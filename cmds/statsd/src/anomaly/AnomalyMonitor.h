@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef ANOMALY_MONITOR_H
-#define ANOMALY_MONITOR_H
+#pragma once
 
 #include "anomaly/indexed_priority_queue.h"
 
@@ -23,6 +22,7 @@
 #include <utils/RefBase.h>
 
 #include <queue>
+#include <set>
 #include <unordered_set>
 #include <vector>
 
@@ -55,6 +55,7 @@ struct AnomalyAlarm : public RefBase {
     };
 };
 
+// TODO: Rename this file to AnomalyAlarmMonitor.
 /**
  * Manages alarms for Anomaly Detection.
  */
@@ -137,6 +138,12 @@ private:
      */
     void updateRegisteredAlarmTime_l(uint32_t timestampSec);
 
+    /**
+     * Cancels the alarm registered with StatsCompanionService.
+     * Also correspondingly sets mRegisteredAlarmTimeSec to 0.
+     */
+    void cancelRegisteredAlarmTime_l();
+
     /** Converts uint32 timestamp in seconds to a Java long in msec. */
     int64_t secToMs(uint32_t timeSec);
 };
@@ -144,5 +151,3 @@ private:
 }  // namespace statsd
 }  // namespace os
 }  // namespace android
-
-#endif  // ANOMALY_MONITOR_H

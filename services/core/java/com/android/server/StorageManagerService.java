@@ -31,8 +31,11 @@ import static org.xmlpull.v1.XmlPullParser.START_TAG;
 import android.Manifest;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
+import android.app.ActivityManagerInternal.ScreenObserver;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
+import android.app.KeyguardManager;
 import android.app.usage.StorageStatsManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -160,7 +163,8 @@ import javax.crypto.spec.PBEKeySpec;
  * watch for and manage dynamically added storage, such as SD cards and USB mass
  * storage. Also decides how storage should be presented to users on the device.
  */
-class StorageManagerService extends IStorageManager.Stub implements Watchdog.Monitor {
+class StorageManagerService extends IStorageManager.Stub
+        implements Watchdog.Monitor, ScreenObserver {
 
     // Static direct instance pointer for the tightly-coupled idle service to use
     static StorageManagerService sSelf = null;
@@ -402,6 +406,7 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
     private volatile boolean mSystemReady = false;
     private volatile boolean mBootCompleted = false;
     private volatile boolean mDaemonConnected = false;
+    private volatile boolean mSecureKeyguardShowing = true;
 
     private PackageManagerService mPms;
 
@@ -542,6 +547,8 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
     private static final int H_VOLUME_UNMOUNT = 8;
     private static final int H_PARTITION_FORGET = 9;
     private static final int H_RESET = 10;
+    private static final int H_RUN_IDLE_MAINT = 11;
+    private static final int H_ABORT_IDLE_MAINT = 12;
 
     class StorageManagerServiceHandler extends Handler {
         public StorageManagerServiceHandler(Looper looper) {
@@ -650,6 +657,17 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
                     resetIfReadyAndConnected();
                     break;
                 }
+                case H_RUN_IDLE_MAINT: {
+                    Slog.i(TAG, "Running idle maintenance");
+                    runIdleMaint((Runnable)msg.obj);
+                    break;
+                }
+                case H_ABORT_IDLE_MAINT: {
+                    Slog.i(TAG, "Aborting idle maintenance");
+                    abortIdleMaint((Runnable)msg.obj);
+                    break;
+                }
+
             }
         }
     }
@@ -814,6 +832,7 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
                     mVold.onUserStarted(userId);
                     mStoraged.onUserStarted(userId);
                 }
+                mVold.onSecureKeyguardStateChanged(mSecureKeyguardShowing);
             } catch (Exception e) {
                 Slog.wtf(TAG, e);
             }
@@ -862,6 +881,24 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
 
         synchronized (mLock) {
             mSystemUnlockedUsers = ArrayUtils.removeInt(mSystemUnlockedUsers, userId);
+        }
+    }
+
+    @Override
+    public void onAwakeStateChanged(boolean isAwake) {
+        // Ignored
+    }
+
+    @Override
+    public void onKeyguardStateChanged(boolean isShowing) {
+        // Push down current secure keyguard status so that we ignore malicious
+        // USB devices while locked.
+        mSecureKeyguardShowing = isShowing
+                && mContext.getSystemService(KeyguardManager.class).isDeviceSecure();
+        try {
+            mVold.onSecureKeyguardStateChanged(mSecureKeyguardShowing);
+        } catch (Exception e) {
+            Slog.wtf(TAG, e);
         }
     }
 
@@ -1401,6 +1438,9 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
     }
 
     private void systemReady() {
+        LocalServices.getService(ActivityManagerInternal.class)
+                .registerScreenObserver(this);
+
         mSystemReady = true;
         mHandler.obtainMessage(H_SYSTEM_READY).sendToTarget();
     }
@@ -1779,6 +1819,58 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
         }
     }
 
+    void runIdleMaint(Runnable callback) {
+        enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
+
+        try {
+            mVold.runIdleMaint(new IVoldTaskListener.Stub() {
+                @Override
+                public void onStatus(int status, PersistableBundle extras) {
+                    // Not currently used
+                }
+                @Override
+                public void onFinished(int status, PersistableBundle extras) {
+                    if (callback != null) {
+                        BackgroundThread.getHandler().post(callback);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            Slog.wtf(TAG, e);
+        }
+    }
+
+    @Override
+    public void runIdleMaintenance() {
+        runIdleMaint(null);
+    }
+
+    void abortIdleMaint(Runnable callback) {
+        enforcePermission(android.Manifest.permission.MOUNT_FORMAT_FILESYSTEMS);
+
+        try {
+            mVold.abortIdleMaint(new IVoldTaskListener.Stub() {
+                @Override
+                public void onStatus(int status, PersistableBundle extras) {
+                    // Not currently used
+                }
+                @Override
+                public void onFinished(int status, PersistableBundle extras) {
+                    if (callback != null) {
+                        BackgroundThread.getHandler().post(callback);
+                    }
+                }
+            });
+        } catch (Exception e) {
+            Slog.wtf(TAG, e);
+        }
+    }
+
+    @Override
+    public void abortIdleMaintenance() {
+        abortIdleMaint(null);
+    }
+
     private void remountUidExternalStorage(int uid, int mode) {
         try {
             mVold.remountUid(uid, mode);
@@ -2127,6 +2219,11 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
         mContext.enforceCallingOrSelfPermission(Manifest.permission.CRYPT_KEEPER,
             "no permission to access the crypt keeper");
 
+        if (StorageManager.isFileEncryptedNativeOnly()) {
+            // Not supported on FBE devices
+            return -1;
+        }
+
         if (type == StorageManager.CRYPT_TYPE_DEFAULT) {
             password = "";
         } else if (TextUtils.isEmpty(password)) {
@@ -2203,6 +2300,11 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
         mContext.enforceCallingOrSelfPermission(Manifest.permission.CRYPT_KEEPER,
             "no permission to access the crypt keeper");
 
+        if (StorageManager.isFileEncryptedNativeOnly()) {
+            // Not supported on FBE devices
+            return;
+        }
+
         try {
             mVold.fdeSetField(field, contents);
             return;
@@ -2221,6 +2323,11 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
     public String getField(String field) throws RemoteException {
         mContext.enforceCallingOrSelfPermission(Manifest.permission.CRYPT_KEEPER,
             "no permission to access the crypt keeper");
+
+        if (StorageManager.isFileEncryptedNativeOnly()) {
+            // Not supported on FBE devices
+            return null;
+        }
 
         try {
             return mVold.fdeGetField(field);
@@ -2503,7 +2610,7 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
     }
 
     @Override
-    public int mkdirs(String callingPkg, String appPath) {
+    public void mkdirs(String callingPkg, String appPath) {
         final int userId = UserHandle.getUserId(Binder.getCallingUid());
         final UserEnvironment userEnv = new UserEnvironment(userId);
 
@@ -2516,8 +2623,7 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
         try {
             appFile = new File(appPath).getCanonicalFile();
         } catch (IOException e) {
-            Slog.e(TAG, "Failed to resolve " + appPath + ": " + e);
-            return -1;
+            throw new IllegalStateException("Failed to resolve " + appPath + ": " + e);
         }
 
         // Try translating the app path into a vold path, but require that it
@@ -2532,9 +2638,9 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
 
             try {
                 mVold.mkdirs(appPath);
-                return 0;
+                return;
             } catch (Exception e) {
-                Slog.wtf(TAG, e);
+                throw new IllegalStateException("Failed to prepare " + appPath + ": " + e);
             }
         }
 
@@ -2612,15 +2718,14 @@ class StorageManagerService extends IStorageManager.Stub implements Watchdog.Mon
             final boolean primary = true;
             final boolean removable = primaryPhysical;
             final boolean emulated = !primaryPhysical;
-            final long mtpReserveSize = 0L;
             final boolean allowMassStorage = false;
             final long maxFileSize = 0L;
             final UserHandle owner = new UserHandle(userId);
             final String uuid = null;
             final String state = Environment.MEDIA_REMOVED;
 
-            res.add(0, new StorageVolume(id, StorageVolume.STORAGE_ID_INVALID, path,
-                    description, primary, removable, emulated, mtpReserveSize,
+            res.add(0, new StorageVolume(id, path,
+                    description, primary, removable, emulated,
                     allowMassStorage, maxFileSize, owner, uuid, state));
         }
 

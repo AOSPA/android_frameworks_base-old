@@ -213,6 +213,9 @@ final class RemoteConnectionService {
         }
 
         @Override
+        public void onConnectionServiceFocusReleased(Session.Info sessionInfo) {}
+
+        @Override
         public void addConferenceCall(
                 final String callId, ParcelableConference parcel, Session.Info sessionInfo) {
             RemoteConference conference = new RemoteConference(callId,
@@ -398,7 +401,8 @@ final class RemoteConnectionService {
         }
 
         @Override
-        public void setAudioRoute(String callId, int audioRoute, Session.Info sessionInfo) {
+        public void setAudioRoute(String callId, int audioRoute, String bluetoothAddress,
+                Session.Info sessionInfo) {
             if (hasConnection(callId)) {
                 // TODO(3pcalls): handle this for remote connections.
                 // Likely we don't want to do anything since it doesn't make sense for self-managed

@@ -17,6 +17,7 @@
 package android.app;
 
 import android.annotation.IntDef;
+import android.annotation.Nullable;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
@@ -418,22 +419,51 @@ public class Instrumentation {
      * different process.  In addition, if the given Intent resolves to
      * multiple activities, instead of displaying a dialog for the user to
      * select an activity, an exception will be thrown.
-     * 
+     *
      * <p>The function returns as soon as the activity goes idle following the
      * call to its {@link Activity#onCreate}.  Generally this means it has gone
      * through the full initialization including {@link Activity#onResume} and
      * drawn and displayed its initial window.
-     * 
+     *
      * @param intent Description of the activity to start.
-     * 
+     *
      * @see Context#startActivity
+     * @see #startActivitySync(Intent, Bundle)
      */
     public Activity startActivitySync(Intent intent) {
+        return startActivitySync(intent, null /* options */);
+    }
+
+    /**
+     * Start a new activity and wait for it to begin running before returning.
+     * In addition to being synchronous, this method as some semantic
+     * differences from the standard {@link Context#startActivity} call: the
+     * activity component is resolved before talking with the activity manager
+     * (its class name is specified in the Intent that this method ultimately
+     * starts), and it does not allow you to start activities that run in a
+     * different process.  In addition, if the given Intent resolves to
+     * multiple activities, instead of displaying a dialog for the user to
+     * select an activity, an exception will be thrown.
+     *
+     * <p>The function returns as soon as the activity goes idle following the
+     * call to its {@link Activity#onCreate}.  Generally this means it has gone
+     * through the full initialization including {@link Activity#onResume} and
+     * drawn and displayed its initial window.
+     *
+     * @param intent Description of the activity to start.
+     * @param options Additional options for how the Activity should be started.
+     * May be null if there are no options.  See {@link android.app.ActivityOptions}
+     * for how to build the Bundle supplied here; there are no supported definitions
+     * for building it manually.
+     *
+     * @see Context#startActivity(Intent, Bundle)
+     */
+    public Activity startActivitySync(Intent intent, @Nullable Bundle options) {
         validateNotAppThread();
 
         synchronized (mSync) {
             intent = new Intent(intent);
-    
+
             ActivityInfo ai = intent.resolveActivityInfo(
                 getTargetContext().getPackageManager(), 0);
             if (ai == null) {
@@ -447,7 +477,7 @@ public class Instrumentation {
                         + myProc + " resolved to different process "
                         + ai.processName + ": " + intent);
             }
-    
+
             intent.setComponent(new ComponentName(
                     ai.applicationInfo.packageName, ai.name));
             final ActivityWaiter aw = new ActivityWaiter(intent);
@@ -457,7 +487,7 @@ public class Instrumentation {
             }
             mWaitingActivities.add(aw);
 
-            getTargetContext().startActivity(intent);
+            getTargetContext().startActivity(intent, options);
 
             do {
                 try {
@@ -465,7 +495,7 @@ public class Instrumentation {
                 } catch (InterruptedException e) {
                 }
             } while (mWaitingActivities.contains(aw));
-         
+
             return aw.activity;
         }
     }
@@ -1084,7 +1114,10 @@ public class Instrumentation {
     public Application newApplication(ClassLoader cl, String className, Context context)
             throws InstantiationException, IllegalAccessException, 
             ClassNotFoundException {
-        return newApplication(cl.loadClass(className), context);
+        Application app = getFactory(context.getPackageName())
+                .instantiateApplication(cl, className);
+        app.attach(context);
+        return app;
     }
     
     /**
@@ -1171,7 +1204,20 @@ public class Instrumentation {
             Intent intent)
             throws InstantiationException, IllegalAccessException,
             ClassNotFoundException {
-        return (Activity)cl.loadClass(className).newInstance();
+        String pkg = intent.getComponent().getPackageName();
+        return getFactory(pkg).instantiateActivity(cl, className, intent);
+    }
+
+    private AppComponentFactory getFactory(String pkg) {
+        if (mThread == null) {
+            Log.e(TAG, "Uninitialized ActivityThread, likely app-created Instrumentation,"
+                    + " disabling AppComponentFactory", new Throwable());
+            return AppComponentFactory.DEFAULT;
+        }
+        LoadedApk loadedApk = mThread.peekLoadedApk(pkg, true);
+        // This is in the case of starting up "android".
+        if (loadedApk == null) loadedApk = mThread.getSystemContext().mLoadedApk;
+        return loadedApk.getAppFactory();
     }
 
     private void prePerformCreate(Activity activity) {
@@ -1918,6 +1964,14 @@ public class Instrumentation {
         mComponent = component;
         mWatcher = watcher;
         mUiAutomationConnection = uiAutomationConnection;
+    }
+
+    /**
+     * Only sets the ActivityThread up, keeps everything else null because app is not being
+     * instrumented.
+     */
+    final void basicInit(ActivityThread thread) {
+        mThread = thread;
     }
 
     /** @hide */

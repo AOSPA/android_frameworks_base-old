@@ -152,7 +152,7 @@
     <!-- Displayed to tell the user that they should switch their network preference. -->
     <string name="NetworkPreferenceSwitchTitle">Can\u2019t reach network</string>
     <!-- Displayed to tell the user that they should switch their network preference. -->
-    <string name="NetworkPreferenceSwitchSummary">To improve reception, try changing the type selected at Settings &gt; Network &amp; Internet &gt; Mobile networks &gt; Preferred network type."</string>
+    <string name="NetworkPreferenceSwitchSummary">To improve reception, try changing the type selected at Settings &gt; Network &amp; internet &gt; Mobile networks &gt; Preferred network type."</string>
     <!-- Displayed to tell the user that emergency calls might not be available. -->
     <string name="EmergencyCallWarningTitle">Wi\u2011Fi calling is active</string>
     <!-- Displayed to tell the user that emergency calls might not be available. -->
@@ -470,6 +470,9 @@
 
     <!-- label for item that generates a bug report in the phone options dialog -->
     <string name="global_action_bug_report">Bug report</string>
+
+    <!-- label for item that logouts the current user -->
+    <string name="global_action_logout">End session</string>
 
     <!-- Take bug report menu title [CHAR LIMIT=NONE] -->
     <string name="bugreport_title">Take bug report</string>
@@ -2852,6 +2855,13 @@
     <!-- [CHAR LIMIT=50] Unsupported display size dialog: check box label. -->
     <string name="unsupported_display_size_show">Always show</string>
 
+    <!-- [CHAR LIMIT=200] Unsupported compile SDK dialog: message. Shown when an app may not be compatible with the device's current version of Android. -->
+    <string name="unsupported_compile_sdk_message"><xliff:g id="app_name">%1$s</xliff:g> was built for an incompatible version of the Android OS and may behave unexpectedly. An updated version of the app may be available.</string>
+    <!-- [CHAR LIMIT=50] Unsupported compile SDK dialog: check box label. -->
+    <string name="unsupported_compile_sdk_show">Always show</string>
+    <!-- [CHAR LIMIT=50] Unsupported compile SDK dialog: label for button to check for an app update. -->
+    <string name="unsupported_compile_sdk_check_update">Check for update</string>
+
     <!-- Text of the alert that is displayed when an application has violated StrictMode. -->
     <string name="smv_application">The app <xliff:g id="application">%1$s</xliff:g>
         (process <xliff:g id="process">%2$s</xliff:g>) has violated its self-enforced StrictMode policy.</string>
@@ -3004,6 +3014,13 @@
     <!-- Notification action name for opening the wifi picker, showing the user all the nearby networks. -->
     <string name="wifi_available_action_all_networks">All Networks</string>
 
+    <!--Notification title for Wi-Fi Wake onboarding. This is displayed the first time a user disables Wi-Fi with the feature enabled. -->
+    <string name="wifi_wakeup_onboarding_title">Wi\u2011Fi will turn on automatically</string>
+    <!--Notification subtext for Wi-Fi Wake onboarding.-->
+    <string name="wifi_wakeup_onboarding_subtext">When you\'re near a high quality saved network</string>
+    <!--Notification action to disable Wi-Fi Wake during onboarding.-->
+    <string name="wifi_wakeup_onboarding_action_disable">Don\'t turn back on</string>
+
     <!-- A notification is shown when a wifi captive portal network is detected.  This is the notification's title. -->
     <string name="wifi_available_sign_in">Sign in to Wi-Fi network</string>
 
@@ -3014,7 +3031,7 @@
     <string name="network_available_sign_in_detailed"><xliff:g id="network_ssid">%1$s</xliff:g></string>
 
     <!-- A notification is shown when the user connects to a Wi-Fi network and the system detects that that network has no Internet access. This is the notification's title. -->
-    <string name="wifi_no_internet">Wi-Fi has no Internet access</string>
+    <string name="wifi_no_internet">Wi-Fi has no internet access</string>
 
     <!-- A notification is shown when the user connects to a Wi-Fi network and the system detects that that network has no Internet access. This is the notification's message. -->
     <string name="wifi_no_internet_detailed">Tap for options</string>
@@ -3023,7 +3040,7 @@
     <string name="network_switch_metered">Switched to <xliff:g id="network_type">%1$s</xliff:g></string>
 
     <!-- A notification might be shown if the device switches to another network type (e.g., mobile data) because it detects that the network it was using (e.g., Wi-Fi) has lost Internet connectivity. This is the notification's message. %1$s is the network that the device switched to, e.g., cellular data. %2$s is the network type the device switched from, e.g., Wi-Fi. Both are strings in the network_switch_type_name array. -->
-    <string name="network_switch_metered_detail">Device uses <xliff:g id="new_network">%1$s</xliff:g> when <xliff:g id="previous_network">%2$s</xliff:g> has no Internet access. Charges may apply.</string>
+    <string name="network_switch_metered_detail">Device uses <xliff:g id="new_network">%1$s</xliff:g> when <xliff:g id="previous_network">%2$s</xliff:g> has no internet access. Charges may apply.</string>
 
     <!-- A toast might be shown if the device switches to another network type (e.g., mobile data) because it detects that the network it was using (e.g., Wi-Fi) has lost Internet connectivity. This is the text of the toast. %1$s is the network that the device switched from, e.g., Wi-Fi. %2$s is the network type the device switched from, e.g., cellular data. Both are strings in the network_switch_type_name array. -->
     <string name="network_switch_metered_toast">Switched from <xliff:g id="previous_network">%1$s</xliff:g> to <xliff:g id="new_network">%2$s</xliff:g></string>
@@ -3043,7 +3060,7 @@
      <!-- A notification is shown when a user's selected SSID is later disabled due to connectivity problems.  This is the notification's title / ticker. -->
      <string name="wifi_watchdog_network_disabled">Couldn\'t connect to Wi-Fi</string>
      <!-- A notification is shown when a user's selected SSID is later disabled due to connectivity problems.  The complete alert msg is: <hotspot name> + this string, i.e. "Linksys has a poor internet connection" -->
-    <string name="wifi_watchdog_network_disabled_detailed">\u0020has a poor Internet connection.</string>
+    <string name="wifi_watchdog_network_disabled_detailed">\u0020has a poor internet connection.</string>
 
     <!-- Do not translate. Default access point SSID used for tethering -->
     <string name="wifi_tether_configure_ssid_default" translatable="false">AndroidAP</string>
@@ -4024,6 +4041,14 @@
     shortcut enabled.-->
     <string name="leave_accessibility_shortcut_on">Use Shortcut</string>
 
+    <!-- Title of Color Inversion feature shown in the warning dialog about the accessibility
+    shortcut. -->
+    <string name="color_inversion_feature_name">Color Inversion</string>
+
+    <!-- Title of Color Correction feature, which is mostly used to help users who are colorblind,
+     shown in the warning dialog about the accessibility shortcut. -->
+    <string name="color_correction_feature_name">Color Correction</string>
+
     <!-- Text in toast to alert the user that the accessibility shortcut turned on an accessibility
     service.-->
     <string name="accessibility_shortcut_enabling_service">Accessibility Shortcut turned
@@ -4366,7 +4391,7 @@
     <string name="package_deleted_device_owner">Deleted by your admin</string>
 
     <!-- [CHAR_LIMIT=NONE] Battery saver: Feature description -->
-    <string name="battery_saver_description">To help improve battery life, battery saver reduces your device’s performance and limits vibration, location services, and most background data. Email, messaging, and other apps that rely on syncing may not update unless you open them.\n\nBattery saver turns off automatically when your device is charging.</string>
+    <string name="battery_saver_description">To help improve battery life, Battery Saver reduces your device’s performance and limits vibration, location services, and most background data. Email, messaging, and other apps that rely on syncing may not update unless you open them.\n\nBattery Saver turns off automatically when your device is charging.</string>
 
     <!-- [CHAR_LIMIT=NONE] Data saver: Feature description -->
     <string name="data_saver_description">To help reduce data usage, Data Saver prevents some apps from sending or receiving data in the background. An app you’re currently using can access data, but may do so less frequently. This may mean, for example, that images don’t display until you tap them.</string>
@@ -4456,6 +4481,9 @@
     <!-- Zen mode - name of default automatic calendar event-based rule. [CHAR LIMIT=40] -->
     <string name="zen_mode_default_events_name">Event</string>
 
+    <!-- Zen mode - name of default automatic calendar time-based rule that is triggered every night (when sleeping). [CHAR LIMIT=40] -->
+    <string name="zen_mode_default_every_night_name">Sleeping</string>
+
     <!-- Indication that the current volume and other effects (vibration) are being suppressed by a third party, such as a notification listener. [CHAR LIMIT=30] -->
     <string name="muted_by">Muted by <xliff:g id="third_party">%1$s</xliff:g></string>
 
@@ -4469,7 +4497,9 @@
     <string name="stk_cc_ussd_to_dial">USSD request is modified to DIAL request.</string>
     <string name="stk_cc_ussd_to_ss">USSD request is modified to SS request.</string>
     <string name="stk_cc_ussd_to_ussd">USSD request is modified to new USSD request.</string>
+    <string name="stk_cc_ussd_to_dial_video">USSD request is modified to Video DIAL request.</string>
     <string name="stk_cc_ss_to_dial">SS request is modified to DIAL request.</string>
+    <string name="stk_cc_ss_to_dial_video">SS request is modified to Video DIAL request.</string>
     <string name="stk_cc_ss_to_ussd">SS request is modified to USSD request.</string>
     <string name="stk_cc_ss_to_ss">SS request is modified to new SS request.</string>
 
@@ -4746,5 +4776,8 @@
     <string name="shortcut_restore_unknown_issue">Couldn\u2019t restore shortcut</string>
 
     <!--Battery saver warning. STOPSHIP: Remove it eventually. -->
-    <string name="battery_saver_warning" translatable="false">Battery saver activated.\n\nSee go/extreme-battery-saver.\n\nThis contains aggressive experimental changes for P and may affect background app behavior.\n</string>
+    <string name="battery_saver_warning" translatable="false">\"Extreme\" battery saver activated.\n\nSee the details at: go/extreme-battery-saver\n\nEBS aggressively throttles background apps and changes screen-off behavior.\n</string>
+
+    <!--Battery saver warning. STOPSHIP: Remove it eventually. -->
+    <string name="battery_saver_warning_title" translatable="false">Extreme battery saver</string>
 </resources>

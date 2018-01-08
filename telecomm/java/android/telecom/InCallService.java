@@ -16,9 +16,11 @@
 
 package android.telecom;
 
+import android.annotation.NonNull;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
 import android.app.Service;
+import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
 import android.hardware.camera2.CameraManager;
 import android.net.Uri;
@@ -78,6 +80,7 @@ public abstract class InCallService extends Service {
     private static final int MSG_ON_CONNECTION_EVENT = 9;
     private static final int MSG_ON_RTT_UPGRADE_REQUEST = 10;
     private static final int MSG_ON_RTT_INITIATION_FAILURE = 11;
+    private static final int MSG_ON_HANDOVER_FAILED = 12;
 
     /** Default Handler used to consolidate binder method calls onto a single thread. */
     private final Handler mHandler = new Handler(Looper.getMainLooper()) {
@@ -146,6 +149,12 @@ public abstract class InCallService extends Service {
                     String callId = (String) msg.obj;
                     int reason = msg.arg1;
                     mPhone.internalOnRttInitiationFailure(callId, reason);
+                    break;
+                }
+                case MSG_ON_HANDOVER_FAILED: {
+                    String callId = (String) msg.obj;
+                    int error = msg.arg1;
+                    mPhone.internalOnHandoverFailed(callId, error);
                     break;
                 }
                 default:
@@ -222,6 +231,11 @@ public abstract class InCallService extends Service {
         @Override
         public void onRttInitiationFailure(String callId, int reason) {
             mHandler.obtainMessage(MSG_ON_RTT_INITIATION_FAILURE, reason, 0, callId).sendToTarget();
+        }
+
+        @Override
+        public void onHandoverFailed(String callId, int error) {
+            mHandler.obtainMessage(MSG_ON_HANDOVER_FAILED, error, 0, callId).sendToTarget();
         }
     }
 
@@ -373,6 +387,22 @@ public abstract class InCallService extends Service {
     public final void setAudioRoute(int route) {
         if (mPhone != null) {
             mPhone.setAudioRoute(route);
+        }
+    }
+
+    /**
+     * Request audio routing to a specific bluetooth device. Calling this method may result in
+     * the device routing audio to a different bluetooth device than the one specified if the
+     * bluetooth stack is unable to route audio to the requested device.
+     * A list of available devices can be obtained via
+     * {@link CallAudioState#getSupportedBluetoothDevices()}
+     *
+     * @param bluetoothAddress The address of the bluetooth device to connect to, as returned by
+     *                         {@link BluetoothDevice#getAddress()}.
+     */
+    public final void requestBluetoothAudio(@NonNull String bluetoothAddress) {
+        if (mPhone != null) {
+            mPhone.requestBluetoothAudio(bluetoothAddress);
         }
     }
 

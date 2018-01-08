@@ -635,6 +635,8 @@ public class AccessibilityNodeInfo implements Parcelable {
 
     private static final int BOOLEAN_PROPERTY_IMPORTANCE = 0x0040000;
 
+    private static final int BOOLEAN_PROPERTY_SCREEN_READER_FOCUSABLE = 0x0080000;
+
     private static final int BOOLEAN_PROPERTY_IS_SHOWING_HINT = 0x0100000;
 
     /**
@@ -2321,6 +2323,37 @@ public class AccessibilityNodeInfo implements Parcelable {
     }
 
     /**
+     * Returns whether the node is explicitly marked as a focusable unit by a screen reader. Note
+     * that {@code false} indicates that it is not explicitly marked, not that the node is not
+     * a focusable unit. Screen readers should generally use other signals, such as
+     * {@link #isFocusable()}, or the presence of text in a node, to determine what should receive
+     * focus.
+     *
+     * @return {@code true} if the node is specifically marked as a focusable unit for screen
+     *         readers, {@code false} otherwise.
+     *
+     * @see View#isScreenReaderFocusable()
+     */
+    public boolean isScreenReaderFocusable() {
+        return getBooleanProperty(BOOLEAN_PROPERTY_SCREEN_READER_FOCUSABLE);
+    }
+
+    /**
+     * Sets whether the node should be considered a focusable unit by a screen reader.
+     * <p>
+     *   <strong>Note:</strong> Cannot be called from an
+     *   {@link android.accessibilityservice.AccessibilityService}.
+     *   This class is made immutable before being delivered to an AccessibilityService.
+     * </p>
+     *
+     * @param screenReaderFocusable {@code true} if the node is a focusable unit for screen readers,
+     *                              {@code false} otherwise.
+     */
+    public void setScreenReaderFocusable(boolean screenReaderFocusable) {
+        setBooleanProperty(BOOLEAN_PROPERTY_SCREEN_READER_FOCUSABLE, screenReaderFocusable);
+    }
+
+    /**
      * Returns whether the node's text represents a hint for the user to enter text. It should only
      * be {@code true} if the node has editable text.
      *
@@ -3662,8 +3695,9 @@ public class AccessibilityNodeInfo implements Parcelable {
 
         if (DEBUG) {
             builder.append("; sourceNodeId: " + mSourceNodeId);
-            builder.append("; accessibilityViewId: " + getAccessibilityViewId(mSourceNodeId));
-            builder.append("; virtualDescendantId: " + getVirtualDescendantId(mSourceNodeId));
+            builder.append("; windowId: " + mWindowId);
+            builder.append("; accessibilityViewId: ").append(getAccessibilityViewId(mSourceNodeId));
+            builder.append("; virtualDescendantId: ").append(getVirtualDescendantId(mSourceNodeId));
             builder.append("; mParentNodeId: " + mParentNodeId);
             builder.append("; traversalBefore: ").append(mTraversalBefore);
             builder.append("; traversalAfter: ").append(mTraversalAfter);
@@ -3693,8 +3727,8 @@ public class AccessibilityNodeInfo implements Parcelable {
             builder.append("]");
         }
 
-        builder.append("; boundsInParent: " + mBoundsInParent);
-        builder.append("; boundsInScreen: " + mBoundsInScreen);
+        builder.append("; boundsInParent: ").append(mBoundsInParent);
+        builder.append("; boundsInScreen: ").append(mBoundsInScreen);
 
         builder.append("; packageName: ").append(mPackageName);
         builder.append("; className: ").append(mClassName);

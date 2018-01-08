@@ -29,8 +29,7 @@
     <string name="keyguard_password_enter_password_code" msgid="595980919238127672">"అన్‌లాక్ చేయడానికి పాస్‌వర్డ్‌ను టైప్ చేయండి"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7504123374204446086">"అన్‌లాక్ చేయడానికి పిన్ టైప్ చేయండి"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="6535018036285012028">"పిన్ కోడ్ తప్పు."</string>
-    <!-- no translation found for keyguard_sim_error_message_short (592109500618448312) -->
-    <skip />
+    <string name="keyguard_sim_error_message_short" msgid="592109500618448312">"చెల్లని కార్డ్."</string>
     <string name="keyguard_charged" msgid="2222329688813033109">"ఛార్జ్ చేయబడింది"</string>
     <string name="keyguard_plugged_in" msgid="89308975354638682">"ఛార్జ్ అవుతోంది"</string>
     <string name="keyguard_plugged_in_charging_fast" msgid="8869226755413795173">"వేగంగా ఛార్జ్ అవుతోంది"</string>
@@ -136,4 +135,12 @@
       <item quantity="one"><xliff:g id="NUMBER_0">%d</xliff:g> గంట పాటు పరికరాన్ని అన్‌లాక్ చేయలేదు. పాస్‌వర్డ్‌ని నమోదు చేయండి.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"గుర్తించలేదు"</string>
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+      <item quantity="other">SIM పిన్‌ని నమోదు చేయండి, మీకు <xliff:g id="NUMBER_1">%d</xliff:g> ప్రయత్నలు మిగిలి ఉన్నాయి.</item>
+      <item quantity="one">SIM పిన్‌ని నమోదు చేయండి, మీరు మీ పరికరాన్ని అన్‌లాక్ చేయడానికి తప్పనిసరిగా మీ క్యారియర్‌ను సంప్రదించడానికి ముందు మీకు <xliff:g id="NUMBER_0">%d</xliff:g> ప్రయత్నం మిగిలి ఉంది.</item>
+    </plurals>
+    <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
+      <item quantity="other">SIM ఇప్పుడు నిలిపివేయబడింది. PUK కోడ్‌ను నమోదు చేయండి. SIM శాశ్వతంగా నిరుపయోగం కాకుండా ఉండటానికి మీకు <xliff:g id="_NUMBER_1">%d</xliff:g> ప్రయత్నాలు మిగిలి ఉన్నాయి. వివరాల కోసం కారియర్‌ను సంప్రదించండి.</item>
+      <item quantity="one">SIM ఇప్పుడు నిలిపివేయబడింది. PUK కోడ్‌ను నమోదు చేయండి. SIM శాశ్వతంగా నిరుపయోగం కాకుండా ఉండటానికి మీకు <xliff:g id="_NUMBER_0">%d</xliff:g> ప్రయత్నం మిగిలి ఉంది వివరాల కోసం కారియర్‌ను సంప్రదించండి.</item>
+    </plurals>
 </resources>

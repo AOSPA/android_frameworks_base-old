@@ -19,8 +19,9 @@
 #include "config/ConfigKey.h"
 #include "config/ConfigListener.h"
 
+#include <map>
+#include <set>
 #include <string>
-#include <unordered_map>
 
 #include <stdio.h>
 
@@ -28,10 +29,8 @@ namespace android {
 namespace os {
 namespace statsd {
 
-using android::RefBase;
-using std::string;
-using std::unordered_map;
-using std::vector;
+// Util function to build a hard coded config with test metrics.
+StatsdConfig build_fake_config();
 
 /**
  * Keeps track of which configurations have been set from various sources.
@@ -39,15 +38,13 @@ using std::vector;
  * TODO: Store the configs persistently too.
  * TODO: Dump method for debugging.
  */
-class ConfigManager : public virtual RefBase {
+class ConfigManager : public virtual android::RefBase {
 public:
     ConfigManager();
     virtual ~ConfigManager();
 
     /**
-     * Call to load the saved configs from disk.
-     *
-     * TODO: Implement me
+     * Initialize ConfigListener by reading from disk and get updates.
      */
     void Startup();
 
@@ -64,6 +61,26 @@ public:
     void UpdateConfig(const ConfigKey& key, const StatsdConfig& data);
 
     /**
+     * Sets the broadcast receiver for a configuration key.
+     */
+    void SetConfigReceiver(const ConfigKey& key, const std::string& pkg, const std::string& cls);
+
+    /**
+     * Returns the package name and class name representing the broadcast receiver for this config.
+     */
+    const std::pair<std::string, std::string> GetConfigReceiver(const ConfigKey& key) const;
+
+    /**
+     * Returns all config keys registered.
+     */
+    std::vector<ConfigKey> GetAllConfigKeys() const;
+
+    /**
+     * Erase any broadcast receiver associated with this config key.
+     */
+    void RemoveConfigReceiver(const ConfigKey& key);
+
+    /**
      * A configuration was removed.
      *
      * Reports this to listeners.
@@ -76,6 +93,11 @@ public:
     void RemoveConfigs(int uid);
 
     /**
+     * Remove all of the configs from memory.
+     */
+    void RemoveAllConfigs();
+
+    /**
      * Text dump of our state for debugging.
      */
     void Dump(FILE* out);
@@ -84,17 +106,28 @@ private:
     /**
      * Save the configs to disk.
      */
-    void update_saved_configs();
+    void update_saved_configs(const ConfigKey& key, const StatsdConfig& config);
 
     /**
-     * The Configs that have been set
+     * Remove saved configs from disk.
      */
-    unordered_map<ConfigKey, StatsdConfig> mConfigs;
+    void remove_saved_configs(const ConfigKey& key);
+
+    /**
+     * The Configs that have been set. Each config should
+     */
+    std::set<ConfigKey> mConfigs;
+
+    /**
+     * Each config key can be subscribed by up to one receiver, specified as the package name and
+     * class name.
+     */
+    std::map<ConfigKey, std::pair<std::string, std::string>> mConfigReceivers;
 
     /**
      * The ConfigListeners that will be told about changes.
      */
-    vector<sp<ConfigListener>> mListeners;
+    std::vector<sp<ConfigListener>> mListeners;
 };
 
 }  // namespace statsd

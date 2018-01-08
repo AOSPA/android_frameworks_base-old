@@ -35,7 +35,6 @@ import android.content.pm.FeatureInfo;
 import android.content.pm.IOnPermissionsChangeListener;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageDeleteObserver;
-import android.content.pm.IPackageInstallObserver;
 import android.content.pm.IPackageManager;
 import android.content.pm.IPackageMoveObserver;
 import android.content.pm.IPackageStatsObserver;
@@ -56,6 +55,7 @@ import android.content.pm.ServiceInfo;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.VerifierDeviceIdentity;
 import android.content.pm.VersionedPackage;
+import android.content.pm.dex.ArtManager;
 import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.graphics.Bitmap;
@@ -122,6 +122,8 @@ public class ApplicationPackageManager extends PackageManager {
     private UserManager mUserManager;
     @GuardedBy("mLock")
     private PackageInstaller mInstaller;
+    @GuardedBy("mLock")
+    private ArtManager mArtManager;
 
     @GuardedBy("mDelegates")
     private final ArrayList<MoveCallbackDelegate> mDelegates = new ArrayList<>();
@@ -1379,7 +1381,7 @@ public class ApplicationPackageManager extends PackageManager {
                     sameUid ? app.sourceDir : app.publicSourceDir,
                     sameUid ? app.splitSourceDirs : app.splitPublicSourceDirs,
                     app.resourceDirs, app.sharedLibraryFiles, Display.DEFAULT_DISPLAY,
-                    mContext.mPackageInfo);
+                    mContext.mLoadedApk);
         if (r != null) {
             return r;
         }
@@ -1681,21 +1683,8 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public void installPackage(Uri packageURI, IPackageInstallObserver observer, int flags,
-                               String installerPackageName) {
-        installCommon(packageURI, new LegacyPackageInstallObserver(observer), flags,
-                installerPackageName, mContext.getUserId());
-    }
-
-    @Override
-    public void installPackage(Uri packageURI, PackageInstallObserver observer,
-            int flags, String installerPackageName) {
-        installCommon(packageURI, observer, flags, installerPackageName, mContext.getUserId());
-    }
-
-    private void installCommon(Uri packageURI,
-            PackageInstallObserver observer, int flags, String installerPackageName,
-            int userId) {
+    public void installPackage(Uri packageURI,
+            PackageInstallObserver observer, int flags, String installerPackageName) {
         if (!"file".equals(packageURI.getScheme())) {
             throw new UnsupportedOperationException("Only file:// URIs are supported");
         }
@@ -1703,7 +1692,7 @@ public class ApplicationPackageManager extends PackageManager {
         final String originPath = packageURI.getPath();
         try {
             mPM.installPackageAsUser(originPath, observer.getBinder(), flags, installerPackageName,
-                    userId);
+                    mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2476,7 +2465,8 @@ public class ApplicationPackageManager extends PackageManager {
         if (itemInfo.showUserIcon != UserHandle.USER_NULL) {
             Bitmap bitmap = getUserManager().getUserIcon(itemInfo.showUserIcon);
             if (bitmap == null) {
-                return UserIcons.getDefaultUserIcon(itemInfo.showUserIcon, /* light= */ false);
+                return UserIcons.getDefaultUserIcon(
+                        mContext.getResources(), itemInfo.showUserIcon, /* light= */ false);
             }
             return new BitmapDrawable(bitmap);
         }
@@ -2761,6 +2751,20 @@ public class ApplicationPackageManager extends PackageManager {
                     isSharedModule, callbackDelegate);
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public ArtManager getArtManager() {
+        synchronized (mLock) {
+            if (mArtManager == null) {
+                try {
+                    mArtManager = new ArtManager(mPM.getArtManager());
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                }
+            }
+            return mArtManager;
         }
     }
 }

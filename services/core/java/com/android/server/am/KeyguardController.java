@@ -19,9 +19,9 @@ package com.android.server.am;
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
-import static android.view.WindowManagerPolicy.KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
-import static android.view.WindowManagerPolicy.KEYGUARD_GOING_AWAY_FLAG_TO_SHADE;
-import static android.view.WindowManagerPolicy.KEYGUARD_GOING_AWAY_FLAG_WITH_WALLPAPER;
+import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
+import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_SHADE;
+import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_WITH_WALLPAPER;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityStackSupervisor.PRESERVE_WINDOWS;
@@ -43,6 +43,7 @@ import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.policy.IKeyguardDismissCallback;
+import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.WindowManagerService;
 
 import java.io.PrintWriter;
@@ -120,7 +121,7 @@ class KeyguardController {
     /**
      * Called when Keyguard is going away.
      *
-     * @param flags See {@link android.view.WindowManagerPolicy#KEYGUARD_GOING_AWAY_FLAG_TO_SHADE}
+     * @param flags See {@link WindowManagerPolicy#KEYGUARD_GOING_AWAY_FLAG_TO_SHADE}
      *              etc.
      */
     void keyguardGoingAway(int flags) {
@@ -236,24 +237,33 @@ class KeyguardController {
         final ActivityRecord lastDismissingKeyguardActivity = mDismissingKeyguardActivity;
         mOccluded = false;
         mDismissingKeyguardActivity = null;
-        final ActivityDisplay display = mStackSupervisor.getDefaultDisplay();
-        for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
-            final ActivityStack stack = display.getChildAt(stackNdx);
 
-            // Only the focused stack top activity may control occluded state
-            if (mStackSupervisor.isFocusedStack(stack)) {
+        for (int displayNdx = mStackSupervisor.getChildCount() - 1; displayNdx >= 0; displayNdx--) {
+            final ActivityDisplay display = mStackSupervisor.getChildAt(displayNdx);
+            for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
+                final ActivityStack stack = display.getChildAt(stackNdx);
 
-                // A dismissing activity occludes Keyguard in the insecure case for legacy reasons.
-                final ActivityRecord topDismissing = stack.getTopDismissingKeyguardActivity();
-                mOccluded = stack.topActivityOccludesKeyguard()
-                        || (topDismissing != null
-                                && stack.topRunningActivityLocked() == topDismissing
-                                && canShowWhileOccluded(true /* dismissKeyguard */,
-                                        false /* showWhenLocked */));
-            }
-            if (mDismissingKeyguardActivity == null
-                    && stack.getTopDismissingKeyguardActivity() != null) {
-                mDismissingKeyguardActivity = stack.getTopDismissingKeyguardActivity();
+                // Only the top activity of the focused stack on the default display may control
+                // occluded state.
+                if (display.mDisplayId == DEFAULT_DISPLAY
+                        && mStackSupervisor.isFocusedStack(stack)) {
+
+                    // A dismissing activity occludes Keyguard in the insecure case for legacy
+                    // reasons.
+                    final ActivityRecord topDismissing = stack.getTopDismissingKeyguardActivity();
+                    mOccluded =
+                            stack.topActivityOccludesKeyguard()
+                                    || (topDismissing != null
+                                            && stack.topRunningActivityLocked() == topDismissing
+                                            && canShowWhileOccluded(
+                                                    true /* dismissKeyguard */,
+                                                    false /* showWhenLocked */));
+                }
+
+                if (mDismissingKeyguardActivity == null
+                        && stack.getTopDismissingKeyguardActivity() != null) {
+                    mDismissingKeyguardActivity = stack.getTopDismissingKeyguardActivity();
+                }
             }
         }
         mOccluded |= mWindowManager.isShowingDream();

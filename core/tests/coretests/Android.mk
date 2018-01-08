@@ -30,6 +30,7 @@ LOCAL_DX_FLAGS := --core-library
 LOCAL_JACK_FLAGS := --multi-dex native
 LOCAL_AAPT_FLAGS = -0 dat -0 gld -c fa
 LOCAL_STATIC_JAVA_LIBRARIES := \
+    frameworks-base-testutils \
     core-tests-support \
     android-common \
     frameworks-core-util-lib \
@@ -44,7 +45,14 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
     truth-prebuilt \
     print-test-util-lib
 
-LOCAL_JAVA_LIBRARIES := android.test.runner conscrypt telephony-common org.apache.http.legacy
+LOCAL_JAVA_LIBRARIES := \
+    android.test.runner \
+    conscrypt \
+    telephony-common \
+    org.apache.http.legacy \
+    android.test.base \
+    android.test.mock \
+
 LOCAL_PACKAGE_NAME := FrameworksCoreTests
 LOCAL_COMPATIBILITY_SUITE := device-tests
 

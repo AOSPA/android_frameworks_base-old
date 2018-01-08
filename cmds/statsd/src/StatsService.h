@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,6 @@
 #include "packages/UidMap.h"
 
 #include <android/os/BnStatsManager.h>
-#include <android/os/IStatsCallbacks.h>
 #include <android/os/IStatsCompanionService.h>
 #include <binder/IResultReceiver.h>
 #include <utils/Looper.h>
@@ -47,6 +46,10 @@ public:
     StatsService(const sp<Looper>& handlerLooper);
     virtual ~StatsService();
 
+    /** The anomaly alarm registered with AlarmManager won't be updated by less than this. */
+    // TODO: Consider making this configurable. And choose a good number.
+    const uint32_t MIN_DIFF_TO_UPDATE_REGISTERED_ALARM_SECS = 5;
+
     virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags);
     virtual status_t dump(int fd, const Vector<String16>& args);
     virtual status_t command(FILE* in, FILE* out, FILE* err, Vector<String8>& args);
@@ -55,10 +58,11 @@ public:
     virtual Status statsCompanionReady();
     virtual Status informAnomalyAlarmFired();
     virtual Status informPollAlarmFired();
-    virtual Status informAllUidData(const vector<int32_t>& uid, const vector<int32_t>& version,
+    virtual Status informAllUidData(const vector<int32_t>& uid, const vector<int64_t>& version,
                                     const vector<String16>& app);
-    virtual Status informOnePackage(const String16& app, int32_t uid, int32_t version);
+    virtual Status informOnePackage(const String16& app, int32_t uid, int64_t version);
     virtual Status informOnePackageRemoved(const String16& app, int32_t uid);
+    virtual Status writeDataToDisk();
 
     /**
      * Called right before we start processing events.
@@ -71,20 +75,27 @@ public:
     virtual void OnLogEvent(const LogEvent& event);
 
     /**
-     * Binder call to force trigger pushLog. This would be called by callback
-     * clients.
+     * Binder call for clients to request data for this configuration key.
      */
-    virtual Status requestPush() override;
+    virtual Status getData(const String16& key, vector<uint8_t>* output) override;
 
     /**
-     * Pushes stats log entries from statsd to callback clients.
+     * Binder call for clients to get metadata across all configs in statsd.
      */
-    Status pushLog(const vector<uint8_t>& log);
+    virtual Status getMetadata(vector<uint8_t>* output) override;
 
     /**
-     * Binder call to listen to statsd to send stats log entries.
+     * Binder call to let clients send a configuration and indicate they're interested when they
+     * should requestData for this configuration.
      */
-    virtual Status subscribeStatsLog(const sp<IStatsCallbacks>& callbacks) override;
+    virtual Status addConfiguration(const String16& key, const vector <uint8_t>& config,
+                                   const String16& package, const String16& cls, bool* success)
+    override;
+
+    /**
+     * Binder call to allow clients to remove the specified configuration.
+     */
+    virtual Status removeConfiguration(const String16& key, bool* success) override;
 
     // TODO: public for testing since statsd doesn't run when system starts. Change to private
     // later.
@@ -120,9 +131,19 @@ private:
     void print_cmd_help(FILE* out);
 
     /**
+     * Trigger a broadcast.
+     */
+    status_t cmd_trigger_broadcast(FILE* out, Vector<String8>& args);
+
+    /**
      * Handle the config sub-command.
      */
     status_t cmd_config(FILE* in, FILE* out, FILE* err, Vector<String8>& args);
+
+    /**
+     * Prints some basic stats to std out.
+     */
+    status_t cmd_print_stats(FILE* out, const Vector<String8>& args);
 
     /**
      * Print the event log.
@@ -137,12 +158,27 @@ private:
     /**
      * Print the mapping of uids to package names.
      */
-    status_t cmd_print_uid_map(FILE* out);
+    status_t cmd_print_uid_map(FILE* out, const Vector<String8>& args);
+
+    /**
+     * Flush the data to disk.
+     */
+    status_t cmd_write_data_to_disk(FILE* out);
 
     /**
      * Print contents of a pulled metrics source.
      */
     status_t cmd_print_pulled_metrics(FILE* out, const Vector<String8>& args);
+
+    /**
+     * Removes all configs stored on disk and on memory.
+     */
+    status_t cmd_remove_all_configs(FILE* out);
+
+    /*
+     * Dump memory usage by statsd.
+     */
+    status_t cmd_dump_memory_info(FILE* out);
 
     /**
      * Update a configuration.
@@ -157,7 +193,7 @@ private:
     /**
      * Fetches external metrics.
      */
-    StatsPullerManager& mStatsPullerManager = StatsPullerManager::GetInstance();
+    StatsPullerManager mStatsPullerManager;
 
     /**
      * Tracks the configurations that have been passed to statsd.
@@ -178,16 +214,6 @@ private:
      * Whether this is an eng build.
      */
     bool mEngBuild;
-
-    /**
-     * Lock for callback handling.
-     */
-    std::mutex mLock;
-
-    /**
-     * Vector maintaining the list of callbacks for clients.
-     */
-    Vector< sp<IStatsCallbacks> > mCallbacks;
 };
 
 }  // namespace statsd

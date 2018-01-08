@@ -19,8 +19,6 @@
 
 #include "DurationTracker.h"
 
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
-
 namespace android {
 namespace os {
 namespace statsd {
@@ -30,22 +28,41 @@ namespace statsd {
 // they stop or bucket expires.
 class MaxDurationTracker : public DurationTracker {
 public:
-    MaxDurationTracker(sp<ConditionWizard> wizard, int conditionIndex,
-                       uint64_t currentBucketStartNs, uint64_t bucketSizeNs,
-                       std::vector<DurationBucket>& bucket);
+    MaxDurationTracker(const ConfigKey& key, const string& name,
+                       const HashableDimensionKey& eventKey, sp<ConditionWizard> wizard,
+                       int conditionIndex, bool nesting, uint64_t currentBucketStartNs,
+                       uint64_t bucketSizeNs,
+                       const std::vector<sp<AnomalyTracker>>& anomalyTrackers);
     void noteStart(const HashableDimensionKey& key, bool condition, const uint64_t eventTime,
                    const ConditionKey& conditionKey) override;
-    void noteStop(const HashableDimensionKey& key, const uint64_t eventTime) override;
+    void noteStop(const HashableDimensionKey& key, const uint64_t eventTime,
+                  const bool stopAll) override;
     void noteStopAll(const uint64_t eventTime) override;
-    bool flushIfNeeded(uint64_t timestampNs) override;
+
+    bool flushIfNeeded(
+            uint64_t timestampNs,
+            std::unordered_map<HashableDimensionKey, std::vector<DurationBucket>>* output) override;
+
     void onSlicedConditionMayChange(const uint64_t timestamp) override;
     void onConditionChanged(bool condition, const uint64_t timestamp) override;
+
+    int64_t predictAnomalyTimestampNs(const AnomalyTracker& anomalyTracker,
+                                      const uint64_t currentTimestamp) const override;
 
 private:
     std::map<HashableDimensionKey, DurationInfo> mInfos;
 
     void noteConditionChanged(const HashableDimensionKey& key, bool conditionMet,
                               const uint64_t timestamp);
+
+    // return true if we should not allow newKey to be tracked because we are above the threshold
+    bool hitGuardRail(const HashableDimensionKey& newKey);
+
+    FRIEND_TEST(MaxDurationTrackerTest, TestSimpleMaxDuration);
+    FRIEND_TEST(MaxDurationTrackerTest, TestCrossBucketBoundary);
+    FRIEND_TEST(MaxDurationTrackerTest, TestMaxDurationWithCondition);
+    FRIEND_TEST(MaxDurationTrackerTest, TestStopAll);
+    FRIEND_TEST(MaxDurationTrackerTest, TestAnomalyDetection);
 };
 
 }  // namespace statsd

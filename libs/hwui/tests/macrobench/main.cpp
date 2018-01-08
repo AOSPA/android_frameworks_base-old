@@ -21,7 +21,6 @@
 #include "hwui/Typeface.h"
 #include "protos/hwui.pb.h"
 
-#include <../src/sysinfo.h>
 #include <benchmark/benchmark.h>
 #include <getopt.h>
 #include <pthread.h>
@@ -68,6 +67,7 @@ OPTIONS:
   --onscreen           Render tests on device screen. By default tests
                        are offscreen rendered
   --benchmark_format   Set output format. Possible values are tabular, json, csv
+  --renderer=TYPE      Sets the render pipeline to use. May be opengl, skiagl, or skiavk
 )");
 }
 
@@ -146,6 +146,20 @@ static bool setBenchmarkFormat(const char* format) {
     return true;
 }
 
+static bool setRenderer(const char* renderer) {
+    if (!strcmp(renderer, "opengl")) {
+        Properties::overrideRenderPipelineType(RenderPipelineType::OpenGL);
+    } else if (!strcmp(renderer, "skiagl")) {
+        Properties::overrideRenderPipelineType(RenderPipelineType::SkiaGL);
+    } else if (!strcmp(renderer, "skiavk")) {
+        Properties::overrideRenderPipelineType(RenderPipelineType::SkiaVulkan);
+    } else {
+        fprintf(stderr, "Unknown format '%s'", renderer);
+        return false;
+    }
+    return true;
+}
+
 // For options that only exist in long-form. Anything in the
 // 0-255 range is reserved for short options (which just use their ASCII value)
 namespace LongOpts {
@@ -158,6 +172,7 @@ enum {
     BenchmarkFormat,
     Onscreen,
     Offscreen,
+    Renderer,
 };
 }
 
@@ -172,6 +187,7 @@ static const struct option LONG_OPTIONS[] = {
         {"benchmark_format", required_argument, nullptr, LongOpts::BenchmarkFormat},
         {"onscreen", no_argument, nullptr, LongOpts::Onscreen},
         {"offscreen", no_argument, nullptr, LongOpts::Offscreen},
+        {"renderer", required_argument, nullptr, LongOpts::Renderer},
         {0, 0, 0, 0}};
 
 static const char* SHORT_OPTIONS = "c:r:h";
@@ -252,6 +268,16 @@ void parseOptions(int argc, char* argv[]) {
                 }
                 break;
 
+            case LongOpts::Renderer:
+                if (!optarg) {
+                    error = true;
+                    break;
+                }
+                if (!setRenderer(optarg)) {
+                    error = true;
+                }
+                break;
+
             case LongOpts::Onscreen:
                 gOpts.renderOffscreen = false;
                 break;
@@ -318,9 +344,6 @@ int main(int argc, char* argv[]) {
         name_field_width += 5;
 
         benchmark::BenchmarkReporter::Context context;
-        context.num_cpus = benchmark::NumCPUs();
-        context.mhz_per_cpu = benchmark::CyclesPerSecond() / 1000000.0f;
-        context.cpu_scaling_enabled = benchmark::CpuScalingEnabled();
         context.name_field_width = name_field_width;
         gBenchmarkReporter->ReportContext(context);
     }

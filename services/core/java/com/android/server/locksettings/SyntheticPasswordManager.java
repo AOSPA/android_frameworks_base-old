@@ -390,11 +390,9 @@ public class SyntheticPasswordManager {
     }
 
     public void removeUser(int userId) {
-        if (isWeaverAvailable()) {
-            for (long handle : mStorage.listSyntheticPasswordHandlesForUser(WEAVER_SLOT_NAME,
-                    userId)) {
-                destroyWeaverSlot(handle, userId);
-            }
+        for (long handle : mStorage.listSyntheticPasswordHandlesForUser(SP_BLOB_NAME, userId)) {
+            destroyWeaverSlot(handle, userId);
+            destroySPBlobKey(getHandleName(handle));
         }
     }
 
@@ -783,7 +781,8 @@ public class SyntheticPasswordManager {
      * unknown. Caller might choose to validate it by examining AuthenticationResult.credentialType
      */
     public AuthenticationResult unwrapPasswordBasedSyntheticPassword(IGateKeeperService gatekeeper,
-            long handle, String credential, int userId) throws RemoteException {
+            long handle, String credential, int userId,
+            ICheckCredentialProgressCallback progressCallback) throws RemoteException {
         if (credential == null) {
             credential = DEFAULT_PASSWORD;
         }
@@ -843,7 +842,11 @@ public class SyntheticPasswordManager {
             applicationId = transformUnderSecdiscardable(pwdToken,
                     loadSecdiscardable(handle, userId));
         }
-
+        // Supplied credential passes first stage weaver/gatekeeper check so it should be correct.
+        // Notify the callback so the keyguard UI can proceed immediately.
+        if (progressCallback != null) {
+            progressCallback.onCredentialVerified();
+        }
         result.authToken = unwrapSyntheticPasswordBlob(handle, SYNTHETIC_PASSWORD_PASSWORD_BASED,
                 applicationId, sid, userId);
 

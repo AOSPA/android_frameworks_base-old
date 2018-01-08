@@ -29,8 +29,7 @@
     <string name="keyguard_password_enter_password_code" msgid="595980919238127672">"Кулпуну ачуу үчүн сырсөздү териңиз"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7504123374204446086">"Кулпуну ачуу үчүн PIN-кодду териңиз"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="6535018036285012028">"PIN-код туура эмес."</string>
-    <!-- no translation found for keyguard_sim_error_message_short (592109500618448312) -->
-    <skip />
+    <string name="keyguard_sim_error_message_short" msgid="592109500618448312">"SIM-карта жараксыз."</string>
     <string name="keyguard_charged" msgid="2222329688813033109">"Кубатталды"</string>
     <string name="keyguard_plugged_in" msgid="89308975354638682">"Кубатталууда"</string>
     <string name="keyguard_plugged_in_charging_fast" msgid="8869226755413795173">"Ыкчам кубатталууда"</string>
@@ -136,4 +135,12 @@
       <item quantity="one">Түзмөктүн кулпусу <xliff:g id="NUMBER_0">%d</xliff:g> саат бою ачылган жок. Сырсөздү ырастаңыз.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Таанылган жок"</string>
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+      <item quantity="other">SIM-картанын PIN-кодун киргизиңиз, сизде <xliff:g id="NUMBER_1">%d</xliff:g> аракет калды.</item>
+      <item quantity="one">SIM-картанын PIN-кодун киргизиңиз, сизде <xliff:g id="NUMBER_0">%d</xliff:g> аракет калды. Эми түзмөктү бөгөттөн чыгаруу үчүн байланыш операторуңузга кайрылышыңыз керек.</item>
+    </plurals>
+    <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
+      <item quantity="other">SIM-карта азыр жарактан чыкты. Улантуу үчүн PUK-кодду киргизиңиз. SIM-картанын биротоло жарактан чыгарына <xliff:g id="_NUMBER_1">%d</xliff:g> аракет калды. Чоо-жайын билүү үчүн байланыш операторуна кайрылыңыз.</item>
+      <item quantity="one">SIM-карта азыр жарактан чыкты. Улантуу үчүн PUK-кодду киргизиңиз. SIM-картанын биротоло жарактан чыгаарына <xliff:g id="_NUMBER_0">%d</xliff:g> аракет калды. Чоо-жайын билүү үчүн байланыш операторуна кайрылыңыз.</item>
+    </plurals>
 </resources>

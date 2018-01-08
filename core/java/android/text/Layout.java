@@ -48,7 +48,11 @@ import java.util.Arrays;
  */
 public abstract class Layout {
     /** @hide */
-    @IntDef({BREAK_STRATEGY_SIMPLE, BREAK_STRATEGY_HIGH_QUALITY, BREAK_STRATEGY_BALANCED})
+    @IntDef(prefix = { "BREAK_STRATEGY_" }, value = {
+            BREAK_STRATEGY_SIMPLE,
+            BREAK_STRATEGY_HIGH_QUALITY,
+            BREAK_STRATEGY_BALANCED
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface BreakStrategy {}
 
@@ -73,8 +77,11 @@ public abstract class Layout {
     public static final int BREAK_STRATEGY_BALANCED = 2;
 
     /** @hide */
-    @IntDef({HYPHENATION_FREQUENCY_NORMAL, HYPHENATION_FREQUENCY_FULL,
-             HYPHENATION_FREQUENCY_NONE})
+    @IntDef(prefix = { "HYPHENATION_FREQUENCY_" }, value = {
+            HYPHENATION_FREQUENCY_NORMAL,
+            HYPHENATION_FREQUENCY_FULL,
+            HYPHENATION_FREQUENCY_NONE
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface HyphenationFrequency {}
 
@@ -105,7 +112,10 @@ public abstract class Layout {
         ArrayUtils.emptyArray(ParagraphStyle.class);
 
     /** @hide */
-    @IntDef({JUSTIFICATION_MODE_NONE, JUSTIFICATION_MODE_INTER_WORD})
+    @IntDef(prefix = { "JUSTIFICATION_MODE_" }, value = {
+            JUSTIFICATION_MODE_NONE,
+            JUSTIFICATION_MODE_INTER_WORD
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface JustificationMode {}
 
@@ -1907,22 +1917,14 @@ public abstract class Layout {
 
     private static float measurePara(TextPaint paint, CharSequence text, int start, int end,
             TextDirectionHeuristic textDir) {
-        MeasuredText mt = MeasuredText.obtain();
+        MeasuredText mt = null;
         TextLine tl = TextLine.obtain();
         try {
-            mt.setPara(text, start, end, textDir);
-            Directions directions;
-            int dir;
-            if (mt.mEasy) {
-                directions = DIRS_ALL_LEFT_TO_RIGHT;
-                dir = Layout.DIR_LEFT_TO_RIGHT;
-            } else {
-                directions = AndroidBidi.directions(mt.mDir, mt.mLevels,
-                    0, mt.mChars, 0, mt.mLen);
-                dir = mt.mDir;
-            }
-            char[] chars = mt.mChars;
-            int len = mt.mLen;
+            mt = MeasuredText.buildForBidi(text, start, end, textDir, mt);
+            final char[] chars = mt.getChars();
+            final int len = chars.length;
+            final Directions directions = mt.getDirections(0, len);
+            final int dir = mt.getParagraphDir();
             boolean hasTabs = false;
             TabStops tabStops = null;
             // leading margins should be taken into account when measuring a paragraph
@@ -1955,7 +1957,9 @@ public abstract class Layout {
             return margin + Math.abs(tl.metrics(null));
         } finally {
             TextLine.recycle(tl);
-            MeasuredText.recycle(mt);
+            if (mt != null) {
+                mt.recycle();
+            }
         }
     }
 
@@ -2272,6 +2276,14 @@ public abstract class Layout {
     private SpanSet<LineBackgroundSpan> mLineBackgroundSpans;
     private int mJustificationMode;
 
+    /** @hide */
+    @IntDef(prefix = { "DIR_" }, value = {
+            DIR_LEFT_TO_RIGHT,
+            DIR_RIGHT_TO_LEFT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface Direction {}
+
     public static final int DIR_LEFT_TO_RIGHT = 1;
     public static final int DIR_RIGHT_TO_LEFT = -1;
 
@@ -2309,7 +2321,10 @@ public abstract class Layout {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({TEXT_SELECTION_LAYOUT_RIGHT_TO_LEFT, TEXT_SELECTION_LAYOUT_LEFT_TO_RIGHT})
+    @IntDef(prefix = { "TEXT_SELECTION_LAYOUT_" }, value = {
+            TEXT_SELECTION_LAYOUT_RIGHT_TO_LEFT,
+            TEXT_SELECTION_LAYOUT_LEFT_TO_RIGHT
+    })
     public @interface TextSelectionLayout {}
 
     /** @hide */

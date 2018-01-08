@@ -14,17 +14,33 @@
  * limitations under the License.
  */
 
+#define DEBUG true  // STOPSHIP if true
 #include "Log.h"
+#include "statslog.h"
 
+#include <android-base/file.h>
+#include <dirent.h>
 #include "StatsLogProcessor.h"
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
+#include "android-base/stringprintf.h"
+#include "guardrail/StatsdStats.h"
 #include "metrics/CountMetricProducer.h"
+#include "external/StatsPullerManager.h"
 #include "stats_util.h"
+#include "storage/StorageManager.h"
 
 #include <log/log_event_list.h>
 #include <utils/Errors.h>
 
 using namespace android;
+using android::base::StringPrintf;
+using android::util::FIELD_COUNT_REPEATED;
+using android::util::FIELD_TYPE_BOOL;
+using android::util::FIELD_TYPE_FLOAT;
+using android::util::FIELD_TYPE_INT32;
+using android::util::FIELD_TYPE_INT64;
+using android::util::FIELD_TYPE_MESSAGE;
+using android::util::FIELD_TYPE_STRING;
+using android::util::ProtoOutputStream;
 using std::make_unique;
 using std::unique_ptr;
 using std::vector;
@@ -33,107 +49,225 @@ namespace android {
 namespace os {
 namespace statsd {
 
+// for ConfigMetricsReportList
+const int FIELD_ID_CONFIG_KEY = 1;
+const int FIELD_ID_REPORTS = 2;
+// for ConfigKey
+const int FIELD_ID_UID = 1;
+const int FIELD_ID_NAME = 2;
+// for ConfigMetricsReport
+const int FIELD_ID_METRICS = 1;
+const int FIELD_ID_UID_MAP = 2;
+
+#define STATS_DATA_DIR "/data/misc/stats-data"
+
 StatsLogProcessor::StatsLogProcessor(const sp<UidMap>& uidMap,
-                                     const std::function<void(const vector<uint8_t>&)>& pushLog)
-    : mUidMap(uidMap), mPushLog(pushLog) {
+                                     const sp<AnomalyMonitor>& anomalyMonitor,
+                                     const std::function<void(const ConfigKey&)>& sendBroadcast)
+    : mUidMap(uidMap),
+      mAnomalyMonitor(anomalyMonitor),
+      mSendBroadcast(sendBroadcast),
+      mTimeBaseSec(time(nullptr)) {
+    // On each initialization of StatsLogProcessor, check stats-data directory to see if there is
+    // any left over data to be read.
+    StorageManager::sendBroadcast(STATS_DATA_DIR, mSendBroadcast);
+    StatsPullerManager statsPullerManager;
+    statsPullerManager.SetTimeBaseSec(mTimeBaseSec);
 }
 
 StatsLogProcessor::~StatsLogProcessor() {
 }
 
+void StatsLogProcessor::onAnomalyAlarmFired(
+        const uint64_t timestampNs,
+        unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>> anomalySet) {
+    for (const auto& itr : mMetricsManagers) {
+        itr.second->onAnomalyAlarmFired(timestampNs, anomalySet);
+    }
+}
+
 // TODO: what if statsd service restarts? How do we know what logs are already processed before?
 void StatsLogProcessor::OnLogEvent(const LogEvent& msg) {
+    StatsdStats::getInstance().noteAtomLogged(msg.GetTagId(), msg.GetTimestampNs() / NS_PER_SEC);
     // pass the event to metrics managers.
     for (auto& pair : mMetricsManagers) {
         pair.second->onLogEvent(msg);
-        flushIfNecessary(msg.GetTimestampNs(), pair.first, pair.second);
+        flushIfNecessary(msg.GetTimestampNs(), pair.first, *(pair.second));
+    }
+
+    // Hard-coded logic to update the isolated uid's in the uid-map.
+    // The field numbers need to be currently updated by hand with atoms.proto
+    if (msg.GetTagId() == android::util::ISOLATED_UID_CHANGED) {
+        status_t err = NO_ERROR, err2 = NO_ERROR, err3 = NO_ERROR;
+        bool is_create = msg.GetBool(3, &err);
+        auto parent_uid = int(msg.GetLong(1, &err2));
+        auto isolated_uid = int(msg.GetLong(2, &err3));
+        if (err == NO_ERROR && err2 == NO_ERROR && err3 == NO_ERROR) {
+            if (is_create) {
+                mUidMap->assignIsolatedUid(isolated_uid, parent_uid);
+            } else {
+                mUidMap->removeIsolatedUid(isolated_uid, parent_uid);
+            }
+        }
     }
 }
 
 void StatsLogProcessor::OnConfigUpdated(const ConfigKey& key, const StatsdConfig& config) {
-    auto it = mMetricsManagers.find(key);
-    if (it != mMetricsManagers.end()) {
-        it->second->finish();
-    }
-
     ALOGD("Updated configuration for key %s", key.ToString().c_str());
 
-    unique_ptr<MetricsManager> newMetricsManager = std::make_unique<MetricsManager>(config);
+    sp<MetricsManager> newMetricsManager = new MetricsManager(key, config, mTimeBaseSec, mUidMap);
+
+    auto it = mMetricsManagers.find(key);
+    if (it == mMetricsManagers.end() && mMetricsManagers.size() > StatsdStats::kMaxConfigCount) {
+        ALOGE("Can't accept more configs!");
+        return;
+    }
+
     if (newMetricsManager->isConfigValid()) {
         mUidMap->OnConfigUpdated(key);
-        mMetricsManagers[key] = std::move(newMetricsManager);
+        newMetricsManager->setAnomalyMonitor(mAnomalyMonitor);
+        if (config.log_source().package().size() > 0) {
+            // We have to add listener after the MetricsManager is constructed because it's
+            // not safe to create wp or sp from this pointer inside its constructor.
+            mUidMap->addListener(newMetricsManager.get());
+        }
+        mMetricsManagers[key] = newMetricsManager;
         // Why doesn't this work? mMetricsManagers.insert({key, std::move(newMetricsManager)});
-        ALOGD("StatsdConfig valid");
+        VLOG("StatsdConfig valid");
     } else {
         // If there is any error in the config, don't use it.
-        ALOGD("StatsdConfig NOT valid");
+        ALOGE("StatsdConfig NOT valid");
     }
 }
 
-ConfigMetricsReport StatsLogProcessor::onDumpReport(const ConfigKey& key) {
-    ConfigMetricsReport report;
-
+size_t StatsLogProcessor::GetMetricsSize(const ConfigKey& key) const {
     auto it = mMetricsManagers.find(key);
     if (it == mMetricsManagers.end()) {
         ALOGW("Config source %s does not exist", key.ToString().c_str());
-        return report;
+        return 0;
+    }
+    return it->second->byteSize();
+}
+
+void StatsLogProcessor::onDumpReport(const ConfigKey& key, vector<uint8_t>* outData) {
+    auto it = mMetricsManagers.find(key);
+    if (it == mMetricsManagers.end()) {
+        ALOGW("Config source %s does not exist", key.ToString().c_str());
+        return;
     }
 
-    auto set_key = report.mutable_config_key();
-    set_key->set_uid(key.GetUid());
-    set_key->set_name(key.GetName());
-    for (auto m : it->second->onDumpReport()) {
-        // Transfer the vector of StatsLogReport into a field
-        // TODO: perhaps we just have bytes being returned from onDumpReport and transfer bytes
-        auto dest = report.add_metrics();
-        *dest = m;
+    // This allows another broadcast to be sent within the rate-limit period if we get close to
+    // filling the buffer again soon.
+    mBroadcastTimesMutex.lock();
+    mLastBroadcastTimes.erase(key);
+    mBroadcastTimesMutex.unlock();
+
+    ProtoOutputStream proto;
+
+    // Start of ConfigKey.
+    long long configKeyToken = proto.start(FIELD_TYPE_MESSAGE | FIELD_ID_CONFIG_KEY);
+    proto.write(FIELD_TYPE_INT32 | FIELD_ID_UID, key.GetUid());
+    proto.write(FIELD_TYPE_STRING | FIELD_ID_NAME, key.GetName());
+    proto.end(configKeyToken);
+    // End of ConfigKey.
+
+    // Start of ConfigMetricsReport (reports).
+    long long reportsToken =
+            proto.start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_REPORTS);
+
+    // First, fill in ConfigMetricsReport using current data on memory, which
+    // starts from filling in StatsLogReport's.
+    it->second->onDumpReport(&proto);
+
+    // Fill in UidMap.
+    auto uidMap = mUidMap->getOutput(key);
+    const int uidMapSize = uidMap.ByteSize();
+    char uidMapBuffer[uidMapSize];
+    uidMap.SerializeToArray(&uidMapBuffer[0], uidMapSize);
+    proto.write(FIELD_TYPE_MESSAGE | FIELD_ID_UID_MAP, uidMapBuffer, uidMapSize);
+
+    // End of ConfigMetricsReport (reports).
+    proto.end(reportsToken);
+
+    // Then, check stats-data directory to see there's any file containing
+    // ConfigMetricsReport from previous shutdowns to concatenate to reports.
+    StorageManager::appendConfigMetricsReport(STATS_DATA_DIR, proto);
+
+    if (outData != nullptr) {
+        outData->clear();
+        outData->resize(proto.size());
+        size_t pos = 0;
+        auto iter = proto.data();
+        while (iter.readBuffer() != NULL) {
+            size_t toRead = iter.currentToRead();
+            std::memcpy(&((*outData)[pos]), iter.readBuffer(), toRead);
+            pos += toRead;
+            iter.rp()->move(toRead);
+        }
     }
-    auto temp = mUidMap->getOutput(key);
-    report.mutable_uid_map()->Swap(&temp);
-    return report;
+    StatsdStats::getInstance().noteMetricsReportSent(key);
 }
 
 void StatsLogProcessor::OnConfigRemoved(const ConfigKey& key) {
     auto it = mMetricsManagers.find(key);
     if (it != mMetricsManagers.end()) {
-        it->second->finish();
         mMetricsManagers.erase(it);
         mUidMap->OnConfigRemoved(key);
     }
-    auto flushTime = mLastFlushTimes.find(key);
-    if (flushTime != mLastFlushTimes.end()) {
-        mLastFlushTimes.erase(flushTime);
-    }
+    StatsdStats::getInstance().noteConfigRemoved(key);
+
+    std::lock_guard<std::mutex> lock(mBroadcastTimesMutex);
+    mLastBroadcastTimes.erase(key);
 }
 
-void StatsLogProcessor::flushIfNecessary(uint64_t timestampNs,
-                                         const ConfigKey& key,
-                                         const unique_ptr<MetricsManager>& metricsManager) {
-    auto lastFlushNs = mLastFlushTimes.find(key);
-    if (lastFlushNs != mLastFlushTimes.end()) {
-        if (timestampNs - lastFlushNs->second < kMinFlushPeriod) {
+void StatsLogProcessor::flushIfNecessary(uint64_t timestampNs, const ConfigKey& key,
+                                         MetricsManager& metricsManager) {
+    std::lock_guard<std::mutex> lock(mBroadcastTimesMutex);
+
+    auto lastCheckTime = mLastByteSizeTimes.find(key);
+    if (lastCheckTime != mLastByteSizeTimes.end()) {
+        if (timestampNs - lastCheckTime->second < StatsdStats::kMinByteSizeCheckPeriodNs) {
             return;
         }
     }
 
-    size_t totalBytes = metricsManager->byteSize();
-    if (totalBytes > kMaxSerializedBytes) {
-        flush();
-        mLastFlushTimes[key] = std::move(timestampNs);
+    // We suspect that the byteSize() computation is expensive, so we set a rate limit.
+    size_t totalBytes = metricsManager.byteSize();
+    mLastByteSizeTimes[key] = timestampNs;
+    if (totalBytes >
+        StatsdStats::kMaxMetricsBytesPerConfig) {  // Too late. We need to start clearing data.
+        // TODO(b/70571383): By 12/15/2017 add API to drop data directly
+        ProtoOutputStream proto;
+        metricsManager.onDumpReport(&proto);
+        StatsdStats::getInstance().noteDataDropped(key);
+        VLOG("StatsD had to toss out metrics for %s", key.ToString().c_str());
+    } else if (totalBytes > .9 * StatsdStats::kMaxMetricsBytesPerConfig) {
+        // Send broadcast so that receivers can pull data.
+        auto lastBroadcastTime = mLastBroadcastTimes.find(key);
+        if (lastBroadcastTime != mLastBroadcastTimes.end()) {
+            if (timestampNs - lastBroadcastTime->second < StatsdStats::kMinBroadcastPeriodNs) {
+                VLOG("StatsD would've sent a broadcast but the rate limit stopped us.");
+                return;
+            }
+        }
+        mLastBroadcastTimes[key] = timestampNs;
+        VLOG("StatsD requesting broadcast for %s", key.ToString().c_str());
+        mSendBroadcast(key);
+        StatsdStats::getInstance().noteBroadcastSent(key);
     }
 }
 
-void StatsLogProcessor::flush() {
-    // TODO: Take ConfigKey as an argument and flush metrics related to the
-    // ConfigKey. Also, create a wrapper that holds a repeated field of
-    // StatsLogReport's.
-    /*
-    StatsLogReport logReport;
-    const int numBytes = logReport.ByteSize();
-    vector<uint8_t> logReportBuffer(numBytes);
-    logReport.SerializeToArray(&logReportBuffer[0], numBytes);
-    mPushLog(logReportBuffer);
-    */
+void StatsLogProcessor::WriteDataToDisk() {
+    mkdir(STATS_DATA_DIR, S_IRWXU);
+    for (auto& pair : mMetricsManagers) {
+        const ConfigKey& key = pair.first;
+        vector<uint8_t> data;
+        onDumpReport(key, &data);
+        // TODO: Add a guardrail to prevent accumulation of file on disk.
+        string file_name = StringPrintf("%s/%d-%s-%ld", STATS_DATA_DIR, key.GetUid(),
+                                        key.GetName().c_str(), time(nullptr));
+        StorageManager::writeFile(file_name.c_str(), &data[0], data.size());
+    }
 }
 
 }  // namespace statsd

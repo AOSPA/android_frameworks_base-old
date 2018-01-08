@@ -144,22 +144,25 @@ void SkiaRecordingCanvas::drawVectorDrawable(VectorDrawableRoot* tree) {
 // ----------------------------------------------------------------------------
 
 inline static const SkPaint* bitmapPaint(const SkPaint* origPaint, SkPaint* tmpPaint,
-                                         sk_sp<SkColorFilter> colorFilter) {
-    if ((origPaint && origPaint->isAntiAlias()) || colorFilter) {
+                                         sk_sp<SkColorFilter> colorSpaceFilter) {
+    if ((origPaint && origPaint->isAntiAlias()) || colorSpaceFilter) {
         if (origPaint) {
             *tmpPaint = *origPaint;
         }
 
-        sk_sp<SkColorFilter> filter;
-        if (colorFilter && tmpPaint->getColorFilter()) {
-            filter = SkColorFilter::MakeComposeFilter(tmpPaint->refColorFilter(), colorFilter);
-            LOG_ALWAYS_FATAL_IF(!filter);
-        } else {
-            filter = colorFilter;
+        if (colorSpaceFilter) {
+            if (tmpPaint->getColorFilter()) {
+                tmpPaint->setColorFilter(
+                        SkColorFilter::MakeComposeFilter(tmpPaint->refColorFilter(), colorSpaceFilter));
+            } else {
+                tmpPaint->setColorFilter(colorSpaceFilter);
+            }
+            LOG_ALWAYS_FATAL_IF(!tmpPaint->getColorFilter());
         }
 
+
+        // disabling AA on bitmap draws matches legacy HWUI behavior
         tmpPaint->setAntiAlias(false);
-        tmpPaint->setColorFilter(filter);
         return tmpPaint;
     } else {
         return origPaint;
@@ -215,7 +218,8 @@ void SkiaRecordingCanvas::drawNinePatch(Bitmap& bitmap, const Res_png_9patch& ch
     SkCanvas::Lattice lattice;
     NinePatchUtils::SetLatticeDivs(&lattice, chunk, bitmap.width(), bitmap.height());
 
-    lattice.fFlags = nullptr;
+    lattice.fRectTypes = nullptr;
+    lattice.fColors = nullptr;
     int numFlags = 0;
     if (chunk.numColors > 0 && chunk.numColors == NinePatchUtils::NumDistinctRects(lattice)) {
         // We can expect the framework to give us a color for every distinct rect.
@@ -223,9 +227,10 @@ void SkiaRecordingCanvas::drawNinePatch(Bitmap& bitmap, const Res_png_9patch& ch
         numFlags = (lattice.fXCount + 1) * (lattice.fYCount + 1);
     }
 
-    SkAutoSTMalloc<25, SkCanvas::Lattice::Flags> flags(numFlags);
+    SkAutoSTMalloc<25, SkCanvas::Lattice::RectType> flags(numFlags);
+    SkAutoSTMalloc<25, SkColor> colors(numFlags);
     if (numFlags > 0) {
-        NinePatchUtils::SetLatticeFlags(&lattice, flags.get(), numFlags, chunk);
+        NinePatchUtils::SetLatticeFlags(&lattice, flags.get(), numFlags, chunk, colors.get());
     }
 
     lattice.fBounds = nullptr;

@@ -79,7 +79,7 @@
     <string name="RestrictedOnAllVoiceTitle" msgid="158800171499150681">"వాయిస్/అత్యవసర సేవ లేదు"</string>
     <string name="RestrictedStateContent" msgid="4278821484643362350">"మీ స్థానంలో మొబైల్ నెట్‌వర్క్ ద్వారా తాత్కాలికంగా అందించబడదు"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"నెట్‌వర్క్‌ను చేరుకోలేరు"</string>
-    <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"స్వీకరణను మెరుగుపరచాలంటే, సెట్టింగ్‌లు &gt; నెట్‌వర్క్ &amp; ఇంటర్నెట్ &gt; మొబైల్ నెట్‌వర్క్‌లు &gt; ప్రాధాన్య నెట్‌వర్క్ రకంలో మీరు ఎంచుకున్న రకాన్ని మార్చి ప్రయత్నించండి."</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7056776609127756440">"స్వీకరణను మెరుగుపరచాలంటే, సెట్టింగ్‌లు &gt; నెట్‌వర్క్ &amp; ఇంటర్నెట్ &gt; మొబైల్ నెట్‌వర్క్‌లు &gt; ప్రాధాన్య నెట్‌వర్క్ రకంలో మీరు ఎంచుకున్న రకాన్ని మార్చి ప్రయత్నించండి."</string>
     <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"Wi-Fi కాలింగ్ సక్రియంగా ఉంది"</string>
     <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"అత్యవసర కాల్‌లకు మొబైల్ నెట్‌వర్క్ అవసరమవుతుంది."</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"హెచ్చరికలు"</string>
@@ -212,6 +212,7 @@
     <string name="global_action_power_off" msgid="4471879440839879722">"పవర్ ఆఫ్ చేయి"</string>
     <string name="global_action_emergency" msgid="7112311161137421166">"అత్యవసరం"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"బగ్ నివేదిక"</string>
+    <string name="global_action_logout" msgid="935179188218826050">"సెషన్‌ను ముగించు"</string>
     <string name="bugreport_title" msgid="2667494803742548533">"బగ్ నివేదికను సిద్ధం చేయి"</string>
     <string name="bugreport_message" msgid="398447048750350456">"ఇది ఇ-మెయిల్ సందేశం రూపంలో పంపడానికి మీ ప్రస్తుత పరికర స్థితి గురించి సమాచారాన్ని సేకరిస్తుంది. బగ్ నివేదికను ప్రారంభించడం మొదలుకొని పంపడానికి సిద్ధం చేసే వరకు ఇందుకు కొంత సమయం పడుతుంది; దయచేసి ఓపిక పట్టండి."</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"ప్రభావశీల నివేదిక"</string>
@@ -1051,6 +1052,9 @@
     <string name="screen_compat_mode_hint" msgid="1064524084543304459">"సిస్టమ్ సెట్టింగ్‌లు &gt; అనువర్తనాలు &gt; డౌన్‌లోడ్ చేసినవిలో దీన్ని పునఃప్రారంభించండి."</string>
     <string name="unsupported_display_size_message" msgid="6545327290756295232">"<xliff:g id="APP_NAME">%1$s</xliff:g> ప్రస్తుత ప్రదర్శన పరిమాణ సెట్టింగ్‌కు మద్దతు ఇవ్వదు, దీని వలన ఊహించని సమస్యలు తలెత్తవచ్చు."</string>
     <string name="unsupported_display_size_show" msgid="7969129195360353041">"ఎల్లప్పుడూ చూపు"</string>
+    <string name="unsupported_compile_sdk_message" msgid="4253168368781441759">"Android OS యొక్క అననుకూల వెర్షన్ కోసం <xliff:g id="APP_NAME">%1$s</xliff:g> రూపొందించబడింది మరియు ఊహించని సమస్యలు తలెత్తవచ్చు. యాప్ యొక్క అప్‌డేట్ చేసిన వెర్షన్ అందుబాటులో ఉండవచ్చు."</string>
+    <string name="unsupported_compile_sdk_show" msgid="2681877855260970231">"ఎల్లప్పుడూ చూపు"</string>
+    <string name="unsupported_compile_sdk_check_update" msgid="3312723623323216101">"అప్‌డేట్ కోసం తనిఖీ చేయి"</string>
     <string name="smv_application" msgid="3307209192155442829">"<xliff:g id="APPLICATION">%1$s</xliff:g> యాప్ (<xliff:g id="PROCESS">%2$s</xliff:g> ప్రాసెస్) అది స్వయంగా అమలు చేసే ఖచ్చితమైన మోడ్ విధానాన్ని ఉల్లంఘించింది."</string>
     <string name="smv_process" msgid="5120397012047462446">"ప్రక్రియ <xliff:g id="PROCESS">%1$s</xliff:g> అది స్వయంగా అమలు చేసే ఖచ్చితమైన మోడ్ విధానాన్ని ఉల్లంఘించింది."</string>
     <string name="android_upgrading_title" msgid="1584192285441405746">"Android అప్‌గ్రేడ్ అవుతోంది…"</string>
@@ -1116,10 +1120,10 @@
     <string name="network_available_sign_in" msgid="1848877297365446605">"నెట్‌వర్క్‌కి సైన్ ఇన్ చేయండి"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
     <skip />
-    <string name="wifi_no_internet" msgid="8451173622563841546">"Wi-Fiకి ఇంటర్నెట్ యాక్సెస్ లేదు"</string>
+    <string name="wifi_no_internet" msgid="8938267198124654938">"Wi-Fiకి ఇంటర్నెట్ యాక్సెస్ లేదు"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"ఎంపికల కోసం నొక్కండి"</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"<xliff:g id="NETWORK_TYPE">%1$s</xliff:g>కి మార్చబడింది"</string>
-    <string name="network_switch_metered_detail" msgid="5325661434777870353">"పరికరం <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g>కి ఇంటర్నెట్ యాక్సెస్ లేనప్పుడు <xliff:g id="NEW_NETWORK">%1$s</xliff:g>ని ఉపయోగిస్తుంది. ఛార్జీలు వర్తించవచ్చు."</string>
+    <string name="network_switch_metered_detail" msgid="775163331794506615">"పరికరం <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g>కి ఇంటర్నెట్ యాక్సెస్ లేనప్పుడు <xliff:g id="NEW_NETWORK">%1$s</xliff:g>ని ఉపయోగిస్తుంది. ఛార్జీలు వర్తించవచ్చు."</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"<xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> నుండి <xliff:g id="NEW_NETWORK">%2$s</xliff:g>కి మార్చబడింది"</string>
   <string-array name="network_switch_type_name">
     <item msgid="3979506840912951943">"మొబైల్ డేటా"</item>
@@ -1130,7 +1134,8 @@
   </string-array>
     <string name="network_switch_type_name_unknown" msgid="4552612897806660656">"తెలియని నెట్‌వర్క్ రకం"</string>
     <string name="wifi_watchdog_network_disabled" msgid="7904214231651546347">"Wi-Fiకి కనెక్ట్ చేయడం సాధ్యపడలేదు"</string>
-    <string name="wifi_watchdog_network_disabled_detailed" msgid="5548780776418332675">" బలహీన ఇంటర్నెట్ కనెక్షన్‌ను కలిగి ఉంది."</string>
+    <!-- no translation found for wifi_watchdog_network_disabled_detailed (4917472096696322767) -->
+    <skip />
     <string name="wifi_connect_alert_title" msgid="8455846016001810172">"కనెక్షన్‌ని అనుమతించాలా?"</string>
     <string name="wifi_connect_alert_message" msgid="6451273376815958922">"%1$s యాప్ %2$s Wifi నెట్‌వర్క్‌కు కనెక్ట్ చేయాలనుకుంటోంది"</string>
     <string name="wifi_connect_default_application" msgid="7143109390475484319">"ఒక యాప్"</string>
@@ -1495,6 +1500,8 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="7256507885737444807">"షార్ట్‌కట్ ఆన్‌లో ఉన్నప్పుడు, రెండు వాల్యూమ్ బటన్‌లను 3 సెకన్ల పాటు నొక్కితే యాక్సెస్ సామర్థ్య ఫీచర్ ప్రారంభం అవుతుంది.\n\n ప్రస్తుత యాక్సెస్ సామర్థ్య ఫీచర్:\n <xliff:g id="SERVICE_NAME">%1$s</xliff:g>\n\n సెట్టింగ్‌లు &gt; యాక్సెస్ సామర్థ్యంలో మీరు ఫీచర్‌ను మార్చవచ్చు."</string>
     <string name="disable_accessibility_shortcut" msgid="627625354248453445">"సత్వరమార్గాన్ని ఆఫ్ చేయి"</string>
     <string name="leave_accessibility_shortcut_on" msgid="7653111894438512680">"సత్వరమార్గాన్ని ఉపయోగించు"</string>
+    <string name="color_inversion_feature_name" msgid="4231186527799958644">"వర్ణ విలోమం"</string>
+    <string name="color_correction_feature_name" msgid="6779391426096954933">"రంగు సవరణ"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"యాక్సెస్ సామర్థ్య షార్ట్‌కట్ ద్వారా <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ఆన్ చేయబడింది"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"యాక్సెస్ సామర్థ్య షార్ట్‌కట్ ద్వారా <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ఆఫ్ చేయబడింది"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"యాక్సెస్ సామర్థ్య బటన్‌ను మీరు నొక్కినప్పుడు ఉపయోగించాల్సిన ఒక ఫీచర్‌ను ఎంచుకోండి:"</string>
@@ -1626,7 +1633,6 @@
     <string name="managed_profile_label_badge_2" msgid="5048136430082124036">"2వ కార్యాలయం <xliff:g id="LABEL">%1$s</xliff:g>"</string>
     <string name="managed_profile_label_badge_3" msgid="2808305070321719040">"3వ కార్యాలయం <xliff:g id="LABEL">%1$s</xliff:g>"</string>
     <string name="lock_to_app_toast" msgid="6820571533009838261">"ఈ స్క్రీన్‌ను అన్‌పిన్ చేయడానికి, వెనుకకు మరియు స్థూలదృష్టి బటన్‌లను నొక్కి &amp; పట్టుకోండి"</string>
-    <string name="lock_to_app_toast_locked" msgid="7849470948648628704">"ఈ అనువర్తనాన్ని అన్‌పిన్ చేయడం సాధ్యపడదు"</string>
     <string name="lock_to_app_start" msgid="6643342070839862795">"స్క్రీన్ పిన్ చేయబడింది"</string>
     <string name="lock_to_app_exit" msgid="8598219838213787430">"స్క్రీన్ అన్‌పిన్ చేయబడింది"</string>
     <string name="lock_to_app_unlock_pin" msgid="2552556656504331634">"అన్‌పిన్ చేయడానికి ముందు పిన్‌ కోసం అడుగు"</string>
@@ -1635,7 +1641,7 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"మీ నిర్వాహకులు ఇన్‌స్టాల్ చేసారు"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"మీ నిర్వాహకులు నవీకరించారు"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"మీ నిర్వాహకులు తొలగించారు"</string>
-    <string name="battery_saver_description" msgid="1960431123816253034">"బ్యాటరీ జీవితకాలాన్ని మెరుగుపరచడంలో సహాయపడటానికి, బ్యాటరీ సేవర్ మీ పరికరం పనితీరును తగ్గిస్తుంది మరియు వైబ్రేషన్‌ను, స్థాన సేవలను మరియు అత్యధిక నేపథ్య డేటాను పరిమితం చేస్తుంది. ఇమెయిల్, మెసేజింగ్ మరియు సమకాలీకరణపై ఆధారపడే ఇతర యాప్‌లు మీరు వాటిని తెరిస్తే మినహా అప్‌డేట్ చేయబడవు.\n\nమీ పరికరం ఛార్జ్ అవుతున్నప్పుడు బ్యాటరీ సేవర్ స్వయంచాలకంగా ఆఫ్ అవుతుంది."</string>
+    <string name="battery_saver_description" msgid="5394663545060026162">"బ్యాటరీ జీవితకాలాన్ని మెరుగుపరచడంలో సహాయపడటానికి, బ్యాటరీ సేవర్ మీ పరికరం పనితీరును తగ్గిస్తుంది మరియు వైబ్రేషన్‌ను, స్థాన సేవలను మరియు అత్యధిక నేపథ్య డేటాను పరిమితం చేస్తుంది. ఇమెయిల్, మెసేజింగ్ మరియు సమకాలీకరణపై ఆధారపడే ఇతర యాప్‌లు మీరు వాటిని తెరిస్తే మినహా అప్‌డేట్ చేయబడవు.\n\nమీ పరికరం ఛార్జ్ అవుతున్నప్పుడు బ్యాటరీ సేవర్ స్వయంచాలకంగా ఆఫ్ అవుతుంది."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"డేటా వినియోగాన్ని తగ్గించడంలో సహాయకరంగా ఉండటానికి, డేటా సేవర్ కొన్ని యాప్‌లను నేపథ్యంలో డేటాను పంపకుండా లేదా స్వీకరించకుండా నిరోధిస్తుంది. మీరు ప్రస్తుతం ఉపయోగిస్తున్న యాప్‌ డేటాను యాక్సెస్ చేయగలదు కానీ అలా అరుదుగా చేయవచ్చు. అంటే, ఉదాహరణకు, మీరు ఆ చిత్రాలను నొక్కే వరకు అవి ప్రదర్శించబడవు."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"డేటా సేవర్‌ను ఆన్ చేయాలా?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"ఆన్ చేయి"</string>
@@ -1682,13 +1688,16 @@
     <string name="zen_mode_default_weeknights_name" msgid="3081318299464998143">"వారపు రోజుల్లో రాత్రి"</string>
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"వారాంతం"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"ఈవెంట్"</string>
+    <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"నిద్రావస్థ"</string>
     <string name="muted_by" msgid="6147073845094180001">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g> ద్వారా మ్యూట్ చేయబడింది"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"మీ పరికరంతో అంతర్గత సమస్య ఏర్పడింది మరియు మీరు ఫ్యాక్టరీ డేటా రీసెట్ చేసే వరకు అస్థిరంగా ఉంటుంది."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"మీ పరికరంతో అంతర్గత సమస్య ఏర్పడింది. వివరాల కోసం మీ తయారీదారుని సంప్రదించండి."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5202342984749947872">"USSD అభ్యర్థన డయల్ అభ్యర్థనగా సవరించబడింది."</string>
     <string name="stk_cc_ussd_to_ss" msgid="2345360594181405482">"USSD అభ్యర్థన SS అభ్యర్థనగా సవరించబడింది."</string>
     <string name="stk_cc_ussd_to_ussd" msgid="7466087659967191653">"USSD అభ్యర్థన కొత్త USSD అభ్యర్థనగా సవరించబడింది."</string>
+    <string name="stk_cc_ussd_to_dial_video" msgid="585340552561515305">"USSD అభ్యర్థన వీడియో డయల్ అభ్యర్థనగా సవరించబడింది."</string>
     <string name="stk_cc_ss_to_dial" msgid="2151304435775557162">"SS అభ్యర్థన డయల్ అభ్యర్థనగా సవరించబడింది."</string>
+    <string name="stk_cc_ss_to_dial_video" msgid="4306210904450719045">"SS అభ్యర్థన వీడియో డయల్ అభ్యర్థనగా సవరించబడింది."</string>
     <string name="stk_cc_ss_to_ussd" msgid="3951862188105305589">"SS అభ్యర్థన USSD అభ్యర్థనగా సవరించబడింది."</string>
     <string name="stk_cc_ss_to_ss" msgid="5470768854991452695">"SS అభ్యర్థన కొత్త SS అభ్యర్థనగా సవరించబడింది."</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"కార్యాలయ ప్రొఫైల్‌"</string>
@@ -1782,14 +1791,10 @@
     <string name="etws_primary_default_message_test" msgid="2709597093560037455">"అత్యవసర సందేశాల పరీక్ష"</string>
     <string name="notification_reply_button_accessibility" msgid="3621714652387814344">"ప్రత్యుత్తరం పంపండి"</string>
     <string name="etws_primary_default_message_others" msgid="6293148756130398971"></string>
-    <!-- no translation found for mmcc_authentication_reject (5767701075994754356) -->
-    <skip />
-    <!-- no translation found for mmcc_imsi_unknown_in_hlr (5316658473301462825) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_ms (807334478177362062) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_me (1950705155760872972) -->
-    <skip />
+    <string name="mmcc_authentication_reject" msgid="5767701075994754356">"వాయిస్ కోసం SIM అనుమతించబడదు"</string>
+    <string name="mmcc_imsi_unknown_in_hlr" msgid="5316658473301462825">"వాయిస్ కోసం SIM సదుపాయం లేదు"</string>
+    <string name="mmcc_illegal_ms" msgid="807334478177362062">"వాయిస్ కోసం SIM అనుమతించబడదు"</string>
+    <string name="mmcc_illegal_me" msgid="1950705155760872972">"వాయిస్ కోసం ఫోన్ అనుమతించబడదు"</string>
     <string name="popup_window_default_title" msgid="4874318849712115433">"పాప్అప్ విండో"</string>
     <string name="slice_more_content" msgid="8504342889413274608">"+ <xliff:g id="NUMBER">%1$d</xliff:g>"</string>
     <string name="shortcut_restored_on_lower_version" msgid="5270675146351613828">"ఈ సత్వరమార్గానికి తాజా యాప్ అవసరం"</string>

@@ -24,6 +24,7 @@ import static android.app.ActivityManager.USER_OP_IS_CURRENT;
 import static android.app.ActivityManager.USER_OP_SUCCESS;
 import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
+
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_MU;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -37,6 +38,7 @@ import static com.android.server.am.UserState.STATE_RUNNING_UNLOCKED;
 import static com.android.server.am.UserState.STATE_RUNNING_UNLOCKING;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.AppGlobals;
@@ -89,6 +91,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemServiceManager;
 import com.android.server.pm.UserManagerService;
@@ -355,27 +358,35 @@ class UserController implements Handler.Callback {
         // Only keep marching forward if user is actually unlocked
         if (!StorageManager.isUserKeyUnlocked(userId)) return;
         synchronized (mLock) {
-            // Bail if we ended up with a stale user
-            if (mStartedUsers.get(uss.mHandle.getIdentifier()) != uss) return;
-
-            // Do not proceed if unexpected state
-            if (!uss.setState(STATE_RUNNING_LOCKED, STATE_RUNNING_UNLOCKING)) {
+            // Do not proceed if unexpected state or a stale user
+            if (mStartedUsers.get(userId) != uss || uss.state != STATE_RUNNING_LOCKED) {
                 return;
             }
         }
-        mInjector.getUserManagerInternal().setUserState(userId, uss.state);
         uss.mUnlockProgress.start();
 
         // Prepare app storage before we go any further
         uss.mUnlockProgress.setProgress(5,
                     mInjector.getContext().getString(R.string.android_start_title));
-        mInjector.getUserManager().onBeforeUnlockUser(userId);
-        uss.mUnlockProgress.setProgress(20);
 
-        // Dispatch unlocked to system services; when fully dispatched,
-        // that calls through to the next "unlocked" phase
-        mHandler.obtainMessage(SYSTEM_USER_UNLOCK_MSG, userId, 0, uss)
-                .sendToTarget();
+        // Call onBeforeUnlockUser on a worker thread that allows disk I/O
+        FgThread.getHandler().post(() -> {
+            mInjector.getUserManager().onBeforeUnlockUser(userId);
+            synchronized (mLock) {
+                // Do not proceed if unexpected state
+                if (!uss.setState(STATE_RUNNING_LOCKED, STATE_RUNNING_UNLOCKING)) {
+                    return;
+                }
+            }
+            mInjector.getUserManagerInternal().setUserState(userId, uss.state);
+
+            uss.mUnlockProgress.setProgress(20);
+
+            // Dispatch unlocked to system services; when fully dispatched,
+            // that calls through to the next "unlocked" phase
+            mHandler.obtainMessage(SYSTEM_USER_UNLOCK_MSG, userId, 0, uss)
+                    .sendToTarget();
+        });
     }
 
     /**
@@ -821,6 +832,9 @@ class UserController implements Handler.Callback {
     private IStorageManager getStorageManager() {
         return IStorageManager.Stub.asInterface(ServiceManager.getService("mount"));
     }
+    boolean startUser(final int userId, final boolean foreground) {
+        return startUser(userId, foreground, null);
+    }
 
     /**
      * Start user, if its not already running.
@@ -851,7 +865,10 @@ class UserController implements Handler.Callback {
      * @param foreground true if user should be brought to the foreground
      * @return true if the user has been successfully started
      */
-    boolean startUser(final int userId, final boolean foreground) {
+    boolean startUser(
+            final int userId,
+            final boolean foreground,
+            @Nullable IProgressListener unlockListener) {
         if (mInjector.checkCallingPermission(INTERACT_ACROSS_USERS_FULL)
                 != PackageManager.PERMISSION_GRANTED) {
             String msg = "Permission Denial: switchUser() from pid="
@@ -909,6 +926,9 @@ class UserController implements Handler.Callback {
                 final Integer userIdInt = userId;
                 mUserLru.remove(userIdInt);
                 mUserLru.add(userIdInt);
+            }
+            if (unlockListener != null) {
+                uss.mUnlockProgress.addListener(unlockListener);
             }
             if (updateUmState) {
                 mInjector.getUserManagerInternal().setUserState(userId, uss.state);
@@ -1717,6 +1737,19 @@ class UserController implements Handler.Callback {
         }
     }
 
+    boolean isUserOrItsParentRunning(int userId) {
+        synchronized (mLock) {
+            if (isUserRunning(userId, 0)) {
+                return true;
+            }
+            final int parentUserId = mUserProfileGroupIds.get(userId, UserInfo.NO_PROFILE_GROUP_ID);
+            if (parentUserId == UserInfo.NO_PROFILE_GROUP_ID) {
+                return false;
+            }
+            return isUserRunning(parentUserId, 0);
+        }
+    }
+
     boolean isCurrentProfile(int userId) {
         synchronized (mLock) {
             return ArrayUtils.contains(mCurrentProfileIds, userId);
@@ -1819,7 +1852,10 @@ class UserController implements Handler.Callback {
             case SYSTEM_USER_UNLOCK_MSG:
                 final int userId = msg.arg1;
                 mInjector.getSystemServiceManager().unlockUser(userId);
-                mInjector.loadUserRecents(userId);
+                // Loads recents on a worker thread that allows disk I/O
+                FgThread.getHandler().post(() -> {
+                    mInjector.loadUserRecents(userId);
+                });
                 if (userId == UserHandle.USER_SYSTEM) {
                     mInjector.startPersistentApps(PackageManager.MATCH_DIRECT_BOOT_UNAWARE);
                 }

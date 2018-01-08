@@ -47,6 +47,7 @@
     <item type="id" name="qs_icon_tag"/>
     <item type="id" name="qs_slash_tag"/>
     <item type="id" name="scrim"/>
+    <item type="id" name="scrim_blanking"/>
     <item type="id" name="scrim_target"/>
     <item type="id" name="scrim_alpha_start"/>
     <item type="id" name="scrim_alpha_end"/>
@@ -76,6 +77,18 @@
     <item type="id" name="action_move_tl_50" />
     <item type="id" name="action_move_tl_30" />
     <item type="id" name="action_move_rb_full" />
+
+    <item type="id" name="bottom_roundess_animator_tag"/>
+    <item type="id" name="bottom_roundess_animator_start_tag"/>
+    <item type="id" name="bottom_roundess_animator_end_tag"/>
+
+    <item type="id" name="top_roundess_animator_tag"/>
+    <item type="id" name="top_roundess_animator_start_tag"/>
+    <item type="id" name="top_roundess_animator_end_tag"/>
+
+    <item type="id" name="side_padding_animator_tag"/>
+    <item type="id" name="side_padding_animator_start_tag"/>
+    <item type="id" name="side_padding_animator_end_tag"/>
 
     <!-- Accessibility actions for the notification menu -->
     <item type="id" name="action_snooze_undo"/>

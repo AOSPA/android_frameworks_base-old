@@ -52,6 +52,7 @@ import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.provider.Settings;
 import android.service.autofill.FillEventHistory;
+import android.service.autofill.UserData;
 import android.util.LocalLog;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -512,6 +513,16 @@ public final class AutofillManagerService extends SystemService {
         }
 
         @Override
+        public void removeClient(IAutoFillManagerClient client, int userId) {
+            synchronized (mLock) {
+                final AutofillManagerServiceImpl service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    service.removeClientLocked(client);
+                }
+            }
+        }
+
+        @Override
         public void setAuthenticationResult(Bundle data, int sessionId, int authenticationId,
                 int userId) {
             synchronized (mLock) {
@@ -557,13 +568,66 @@ public final class AutofillManagerService extends SystemService {
 
         @Override
         public FillEventHistory getFillEventHistory() throws RemoteException {
-            UserHandle user = getCallingUserHandle();
-            int uid = getCallingUid();
+            final int userId = UserHandle.getCallingUserId();
 
             synchronized (mLock) {
-                AutofillManagerServiceImpl service = peekServiceForUserLocked(user.getIdentifier());
+                final AutofillManagerServiceImpl service = peekServiceForUserLocked(userId);
                 if (service != null) {
-                    return service.getFillEventHistory(uid);
+                    return service.getFillEventHistory(getCallingUid());
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public UserData getUserData() throws RemoteException {
+            final int userId = UserHandle.getCallingUserId();
+
+            synchronized (mLock) {
+                final AutofillManagerServiceImpl service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    return service.getUserData(getCallingUid());
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public void setUserData(UserData userData) throws RemoteException {
+            final int userId = UserHandle.getCallingUserId();
+
+            synchronized (mLock) {
+                final AutofillManagerServiceImpl service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    service.setUserData(getCallingUid(), userData);
+                }
+            }
+        }
+
+        @Override
+        public boolean isFieldClassificationEnabled() throws RemoteException {
+            final int userId = UserHandle.getCallingUserId();
+
+            synchronized (mLock) {
+                final AutofillManagerServiceImpl service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    return service.isFieldClassificationEnabled(getCallingUid());
+                }
+            }
+
+            return false;
+        }
+
+        @Override
+        public ComponentName getAutofillServiceComponentName() throws RemoteException {
+            final int userId = UserHandle.getCallingUserId();
+
+            synchronized (mLock) {
+                final AutofillManagerServiceImpl service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    return service.getServiceComponentName();
                 }
             }
 
@@ -713,6 +777,7 @@ public final class AutofillManagerService extends SystemService {
             }
 
             boolean oldDebug = sDebug;
+            final String prefix = "  ";
             try {
                 synchronized (mLock) {
                     oldDebug = sDebug;
@@ -721,6 +786,7 @@ public final class AutofillManagerService extends SystemService {
                     pw.print("Verbose mode: "); pw.println(sVerbose);
                     pw.print("Disabled users: "); pw.println(mDisabledUsers);
                     pw.print("Max partitions per session: "); pw.println(sPartitionMaxCount);
+                    pw.println("User data constraints: "); UserData.dumpConstraints(prefix, pw);
                     final int size = mServicesCache.size();
                     pw.print("Cached services: ");
                     if (size == 0) {
@@ -730,7 +796,7 @@ public final class AutofillManagerService extends SystemService {
                         for (int i = 0; i < size; i++) {
                             pw.print("\nService at index "); pw.println(i);
                             final AutofillManagerServiceImpl impl = mServicesCache.valueAt(i);
-                            impl.dumpLocked("  ", pw);
+                            impl.dumpLocked(prefix, pw);
                         }
                     }
                     mUi.dump(pw);

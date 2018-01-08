@@ -498,7 +498,7 @@ public class CameraDeviceUserShim implements ICameraDeviceUser {
     }
 
     @Override
-    public void endConfigure(int operatingMode) {
+    public void endConfigure(int operatingMode, CameraMetadataNative sessionParams) {
         if (DEBUG) {
             Log.d(TAG, "endConfigure called.");
         }
@@ -643,6 +643,11 @@ public class CameraDeviceUserShim implements ICameraDeviceUser {
         // TODO: implement getCameraInfo.
         Log.e(TAG, "getCameraInfo unimplemented.");
         return null;
+    }
+
+    @Override
+    public void updateOutputConfiguration(int streamId, OutputConfiguration config) {
+        // TODO: b/63912484 implement updateOutputConfiguration.
     }
 
     @Override

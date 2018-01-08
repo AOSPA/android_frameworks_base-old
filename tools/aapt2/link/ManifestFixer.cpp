@@ -346,30 +346,15 @@ bool ManifestFixer::BuildRules(xml::XmlActionExecutor* executor,
   return true;
 }
 
-class FullyQualifiedClassNameVisitor : public xml::Visitor {
- public:
-  using xml::Visitor::Visit;
-
-  explicit FullyQualifiedClassNameVisitor(const StringPiece& package) : package_(package) {}
-
-  void Visit(xml::Element* el) override {
-    for (xml::Attribute& attr : el->attributes) {
-      if (attr.namespace_uri == xml::kSchemaAndroid &&
-          class_attributes_.find(attr.name) != class_attributes_.end()) {
-        if (Maybe<std::string> new_value = util::GetFullyQualifiedClassName(package_, attr.value)) {
-          attr.value = std::move(new_value.value());
-        }
-      }
+static void FullyQualifyClassName(const StringPiece& package, const StringPiece& attr_ns,
+                                  const StringPiece& attr_name, xml::Element* el) {
+  xml::Attribute* attr = el->FindAttribute(attr_ns, attr_name);
+  if (attr != nullptr) {
+    if (Maybe<std::string> new_value = util::GetFullyQualifiedClassName(package, attr->value)) {
+      attr->value = std::move(new_value.value());
     }
-
-    // Super implementation to iterate over the children.
-    xml::Visitor::Visit(el);
   }
-
- private:
-  StringPiece package_;
-  std::unordered_set<StringPiece> class_attributes_ = {"name"};
-};
+}
 
 static bool RenameManifestPackage(const StringPiece& package_override, xml::Element* manifest_el) {
   xml::Attribute* attr = manifest_el->FindAttribute({}, "package");
@@ -381,8 +366,25 @@ static bool RenameManifestPackage(const StringPiece& package_override, xml::Elem
   std::string original_package = std::move(attr->value);
   attr->value = package_override.to_string();
 
-  FullyQualifiedClassNameVisitor visitor(original_package);
-  manifest_el->Accept(&visitor);
+  xml::Element* application_el = manifest_el->FindChild({}, "application");
+  if (application_el != nullptr) {
+    FullyQualifyClassName(original_package, xml::kSchemaAndroid, "name", application_el);
+    FullyQualifyClassName(original_package, xml::kSchemaAndroid, "backupAgent", application_el);
+
+    for (xml::Element* child_el : application_el->GetChildElements()) {
+      if (child_el->namespace_uri.empty()) {
+        if (child_el->name == "activity" || child_el->name == "activity-alias" ||
+            child_el->name == "provider" || child_el->name == "receiver" ||
+            child_el->name == "service") {
+          FullyQualifyClassName(original_package, xml::kSchemaAndroid, "name", child_el);
+        }
+
+        if (child_el->name == "activity-alias") {
+          FullyQualifyClassName(original_package, xml::kSchemaAndroid, "targetActivity", child_el);
+        }
+      }
+    }
+  }
   return true;
 }
 
@@ -404,12 +406,34 @@ bool ManifestFixer::Consume(IAaptContext* context, xml::XmlResource* doc) {
     root->InsertChild(0, std::move(uses_sdk));
   }
 
+  if (options_.compile_sdk_version) {
+    xml::Attribute* attr = root->FindOrCreateAttribute(xml::kSchemaAndroid, "compileSdkVersion");
+
+    // Make sure we un-compile the value if it was set to something else.
+    attr->compiled_value = {};
+
+    attr->value = options_.compile_sdk_version.value();
+  }
+
+  if (options_.compile_sdk_version_codename) {
+    xml::Attribute* attr =
+        root->FindOrCreateAttribute(xml::kSchemaAndroid, "compileSdkVersionCodename");
+
+    // Make sure we un-compile the value if it was set to something else.
+    attr->compiled_value = {};
+
+    attr->value = options_.compile_sdk_version_codename.value();
+  }
+
   xml::XmlActionExecutor executor;
   if (!BuildRules(&executor, context->GetDiagnostics())) {
     return false;
   }
 
-  if (!executor.Execute(xml::XmlActionExecutorPolicy::kWhitelist, context->GetDiagnostics(), doc)) {
+  xml::XmlActionExecutorPolicy policy = options_.warn_validation
+                                            ? xml::XmlActionExecutorPolicy::kWhitelistWarning
+                                            : xml::XmlActionExecutorPolicy::kWhitelist;
+  if (!executor.Execute(policy, context->GetDiagnostics(), doc)) {
     return false;
   }
 

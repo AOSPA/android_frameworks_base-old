@@ -1016,6 +1016,9 @@
         <!-- Style for the "neutral" buttons within button bars. -->
         <attr name="buttonBarNeutralButtonStyle" format="reference" />
 
+        <!-- Corner radius of buttons. -->
+        <attr name="buttonCornerRadius" format="dimension" />
+
         <!-- Style for the search query widget. -->
         <attr name="searchViewStyle" format="reference" />
 
@@ -3021,6 +3024,12 @@
         <!-- Whether this View should use a default focus highlight when it gets focused but
              doesn't have {@link android.R.attr#state_focused} defined in its background. -->
         <attr name="defaultFocusHighlightEnabled" format="boolean" />
+
+        <!-- Whether this view should be treated as a focusable unit by screen reader accessibility
+             tools. See {@link android.view.View#setScreenReaderFocusable(boolean)}. The default
+             value, {@code false}, leaves the screen reader to consider other signals, such as
+             focusability or the presence of text, to decide what it focus.-->
+        <attr name="screenReaderFocusable" format="boolean" />
     </declare-styleable>
 
     <!-- Attributes that can be assigned to a tag for a particular View. -->
@@ -3285,6 +3294,9 @@
              and subtype in order to provide the consistent user experience in switching
              between IMEs and subtypes. -->
         <attr name="supportsSwitchingToNextInputMethod" format="boolean" />
+        <!-- Specifies if an IME can only be used while a device is in VR mode or on a dedicated
+             device -->
+        <attr name="isVrOnly" format="boolean"/>
         <attr name="__removed2" format="boolean" />
     </declare-styleable>
 
@@ -4430,7 +4442,7 @@
         <attr name="textColor" />
         <!-- Size of the text. Recommended dimension type for text is "sp" for scaled-pixels (example: 15sp). -->
         <attr name="textSize" />
-        <!-- Style (bold, italic, bolditalic) for the text. -->
+        <!-- Style (normal, bold, italic, bold|italic) for the text. -->
         <attr name="textStyle" />
         <!-- Typeface (normal, sans, serif, monospace) for the text. -->
         <attr name="typeface" />
@@ -4515,7 +4527,7 @@
         <attr name="textScaleX" format="float" />
         <!-- Typeface (normal, sans, serif, monospace) for the text. -->
         <attr name="typeface" />
-        <!-- Style (bold, italic, bolditalic) for the text. -->
+        <!-- Style (normal, bold, italic, bold|italic) for the text. -->
         <attr name="textStyle" />
         <!-- Font family (named by string or as a font resource reference) for the text. -->
         <attr name="fontFamily" />
@@ -7559,6 +7571,15 @@
             <flag name="keyguard" value="0x2" />
             <flag name="searchbox" value="0x4" />
         </attr>
+        <!-- Flags indicating various features supported by the widget. These are hints to the
+         widget host, and do not actually change the behavior of the widget. -->
+        <attr name="widgetFeatures" format="integer">
+            <!-- The widget can be reconfigured anytime after it is bound -->
+            <flag name="reconfigurable" value="0x1" />
+            <!-- The widget is added directly by the app, and does not need to appear in
+                 the global list of available widgets -->
+            <flag name="hide_from_picker" value="0x2" />
+        </attr>
     </declare-styleable>
 
     <!-- =============================== -->
@@ -7707,6 +7728,10 @@
              description of this wallpaper so the user gets to know further information about this
              wallpaper. -->
         <attr name="showMetadataInPreview" format="boolean" />
+
+        <!-- Wallpapers optimized and capable of drawing in ambient mode will return true.
+            @hide -->
+        <attr name="supportsAmbientMode" format="boolean" />
 
     </declare-styleable>
 
@@ -8529,6 +8554,8 @@
         <attr name="maxWidth" />
         <attr name="maxCollapsedHeight" format="dimension" />
         <attr name="maxCollapsedHeightSmall" format="dimension" />
+        <!-- Whether the Drawer should be positioned at the top rather than at the bottom. -->
+        <attr name="showAtTop" format="boolean" />
     </declare-styleable>
 
     <declare-styleable name="MessagingLinearLayout">

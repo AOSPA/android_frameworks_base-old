@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef DURATION_METRIC_PRODUCER_H
-#define DURATION_METRIC_PRODUCER_H
+#pragma once
+
 
 #include <unordered_map>
 
@@ -26,7 +26,6 @@
 #include "duration_helper/DurationTracker.h"
 #include "duration_helper/MaxDurationTracker.h"
 #include "duration_helper/OringDurationTracker.h"
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 #include "stats_util.h"
 
@@ -38,48 +37,51 @@ namespace statsd {
 
 class DurationMetricProducer : public MetricProducer {
 public:
-    DurationMetricProducer(const DurationMetric& durationMetric, const int conditionIndex,
-                           const size_t startIndex, const size_t stopIndex,
-                           const size_t stopAllIndex, const sp<ConditionWizard>& wizard,
+    DurationMetricProducer(const ConfigKey& key, const DurationMetric& durationMetric,
+                           const int conditionIndex, const size_t startIndex,
+                           const size_t stopIndex, const size_t stopAllIndex, const bool nesting,
+                           const sp<ConditionWizard>& wizard,
                            const vector<KeyMatcher>& internalDimension, const uint64_t startTimeNs);
 
     virtual ~DurationMetricProducer();
 
-    void onConditionChanged(const bool conditionMet, const uint64_t eventTime) override;
-
-    void finish() override;
-
-    // TODO: Pass a timestamp as a parameter in onDumpReport.
-    StatsLogReport onDumpReport() override;
-
-    void onSlicedConditionMayChange(const uint64_t eventTime) override;
-
-    size_t byteSize() override;
-
-    // TODO: Implement this later.
-    virtual void notifyAppUpgrade(const string& apk, const int uid, const int version) override{};
-    // TODO: Implement this later.
-    virtual void notifyAppRemoved(const string& apk, const int uid) override{};
+    virtual sp<AnomalyTracker> createAnomalyTracker(const Alert &alert) override;
 
 protected:
-    void onMatchedLogEventInternal(const size_t matcherIndex, const HashableDimensionKey& eventKey,
-                                   const std::map<std::string, HashableDimensionKey>& conditionKeys,
-                                   bool condition, const LogEvent& event,
-                                   bool scheduledPull) override;
-
-    void startNewProtoOutputStream(long long timestamp) override;
+    void onMatchedLogEventInternalLocked(
+            const size_t matcherIndex, const HashableDimensionKey& eventKey,
+            const std::map<std::string, HashableDimensionKey>& conditionKeys, bool condition,
+            const LogEvent& event) override;
 
 private:
-    const DurationMetric mMetric;
+    void onDumpReportLocked(const uint64_t dumpTimeNs,
+                            android::util::ProtoOutputStream* protoOutput) override;
 
-    // Index of the SimpleLogEntryMatcher which defines the start.
+    // Internal interface to handle condition change.
+    void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
+
+    // Internal interface to handle sliced condition change.
+    void onSlicedConditionMayChangeLocked(const uint64_t eventTime) override;
+
+    // Internal function to calculate the current used bytes.
+    size_t byteSizeLocked() const override;
+
+    // Util function to flush the old packet.
+    void flushIfNeededLocked(const uint64_t& eventTime);
+
+    const DurationMetric_AggregationType mAggregationType;
+
+    // Index of the SimpleAtomMatcher which defines the start.
     const size_t mStartIndex;
 
-    // Index of the SimpleLogEntryMatcher which defines the stop.
+    // Index of the SimpleAtomMatcher which defines the stop.
     const size_t mStopIndex;
 
-    // Index of the SimpleLogEntryMatcher which defines the stop all for all dimensions.
+    // Index of the SimpleAtomMatcher which defines the stop all for all dimensions.
     const size_t mStopAllIndex;
+
+    // nest counting -- for the same key, stops must match the number of starts to make real stop
+    const bool mNested;
 
     // The dimension from the atom predicate. e.g., uid, wakelock name.
     const vector<KeyMatcher> mInternalDimension;
@@ -92,17 +94,19 @@ private:
     std::unordered_map<HashableDimensionKey, std::unique_ptr<DurationTracker>>
             mCurrentSlicedDuration;
 
-    void flushDurationIfNeeded(const uint64_t newEventTime);
+    // Helper function to create a duration tracker given the metric aggregation type.
+    std::unique_ptr<DurationTracker> createDurationTracker(
+            const HashableDimensionKey& eventKey) const;
 
-    std::unique_ptr<DurationTracker> createDurationTracker(std::vector<DurationBucket>& bucket);
-
-    void flushIfNeeded(uint64_t timestamp);
+    // Util function to check whether the specified dimension hits the guardrail.
+    bool hitGuardRailLocked(const HashableDimensionKey& newKey);
 
     static const size_t kBucketSize = sizeof(DurationBucket{});
+
+    FRIEND_TEST(DurationMetricTrackerTest, TestNoCondition);
+    FRIEND_TEST(DurationMetricTrackerTest, TestNonSlicedCondition);
 };
 
 }  // namespace statsd
 }  // namespace os
 }  // namespace android
-
-#endif  // DURATION_METRIC_PRODUCER_H

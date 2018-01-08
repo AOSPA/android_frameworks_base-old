@@ -85,7 +85,7 @@ public class CarStatusBar extends StatusBar implements
     public void start() {
         super.start();
         mTaskStackListener = new TaskStackListenerImpl();
-        SystemServicesProxy.getInstance(mContext).registerTaskStackListener(mTaskStackListener);
+        ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
         registerPackageChangeReceivers();
 
         mStackScroller.setScrollingEnabled(true);
@@ -247,19 +247,6 @@ public class CarStatusBar extends StatusBar implements
         return null;
     }
 
-    /**
-     * Returns the
-     * {@link com.android.systemui.statusbar.ExpandableNotificationRow.LongPressListener} that will
-     * be triggered when a notification card is long-pressed.
-     */
-    @Override
-    protected ExpandableNotificationRow.LongPressListener getNotificationLongClicker() {
-        // For the automative use case, we do not want to the user to be able to interact with
-        // a notification other than a regular click. As a result, just return null for the
-        // long click listener.
-        return null;
-    }
-
     @Override
     public void showBatteryView() {
         if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -335,8 +322,8 @@ public class CarStatusBar extends StatusBar implements
     }
 
     @Override
-    public void userSwitched(int newUserId) {
-        super.userSwitched(newUserId);
+    public void onUserSwitched(int newUserId) {
+        super.onUserSwitched(newUserId);
         if (mFullscreenUserSwitcher != null) {
             mFullscreenUserSwitcher.onUserSwitched(newUserId);
         }
@@ -385,18 +372,6 @@ public class CarStatusBar extends StatusBar implements
         options.setLaunchWindowingMode(windowingMode);
         options.setLaunchActivityType(activityType);
         return startActivityWithOptions(intent, options.toBundle());
-    }
-
-    @Override
-    protected boolean shouldPeek(NotificationData.Entry entry, StatusBarNotification sbn) {
-        // Because space is usually constrained in the auto use-case, there should not be a
-        // pinned notification when the shade has been expanded. Ensure this by not pinning any
-        // notification if the shade is already opened.
-        if (mPanelExpanded) {
-            return false;
-        }
-
-        return super.shouldPeek(entry, sbn);
     }
 
     @Override

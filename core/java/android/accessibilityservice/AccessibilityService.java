@@ -358,6 +358,11 @@ public abstract class AccessibilityService extends Service {
      */
     public static final int GLOBAL_ACTION_TOGGLE_SPLIT_SCREEN = 7;
 
+    /**
+     * Action to lock the screen
+     */
+    public static final int GLOBAL_ACTION_LOCK_SCREEN = 8;
+
     private static final String LOG_TAG = "AccessibilityService";
 
     /**
@@ -386,8 +391,12 @@ public abstract class AccessibilityService extends Service {
      * @hide
      */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({SHOW_MODE_AUTO, SHOW_MODE_HIDDEN})
-    public @interface SoftKeyboardShowMode {};
+    @IntDef(prefix = { "SHOW_MODE_" }, value = {
+            SHOW_MODE_AUTO,
+            SHOW_MODE_HIDDEN
+    })
+    public @interface SoftKeyboardShowMode {}
+
     public static final int SHOW_MODE_AUTO = 0;
     public static final int SHOW_MODE_HIDDEN = 1;
 

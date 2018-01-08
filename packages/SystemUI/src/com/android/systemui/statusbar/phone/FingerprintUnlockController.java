@@ -26,7 +26,7 @@ import android.util.Log;
 import com.android.keyguard.KeyguardConstants;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
-import com.android.keyguard.LatencyTracker;
+import com.android.internal.util.LatencyTracker;
 import com.android.systemui.Dependency;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.ScreenLifecycle;
@@ -181,9 +181,9 @@ public class FingerprintUnlockController extends KeyguardUpdateMonitorCallback {
     }
 
     private boolean pulsingOrAod() {
-        boolean pulsing = mDozeScrimController.isPulsing();
-        boolean dozingWithScreenOn = mStatusBar.isDozing() && !mStatusBar.isScreenFullyOff();
-        return pulsing || dozingWithScreenOn;
+        final ScrimState scrimState = mScrimController.getState();
+        return scrimState == ScrimState.AOD
+                || scrimState == ScrimState.PULSING;
     }
 
     @Override
@@ -246,15 +246,12 @@ public class FingerprintUnlockController extends KeyguardUpdateMonitorCallback {
                             true /* allowEnterAnimation */);
                 } else if (mMode == MODE_WAKE_AND_UNLOCK){
                     Trace.beginSection("MODE_WAKE_AND_UNLOCK");
-                    mDozeScrimController.abortDoze();
                 } else {
                     Trace.beginSection("MODE_WAKE_AND_UNLOCK_FROM_DREAM");
                     mUpdateMonitor.awakenFromDream();
                 }
                 mStatusBarWindowManager.setStatusBarFocusable(false);
                 mKeyguardViewMediator.onWakeAndUnlocking();
-                mScrimController.setWakeAndUnlocking();
-                mDozeScrimController.setWakeAndUnlocking();
                 if (mStatusBar.getNavigationBarView() != null) {
                     mStatusBar.getNavigationBarView().setWakeAndUnlocking(true);
                 }

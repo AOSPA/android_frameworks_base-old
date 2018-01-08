@@ -25,6 +25,7 @@
 #include <nativehelper/ScopedPrimitiveArray.h>
 #include <nativehelper/JNIHelp.h>
 #include "core_jni_helpers.h"
+#include "scoped_nullable_primitive_array.h"
 #include <cstdint>
 #include <vector>
 #include <list>
@@ -36,7 +37,7 @@
 #include <hwui/MinikinUtils.h>
 #include <hwui/Paint.h>
 #include <minikin/FontCollection.h>
-#include <minikin/LineBreaker.h>
+#include <minikin/AndroidLineBreakerHelper.h>
 #include <minikin/MinikinFont.h>
 
 namespace android {
@@ -52,63 +53,6 @@ struct JLineBreaksID {
 static jclass gLineBreaks_class;
 static JLineBreaksID gLineBreaks_fieldID;
 
-class JNILineBreakerLineWidth : public minikin::LineBreaker::LineWidthDelegate {
-    public:
-        JNILineBreakerLineWidth(float firstWidth, int32_t firstLineCount, float restWidth,
-                const std::vector<float>& indents, const std::vector<float>& leftPaddings,
-                const std::vector<float>& rightPaddings, int32_t indentsAndPaddingsOffset)
-            : mFirstWidth(firstWidth), mFirstLineCount(firstLineCount), mRestWidth(restWidth),
-              mIndents(indents), mLeftPaddings(leftPaddings),
-              mRightPaddings(rightPaddings), mOffset(indentsAndPaddingsOffset) {}
-
-        float getLineWidth(size_t lineNo) override {
-            const float width = ((ssize_t)lineNo < (ssize_t)mFirstLineCount)
-                    ? mFirstWidth : mRestWidth;
-            return width - get(mIndents, lineNo);
-        }
-
-        float getMinLineWidth() override {
-            // A simpler algorithm would have been simply looping until the larger of
-            // mFirstLineCount and mIndents.size()-mOffset, but that does unnecessary calculations
-            // when mFirstLineCount is large. Instead, we measure the first line, all the lines that
-            // have an indent, and the first line after firstWidth ends and restWidth starts.
-            float minWidth = std::min(getLineWidth(0), getLineWidth(mFirstLineCount));
-            for (size_t lineNo = 1; lineNo + mOffset < mIndents.size(); lineNo++) {
-                minWidth = std::min(minWidth, getLineWidth(lineNo));
-            }
-            return minWidth;
-        }
-
-        float getLeftPadding(size_t lineNo) override {
-            return get(mLeftPaddings, lineNo);
-        }
-
-        float getRightPadding(size_t lineNo) override {
-            return get(mRightPaddings, lineNo);
-        }
-
-    private:
-        float get(const std::vector<float>& vec, size_t lineNo) {
-            if (vec.empty()) {
-                return 0;
-            }
-            const size_t index = lineNo + mOffset;
-            if (index < vec.size()) {
-                return vec[index];
-            } else {
-                return vec.back();
-            }
-        }
-
-        const float mFirstWidth;
-        const int32_t mFirstLineCount;
-        const float mRestWidth;
-        const std::vector<float>& mIndents;
-        const std::vector<float>& mLeftPaddings;
-        const std::vector<float>& mRightPaddings;
-        const int32_t mOffset;
-};
-
 static inline std::vector<float> jintArrayToFloatVector(JNIEnv* env, jintArray javaArray) {
     if (javaArray == nullptr) {
          return std::vector<float>();
@@ -118,110 +62,8 @@ static inline std::vector<float> jintArrayToFloatVector(JNIEnv* env, jintArray j
     }
 }
 
-class Run {
-    public:
-        Run(int32_t start, int32_t end) : mStart(start), mEnd(end) {}
-        virtual ~Run() {}
-
-        virtual void addTo(minikin::LineBreaker* lineBreaker) = 0;
-
-    protected:
-        const int32_t mStart;
-        const int32_t mEnd;
-
-    private:
-        // Forbid copy and assign.
-        Run(const Run&) = delete;
-        void operator=(const Run&) = delete;
-};
-
-class StyleRun : public Run {
-    public:
-        StyleRun(int32_t start, int32_t end, minikin::MinikinPaint&& paint,
-                std::shared_ptr<minikin::FontCollection>&& collection, bool isRtl)
-            : Run(start, end), mPaint(std::move(paint)), mCollection(std::move(collection)),
-              mIsRtl(isRtl) {}
-
-        void addTo(minikin::LineBreaker* lineBreaker) override {
-            lineBreaker->addStyleRun(&mPaint, mCollection, mStart, mEnd, mIsRtl);
-        }
-
-    private:
-        minikin::MinikinPaint mPaint;
-        std::shared_ptr<minikin::FontCollection> mCollection;
-        const bool mIsRtl;
-};
-
-class Replacement : public Run {
-    public:
-        Replacement(int32_t start, int32_t end, float width, uint32_t localeListId)
-            : Run(start, end), mWidth(width), mLocaleListId(localeListId) {}
-
-        void addTo(minikin::LineBreaker* lineBreaker) override {
-            lineBreaker->addReplacement(mStart, mEnd, mWidth, mLocaleListId);
-        }
-
-    private:
-        const float mWidth;
-        const uint32_t mLocaleListId;
-};
-
-class StaticLayoutNative {
-    public:
-        StaticLayoutNative(
-                minikin::BreakStrategy strategy, minikin::HyphenationFrequency frequency,
-                bool isJustified, std::vector<float>&& indents, std::vector<float>&& leftPaddings,
-                std::vector<float>&& rightPaddings)
-            : mStrategy(strategy), mFrequency(frequency), mIsJustified(isJustified),
-              mIndents(std::move(indents)), mLeftPaddings(std::move(leftPaddings)),
-              mRightPaddings(std::move(rightPaddings)) {}
-
-        void addStyleRun(int32_t start, int32_t end, minikin::MinikinPaint&& paint,
-                         std::shared_ptr<minikin::FontCollection> collection, bool isRtl) {
-            mRuns.emplace_back(std::make_unique<StyleRun>(
-                    start, end, std::move(paint), std::move(collection), isRtl));
-        }
-
-        void addReplacementRun(int32_t start, int32_t end, float width, uint32_t localeListId) {
-            mRuns.emplace_back(std::make_unique<Replacement>(start, end, width, localeListId));
-        }
-
-        // Only valid while this instance is alive.
-        inline std::unique_ptr<minikin::LineBreaker::LineWidthDelegate> buildLineWidthDelegate(
-                float firstWidth, int32_t firstLineCount, float restWidth,
-                int32_t indentsAndPaddingsOffset) {
-            return std::make_unique<JNILineBreakerLineWidth>(
-                firstWidth, firstLineCount, restWidth, mIndents, mLeftPaddings, mRightPaddings,
-                indentsAndPaddingsOffset);
-        }
-
-        void addRuns(minikin::LineBreaker* lineBreaker) {
-            for (const auto& run : mRuns) {
-                run->addTo(lineBreaker);
-            }
-        }
-
-        void clearRuns() {
-            mRuns.clear();
-        }
-
-        inline minikin::BreakStrategy getStrategy() const { return mStrategy; }
-        inline minikin::HyphenationFrequency getFrequency() const { return mFrequency; }
-        inline bool isJustified() const { return mIsJustified; }
-
-    private:
-        const minikin::BreakStrategy mStrategy;
-        const minikin::HyphenationFrequency mFrequency;
-        const bool mIsJustified;
-        const std::vector<float> mIndents;
-        const std::vector<float> mLeftPaddings;
-        const std::vector<float> mRightPaddings;
-
-        std::vector<std::unique_ptr<Run>> mRuns;
-};
-
-static inline StaticLayoutNative* toNative(jlong ptr) {
-    return reinterpret_cast<StaticLayoutNative*>(ptr);
+static inline minikin::android::StaticLayoutNative* toNative(jlong ptr) {
+    return reinterpret_cast<minikin::android::StaticLayoutNative*>(ptr);
 }
 
 // set text and set a number of parameters for creating a layout (width, tabstops, strategy,
@@ -229,7 +71,7 @@ static inline StaticLayoutNative* toNative(jlong ptr) {
 static jlong nInit(JNIEnv* env, jclass /* unused */,
         jint breakStrategy, jint hyphenationFrequency, jboolean isJustified,
         jintArray indents, jintArray leftPaddings, jintArray rightPaddings) {
-    return reinterpret_cast<jlong>(new StaticLayoutNative(
+    return reinterpret_cast<jlong>(new minikin::android::StaticLayoutNative(
             static_cast<minikin::BreakStrategy>(breakStrategy),
             static_cast<minikin::HyphenationFrequency>(hyphenationFrequency),
             isJustified,
@@ -246,9 +88,8 @@ static void nFinish(jlong nativePtr) {
 static void recycleCopy(JNIEnv* env, jobject recycle, jintArray recycleBreaks,
                         jfloatArray recycleWidths, jfloatArray recycleAscents,
                         jfloatArray recycleDescents, jintArray recycleFlags,
-                        jint recycleLength, size_t nBreaks, const jint* breaks,
-                        const jfloat* widths, const jfloat* ascents, const jfloat* descents,
-                        const jint* flags) {
+                        jint recycleLength, const minikin::LineBreakResult& result) {
+    const size_t nBreaks = result.breakPoints.size();
     if ((size_t)recycleLength < nBreaks) {
         // have to reallocate buffers
         recycleBreaks = env->NewIntArray(nBreaks);
@@ -264,16 +105,17 @@ static void recycleCopy(JNIEnv* env, jobject recycle, jintArray recycleBreaks,
         env->SetObjectField(recycle, gLineBreaks_fieldID.flags, recycleFlags);
     }
     // copy data
-    env->SetIntArrayRegion(recycleBreaks, 0, nBreaks, breaks);
-    env->SetFloatArrayRegion(recycleWidths, 0, nBreaks, widths);
-    env->SetFloatArrayRegion(recycleAscents, 0, nBreaks, ascents);
-    env->SetFloatArrayRegion(recycleDescents, 0, nBreaks, descents);
-    env->SetIntArrayRegion(recycleFlags, 0, nBreaks, flags);
+    env->SetIntArrayRegion(recycleBreaks, 0, nBreaks, result.breakPoints.data());
+    env->SetFloatArrayRegion(recycleWidths, 0, nBreaks, result.widths.data());
+    env->SetFloatArrayRegion(recycleAscents, 0, nBreaks, result.ascents.data());
+    env->SetFloatArrayRegion(recycleDescents, 0, nBreaks, result.descents.data());
+    env->SetIntArrayRegion(recycleFlags, 0, nBreaks, result.flags.data());
 }
 
 static jint nComputeLineBreaks(JNIEnv* env, jclass, jlong nativePtr,
         // Inputs
-        jcharArray text,
+        jcharArray javaText,
+        jlong measuredTextPtr,
         jint length,
         jfloat firstWidth,
         jint firstWidthLineCount,
@@ -292,57 +134,24 @@ static jint nComputeLineBreaks(JNIEnv* env, jclass, jlong nativePtr,
         jintArray recycleFlags,
         jfloatArray charWidths) {
 
-    StaticLayoutNative* builder = toNative(nativePtr);
+    minikin::android::StaticLayoutNative* builder = toNative(nativePtr);
 
-    // TODO: Reorganize minikin APIs.
-    minikin::LineBreaker b;
-    b.resize(length);
-    env->GetCharArrayRegion(text, 0, length, b.buffer());
-    b.setText();
-    if (variableTabStops == nullptr) {
-        b.setTabStops(nullptr, 0, defaultTabStop);
-    } else {
-        ScopedIntArrayRO stops(env, variableTabStops);
-        b.setTabStops(stops.get(), stops.size(), defaultTabStop);
-    }
-    b.setStrategy(builder->getStrategy());
-    b.setHyphenationFrequency(builder->getFrequency());
-    b.setJustified(builder->isJustified());
-    b.setLineWidthDelegate(builder->buildLineWidthDelegate(
-            firstWidth, firstWidthLineCount, restWidth, indentsOffset));
+    ScopedCharArrayRO text(env, javaText);
+    ScopedNullableIntArrayRO tabStops(env, variableTabStops);
 
-    builder->addRuns(&b);
-
-    size_t nBreaks = b.computeBreaks();
+    minikin::U16StringPiece u16Text(text.get(), length);
+    minikin::MeasuredText* measuredText = reinterpret_cast<minikin::MeasuredText*>(measuredTextPtr);
+    minikin::LineBreakResult result = builder->computeBreaks(
+            u16Text, *measuredText, firstWidth, firstWidthLineCount, restWidth, indentsOffset,
+            tabStops.get(), tabStops.size(), defaultTabStop);
 
     recycleCopy(env, recycle, recycleBreaks, recycleWidths, recycleAscents, recycleDescents,
-            recycleFlags, recycleLength, nBreaks, b.getBreaks(), b.getWidths(), b.getAscents(),
-            b.getDescents(), b.getFlags());
+            recycleFlags, recycleLength, result);
 
-    env->SetFloatArrayRegion(charWidths, 0, b.size(), b.charWidths());
+    env->SetFloatArrayRegion(charWidths, 0, measuredText->widths.size(),
+                             measuredText->widths.data());
 
-    b.finish();
-    builder->clearRuns();
-
-    return static_cast<jint>(nBreaks);
-}
-
-// Basically similar to Paint.getTextRunAdvances but with C++ interface
-// CriticalNative
-static void nAddStyleRun(jlong nativePtr, jlong nativePaint, jint start, jint end, jboolean isRtl) {
-    StaticLayoutNative* builder = toNative(nativePtr);
-    Paint* paint = reinterpret_cast<Paint*>(nativePaint);
-    const Typeface* typeface = Typeface::resolveDefault(paint->getAndroidTypeface());
-    minikin::MinikinPaint minikinPaint = MinikinUtils::prepareMinikinPaint(paint, typeface);
-    builder->addStyleRun(start, end, std::move(minikinPaint), typeface->fFontCollection, isRtl);
-}
-
-// CriticalNative
-static void nAddReplacementRun(jlong nativePtr, jlong nativePaint, jint start, jint end,
-        jfloat width) {
-    StaticLayoutNative* builder = toNative(nativePtr);
-    Paint* paint = reinterpret_cast<Paint*>(nativePaint);
-    builder->addReplacementRun(start, end, width, paint->getMinikinLocaleListId());
+    return static_cast<jint>(result.breakPoints.size());
 }
 
 static const JNINativeMethod gMethods[] = {
@@ -358,8 +167,6 @@ static const JNINativeMethod gMethods[] = {
 
     // Critical Natives
     {"nFinish", "(J)V", (void*) nFinish},
-    {"nAddStyleRun", "(JJIIZ)V", (void*) nAddStyleRun},
-    {"nAddReplacementRun", "(JJIIF)V", (void*) nAddReplacementRun},
 
     // Regular JNI
     {"nComputeLineBreaks", "("
@@ -367,6 +174,7 @@ static const JNINativeMethod gMethods[] = {
 
         // Inputs
         "[C"  // text
+        "J"  // MeasuredText ptr.
         "I"  // length
         "F"  // firstWidth
         "I"  // firstWidthLineCount

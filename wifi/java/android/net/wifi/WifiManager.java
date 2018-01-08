@@ -16,6 +16,7 @@
 
 package android.net.wifi;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
@@ -32,6 +33,8 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.net.wifi.hotspot2.OsuProvider;
 import android.net.wifi.hotspot2.PasspointConfiguration;
+import android.net.wifi.hotspot2.IProvisioningCallback;
+import android.net.wifi.hotspot2.ProvisioningCallback;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -1748,13 +1751,12 @@ public class WifiManager {
     /**
      * Set the country code.
      * @param countryCode country code in ISO 3166 format.
-     * @param persist {@code true} if this needs to be remembered
      *
      * @hide
      */
-    public void setCountryCode(String country, boolean persist) {
+    public void setCountryCode(@NonNull String country) {
         try {
-            mService.setCountryCode(country, persist);
+            mService.setCountryCode(country);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2844,8 +2846,7 @@ public class WifiManager {
      * gets added to the list of configured networks for the foreground user.
      *
      * For a new network, this function is used instead of a
-     * sequence of addNetwork(), enableNetwork(), saveConfiguration() and
-     * reconnect()
+     * sequence of addNetwork(), enableNetwork(), and reconnect()
      *
      * @param config the set of variables that describe the configuration,
      *            contained in a {@link WifiConfiguration} object.
@@ -2867,8 +2868,7 @@ public class WifiManager {
     /**
      * Connect to a network with the given networkId.
      *
-     * This function is used instead of a enableNetwork(), saveConfiguration() and
-     * reconnect()
+     * This function is used instead of a enableNetwork() and reconnect()
      *
      * @param networkId the ID of the network as returned by {@link #addNetwork} or {@link
      *        getConfiguredNetworks}.
@@ -2888,10 +2888,12 @@ public class WifiManager {
      * is updated. Any new network is enabled by default.
      *
      * For a new network, this function is used instead of a
-     * sequence of addNetwork(), enableNetwork() and saveConfiguration().
+     * sequence of addNetwork() and enableNetwork().
      *
      * For an existing network, it accomplishes the task of updateNetwork()
-     * and saveConfiguration()
+     *
+     * This API will cause reconnect if the crecdentials of the current active
+     * connection has been changed.
      *
      * @param config the set of variables that describe the configuration,
      *            contained in a {@link WifiConfiguration} object.
@@ -2910,7 +2912,6 @@ public class WifiManager {
      * foreground user.
      *
      * This function is used instead of a sequence of removeNetwork()
-     * and saveConfiguration().
      *
      * @param config the set of variables that describe the configuration,
      *            contained in a {@link WifiConfiguration} object.
@@ -3486,27 +3487,23 @@ public class WifiManager {
     }
 
     /**
-     * Set setting for allowing Scans when traffic is ongoing.
+     * Deprecated
+     * Does nothing
      * @hide
+     * @deprecated
      */
     public void setAllowScansWithTraffic(int enabled) {
-        try {
-            mService.setAllowScansWithTraffic(enabled);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return;
     }
 
     /**
-     * Get setting for allowing Scans when traffic is ongoing.
+     * Deprecated
+     * returns value for 'disabled'
      * @hide
+     * @deprecated
      */
     public int getAllowScansWithTraffic() {
-        try {
-            return mService.getAllowScansWithTraffic();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return 0;
     }
 
     /**
@@ -3536,29 +3533,23 @@ public class WifiManager {
     }
 
     /**
-     * Framework layer autojoin enable/disable when device is associated
-     * this will enable/disable autojoin scan and switch network when connected
-     * @return true -- if set successful false -- if set failed
+     * Deprecated
+     * returns false
      * @hide
+     * @deprecated
      */
     public boolean setEnableAutoJoinWhenAssociated(boolean enabled) {
-        try {
-            return mService.setEnableAutoJoinWhenAssociated(enabled);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return false;
     }
 
     /**
-     * Get setting for Framework layer autojoin enable status
+     * Deprecated
+     * returns false
      * @hide
+     * @deprecated
      */
     public boolean getEnableAutoJoinWhenAssociated() {
-        try {
-            return mService.getEnableAutoJoinWhenAssociated();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return false;
     }
 
     /**
@@ -3608,6 +3599,47 @@ public class WifiManager {
             mService.restoreSupplicantBackupData(supplicantData, ipConfigData);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Start subscription provisioning flow
+     * @param provider {@link OsuProvider} to provision with
+     * @param callback {@link ProvisioningCallback} for updates regarding provisioning flow
+     * @hide
+     */
+    public void startSubscriptionProvisioning(OsuProvider provider, ProvisioningCallback callback,
+            @Nullable Handler handler) {
+        Looper looper = (handler == null) ? Looper.getMainLooper() : handler.getLooper();
+        try {
+            mService.startSubscriptionProvisioning(provider,
+                    new ProvisioningCallbackProxy(looper, callback));
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    private static class ProvisioningCallbackProxy extends IProvisioningCallback.Stub {
+        private final Handler mHandler;
+        private final ProvisioningCallback mCallback;
+
+        ProvisioningCallbackProxy(Looper looper, ProvisioningCallback callback) {
+            mHandler = new Handler(looper);
+            mCallback = callback;
+        }
+
+        @Override
+        public void onProvisioningStatus(int status) {
+            mHandler.post(() -> {
+                mCallback.onProvisioningStatus(status);
+            });
+        }
+
+        @Override
+        public void onProvisioningFailure(int status) {
+            mHandler.post(() -> {
+                mCallback.onProvisioningFailure(status);
+            });
         }
     }
 }

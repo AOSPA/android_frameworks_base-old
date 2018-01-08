@@ -1728,6 +1728,9 @@ public class Intent implements Parcelable, Cloneable {
      * <p>
      * Output: If {@link #EXTRA_RETURN_RESULT}, returns whether the install
      * succeeded.
+     * <p>
+     * Requires {@link android.Manifest.permission#REQUEST_DELETE_PACKAGES}
+     * since {@link Build.VERSION_CODES#P}.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_UNINSTALL_PACKAGE = "android.intent.action.UNINSTALL_PACKAGE";
@@ -4452,10 +4455,34 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_EPHEMERAL_TOKEN = "android.intent.extra.EPHEMERAL_TOKEN";
 
     /**
+     * The action that triggered an instant application resolution.
+     * @hide
+     */
+    public static final String EXTRA_INSTANT_APP_ACTION = "android.intent.extra.INSTANT_APP_ACTION";
+
+    /**
+     * A {@link Bundle} of metadata that describes the instanta application that needs to be
+     * installed. This data is populated from the response to
+     * {@link android.content.pm.InstantAppResolveInfo#getExtras()} as provided by the registered
+     * instant application resolver.
+     * @hide
+     */
+    public static final String EXTRA_INSTANT_APP_EXTRAS =
+            "android.intent.extra.INSTANT_APP_EXTRAS";
+
+    /**
+     * The version code of the app to install components from.
+     * @deprecated Use {@link #EXTRA_LONG_VERSION_CODE).
+     * @hide
+     */
+    @Deprecated
+    public static final String EXTRA_VERSION_CODE = "android.intent.extra.VERSION_CODE";
+
+    /**
      * The version code of the app to install components from.
      * @hide
      */
-    public static final String EXTRA_VERSION_CODE = "android.intent.extra.VERSION_CODE";
+    public static final String EXTRA_LONG_VERSION_CODE = "android.intent.extra.LONG_VERSION_CODE";
 
     /**
      * The app that triggered the ephemeral installation.
@@ -4888,8 +4915,9 @@ public class Intent implements Parcelable, Cloneable {
      * <li>Enumeration of features here is not meant to restrict capabilities of the quick viewer.
      * Quick viewer can implement features not listed below.
      * <li>Features included at this time are: {@link QuickViewConstants#FEATURE_VIEW},
-     * {@link QuickViewConstants#FEATURE_EDIT}, {@link QuickViewConstants#FEATURE_DOWNLOAD},
-     * {@link QuickViewConstants#FEATURE_SEND}, {@link QuickViewConstants#FEATURE_PRINT}.
+     * {@link QuickViewConstants#FEATURE_EDIT}, {@link QuickViewConstants#FEATURE_DELETE},
+     * {@link QuickViewConstants#FEATURE_DOWNLOAD}, {@link QuickViewConstants#FEATURE_SEND},
+     * {@link QuickViewConstants#FEATURE_PRINT}.
      * <p>
      * Requirements:
      * <li>Quick viewer shouldn't show a feature if the feature is absent in
@@ -5662,10 +5690,13 @@ public class Intent implements Parcelable, Cloneable {
     private static final int COPY_MODE_HISTORY = 2;
 
     /** @hide */
-    @IntDef(value = {COPY_MODE_ALL, COPY_MODE_FILTER, COPY_MODE_HISTORY})
+    @IntDef(prefix = { "COPY_MODE_" }, value = {
+            COPY_MODE_ALL,
+            COPY_MODE_FILTER,
+            COPY_MODE_HISTORY
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CopyMode {}
-
 
     /**
      * Create an empty intent.
@@ -8938,17 +8969,16 @@ public class Intent implements Parcelable, Cloneable {
     }
 
     /** @hide */
-    @IntDef(flag = true,
-            value = {
-                    FILL_IN_ACTION,
-                    FILL_IN_DATA,
-                    FILL_IN_CATEGORIES,
-                    FILL_IN_COMPONENT,
-                    FILL_IN_PACKAGE,
-                    FILL_IN_SOURCE_BOUNDS,
-                    FILL_IN_SELECTOR,
-                    FILL_IN_CLIP_DATA
-            })
+    @IntDef(flag = true, prefix = { "FILL_IN_" }, value = {
+            FILL_IN_ACTION,
+            FILL_IN_DATA,
+            FILL_IN_CATEGORIES,
+            FILL_IN_COMPONENT,
+            FILL_IN_PACKAGE,
+            FILL_IN_SOURCE_BOUNDS,
+            FILL_IN_SELECTOR,
+            FILL_IN_CLIP_DATA
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface FillInFlags {}
 

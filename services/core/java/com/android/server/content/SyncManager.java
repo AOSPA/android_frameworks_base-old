@@ -323,7 +323,7 @@ public class SyncManager {
     private final BroadcastReceiver mAccountsUpdatedReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            EndPoint target = new EndPoint(null, null, context.getUserId());
+            EndPoint target = new EndPoint(null, null, getSendingUserId());
             updateRunningAccounts(target /* sync targets for user */);
         }
     };
@@ -565,7 +565,7 @@ public class SyncManager {
 
         mLogger = SyncLogger.getInstance();
 
-        SyncStorageEngine.init(context);
+        SyncStorageEngine.init(context, BackgroundThread.get().getLooper());
         mSyncStorageEngine = SyncStorageEngine.getSingleton();
         mSyncStorageEngine.setOnSyncRequestListener(new OnSyncRequestListener() {
             @Override
@@ -735,15 +735,15 @@ public class SyncManager {
     }
 
     public void onStartUser(int userHandle) {
-        mLogger.log("onStartUser: user=", userHandle);
+        mSyncHandler.post(() -> mLogger.log("onStartUser: user=", userHandle));
     }
 
     public void onUnlockUser(int userHandle) {
-        mLogger.log("onUnlockUser: user=", userHandle);
+        mSyncHandler.post(() -> mLogger.log("onUnlockUser: user=", userHandle));
     }
 
     public void onStopUser(int userHandle) {
-        mLogger.log("onStopUser: user=", userHandle);
+        mSyncHandler.post(() -> mLogger.log("onStopUser: user=", userHandle));
     }
 
 

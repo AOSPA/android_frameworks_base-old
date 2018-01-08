@@ -15,13 +15,17 @@
  */
 
 syntax = "proto2";
-import "frameworks/base/core/proto/android/content/intent.proto";
-import "frameworks/base/core/proto/android/server/intentresolver.proto";
-import "frameworks/base/core/proto/android/server/windowmanagerservice.proto";
-import "frameworks/base/core/proto/android/graphics/rect.proto";
-import "frameworks/base/core/proto/android/os/looper.proto";
 
 package com.android.server.am.proto;
+
+import "frameworks/base/core/proto/android/app/notification.proto";
+import "frameworks/base/core/proto/android/content/intent.proto";
+import "frameworks/base/core/proto/android/graphics/rect.proto";
+import "frameworks/base/core/proto/android/internal/processstats.proto";
+import "frameworks/base/core/proto/android/os/looper.proto";
+import "frameworks/base/core/proto/android/server/intentresolver.proto";
+import "frameworks/base/core/proto/android/server/windowmanagerservice.proto";
+import "frameworks/base/core/proto/android/util/common.proto";
 
 option java_multiple_files = true;
 
@@ -30,11 +34,12 @@ message ActivityManagerServiceProto {
 
   optional BroadcastProto broadcasts = 2;
 
-  optional ServiceProto services = 3;
+  optional ActiveServicesProto services = 3;
 
   optional ProcessProto processes = 4;
 }
 
+// "dumpsys activity --proto activities"
 message ActivityStackSupervisorProto {
   optional .com.android.server.wm.proto.ConfigurationContainerProto configuration_container = 1;
   repeated ActivityDisplayProto displays = 2;
@@ -90,6 +95,7 @@ message KeyguardControllerProto {
   optional bool keyguard_occluded = 2;
 }
 
+// "dumpsys activity --proto broadcasts"
 message BroadcastProto {
   repeated ReceiverListProto  receiver_list = 1;
 
@@ -154,6 +160,175 @@ message BroadcastQueueProto {
   repeated BroadcastSummary historical_broadcasts_summary = 6;
 }
 
+message MemInfoProto {
+  optional int64 uptime_duration_ms = 1;
+  optional int64 elapsed_realtime_ms = 2;
+
+  message ProcessMemory {
+    optional int32 pid = 1;
+    optional string process_name = 2;
+
+    message MemoryInfo {
+      optional string name = 1;
+      // The proportional set size for the heap.
+      optional int32 total_pss_kb = 2;
+      // The proportional set size that is swappable for the heap.
+      optional int32 clean_pss_kb = 3;
+      // The private dirty pages used by the heap.
+      optional int32 shared_dirty_kb = 4;
+      // The shared dirty pages used by the heap.
+      optional int32 private_dirty_kb = 5;
+      // The shared clean pages used by the heap.
+      optional int32 shared_clean_kb = 6;
+      // The private clean pages used by the heap.
+      optional int32 private_clean_kb = 7;
+      oneof dirty_swap {
+        // The dirty the pages that have been swapped out.
+        int32 dirty_swap_kb = 8;
+        // The dirty the pages that have been swapped out, proportional.
+        int32 dirty_swap_pss_kb = 9;
+      }
+    }
+    message HeapInfo {
+      optional MemoryInfo mem_info = 1;
+      optional int32 heap_size_kb = 2;
+      optional int32 heap_alloc_kb = 3;
+      optional int32 heap_free_kb = 4;
+    }
+    optional HeapInfo native_heap = 3;
+    optional HeapInfo dalvik_heap = 4;
+    repeated MemoryInfo other_heaps = 5;
+    optional MemoryInfo unknown_heap = 6;
+    // Summation of native_heap, dalvik_heap, and other_heaps.
+    optional HeapInfo total_heap = 7;
+
+    repeated MemoryInfo dalvik_details = 8;
+
+    message AppSummary {
+      optional int32 java_heap_pss_kb = 1;
+      optional int32 native_heap_pss_kb = 2;
+      optional int32 code_pss_kb = 3;
+      optional int32 stack_pss_kb = 4;
+      optional int32 graphics_pss_kb = 5;
+      optional int32 private_other_pss_kb = 6;
+      optional int32 system_pss_kb = 7;
+
+      oneof total_swap {
+        int32 total_swap_pss = 8;
+        int32 total_swap_kb = 9;
+      }
+    }
+    optional AppSummary app_summary = 9;
+  }
+  repeated ProcessMemory native_processes = 3;
+
+  message AppData {
+    optional ProcessMemory process_memory = 1;
+
+    message ObjectStats {
+      optional int32 view_instance_count = 1;
+      optional int32 view_root_instance_count = 2;
+      optional int32 app_context_instance_count = 3;
+      optional int32 activity_instance_count = 4;
+      optional int32 global_asset_count = 5;
+      optional int32 global_asset_manager_count = 6;
+      optional int32 local_binder_object_count = 7;
+      optional int32 proxy_binder_object_count = 8;
+      optional int64 parcel_memory_kb = 9;
+      optional int32 parcel_count = 10;
+      optional int32 binder_object_death_count = 11;
+      optional int32 open_ssl_socket_count = 12;
+      optional int32 webview_instance_count = 13;
+    }
+    optional ObjectStats objects = 2;
+
+    message SqlStats {
+      optional int32 memory_used_kb = 1;
+      optional int32 pagecache_overflow_kb = 2;
+      optional int32 malloc_size_kb = 3;
+
+      message Database {
+        optional string name = 1;
+        optional int32 page_size = 2;
+        optional int32 db_size = 3;
+        // Number of lookaside slots:
+        // http://www.sqlite.org/c3ref/c_dbstatus_lookaside_used.html
+        optional int32 lookaside_b = 4;
+        // Statement cache stats: hits/misses/cachesize
+        optional string cache = 5;
+      }
+      repeated Database databases = 4;
+    }
+    optional SqlStats sql = 3;
+
+    optional string asset_allocations = 4;
+    optional string unreachable_memory = 5;
+  }
+  repeated AppData app_processes = 4;
+
+  message MemItem {
+    optional string tag = 1;
+    optional string label = 2;
+    optional int32 id = 3;
+    optional bool is_proc = 4;
+    optional bool has_activities = 5;
+    optional int64 pss_kb = 6;
+    optional int64 swap_pss_kb = 7;
+    repeated MemItem sub_items = 8;
+  }
+  repeated MemItem total_pss_by_process = 5;
+  repeated MemItem total_pss_by_oom_adjustment = 6;
+  repeated MemItem total_pss_by_category = 7;
+
+  optional int64 total_ram_kb = 8;
+  optional .com.android.internal.app.procstats.ProcessStatsProto.MemoryFactor status = 9;
+  // Total free RAM = cached_pss_kb + cached_kernel_kb + free_kb.
+  optional int64 cached_pss_kb = 10;
+  optional int64 cached_kernel_kb = 11;
+  optional int64 free_kb = 12;
+  // Total used RAM = used_pss_kb + used_kernel_kb.
+  optional int64 used_pss_kb = 13;
+  optional int64 used_kernel_kb = 14;
+
+  optional int64 lost_ram_kb = 15;
+
+  optional int64 total_zram_kb = 16;
+  optional int64 zram_physical_used_in_swap_kb = 17;
+  optional int64 total_zram_swap_kb = 18;
+
+  optional int64 ksm_sharing_kb = 19;
+  optional int64 ksm_shared_kb = 20;
+  optional int64 ksm_unshared_kb = 21;
+  optional int64 ksm_volatile_kb = 22;
+
+  // The approximate per-application memory class of the current device. This
+  // gives developers an idea of how hard a memory limit you should impose on
+  // their application to let the overall system work best. The value is in
+  // megabytes; the baseline Android memory class is 16 (which happens to be the
+  // Java heap limit of those devices); some devices with more memory may have
+  // 24 or even higher numbers.
+  optional int32 tuning_mb = 23;
+  // The approximate per-application memory class of the current device when an
+  // application is running with a large heap. This is the space available for
+  // memory-intensive applications; most applications should not need this
+  // amount of memory, and should instead stay with the tuning_mb limit. The
+  // value is in megabytes. This may be the same size as tuning_mb on memory
+  // constrained devices, or it may be significantly larger on devices with a
+  // large amount of available RAM.
+  // This is the size of the application's Dalvik heap if it has specified
+  // 'android:largeHeap="true"' in its manifest.
+  optional int32 tuning_large_mb = 24;
+
+  optional int64 oom_kb = 25;
+
+  // The maximum pss size in kb that we consider a process acceptable to restore
+  // from its cached state for running in the background when RAM is low.
+  optional int64 restore_limit_kb = 26;
+
+  optional bool is_low_ram_device = 27;
+  optional bool is_high_end_gfx = 28;
+}
+
 message StickyBroadcastProto {
   optional int32 user = 1;
 
@@ -164,10 +339,158 @@ message StickyBroadcastProto {
   repeated StickyAction actions = 2;
 }
 
-message ServiceProto {
-  // TODO: "dumpsys activity --proto services"
+// "dumpsys activity --proto service"
+message ActiveServicesProto {
+
+  message ServicesByUser {
+    optional int32 user_id = 1;
+    repeated ServiceRecordProto service_records = 2;
+  }
+  repeated ServicesByUser services_by_users = 1;
 }
 
+// corresponds to ActivityManagerService.GrantUri Java class
+message GrantUriProto {
+  optional int32 source_user_id = 1;
+  optional string uri = 2;
+}
+
+message NeededUriGrantsProto {
+  optional string target_package = 1;
+  optional int32 target_uid = 2;
+  optional int32 flags = 3;
+
+  repeated GrantUriProto grants = 4;
+}
+
+message UriPermissionOwnerProto {
+  optional string owner = 1;
+  repeated GrantUriProto read_perms = 2;
+  repeated GrantUriProto write_perms = 3;
+}
+
+message ServiceRecordProto {
+  optional string short_name = 1;
+  optional string hex_hash = 2;
+  optional bool is_running = 3; // false if the application service is null
+  optional int32 pid = 4;
+  optional .android.content.IntentProto intent = 5;
+  optional string package_name = 6;
+  optional string process_name = 7;
+  optional string permission = 8;
+
+  message AppInfo {
+    optional string base_dir = 1;
+    optional string res_dir = 2;
+    optional string data_dir = 3;
+  }
+  optional AppInfo appinfo = 9;
+  optional ProcessRecordProto app = 10;
+  optional ProcessRecordProto isolated_proc = 11;
+  optional bool whitelist_manager = 12;
+  optional bool delayed = 13;
+
+  message Foreground {
+    optional int32 id = 1;
+    optional .android.app.NotificationProto notification = 2;
+  }
+  optional Foreground foreground = 14;
+
+  optional .android.util.Duration create_real_time = 15;
+  optional .android.util.Duration starting_bg_timeout = 16;
+  optional .android.util.Duration last_activity_time = 17;
+  optional .android.util.Duration restart_time = 18;
+  optional bool created_from_fg = 19;
+
+  // variables used to track states related to service start
+  message Start {
+    optional bool start_requested = 1;
+    optional bool delayed_stop = 2;
+    optional bool stop_if_killed = 3;
+    optional bool call_start = 4;
+    optional int32 last_start_id = 5;
+  }
+  optional Start start = 20;
+
+  message ExecuteNesting {
+    optional int32 execute_nesting = 1;
+    optional bool execute_fg = 2;
+    optional .android.util.Duration executing_start = 3;
+  }
+  optional ExecuteNesting execute = 21;
+
+  optional .android.util.Duration destory_time = 22;
+
+  message Crash {
+    optional int32 restart_count = 1;
+    optional .android.util.Duration restart_delay = 2;
+    optional .android.util.Duration next_restart_time = 3;
+    optional int32 crash_count = 4;
+  }
+  optional Crash crash = 23;
+
+  message StartItemProto {
+    optional int32 id = 1;
+    optional .android.util.Duration duration = 2;
+    optional int32 delivery_count = 3;
+    optional int32 done_executing_count = 4;
+    optional .android.content.IntentProto intent = 5;
+    optional NeededUriGrantsProto needed_grants = 6;
+    optional UriPermissionOwnerProto uri_permissions = 7;
+  }
+  repeated StartItemProto delivered_starts = 24;
+  repeated StartItemProto pending_starts = 25;
+
+  repeated IntentBindRecordProto bindings = 26;
+  repeated ConnectionRecordProto connections = 27;
+}
+
+message ConnectionRecordProto {
+  optional string hex_hash = 1;
+  optional int32 user_id = 2;
+
+  enum Flag {
+    AUTO_CREATE = 0;
+    DEBUG_UNBIND = 1;
+    NOT_FG = 2;
+    IMPORTANT_BG = 3;
+    ABOVE_CLIENT = 4;
+    ALLOW_OOM_MANAGEMENT = 5;
+    WAIVE_PRIORITY = 6;
+    IMPORTANT = 7;
+    ADJUST_WITH_ACTIVITY = 8;
+    FG_SERVICE_WHILE_WAKE = 9;
+    FG_SERVICE = 10;
+    TREAT_LIKE_ACTIVITY = 11;
+    VISIBLE = 12;
+    SHOWING_UI = 13;
+    NOT_VISIBLE = 14;
+    DEAD = 15;
+  }
+  repeated Flag flags = 3;
+  optional string service_name = 4;
+  optional string conn_hex_hash = 5;
+}
+
+message AppBindRecordProto {
+  optional string hex_hash = 1;
+  optional ProcessRecordProto client = 2;
+  repeated ConnectionRecordProto connections = 3;
+}
+
+message IntentBindRecordProto {
+  optional string hex_hash = 1;
+  optional bool is_create = 2;
+  optional .android.content.IntentProto intent = 3;
+  optional string binder = 4;
+  optional bool requested = 5;
+  optional bool received = 6;
+  optional bool has_bound = 7;
+  optional bool do_rebind = 8;
+
+  repeated AppBindRecordProto apps = 9;
+}
+
+// TODO: "dumpsys activity --proto processes"
 message ProcessProto {
-  // TODO: "dumpsys activity --proto processes"
 }

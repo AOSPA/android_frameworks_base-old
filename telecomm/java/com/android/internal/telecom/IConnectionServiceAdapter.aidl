@@ -103,7 +103,8 @@ oneway interface IConnectionServiceAdapter {
 
     void removeExtras(String callId, in List<String> keys, in Session.Info sessionInfo);
 
-    void setAudioRoute(String callId, int audioRoute, in Session.Info sessionInfo);
+    void setAudioRoute(String callId, int audioRoute, String bluetoothAddress,
+            in Session.Info sessionInfo);
 
     void onConnectionEvent(String callId, String event, in Bundle extras,
     in Session.Info sessionInfo);
@@ -118,4 +119,6 @@ oneway interface IConnectionServiceAdapter {
 
     void onPhoneAccountChanged(String callId, in PhoneAccountHandle pHandle,
     in Session.Info sessionInfo);
+
+    void onConnectionServiceFocusReleased(in Session.Info sessionInfo);
 }

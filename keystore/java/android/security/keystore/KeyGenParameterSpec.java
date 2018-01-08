@@ -195,7 +195,7 @@ import javax.security.auth.x500.X500Principal;
  * <pre> {@code
  * KeyGenerator keyGenerator = KeyGenerator.getInstance(
  *         KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
- * keyGenerator.initialize(
+ * keyGenerator.init(
  *         new KeyGenParameterSpec.Builder("key2",
  *                 KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
  *                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
@@ -219,7 +219,7 @@ import javax.security.auth.x500.X500Principal;
  * <pre> {@code
  * KeyGenerator keyGenerator = KeyGenerator.getInstance(
  *         KeyProperties.KEY_ALGORITHM_HMAC_SHA256, "AndroidKeyStore");
- * keyGenerator.initialize(
+ * keyGenerator.init(
  *         new KeyGenParameterSpec.Builder("key2", KeyProperties.PURPOSE_SIGN).build());
  * SecretKey key = keyGenerator.generateKey();
  * Mac mac = Mac.getInstance("HmacSHA256");
@@ -677,6 +677,40 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec {
             }
             mKeystoreAlias = keystoreAlias;
             mPurposes = purposes;
+        }
+
+        /**
+         * A Builder constructor taking in an already-built KeyGenParameterSpec, useful for
+         * changing values of the KeyGenParameterSpec quickly.
+         * @hide Should be used internally only.
+         */
+        public Builder(@NonNull KeyGenParameterSpec sourceSpec) {
+            this(sourceSpec.getKeystoreAlias(), sourceSpec.getPurposes());
+            mUid = sourceSpec.getUid();
+            mKeySize = sourceSpec.getKeySize();
+            mSpec = sourceSpec.getAlgorithmParameterSpec();
+            mCertificateSubject = sourceSpec.getCertificateSubject();
+            mCertificateSerialNumber = sourceSpec.getCertificateSerialNumber();
+            mCertificateNotBefore = sourceSpec.getCertificateNotBefore();
+            mCertificateNotAfter = sourceSpec.getCertificateNotAfter();
+            mKeyValidityStart = sourceSpec.getKeyValidityStart();
+            mKeyValidityForOriginationEnd = sourceSpec.getKeyValidityForOriginationEnd();
+            mKeyValidityForConsumptionEnd = sourceSpec.getKeyValidityForConsumptionEnd();
+            mPurposes = sourceSpec.getPurposes();
+            if (sourceSpec.isDigestsSpecified()) {
+                mDigests = sourceSpec.getDigests();
+            }
+            mEncryptionPaddings = sourceSpec.getEncryptionPaddings();
+            mSignaturePaddings = sourceSpec.getSignaturePaddings();
+            mBlockModes = sourceSpec.getBlockModes();
+            mRandomizedEncryptionRequired = sourceSpec.isRandomizedEncryptionRequired();
+            mUserAuthenticationRequired = sourceSpec.isUserAuthenticationRequired();
+            mUserAuthenticationValidityDurationSeconds =
+                sourceSpec.getUserAuthenticationValidityDurationSeconds();
+            mAttestationChallenge = sourceSpec.getAttestationChallenge();
+            mUniqueIdIncluded = sourceSpec.isUniqueIdIncluded();
+            mUserAuthenticationValidWhileOnBody = sourceSpec.isUserAuthenticationValidWhileOnBody();
+            mInvalidatedByBiometricEnrollment = sourceSpec.isInvalidatedByBiometricEnrollment();
         }
 
         /**

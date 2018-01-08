@@ -57,10 +57,12 @@ extern int register_android_os_Process(JNIEnv* env);
 extern int register_android_graphics_Bitmap(JNIEnv*);
 extern int register_android_graphics_BitmapFactory(JNIEnv*);
 extern int register_android_graphics_BitmapRegionDecoder(JNIEnv*);
+extern int register_android_graphics_ByteBufferStreamAdaptor(JNIEnv* env);
 extern int register_android_graphics_Camera(JNIEnv* env);
 extern int register_android_graphics_CreateJavaOutputStreamAdaptor(JNIEnv* env);
 extern int register_android_graphics_GraphicBuffer(JNIEnv* env);
 extern int register_android_graphics_Graphics(JNIEnv* env);
+extern int register_android_graphics_ImageDecoder(JNIEnv*);
 extern int register_android_graphics_Interpolator(JNIEnv* env);
 extern int register_android_graphics_MaskFilter(JNIEnv* env);
 extern int register_android_graphics_Movie(JNIEnv* env);
@@ -154,6 +156,7 @@ extern int register_android_database_SQLiteDebug(JNIEnv* env);
 extern int register_android_nio_utils(JNIEnv* env);
 extern int register_android_os_Debug(JNIEnv* env);
 extern int register_android_os_GraphicsEnvironment(JNIEnv* env);
+extern int register_android_os_HidlSupport(JNIEnv* env);
 extern int register_android_os_HwBinder(JNIEnv *env);
 extern int register_android_os_HwBlob(JNIEnv *env);
 extern int register_android_os_HwParcel(JNIEnv *env);
@@ -173,9 +176,9 @@ extern int register_android_os_MemoryFile(JNIEnv* env);
 extern int register_android_os_SharedMemory(JNIEnv* env);
 extern int register_android_net_LocalSocketImpl(JNIEnv* env);
 extern int register_android_net_NetworkUtils(JNIEnv* env);
-extern int register_android_net_TrafficStats(JNIEnv* env);
 extern int register_android_text_AndroidCharacter(JNIEnv *env);
 extern int register_android_text_Hyphenator(JNIEnv *env);
+extern int register_android_text_MeasuredText(JNIEnv* env);
 extern int register_android_text_StaticLayout(JNIEnv *env);
 extern int register_android_opengl_classes(JNIEnv *env);
 extern int register_android_ddm_DdmHandleNativeHeap(JNIEnv *env);
@@ -187,7 +190,6 @@ extern int register_android_backup_BackupHelperDispatcher(JNIEnv *env);
 extern int register_android_app_backup_FullBackup(JNIEnv *env);
 extern int register_android_app_Activity(JNIEnv *env);
 extern int register_android_app_ActivityThread(JNIEnv *env);
-extern int register_android_app_ApplicationLoaders(JNIEnv *env);
 extern int register_android_app_NativeActivity(JNIEnv *env);
 extern int register_android_media_RemoteDisplay(JNIEnv *env);
 extern int register_android_util_jar_StrictJarFile(JNIEnv* env);
@@ -643,6 +645,7 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
     char methodTraceFileBuf[sizeof("-Xmethod-trace-file:") + PROPERTY_VALUE_MAX];
     char methodTraceFileSizeBuf[sizeof("-Xmethod-trace-file-size:") + PROPERTY_VALUE_MAX];
     std::string fingerprintBuf;
+    char jdwpProviderBuf[sizeof("-XjdwpProvider:") - 1 + PROPERTY_VALUE_MAX];
 
     bool checkJni = false;
     property_get("dalvik.vm.checkjni", propBuf, "");
@@ -765,8 +768,14 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
      * Set suspend=y to pause during VM init and use android ADB transport.
      */
     if (zygote) {
-      addOption("-agentlib:jdwp=transport=dt_android_adb,suspend=n,server=y");
+      addOption("-XjdwpOptions:suspend=n,server=y");
     }
+
+    // Set the JDWP provider. By default let the runtime choose.
+    parseRuntimeOption("dalvik.vm.jdwp-provider",
+                       jdwpProviderBuf,
+                       "-XjdwpProvider:",
+                       "default");
 
     parseRuntimeOption("dalvik.vm.lockprof.threshold",
                        lockProfThresholdBuf,
@@ -1333,6 +1342,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_content_XmlBlock),
     REG_JNI(register_android_text_AndroidCharacter),
     REG_JNI(register_android_text_Hyphenator),
+    REG_JNI(register_android_text_MeasuredText),
     REG_JNI(register_android_text_StaticLayout),
     REG_JNI(register_android_view_InputDevice),
     REG_JNI(register_android_view_KeyCharacterMap),
@@ -1340,6 +1350,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_os_SystemProperties),
     REG_JNI(register_android_os_Binder),
     REG_JNI(register_android_os_Parcel),
+    REG_JNI(register_android_os_HidlSupport),
     REG_JNI(register_android_os_HwBinder),
     REG_JNI(register_android_os_HwBlob),
     REG_JNI(register_android_os_HwParcel),
@@ -1377,6 +1388,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_graphics_Bitmap),
     REG_JNI(register_android_graphics_BitmapFactory),
     REG_JNI(register_android_graphics_BitmapRegionDecoder),
+    REG_JNI(register_android_graphics_ByteBufferStreamAdaptor),
     REG_JNI(register_android_graphics_Camera),
     REG_JNI(register_android_graphics_CreateJavaOutputStreamAdaptor),
     REG_JNI(register_android_graphics_CanvasProperty),
@@ -1384,6 +1396,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_graphics_DrawFilter),
     REG_JNI(register_android_graphics_FontFamily),
     REG_JNI(register_android_graphics_GraphicBuffer),
+    REG_JNI(register_android_graphics_ImageDecoder),
     REG_JNI(register_android_graphics_Interpolator),
     REG_JNI(register_android_graphics_MaskFilter),
     REG_JNI(register_android_graphics_Matrix),
@@ -1419,7 +1432,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_os_UEventObserver),
     REG_JNI(register_android_net_LocalSocketImpl),
     REG_JNI(register_android_net_NetworkUtils),
-    REG_JNI(register_android_net_TrafficStats),
     REG_JNI(register_android_os_MemoryFile),
     REG_JNI(register_android_os_SharedMemory),
     REG_JNI(register_com_android_internal_os_ClassLoaderFactory),
@@ -1456,7 +1468,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_app_backup_FullBackup),
     REG_JNI(register_android_app_Activity),
     REG_JNI(register_android_app_ActivityThread),
-    REG_JNI(register_android_app_ApplicationLoaders),
     REG_JNI(register_android_app_NativeActivity),
     REG_JNI(register_android_util_jar_StrictJarFile),
     REG_JNI(register_android_view_InputChannel),

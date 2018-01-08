@@ -47,9 +47,6 @@ jfieldID gOptions_bitmapFieldID;
 
 jfieldID gBitmap_ninePatchInsetsFieldID;
 
-jclass gInsetStruct_class;
-jmethodID gInsetStruct_constructorMethodID;
-
 jclass gBitmapConfig_class;
 jmethodID gBitmapConfig_nativeToConfigMethodID;
 
@@ -97,41 +94,6 @@ jstring encodedFormatToString(JNIEnv* env, SkEncodedImageFormat format) {
         jstr = env->NewStringUTF(mimeType);
     }
     return jstr;
-}
-
-static void scaleDivRange(int32_t* divs, int count, float scale, int maxValue) {
-    for (int i = 0; i < count; i++) {
-        divs[i] = int32_t(divs[i] * scale + 0.5f);
-        if (i > 0 && divs[i] == divs[i - 1]) {
-            divs[i]++; // avoid collisions
-        }
-    }
-
-    if (CC_UNLIKELY(divs[count - 1] > maxValue)) {
-        // if the collision avoidance above put some divs outside the bounds of the bitmap,
-        // slide outer stretchable divs inward to stay within bounds
-        int highestAvailable = maxValue;
-        for (int i = count - 1; i >= 0; i--) {
-            divs[i] = highestAvailable;
-            if (i > 0 && divs[i] <= divs[i-1]){
-                // keep shifting
-                highestAvailable = divs[i] - 1;
-            } else {
-                break;
-            }
-        }
-    }
-}
-
-static void scaleNinePatchChunk(android::Res_png_9patch* chunk, float scale,
-        int scaledWidth, int scaledHeight) {
-    chunk->paddingLeft = int(chunk->paddingLeft * scale + 0.5f);
-    chunk->paddingTop = int(chunk->paddingTop * scale + 0.5f);
-    chunk->paddingRight = int(chunk->paddingRight * scale + 0.5f);
-    chunk->paddingBottom = int(chunk->paddingBottom * scale + 0.5f);
-
-    scaleDivRange(chunk->getXDivs(), chunk->numXDivs, scale, scaledWidth);
-    scaleDivRange(chunk->getYDivs(), chunk->numYDivs, scale, scaledHeight);
 }
 
 class ScaleCheckingAllocator : public SkBitmap::HeapAllocator {
@@ -423,10 +385,18 @@ static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
             return nullObjectReturn("codec->getAndroidPixels() failed.");
     }
 
+    // This is weird so let me explain: we could use the scale parameter
+    // directly, but for historical reasons this is how the corresponding
+    // Dalvik code has always behaved. We simply recreate the behavior here.
+    // The result is slightly different from simply using scale because of
+    // the 0.5f rounding bias applied when computing the target image size
+    const float scaleX = scaledWidth / float(decodingBitmap.width());
+    const float scaleY = scaledHeight / float(decodingBitmap.height());
+
     jbyteArray ninePatchChunk = NULL;
     if (peeker.mPatch != NULL) {
         if (willScale) {
-            scaleNinePatchChunk(peeker.mPatch, scale, scaledWidth, scaledHeight);
+            peeker.scale(scaleX, scaleY, scaledWidth, scaledHeight);
         }
 
         size_t ninePatchArraySize = peeker.mPatch->serializedSize();
@@ -446,12 +416,7 @@ static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
 
     jobject ninePatchInsets = NULL;
     if (peeker.mHasInsets) {
-        ninePatchInsets = env->NewObject(gInsetStruct_class, gInsetStruct_constructorMethodID,
-                peeker.mOpticalInsets[0], peeker.mOpticalInsets[1],
-                peeker.mOpticalInsets[2], peeker.mOpticalInsets[3],
-                peeker.mOutlineInsets[0], peeker.mOutlineInsets[1],
-                peeker.mOutlineInsets[2], peeker.mOutlineInsets[3],
-                peeker.mOutlineRadius, peeker.mOutlineAlpha, scale);
+        ninePatchInsets = peeker.createNinePatchInsets(env, scale);
         if (ninePatchInsets == NULL) {
             return nullObjectReturn("nine patch insets == null");
         }
@@ -462,14 +427,6 @@ static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
 
     SkBitmap outputBitmap;
     if (willScale) {
-        // This is weird so let me explain: we could use the scale parameter
-        // directly, but for historical reasons this is how the corresponding
-        // Dalvik code has always behaved. We simply recreate the behavior here.
-        // The result is slightly different from simply using scale because of
-        // the 0.5f rounding bias applied when computing the target image size
-        const float sx = scaledWidth / float(decodingBitmap.width());
-        const float sy = scaledHeight / float(decodingBitmap.height());
-
         // Set the allocator for the outputBitmap.
         SkBitmap::Allocator* outputAllocator;
         if (javaBitmap != nullptr) {
@@ -499,20 +456,14 @@ static jobject doDecode(JNIEnv* env, std::unique_ptr<SkStreamRewindable> stream,
         paint.setFilterQuality(kLow_SkFilterQuality); // bilinear filtering
 
         SkCanvas canvas(outputBitmap, SkCanvas::ColorBehavior::kLegacy);
-        canvas.scale(sx, sy);
+        canvas.scale(scaleX, scaleY);
         canvas.drawBitmap(decodingBitmap, 0.0f, 0.0f, &paint);
     } else {
         outputBitmap.swap(decodingBitmap);
     }
 
     if (padding) {
-        if (peeker.mPatch != NULL) {
-            GraphicsJNI::set_jrect(env, padding,
-                    peeker.mPatch->paddingLeft, peeker.mPatch->paddingTop,
-                    peeker.mPatch->paddingRight, peeker.mPatch->paddingBottom);
-        } else {
-            GraphicsJNI::set_jrect(env, padding, -1, -1, -1, -1);
-        }
+        peeker.getPadding(env, padding);
     }
 
     // If we get here, the outputBitmap should have an installed pixelref.
@@ -702,11 +653,6 @@ int register_android_graphics_BitmapFactory(JNIEnv* env) {
     jclass bitmap_class = FindClassOrDie(env, "android/graphics/Bitmap");
     gBitmap_ninePatchInsetsFieldID = GetFieldIDOrDie(env, bitmap_class, "mNinePatchInsets",
             "Landroid/graphics/NinePatch$InsetStruct;");
-
-    gInsetStruct_class = MakeGlobalRefOrDie(env, FindClassOrDie(env,
-        "android/graphics/NinePatch$InsetStruct"));
-    gInsetStruct_constructorMethodID = GetMethodIDOrDie(env, gInsetStruct_class, "<init>",
-                                                        "(IIIIIIIIFIF)V");
 
     gBitmapConfig_class = MakeGlobalRefOrDie(env, FindClassOrDie(env,
             "android/graphics/Bitmap$Config"));

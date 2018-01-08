@@ -14,9 +14,17 @@
 #
 
 ifeq ($(LOCAL_USE_AAPT2),true)
-LOCAL_STATIC_ANDROID_LIBRARIES += \
+LOCAL_STATIC_JAVA_LIBRARIES += \
     android-support-annotations \
+    apptoolkit-lifecycle-common
+
+LOCAL_STATIC_ANDROID_LIBRARIES += \
     android-support-v4 \
+    apptoolkit-lifecycle-runtime \
+    android-support-v7-recyclerview \
+    android-support-v7-preference \
+    android-support-v7-appcompat \
+    android-support-v14-preference \
     SettingsLib
 else
 LOCAL_RESOURCE_DIR += $(call my-dir)/res
@@ -57,5 +65,7 @@ LOCAL_AAPT_FLAGS += --auto-add-overlay --extra-packages com.android.settingslib
 LOCAL_STATIC_JAVA_LIBRARIES += \
     android-support-annotations \
     android-support-v4 \
+    apptoolkit-lifecycle-runtime \
+    apptoolkit-lifecycle-common \
     SettingsLib
 endif

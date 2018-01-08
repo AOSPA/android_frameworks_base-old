@@ -33,8 +33,9 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.os.IBinder;
 import android.os.Looper;
-import android.view.WindowManagerInternal;
 import android.view.accessibility.AccessibilityEvent;
+
+import com.android.server.wm.WindowManagerInternal;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -58,7 +59,7 @@ public class UiAutomationManagerTest {
     @Mock AccessibilityServiceInfo mMockServiceInfo;
     @Mock ResolveInfo mMockResolveInfo;
     @Mock AccessibilityManagerService.SecurityPolicy mMockSecurityPolicy;
-    @Mock AccessibilityClientConnection.SystemSupport mMockSystemSupport;
+    @Mock AbstractAccessibilityServiceConnection.SystemSupport mMockSystemSupport;
     @Mock WindowManagerInternal mMockWindowManagerInternal;
     @Mock GlobalActionPerformer mMockGlobalActionPerformer;
     @Mock IBinder mMockOwner;
@@ -152,13 +153,14 @@ public class UiAutomationManagerTest {
     }
 
     @Test
-    public void uiAutomationBinderDiesBeforeConnecting_shouldNotCrash() throws Exception {
+    public void uiAutomationBinderDiesBeforeConnecting_notifiesSystem() throws Exception {
         register(0);
         ArgumentCaptor<IBinder.DeathRecipient> captor = ArgumentCaptor.forClass(
                 IBinder.DeathRecipient.class);
         verify(mMockOwner).linkToDeath(captor.capture(), anyInt());
         captor.getValue().binderDied();
         mMessageCapturingHandler.sendAllMessages();
+        verify(mMockSystemSupport).onClientChange(false);
     }
 
     private void register(int flags) {

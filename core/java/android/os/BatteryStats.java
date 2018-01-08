@@ -16,6 +16,7 @@
 
 package android.os;
 
+import android.app.ActivityManager;
 import android.app.job.JobParameters;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -33,6 +34,7 @@ import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.BatterySipper;
 import com.android.internal.os.BatteryStatsHelper;
 
@@ -222,8 +224,14 @@ public abstract class BatteryStats implements Parcelable {
      *   - Resource power manager (rpm) states [but screenOffRpm is disabled from working properly]
      * New in version 27:
      *   - Always On Display (screen doze mode) time and power
+     * New in version 28:
+     *   - Light/Deep Doze power
+     *   - WiFi Multicast Wakelock statistics (count & duration)
+     * New in version 29:
+     *   - Process states re-ordered. TOP_SLEEPING now below BACKGROUND. HEAVY_WEIGHT introduced.
+     *   - CPU times per UID process state
      */
-    static final int CHECKIN_VERSION = 27;
+    static final int CHECKIN_VERSION = 29;
 
     /**
      * Old version, we hit 9 and ran out of room, need to remove.
@@ -311,6 +319,8 @@ public abstract class BatteryStats implements Parcelable {
     private static final String CAMERA_DATA = "cam";
     private static final String VIDEO_DATA = "vid";
     private static final String AUDIO_DATA = "aud";
+    private static final String WIFI_MULTICAST_TOTAL_DATA = "wmct";
+    private static final String WIFI_MULTICAST_DATA = "wmc";
 
     public static final String RESULT_RECEIVER_CONTROLLER_KEY = "controller_activity";
 
@@ -322,7 +332,8 @@ public abstract class BatteryStats implements Parcelable {
      *
      * Other types might include times spent in foreground, background etc.
      */
-    private final String UID_TIMES_TYPE_ALL = "A";
+    @VisibleForTesting
+    public static final String UID_TIMES_TYPE_ALL = "A";
 
     /**
      * State for keeping track of counting information.
@@ -502,6 +513,31 @@ public abstract class BatteryStats implements Parcelable {
     }
 
     /**
+     * Maps the ActivityManager procstate into corresponding BatteryStats procstate.
+     */
+    public static int mapToInternalProcessState(int procState) {
+        if (procState == ActivityManager.PROCESS_STATE_NONEXISTENT) {
+            return ActivityManager.PROCESS_STATE_NONEXISTENT;
+        } else if (procState == ActivityManager.PROCESS_STATE_TOP) {
+            return Uid.PROCESS_STATE_TOP;
+        } else if (procState <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE) {
+            // Persistent and other foreground states go here.
+            return Uid.PROCESS_STATE_FOREGROUND_SERVICE;
+        } else if (procState <= ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND) {
+            // Persistent and other foreground states go here.
+            return Uid.PROCESS_STATE_FOREGROUND;
+        } else if (procState <= ActivityManager.PROCESS_STATE_RECEIVER) {
+            return Uid.PROCESS_STATE_BACKGROUND;
+        } else if (procState <= ActivityManager.PROCESS_STATE_TOP_SLEEPING) {
+            return Uid.PROCESS_STATE_TOP_SLEEPING;
+        } else if (procState <= ActivityManager.PROCESS_STATE_HEAVY_WEIGHT) {
+            return Uid.PROCESS_STATE_HEAVY_WEIGHT;
+        } else {
+            return Uid.PROCESS_STATE_CACHED;
+        }
+    }
+
+    /**
      * The statistics associated with a particular uid.
      */
     public static abstract class Uid {
@@ -512,6 +548,13 @@ public abstract class BatteryStats implements Parcelable {
          * @return a Map from Strings to Uid.Wakelock objects.
          */
         public abstract ArrayMap<String, ? extends Wakelock> getWakelockStats();
+
+        /**
+         * Returns the WiFi Multicast Wakelock statistics.
+         *
+         * @return a Timer Object for the per uid Multicast statistics.
+         */
+        public abstract Timer getMulticastWakelockStats();
 
         /**
          * Returns a mapping containing sync statistics.
@@ -633,6 +676,15 @@ public abstract class BatteryStats implements Parcelable {
         public abstract long[] getCpuFreqTimes(int which);
         public abstract long[] getScreenOffCpuFreqTimes(int which);
 
+        /**
+         * Returns cpu times of an uid at a particular process state.
+         */
+        public abstract long[] getCpuFreqTimes(int which, int procState);
+        /**
+         * Returns cpu times of an uid while the screen if off at a particular process state.
+         */
+        public abstract long[] getScreenOffCpuFreqTimes(int which, int procState);
+
         // Note: the following times are disjoint.  They can be added together to find the
         // total time a uid has had any processes running at all.
 
@@ -646,32 +698,61 @@ public abstract class BatteryStats implements Parcelable {
          */
         public static final int PROCESS_STATE_FOREGROUND_SERVICE = 1;
         /**
-         * Time this uid has any process that is top while the device is sleeping, but none
-         * in the "foreground service" or better state.
-         */
-        public static final int PROCESS_STATE_TOP_SLEEPING = 2;
-        /**
          * Time this uid has any process in an active foreground state, but none in the
          * "top sleeping" or better state.
          */
-        public static final int PROCESS_STATE_FOREGROUND = 3;
+        public static final int PROCESS_STATE_FOREGROUND = 2;
         /**
          * Time this uid has any process in an active background state, but none in the
          * "foreground" or better state.
          */
-        public static final int PROCESS_STATE_BACKGROUND = 4;
+        public static final int PROCESS_STATE_BACKGROUND = 3;
+        /**
+         * Time this uid has any process that is top while the device is sleeping, but not
+         * active for any other reason.  We kind-of consider it a kind of cached process
+         * for execution restrictions.
+         */
+        public static final int PROCESS_STATE_TOP_SLEEPING = 4;
+        /**
+         * Time this uid has any process that is in the background but it has an activity
+         * marked as "can't save state".  This is essentially a cached process, though the
+         * system will try much harder than normal to avoid killing it.
+         */
+        public static final int PROCESS_STATE_HEAVY_WEIGHT = 5;
         /**
          * Time this uid has any processes that are sitting around cached, not in one of the
          * other active states.
          */
-        public static final int PROCESS_STATE_CACHED = 5;
+        public static final int PROCESS_STATE_CACHED = 6;
         /**
          * Total number of process states we track.
          */
-        public static final int NUM_PROCESS_STATE = 6;
+        public static final int NUM_PROCESS_STATE = 7;
 
+        // Used in dump
         static final String[] PROCESS_STATE_NAMES = {
-            "Top", "Fg Service", "Top Sleeping", "Foreground", "Background", "Cached"
+                "Top", "Fg Service", "Foreground", "Background", "Top Sleeping", "Heavy Weight",
+                "Cached"
+        };
+
+        // Used in checkin dump
+        @VisibleForTesting
+        public static final String[] UID_PROCESS_TYPES = {
+                "T",  // TOP
+                "FS", // FOREGROUND_SERVICE
+                "F",  // FOREGROUND
+                "B",  // BACKGROUND
+                "TS", // TOP_SLEEPING
+                "HW",  // HEAVY_WEIGHT
+                "C"   // CACHED
+        };
+
+        /**
+         * When the process exits one of these states, we need to make sure cpu time in this state
+         * is not attributed to any non-critical process states.
+         */
+        public static final int[] CRITICAL_PROC_STATES = {
+            PROCESS_STATE_TOP, PROCESS_STATE_FOREGROUND_SERVICE, PROCESS_STATE_FOREGROUND
         };
 
         public abstract long getProcessStateTime(int state, long elapsedRealtimeUs, int which);
@@ -1168,7 +1249,7 @@ public abstract class BatteryStats implements Parcelable {
     public static final class PackageChange {
         public String mPackageName;
         public boolean mUpdate;
-        public int mVersionCode;
+        public long mVersionCode;
     }
 
     public static final class DailyItem {
@@ -2696,6 +2777,18 @@ public abstract class BatteryStats implements Parcelable {
     public abstract long getUahDischarge(int which);
 
     /**
+     * @return the amount of battery discharge while the device is in light idle mode, measured in
+     * micro-Ampere-hours.
+     */
+    public abstract long getUahDischargeLightDoze(int which);
+
+    /**
+     * @return the amount of battery discharge while the device is in deep idle mode, measured in
+     * micro-Ampere-hours.
+     */
+    public abstract long getUahDischargeDeepDoze(int which);
+
+    /**
      * Returns the estimated real battery capacity, which may be less than the capacity
      * declared by the PowerProfile.
      * @return The estimated battery capacity in mAh.
@@ -3327,6 +3420,8 @@ public abstract class BatteryStats implements Parcelable {
         final long dischargeCount = getUahDischarge(which);
         final long dischargeScreenOffCount = getUahDischargeScreenOff(which);
         final long dischargeScreenDozeCount = getUahDischargeScreenDoze(which);
+        final long dischargeLightDozeCount = getUahDischargeLightDoze(which);
+        final long dischargeDeepDozeCount = getUahDischargeDeepDoze(which);
 
         final StringBuilder sb = new StringBuilder(128);
 
@@ -3347,13 +3442,16 @@ public abstract class BatteryStats implements Parcelable {
                 screenDozeTime / 1000);
 
 
-        // Calculate wakelock times across all uids.
+        // Calculate both wakelock and wifi multicast wakelock times across all uids.
         long fullWakeLockTimeTotal = 0;
         long partialWakeLockTimeTotal = 0;
+        long multicastWakeLockTimeTotalMicros = 0;
+        int multicastWakeLockCountTotal = 0;
 
         for (int iu = 0; iu < NU; iu++) {
             final Uid u = uidStats.valueAt(iu);
 
+            // First calculating the wakelock stats
             final ArrayMap<String, ? extends BatteryStats.Uid.Wakelock> wakelocks
                     = u.getWakelockStats();
             for (int iw=wakelocks.size()-1; iw>=0; iw--) {
@@ -3370,6 +3468,13 @@ public abstract class BatteryStats implements Parcelable {
                     partialWakeLockTimeTotal += partialWakeTimer.getTotalTimeLocked(
                         rawRealtime, which);
                 }
+            }
+
+            // Now calculating the wifi multicast wakelock stats
+            final Timer mcTimer = u.getMulticastWakelockStats();
+            if (mcTimer != null) {
+                multicastWakeLockTimeTotalMicros += mcTimer.getTotalTimeLocked(rawRealtime, which);
+                multicastWakeLockCountTotal += mcTimer.getCountLocked(which);
             }
         }
 
@@ -3486,6 +3591,11 @@ public abstract class BatteryStats implements Parcelable {
         }
         dumpLine(pw, 0 /* uid */, category, WIFI_SIGNAL_STRENGTH_COUNT_DATA, args);
 
+        // Dump Multicast total stats
+        dumpLine(pw, 0 /* uid */, category, WIFI_MULTICAST_TOTAL_DATA,
+                multicastWakeLockTimeTotalMicros / 1000,
+                multicastWakeLockCountTotal);
+
         if (which == STATS_SINCE_UNPLUGGED) {
             dumpLine(pw, 0 /* uid */, category, BATTERY_LEVEL_DATA, getDischargeStartLevel(),
                     getDischargeCurrentLevel());
@@ -3497,14 +3607,16 @@ public abstract class BatteryStats implements Parcelable {
                     getDischargeStartLevel()-getDischargeCurrentLevel(),
                     getDischargeAmountScreenOn(), getDischargeAmountScreenOff(),
                     dischargeCount / 1000, dischargeScreenOffCount / 1000,
-                    getDischargeAmountScreenDoze(), dischargeScreenDozeCount / 1000);
+                    getDischargeAmountScreenDoze(), dischargeScreenDozeCount / 1000,
+                    dischargeLightDozeCount / 1000, dischargeDeepDozeCount / 1000);
         } else {
             dumpLine(pw, 0 /* uid */, category, BATTERY_DISCHARGE_DATA,
                     getLowDischargeAmountSinceCharge(), getHighDischargeAmountSinceCharge(),
                     getDischargeAmountScreenOnSinceCharge(),
                     getDischargeAmountScreenOffSinceCharge(),
                     dischargeCount / 1000, dischargeScreenOffCount / 1000,
-                    getDischargeAmountScreenDozeSinceCharge(), dischargeScreenDozeCount / 1000);
+                    getDischargeAmountScreenDozeSinceCharge(), dischargeScreenDozeCount / 1000,
+                    dischargeLightDozeCount / 1000, dischargeDeepDozeCount / 1000);
         }
 
         if (reqUid < 0) {
@@ -3810,6 +3922,18 @@ public abstract class BatteryStats implements Parcelable {
                 }
             }
 
+            // WiFi Multicast Wakelock Statistics
+            final Timer mcTimer = u.getMulticastWakelockStats();
+            if (mcTimer != null) {
+                final long totalMcWakelockTimeMs =
+                        mcTimer.getTotalTimeLocked(rawRealtime, which) / 1000 ;
+                final int countMcWakelock = mcTimer.getCountLocked(which);
+                if(totalMcWakelockTimeMs > 0) {
+                    dumpLine(pw, uid, category, WIFI_MULTICAST_DATA,
+                            totalMcWakelockTimeMs, countMcWakelock);
+                }
+            }
+
             final ArrayMap<String, ? extends Timer> syncs = u.getSyncStats();
             for (int isy=syncs.size()-1; isy>=0; isy--) {
                 final Timer timer = syncs.valueAt(isy);
@@ -3938,6 +4062,29 @@ public abstract class BatteryStats implements Parcelable {
                     }
                     dumpLine(pw, uid, category, CPU_TIMES_AT_FREQ_DATA, UID_TIMES_TYPE_ALL,
                             cpuFreqTimeMs.length, sb.toString());
+                }
+
+                for (int procState = 0; procState < Uid.NUM_PROCESS_STATE; ++procState) {
+                    final long[] timesMs = u.getCpuFreqTimes(which, procState);
+                    if (timesMs != null && timesMs.length == cpuFreqs.length) {
+                        sb.setLength(0);
+                        for (int i = 0; i < timesMs.length; ++i) {
+                            sb.append((i == 0 ? "" : ",") + timesMs[i]);
+                        }
+                        final long[] screenOffTimesMs = u.getScreenOffCpuFreqTimes(
+                                which, procState);
+                        if (screenOffTimesMs != null) {
+                            for (int i = 0; i < screenOffTimesMs.length; ++i) {
+                                sb.append("," + screenOffTimesMs[i]);
+                            }
+                        } else {
+                            for (int i = 0; i < timesMs.length; ++i) {
+                                sb.append(",0");
+                            }
+                        }
+                        dumpLine(pw, uid, category, CPU_TIMES_AT_FREQ_DATA,
+                                Uid.UID_PROCESS_TYPES[procState], timesMs.length, sb.toString());
+                    }
                 }
             }
 
@@ -4169,6 +4316,26 @@ public abstract class BatteryStats implements Parcelable {
             pw.println(sb.toString());
         }
 
+        final long dischargeLightDozeCount = getUahDischargeLightDoze(which);
+        if (dischargeLightDozeCount >= 0) {
+            sb.setLength(0);
+            sb.append(prefix);
+            sb.append("  Device light doze discharge: ");
+            sb.append(BatteryStatsHelper.makemAh(dischargeLightDozeCount / 1000.0));
+            sb.append(" mAh");
+            pw.println(sb.toString());
+        }
+
+        final long dischargeDeepDozeCount = getUahDischargeDeepDoze(which);
+        if (dischargeDeepDozeCount >= 0) {
+            sb.setLength(0);
+            sb.append(prefix);
+            sb.append("  Device deep doze discharge: ");
+            sb.append(BatteryStatsHelper.makemAh(dischargeDeepDozeCount / 1000.0));
+            sb.append(" mAh");
+            pw.println(sb.toString());
+        }
+
         pw.print("  Start clock time: ");
         pw.println(DateFormat.format("yyyy-MM-dd-HH-mm-ss", getStartClockTime()).toString());
 
@@ -4289,15 +4456,18 @@ public abstract class BatteryStats implements Parcelable {
             pw.print("  Connectivity changes: "); pw.println(connChanges);
         }
 
-        // Calculate wakelock times across all uids.
+        // Calculate both wakelock and wifi multicast wakelock times across all uids.
         long fullWakeLockTimeTotalMicros = 0;
         long partialWakeLockTimeTotalMicros = 0;
+        long multicastWakeLockTimeTotalMicros = 0;
+        int multicastWakeLockCountTotal = 0;
 
         final ArrayList<TimerEntry> timers = new ArrayList<>();
 
         for (int iu = 0; iu < NU; iu++) {
             final Uid u = uidStats.valueAt(iu);
 
+            // First calculate wakelock statistics
             final ArrayMap<String, ? extends BatteryStats.Uid.Wakelock> wakelocks
                     = u.getWakelockStats();
             for (int iw=wakelocks.size()-1; iw>=0; iw--) {
@@ -4325,6 +4495,13 @@ public abstract class BatteryStats implements Parcelable {
                     }
                 }
             }
+
+            // Next calculate wifi multicast wakelock statistics
+            final Timer mcTimer = u.getMulticastWakelockStats();
+            if (mcTimer != null) {
+                multicastWakeLockTimeTotalMicros += mcTimer.getTotalTimeLocked(rawRealtime, which);
+                multicastWakeLockCountTotal += mcTimer.getCountLocked(which);
+            }
         }
 
         final long mobileRxTotalBytes = getNetworkActivityBytes(NETWORK_MOBILE_RX_DATA, which);
@@ -4351,6 +4528,20 @@ public abstract class BatteryStats implements Parcelable {
             sb.append(prefix);
                     sb.append("  Total partial wakelock time: "); formatTimeMsNoSpace(sb,
                             (partialWakeLockTimeTotalMicros + 500) / 1000);
+            pw.println(sb.toString());
+        }
+
+        if (multicastWakeLockTimeTotalMicros != 0) {
+            sb.setLength(0);
+            sb.append(prefix);
+            sb.append("  Total WiFi Multicast wakelock Count: ");
+            sb.append(multicastWakeLockCountTotal);
+            pw.println(sb.toString());
+
+            sb.setLength(0);
+            sb.append(prefix);
+            sb.append("  Total WiFi Multicast wakelock time: ");
+            formatTimeMsNoSpace(sb, (multicastWakeLockTimeTotalMicros + 500) / 1000);
             pw.println(sb.toString());
         }
 
@@ -5271,6 +5462,24 @@ public abstract class BatteryStats implements Parcelable {
                 }
             }
 
+            // Calculate multicast wakelock stats
+            final Timer mcTimer = u.getMulticastWakelockStats();
+            if (mcTimer != null) {
+                final long multicastWakeLockTimeMicros = mcTimer.getTotalTimeLocked(rawRealtime, which);
+                final int multicastWakeLockCount = mcTimer.getCountLocked(which);
+
+                if (multicastWakeLockTimeMicros > 0) {
+                    sb.setLength(0);
+                    sb.append(prefix);
+                    sb.append("    WiFi Multicast Wakelock");
+                    sb.append(" count = ");
+                    sb.append(multicastWakeLockCount);
+                    sb.append(" time = ");
+                    formatTimeMsNoSpace(sb, (multicastWakeLockTimeMicros + 500) / 1000);
+                    pw.println(sb.toString());
+                }
+            }
+
             final ArrayMap<String, ? extends Timer> syncs = u.getSyncStats();
             for (int isy=syncs.size()-1; isy>=0; isy--) {
                 final Timer timer = syncs.valueAt(isy);
@@ -5485,6 +5694,30 @@ public abstract class BatteryStats implements Parcelable {
                     sb.append(" " + screenOffCpuFreqTimes[i]);
                 }
                 pw.println(sb.toString());
+            }
+
+            for (int procState = 0; procState < Uid.NUM_PROCESS_STATE; ++procState) {
+                final long[] cpuTimes = u.getCpuFreqTimes(which, procState);
+                if (cpuTimes != null) {
+                    sb.setLength(0);
+                    sb.append("    Cpu times per freq at state "
+                            + Uid.PROCESS_STATE_NAMES[procState] + ":");
+                    for (int i = 0; i < cpuTimes.length; ++i) {
+                        sb.append(" " + cpuTimes[i]);
+                    }
+                    pw.println(sb.toString());
+                }
+
+                final long[] screenOffCpuTimes = u.getScreenOffCpuFreqTimes(which, procState);
+                if (screenOffCpuTimes != null) {
+                    sb.setLength(0);
+                    sb.append("   Screen-off cpu times per freq at state "
+                            + Uid.PROCESS_STATE_NAMES[procState] + ":");
+                    for (int i = 0; i < screenOffCpuTimes.length; ++i) {
+                        sb.append(" " + screenOffCpuTimes[i]);
+                    }
+                    pw.println(sb.toString());
+                }
             }
 
             final ArrayMap<String, ? extends BatteryStats.Uid.Proc> processStats
@@ -6625,7 +6858,7 @@ public abstract class BatteryStats implements Parcelable {
 
     /** Dump #STATS_SINCE_CHARGED batterystats data to a proto. @hide */
     public void dumpProtoLocked(Context context, FileDescriptor fd, List<ApplicationInfo> apps,
-            int flags, long historyStart) {
+            int flags) {
         final ProtoOutputStream proto = new ProtoOutputStream(fd);
         final long bToken = proto.start(BatteryStatsServiceDumpProto.BATTERYSTATS);
         prepareForDumpLocked();
@@ -6635,13 +6868,7 @@ public abstract class BatteryStats implements Parcelable {
         proto.write(BatteryStatsProto.START_PLATFORM_VERSION, getStartPlatformVersion());
         proto.write(BatteryStatsProto.END_PLATFORM_VERSION, getEndPlatformVersion());
 
-        long now = getHistoryBaseTime() + SystemClock.elapsedRealtime();
-
-        if ((flags & (DUMP_INCLUDE_HISTORY | DUMP_HISTORY_ONLY)) != 0) {
-            if (startIteratingHistoryLocked()) {
-                // TODO: implement dumpProtoHistoryLocked(proto);
-            }
-        }
+        // History intentionally not included in proto dump.
 
         if ((flags & (DUMP_HISTORY_ONLY | DUMP_DAILY_ONLY)) == 0) {
             final BatteryStatsHelper helper = new BatteryStatsHelper(context, false,
@@ -7047,6 +7274,10 @@ public abstract class BatteryStats implements Parcelable {
                 proto.end(wToken);
             }
 
+            // Wifi Multicast Wakelock (WIFI_MULTICAST_WAKELOCK_DATA)
+            dumpTimer(proto, UidProto.WIFI_MULTICAST_WAKELOCK, u.getMulticastWakelockStats(),
+                    rawRealtimeUs, which);
+
             // Wakeup alarms (WAKEUP_ALARM_DATA)
             for (int ipkg = packageStats.size() - 1; ipkg >= 0; --ipkg) {
                 final Uid.Pkg ps = packageStats.valueAt(ipkg);
@@ -7131,6 +7362,10 @@ public abstract class BatteryStats implements Parcelable {
                 getUahDischargeScreenOff(which) / 1000);
         proto.write(SystemProto.BatteryDischarge.TOTAL_MAH_SCREEN_DOZE,
                 getUahDischargeScreenDoze(which) / 1000);
+        proto.write(SystemProto.BatteryDischarge.TOTAL_MAH_LIGHT_DOZE,
+                getUahDischargeLightDoze(which) / 1000);
+        proto.write(SystemProto.BatteryDischarge.TOTAL_MAH_DEEP_DOZE,
+                getUahDischargeDeepDoze(which) / 1000);
         proto.end(bdToken);
 
         // Time remaining
@@ -7298,6 +7533,30 @@ public abstract class BatteryStats implements Parcelable {
         proto.write(SystemProto.Misc.LONGEST_LIGHT_DOZE_DURATION_MS,
                 getLongestDeviceIdleModeTime(DEVICE_IDLE_MODE_LIGHT));
         proto.end(mToken);
+
+        // Wifi multicast wakelock total stats (WIFI_MULTICAST_WAKELOCK_TOTAL_DATA)
+        // Calculate multicast wakelock stats across all uids.
+        long multicastWakeLockTimeTotalUs = 0;
+        int multicastWakeLockCountTotal = 0;
+
+        for (int iu = 0; iu < uidStats.size(); iu++) {
+            final Uid u = uidStats.valueAt(iu);
+
+            final Timer mcTimer = u.getMulticastWakelockStats();
+
+            if (mcTimer != null) {
+                multicastWakeLockTimeTotalUs +=
+                        mcTimer.getTotalTimeLocked(rawRealtimeUs, which);
+                multicastWakeLockCountTotal += mcTimer.getCountLocked(which);
+            }
+        }
+
+        final long wmctToken = proto.start(SystemProto.WIFI_MULTICAST_WAKELOCK_TOTAL);
+        proto.write(SystemProto.WifiMulticastWakelockTotal.DURATION_MS,
+                multicastWakeLockTimeTotalUs / 1000);
+        proto.write(SystemProto.WifiMulticastWakelockTotal.COUNT,
+                multicastWakeLockCountTotal);
+        proto.end(wmctToken);
 
         // Power use item (POWER_USE_ITEM_DATA)
         final List<BatterySipper> sippers = helper.getUsageList();

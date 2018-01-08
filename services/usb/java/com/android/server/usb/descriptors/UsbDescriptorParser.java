@@ -26,13 +26,13 @@ import java.util.ArrayList;
  */
 public final class UsbDescriptorParser {
     private static final String TAG = "UsbDescriptorParser";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = true;
 
     private final String mDeviceAddr;
 
     // Descriptor Objects
     private static final int DESCRIPTORS_ALLOC_SIZE = 128;
-    private ArrayList<UsbDescriptor> mDescriptors = new ArrayList<UsbDescriptor>();
+    private final ArrayList<UsbDescriptor> mDescriptors;
 
     private UsbDeviceDescriptor mDeviceDescriptor;
     private UsbConfigDescriptor mCurConfigDescriptor;
@@ -45,6 +45,28 @@ public final class UsbDescriptorParser {
 
     public UsbDescriptorParser(String deviceAddr) {
         mDeviceAddr = deviceAddr;
+        mDescriptors = new ArrayList<UsbDescriptor>(DESCRIPTORS_ALLOC_SIZE);
+    }
+
+    /**
+     * Connect this parser to an existing set of already parsed descriptors.
+     * This is useful for reporting.
+     */
+    public UsbDescriptorParser(String deviceAddr, ArrayList<UsbDescriptor> descriptors) {
+        mDeviceAddr = deviceAddr;
+        mDescriptors = descriptors;
+        //TODO some error checking here....
+        mDeviceDescriptor = (UsbDeviceDescriptor) descriptors.get(0);
+    }
+
+    /**
+     * Connect this parser to an byte array containing unparsed (raw) device descriptors
+     * to be parsed (and parse them). Useful for parsing a stored descriptor buffer.
+     */
+    public UsbDescriptorParser(String deviceAddr, byte[] rawDescriptors) {
+        mDeviceAddr = deviceAddr;
+        mDescriptors = new ArrayList<UsbDescriptor>(DESCRIPTORS_ALLOC_SIZE);
+        parseDescriptors(rawDescriptors);
     }
 
     public String getDeviceAddr() {
@@ -196,8 +218,6 @@ public final class UsbDescriptorParser {
         if (DEBUG) {
             Log.d(TAG, "parseDescriptors() - start");
         }
-        // This will allow us to (probably) alloc mDescriptors just once.
-        mDescriptors = new ArrayList<UsbDescriptor>(DESCRIPTORS_ALLOC_SIZE);
 
         ByteStream stream = new ByteStream(descriptors);
         while (stream.available() > 0) {
@@ -241,7 +261,7 @@ public final class UsbDescriptorParser {
             ? parseDescriptors(rawDescriptors) : false;
     }
 
-    private byte[] getRawDescriptors() {
+    public byte[] getRawDescriptors() {
         return getRawDescriptors_native(mDeviceAddr);
     }
 
@@ -269,10 +289,15 @@ public final class UsbDescriptorParser {
      */
     public UsbDevice toAndroidUsbDevice() {
         if (mDeviceDescriptor == null) {
+            Log.e(TAG, "toAndroidUsbDevice() ERROR - No Device Descriptor");
             return null;
         }
 
-        return mDeviceDescriptor.toAndroid(this);
+        UsbDevice device = mDeviceDescriptor.toAndroid(this);
+        if (device == null) {
+            Log.e(TAG, "toAndroidUsbDevice() ERROR Creating Device");
+        }
+        return device;
     }
 
     /**
@@ -291,7 +316,7 @@ public final class UsbDescriptorParser {
     /**
      * @hide
      */
-    public ArrayList<UsbDescriptor> getInterfaceDescriptorsForClass(byte usbClass) {
+    public ArrayList<UsbDescriptor> getInterfaceDescriptorsForClass(int usbClass) {
         ArrayList<UsbDescriptor> list = new ArrayList<UsbDescriptor>();
         for (UsbDescriptor descriptor : mDescriptors) {
             // ensure that this isn't an unrecognized DESCRIPTORTYPE_INTERFACE
@@ -313,7 +338,7 @@ public final class UsbDescriptorParser {
     /**
      * @hide
      */
-    public ArrayList<UsbDescriptor> getACInterfaceDescriptors(byte subtype, byte subclass) {
+    public ArrayList<UsbDescriptor> getACInterfaceDescriptors(byte subtype, int subclass) {
         ArrayList<UsbDescriptor> list = new ArrayList<UsbDescriptor>();
         for (UsbDescriptor descriptor : mDescriptors) {
             if (descriptor.getType() == UsbDescriptor.DESCRIPTORTYPE_AUDIO_INTERFACE) {

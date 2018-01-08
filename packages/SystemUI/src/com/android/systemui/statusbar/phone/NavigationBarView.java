@@ -47,6 +47,8 @@ import android.widget.FrameLayout;
 import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.DockedStackExistsListener;
+import com.android.systemui.OverviewProxyService;
+import com.android.systemui.OverviewProxyService.OverviewProxyListener;
 import com.android.systemui.R;
 import com.android.systemui.RecentsComponent;
 import com.android.systemui.plugins.PluginListener;
@@ -96,6 +98,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     private GestureHelper mGestureHelper;
     private DeadZone mDeadZone;
     private final NavigationBarTransitions mBarTransitions;
+    private final OverviewProxyService mOverviewProxyService;
 
     // workaround for LayoutTransitions leaving the nav buttons in a weird state (bug 5549288)
     final static boolean WORKAROUND_INVALID_LAYOUT = true;
@@ -196,6 +199,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         }
     }
 
+    private final OverviewProxyListener mOverviewProxyListener =
+            isConnected -> setSlippery(!isConnected);
+
     public NavigationBarView(Context context, AttributeSet attrs) {
         super(context, attrs);
 
@@ -221,6 +227,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         mButtonDispatchers.put(R.id.ime_switcher, new ButtonDispatcher(R.id.ime_switcher));
         mButtonDispatchers.put(R.id.accessibility_button,
                 new ButtonDispatcher(R.id.accessibility_button));
+        mOverviewProxyService = Dependency.get(OverviewProxyService.class);
     }
 
     public BarTransitions getBarTransitions() {
@@ -459,6 +466,10 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
             disableBack = false;
             disableRecent = false;
         }
+        if (mOverviewProxyService.getProxy() != null) {
+            // When overview is connected to the launcher service, disable the recents button
+            disableRecent = true;
+        }
 
         ViewGroup navButtons = (ViewGroup) getCurrentView().findViewById(R.id.nav_buttons);
         if (navButtons != null) {
@@ -528,6 +539,24 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
             }
             WindowManager wm = (WindowManager)getContext().getSystemService(Context.WINDOW_SERVICE);
             wm.updateViewLayout((View) getParent(), lp);
+        }
+    }
+
+    private void setSlippery(boolean slippery) {
+        boolean changed = false;
+        final ViewGroup navbarView = ((ViewGroup) getParent());
+        final WindowManager.LayoutParams lp = (WindowManager.LayoutParams) navbarView
+                .getLayoutParams();
+        if (slippery && (lp.flags & WindowManager.LayoutParams.FLAG_SLIPPERY) == 0) {
+            lp.flags |= WindowManager.LayoutParams.FLAG_SLIPPERY;
+            changed = true;
+        } else if (!slippery && (lp.flags & WindowManager.LayoutParams.FLAG_SLIPPERY) != 0) {
+            lp.flags &= ~WindowManager.LayoutParams.FLAG_SLIPPERY;
+            changed = true;
+        }
+        if (changed) {
+            WindowManager wm = (WindowManager)getContext().getSystemService(Context.WINDOW_SERVICE);
+            wm.updateViewLayout(navbarView, lp);
         }
     }
 
@@ -756,6 +785,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         onPluginDisconnected(null); // Create default gesture helper
         Dependency.get(PluginManager.class).addPluginListener(this,
                 NavGesture.class, false /* Only one */);
+        mOverviewProxyService.addCallback(mOverviewProxyListener);
     }
 
     @Override
@@ -765,6 +795,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         if (mGestureHelper != null) {
             mGestureHelper.destroy();
         }
+        mOverviewProxyService.removeCallback(mOverviewProxyListener);
     }
 
     @Override

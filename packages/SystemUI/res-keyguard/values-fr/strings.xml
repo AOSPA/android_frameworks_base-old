@@ -29,8 +29,7 @@
     <string name="keyguard_password_enter_password_code" msgid="595980919238127672">"Saisissez le mot de passe pour déverrouiller le clavier"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7504123374204446086">"Saisissez le code pour déverrouiller le clavier"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="6535018036285012028">"Le code est incorrect."</string>
-    <!-- no translation found for keyguard_sim_error_message_short (592109500618448312) -->
-    <skip />
+    <string name="keyguard_sim_error_message_short" msgid="592109500618448312">"Carte non valide."</string>
     <string name="keyguard_charged" msgid="2222329688813033109">"Chargé"</string>
     <string name="keyguard_plugged_in" msgid="89308975354638682">"En charge…"</string>
     <string name="keyguard_plugged_in_charging_fast" msgid="8869226755413795173">"Chargement rapide…"</string>
@@ -136,4 +135,12 @@
       <item quantity="other">L\'appareil n\'a pas été déverrouillé depuis <xliff:g id="NUMBER_1">%d</xliff:g> heures. Confirmez le mot de passe.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Non reconnu"</string>
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+      <item quantity="one">Saisissez le code PIN de la carte SIM. <xliff:g id="NUMBER_1">%d</xliff:g> tentative restante.</item>
+      <item quantity="other">Saisissez le code PIN de la carte SIM. <xliff:g id="NUMBER_1">%d</xliff:g> tentatives restantes.</item>
+    </plurals>
+    <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
+      <item quantity="one">La carte SIM est maintenant désactivée. Saisissez le code PUK pour continuer. Il vous reste <xliff:g id="_NUMBER_1">%d</xliff:g> tentative avant que votre carte SIM ne devienne définitivement inutilisable. Pour de plus amples informations, veuillez contacter votre opérateur.</item>
+      <item quantity="other">La carte SIM est maintenant désactivée. Saisissez le code PUK pour continuer. Il vous reste <xliff:g id="_NUMBER_1">%d</xliff:g> tentatives avant que votre carte SIM ne devienne définitivement inutilisable. Pour de plus amples informations, veuillez contacter votre opérateur.</item>
+    </plurals>
 </resources>

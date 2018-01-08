@@ -61,7 +61,7 @@ class AppTaskImpl extends IAppTask.Stub {
             try {
                 // We remove the task from recents to preserve backwards
                 if (!mService.mStackSupervisor.removeTaskByIdLocked(mTaskId, false,
-                        REMOVE_FROM_RECENTS)) {
+                        REMOVE_FROM_RECENTS, "finish-and-remove-task")) {
                     throw new IllegalArgumentException("Unable to find task ID " + mTaskId);
                 }
             } finally {
@@ -122,9 +122,14 @@ class AppTaskImpl extends IAppTask.Stub {
                 throw new IllegalArgumentException("Bad app thread " + appThread);
             }
         }
-        return mService.mActivityStarter.startActivityMayWait(appThread, -1, callingPackage,
-                intent, resolvedType, null, null, null, null, 0, 0, null, null,
-                null, bOptions, false, callingUser, tr, "AppTaskImpl");
+
+        return mService.getActivityStartController().obtainStarter(intent, "AppTaskImpl")
+                .setCaller(appThread)
+                .setCallingPackage(callingPackage)
+                .setResolvedType(resolvedType)
+                .setMayWait(bOptions, callingUser)
+                .setInTask(tr)
+                .execute();
     }
 
     @Override

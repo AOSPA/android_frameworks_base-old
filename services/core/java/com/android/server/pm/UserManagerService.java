@@ -27,7 +27,7 @@ import android.app.Activity;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityManagerNative;
-import android.app.AppGlobals;
+import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.IStopUserCallback;
 import android.app.KeyguardManager;
@@ -39,6 +39,7 @@ import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.ShortcutServiceInternal;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -50,6 +51,7 @@ import android.os.Environment;
 import android.os.FileUtils;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.IProgressListener;
 import android.os.IUserManager;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
@@ -71,10 +73,6 @@ import android.os.UserManagerInternal.UserRestrictionsListener;
 import android.os.storage.StorageManager;
 import android.security.GateKeeper;
 import android.service.gatekeeper.IGateKeeperService;
-import android.system.ErrnoException;
-import android.system.Os;
-import android.system.OsConstants;
-import android.text.TextUtils;
 import android.util.AtomicFile;
 import android.util.IntArray;
 import android.util.Log;
@@ -113,9 +111,9 @@ import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -378,20 +376,43 @@ public class UserManagerService extends IUserManager.Stub {
     private final BroadcastReceiver mDisableQuietModeCallback = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if (ACTION_DISABLE_QUIET_MODE_AFTER_UNLOCK.equals(intent.getAction())) {
-                final IntentSender target = intent.getParcelableExtra(Intent.EXTRA_INTENT);
-                final int userHandle = intent.getIntExtra(Intent.EXTRA_USER_ID, 0);
-                setQuietModeEnabled(userHandle, false);
-                if (target != null) {
-                    try {
-                        mContext.startIntentSender(target, null, 0, 0, 0);
-                    } catch (IntentSender.SendIntentException e) {
-                        /* ignore */
-                    }
-                }
+            if (!ACTION_DISABLE_QUIET_MODE_AFTER_UNLOCK.equals(intent.getAction())) {
+                return;
             }
+            final IntentSender target = intent.getParcelableExtra(Intent.EXTRA_INTENT);
+            final int userHandle = intent.getIntExtra(Intent.EXTRA_USER_ID, UserHandle.USER_NULL);
+            setQuietModeEnabled(userHandle, false, target);
         }
     };
+
+    /**
+     * Start an {@link IntentSender} when user is unlocked after disabling quiet mode.
+     *
+     * @see {@link #trySetQuietModeEnabled(String, boolean, int, IntentSender)}
+     */
+    private class DisableQuietModeUserUnlockedCallback extends IProgressListener.Stub {
+        private final IntentSender mTarget;
+
+        public DisableQuietModeUserUnlockedCallback(IntentSender target) {
+            Preconditions.checkNotNull(target);
+            mTarget = target;
+        }
+
+        @Override
+        public void onStarted(int id, Bundle extras) {}
+
+        @Override
+        public void onProgress(int id, int progress, Bundle extras) {}
+
+        @Override
+        public void onFinished(int id, Bundle extras) {
+            try {
+                mContext.startIntentSender(mTarget, null, 0, 0, 0);
+            } catch (IntentSender.SendIntentException e) {
+                Slog.e(LOG_TAG, "Failed to start the target in the callback", e);
+            }
+        }
+    }
 
     /**
      * Whether all users should be created ephemeral.
@@ -717,6 +738,19 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
+    @Override
+    public int getProfileParentId(int userHandle) {
+        checkManageUsersPermission("get the profile parent");
+        synchronized (mUsersLock) {
+            UserInfo profileParent = getProfileParentLU(userHandle);
+            if (profileParent == null) {
+                return userHandle;
+            }
+
+            return profileParent.id;
+        }
+    }
+
     private UserInfo getProfileParentLU(int userHandle) {
         UserInfo profile = getUserInfoLU(userHandle);
         if (profile == null) {
@@ -752,44 +786,114 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @Override
-    public void setQuietModeEnabled(int userHandle, boolean enableQuietMode) {
-        checkManageUsersPermission("silence profile");
-        boolean changed = false;
-        UserInfo profile, parent;
-        synchronized (mPackagesLock) {
-            synchronized (mUsersLock) {
-                profile = getUserInfoLU(userHandle);
-                parent = getProfileParentLU(userHandle);
+    public boolean trySetQuietModeEnabled(@NonNull String callingPackage, boolean enableQuietMode,
+            int userHandle, @Nullable IntentSender target) {
+        Preconditions.checkNotNull(callingPackage);
 
+        if (enableQuietMode && target != null) {
+            throw new IllegalArgumentException(
+                    "target should only be specified when we are disabling quiet mode.");
+        }
+
+        if (!isAllowedToSetWorkMode(callingPackage, Binder.getCallingUid())) {
+            throw new SecurityException("Not allowed to call trySetQuietModeEnabled, "
+                    + "caller is foreground default launcher "
+                    + "nor with MANAGE_USERS/MODIFY_QUIET_MODE permission");
+        }
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            if (enableQuietMode) {
+                setQuietModeEnabled(userHandle, true /* enableQuietMode */, target);
+                return true;
+            } else {
+                boolean needToShowConfirmCredential =
+                        mLockPatternUtils.isSecure(userHandle)
+                                && !StorageManager.isUserKeyUnlocked(userHandle);
+                if (needToShowConfirmCredential) {
+                    showConfirmCredentialToDisableQuietMode(userHandle, target);
+                    return false;
+                } else {
+                    setQuietModeEnabled(userHandle, false /* enableQuietMode */, target);
+                    return true;
+                }
             }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * An app can modify quiet mode if the caller meets one of the condition:
+     * <ul>
+     *     <li>Has system UID or root UID</li>
+     *     <li>Has {@link Manifest.permission#MODIFY_QUIET_MODE}</li>
+     *     <li>Has {@link Manifest.permission#MANAGE_USERS}</li>
+     * </ul>
+     */
+    private boolean isAllowedToSetWorkMode(String callingPackage, int callingUid) {
+        if (hasManageUsersPermission()) {
+            return true;
+        }
+
+        final boolean hasModifyQuietModePermission = ActivityManager.checkComponentPermission(
+                Manifest.permission.MODIFY_QUIET_MODE,
+                callingUid, -1, true) == PackageManager.PERMISSION_GRANTED;
+        if (hasModifyQuietModePermission) {
+            return true;
+        }
+
+        final ShortcutServiceInternal shortcutInternal =
+                LocalServices.getService(ShortcutServiceInternal.class);
+        if (shortcutInternal != null) {
+            boolean isForegroundLauncher =
+                    shortcutInternal.isForegroundDefaultLauncher(callingPackage, callingUid);
+            if (isForegroundLauncher) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void setQuietModeEnabled(
+            int userHandle, boolean enableQuietMode, IntentSender target) {
+        final UserInfo profile, parent;
+        final UserData profileUserData;
+        synchronized (mUsersLock) {
+            profile = getUserInfoLU(userHandle);
+            parent = getProfileParentLU(userHandle);
+
             if (profile == null || !profile.isManagedProfile()) {
                 throw new IllegalArgumentException("User " + userHandle + " is not a profile");
             }
-            if (profile.isQuietModeEnabled() != enableQuietMode) {
-                profile.flags ^= UserInfo.FLAG_QUIET_MODE;
-                writeUserLP(getUserDataLU(profile.id));
-                changed = true;
+            if (profile.isQuietModeEnabled() == enableQuietMode) {
+                Slog.i(LOG_TAG, "Quiet mode is already " + enableQuietMode);
+                return;
             }
+            profile.flags ^= UserInfo.FLAG_QUIET_MODE;
+            profileUserData = getUserDataLU(profile.id);
         }
-        if (changed) {
-            long identity = Binder.clearCallingIdentity();
-            try {
-                if (enableQuietMode) {
-                    ActivityManager.getService().stopUser(userHandle, /* force */true, null);
-                    LocalServices.getService(ActivityManagerInternal.class)
-                            .killForegroundAppsForUser(userHandle);
-                } else {
-                    ActivityManager.getService().startUserInBackground(userHandle);
-                }
-            } catch (RemoteException e) {
-                Slog.e(LOG_TAG, "fail to start/stop user for quiet mode", e);
-            } finally {
-                Binder.restoreCallingIdentity(identity);
+        synchronized (mPackagesLock) {
+            writeUserLP(profileUserData);
+        }
+        try {
+            if (enableQuietMode) {
+                ActivityManager.getService().stopUser(userHandle, /* force */true, null);
+                LocalServices.getService(ActivityManagerInternal.class)
+                        .killForegroundAppsForUser(userHandle);
+            } else {
+                IProgressListener callback = target != null
+                        ? new DisableQuietModeUserUnlockedCallback(target)
+                        : null;
+                ActivityManager.getService().startUserInBackgroundWithListener(
+                        userHandle, callback);
             }
-
-            broadcastProfileAvailabilityChanges(profile.getUserHandle(), parent.getUserHandle(),
-                    enableQuietMode);
+        } catch (RemoteException e) {
+            // Should not happen, same process.
+            e.rethrowAsRuntimeException();
         }
+        broadcastProfileAvailabilityChanges(profile.getUserHandle(), parent.getUserHandle(),
+                enableQuietMode);
     }
 
     @Override
@@ -806,53 +910,42 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
-    @Override
-    public boolean trySetQuietModeDisabled(int userHandle, IntentSender target) {
-        checkManageUsersPermission("silence profile");
-        if (StorageManager.isUserKeyUnlocked(userHandle)
-                || !mLockPatternUtils.isSecure(userHandle)) {
-            // if the user is already unlocked, no need to show a profile challenge
-            setQuietModeEnabled(userHandle, false);
-            return true;
+    /**
+     * Show confirm credential screen to unlock user in order to turn off quiet mode.
+     */
+    private void showConfirmCredentialToDisableQuietMode(
+            @UserIdInt int userHandle, @Nullable IntentSender target) {
+        // otherwise, we show a profile challenge to trigger decryption of the user
+        final KeyguardManager km = (KeyguardManager) mContext.getSystemService(
+                Context.KEYGUARD_SERVICE);
+        // We should use userHandle not credentialOwnerUserId here, as even if it is unified
+        // lock, confirm screenlock page will know and show personal challenge, and unlock
+        // work profile when personal challenge is correct
+        final Intent unlockIntent = km.createConfirmDeviceCredentialIntent(null, null,
+                userHandle);
+        if (unlockIntent == null) {
+            return;
         }
-
-        long identity = Binder.clearCallingIdentity();
-        try {
-            // otherwise, we show a profile challenge to trigger decryption of the user
-            final KeyguardManager km = (KeyguardManager) mContext.getSystemService(
-                    Context.KEYGUARD_SERVICE);
-            // We should use userHandle not credentialOwnerUserId here, as even if it is unified
-            // lock, confirm screenlock page will know and show personal challenge, and unlock
-            // work profile when personal challenge is correct
-            final Intent unlockIntent = km.createConfirmDeviceCredentialIntent(null, null,
-                    userHandle);
-            if (unlockIntent == null) {
-                return false;
-            }
-            final Intent callBackIntent = new Intent(
-                    ACTION_DISABLE_QUIET_MODE_AFTER_UNLOCK);
-            if (target != null) {
-                callBackIntent.putExtra(Intent.EXTRA_INTENT, target);
-            }
-            callBackIntent.putExtra(Intent.EXTRA_USER_ID, userHandle);
-            callBackIntent.setPackage(mContext.getPackageName());
-            callBackIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
-            final PendingIntent pendingIntent = PendingIntent.getBroadcast(
-                    mContext,
-                    0,
-                    callBackIntent,
-                    PendingIntent.FLAG_CANCEL_CURRENT |
-                            PendingIntent.FLAG_ONE_SHOT |
-                            PendingIntent.FLAG_IMMUTABLE);
-            // After unlocking the challenge, it will disable quiet mode and run the original
-            // intentSender
-            unlockIntent.putExtra(Intent.EXTRA_INTENT, pendingIntent.getIntentSender());
-            unlockIntent.setFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-            mContext.startActivity(unlockIntent);
-        } finally {
-            Binder.restoreCallingIdentity(identity);
+        final Intent callBackIntent = new Intent(
+                ACTION_DISABLE_QUIET_MODE_AFTER_UNLOCK);
+        if (target != null) {
+            callBackIntent.putExtra(Intent.EXTRA_INTENT, target);
         }
-        return false;
+        callBackIntent.putExtra(Intent.EXTRA_USER_ID, userHandle);
+        callBackIntent.setPackage(mContext.getPackageName());
+        callBackIntent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+        final PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                mContext,
+                0,
+                callBackIntent,
+                PendingIntent.FLAG_CANCEL_CURRENT |
+                        PendingIntent.FLAG_ONE_SHOT |
+                        PendingIntent.FLAG_IMMUTABLE);
+        // After unlocking the challenge, it will disable quiet mode and run the original
+        // intentSender
+        unlockIntent.putExtra(Intent.EXTRA_INTENT, pendingIntent.getIntentSender());
+        unlockIntent.setFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+        mContext.startActivity(unlockIntent);
     }
 
     @Override
@@ -1007,6 +1100,23 @@ public class UserManagerService extends IUserManager.Stub {
             }
             // restricted profile can be created if there is no DO set and the admin user has no PO;
             return !mIsDeviceManaged && !mIsUserManaged.get(userId);
+        }
+    }
+
+    @Override
+    public boolean hasRestrictedProfiles() {
+        checkManageUsersPermission("hasRestrictedProfiles");
+        final int callingUserId = UserHandle.getCallingUserId();
+        synchronized (mUsersLock) {
+            final int userSize = mUsers.size();
+            for (int i = 0; i < userSize; i++) {
+                UserInfo profile = mUsers.valueAt(i).info;
+                if (callingUserId != profile.id
+                        && profile.restrictedProfileParentId == callingUserId) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -3648,8 +3758,10 @@ public class UserManagerService extends IUserManager.Stub {
         }
 
         @Override
-        public UserInfo createUserEvenWhenDisallowed(String name, int flags) {
-            UserInfo user = createUserInternalUnchecked(name, flags, UserHandle.USER_NULL, null);
+        public UserInfo createUserEvenWhenDisallowed(String name, int flags,
+                String[] disallowedPackages) {
+            UserInfo user = createUserInternalUnchecked(name, flags, UserHandle.USER_NULL,
+                    disallowedPackages);
             // Keep this in sync with UserManager.createUser
             if (user != null && !user.isAdmin() && !user.isDemo()) {
                 setUserRestriction(UserManager.DISALLOW_SMS, true, user.id);

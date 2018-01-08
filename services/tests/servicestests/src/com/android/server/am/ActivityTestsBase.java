@@ -19,10 +19,14 @@ package com.android.server.am;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
 
@@ -33,11 +37,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.IPackageManager;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.service.voice.IVoiceInteractionSession;
 import android.support.test.InstrumentationRegistry;
 import com.android.server.AttributeCache;
 import com.android.server.wm.AppWindowContainerController;
@@ -78,11 +84,15 @@ public class ActivityTestsBase {
     }
 
     protected ActivityManagerService createActivityManagerService() {
-        return setupActivityManagerService(new TestActivityManagerService(mContext));
+        final ActivityManagerService service =
+                setupActivityManagerService(new TestActivityManagerService(mContext));
+        AttributeCache.init(mContext);
+        return service;
     }
 
     protected ActivityManagerService setupActivityManagerService(ActivityManagerService service) {
         service = spy(service);
+        doReturn(mock(IPackageManager.class)).when(service).getPackageManager();
         service.mWindowManager = prepareMockWindowManager();
         return service;
     }
@@ -95,7 +105,7 @@ public class ActivityTestsBase {
         private static int sCurrentActivityId = 0;
 
         // Default package name
-        private static final String DEFAULT_PACKAGE = "com.foo";
+        static final String DEFAULT_PACKAGE = "com.foo";
 
         // Default base activity name
         private static final String DEFAULT_BASE_ACTIVITY_NAME = ".BarActivity";
@@ -156,7 +166,6 @@ public class ActivityTestsBase {
             aInfo.applicationInfo = new ApplicationInfo();
             aInfo.applicationInfo.packageName = mComponent.getPackageName();
             aInfo.applicationInfo.uid = mUid;
-            AttributeCache.init(mService.mContext);
             final ActivityRecord activity = new ActivityRecord(mService, null /* caller */,
                     0 /* launchedFromPid */, 0, null, intent, null,
                     aInfo /*aInfo*/, new Configuration(), null /* resultTo */, null /* resultWho */,
@@ -182,6 +191,8 @@ public class ActivityTestsBase {
         private String mPackage;
         private int mFlags = 0;
         private int mTaskId = 0;
+        private int mUserId = 0;
+        private IVoiceInteractionSession mVoiceSession;
 
         private ActivityStack mStack;
 
@@ -199,6 +210,11 @@ public class ActivityTestsBase {
             return this;
         }
 
+        TaskBuilder setVoiceSession(IVoiceInteractionSession session) {
+            mVoiceSession = session;
+            return this;
+        }
+
         TaskBuilder setFlags(int flags) {
             mFlags = flags;
             return this;
@@ -206,6 +222,11 @@ public class ActivityTestsBase {
 
         TaskBuilder setTaskId(int taskId) {
             mTaskId = taskId;
+            return this;
+        }
+
+        TaskBuilder setUserId(int userId) {
+            mUserId = userId;
             return this;
         }
 
@@ -229,11 +250,13 @@ public class ActivityTestsBase {
             intent.setFlags(mFlags);
 
             final TaskRecord task = new TaskRecord(mSupervisor.mService, mTaskId, aInfo,
-                    intent /*intent*/, null /*_taskDescription*/);
+                    intent /*intent*/, mVoiceSession, null /*_voiceInteractor*/);
+            task.userId = mUserId;
             mSupervisor.setFocusStackUnchecked("test", mStack);
             mStack.addTask(task, true, "creating test task");
             task.setStack(mStack);
             task.setWindowContainerController(mock(TaskWindowContainerController.class));
+            task.touchActiveTime();
 
             return task;
         }
@@ -255,7 +278,27 @@ public class ActivityTestsBase {
         }
 
         @Override
-        protected ActivityStackSupervisor createStackSupervisor() {
+        final protected ActivityStackSupervisor createStackSupervisor() {
+            final ActivityStackSupervisor supervisor = spy(createTestSupervisor());
+
+            // No home stack is set.
+            doNothing().when(supervisor).moveHomeStackToFront(any());
+            doReturn(true).when(supervisor).moveHomeStackTaskToTop(any());
+            // Invoked during {@link ActivityStack} creation.
+            doNothing().when(supervisor).updateUIDsPresentOnDisplay();
+            // Always keep things awake.
+            doReturn(true).when(supervisor).hasAwakeDisplay();
+            // Called when moving activity to pinned stack.
+            doNothing().when(supervisor).ensureActivitiesVisibleLocked(any(), anyInt(), anyBoolean());
+            // Do not schedule idle timeouts
+            doNothing().when(supervisor).scheduleIdleTimeoutLocked(any());
+
+            supervisor.initialize();
+
+            return supervisor;
+        }
+
+        protected ActivityStackSupervisor createTestSupervisor() {
             return new TestActivityStackSupervisor(this, mHandlerThread.getLooper());
         }
 
@@ -269,14 +312,18 @@ public class ActivityTestsBase {
      * setup not available in the test environment. Also specifies an injector for
      */
     protected static class TestActivityStackSupervisor extends ActivityStackSupervisor {
-        private final ActivityDisplay mDisplay;
-        private boolean mLastResizeable;
+        private ActivityDisplay mDisplay;
 
         public TestActivityStackSupervisor(ActivityManagerService service, Looper looper) {
             super(service, looper);
             mDisplayManager =
                     (DisplayManager) mService.mContext.getSystemService(Context.DISPLAY_SERVICE);
             mWindowManager = prepareMockWindowManager();
+        }
+
+        @Override
+        public void initialize() {
+            super.initialize();
             mDisplay = new TestActivityDisplay(this, DEFAULT_DISPLAY);
             attachDisplay(mDisplay);
         }
@@ -286,53 +333,10 @@ public class ActivityTestsBase {
             return mDisplay;
         }
 
-        // TODO: Use Mockito spy instead. Currently not possible due to TestActivityStackSupervisor
-        // access to ActivityDisplay
-        @Override
-        boolean canPlaceEntityOnDisplay(int displayId, boolean resizeable, int callingPid,
-                int callingUid, ActivityInfo activityInfo) {
-            mLastResizeable = resizeable;
-            return super.canPlaceEntityOnDisplay(displayId, resizeable, callingPid, callingUid,
-                    activityInfo);
-        }
-
-        // TODO: remove and use Mockito verify once {@link #canPlaceEntityOnDisplay} override is
-        // removed.
-        public boolean getLastResizeableFromCanPlaceEntityOnDisplay() {
-            return mLastResizeable;
-        }
-
-        // No home stack is set.
-        @Override
-        void moveHomeStackToFront(String reason) {
-        }
-
-        @Override
-        boolean moveHomeStackTaskToTop(String reason) {
-            return true;
-        }
-
-        // Invoked during {@link ActivityStack} creation.
-        @Override
-        void updateUIDsPresentOnDisplay() {
-        }
-
-        // Just return the current front task.
+        // Just return the current front task. This is called internally so we cannot use spy to mock this out.
         @Override
         ActivityStack getNextFocusableStackLocked(ActivityStack currentFocus) {
             return mFocusedStack;
-        }
-
-        // Called when moving activity to pinned stack.
-        @Override
-        void ensureActivitiesVisibleLocked(ActivityRecord starting, int configChanges,
-                boolean preserveWindows) {
-        }
-
-        // Always keep things awake
-        @Override
-        boolean hasAwakeDisplay() {
-            return true;
         }
     }
 
@@ -396,6 +400,11 @@ public class ActivityTestsBase {
         static final int IS_TRANSLUCENT_TRUE = 2;
         private int mIsTranslucent = IS_TRANSLUCENT_UNSET;
 
+        static final int SUPPORTS_SPLIT_SCREEN_UNSET = 0;
+        static final int SUPPORTS_SPLIT_SCREEN_FALSE = 1;
+        static final int SUPPORTS_SPLIT_SCREEN_TRUE = 2;
+        private int mSupportsSplitScreen = SUPPORTS_SPLIT_SCREEN_UNSET;
+
         TestActivityStack(ActivityDisplay display, int stackId, ActivityStackSupervisor supervisor,
                 int windowingMode, int activityType, boolean onTop) {
             super(display, stackId, supervisor, windowingMode, activityType, onTop);
@@ -415,6 +424,12 @@ public class ActivityTestsBase {
         @Override
         protected T createStackWindowController(int displayId, boolean onTop, Rect outBounds) {
             mContainerController = (T) WindowTestUtils.createMockStackWindowContainerController();
+
+            // Primary pinned stacks require a non-empty out bounds to be set or else all tasks
+            // will be moved to the full screen stack.
+            if (getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
+                outBounds.set(0, 0, 100, 100);
+            }
             return mContainerController;
         }
 
@@ -437,6 +452,24 @@ public class ActivityTestsBase {
                 case IS_TRANSLUCENT_UNSET:
                 default:
                     return super.isStackTranslucent(starting);
+            }
+        }
+
+        void setSupportsSplitScreen(boolean supportsSplitScreen) {
+            mSupportsSplitScreen = supportsSplitScreen
+                    ? SUPPORTS_SPLIT_SCREEN_TRUE : SUPPORTS_SPLIT_SCREEN_FALSE;
+        }
+
+        @Override
+        public boolean supportsSplitScreenWindowingMode() {
+            switch (mSupportsSplitScreen) {
+                case SUPPORTS_SPLIT_SCREEN_TRUE:
+                    return true;
+                case SUPPORTS_SPLIT_SCREEN_FALSE:
+                    return false;
+                case SUPPORTS_SPLIT_SCREEN_UNSET:
+                default:
+                    return super.supportsSplitScreenWindowingMode();
             }
         }
     }

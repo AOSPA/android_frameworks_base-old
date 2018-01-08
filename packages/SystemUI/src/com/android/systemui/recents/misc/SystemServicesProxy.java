@@ -21,12 +21,10 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
-import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManager.StackInfo;
 import android.app.ActivityOptions;
@@ -49,9 +47,6 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.os.Handler;
-import android.os.IRemoteCallback;
-import android.os.Looper;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemProperties;
@@ -63,7 +58,6 @@ import android.service.dreams.IDreamManager;
 import android.util.Log;
 import android.util.MutableBoolean;
 import android.view.Display;
-import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.IDockedStackListener;
 import android.view.IWindowManager;
 import android.view.WindowManager;
@@ -74,16 +68,12 @@ import android.view.accessibility.AccessibilityManager;
 import com.android.internal.app.AssistUtils;
 import com.android.internal.os.BackgroundThread;
 import com.android.systemui.Dependency;
-import com.android.systemui.R;
 import com.android.systemui.UiOffloadThread;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsImpl;
-import com.android.systemui.shared.recents.model.Task;
-import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.statusbar.policy.UserInfoController;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 /**
  * Acts as a shim around the real system services that we need to access data from, and provides
@@ -114,7 +104,6 @@ public class SystemServicesProxy {
     UserManager mUm;
     Display mDisplay;
     String mRecentsPackage;
-    private TaskStackChangeListeners mTaskStackChangeListeners;
     private int mCurrentUserId;
 
     boolean mIsSafeMode;
@@ -156,7 +145,6 @@ public class SystemServicesProxy {
         mRecentsPackage = context.getPackageName();
         mIsSafeMode = mPm.isSafeMode();
         mCurrentUserId = mAm.getCurrentUser();
-        mTaskStackChangeListeners = new TaskStackChangeListeners(Looper.getMainLooper());
 
         // Get the dummy thumbnail width/heights
         Resources res = context.getResources();
@@ -208,6 +196,8 @@ public class SystemServicesProxy {
      *
      * @param isHomeStackVisible if provided, will return whether the home stack is visible
      *                           regardless of the recents visibility
+     *
+     * TODO(winsonc): Refactor this check to just use the recents activity lifecycle
      */
     public boolean isRecentsActivityVisible(MutableBoolean isHomeStackVisible) {
         if (mIam == null) return false;
@@ -222,13 +212,13 @@ public class SystemServicesProxy {
                 final WindowConfiguration winConfig = stackInfo.configuration.windowConfiguration;
                 final int activityType = winConfig.getActivityType();
                 final int windowingMode = winConfig.getWindowingMode();
-                if (activityType == ACTIVITY_TYPE_HOME) {
+                if (homeStackInfo == null && activityType == ACTIVITY_TYPE_HOME) {
                     homeStackInfo = stackInfo;
-                } else if (activityType == ACTIVITY_TYPE_STANDARD
+                } else if (fullscreenStackInfo == null && activityType == ACTIVITY_TYPE_STANDARD
                         && (windowingMode == WINDOWING_MODE_FULLSCREEN
                             || windowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY)) {
                     fullscreenStackInfo = stackInfo;
-                } else if (activityType == ACTIVITY_TYPE_RECENTS) {
+                } else if (recentsStackInfo == null && activityType == ACTIVITY_TYPE_RECENTS) {
                     recentsStackInfo = stackInfo;
                 }
             }
@@ -268,22 +258,6 @@ public class SystemServicesProxy {
         return mIsSafeMode;
     }
 
-    /** Docks a task to the side of the screen and starts it. */
-    public boolean startTaskInDockedMode(int taskId, int createMode) {
-        if (mIam == null) return false;
-
-        try {
-            final ActivityOptions options = ActivityOptions.makeBasic();
-            options.setSplitScreenCreateMode(createMode);
-            options.setLaunchWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
-            mIam.startActivityFromRecents(taskId, options.toBundle());
-            return true;
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to dock task: " + taskId + " with createMode: " + createMode, e);
-        }
-        return false;
-    }
-
     /** Moves an already resumed task to the side of the screen to initiate split screen. */
     public boolean setTaskWindowingModeSplitScreenPrimary(int taskId, int createMode,
             Rect initialBounds) {
@@ -293,7 +267,7 @@ public class SystemServicesProxy {
 
         try {
             return mIam.setTaskWindowingModeSplitScreenPrimary(taskId, createMode, true /* onTop */,
-                    false /* animate */, initialBounds);
+                    false /* animate */, initialBounds, true /* showRecents */);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
@@ -397,7 +371,7 @@ public class SystemServicesProxy {
         if (mIam == null) return false;
 
         try {
-            return mIam.isInLockTaskMode();
+            return mIam.getLockTaskModeState() == ActivityManager.LOCK_TASK_MODE_PINNED;
         } catch (RemoteException e) {
             return false;
         }
@@ -492,18 +466,6 @@ public class SystemServicesProxy {
         }
     }
 
-    /**
-     * Registers a task stack listener with the system.
-     * This should be called on the main thread.
-     */
-    public void registerTaskStackListener(SysUiTaskStackChangeListener listener) {
-        if (mIam == null) return;
-
-        synchronized (mTaskStackChangeListeners) {
-            mTaskStackChangeListeners.addListener(mIam, listener);
-        }
-    }
-
     public void endProlongedAnimations() {
         if (mWm == null) {
             return;
@@ -549,16 +511,6 @@ public class SystemServicesProxy {
             mIwm.getStableInsets(Display.DEFAULT_DISPLAY, outStableInsets);
         } catch (Exception e) {
             e.printStackTrace();
-        }
-    }
-
-    public void overridePendingAppTransitionMultiThumbFuture(
-            IAppTransitionAnimationSpecsFuture future, IRemoteCallback animStartedListener,
-            boolean scaleUp) {
-        try {
-            mIwm.overridePendingAppTransitionMultiThumbFuture(future, animStartedListener, scaleUp);
-        } catch (RemoteException e) {
-            Log.w(TAG, "Failed to override transition: " + e);
         }
     }
 

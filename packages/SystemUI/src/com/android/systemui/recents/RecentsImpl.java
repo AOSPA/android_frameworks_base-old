@@ -23,24 +23,24 @@ import static android.view.View.MeasureSpec;
 import static com.android.systemui.statusbar.phone.StatusBar.SYSTEM_DIALOG_REASON_RECENT_APPS;
 
 import android.app.ActivityManager;
-import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityOptions;
-import android.app.ActivityOptions.OnAnimationStartedListener;
+import android.app.KeyguardManager;
+import android.app.trust.TrustManager;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
-import android.graphics.GraphicBuffer;
+import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.os.AsyncTask.Status;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.MutableBoolean;
 import android.util.Pair;
-import android.view.AppTransitionAnimationSpec;
 import android.view.LayoutInflater;
 import android.view.ViewConfiguration;
 import android.view.WindowManager;
@@ -85,11 +85,11 @@ import com.android.systemui.recents.views.TaskStackView;
 import com.android.systemui.recents.views.TaskViewHeader;
 import com.android.systemui.recents.views.TaskViewTransform;
 import com.android.systemui.recents.views.grid.TaskGridLayoutAlgorithm;
+import com.android.systemui.shared.recents.view.AppTransitionAnimationSpecCompat;
 import com.android.systemui.shared.recents.view.AppTransitionAnimationSpecsFuture;
 import com.android.systemui.shared.recents.view.RecentsTransition;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.stackdivider.DividerView;
-import com.android.systemui.statusbar.phone.NavigationBarGestureHelper;
 import com.android.systemui.statusbar.phone.StatusBar;
 
 import java.util.ArrayList;
@@ -156,10 +156,11 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
                     // Launched from app is always the worst case (in terms of how many
                     // thumbnails/tasks visible)
                     launchState.launchedFromApp = true;
-                    mBackgroundLayoutAlgorithm.update(plan.getTaskStack(), EMPTY_SET, launchState);
+                    mBackgroundLayoutAlgorithm.update(plan.getTaskStack(), EMPTY_SET, launchState,
+                            -1 /* lastScrollPPresent */);
                     VisibilityReport visibilityReport =
                             mBackgroundLayoutAlgorithm.computeStackVisibilityReport(
-                                    stack.getStackTasks());
+                                    stack.getTasks());
 
                     launchOpts.runningTaskId = runningTaskInfo != null ? runningTaskInfo.id : -1;
                     launchOpts.numVisibleTasks = visibilityReport.numVisibleTasks;
@@ -200,14 +201,13 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         }
 
         @Override
-        public void onTaskSnapshotChanged(int taskId, TaskSnapshot snapshot) {
+        public void onTaskSnapshotChanged(int taskId, ThumbnailData snapshot) {
             // Check this is for the right user
             if (!checkCurrentUserId(mContext, false /* debug */)) {
                 return;
             }
 
-            EventBus.getDefault().send(new TaskSnapshotChangedEvent(taskId,
-                    new ThumbnailData(snapshot)));
+            EventBus.getDefault().send(new TaskSnapshotChangedEvent(taskId, snapshot));
         }
     }
 
@@ -221,14 +221,14 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
     // recents. In this case, we defer the toggle state until then and apply it immediately after.
     private static boolean mToggleFollowingTransitionStart = true;
 
-    private ActivityOptions.OnAnimationStartedListener mResetToggleFlagListener =
-            new OnAnimationStartedListener() {
-                @Override
-                public void onAnimationStarted() {
-                    setWaitingForTransitionStart(false);
-                }
-            };
+    private Runnable mResetToggleFlagListener = new Runnable() {
+        @Override
+        public void run() {
+            setWaitingForTransitionStart(false);
+        }
+    };
 
+    private TrustManager mTrustManager;
     protected Context mContext;
     protected Handler mHandler;
     TaskStackListenerImpl mTaskStackListener;
@@ -270,12 +270,13 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
 
         // Register the task stack listener
         mTaskStackListener = new TaskStackListenerImpl();
-        SystemServicesProxy ssp = Recents.getSystemServices();
-        ssp.registerTaskStackListener(mTaskStackListener);
+        ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
 
         // Initialize the static configuration resources
         mDummyStackView = new TaskStackView(mContext);
         reloadResources();
+
+        mTrustManager = (TrustManager) mContext.getSystemService(Context.TRUST_SERVICE);
     }
 
     public void onBootCompleted() {
@@ -314,8 +315,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
      * {@link Recents#onBusEvent(ScreenPinningRequestEvent)}.
      */
     public void onStartScreenPinning(Context context, int taskId) {
-        SystemUIApplication app = (SystemUIApplication) context;
-        StatusBar statusBar = app.getComponent(StatusBar.class);
+        final StatusBar statusBar = getStatusBar();
         if (statusBar != null) {
             statusBar.showScreenPinningRequest(taskId, false);
         }
@@ -355,8 +355,8 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
             if (forceVisible || !ssp.isRecentsActivityVisible(isHomeStackVisible)) {
                 ActivityManager.RunningTaskInfo runningTask =
                         ActivityManagerWrapper.getInstance().getRunningTask();
-                startRecentsActivity(runningTask, isHomeStackVisible.value || fromHome, animate,
-                        growTarget);
+                startRecentsActivityAndDismissKeyguardIfNeeded(runningTask,
+                        isHomeStackVisible.value || fromHome, animate, growTarget);
             }
         } catch (ActivityNotFoundException e) {
             Log.e(TAG, "Failed to launch RecentsActivity", e);
@@ -447,8 +447,8 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
                 // Otherwise, start the recents activity
                 ActivityManager.RunningTaskInfo runningTask =
                         ActivityManagerWrapper.getInstance().getRunningTask();
-                startRecentsActivity(runningTask, isHomeStackVisible.value, true /* animate */,
-                        growTarget);
+                startRecentsActivityAndDismissKeyguardIfNeeded(runningTask,
+                        isHomeStackVisible.value, true /* animate */, growTarget);
 
                 // Only close the other system windows if we are actually showing recents
                 ActivityManagerWrapper.getInstance().closeSystemWindows(
@@ -464,6 +464,12 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         // Skip preloading if the task is locked
         SystemServicesProxy ssp = Recents.getSystemServices();
         if (ssp.isScreenPinningActive()) {
+            return;
+        }
+
+        // Skip preloading recents when keyguard is showing
+        final StatusBar statusBar = getStatusBar();
+        if (statusBar != null && statusBar.isKeyguardShowing()) {
             return;
         }
 
@@ -535,7 +541,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         boolean isRunningTaskInHomeStack =
                 runningTask.configuration.windowConfiguration.getActivityType()
                         == ACTIVITY_TYPE_HOME;
-        ArrayList<Task> tasks = focusedStack.getStackTasks();
+        ArrayList<Task> tasks = focusedStack.getTasks();
         Task toTask = null;
         ActivityOptions launchOpts = null;
         int taskCount = tasks.size();
@@ -565,7 +571,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         }
 
         // Launch the task
-        ActivityManagerWrapper.getInstance().startActivityFromRecents(toTask.key, launchOpts,
+        ActivityManagerWrapper.getInstance().startActivityFromRecentsAsync(toTask.key, launchOpts,
                 null /* resultCallback */, null /* resultCallbackHandler */);
     }
 
@@ -591,7 +597,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         if (activityType == ACTIVITY_TYPE_HOME || activityType == ACTIVITY_TYPE_RECENTS) return;
 
         // Find the task in the recents list
-        ArrayList<Task> tasks = focusedStack.getStackTasks();
+        ArrayList<Task> tasks = focusedStack.getTasks();
         Task toTask = null;
         ActivityOptions launchOpts = null;
         int taskCount = tasks.size();
@@ -635,7 +641,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         MetricsLogger.count(mContext, "overview_affiliated_task_launch", 1);
 
         // Launch the task
-        ActivityManagerWrapper.getInstance().startActivityFromRecents(toTask.key, launchOpts,
+        ActivityManagerWrapper.getInstance().startActivityFromRecentsAsync(toTask.key, launchOpts,
                 null /* resultListener */, null /* resultCallbackHandler */);
     }
 
@@ -659,13 +665,6 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         // the resize mode already.
         if (ssp.setTaskWindowingModeSplitScreenPrimary(taskId, stackCreateMode, initialBounds)) {
             EventBus.getDefault().send(new DockedTopTaskEvent(dragMode, initialBounds));
-            showRecents(
-                    false /* triggeredFromAltTab */,
-                    dragMode == NavigationBarGestureHelper.DRAG_MODE_RECENTS,
-                    false /* animate */,
-                    true /* launchedWhileDockingTask*/,
-                    false /* fromHome */,
-                    DividerView.INVALID_RECENTS_GROW_TARGET);
         }
     }
 
@@ -736,7 +735,10 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         // However, the window bounds include the insets, so we need to subtract them here to make
         // them identical.
         if (ssp.hasDockedTask()) {
-            windowRect.bottom -= systemInsets.bottom;
+            if (systemInsets.bottom < windowRect.height()) {
+                // Only apply inset if it isn't going to cause the rect height to go negative.
+                windowRect.bottom -= systemInsets.bottom;
+            }
             systemInsets.bottom = 0;
         }
         calculateWindowStableInsets(systemInsets, windowRect, displayRect);
@@ -876,12 +878,12 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         RectF toTaskRect = toTransform.rect;
         AppTransitionAnimationSpecsFuture future = new AppTransitionAnimationSpecsFuture(mHandler) {
             @Override
-            public List<AppTransitionAnimationSpec> composeSpecs() {
+            public List<AppTransitionAnimationSpecCompat> composeSpecs() {
                 Rect rect = new Rect();
                 toTaskRect.round(rect);
-                GraphicBuffer thumbnail = drawThumbnailTransitionBitmap(toTask, toTransform);
-                return Lists.newArrayList(new AppTransitionAnimationSpec(toTask.key.id, thumbnail,
-                        rect));
+                Bitmap thumbnail = drawThumbnailTransitionBitmap(toTask, toTransform);
+                return Lists.newArrayList(new AppTransitionAnimationSpecCompat(toTask.key.id,
+                        thumbnail, rect));
             }
         };
 
@@ -904,7 +906,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
             runningTaskOut.copyFrom(launchTask);
         } else {
             // If no task is specified or we can not find the task just use the front most one
-            launchTask = stack.getStackFrontMostTask();
+            launchTask = stack.getFrontMostTask();
             runningTaskOut.copyFrom(launchTask);
         }
 
@@ -919,7 +921,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
     /**
      * Draws the header of a task used for the window animation into a bitmap.
      */
-    private GraphicBuffer drawThumbnailTransitionBitmap(Task toTask,
+    private Bitmap drawThumbnailTransitionBitmap(Task toTask,
             TaskViewTransform toTransform) {
         SystemServicesProxy ssp = Recents.getSystemServices();
         int width = (int) toTransform.rect.width();
@@ -929,7 +931,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
                 boolean disabledInSafeMode = !toTask.isSystemApp && ssp.isInSafeMode();
                 mHeaderBar.onTaskViewSizeChanged(width, height);
                 if (RecentsDebugFlags.Static.EnableTransitionThumbnailDebugMode) {
-                    return RecentsTransition.drawViewIntoGraphicBuffer(width, mTaskBarHeight,
+                    return RecentsTransition.drawViewIntoHardwareBitmap(width, mTaskBarHeight,
                             null, 1f, 0xFFff0000);
                 } else {
                     // Workaround for b/27815919, reset the callback so that we do not trigger an
@@ -942,7 +944,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
                             disabledInSafeMode);
                     mHeaderBar.onTaskDataLoaded();
                     mHeaderBar.setDimAlpha(toTransform.dimAlpha);
-                    return RecentsTransition.drawViewIntoGraphicBuffer(width, mTaskBarHeight,
+                    return RecentsTransition.drawViewIntoHardwareBitmap(width, mTaskBarHeight,
                             mHeaderBar, 1f, 0);
                 }
             }
@@ -951,9 +953,27 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
     }
 
     /**
-     * Shows the recents activity
+     * Shows the recents activity after dismissing the keyguard if visible
      */
-    protected void startRecentsActivity(ActivityManager.RunningTaskInfo runningTask,
+    protected void startRecentsActivityAndDismissKeyguardIfNeeded(
+            final ActivityManager.RunningTaskInfo runningTask, final boolean isHomeStackVisible,
+            final boolean animate, final int growTarget) {
+        // Preload only if device for current user is unlocked
+        final StatusBar statusBar = getStatusBar();
+        if (statusBar != null && statusBar.isKeyguardShowing()) {
+            statusBar.executeRunnableDismissingKeyguard(() -> {
+                    // Flush trustmanager before checking device locked per user when preloading
+                    mTrustManager.reportKeyguardShowingChanged();
+                    mHandler.post(() -> startRecentsActivity(runningTask, isHomeStackVisible,
+                            animate, growTarget));
+                }, null,  true /* dismissShade */, false /* afterKeyguardGone */,
+                true /* deferred */);
+        } else {
+            startRecentsActivity(runningTask, isHomeStackVisible, animate, growTarget);
+        }
+    }
+
+    private void startRecentsActivity(ActivityManager.RunningTaskInfo runningTask,
             boolean isHomeStackVisible, boolean animate, int growTarget) {
         RecentsTaskLoader loader = Recents.getTaskLoader();
         RecentsActivityLaunchState launchState = Recents.getConfiguration().getLaunchState();
@@ -1040,6 +1060,10 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
                 result, displayRect.width(), displayRect.height(),
                 Recents.getSystemServices().getDockedDividerSize(mContext));
         return result;
+    }
+
+    private StatusBar getStatusBar() {
+        return ((SystemUIApplication) mContext).getComponent(StatusBar.class);
     }
 
     /**

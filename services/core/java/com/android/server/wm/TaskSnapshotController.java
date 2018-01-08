@@ -18,12 +18,12 @@ package com.android.server.wm;
 
 import static com.android.server.wm.TaskSnapshotPersister.DISABLE_FULL_SIZED_BITMAPS;
 import static com.android.server.wm.TaskSnapshotPersister.REDUCED_SCALE;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREENSHOT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 import android.annotation.Nullable;
 import android.app.ActivityManager;
-import android.app.ActivityManager.StackId;
 import android.app.ActivityManager.TaskSnapshot;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
@@ -35,15 +35,16 @@ import android.util.ArraySet;
 import android.util.Slog;
 import android.view.DisplayListCanvas;
 import android.view.RenderNode;
+import android.view.SurfaceControl;
 import android.view.ThreadedRenderer;
 import android.view.WindowManager.LayoutParams;
-import android.view.WindowManagerPolicy.ScreenOffListener;
-import android.view.WindowManagerPolicy.StartingSurface;
-
-import com.google.android.collect.Sets;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.policy.WindowManagerPolicy.ScreenOffListener;
+import com.android.server.policy.WindowManagerPolicy.StartingSurface;
 import com.android.server.wm.TaskSnapshotSurface.SystemBarBackgroundPainter;
+
+import com.google.android.collect.Sets;
 
 import java.io.PrintWriter;
 
@@ -91,6 +92,8 @@ class TaskSnapshotController {
     private final TaskSnapshotLoader mLoader = new TaskSnapshotLoader(mPersister);
     private final ArraySet<Task> mTmpTasks = new ArraySet<>();
     private final Handler mHandler = new Handler();
+
+    private final Rect mTmpRect = new Rect();
 
     /**
      * Flag indicating whether we are running on an Android TV device.
@@ -210,15 +213,32 @@ class TaskSnapshotController {
         if (mainWindow == null) {
             return null;
         }
+        if (!mService.mPolicy.isScreenOn()) {
+            if (DEBUG_SCREENSHOT) {
+                Slog.i(TAG_WM, "Attempted to take screenshot while display was off.");
+            }
+            return null;
+        }
+        if (task.getSurfaceControl() == null) {
+            return null;
+        }
+
         final boolean isLowRamDevice = ActivityManager.isLowRamDeviceStatic();
         final float scaleFraction = isLowRamDevice ? REDUCED_SCALE : 1f;
-        final GraphicBuffer buffer = top.mDisplayContent.screenshotApplicationsToBuffer(top.token,
-                -1, -1, false, scaleFraction, false, true);
+        task.getBounds(mTmpRect);
+        mTmpRect.offsetTo(0, 0);
+
+        final GraphicBuffer buffer = SurfaceControl.captureLayers(
+                task.getSurfaceControl().getHandle(), mTmpRect, scaleFraction);
+
         if (buffer == null || buffer.getWidth() <= 1 || buffer.getHeight() <= 1) {
+            if (DEBUG_SCREENSHOT) {
+                Slog.w(TAG_WM, "Failed to take screenshot");
+            }
             return null;
         }
         return new TaskSnapshot(buffer, top.getConfiguration().orientation,
-                minRect(mainWindow.mContentInsets, mainWindow.mStableInsets),
+                getInsetsFromTaskBounds(mainWindow, task),
                 isLowRamDevice /* reduced */, scaleFraction /* scale */);
     }
 
@@ -226,11 +246,18 @@ class TaskSnapshotController {
         return mIsRunningOnWear || mIsRunningOnTv || mIsRunningOnIoT;
     }
 
-    private Rect minRect(Rect rect1, Rect rect2) {
-        return new Rect(Math.min(rect1.left, rect2.left),
-                Math.min(rect1.top, rect2.top),
-                Math.min(rect1.right, rect2.right),
-                Math.min(rect1.bottom, rect2.bottom));
+    private Rect getInsetsFromTaskBounds(WindowState state, Task task) {
+        final Rect r = new Rect();
+        r.set(state.getContentFrameLw());
+        r.intersectUnchecked(state.getStableFrameLw());
+
+        final Rect taskBounds = task.getBounds();
+
+        r.set(Math.max(0, r.left - taskBounds.left),
+                Math.max(0, r.top - taskBounds.top),
+                Math.max(0, taskBounds.right - r.right),
+                Math.max(0, taskBounds.bottom - r.bottom));
+        return r;
     }
 
     /**

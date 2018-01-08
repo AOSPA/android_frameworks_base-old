@@ -28,6 +28,7 @@ import android.content.res.Resources;
 import android.net.INetworkPolicyManager;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -360,6 +361,45 @@ public class SubscriptionManager {
     public static final String CB_OPT_OUT_DIALOG = "show_cmas_opt_out_dialog";
 
     /**
+     * TelephonyProvider column name for enable Volte.
+     *
+     * If this setting is not initialized (set to -1)  then we use the Carrier Config value
+     * {@link CarrierConfigManager#KEY_ENHANCED_4G_LTE_ON_BY_DEFAULT_BOOL}.
+     *@hide
+     */
+    public static final String ENHANCED_4G_MODE_ENABLED = "volte_vt_enabled";
+
+    /**
+     * TelephonyProvider column name for enable VT (Video Telephony over IMS)
+     *@hide
+     */
+    public static final String VT_IMS_ENABLED = "vt_ims_enabled";
+
+    /**
+     * TelephonyProvider column name for enable Wifi calling
+     *@hide
+     */
+    public static final String WFC_IMS_ENABLED = "wfc_ims_enabled";
+
+    /**
+     * TelephonyProvider column name for Wifi calling mode
+     *@hide
+     */
+    public static final String WFC_IMS_MODE = "wfc_ims_mode";
+
+    /**
+     * TelephonyProvider column name for Wifi calling mode in roaming
+     *@hide
+     */
+    public static final String WFC_IMS_ROAMING_MODE = "wfc_ims_roaming_mode";
+
+    /**
+     * TelephonyProvider column name for enable Wifi calling in roaming
+     *@hide
+     */
+    public static final String WFC_IMS_ROAMING_ENABLED = "wfc_ims_roaming_enabled";
+
+    /**
      * Broadcast Action: The user has changed one of the default subs related to
      * data, phone calls, or sms</p>
      *
@@ -410,7 +450,15 @@ public class SubscriptionManager {
      * for #onSubscriptionsChanged to be invoked.
      */
     public static class OnSubscriptionsChangedListener {
-        private final Handler mHandler  = new Handler() {
+        private class OnSubscriptionsChangedListenerHandler extends Handler {
+            OnSubscriptionsChangedListenerHandler() {
+                super();
+            }
+
+            OnSubscriptionsChangedListenerHandler(Looper looper) {
+                super(looper);
+            }
+
             @Override
             public void handleMessage(Message msg) {
                 if (DBG) {
@@ -418,7 +466,22 @@ public class SubscriptionManager {
                 }
                 OnSubscriptionsChangedListener.this.onSubscriptionsChanged();
             }
-        };
+        }
+
+        private final Handler mHandler;
+
+        public OnSubscriptionsChangedListener() {
+            mHandler = new OnSubscriptionsChangedListenerHandler();
+        }
+
+        /**
+         * Allow a listener to be created with a custom looper
+         * @param looper the looper that the underlining handler should run on
+         * @hide
+         */
+        public OnSubscriptionsChangedListener(Looper looper) {
+            mHandler = new OnSubscriptionsChangedListenerHandler(looper);
+        }
 
         /**
          * Callback invoked when there is any change to any SubscriptionInfo. Typically

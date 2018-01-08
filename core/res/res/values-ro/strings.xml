@@ -80,7 +80,7 @@
     <string name="RestrictedOnAllVoiceTitle" msgid="158800171499150681">"Fără servicii vocale/de urgență"</string>
     <string name="RestrictedStateContent" msgid="4278821484643362350">"Momentan nu este oferit de rețeaua mobilă în locația dvs."</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"Nu se poate stabili conexiunea la rețea"</string>
-    <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"Pentru o recepție mai bună, încercați să schimbați tipul selectat în Setări &gt; Rețea și internet &gt; Rețele mobile &gt; Tip preferat de rețea."</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7056776609127756440">"Pentru o recepție mai bună, încercați să schimbați tipul selectat în Setări &gt; Rețea și internet &gt; Rețele mobile &gt; Tip preferat de rețea."</string>
     <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"Apelarea prin Wi-Fi este activă"</string>
     <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"Apelurile de urgență necesită o rețea mobilă."</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"Alerte"</string>
@@ -214,6 +214,7 @@
     <string name="global_action_power_off" msgid="4471879440839879722">"Opriți alimentarea"</string>
     <string name="global_action_emergency" msgid="7112311161137421166">"Urgență"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"Raport despre erori"</string>
+    <string name="global_action_logout" msgid="935179188218826050">"Încheiați sesiunea"</string>
     <string name="bugreport_title" msgid="2667494803742548533">"Executați un raport despre erori"</string>
     <string name="bugreport_message" msgid="398447048750350456">"Acest raport va colecta informații despre starea actuală a dispozitivului, pentru a le trimite într-un e-mail. Aveți răbdare după pornirea raportului despre erori până când va fi gata de trimis."</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"Raport interactiv"</string>
@@ -1071,6 +1072,9 @@
     <string name="screen_compat_mode_hint" msgid="1064524084543304459">"Reactivați acest mod din Setări de sistem &gt; Aplicații &gt; Descărcate."</string>
     <string name="unsupported_display_size_message" msgid="6545327290756295232">"<xliff:g id="APP_NAME">%1$s</xliff:g> nu acceptă setarea actuală pentru Dimensiunea afișării și este posibil să aibă un comportament neașteptat."</string>
     <string name="unsupported_display_size_show" msgid="7969129195360353041">"Afișează întotdeauna"</string>
+    <string name="unsupported_compile_sdk_message" msgid="4253168368781441759">"<xliff:g id="APP_NAME">%1$s</xliff:g> a fost concepută pentru o versiune incompatibilă de sistem de operare Android și este posibil să se comporte în mod neprevăzut. Poate fi disponibilă o versiune actualizată a aplicației."</string>
+    <string name="unsupported_compile_sdk_show" msgid="2681877855260970231">"Afișați întotdeauna"</string>
+    <string name="unsupported_compile_sdk_check_update" msgid="3312723623323216101">"Căutați actualizări"</string>
     <string name="smv_application" msgid="3307209192155442829">"Aplicația <xliff:g id="APPLICATION">%1$s</xliff:g> (procesul <xliff:g id="PROCESS">%2$s</xliff:g>) a încălcat propria politică StrictMode."</string>
     <string name="smv_process" msgid="5120397012047462446">"Procesul <xliff:g id="PROCESS">%1$s</xliff:g> a încălcat propria politică StrictMode."</string>
     <string name="android_upgrading_title" msgid="1584192285441405746">"Android trece la o versiune superioară..."</string>
@@ -1138,10 +1142,10 @@
     <string name="network_available_sign_in" msgid="1848877297365446605">"Conectați-vă la rețea"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
     <skip />
-    <string name="wifi_no_internet" msgid="8451173622563841546">"Rețeaua Wi-Fi nu are acces la internet"</string>
+    <string name="wifi_no_internet" msgid="8938267198124654938">"Rețeaua Wi-Fi nu are acces la internet"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"Atingeți pentru opțiuni"</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"S-a comutat la <xliff:g id="NETWORK_TYPE">%1$s</xliff:g>"</string>
-    <string name="network_switch_metered_detail" msgid="5325661434777870353">"Dispozitivul folosește <xliff:g id="NEW_NETWORK">%1$s</xliff:g> când <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> nu are acces la internet. Se pot aplica taxe."</string>
+    <string name="network_switch_metered_detail" msgid="775163331794506615">"Dispozitivul folosește <xliff:g id="NEW_NETWORK">%1$s</xliff:g> când <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> nu are acces la internet. Se pot aplica taxe."</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"S-a comutat de la <xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> la <xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
   <string-array name="network_switch_type_name">
     <item msgid="3979506840912951943">"date mobile"</item>
@@ -1152,7 +1156,7 @@
   </string-array>
     <string name="network_switch_type_name_unknown" msgid="4552612897806660656">"un tip de rețea necunoscut"</string>
     <string name="wifi_watchdog_network_disabled" msgid="7904214231651546347">"Nu se poate conecta la Wi-Fi"</string>
-    <string name="wifi_watchdog_network_disabled_detailed" msgid="5548780776418332675">" are o conexiune la internet slabă."</string>
+    <string name="wifi_watchdog_network_disabled_detailed" msgid="4917472096696322767">" are o conexiune la internet slabă."</string>
     <string name="wifi_connect_alert_title" msgid="8455846016001810172">"Permiteți conectarea?"</string>
     <string name="wifi_connect_alert_message" msgid="6451273376815958922">"Aplicația %1$s dorește să se conecteze la rețeaua Wi-Fi %2$s"</string>
     <string name="wifi_connect_default_application" msgid="7143109390475484319">"O aplicație"</string>
@@ -1519,6 +1523,8 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="7256507885737444807">"Când comanda rapidă este activată, dacă apăsați ambele butoane de volum timp de 3 secunde, veți lansa o funcție de accesibilitate.\n\n Funcția actuală de accesibilitate:\n <xliff:g id="SERVICE_NAME">%1$s</xliff:g>\n\n Puteți schimba funcția în Setări &gt; Accesibilitate."</string>
     <string name="disable_accessibility_shortcut" msgid="627625354248453445">"Dezactivați comanda rapidă"</string>
     <string name="leave_accessibility_shortcut_on" msgid="7653111894438512680">"Utilizați comanda rapidă"</string>
+    <string name="color_inversion_feature_name" msgid="4231186527799958644">"Inversarea culorilor"</string>
+    <string name="color_correction_feature_name" msgid="6779391426096954933">"Corecția culorii"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"Comanda rapidă de accesibilitate a activat <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"Comanda rapidă de accesibilitate a dezactivat <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Alegeți o funcție pe care să o folosiți când atingeți butonul Accesibilitate:"</string>
@@ -1651,7 +1657,6 @@
     <string name="managed_profile_label_badge_2" msgid="5048136430082124036">"<xliff:g id="LABEL">%1$s</xliff:g> pentru serviciu (2)"</string>
     <string name="managed_profile_label_badge_3" msgid="2808305070321719040">"<xliff:g id="LABEL">%1$s</xliff:g> pentru serviciu (3)"</string>
     <string name="lock_to_app_toast" msgid="6820571533009838261">"Pentru a anula fixarea acestui ecran, atingeți lung butoanele Înapoi și Recente"</string>
-    <string name="lock_to_app_toast_locked" msgid="7849470948648628704">"Nu se poate anula fixarea acestei aplicații"</string>
     <string name="lock_to_app_start" msgid="6643342070839862795">"Ecran fixat"</string>
     <string name="lock_to_app_exit" msgid="8598219838213787430">"Fixarea ecranului anulată"</string>
     <string name="lock_to_app_unlock_pin" msgid="2552556656504331634">"Solicită codul PIN înainte de a anula fixarea"</string>
@@ -1660,7 +1665,7 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Instalat de administratorul dvs."</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Actualizat de administratorul dvs."</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Șters de administratorul dvs."</string>
-    <string name="battery_saver_description" msgid="1960431123816253034">"Pentru a îmbunătăți autonomia bateriei, funcția de economisire a energiei reduce performanțele dispozitivului și limitează vibrațiile, serviciile de localizare și majoritatea datelor de fundal. Este posibil ca e-mailurile, mesageria și alte aplicații care depind de sincronizare să nu se actualizeze dacă nu le deschideți.\n\nFuncția de economisire a energiei se dezactivează automat când dispozitivul se încarcă."</string>
+    <string name="battery_saver_description" msgid="5394663545060026162">"Pentru a îmbunătăți autonomia bateriei, economisirea bateriei reduce performanțele dispozitivului și limitează vibrațiile, serviciile de localizare și majoritatea datelor de fundal. Este posibil ca e-mailurile, mesageria și alte aplicații care depind de sincronizare să nu se actualizeze dacă nu le deschideți.\n\nEconomisirea bateriei se dezactivează automat când dispozitivul se încarcă."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Pentru a contribui la reducerea utilizării de date, Economizorul de date împiedică unele aplicații să trimită sau să primească date în fundal. O aplicație pe care o folosiți poate accesa datele, însă mai rar. Aceasta poate însemna, de exemplu, că imaginile se afișează numai după ce le atingeți."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Activați Economizorul de date?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Activați"</string>
@@ -1715,13 +1720,16 @@
     <string name="zen_mode_default_weeknights_name" msgid="3081318299464998143">"Nopțile din zilele lucrătoare"</string>
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Weekend"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Eveniment"</string>
+    <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"Somn"</string>
     <string name="muted_by" msgid="6147073845094180001">"Dezactivate de <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"A apărut o problemă internă pe dispozitiv, iar acesta poate fi instabil până la revenirea la setările din fabrică."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"A apărut o problemă internă pe dispozitiv. Pentru detalii, contactați producătorul."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5202342984749947872">"Solicitarea USSD este modificată într-o solicitare DIAL."</string>
     <string name="stk_cc_ussd_to_ss" msgid="2345360594181405482">"Solicitarea USSD este modificată într-o solicitare SS."</string>
     <string name="stk_cc_ussd_to_ussd" msgid="7466087659967191653">"Solicitarea USSD este modificată într-o nouă solicitare USSD."</string>
+    <string name="stk_cc_ussd_to_dial_video" msgid="585340552561515305">"Solicitarea USSD este modificată într-o solicitare DIAL video."</string>
     <string name="stk_cc_ss_to_dial" msgid="2151304435775557162">"Solicitarea SS este modificată într-o solicitare DIAL."</string>
+    <string name="stk_cc_ss_to_dial_video" msgid="4306210904450719045">"Solicitarea SS este modificată într-o solicitare DIAL video."</string>
     <string name="stk_cc_ss_to_ussd" msgid="3951862188105305589">"Solicitarea SS este modificată într-o solicitare USSD."</string>
     <string name="stk_cc_ss_to_ss" msgid="5470768854991452695">"Solicitarea SS este modificată într-o nouă solicitare SS."</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Profil de serviciu"</string>
@@ -1817,14 +1825,10 @@
     <string name="etws_primary_default_message_test" msgid="2709597093560037455">"Testarea mesajelor de urgență"</string>
     <string name="notification_reply_button_accessibility" msgid="3621714652387814344">"Răspundeți"</string>
     <string name="etws_primary_default_message_others" msgid="6293148756130398971"></string>
-    <!-- no translation found for mmcc_authentication_reject (5767701075994754356) -->
-    <skip />
-    <!-- no translation found for mmcc_imsi_unknown_in_hlr (5316658473301462825) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_ms (807334478177362062) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_me (1950705155760872972) -->
-    <skip />
+    <string name="mmcc_authentication_reject" msgid="5767701075994754356">"Cardul SIM nu este permis pentru voce"</string>
+    <string name="mmcc_imsi_unknown_in_hlr" msgid="5316658473301462825">"Cardul SIM nu este activat pentru voce"</string>
+    <string name="mmcc_illegal_ms" msgid="807334478177362062">"Cardul SIM nu este permis pentru voce"</string>
+    <string name="mmcc_illegal_me" msgid="1950705155760872972">"Telefonul nu este permis pentru voce"</string>
     <string name="popup_window_default_title" msgid="4874318849712115433">"Fereastră pop-up"</string>
     <string name="slice_more_content" msgid="8504342889413274608">"+ <xliff:g id="NUMBER">%1$d</xliff:g>"</string>
     <string name="shortcut_restored_on_lower_version" msgid="5270675146351613828">"Această comandă rapidă necesită cea mai recentă aplicație"</string>

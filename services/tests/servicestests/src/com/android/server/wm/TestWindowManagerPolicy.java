@@ -47,7 +47,6 @@ import android.view.IWindowManager;
 import android.view.InputChannel;
 import android.view.KeyEvent;
 import android.view.WindowManager;
-import android.view.WindowManagerPolicy;
 import android.view.animation.Animation;
 import android.os.PowerManagerInternal;
 
@@ -55,6 +54,7 @@ import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
 import com.android.server.input.InputManagerService;
 import com.android.server.LocalServices;
+import com.android.server.policy.WindowManagerPolicy;
 
 import java.io.PrintWriter;
 
@@ -129,11 +129,6 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
 
     @Override
     public void setInitialDisplaySize(Display display, int width, int height, int density) {
-
-    }
-
-    @Override
-    public void setDisplayOverscan(Display display, int left, int top, int right, int bottom) {
 
     }
 
@@ -290,37 +285,8 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public void beginLayoutLw(int displayId, int displayWidth, int displayHeight,
-            int displayRotation, int uiMode) {
-
-    }
-
-    @Override
     public int getSystemDecorLayerLw() {
         return 0;
-    }
-
-    @Override
-    public void getContentRectLw(Rect r) {
-
-    }
-
-    @Override
-    public void layoutWindowLw(WindowState win,
-            WindowState attached) {
-
-    }
-
-    @Override
-    public boolean getInsetHintLw(WindowManager.LayoutParams attrs, Rect taskBounds,
-            int displayRotation, int displayWidth, int displayHeight, Rect outContentInsets,
-            Rect outStableInsets, Rect outOutsets) {
-        return false;
-    }
-
-    @Override
-    public void finishLayoutLw() {
-
     }
 
     @Override
@@ -582,11 +548,6 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public int getInputMethodWindowVisibleHeightLw() {
-        return 0;
-    }
-
-    @Override
     public void setCurrentUserLw(int newUserId) {
 
     }
@@ -604,11 +565,6 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     @Override
     public void dump(String prefix, PrintWriter writer, String[] args) {
 
-    }
-
-    @Override
-    public boolean canMagnifyWindow(int windowType) {
-        return false;
     }
 
     @Override

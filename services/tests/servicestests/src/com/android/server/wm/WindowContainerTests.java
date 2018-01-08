@@ -29,8 +29,6 @@ import java.util.Comparator;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
-import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
-import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 
@@ -193,7 +191,7 @@ public class WindowContainerTests extends WindowTestsBase {
 
     @Test
     public void testRemoveImmediately_WithController() throws Exception {
-        final WindowContainer container = new WindowContainer();
+        final WindowContainer container = new WindowContainer(sWm);
         final WindowContainerController controller = new WindowContainerController(null, sWm);
 
         container.setController(controller);
@@ -208,7 +206,7 @@ public class WindowContainerTests extends WindowTestsBase {
     @Test
     public void testSetController() throws Exception {
         final WindowContainerController controller = new WindowContainerController(null, sWm);
-        final WindowContainer container = new WindowContainer();
+        final WindowContainer container = new WindowContainer(sWm);
 
         container.setController(controller);
         assertEquals(controller, container.getController());
@@ -333,12 +331,19 @@ public class WindowContainerTests extends WindowTestsBase {
         final TestWindowContainer child12 = child1.addChildWindow(builder.setIsAnimating(true));
         final TestWindowContainer child21 = child2.addChildWindow();
 
-        assertTrue(root.isAnimating());
+        assertFalse(root.isAnimating());
         assertTrue(child1.isAnimating());
-        assertFalse(child11.isAnimating());
+        assertTrue(child11.isAnimating());
         assertTrue(child12.isAnimating());
         assertFalse(child2.isAnimating());
         assertFalse(child21.isAnimating());
+
+        assertTrue(root.isSelfOrChildAnimating());
+        assertTrue(child1.isSelfOrChildAnimating());
+        assertFalse(child11.isSelfOrChildAnimating());
+        assertTrue(child12.isSelfOrChildAnimating());
+        assertFalse(child2.isSelfOrChildAnimating());
+        assertFalse(child21.isSelfOrChildAnimating());
     }
 
     @Test
@@ -559,6 +564,86 @@ public class WindowContainerTests extends WindowTestsBase {
         assertEquals(1, child2223.compareTo(child21));
     }
 
+    @Test
+    public void testPrefixOrderIndex() throws Exception {
+        final TestWindowContainerBuilder builder = new TestWindowContainerBuilder();
+        final TestWindowContainer root = builder.build();
+
+        final TestWindowContainer child1 = root.addChildWindow();
+
+        final TestWindowContainer child11 = child1.addChildWindow();
+        final TestWindowContainer child12 = child1.addChildWindow();
+
+        final TestWindowContainer child2 = root.addChildWindow();
+
+        final TestWindowContainer child21 = child2.addChildWindow();
+        final TestWindowContainer child22 = child2.addChildWindow();
+
+        final TestWindowContainer child221 = child22.addChildWindow();
+        final TestWindowContainer child222 = child22.addChildWindow();
+        final TestWindowContainer child223 = child22.addChildWindow();
+
+        final TestWindowContainer child23 = child2.addChildWindow();
+
+        assertEquals(0, root.getPrefixOrderIndex());
+        assertEquals(1, child1.getPrefixOrderIndex());
+        assertEquals(2, child11.getPrefixOrderIndex());
+        assertEquals(3, child12.getPrefixOrderIndex());
+        assertEquals(4, child2.getPrefixOrderIndex());
+        assertEquals(5, child21.getPrefixOrderIndex());
+        assertEquals(6, child22.getPrefixOrderIndex());
+        assertEquals(7, child221.getPrefixOrderIndex());
+        assertEquals(8, child222.getPrefixOrderIndex());
+        assertEquals(9, child223.getPrefixOrderIndex());
+        assertEquals(10, child23.getPrefixOrderIndex());
+    }
+
+    @Test
+    public void testPrefixOrder_addEntireSubtree() throws Exception {
+        final TestWindowContainerBuilder builder = new TestWindowContainerBuilder();
+        final TestWindowContainer root = builder.build();
+        final TestWindowContainer subtree = builder.build();
+        final TestWindowContainer subtree2 = builder.build();
+
+        final TestWindowContainer child1 = subtree.addChildWindow();
+        final TestWindowContainer child11 = child1.addChildWindow();
+        final TestWindowContainer child2 = subtree2.addChildWindow();
+        final TestWindowContainer child3 = subtree2.addChildWindow();
+        subtree.addChild(subtree2, 1);
+        root.addChild(subtree, 0);
+
+        assertEquals(0, root.getPrefixOrderIndex());
+        assertEquals(1, subtree.getPrefixOrderIndex());
+        assertEquals(2, child1.getPrefixOrderIndex());
+        assertEquals(3, child11.getPrefixOrderIndex());
+        assertEquals(4, subtree2.getPrefixOrderIndex());
+        assertEquals(5, child2.getPrefixOrderIndex());
+        assertEquals(6, child3.getPrefixOrderIndex());
+    }
+
+    @Test
+    public void testPrefixOrder_remove() throws Exception {
+        final TestWindowContainerBuilder builder = new TestWindowContainerBuilder();
+        final TestWindowContainer root = builder.build();
+
+        final TestWindowContainer child1 = root.addChildWindow();
+
+        final TestWindowContainer child11 = child1.addChildWindow();
+        final TestWindowContainer child12 = child1.addChildWindow();
+
+        final TestWindowContainer child2 = root.addChildWindow();
+
+        assertEquals(0, root.getPrefixOrderIndex());
+        assertEquals(1, child1.getPrefixOrderIndex());
+        assertEquals(2, child11.getPrefixOrderIndex());
+        assertEquals(3, child12.getPrefixOrderIndex());
+        assertEquals(4, child2.getPrefixOrderIndex());
+
+        root.removeChild(child1);
+
+        assertEquals(1, child2.getPrefixOrderIndex());
+    }
+
     /* Used so we can gain access to some protected members of the {@link WindowContainer} class */
     private class TestWindowContainer extends WindowContainer<TestWindowContainer> {
         private final int mLayer;
@@ -587,6 +672,7 @@ public class WindowContainerTests extends WindowTestsBase {
 
         TestWindowContainer(int layer, boolean isAnimating, boolean isVisible,
             Integer orientation) {
+            super(sWm);
             mLayer = layer;
             mIsAnimating = isAnimating;
             mIsVisible = isVisible;
@@ -629,8 +715,8 @@ public class WindowContainerTests extends WindowTestsBase {
         }
 
         @Override
-        boolean isAnimating() {
-            return mIsAnimating || super.isAnimating();
+        boolean isSelfAnimating() {
+            return mIsAnimating;
         }
 
         @Override

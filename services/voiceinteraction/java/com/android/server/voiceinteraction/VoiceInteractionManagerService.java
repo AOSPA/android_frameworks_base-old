@@ -67,6 +67,7 @@ import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
+import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.UiThread;
@@ -75,7 +76,6 @@ import com.android.server.soundtrigger.SoundTriggerInternal;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.List;
-import java.util.TreeSet;
 
 /**
  * SystemService that publishes an IVoiceInteractionManagerService.
@@ -390,11 +390,13 @@ public class VoiceInteractionManagerService extends SystemService {
         }
 
         public void switchUser(int userHandle) {
-            synchronized (this) {
-                mCurUser = userHandle;
-                mCurUserUnlocked = false;
-                switchImplementationIfNeededLocked(false);
-            }
+            FgThread.getHandler().post(() -> {
+                synchronized (this) {
+                    mCurUser = userHandle;
+                    mCurUserUnlocked = false;
+                    switchImplementationIfNeededLocked(false);
+                }
+            });
         }
 
         void switchImplementationIfNeeded(boolean force) {
@@ -427,8 +429,11 @@ public class VoiceInteractionManagerService extends SystemService {
                     if (hasComponent) {
                         mShortcutServiceInternal.setShortcutHostPackage(TAG,
                                 serviceComponent.getPackageName(), mCurUser);
+                        mAmInternal.setAllowAppSwitches(TAG,
+                                serviceInfo.applicationInfo.uid, mCurUser);
                     } else {
                         mShortcutServiceInternal.setShortcutHostPackage(TAG, null, mCurUser);
+                        mAmInternal.setAllowAppSwitches(TAG, -1, mCurUser);
                     }
                 }
 
@@ -439,11 +444,11 @@ public class VoiceInteractionManagerService extends SystemService {
                         mImpl.shutdownLocked();
                     }
                     if (hasComponent) {
-                        mImpl = new VoiceInteractionManagerServiceImpl(mContext,
-                                UiThread.getHandler(), this, mCurUser, serviceComponent);
+                        setImplLocked(new VoiceInteractionManagerServiceImpl(mContext,
+                                UiThread.getHandler(), this, mCurUser, serviceComponent));
                         mImpl.startLocked();
                     } else {
-                        mImpl = null;
+                        setImplLocked(null);
                     }
                 }
             }
@@ -1174,6 +1179,12 @@ public class VoiceInteractionManagerService extends SystemService {
             }
         }
 
+        private void setImplLocked(VoiceInteractionManagerServiceImpl impl) {
+            mImpl = impl;
+            mAmInternal.notifyActiveVoiceInteractionServiceChanged(
+                    getActiveServiceComponentName());
+        }
+
         class SettingsObserver extends ContentObserver {
             SettingsObserver(Handler handler) {
                 super(handler);
@@ -1216,7 +1227,7 @@ public class VoiceInteractionManagerService extends SystemService {
                         unloadAllKeyphraseModels();
                         if (mImpl != null) {
                             mImpl.shutdownLocked();
-                            mImpl = null;
+                            setImplLocked(null);
                         }
                         setCurInteractor(null, userHandle);
                         setCurRecognizer(null, userHandle);

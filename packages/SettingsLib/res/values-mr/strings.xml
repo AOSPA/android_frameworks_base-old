@@ -33,13 +33,13 @@
     <string name="wifi_check_password_try_again" msgid="516958988102584767">"पासवर्ड तपासा आणि पुन्‍हा प्रयत्‍न करा"</string>
     <string name="wifi_not_in_range" msgid="1136191511238508967">"परिक्षेत्रामध्ये नाही"</string>
     <string name="wifi_no_internet_no_reconnect" msgid="5724903347310541706">"स्वयंचलितपणे कनेक्ट करणार नाही"</string>
-    <string name="wifi_no_internet" msgid="3880396223819116454">"इंटरनेट अॅक्सेस नाही"</string>
+    <string name="wifi_no_internet" msgid="4663834955626848401">"इंटरनेट अॅक्सेस नाही"</string>
     <string name="saved_network" msgid="4352716707126620811">"<xliff:g id="NAME">%1$s</xliff:g> द्वारे सेव्ह केले"</string>
     <string name="connected_via_network_scorer" msgid="5713793306870815341">"%1$s द्वारे स्वयंचलितपणे कनेक्ट केले"</string>
     <string name="connected_via_network_scorer_default" msgid="7867260222020343104">"नेटवर्क रेटिंग प्रदात्याद्वारे स्वयंचलितपणे कनेक्ट केले"</string>
     <string name="connected_via_passpoint" msgid="2826205693803088747">"%1$s द्वारे कनेक्‍ट केले"</string>
     <string name="available_via_passpoint" msgid="1617440946846329613">"%1$s द्वारे उपलब्‍ध"</string>
-    <string name="wifi_connected_no_internet" msgid="3149853966840874992">"कनेक्‍ट केले, इंटरनेट नाही"</string>
+    <string name="wifi_connected_no_internet" msgid="8202906332837777829">"कनेक्‍ट केले, इंटरनेट नाही"</string>
     <string name="wifi_ap_unable_to_handle_new_sta" msgid="5348824313514404541">"अॅक्सेस पॉइंट तात्पुरते भरलेले"</string>
     <string name="connected_via_carrier" msgid="7583780074526041912">"%1$s ने कनेक्‍ट केले"</string>
     <string name="available_via_carrier" msgid="1469036129740799053">"%1$s ने उपलब्‍ध"</string>
@@ -82,9 +82,9 @@
     <string name="bluetooth_sap_profile_summary_connected" msgid="8561765057453083838">"SAP शी कनेक्‍ट केले"</string>
     <string name="bluetooth_opp_profile_summary_not_connected" msgid="1267091356089086285">"फाइल स्थानांतर सर्व्हरशी कनेक्ट केले नाही"</string>
     <string name="bluetooth_hid_profile_summary_connected" msgid="3381760054215168689">"इनपुट डिव्हाइसवर कनेक्ट केले"</string>
-    <string name="bluetooth_pan_user_profile_summary_connected" msgid="4602294638909590612">"इंटरनेट अॅक्सेससाठी डीव्हाइसवर कनेक्ट केले"</string>
-    <string name="bluetooth_pan_nap_profile_summary_connected" msgid="1561383706411975199">"डीव्हाइससह स्थानिक इंटरनेट कनेक्शन शेअर करत आहे"</string>
-    <string name="bluetooth_pan_profile_summary_use_for" msgid="5664884523822068653">"इंटरनेट अॅक्सेससाठी वापरा"</string>
+    <string name="bluetooth_pan_user_profile_summary_connected" msgid="6436258151814414028">"इंटरनेट अॅक्सेससाठी डिव्हाइसशी कनेक्ट केले"</string>
+    <string name="bluetooth_pan_nap_profile_summary_connected" msgid="1322694224800769308">"डिव्हाइससह स्थानिक इंटरनेट कनेक्शन शेअर करत आहे"</string>
+    <string name="bluetooth_pan_profile_summary_use_for" msgid="5736111170225304239">"इंटरनेट अॅक्सेस करण्यासाठी वापरा"</string>
     <string name="bluetooth_map_profile_summary_use_for" msgid="5154200119919927434">"नकाशासाठी वापरा"</string>
     <string name="bluetooth_sap_profile_summary_use_for" msgid="7085362712786907993">"SIM प्रवेशासाठी वापरा"</string>
     <string name="bluetooth_a2dp_profile_summary_use_for" msgid="4630849022250168427">"मीडिया ऑडिओसाठी वापरा"</string>
@@ -97,7 +97,7 @@
     <string name="bluetooth_pairing_will_share_phonebook" msgid="4982239145676394429">"कनेक्‍ट केल्यावर पेअरींग तुमचे संपर्क आणि कॉल इतिहास यामध्ये अॅक्सेस देते."</string>
     <string name="bluetooth_pairing_error_message" msgid="3748157733635947087">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> शी जोडू शकलो नाही."</string>
     <string name="bluetooth_pairing_pin_error_message" msgid="8337234855188925274">"अयोग्य पिन किंवा पासकीमुळे <xliff:g id="DEVICE_NAME">%1$s</xliff:g> सह जोडू शकलो नाही."</string>
-    <string name="bluetooth_pairing_device_down_error_message" msgid="7870998403045801381">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> शी संप्रेषण करू शकत नाही."</string>
+    <string name="bluetooth_pairing_device_down_error_message" msgid="7870998403045801381">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> शी संवाद प्रस्थापित करू शकत नाही."</string>
     <string name="bluetooth_pairing_rejected_error_message" msgid="1648157108520832454">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> द्वारे पेअरींग नाकारले."</string>
     <string name="bluetooth_talkback_computer" msgid="4875089335641234463">"संगणक"</string>
     <string name="bluetooth_talkback_headset" msgid="5140152177885220949">"हेडसेट"</string>
@@ -216,8 +216,12 @@
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"ब्लूटूथ ऑडिओ LDAC कोडेक: प्लेबॅक गुणवत्ता"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="3181967377574368400">"ब्लूटूथ ऑडिओ LDAC कोडेक निवडा:\nप्लेबॅक गुणवत्ता"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"स्ट्रीमिंग: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
-    <string name="dns_tls" msgid="6773814174391131955">"DNS ओव्हर TLS"</string>
-    <string name="dns_tls_summary" msgid="3692494150251071380">"सुरू केल्यास, पोर्ट 853 वर DNS ओव्हर TLS करण्याचा प्रयत्न करा."</string>
+    <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"खाजगी DNS"</string>
+    <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"खाजगी DNS मोड निवडा"</string>
+    <string name="private_dns_mode_off" msgid="8236575187318721684">"बंद"</string>
+    <string name="private_dns_mode_opportunistic" msgid="7608409735589131766">"संधिसाधू"</string>
+    <string name="private_dns_mode_provider" msgid="8354935160639360804">"खाजगी DNS पुरवठादार होस्ट नाव"</string>
+    <string name="private_dns_mode_provider_hostname_hint" msgid="2487492386970928143">"DNS पुरवठादाराचे होस्टनाव टाका"</string>
     <string name="wifi_display_certification_summary" msgid="1155182309166746973">"वायरलेस डिस्प्ले प्रमाणिकरणाचे पर्याय दाखवा"</string>
     <string name="wifi_verbose_logging_summary" msgid="6615071616111731958">"वाय-फाय लॉगिंग स्‍तर वाढवा, वाय-फाय सिलेक्टरमध्‍ये प्रति SSID RSSI दर्शवा"</string>
     <string name="wifi_aggressive_handover_summary" msgid="7266329646559808827">"सक्षम केले असताना, वाय-फाय सिग्‍नल कमी असताना, मोबाइलकडे डेटा कनेक्‍शन सोपवण्यासाठी वाय-फाय अधिक अॅग्रेसिव्ह असेल."</string>
@@ -292,6 +296,8 @@
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 अॅप्समध्ये 4x MSAA सक्षम करा"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"आयताकृती नसलेले क्लिप ऑपरेशन डीबग करा"</string>
     <string name="track_frame_time" msgid="6146354853663863443">"प्रोफाईल GPU प्रस्तुती"</string>
+    <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU डीबग स्तर सुरू करा"</string>
+    <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"डीबग अॅप्ससाठी GPU डीबग स्तर लोड करण्याची अनुमती द्या"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"विंडो अॅनिमेशन स्केल"</string>
     <string name="transition_animation_scale_title" msgid="387527540523595875">"संक्रमण अॅनिमेशन स्केल"</string>
     <string name="animator_duration_scale_title" msgid="3406722410819934083">"अॅनिमेटर कालावधी स्केल"</string>

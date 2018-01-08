@@ -18,6 +18,7 @@ package com.android.server.accessibility;
 
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.IAccessibilityServiceClient;
+import android.annotation.Nullable;
 import android.app.UiAutomation;
 import android.content.ComponentName;
 import android.content.Context;
@@ -26,8 +27,10 @@ import android.os.IBinder;
 import android.os.IBinder.DeathRecipient;
 import android.os.RemoteException;
 import android.util.Slog;
-import android.view.WindowManagerInternal;
 import android.view.accessibility.AccessibilityEvent;
+
+import com.android.internal.util.DumpUtils;
+import com.android.server.wm.WindowManagerInternal;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -43,6 +46,8 @@ class UiAutomationManager {
     private UiAutomationService mUiAutomationService;
 
     private AccessibilityServiceInfo mUiAutomationServiceInfo;
+
+    private AbstractAccessibilityServiceConnection.SystemSupport mSystemSupport;
 
     private int mUiAutomationFlags;
 
@@ -74,7 +79,7 @@ class UiAutomationManager {
             Context context, AccessibilityServiceInfo accessibilityServiceInfo,
             int id, Handler mainHandler, Object lock,
             AccessibilityManagerService.SecurityPolicy securityPolicy,
-            AccessibilityClientConnection.SystemSupport systemSupport,
+            AbstractAccessibilityServiceConnection.SystemSupport systemSupport,
             WindowManagerInternal windowManagerInternal,
             GlobalActionPerformer globalActionPerfomer, int flags) {
         accessibilityServiceInfo.setComponentName(COMPONENT_NAME);
@@ -91,6 +96,7 @@ class UiAutomationManager {
             return;
         }
 
+        mSystemSupport = systemSupport;
         mUiAutomationService = new UiAutomationService(context, accessibilityServiceInfo, id,
                 mainHandler, lock, securityPolicy, systemSupport, windowManagerInternal,
                 globalActionPerfomer);
@@ -152,6 +158,17 @@ class UiAutomationManager {
         return mUiAutomationService.mEventTypes;
     }
 
+    int getRelevantEventTypes() {
+        if (mUiAutomationService == null) return 0;
+        return mUiAutomationService.getRelevantEventTypes();
+    }
+
+    @Nullable
+    AccessibilityServiceInfo getServiceInfo() {
+        if (mUiAutomationService == null) return null;
+        return mUiAutomationService.getServiceInfo();
+    }
+
     void dumpUiAutomationService(FileDescriptor fd, final PrintWriter pw, String[] args) {
         if (mUiAutomationService != null) {
             mUiAutomationService.dump(fd, pw, args);
@@ -168,9 +185,10 @@ class UiAutomationManager {
             mUiAutomationServiceOwner.unlinkToDeath(mUiAutomationServiceOwnerDeathRecipient, 0);
             mUiAutomationServiceOwner = null;
         }
+        mSystemSupport.onClientChange(false);
     }
 
-    private class UiAutomationService extends AccessibilityClientConnection {
+    private class UiAutomationService extends AbstractAccessibilityServiceConnection {
         private final Handler mMainHandler;
 
         UiAutomationService(Context context, AccessibilityServiceInfo accessibilityServiceInfo,
@@ -221,6 +239,17 @@ class UiAutomationManager {
         @Override
         protected boolean supportsFlagForNotImportantViews(AccessibilityServiceInfo info) {
             return true;
+        }
+
+        @Override
+        public void dump(FileDescriptor fd, final PrintWriter pw, String[] args) {
+            if (!DumpUtils.checkDumpPermission(mContext, LOG_TAG, pw)) return;
+            synchronized (mLock) {
+                pw.append("Ui Automation[eventTypes="
+                        + AccessibilityEvent.eventTypeToString(mEventTypes));
+                pw.append(", notificationTimeout=" + mNotificationTimeout);
+                pw.append("]");
+            }
         }
 
         // Since this isn't really an accessibility service, several methods are just stubbed here.

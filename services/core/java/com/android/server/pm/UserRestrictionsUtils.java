@@ -66,6 +66,7 @@ public class UserRestrictionsUtils {
 
     public static final Set<String> USER_RESTRICTIONS = newSetWithUniqueCheck(new String[] {
             UserManager.DISALLOW_CONFIG_WIFI,
+            UserManager.DISALLOW_CONFIG_LOCALE,
             UserManager.DISALLOW_MODIFY_ACCOUNTS,
             UserManager.DISALLOW_INSTALL_APPS,
             UserManager.DISALLOW_UNINSTALL_APPS,
@@ -112,7 +113,10 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_OEM_UNLOCK,
             UserManager.DISALLOW_UNMUTE_DEVICE,
             UserManager.DISALLOW_AUTOFILL,
-            UserManager.DISALLOW_USER_SWITCH
+            UserManager.DISALLOW_USER_SWITCH,
+            UserManager.DISALLOW_UNIFIED_PASSWORD,
+            UserManager.DISALLOW_CONFIG_LOCATION_MODE,
+            UserManager.DISALLOW_AIRPLANE_MODE
     });
 
     /**
@@ -140,7 +144,8 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_FUN,
             UserManager.DISALLOW_SAFE_BOOT,
             UserManager.DISALLOW_CREATE_WINDOWS,
-            UserManager.DISALLOW_DATA_ROAMING
+            UserManager.DISALLOW_DATA_ROAMING,
+            UserManager.DISALLOW_AIRPLANE_MODE
     );
 
     /**
@@ -191,11 +196,12 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_BLUETOOTH_SHARING
     );
 
-    /*
+    /**
      * Special user restrictions that are always applied to all users no matter who sets them.
      */
     private static final Set<String> PROFILE_GLOBAL_RESTRICTIONS = Sets.newArraySet(
-            UserManager.ENSURE_VERIFY_APPS
+            UserManager.ENSURE_VERIFY_APPS,
+            UserManager.DISALLOW_AIRPLANE_MODE
     );
 
     /**

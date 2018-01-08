@@ -16,20 +16,24 @@
 
 package android.hardware.display;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.app.KeyguardManager;
 import android.content.Context;
 import android.graphics.Point;
 import android.media.projection.MediaProjection;
 import android.os.Handler;
+import android.os.UserHandle;
 import android.util.SparseArray;
 import android.view.Display;
 import android.view.Surface;
-import android.view.WindowManagerPolicy;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Manages the properties of attached displays.
@@ -253,8 +257,8 @@ public final class DisplayManager {
      * </p>
      *
      * @see #createVirtualDisplay
-     * @see WindowManagerPolicy#isKeyguardSecure(int)
-     * @see WindowManagerPolicy#isKeyguardTrustedLw()
+     * @see KeyguardManager#isDeviceSecure()
+     * @see KeyguardManager#isDeviceLocked()
      * @hide
      */
     // TODO: Update name and documentation and un-hide the flag. Don't change the value before that.
@@ -612,6 +616,43 @@ public final class DisplayManager {
     @SystemApi
     public Point getStableDisplaySize() {
         return mGlobal.getStableDisplaySize();
+    }
+
+    /**
+     * Fetch {@link BrightnessChangeEvent}s.
+     * @hide until we make it a system api.
+     */
+    @RequiresPermission(Manifest.permission.BRIGHTNESS_SLIDER_USAGE)
+    public List<BrightnessChangeEvent> getBrightnessEvents() {
+        return mGlobal.getBrightnessEvents(mContext.getOpPackageName());
+    }
+
+    /**
+     * @hide STOPSHIP - remove when adaptive brightness accepts curves.
+     */
+    public void setBrightness(int brightness) {
+        mGlobal.setBrightness(brightness);
+    }
+
+    /**
+     * Sets the global display brightness configuration.
+     *
+     * @hide
+     */
+    public void setBrightnessConfiguration(BrightnessConfiguration c) {
+        setBrightnessConfigurationForUser(c, UserHandle.myUserId());
+    }
+
+    /**
+     * Sets the global display brightness configuration for a specific user.
+     *
+     * Note this requires the INTERACT_ACROSS_USERS permission if setting the configuration for a
+     * user other than the one you're currently running as.
+     *
+     * @hide
+     */
+    public void setBrightnessConfigurationForUser(BrightnessConfiguration c, int userId) {
+        mGlobal.setBrightnessConfigurationForUser(c, userId);
     }
 
     /**

@@ -46,9 +46,6 @@ import java.io.PrintWriter;
 class WindowToken extends WindowContainer<WindowState> {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "WindowToken" : TAG_WM;
 
-    // The window manager!
-    protected final WindowManagerService mService;
-
     // The actual token.
     final IBinder token;
 
@@ -66,7 +63,7 @@ class WindowToken extends WindowContainer<WindowState> {
     boolean paused = false;
 
     // Should this token's windows be hidden?
-    boolean hidden;
+    private boolean mHidden;
 
     // Temporary for finding which tokens no longer have visible windows.
     boolean hasVisible;
@@ -107,12 +104,22 @@ class WindowToken extends WindowContainer<WindowState> {
 
     WindowToken(WindowManagerService service, IBinder _token, int type, boolean persistOnEmpty,
             DisplayContent dc, boolean ownerCanManageAppTokens) {
-        mService = service;
+        super(service);
         token = _token;
         windowType = type;
         mPersistOnEmpty = persistOnEmpty;
         mOwnerCanManageAppTokens = ownerCanManageAppTokens;
         onDisplayChanged(dc);
+    }
+
+    void setHidden(boolean hidden) {
+        if (hidden != mHidden) {
+            mHidden = hidden;
+        }
+    }
+
+    boolean isHidden() {
+        return mHidden;
     }
 
     void removeAllWindowsIfPossible() {
@@ -125,10 +132,15 @@ class WindowToken extends WindowContainer<WindowState> {
     }
 
     void setExiting() {
+        if (mChildren.size() == 0) {
+            super.removeImmediately();
+            return;
+        }
+
         // This token is exiting, so allow it to be removed when it no longer contains any windows.
         mPersistOnEmpty = false;
 
-        if (hidden) {
+        if (mHidden) {
             return;
         }
 
@@ -144,7 +156,7 @@ class WindowToken extends WindowContainer<WindowState> {
             changed |= win.onSetAppExiting();
         }
 
-        hidden = true;
+        setHidden(true);
 
         if (changed) {
             mService.mWindowPlacerLocked.performSurfacePlacement();
@@ -185,11 +197,6 @@ class WindowToken extends WindowContainer<WindowState> {
     /** Returns true if the token windows list is empty. */
     boolean isEmpty() {
         return mChildren.isEmpty();
-    }
-
-    // Used by AppWindowToken.
-    int getAnimLayerAdjustment() {
-        return 0;
     }
 
     WindowState getReplacingWindow() {
@@ -255,12 +262,6 @@ class WindowToken extends WindowContainer<WindowState> {
         // up with goodToGo, so we don't move a window
         // to another display before the window behind
         // it is ready.
-        SurfaceControl.openTransaction();
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final WindowState win = mChildren.get(i);
-            win.mWinAnimator.updateLayerStackInTransaction();
-        }
-        SurfaceControl.closeTransaction();
 
         super.onDisplayChanged(dc);
     }
@@ -278,10 +279,11 @@ class WindowToken extends WindowContainer<WindowState> {
         proto.end(token);
     }
 
-    void dump(PrintWriter pw, String prefix) {
+    void dump(PrintWriter pw, String prefix, boolean dumpAll) {
+        super.dump(pw, prefix, dumpAll);
         pw.print(prefix); pw.print("windows="); pw.println(mChildren);
         pw.print(prefix); pw.print("windowType="); pw.print(windowType);
-                pw.print(" hidden="); pw.print(hidden);
+                pw.print(" hidden="); pw.print(mHidden);
                 pw.print(" hasVisible="); pw.println(hasVisible);
         if (waitingToShow || sendingToBottom) {
             pw.print(prefix); pw.print("waitingToShow="); pw.print(waitingToShow);

@@ -16,29 +16,42 @@
 
 package com.android.systemui;
 
+import android.app.AlarmManager;
 import android.content.Context;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 
+import com.android.internal.logging.MetricsLogger;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.Dependency.DependencyProvider;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
+import com.android.systemui.qs.QSTileHost;
 import com.android.systemui.statusbar.KeyguardIndicationController;
+import com.android.systemui.statusbar.NotificationEntryManager;
+import com.android.systemui.statusbar.NotificationGutsManager;
+import com.android.systemui.statusbar.NotificationListener;
+import com.android.systemui.statusbar.NotificationLockscreenUserManager;
+import com.android.systemui.statusbar.NotificationLogger;
+import com.android.systemui.statusbar.NotificationMediaManager;
+import com.android.systemui.statusbar.NotificationRemoteInputManager;
+import com.android.systemui.statusbar.NotificationViewHierarchyManager;
 import com.android.systemui.statusbar.ScrimView;
+import com.android.systemui.statusbar.notification.VisualStabilityManager;
+import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardBouncer;
 import com.android.systemui.statusbar.phone.LightBarController;
 import com.android.systemui.statusbar.phone.LockIcon;
 import com.android.systemui.statusbar.phone.LockscreenWallpaper;
+import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.NotificationIconAreaController;
-import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.qs.QSTileHost;
 import com.android.systemui.statusbar.phone.ScrimController;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
-import com.android.systemui.volume.VolumeDialogControllerImpl;
+import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 
 import java.util.function.Consumer;
 
@@ -86,10 +99,10 @@ public class SystemUIFactory {
 
     public ScrimController createScrimController(LightBarController lightBarController,
             ScrimView scrimBehind, ScrimView scrimInFront, View headsUpScrim,
-            LockscreenWallpaper lockscreenWallpaper,
-            Consumer<Boolean> scrimVisibleListener) {
+            LockscreenWallpaper lockscreenWallpaper, Consumer<Integer> scrimVisibleListener,
+            DozeParameters dozeParameters, AlarmManager alarmManager) {
         return new ScrimController(lightBarController, scrimBehind, scrimInFront, headsUpScrim,
-                scrimVisibleListener);
+                scrimVisibleListener, dozeParameters, alarmManager);
     }
 
     public NotificationIconAreaController createNotificationIconAreaController(Context context,
@@ -107,10 +120,20 @@ public class SystemUIFactory {
         return new QSTileHost(context, statusBar, iconController);
     }
 
-    public <T> T createInstance(Class<T> classType) {
-        return null;
-    }
-
     public void injectDependencies(ArrayMap<Object, DependencyProvider> providers,
-            Context context) { }
+            Context context) {
+        providers.put(NotificationLockscreenUserManager.class,
+                () -> new NotificationLockscreenUserManager(context));
+        providers.put(VisualStabilityManager.class, VisualStabilityManager::new);
+        providers.put(NotificationGroupManager.class, NotificationGroupManager::new);
+        providers.put(NotificationMediaManager.class, () -> new NotificationMediaManager(context));
+        providers.put(NotificationGutsManager.class, () -> new NotificationGutsManager(context));
+        providers.put(NotificationRemoteInputManager.class,
+                () -> new NotificationRemoteInputManager(context));
+        providers.put(NotificationListener.class, () -> new NotificationListener(context));
+        providers.put(NotificationLogger.class, NotificationLogger::new);
+        providers.put(NotificationViewHierarchyManager.class,
+                () -> new NotificationViewHierarchyManager(context));
+        providers.put(NotificationEntryManager.class, () -> new NotificationEntryManager(context));
+    }
 }

@@ -164,6 +164,8 @@ final class ProcessRecord {
 
     // all activities running in the process
     final ArrayList<ActivityRecord> activities = new ArrayList<>();
+    // any tasks this process had run root activities in
+    final ArrayList<TaskRecord> recentTasks = new ArrayList<>();
     // all ServiceRecord running in this process
     final ArraySet<ServiceRecord> services = new ArraySet<>();
     // services that are currently executing code (need to remain foreground).
@@ -194,6 +196,9 @@ final class ProcessRecord {
 
     String shortStringName;     // caching of toShortString() result.
     String stringName;          // caching of toString() result.
+    boolean pendingStart;       // Process start is pending.
+    long startSeq;              // Seq no. indicating the latest process start associated with
+                                // this process record.
 
     // These reports are generated & stored when an app gets into an error condition.
     // They will be "null" when all is OK.
@@ -208,6 +213,23 @@ final class ProcessRecord {
     public boolean inFullBackup;
     // App is allowed to manage whitelists such as temporary Power Save mode whitelist.
     boolean whitelistManager;
+
+    // Params used in starting this process.
+    String hostingType;
+    String hostingNameStr;
+    String seInfo;
+    long startTime;
+    // This will be same as {@link #uid} usually except for some apps used during factory testing.
+    int startUid;
+
+    void setStartParams(int startUid, String hostingType, String hostingNameStr, String seInfo,
+            long startTime) {
+        this.startUid = startUid;
+        this.hostingType = hostingType;
+        this.hostingNameStr = hostingNameStr;
+        this.seInfo = seInfo;
+        this.startTime = startTime;
+    }
 
     void dump(PrintWriter pw, String prefix) {
         final long nowUptime = SystemClock.uptimeMillis();
@@ -346,6 +368,10 @@ final class ProcessRecord {
         if (hasStartedServices) {
             pw.print(prefix); pw.print("hasStartedServices="); pw.println(hasStartedServices);
         }
+        if (pendingStart) {
+            pw.print(prefix); pw.print("pendingStart="); pw.println(pendingStart);
+        }
+        pw.print(prefix); pw.print("startSeq="); pw.println(startSeq);
         if (setProcState > ActivityManager.PROCESS_STATE_SERVICE) {
             pw.print(prefix); pw.print("lastCpuTime="); pw.print(lastCpuTime);
                     if (lastCpuTime > 0) {
@@ -394,6 +420,12 @@ final class ProcessRecord {
             pw.print(prefix); pw.println("Activities:");
             for (int i=0; i<activities.size(); i++) {
                 pw.print(prefix); pw.print("  - "); pw.println(activities.get(i));
+            }
+        }
+        if (recentTasks.size() > 0) {
+            pw.print(prefix); pw.println("Recent Tasks:");
+            for (int i=0; i<recentTasks.size(); i++) {
+                pw.print(prefix); pw.print("  - "); pw.println(recentTasks.get(i));
             }
         }
         if (services.size() > 0) {
@@ -512,6 +544,13 @@ final class ProcessRecord {
         }
     }
 
+    public void clearRecentTasks() {
+        for (int i = recentTasks.size() - 1; i >= 0; i--) {
+            recentTasks.get(i).clearRootProcess();
+        }
+        recentTasks.clear();
+    }
+
     /**
      * This method returns true if any of the activities within the process record are interesting
      * to the user. See HistoryRecord.isInterestingToUserLocked()
@@ -612,9 +651,13 @@ final class ProcessRecord {
             if (noisy) {
                 Slog.i(TAG, "Killing " + toShortString() + " (adj " + setAdj + "): " + reason);
             }
-            EventLog.writeEvent(EventLogTags.AM_KILL, userId, pid, processName, setAdj, reason);
-            Process.killProcessQuiet(pid);
-            ActivityManagerService.killProcessGroup(uid, pid);
+            if (pid > 0) {
+                EventLog.writeEvent(EventLogTags.AM_KILL, userId, pid, processName, setAdj, reason);
+                Process.killProcessQuiet(pid);
+                ActivityManagerService.killProcessGroup(uid, pid);
+            } else {
+                pendingStart = false;
+            }
             if (!persistent) {
                 killed = true;
                 killedByAm = true;
@@ -715,7 +758,7 @@ final class ProcessRecord {
     /*
      *  Return true if package has been added false if not
      */
-    public boolean addPackage(String pkg, int versionCode, ProcessStatsService tracker) {
+    public boolean addPackage(String pkg, long versionCode, ProcessStatsService tracker) {
         if (!pkgList.containsKey(pkg)) {
             ProcessStats.ProcessStateHolder holder = new ProcessStats.ProcessStateHolder(
                     versionCode);

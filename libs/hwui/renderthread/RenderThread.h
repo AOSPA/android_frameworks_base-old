@@ -67,6 +67,9 @@ class RenderThread : private ThreadBase {
     PREVENT_COPY_AND_ASSIGN(RenderThread);
 
 public:
+    // Sets a callback that fires before any RenderThread setup has occured.
+    ANDROID_API static void setOnStartHook(void (*onStartHook)());
+
     WorkQueue& queue() { return ThreadBase::queue(); }
 
     // Mimics android.view.Choreographer
@@ -85,7 +88,7 @@ public:
     const DisplayInfo& mainDisplayInfo() { return mDisplayInfo; }
 
     GrContext* getGrContext() const { return mGrContext.get(); }
-    void setGrContext(GrContext* cxt);
+    void setGrContext(sk_sp<GrContext> cxt);
 
     CacheManager& cacheManager() { return *mCacheManager; }
     VulkanManager& vulkanManager() { return *mVkManager; }

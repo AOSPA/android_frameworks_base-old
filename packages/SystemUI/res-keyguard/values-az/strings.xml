@@ -29,8 +29,7 @@
     <string name="keyguard_password_enter_password_code" msgid="595980919238127672">"Kilidi açmaq üçün parol daxil edin"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7504123374204446086">"Kilidi açmaq üçün PIN daxil edin"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="6535018036285012028">"Yanlış PIN kod."</string>
-    <!-- no translation found for keyguard_sim_error_message_short (592109500618448312) -->
-    <skip />
+    <string name="keyguard_sim_error_message_short" msgid="592109500618448312">"Yanlış Kart."</string>
     <string name="keyguard_charged" msgid="2222329688813033109">"Enerji yığdı"</string>
     <string name="keyguard_plugged_in" msgid="89308975354638682">"Enerji yığır"</string>
     <string name="keyguard_plugged_in_charging_fast" msgid="8869226755413795173">"Sürətlə enerji yığır"</string>
@@ -136,4 +135,12 @@
       <item quantity="one">Cihaz <xliff:g id="NUMBER_0">%d</xliff:g> saat kiliddən çıxarılmayıb. Parolu təsdiq edin.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Tanınmır"</string>
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+      <item quantity="other">SIM PIN-ni daxil edin, <xliff:g id="NUMBER_1">%d</xliff:g> cəhdiniz qalır.</item>
+      <item quantity="one">Yanlış SIM PIN kodu, cihazınızı kiliddən çıxarmaq üçün operatorunuzla əlaqə saxlamadan öncə <xliff:g id="NUMBER_0">%d</xliff:g> cəhdiniz qalır.</item>
+    </plurals>
+    <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
+      <item quantity="other">SIM indi deaktivdir. Davam etmək üçün PUK kodunu daxil edin. SIM birdəfəlik yararsız olmadan öncə <xliff:g id="_NUMBER_1">%d</xliff:g> cəhdiniz qalır. Ətraflı məlumat üçün operatorla əlaqə saxlayın.</item>
+      <item quantity="one">SIM indi deaktivdir. Davam etmək üçün PUK kodunu daxil edin. SIM birdəfəlik yararsız olmadan öncə <xliff:g id="_NUMBER_0">%d</xliff:g> cəhdiniz qalır. Ətraflı məlumat üçün operatorla əlaqə saxlayın.</item>
+    </plurals>
 </resources>

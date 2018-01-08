@@ -38,6 +38,7 @@ cc_binary {
 
 cc_test {
     name: "incident_helper_test",
+    test_suites: ["device-tests"],
     defaults: ["incident_helper_defaults"],
     local_include_dirs: ["src/"],
 
@@ -49,12 +50,15 @@ cc_test {
         "testdata/*",
     ],
 
-    shared_libs: [
-        "libprotobuf-cpp-full",
-    ],
-
     static_libs: [
         "libgmock",
         "libplatformprotos"
     ],
+
+    shared_libs: [
+        "libprotobuf-cpp-full"
+    ],
+    proto: {
+        type: "full",
+    },
 }

@@ -15,13 +15,13 @@
 LOCAL_PATH:= $(call my-dir)
 
 statsd_common_src := \
-    ../../core/java/android/os/IStatsCallbacks.aidl \
     ../../core/java/android/os/IStatsCompanionService.aidl \
     ../../core/java/android/os/IStatsManager.aidl \
     src/stats_log.proto \
     src/statsd_config.proto \
-    src/stats_events_copy.proto \
+    src/atoms.proto \
     src/anomaly/AnomalyMonitor.cpp \
+    src/anomaly/AnomalyTracker.cpp \
     src/condition/CombinationConditionTracker.cpp \
     src/condition/condition_util.cpp \
     src/condition/SimpleConditionTracker.cpp \
@@ -31,14 +31,15 @@ statsd_common_src := \
     src/config/ConfigManager.cpp \
     src/external/StatsCompanionServicePuller.cpp \
     src/external/ResourcePowerManagerPuller.cpp \
-    src/external/StatsPullerManager.cpp \
+    src/external/CpuTimePerUidPuller.cpp \
+    src/external/CpuTimePerUidFreqPuller.cpp \
+    src/external/StatsPullerManagerImpl.cpp \
     src/logd/LogEvent.cpp \
     src/logd/LogListener.cpp \
     src/logd/LogReader.cpp \
     src/matchers/CombinationLogMatchingTracker.cpp \
     src/matchers/matcher_util.cpp \
     src/matchers/SimpleLogMatchingTracker.cpp \
-    src/metrics/CountAnomalyTracker.cpp \
     src/metrics/MetricProducer.cpp \
     src/metrics/EventMetricProducer.cpp \
     src/metrics/CountMetricProducer.cpp \
@@ -50,11 +51,12 @@ statsd_common_src := \
     src/metrics/MetricsManager.cpp \
     src/metrics/metrics_manager_util.cpp \
     src/packages/UidMap.cpp \
-    src/storage/DropboxReader.cpp \
-    src/storage/DropboxWriter.cpp \
+    src/storage/StorageManager.cpp \
     src/StatsLogProcessor.cpp \
     src/StatsService.cpp \
-    src/stats_util.cpp
+    src/HashableDimensionKey.cpp \
+    src/guardrail/MemoryLeakTrackUtil.cpp \
+    src/guardrail/StatsdStats.cpp
 
 statsd_common_c_includes := \
     $(LOCAL_PATH)/src \
@@ -62,6 +64,9 @@ statsd_common_c_includes := \
 
 statsd_common_aidl_includes := \
     $(LOCAL_PATH)/../../core/java
+
+statsd_common_static_libraries := \
+    libplatformprotos
 
 statsd_common_shared_libraries := \
     libbase \
@@ -72,7 +77,6 @@ statsd_common_shared_libraries := \
     libselinux \
     libutils \
     libservices \
-    libandroidfw \
     libprotoutil \
     libstatslog \
     libhardware \
@@ -81,7 +85,8 @@ statsd_common_shared_libraries := \
     libhidltransport \
     libhwbinder \
     android.hardware.power@1.0 \
-    android.hardware.power@1.1
+    android.hardware.power@1.1 \
+    libmemunreachable
 
 # =========
 # statsd
@@ -116,12 +121,14 @@ LOCAL_PROTOC_OPTIMIZE_TYPE := lite-static
 LOCAL_AIDL_INCLUDES := $(statsd_common_aidl_includes)
 LOCAL_C_INCLUDES += $(statsd_common_c_includes)
 
+LOCAL_STATIC_LIBRARIES := $(statsd_common_static_libraries)
+
 LOCAL_SHARED_LIBRARIES := $(statsd_common_shared_libraries) \
     libgtest_prod
 
 LOCAL_MODULE_CLASS := EXECUTABLES
 
-#LOCAL_INIT_RC := statsd.rc
+LOCAL_INIT_RC := statsd.rc
 
 include $(BUILD_EXECUTABLE)
 
@@ -150,29 +157,44 @@ LOCAL_CFLAGS += \
 LOCAL_SRC_FILES := \
     $(statsd_common_src) \
     tests/AnomalyMonitor_test.cpp \
-    tests/ConditionTracker_test.cpp \
+    tests/anomaly/AnomalyTracker_test.cpp \
     tests/ConfigManager_test.cpp \
     tests/indexed_priority_queue_test.cpp \
     tests/LogEntryMatcher_test.cpp \
     tests/LogReader_test.cpp \
     tests/MetricsManager_test.cpp \
+    tests/StatsLogProcessor_test.cpp \
     tests/UidMap_test.cpp \
+    tests/condition/CombinationConditionTracker_test.cpp \
+    tests/condition/SimpleConditionTracker_test.cpp \
     tests/metrics/OringDurationTracker_test.cpp \
     tests/metrics/MaxDurationTracker_test.cpp \
     tests/metrics/CountMetricProducer_test.cpp \
-    tests/metrics/EventMetricProducer_test.cpp
-
+    tests/metrics/DurationMetricProducer_test.cpp \
+    tests/metrics/EventMetricProducer_test.cpp \
+    tests/metrics/ValueMetricProducer_test.cpp \
+    tests/metrics/GaugeMetricProducer_test.cpp \
+    tests/guardrail/StatsdStats_test.cpp \
+    tests/metrics/metrics_test_helper.cpp
 
 LOCAL_STATIC_LIBRARIES := \
+    $(statsd_common_static_libraries) \
     libgmock
 
 LOCAL_SHARED_LIBRARIES := $(statsd_common_shared_libraries)
 
 LOCAL_PROTOC_OPTIMIZE_TYPE := lite
 
+include $(BUILD_NATIVE_TEST)
+
+
 statsd_common_src:=
 statsd_common_aidl_includes:=
 statsd_common_c_includes:=
+statsd_common_static_libraries:=
+statsd_common_shared_libraries:=
 
-include $(BUILD_NATIVE_TEST)
 
+##############################
+
+include $(call all-makefiles-under,$(LOCAL_PATH))

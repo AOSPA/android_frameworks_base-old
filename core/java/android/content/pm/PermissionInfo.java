@@ -17,6 +17,7 @@
 package android.content.pm;
 
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
@@ -144,6 +145,16 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
     public static final int PROTECTION_FLAG_OEM = 0x4000;
 
     /**
+     * Additional flag for {${link #protectionLevel}, corresponding
+     * to the <code>vendorPrivileged</code> value of
+     * {@link android.R.attr#protectionLevel}.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final int PROTECTION_FLAG_VENDOR_PRIVILEGED = 0x8000;
+
+    /**
      * Mask for {@link #protectionLevel}: the basic protection type.
      */
     public static final int PROTECTION_MASK_BASE = 0xf;
@@ -155,12 +166,18 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
 
     /**
      * The level of access this permission is protecting, as per
-     * {@link android.R.attr#protectionLevel}.  Values may be
-     * {@link #PROTECTION_NORMAL}, {@link #PROTECTION_DANGEROUS}, or
-     * {@link #PROTECTION_SIGNATURE}.  May also include the additional
-     * flags {@link #PROTECTION_FLAG_SYSTEM} or {@link #PROTECTION_FLAG_DEVELOPMENT}
-     * (which only make sense in combination with the base
-     * {@link #PROTECTION_SIGNATURE}.
+     * {@link android.R.attr#protectionLevel}. Consists of
+     * a base permission type and zero or more flags:
+     *
+     * <pre>
+     * int basePermissionType = protectionLevel & {@link #PROTECTION_MASK_BASE};
+     * int permissionFlags = protectionLevel & {@link #PROTECTION_MASK_FLAGS};
+     * </pre>
+     *
+     * <p></p>Base permission types are {@link #PROTECTION_NORMAL},
+     * {@link #PROTECTION_DANGEROUS}, {@link #PROTECTION_SIGNATURE}
+     * and the deprecated {@link #PROTECTION_SIGNATURE_OR_SYSTEM}.
+     * Flags are listed under {@link android.R.attr#protectionLevel}.
      */
     public int protectionLevel;
 
@@ -225,6 +242,12 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
         if (level == PROTECTION_SIGNATURE_OR_SYSTEM) {
             level = PROTECTION_SIGNATURE | PROTECTION_FLAG_PRIVILEGED;
         }
+        if ((level & PROTECTION_FLAG_VENDOR_PRIVILEGED) != 0
+                && (level & PROTECTION_FLAG_PRIVILEGED) == 0) {
+            // 'vendorPrivileged' must be 'privileged'. If not,
+            // drop the vendorPrivileged.
+            level = level & ~PROTECTION_FLAG_VENDOR_PRIVILEGED;
+        }
         return level;
     }
 
@@ -277,6 +300,9 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
         }
         if ((level & PermissionInfo.PROTECTION_FLAG_OEM) != 0) {
             protLevel += "|oem";
+        }
+        if ((level & PermissionInfo.PROTECTION_FLAG_VENDOR_PRIVILEGED) != 0) {
+            protLevel += "|vendorPrivileged";
         }
         return protLevel;
     }

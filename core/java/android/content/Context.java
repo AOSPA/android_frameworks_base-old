@@ -51,6 +51,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.StatFs;
@@ -75,6 +76,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.concurrent.Executor;
 
 /**
  * Interface to global information about an application environment.  This is
@@ -219,17 +221,16 @@ public abstract class Context {
     public static final int MODE_NO_LOCALIZED_COLLATORS = 0x0010;
 
     /** @hide */
-    @IntDef(flag = true,
-            value = {
-                BIND_AUTO_CREATE,
-                BIND_DEBUG_UNBIND,
-                BIND_NOT_FOREGROUND,
-                BIND_ABOVE_CLIENT,
-                BIND_ALLOW_OOM_MANAGEMENT,
-                BIND_WAIVE_PRIORITY,
-                BIND_IMPORTANT,
-                BIND_ADJUST_WITH_ACTIVITY
-            })
+    @IntDef(flag = true, prefix = { "BIND_" }, value = {
+            BIND_AUTO_CREATE,
+            BIND_DEBUG_UNBIND,
+            BIND_NOT_FOREGROUND,
+            BIND_ABOVE_CLIENT,
+            BIND_ALLOW_OOM_MANAGEMENT,
+            BIND_WAIVE_PRIORITY,
+            BIND_IMPORTANT,
+            BIND_ADJUST_WITH_ACTIVITY
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface BindServiceFlags {}
 
@@ -323,6 +324,15 @@ public abstract class Context {
     public static final int BIND_ADJUST_WITH_ACTIVITY = 0x0080;
 
     /**
+     * @hide Flag for {@link #bindService}: allows binding to a service provided
+     * by an instant app. Note that the caller may not have access to the instant
+     * app providing the service which is a violation of the instant app sandbox.
+     * This flag is intended ONLY for development/testing and should be used with
+     * great care. Only the system is allowed to use this flag.
+     */
+    public static final int BIND_ALLOW_INSTANT = 0x00400000;
+
+    /**
      * @hide Flag for {@link #bindService}: like {@link #BIND_NOT_FOREGROUND}, but puts it
      * up in to the important background state (instead of transient).
      */
@@ -404,10 +414,9 @@ public abstract class Context {
     public static final int BIND_EXTERNAL_SERVICE = 0x80000000;
 
     /** @hide */
-    @IntDef(flag = true,
-            value = {
-                RECEIVER_VISIBLE_TO_INSTANT_APPS
-            })
+    @IntDef(flag = true, prefix = { "RECEIVER_VISIBLE_" }, value = {
+            RECEIVER_VISIBLE_TO_INSTANT_APPS
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface RegisterReceiverFlags {}
 
@@ -460,6 +469,16 @@ public abstract class Context {
      * @return The main looper.
      */
     public abstract Looper getMainLooper();
+
+    /**
+     * Return an {@link Executor} that will run enqueued tasks on the main
+     * thread associated with this context. This is the thread used to dispatch
+     * calls to application components (activities, services, etc).
+     */
+    public Executor getMainExecutor() {
+        // This is pretty inefficient, which is why ContextImpl overrides it
+        return new HandlerExecutor(new Handler(getMainLooper()));
+    }
 
     /**
      * Return the context of the single, global Application object of the
@@ -753,6 +772,8 @@ public abstract class Context {
      * values.  Only one instance of the SharedPreferences object is returned
      * to any callers for the same name, meaning they will see each other's
      * edits as soon as they are made.
+     *
+     * This method is thead-safe.
      *
      * @param name Desired preferences file. If a preferences file by this name
      * does not exist, it will be created when you retrieve an
@@ -2799,10 +2820,17 @@ public abstract class Context {
      * example, if this Context is an Activity that is stopped, the service will
      * not be required to continue running until the Activity is resumed.
      *
-     * <p>This function will throw {@link SecurityException} if you do not
+     * <p>If the service does not support binding, it may return {@code null} from
+     * its {@link android.app.Service#onBind(Intent) onBind()} method.  If it does, then
+     * the ServiceConnection's
+     * {@link ServiceConnection#onNullBinding(ComponentName) onNullBinding()} method
+     * will be invoked instead of
+     * {@link ServiceConnection#onServiceConnected(ComponentName, IBinder) onServiceConnected()}.
+     *
+     * <p>This method will throw {@link SecurityException} if the calling app does not
      * have permission to bind to the given service.
      *
-     * <p class="note">Note: this method <em>can not be called from a
+     * <p class="note">Note: this method <em>cannot be called from a
      * {@link BroadcastReceiver} component</em>.  A pattern you can use to
      * communicate from a BroadcastReceiver to a Service is to call
      * {@link #startService} with the arguments containing the command to be
@@ -2825,8 +2853,8 @@ public abstract class Context {
      *          {@link #BIND_WAIVE_PRIORITY}.
      * @return If you have successfully bound to the service, {@code true} is returned;
      *         {@code false} is returned if the connection is not made so you will not
-     *         receive the service object. However, you should still call
-     *         {@link #unbindService} to release the connection.
+     *         receive the service object. You should still call {@link #unbindService}
+     *         to release the connection even if this method returned {@code false}.
      *
      * @throws SecurityException If the caller does not have permission to access the service
      * or the service can not be found.
@@ -2904,7 +2932,7 @@ public abstract class Context {
             @Nullable String profileFile, @Nullable Bundle arguments);
 
     /** @hide */
-    @StringDef({
+    @StringDef(suffix = { "_SERVICE" }, value = {
             POWER_SERVICE,
             WINDOW_SERVICE,
             LAYOUT_INFLATER_SERVICE,
@@ -2938,7 +2966,7 @@ public abstract class Context {
             //@hide: LOWPAN_SERVICE,
             //@hide: WIFI_RTT_SERVICE,
             //@hide: ETHERNET_SERVICE,
-            WIFI_RTT_SERVICE,
+            WIFI_RTT_RANGING_SERVICE,
             NSD_SERVICE,
             AUDIO_SERVICE,
             FINGERPRINT_SERVICE,
@@ -3072,6 +3100,14 @@ public abstract class Context {
      * service objects between various different contexts (Activities, Applications,
      * Services, Providers, etc.)
      *
+     * <p>Note: Instant apps, for which {@link PackageManager#isInstantApp()} returns true,
+     * don't have access to the following system services: {@link #DEVICE_POLICY_SERVICE},
+     * {@link #FINGERPRINT_SERVICE}, {@link #SHORTCUT_SERVICE}, {@link #USB_SERVICE},
+     * {@link #WALLPAPER_SERVICE}, {@link #WIFI_P2P_SERVICE}, {@link #WIFI_SERVICE},
+     * {@link #WIFI_AWARE_SERVICE}. For these services this method will return <code>null</code>.
+     * Generally, if you are running as an instant app you should always check whether the result
+     * of this method is null.
+     *
      * @param name The name of the desired service.
      *
      * @return The service or null if the name does not exist.
@@ -3154,6 +3190,14 @@ public abstract class Context {
      * service objects between various different contexts (Activities, Applications,
      * Services, Providers, etc.)
      * </p>
+     *
+     * <p>Note: Instant apps, for which {@link PackageManager#isInstantApp()} returns true,
+     * don't have access to the following system services: {@link #DEVICE_POLICY_SERVICE},
+     * {@link #FINGERPRINT_SERVICE}, {@link #SHORTCUT_SERVICE}, {@link #USB_SERVICE},
+     * {@link #WALLPAPER_SERVICE}, {@link #WIFI_P2P_SERVICE}, {@link #WIFI_SERVICE},
+     * {@link #WIFI_AWARE_SERVICE}. For these services this method will return <code>null</code>.
+     * Generally, if you are running as an instant app you should always check whether the result
+     * of this method is null.
      *
      * @param serviceClass The class of the desired service.
      * @return The service or null if the class is not a supported system service.
@@ -3404,6 +3448,14 @@ public abstract class Context {
     public static final String NETWORKMANAGEMENT_SERVICE = "network_management";
 
     /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link com.android.server.slice.SliceManagerService} for managing slices.
+     * @hide
+     * @see #getSystemService
+     */
+    public static final String SLICE_SERVICE = "slice";
+
+    /**
      * Use with {@link #getSystemService} to retrieve a {@link
      * android.app.usage.NetworkStatsManager} for querying network usage stats.
      *
@@ -3413,6 +3465,8 @@ public abstract class Context {
     public static final String NETWORK_STATS_SERVICE = "netstats";
     /** {@hide} */
     public static final String NETWORK_POLICY_SERVICE = "netpolicy";
+    /** {@hide} */
+    public static final String NETWORK_WATCHLIST_SERVICE = "network_watchlist";
 
     /**
      * Use with {@link #getSystemService} to retrieve a {@link
@@ -3477,7 +3531,7 @@ public abstract class Context {
      * @see android.net.wifi.rtt.WifiRttManager
      * @hide
      */
-    public static final String WIFI_RTT2_SERVICE = "rttmanager2";
+    public static final String WIFI_RTT_RANGING_SERVICE = "rttmanager2";
 
     /**
      * Use with {@link #getSystemService} to retrieve a {@link
@@ -4042,6 +4096,13 @@ public abstract class Context {
     public static final String STATS_COMPANION_SERVICE = "statscompanion";
 
     /**
+     * Use with {@link #getSystemService} to retrieve an {@link android.stats.StatsManager}.
+     * @hide
+     */
+    @SystemApi
+    public static final String STATS_MANAGER = "stats";
+
+    /**
      * Use with {@link #getSystemService} to retrieve a {@link
      * android.content.om.OverlayManager} for managing overlay packages.
      *
@@ -4069,6 +4130,14 @@ public abstract class Context {
      * @see #getSystemService
      */
     public static final String TIME_ZONE_RULES_MANAGER_SERVICE = "timezone";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link android.content.pm.crossprofile.CrossProfileApps} for cross profile operations.
+     *
+     * @see #getSystemService
+     */
+    public static final String CROSS_PROFILE_APPS_SERVICE = "crossprofileapps";
 
     /**
      * Determine whether the given permission is allowed for a particular

@@ -35,6 +35,9 @@ import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Base class for a remotable object, the core part of a lightweight
@@ -193,6 +196,19 @@ public class Binder implements IBinder {
     }
 
     /**
+     * Reset the given interface back to the default blocking behavior,
+     * reverting any changes made by {@link #allowBlocking(IBinder)}.
+     *
+     * @hide
+     */
+    public static IBinder defaultBlocking(IBinder binder) {
+        if (binder instanceof BinderProxy) {
+            ((BinderProxy) binder).mWarnOnBlocking = sWarnOnBlocking;
+        }
+        return binder;
+    }
+
+    /**
      * Inherit the current {@link #allowBlocking(IBinder)} value from one given
      * interface to another.
      *
@@ -285,7 +301,7 @@ public class Binder implements IBinder {
         long callingIdentity = clearCallingIdentity();
         Throwable throwableToPropagate = null;
         try {
-            action.run();
+            action.runOrThrow();
         } catch (Throwable throwable) {
             throwableToPropagate = throwable;
         } finally {
@@ -309,7 +325,7 @@ public class Binder implements IBinder {
         long callingIdentity = clearCallingIdentity();
         Throwable throwableToPropagate = null;
         try {
-            return action.get();
+            return action.getOrThrow();
         } catch (Throwable throwable) {
             throwableToPropagate = throwable;
             return null; // overridden by throwing in finally block
@@ -765,6 +781,8 @@ final class BinderProxy implements IBinder {
         private static final int LOG_MAIN_INDEX_SIZE = 8;
         private static final int MAIN_INDEX_SIZE = 1 <<  LOG_MAIN_INDEX_SIZE;
         private static final int MAIN_INDEX_MASK = MAIN_INDEX_SIZE - 1;
+        // Debuggable builds will throw an AssertionError if the number of map entries exceeds:
+        private static final int CRASH_AT_SIZE = 5_000;
 
         /**
          * We next warn when we exceed this bucket size.
@@ -886,10 +904,60 @@ final class BinderProxy implements IBinder {
                 keyArray[size] = key;
             }
             if (size >= mWarnBucketSize) {
+                final int totalSize = size();
                 Log.v(Binder.TAG, "BinderProxy map growth! bucket size = " + size
-                        + " total = " + size());
+                        + " total = " + totalSize);
                 mWarnBucketSize += WARN_INCREMENT;
+                if (Build.IS_DEBUGGABLE && totalSize > CRASH_AT_SIZE) {
+                    diagnosticCrash();
+                }
             }
+        }
+
+        /**
+         * Dump a histogram to the logcat, then throw an assertion error. Used to diagnose
+         * abnormally large proxy maps.
+         */
+        private void diagnosticCrash() {
+            Map<String, Integer> counts = new HashMap<>();
+            for (ArrayList<WeakReference<BinderProxy>> a : mMainIndexValues) {
+                if (a != null) {
+                    for (WeakReference<BinderProxy> weakRef : a) {
+                        BinderProxy bp = weakRef.get();
+                        String key;
+                        if (bp == null) {
+                            key = "<cleared weak-ref>";
+                        } else {
+                            try {
+                                key = bp.getInterfaceDescriptor();
+                            } catch (Throwable t) {
+                                key = "<exception during getDescriptor>";
+                            }
+                        }
+                        Integer i = counts.get(key);
+                        if (i == null) {
+                            counts.put(key, 1);
+                        } else {
+                            counts.put(key, i + 1);
+                        }
+                    }
+                }
+            }
+            Map.Entry<String, Integer>[] sorted = counts.entrySet().toArray(
+                    new Map.Entry[counts.size()]);
+            Arrays.sort(sorted, (Map.Entry<String, Integer> a, Map.Entry<String, Integer> b)
+                    -> b.getValue().compareTo(a.getValue()));
+            Log.v(Binder.TAG, "BinderProxy descriptor histogram (top ten):");
+            int printLength = Math.min(10, sorted.length);
+            for (int i = 0; i < printLength; i++) {
+                Log.v(Binder.TAG, " #" + (i + 1) + ": " + sorted[i].getKey() + " x"
+                        + sorted[i].getValue());
+            }
+
+            // Now throw an assertion.
+            final int totalSize = size();
+            throw new AssertionError("Binder ProxyMap has too many entries: " + totalSize
+                    + ". BinderProxy leak?");
         }
 
         // Corresponding ArrayLists in the following two arrays always have the same size.

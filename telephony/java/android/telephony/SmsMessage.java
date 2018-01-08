@@ -19,6 +19,7 @@ package android.telephony;
 import static android.telephony.TelephonyManager.PHONE_TYPE_CDMA;
 
 import android.annotation.StringDef;
+import android.app.PendingIntent;
 import android.content.res.Resources;
 import android.os.Binder;
 import android.text.TextUtils;
@@ -83,17 +84,22 @@ public class SmsMessage {
     public static final int MAX_USER_DATA_SEPTETS_WITH_HEADER = 153;
 
     /** @hide */
-    @StringDef({FORMAT_3GPP, FORMAT_3GPP2})
+    @StringDef(prefix = { "FORMAT_" }, value = {
+            FORMAT_3GPP,
+            FORMAT_3GPP2
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Format {}
 
     /**
      * Indicates a 3GPP format SMS message.
+     * @see SmsManager#injectSmsPdu(byte[], String, PendingIntent)
      */
     public static final String FORMAT_3GPP = "3gpp";
 
     /**
      * Indicates a 3GPP2 format SMS message.
+     * @see SmsManager#injectSmsPdu(byte[], String, PendingIntent)
      */
     public static final String FORMAT_3GPP2 = "3gpp2";
 
@@ -268,31 +274,6 @@ public class SmsMessage {
             Rlog.e(LOG_TAG, "createFromEfRecord(): wrappedMessage is null");
             return null;
         }
-    }
-
-    /**
-     * Create an SmsMessage from an SMS EF record.
-     *
-     * @param index Index of SMS record. This should be index in ArrayList
-     *              returned by SmsManager.getAllMessagesFromSim + 1.
-     * @param data Record data.
-     * @param subId Subscription Id of the SMS
-     * @return An SmsMessage representing the record.
-     *
-     * @hide
-     */
-    public static SmsMessage createFromEfRecord(int index, byte[] data, int subId) {
-        SmsMessageBase wrappedMessage;
-
-        if (isCdmaVoice(subId)) {
-            wrappedMessage = com.android.internal.telephony.cdma.SmsMessage.createFromEfRecord(
-                    index, data);
-        } else {
-            wrappedMessage = com.android.internal.telephony.gsm.SmsMessage.createFromEfRecord(
-                    index, data);
-        }
-
-        return wrappedMessage != null ? new SmsMessage(wrappedMessage) : null;
     }
 
     /**
@@ -847,7 +828,6 @@ public class SmsMessage {
          int activePhone = TelephonyManager.getDefault().getCurrentPhoneType(subId);
          return (PHONE_TYPE_CDMA == activePhone);
    }
-
     /**
      * Decide if the carrier supports long SMS.
      * {@hide}

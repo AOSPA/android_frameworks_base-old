@@ -13,33 +13,59 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef STATS_UTIL_H
-#define STATS_UTIL_H
 
+#pragma once
+
+#include <sstream>
+#include "HashableDimensionKey.h"
+#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 #include "logd/LogReader.h"
-#include "storage/DropboxWriter.h"
 
-#include <log/logprint.h>
-#include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
+#include <unordered_map>
 
 namespace android {
 namespace os {
 namespace statsd {
 
-#define DEFAULT_DIMENSION_KEY ""
-#define MATCHER_NOT_FOUND -2
+const HashableDimensionKey DEFAULT_DIMENSION_KEY = HashableDimensionKey(vector<KeyValuePair>());
 
-typedef std::string HashableDimensionKey;
+// Minimum bucket size in seconds
+const long kMinBucketSizeSec = 5 * 60;
 
 typedef std::map<std::string, HashableDimensionKey> ConditionKey;
 
-EventMetricData parse(log_msg msg);
+typedef std::unordered_map<HashableDimensionKey, int64_t> DimToValMap;
 
-int getTagId(log_msg msg);
+/*
+ * In memory rep for LogEvent. Uses much less memory than LogEvent
+ */
+typedef struct EventKV {
+    std::vector<KeyValuePair> kv;
+    string ToString() const {
+        std::ostringstream result;
+        result << "{ ";
+        const size_t N = kv.size();
+        for (size_t i = 0; i < N; i++) {
+            result << " ";
+            result << (i + 1);
+            result << "->";
+            const auto& pair = kv[i];
+            if (pair.has_value_int()) {
+                result << pair.value_int();
+            } else if (pair.has_value_long()) {
+                result << pair.value_long();
+            } else if (pair.has_value_float()) {
+                result << pair.value_float();
+            } else if (pair.has_value_str()) {
+                result << pair.value_str().c_str();
+            }
+        }
+        result << " }";
+        return result.str();
+    }
+} EventKV;
 
-std::string getHashableKey(std::vector<KeyValuePair> key);
+typedef std::unordered_map<HashableDimensionKey, std::shared_ptr<EventKV>> DimToEventKVMap;
 }  // namespace statsd
 }  // namespace os
 }  // namespace android
-
-#endif  // STATS_UTIL_H

@@ -19,6 +19,7 @@ import static android.view.Display.INVALID_DISPLAY;
 
 import android.Manifest;
 import android.app.ActivityManagerInternal;
+import android.app.ActivityManagerInternal.ScreenObserver;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.INotificationManager;
@@ -58,7 +59,10 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.view.WindowManagerInternal;
+
+import com.android.server.FgThread;
+import com.android.server.wm.WindowManagerInternal;
+import android.view.inputmethod.InputMethodManagerInternal;
 
 import com.android.internal.R;
 import com.android.internal.util.DumpUtils;
@@ -104,7 +108,8 @@ import java.util.Objects;
  *
  * @hide
  */
-public class VrManagerService extends SystemService implements EnabledComponentChangeListener{
+public class VrManagerService extends SystemService
+        implements EnabledComponentChangeListener, ScreenObserver {
 
     public static final String TAG = "VrManagerService";
     static final boolean DBG = false;
@@ -236,15 +241,17 @@ public class VrManagerService extends SystemService implements EnabledComponentC
         }
     }
 
-    private void setSleepState(boolean isAsleep) {
-        setSystemState(FLAG_AWAKE, !isAsleep);
-    }
-
     private void setScreenOn(boolean isScreenOn) {
         setSystemState(FLAG_SCREEN_ON, isScreenOn);
     }
 
-    private void setKeyguardShowing(boolean isShowing) {
+    @Override
+    public void onAwakeStateChanged(boolean isAwake) {
+        setSystemState(FLAG_AWAKE, isAwake);
+    }
+
+    @Override
+    public void onKeyguardStateChanged(boolean isShowing) {
         setSystemState(FLAG_KEYGUARD_UNLOCKED, !isShowing);
     }
 
@@ -609,6 +616,14 @@ public class VrManagerService extends SystemService implements EnabledComponentC
         }
 
         @Override
+        public void setVrInputMethod(ComponentName componentName) {
+            enforceCallerPermissionAnyOf(Manifest.permission.RESTRICTED_VR_ACCESS);
+            InputMethodManagerInternal imm =
+                    LocalServices.getService(InputMethodManagerInternal.class);
+            imm.startVrInputMethodNoCheck(componentName);
+        }
+
+        @Override
         protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
             if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
@@ -697,18 +712,8 @@ public class VrManagerService extends SystemService implements EnabledComponentC
         }
 
         @Override
-        public void onSleepStateChanged(boolean isAsleep) {
-            VrManagerService.this.setSleepState(isAsleep);
-        }
-
-        @Override
         public void onScreenStateChanged(boolean isScreenOn) {
             VrManagerService.this.setScreenOn(isScreenOn);
-        }
-
-        @Override
-        public void onKeyguardStateChanged(boolean isShowing) {
-            VrManagerService.this.setKeyguardShowing(isShowing);
         }
 
         @Override
@@ -756,7 +761,7 @@ public class VrManagerService extends SystemService implements EnabledComponentC
 
         mBootsToVr = SystemProperties.getBoolean("ro.boot.vr", false);
         mUseStandbyToExitVrMode = mBootsToVr
-                && SystemProperties.getBoolean("persist.vr.use_standby_to_exit_vr_mode", false);
+                && SystemProperties.getBoolean("persist.vr.use_standby_to_exit_vr_mode", true);
         publishLocalService(VrManagerInternal.class, new LocalService());
         publishBinderService(Context.VR_SERVICE, mVrManager.asBinder());
     }
@@ -764,6 +769,9 @@ public class VrManagerService extends SystemService implements EnabledComponentC
     @Override
     public void onBootPhase(int phase) {
         if (phase == SystemService.PHASE_SYSTEM_SERVICES_READY) {
+            LocalServices.getService(ActivityManagerInternal.class)
+                    .registerScreenObserver(this);
+
             mNotificationManager = INotificationManager.Stub.asInterface(
                     ServiceManager.getService(Context.NOTIFICATION_SERVICE));
             synchronized (mLock) {
@@ -819,9 +827,11 @@ public class VrManagerService extends SystemService implements EnabledComponentC
 
     @Override
     public void onSwitchUser(int userHandle) {
-        synchronized (mLock) {
-            mComponentObserver.onUsersChanged();
-        }
+        FgThread.getHandler().post(() -> {
+            synchronized (mLock) {
+                mComponentObserver.onUsersChanged();
+            }
+        });
 
     }
 

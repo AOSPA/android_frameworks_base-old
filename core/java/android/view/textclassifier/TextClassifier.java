@@ -16,15 +16,23 @@
 
 package android.view.textclassifier;
 
+import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringDef;
 import android.annotation.WorkerThread;
 import android.os.LocaleList;
+import android.util.ArraySet;
+
+import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Interface for providing text classification related features.
@@ -35,10 +43,9 @@ import java.lang.annotation.RetentionPolicy;
 public interface TextClassifier {
 
     /** @hide */
-    String DEFAULT_LOG_TAG = "TextClassifierImpl";
+    String DEFAULT_LOG_TAG = "androidtc";
 
-    /** @hide */
-    String TYPE_UNKNOWN = "";  // TODO: Make this public API.
+    String TYPE_UNKNOWN = "";
     String TYPE_OTHER = "other";
     String TYPE_EMAIL = "email";
     String TYPE_PHONE = "phone";
@@ -47,10 +54,29 @@ public interface TextClassifier {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @StringDef({
-            TYPE_UNKNOWN, TYPE_OTHER, TYPE_EMAIL, TYPE_PHONE, TYPE_ADDRESS, TYPE_URL
+    @StringDef(prefix = { "TYPE_" }, value = {
+            TYPE_UNKNOWN,
+            TYPE_OTHER,
+            TYPE_EMAIL,
+            TYPE_PHONE,
+            TYPE_ADDRESS,
+            TYPE_URL,
     })
     @interface EntityType {}
+
+    /** Designates that the TextClassifier should identify all entity types it can. **/
+    int ENTITY_PRESET_ALL = 0;
+    /** Designates that the TextClassifier should identify no entities. **/
+    int ENTITY_PRESET_NONE = 1;
+    /** Designates that the TextClassifier should identify a base set of entities determined by the
+     * TextClassifier. **/
+    int ENTITY_PRESET_BASE = 2;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = { "ENTITY_CONFIG_" },
+            value = {ENTITY_PRESET_ALL, ENTITY_PRESET_NONE, ENTITY_PRESET_BASE})
+    @interface EntityPreset {}
 
     /**
      * No-op TextClassifier.
@@ -70,6 +96,8 @@ public interface TextClassifier {
      *
      * @throws IllegalArgumentException if text is null; selectionStartIndex is negative;
      *      selectionEndIndex is greater than text.length() or not greater than selectionStartIndex
+     *
+     * @see #suggestSelection(CharSequence, int, int)
      */
     @WorkerThread
     @NonNull
@@ -78,13 +106,46 @@ public interface TextClassifier {
             @IntRange(from = 0) int selectionStartIndex,
             @IntRange(from = 0) int selectionEndIndex,
             @Nullable TextSelection.Options options) {
+        Utils.validateInput(text, selectionStartIndex, selectionEndIndex);
         return new TextSelection.Builder(selectionStartIndex, selectionEndIndex).build();
     }
 
     /**
+     * Returns suggested text selection start and end indices, recognized entity types, and their
+     * associated confidence scores. The entity types are ordered from highest to lowest scoring.
+     *
+     * <p><b>NOTE:</b> Do not implement. The default implementation of this method calls
+     * {@link #suggestSelection(CharSequence, int, int, TextSelection.Options)}. If that method
+     * calls this method, a stack overflow error will happen.
+     *
+     * @param text text providing context for the selected text (which is specified
+     *      by the sub sequence starting at selectionStartIndex and ending at selectionEndIndex)
+     * @param selectionStartIndex start index of the selected part of text
+     * @param selectionEndIndex end index of the selected part of text
+     *
+     * @throws IllegalArgumentException if text is null; selectionStartIndex is negative;
+     *      selectionEndIndex is greater than text.length() or not greater than selectionStartIndex
+     *
      * @see #suggestSelection(CharSequence, int, int, TextSelection.Options)
      */
-    // TODO: Consider deprecating (b/68846316)
+    @WorkerThread
+    @NonNull
+    default TextSelection suggestSelection(
+            @NonNull CharSequence text,
+            @IntRange(from = 0) int selectionStartIndex,
+            @IntRange(from = 0) int selectionEndIndex) {
+        return suggestSelection(text, selectionStartIndex, selectionEndIndex,
+                (TextSelection.Options) null);
+    }
+
+    /**
+     * See {@link #suggestSelection(CharSequence, int, int)} or
+     * {@link #suggestSelection(CharSequence, int, int, TextSelection.Options)}.
+     *
+     * <p><b>NOTE:</b> Do not implement. The default implementation of this method calls
+     * {@link #suggestSelection(CharSequence, int, int, TextSelection.Options)}. If that method
+     * calls this method, a stack overflow error will happen.
+     */
     @WorkerThread
     @NonNull
     default TextSelection suggestSelection(
@@ -92,7 +153,10 @@ public interface TextClassifier {
             @IntRange(from = 0) int selectionStartIndex,
             @IntRange(from = 0) int selectionEndIndex,
             @Nullable LocaleList defaultLocales) {
-        return new TextSelection.Builder(selectionStartIndex, selectionEndIndex).build();
+        final TextSelection.Options options = (defaultLocales != null)
+                ? new TextSelection.Options().setDefaultLocales(defaultLocales)
+                : null;
+        return suggestSelection(text, selectionStartIndex, selectionEndIndex, options);
     }
 
     /**
@@ -107,6 +171,8 @@ public interface TextClassifier {
      *
      * @throws IllegalArgumentException if text is null; startIndex is negative;
      *      endIndex is greater than text.length() or not greater than startIndex
+     *
+     * @see #classifyText(CharSequence, int, int)
      */
     @WorkerThread
     @NonNull
@@ -115,13 +181,45 @@ public interface TextClassifier {
             @IntRange(from = 0) int startIndex,
             @IntRange(from = 0) int endIndex,
             @Nullable TextClassification.Options options) {
+        Utils.validateInput(text, startIndex, endIndex);
         return TextClassification.EMPTY;
     }
 
     /**
+     * Classifies the specified text and returns a {@link TextClassification} object that can be
+     * used to generate a widget for handling the classified text.
+     *
+     * <p><b>NOTE:</b> Do not implement. The default implementation of this method calls
+     * {@link #classifyText(CharSequence, int, int, TextClassification.Options)}. If that method
+     * calls this method, a stack overflow error will happen.
+     *
+     * @param text text providing context for the text to classify (which is specified
+     *      by the sub sequence starting at startIndex and ending at endIndex)
+     * @param startIndex start index of the text to classify
+     * @param endIndex end index of the text to classify
+     *
+     * @throws IllegalArgumentException if text is null; startIndex is negative;
+     *      endIndex is greater than text.length() or not greater than startIndex
+     *
      * @see #classifyText(CharSequence, int, int, TextClassification.Options)
      */
-    // TODO: Consider deprecating (b/68846316)
+    @WorkerThread
+    @NonNull
+    default TextClassification classifyText(
+            @NonNull CharSequence text,
+            @IntRange(from = 0) int startIndex,
+            @IntRange(from = 0) int endIndex) {
+        return classifyText(text, startIndex, endIndex, (TextClassification.Options) null);
+    }
+
+    /**
+     * See {@link #classifyText(CharSequence, int, int, TextClassification.Options)} or
+     * {@link #classifyText(CharSequence, int, int)}.
+     *
+     * <p><b>NOTE:</b> Do not implement. The default implementation of this method calls
+     * {@link #classifyText(CharSequence, int, int, TextClassification.Options)}. If that method
+     * calls this method, a stack overflow error will happen.
+     */
     @WorkerThread
     @NonNull
     default TextClassification classifyText(
@@ -129,43 +227,59 @@ public interface TextClassifier {
             @IntRange(from = 0) int startIndex,
             @IntRange(from = 0) int endIndex,
             @Nullable LocaleList defaultLocales) {
-        return TextClassification.EMPTY;
-    }
-
-    /**
-     * Returns a {@link LinksInfo} that may be applied to the text to annotate it with links
-     * information.
-     *
-     * @param text the text to generate annotations for
-     * @param linkMask See {@link android.text.util.Linkify} for a list of linkMasks that may be
-     *      specified. Subclasses of this interface may specify additional linkMasks
-     * @param defaultLocales  ordered list of locale preferences that can be used to disambiguate
-     *      the provided text. If no locale preferences exist, set this to null or an empty locale
-     *      list in which case the classifier will decide whether to use no locale information, use
-     *      a default locale, or use the system default.
-     *
-     * @throws IllegalArgumentException if text is null
-     * @hide
-     */
-    @WorkerThread
-    default LinksInfo getLinks(
-            @NonNull CharSequence text, int linkMask, @Nullable LocaleList defaultLocales) {
-        return LinksInfo.NO_OP;
+        final TextClassification.Options options = (defaultLocales != null)
+                ? new TextClassification.Options().setDefaultLocales(defaultLocales)
+                : null;
+        return classifyText(text, startIndex, endIndex, options);
     }
 
     /**
      * Returns a {@link TextLinks} that may be applied to the text to annotate it with links
      * information.
      *
+     * If no options are supplied, default values will be used, determined by the TextClassifier.
+     *
      * @param text the text to generate annotations for
-     * @param options configuration for link generation. If null, defaults will be used.
+     * @param options configuration for link generation
      *
      * @throws IllegalArgumentException if text is null
+     *
+     * @see #generateLinks(CharSequence)
      */
     @WorkerThread
     default TextLinks generateLinks(
             @NonNull CharSequence text, @Nullable TextLinks.Options options) {
+        Utils.validateInput(text);
         return new TextLinks.Builder(text.toString()).build();
+    }
+
+    /**
+     * Returns a {@link TextLinks} that may be applied to the text to annotate it with links
+     * information.
+     *
+     * <p><b>NOTE:</b> Do not implement. The default implementation of this method calls
+     * {@link #generateLinks(CharSequence, TextLinks.Options)}. If that method calls this method,
+     * a stack overflow error will happen.
+     *
+     * @param text the text to generate annotations for
+     *
+     * @throws IllegalArgumentException if text is null
+     *
+     * @see #generateLinks(CharSequence, TextLinks.Options)
+     */
+    @WorkerThread
+    default TextLinks generateLinks(@NonNull CharSequence text) {
+        return generateLinks(text, null);
+    }
+
+    /**
+     * Returns a {@link Collection} of the entity types in the specified preset.
+     *
+     * @see #ENTITIES_ALL
+     * @see #ENTITIES_NONE
+     */
+    default Collection<String> getEntitiesForPreset(@EntityPreset int entityPreset) {
+        return Collections.EMPTY_LIST;
     }
 
     /**
@@ -184,5 +298,95 @@ public interface TextClassifier {
      */
     default TextClassifierConstants getSettings() {
         return TextClassifierConstants.DEFAULT;
+    }
+
+    /**
+     * Configuration object for specifying what entities to identify.
+     *
+     * Configs are initially based on a predefined preset, and can be modified from there.
+     */
+    final class EntityConfig {
+        private final @TextClassifier.EntityPreset int mEntityPreset;
+        private final Collection<String> mExcludedEntityTypes;
+        private final Collection<String> mIncludedEntityTypes;
+
+        public EntityConfig(@TextClassifier.EntityPreset int mEntityPreset) {
+            this.mEntityPreset = mEntityPreset;
+            mExcludedEntityTypes = new ArraySet<>();
+            mIncludedEntityTypes = new ArraySet<>();
+        }
+
+        /**
+         * Specifies an entity to include in addition to any specified by the enity preset.
+         *
+         * Note that if an entity has been excluded, the exclusion will take precedence.
+         */
+        public EntityConfig includeEntities(String... entities) {
+            for (String entity : entities) {
+                mIncludedEntityTypes.add(entity);
+            }
+            return this;
+        }
+
+        /**
+         * Specifies an entity to be excluded.
+         */
+        public EntityConfig excludeEntities(String... entities) {
+            for (String entity : entities) {
+                mExcludedEntityTypes.add(entity);
+            }
+            return this;
+        }
+
+        /**
+         * Returns an unmodifiable list of the final set of entities to find.
+         */
+        public List<String> getEntities(TextClassifier textClassifier) {
+            ArrayList<String> entities = new ArrayList<>();
+            for (String entity : textClassifier.getEntitiesForPreset(mEntityPreset)) {
+                if (!mExcludedEntityTypes.contains(entity)) {
+                    entities.add(entity);
+                }
+            }
+            for (String entity : mIncludedEntityTypes) {
+                if (!mExcludedEntityTypes.contains(entity) && !entities.contains(entity)) {
+                    entities.add(entity);
+                }
+            }
+            return Collections.unmodifiableList(entities);
+        }
+    }
+
+    /**
+     * Utility functions for TextClassifier methods.
+     *
+     * <ul>
+     *  <li>Provides validation of input parameters to TextClassifier methods
+     * </ul>
+     *
+     * Intended to be used only in this package.
+     * @hide
+     */
+    final class Utils {
+
+        /**
+         * @throws IllegalArgumentException if text is null; startIndex is negative;
+         *      endIndex is greater than text.length() or is not greater than startIndex;
+         *      options is null
+         */
+        static void validateInput(
+                @NonNull CharSequence text, int startIndex, int endIndex) {
+            Preconditions.checkArgument(text != null);
+            Preconditions.checkArgument(startIndex >= 0);
+            Preconditions.checkArgument(endIndex <= text.length());
+            Preconditions.checkArgument(endIndex > startIndex);
+        }
+
+        /**
+         * @throws IllegalArgumentException if text is null or options is null
+         */
+        static void validateInput(@NonNull CharSequence text) {
+            Preconditions.checkArgument(text != null);
+        }
     }
 }

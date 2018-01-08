@@ -28,10 +28,6 @@ cc_library_shared {
         "-Wunused",
         "-Wunreachable-code",
 
-        // necessary for Clang as the GL bindings need to turn
-        // off a GCC warning that Clang doesn't know.
-        "-Wno-unknown-pragmas",
-
         // TODO: Linear blending should be enabled by default, but we are
         // TODO: making it an opt-in while it's a work in progress
         //"-DANDROID_ENABLE_LINEAR_BLENDING",
@@ -46,7 +42,6 @@ cc_library_shared {
         "com_google_android_gles_jni_EGLImpl.cpp",
         "com_google_android_gles_jni_GLImpl.cpp", // TODO: .arm
         "android_app_Activity.cpp",
-        "android_app_ApplicationLoaders.cpp",
         "android_app_NativeActivity.cpp",
         "android_app_admin_SecurityLog.cpp",
         "android_opengl_EGL14.cpp",
@@ -89,9 +84,11 @@ cc_library_shared {
         "android_view_VelocityTracker.cpp",
         "android_text_AndroidCharacter.cpp",
         "android_text_Hyphenator.cpp",
+        "android_text_MeasuredText.cpp",
         "android_text_StaticLayout.cpp",
         "android_os_Debug.cpp",
         "android_os_GraphicsEnvironment.cpp",
+        "android_os_HidlSupport.cpp",
         "android_os_HwBinder.cpp",
         "android_os_HwBlob.cpp",
         "android_os_HwParcel.cpp",
@@ -110,7 +107,6 @@ cc_library_shared {
         "android_os_VintfRuntimeInfo.cpp",
         "android_net_LocalSocketImpl.cpp",
         "android_net_NetUtils.cpp",
-        "android_net_TrafficStats.cpp",
         "android_nio_utils.cpp",
         "android_util_AssetManager.cpp",
         "android_util_Binder.cpp",
@@ -126,6 +122,7 @@ cc_library_shared {
         "android_graphics_Picture.cpp",
         "android/graphics/Bitmap.cpp",
         "android/graphics/BitmapFactory.cpp",
+        "android/graphics/ByteBufferStreamAdaptor.cpp",
         "android/graphics/Camera.cpp",
         "android/graphics/CanvasProperty.cpp",
         "android/graphics/ColorFilter.cpp",
@@ -137,6 +134,7 @@ cc_library_shared {
         "android/graphics/GraphicBuffer.cpp",
         "android/graphics/Graphics.cpp",
         "android/graphics/HarfBuzzNGFaceSkia.cpp",
+        "android/graphics/ImageDecoder.cpp",
         "android/graphics/Interpolator.cpp",
         "android/graphics/MaskFilter.cpp",
         "android/graphics/Matrix.cpp",

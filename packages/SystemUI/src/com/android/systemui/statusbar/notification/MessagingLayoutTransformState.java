@@ -89,6 +89,7 @@ public class MessagingLayoutTransformState extends TransformState {
 
     private void transformViewInternal(MessagingLayoutTransformState mlt,
             float transformationAmount, boolean to) {
+        ensureVisible();
         ArrayList<MessagingGroup> ownGroups = filterHiddenGroups(
                 mMessagingLayout.getMessagingGroups());
         ArrayList<MessagingGroup> otherGroups = filterHiddenGroups(
@@ -332,6 +333,7 @@ public class MessagingLayoutTransformState extends TransformState {
 
     @Override
     public void setVisible(boolean visible, boolean force) {
+        super.setVisible(visible, force);
         resetTransformedView();
         ArrayList<MessagingGroup> ownGroups = mMessagingLayout.getMessagingGroups();
         for (int i = 0; i < ownGroups.size(); i++) {
@@ -381,6 +383,12 @@ public class MessagingLayoutTransformState extends TransformState {
                 ownGroup.getMessageContainer().setTranslationY(0);
             }
         }
+    }
+
+    @Override
+    public void prepareFadeIn() {
+        super.prepareFadeIn();
+        setVisible(true /* visible */, false /* force */);
     }
 
     private void resetTransformedView(View child) {

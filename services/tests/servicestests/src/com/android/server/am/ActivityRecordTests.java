@@ -21,17 +21,22 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.WindowManagerPolicy.NAV_BAR_BOTTOM;
-import static android.view.WindowManagerPolicy.NAV_BAR_LEFT;
-import static android.view.WindowManagerPolicy.NAV_BAR_RIGHT;
 import static com.android.server.am.ActivityStack.REMOVE_TASK_MODE_MOVING;
+import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_BOTTOM;
+import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_LEFT;
+import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_RIGHT;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.content.ComponentName;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.support.test.filters.MediumTest;
@@ -156,7 +161,8 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         record.canBeLaunchedOnDisplay(DEFAULT_DISPLAY);
 
-        assertEquals(((TestActivityStackSupervisor) mService.mStackSupervisor)
-                .getLastResizeableFromCanPlaceEntityOnDisplay(), expected);
+
+        verify(mService.mStackSupervisor, times(1)).canPlaceEntityOnDisplay(anyInt(), eq(expected), anyInt(), anyInt(),
+                eq(record.info));
     }
 }

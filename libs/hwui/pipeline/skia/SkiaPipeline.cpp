@@ -22,8 +22,6 @@
 #include <SkOverdrawColorFilter.h>
 #include <SkPicture.h>
 #include <SkPictureRecorder.h>
-#include <SkPixelSerializer.h>
-#include <SkStream.h>
 #include "VectorDrawable.h"
 #include "utils/TraceUtils.h"
 
@@ -161,14 +159,18 @@ void SkiaPipeline::renderLayersImpl(const LayerUpdateQueue& layers, bool opaque,
 
 bool SkiaPipeline::createOrUpdateLayer(RenderNode* node, const DamageAccumulator& damageAccumulator,
                                        bool wideColorGamut) {
+    // compute the size of the surface (i.e. texture) to be allocated for this layer
+    const int surfaceWidth = ceilf(node->getWidth() / float(LAYER_SIZE)) * LAYER_SIZE;
+    const int surfaceHeight = ceilf(node->getHeight() / float(LAYER_SIZE)) * LAYER_SIZE;
+
     SkSurface* layer = node->getLayerSurface();
-    if (!layer || layer->width() != node->getWidth() || layer->height() != node->getHeight()) {
+    if (!layer || layer->width() != surfaceWidth || layer->height() != surfaceHeight) {
         SkImageInfo info;
         if (wideColorGamut) {
-            info = SkImageInfo::Make(node->getWidth(), node->getHeight(), kRGBA_F16_SkColorType,
+            info = SkImageInfo::Make(surfaceWidth, surfaceHeight, kRGBA_F16_SkColorType,
                                      kPremul_SkAlphaType);
         } else {
-            info = SkImageInfo::MakeN32Premul(node->getWidth(), node->getHeight());
+            info = SkImageInfo::MakeN32Premul(surfaceWidth, surfaceHeight);
         }
         SkSurfaceProps props(0, kUnknown_SkPixelGeometry);
         SkASSERT(mRenderThread.getGrContext() != nullptr);
@@ -202,19 +204,6 @@ void SkiaPipeline::prepareToDraw(const RenderThread& thread, Bitmap* bitmap) {
         }
     }
 }
-
-// Encodes to PNG, unless there is already encoded data, in which case that gets
-// used.
-class PngPixelSerializer : public SkPixelSerializer {
-public:
-    bool onUseEncodedData(const void*, size_t) override { return true; }
-    SkData* onEncode(const SkPixmap& pixmap) override {
-        SkDynamicMemoryWStream buf;
-        return SkEncodeImage(&buf, pixmap, SkEncodedImageFormat::kPNG, 100)
-                       ? buf.detachAsData().release()
-                       : nullptr;
-    }
-};
 
 void SkiaPipeline::renderVectorDrawableCache() {
     if (!mVectorDrawables.empty()) {
@@ -292,9 +281,7 @@ void SkiaPipeline::endCapture(SkSurface* surface) {
         sk_sp<SkPicture> picture = mRecorder->finishRecordingAsPicture();
         surface->getCanvas()->drawPicture(picture);
         if (picture->approximateOpCount() > 0) {
-            SkDynamicMemoryWStream stream;
-            PngPixelSerializer serializer;
-            picture->serialize(&stream, &serializer);
+            auto data = picture->serialize();
 
             // offload saving to file in a different thread
             if (!mSavePictureProcessor.get()) {
@@ -303,10 +290,10 @@ void SkiaPipeline::endCapture(SkSurface* surface) {
                         taskManager->canRunTasks() ? taskManager : nullptr);
             }
             if (1 == mCaptureSequence) {
-                mSavePictureProcessor->savePicture(stream.detachAsData(), mCapturedFile);
+                mSavePictureProcessor->savePicture(data, mCapturedFile);
             } else {
                 mSavePictureProcessor->savePicture(
-                        stream.detachAsData(),
+                        data,
                         mCapturedFile + "_" + std::to_string(mCaptureSequence));
             }
             mCaptureSequence--;

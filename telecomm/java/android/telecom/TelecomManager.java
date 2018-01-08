@@ -582,13 +582,29 @@ public class TelecomManager {
             "android.telecom.extra.CALL_BACK_INTENT";
 
     /**
+     * The dialer activity responsible for placing emergency calls from, for example, a locked
+     * keyguard.
+     * @hide
+     */
+    public static final ComponentName EMERGENCY_DIALER_COMPONENT =
+            ComponentName.createRelative("com.android.phone", ".EmergencyDialer");
+
+    /**
+     * The boolean indicated by this extra controls whether or not a call is eligible to undergo
+     * assisted dialing. This extra is stored under {@link #EXTRA_OUTGOING_CALL_EXTRAS}.
+     * @hide
+     */
+    public static final String EXTRA_USE_ASSISTED_DIALING =
+            "android.telecom.extra.USE_ASSISTED_DIALING";
+
+    /**
      * The following 4 constants define how properties such as phone numbers and names are
      * displayed to the user.
      */
 
     /**
      * Indicates that the address or number of a call is allowed to be displayed for caller ID.
-    */
+     */
     public static final int PRESENTATION_ALLOWED = 1;
 
     /**
@@ -1346,7 +1362,7 @@ public class TelecomManager {
     /**
      * Returns whether TTY is supported on this device.
      */
-
+    @SystemApi
     @RequiresPermission(anyOf = {
             android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
             android.Manifest.permission.READ_PHONE_STATE
@@ -1750,6 +1766,41 @@ public class TelecomManager {
         return false;
     }
 
+    /**
+     * Called from the recipient side of a handover to indicate a desire to accept the handover
+     * of an ongoing call to another {@link ConnectionService} identified by
+     * {@link PhoneAccountHandle} destAcct. For managed {@link ConnectionService}s, the specified
+     * {@link PhoneAccountHandle} must have been registered with {@link #registerPhoneAccount} and
+     * the user must have enabled the corresponding {@link PhoneAccount}.  This can be checked using
+     * {@link #getPhoneAccount}. Self-managed {@link ConnectionService}s must have
+     * {@link android.Manifest.permission#MANAGE_OWN_CALLS} to handover a call to it.
+     * <p>
+     * Once invoked, this method will cause the system to bind to the {@link ConnectionService}
+     * associated with the {@link PhoneAccountHandle} destAcct and call
+     * (See {@link ConnectionService#onCreateIncomingHandoverConnection}).
+     * <p>
+     * For a managed {@link ConnectionService}, a {@link SecurityException} will be thrown if either
+     * the {@link PhoneAccountHandle} destAcct does not correspond to a registered
+     * {@link PhoneAccount} or the associated {@link PhoneAccount} is not currently enabled by the
+     * user.
+     * <p>
+     * For a self-managed {@link ConnectionService}, a {@link SecurityException} will be thrown if
+     * the calling app does not have {@link android.Manifest.permission#MANAGE_OWN_CALLS}.
+     *
+     * @param srcAddr The {@link android.net.Uri} of the ongoing call to handover to the caller’s
+     *                {@link ConnectionService}.
+     * @param videoState Video state after the handover.
+     * @param destAcct The {@link PhoneAccountHandle} registered to the calling package.
+     */
+    public void acceptHandover(Uri srcAddr, int videoState, PhoneAccountHandle destAcct) {
+        try {
+            if (isServiceConnected()) {
+                getTelecomService().acceptHandover(srcAddr, videoState, destAcct);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "RemoteException acceptHandover: " + e);
+        }
+    }
 
     private ITelecomService getTelecomService() {
         if (mTelecomServiceOverride != null) {

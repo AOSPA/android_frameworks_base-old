@@ -16,9 +16,12 @@
 
 #define LOG_TAG "incident_helper"
 
+#include "parsers/CpuFreqParser.h"
+#include "parsers/CpuInfoParser.h"
 #include "parsers/KernelWakesParser.h"
 #include "parsers/PageTypeInfoParser.h"
 #include "parsers/ProcrankParser.h"
+#include "parsers/SystemPropertiesParser.h"
 
 #include <android-base/file.h>
 #include <getopt.h>
@@ -48,12 +51,18 @@ static TextParserBase* selectParser(int section) {
             return new ReverseParser();
 /* ========================================================================= */
         // IDs larger than 1 are section ids reserved in incident.proto
+        case 1000:
+            return new SystemPropertiesParser();
         case 2000:
             return new ProcrankParser();
         case 2001:
             return new PageTypeInfoParser();
         case 2002:
             return new KernelWakesParser();
+        case 2003:
+            return new CpuInfoParser();
+        case 2004:
+            return new CpuFreqParser();
         default:
             return NULL;
     }

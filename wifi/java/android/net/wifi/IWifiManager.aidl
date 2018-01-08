@@ -21,6 +21,7 @@ import android.content.pm.ParceledListSlice;
 
 import android.net.wifi.hotspot2.OsuProvider;
 import android.net.wifi.hotspot2.PasspointConfiguration;
+import android.net.wifi.hotspot2.IProvisioningCallback;
 
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
@@ -102,7 +103,7 @@ interface IWifiManager
 
     int getWifiEnabledState();
 
-    void setCountryCode(String country, boolean persist);
+    void setCountryCode(String country);
 
     String getCountryCode();
 
@@ -163,12 +164,6 @@ interface IWifiManager
     void enableAggressiveHandover(int enabled);
     int getAggressiveHandover();
 
-    void setAllowScansWithTraffic(int enabled);
-    int getAllowScansWithTraffic();
-
-    boolean setEnableAutoJoinWhenAssociated(boolean enabled);
-    boolean getEnableAutoJoinWhenAssociated();
-
     void enableWifiConnectivityManager(boolean enabled);
 
     WifiConnectionStatistics getConnectionStatistics();
@@ -184,5 +179,7 @@ interface IWifiManager
     void restoreBackupData(in byte[] data);
 
     void restoreSupplicantBackupData(in byte[] supplicantData, in byte[] ipConfigData);
+
+    void startSubscriptionProvisioning(in OsuProvider provider, in IProvisioningCallback callback);
 }
 

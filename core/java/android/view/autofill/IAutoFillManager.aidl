@@ -21,6 +21,7 @@ import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.service.autofill.FillEventHistory;
+import android.service.autofill.UserData;
 import android.view.autofill.AutofillId;
 import android.view.autofill.AutofillValue;
 import android.view.autofill.IAutoFillManagerClient;
@@ -33,6 +34,7 @@ import android.view.autofill.IAutoFillManagerClient;
 interface IAutoFillManager {
     // Returns flags: FLAG_ADD_CLIENT_ENABLED | FLAG_ADD_CLIENT_DEBUG | FLAG_ADD_CLIENT_VERBOSE
     int addClient(in IAutoFillManagerClient client, int userId);
+    void removeClient(in IAutoFillManagerClient client, int userId);
     int startSession(IBinder activityToken, in IBinder appCallback, in AutofillId autoFillId,
             in Rect bounds, in AutofillValue value, int userId, boolean hasCallback, int flags,
             in ComponentName componentName);
@@ -52,4 +54,8 @@ interface IAutoFillManager {
     boolean isServiceSupported(int userId);
     boolean isServiceEnabled(int userId, String packageName);
     void onPendingSaveUi(int operation, IBinder token);
+    UserData getUserData();
+    void setUserData(in UserData userData);
+    boolean isFieldClassificationEnabled();
+    ComponentName getAutofillServiceComponentName();
 }

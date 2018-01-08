@@ -32,46 +32,55 @@ namespace statsd {
 
 class StatsLogProcessor : public ConfigListener {
 public:
-    StatsLogProcessor(const sp<UidMap>& uidMap,
-                      const std::function<void(const vector<uint8_t>&)>& pushLog);
+    StatsLogProcessor(const sp<UidMap>& uidMap, const sp<AnomalyMonitor>& anomalyMonitor,
+                      const std::function<void(const ConfigKey&)>& sendBroadcast);
     virtual ~StatsLogProcessor();
 
-    virtual void OnLogEvent(const LogEvent& event);
+    void OnLogEvent(const LogEvent& event);
 
     void OnConfigUpdated(const ConfigKey& key, const StatsdConfig& config);
     void OnConfigRemoved(const ConfigKey& key);
 
-    // TODO: Once we have the ProtoOutputStream in c++, we can just return byte array.
-    ConfigMetricsReport onDumpReport(const ConfigKey& key);
+    size_t GetMetricsSize(const ConfigKey& key) const;
 
-    /* Request a flush through a binder call. */
-    void flush();
+    void onDumpReport(const ConfigKey& key, vector<uint8_t>* outData);
+
+    /* Tells MetricsManager that the alarms in anomalySet have fired. Modifies anomalySet. */
+    void onAnomalyAlarmFired(
+            const uint64_t timestampNs,
+            unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>> anomalySet);
+
+    /* Flushes data to disk. Data on memory will be gone after written to disk. */
+    void WriteDataToDisk();
 
 private:
-    std::unordered_map<ConfigKey, std::unique_ptr<MetricsManager>> mMetricsManagers;
+    mutable mutex mBroadcastTimesMutex;
 
-    std::unordered_map<ConfigKey, long> mLastFlushTimes;
+    std::unordered_map<ConfigKey, sp<MetricsManager>> mMetricsManagers;
+
+    std::unordered_map<ConfigKey, long> mLastBroadcastTimes;
+
+    // Tracks when we last checked the bytes consumed for each config key.
+    std::unordered_map<ConfigKey, long> mLastByteSizeTimes;
 
     sp<UidMap> mUidMap;  // Reference to the UidMap to lookup app name and version for each uid.
 
-    /* Max *serialized* size of the logs kept in memory before flushing through binder call.
-       Proto lite does not implement the SpaceUsed() function which gives the in memory byte size.
-       So we cap memory usage by limiting the serialized size. Note that protobuf's in memory size
-       is higher than its serialized size.
-     */
-    static const size_t kMaxSerializedBytes = 16 * 1024;
+    sp<AnomalyMonitor> mAnomalyMonitor;
 
-    /* Check if the buffer size exceeds the max buffer size when the new entry is added, and flush
-       the logs to callback clients if true. */
-    void flushIfNecessary(uint64_t timestampNs,
-                          const ConfigKey& key,
-                          const unique_ptr<MetricsManager>& metricsManager);
+    /* Check if we should send a broadcast if approaching memory limits and if we're over, we
+     * actually delete the data. */
+    void flushIfNecessary(uint64_t timestampNs, const ConfigKey& key,
+                          MetricsManager& metricsManager);
 
-    std::function<void(const vector<uint8_t>&)> mPushLog;
+    // Function used to send a broadcast so that receiver for the config key can call getData
+    // to retrieve the stored data.
+    std::function<void(const ConfigKey& key)> mSendBroadcast;
 
-    /* Minimum period between two flushes in nanoseconds. Currently set to 10
-     * minutes. */
-    static const unsigned long long kMinFlushPeriod = 600 * NS_PER_SEC;
+    const long mTimeBaseSec;
+
+    FRIEND_TEST(StatsLogProcessorTest, TestRateLimitByteSize);
+    FRIEND_TEST(StatsLogProcessorTest, TestRateLimitBroadcast);
+    FRIEND_TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge);
 };
 
 }  // namespace statsd

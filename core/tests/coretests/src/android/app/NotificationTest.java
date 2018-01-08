@@ -19,12 +19,17 @@ package android.app;
 import static com.android.internal.util.NotificationColorUtil.satisfiesTextContrast;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.Icon;
 import android.media.session.MediaSession;
 import android.os.Parcel;
+import android.os.Parcelable;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -142,6 +147,36 @@ public class NotificationTest {
     }
 
     @Test
+    public void largeIconMultipleReferences_keptAfterParcelling() {
+        Icon originalIcon = Icon.createWithBitmap(BitmapFactory.decodeResource(
+                mContext.getResources(), com.android.frameworks.coretests.R.drawable.test128x96));
+
+        Notification n = new Notification.Builder(mContext).setLargeIcon(originalIcon).build();
+        assertSame(n.getLargeIcon(), originalIcon);
+
+        Notification q = writeAndReadParcelable(n);
+        assertNotSame(q.getLargeIcon(), n.getLargeIcon());
+
+        assertTrue(q.getLargeIcon().getBitmap().sameAs(n.getLargeIcon().getBitmap()));
+        assertSame(q.getLargeIcon(), q.extras.getParcelable(Notification.EXTRA_LARGE_ICON));
+    }
+
+    @Test
+    public void largeIconReferenceInExtrasOnly_keptAfterParcelling() {
+        Icon originalIcon = Icon.createWithBitmap(BitmapFactory.decodeResource(
+                mContext.getResources(), com.android.frameworks.coretests.R.drawable.test128x96));
+
+        Notification n = new Notification.Builder(mContext).build();
+        n.extras.putParcelable(Notification.EXTRA_LARGE_ICON, originalIcon);
+        assertSame(n.getLargeIcon(), null);
+
+        Notification q = writeAndReadParcelable(n);
+        assertSame(q.getLargeIcon(), null);
+        assertTrue(((Icon) q.extras.getParcelable(Notification.EXTRA_LARGE_ICON)).getBitmap()
+                .sameAs(originalIcon.getBitmap()));
+    }
+
+    @Test
     public void allPendingIntents_recollectedAfterReusingBuilder() {
         PendingIntent intent1 = PendingIntent.getActivity(mContext, 0, new Intent("test1"), 0);
         PendingIntent intent2 = PendingIntent.getActivity(mContext, 0, new Intent("test2"), 0);
@@ -179,6 +214,20 @@ public class NotificationTest {
         assertTrue(n.allPendingIntents.contains(intent));
     }
 
+    @Test
+    public void testMessagingStyle_isGroupConversation() {
+        Notification.MessagingStyle messagingStyle = new Notification.MessagingStyle("self name")
+                .setGroupConversation(true);
+        Notification notification = new Notification.Builder(mContext, "test id")
+                .setSmallIcon(1)
+                .setContentTitle("test title")
+                .setStyle(messagingStyle)
+                .build();
+
+        assertTrue(messagingStyle.isGroupConversation());
+        assertTrue(notification.extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION));
+    }
+
     private Notification.Builder getMediaNotification() {
         MediaSession session = new MediaSession(mContext, "test");
         return new Notification.Builder(mContext, "color")
@@ -186,5 +235,16 @@ public class NotificationTest {
                 .setContentTitle("Title")
                 .setContentText("Text")
                 .setStyle(new Notification.MediaStyle().setMediaSession(session.getSessionToken()));
+    }
+
+    /**
+      * Writes an arbitrary {@link Parcelable} into a {@link Parcel} using its writeToParcel
+      * method before reading it out again to check that it was sent properly.
+      */
+    private static <T extends Parcelable> T writeAndReadParcelable(T original) {
+        Parcel p = Parcel.obtain();
+        p.writeParcelable(original, /* flags */ 0);
+        p.setDataPosition(0);
+        return p.readParcelable(/* classLoader */ null);
     }
 }

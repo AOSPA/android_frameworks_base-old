@@ -19,8 +19,7 @@ package android.content.pm;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
-import android.content.IntentFilter;
-import android.net.Uri;
+import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -44,10 +43,18 @@ public final class InstantAppResolveInfo implements Parcelable {
     /** The filters used to match domain */
     private final List<InstantAppIntentFilter> mFilters;
     /** The version code of the app that this class resolves to */
-    private final int mVersionCode;
+    private final long mVersionCode;
+    /** Data about the app that should be passed along to the Instant App installer on resolve */
+    private final Bundle mExtras;
 
     public InstantAppResolveInfo(@NonNull InstantAppDigest digest, @Nullable String packageName,
             @Nullable List<InstantAppIntentFilter> filters, int versionCode) {
+        this(digest, packageName, filters, (long) versionCode, null /* extras */);
+    }
+
+    public InstantAppResolveInfo(@NonNull InstantAppDigest digest, @Nullable String packageName,
+            @Nullable List<InstantAppIntentFilter> filters, long versionCode,
+            @Nullable Bundle extras) {
         // validate arguments
         if ((packageName == null && (filters != null && filters.size() != 0))
                 || (packageName != null && (filters == null || filters.size() == 0))) {
@@ -62,11 +69,13 @@ public final class InstantAppResolveInfo implements Parcelable {
         }
         mPackageName = packageName;
         mVersionCode = versionCode;
+        mExtras = extras;
     }
 
     public InstantAppResolveInfo(@NonNull String hostName, @Nullable String packageName,
             @Nullable List<InstantAppIntentFilter> filters) {
-        this(new InstantAppDigest(hostName), packageName, filters, -1 /*versionCode*/);
+        this(new InstantAppDigest(hostName), packageName, filters, -1 /*versionCode*/,
+                null /* extras */);
     }
 
     InstantAppResolveInfo(Parcel in) {
@@ -74,7 +83,8 @@ public final class InstantAppResolveInfo implements Parcelable {
         mPackageName = in.readString();
         mFilters = new ArrayList<InstantAppIntentFilter>();
         in.readList(mFilters, null /*loader*/);
-        mVersionCode = in.readInt();
+        mVersionCode = in.readLong();
+        mExtras = in.readBundle();
     }
 
     public byte[] getDigestBytes() {
@@ -93,8 +103,21 @@ public final class InstantAppResolveInfo implements Parcelable {
         return mFilters;
     }
 
+    /**
+     * @deprecated Use {@link #getLongVersionCode} instead.
+     */
+    @Deprecated
     public int getVersionCode() {
+        return (int) (mVersionCode & 0xffffffff);
+    }
+
+    public long getLongVersionCode() {
         return mVersionCode;
+    }
+
+    @Nullable
+    public Bundle getExtras() {
+        return mExtras;
     }
 
     @Override
@@ -107,7 +130,8 @@ public final class InstantAppResolveInfo implements Parcelable {
         out.writeParcelable(mDigest, flags);
         out.writeString(mPackageName);
         out.writeList(mFilters);
-        out.writeInt(mVersionCode);
+        out.writeLong(mVersionCode);
+        out.writeBundle(mExtras);
     }
 
     public static final Parcelable.Creator<InstantAppResolveInfo> CREATOR

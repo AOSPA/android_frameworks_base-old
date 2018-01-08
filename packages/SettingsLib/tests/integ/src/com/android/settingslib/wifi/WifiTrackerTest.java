@@ -723,9 +723,9 @@ public class WifiTrackerTest {
         CountDownLatch latch = new CountDownLatch(1);
 
         // Once the new info has been fetched, we need to wait for the access points to be copied
+        mAccessPointsChangedLatch = new CountDownLatch(1);
         doAnswer(invocation -> {
                     latch.countDown();
-                    mAccessPointsChangedLatch = new CountDownLatch(1);
                     return info;
                 }).when(mockWifiManager).getConnectionInfo();
 
@@ -767,10 +767,12 @@ public class WifiTrackerTest {
         WifiTracker tracker = createMockedWifiTracker();
         startTracking(tracker);
 
+        CountDownLatch ready = new CountDownLatch(1);
         CountDownLatch latch = new CountDownLatch(1);
         CountDownLatch lock = new CountDownLatch(1);
         tracker.mMainHandler.post(() -> {
             try {
+                ready.countDown();
                 lock.await();
                 latch.countDown();
             } catch (InterruptedException e) {
@@ -786,6 +788,9 @@ public class WifiTrackerTest {
         tracker.mMainHandler.sendEmptyMessage(
                 WifiTracker.MainHandler.MSG_WIFI_STATE_CHANGED);
 
+        try {
+            ready.await(); // Make sure we have entered the first message handler
+        } catch (InterruptedException e) {}
         tracker.onStop();
 
         verify(mockWifiListener, atMost(1)).onAccessPointsChanged();

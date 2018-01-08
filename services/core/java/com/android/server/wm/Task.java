@@ -22,7 +22,6 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_PORTRA
 import static android.content.pm.ActivityInfo.RESIZE_MODE_FORCE_RESIZABLE_PRESERVE_ORIENTATION;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.res.Configuration.EMPTY;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 
 import static com.android.server.EventLogTags.WM_TASK_REMOVED;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
@@ -43,7 +42,6 @@ import android.graphics.Rect;
 import android.util.EventLog;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
-import android.view.DisplayInfo;
 import android.view.Surface;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -51,24 +49,15 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.PrintWriter;
 import java.util.function.Consumer;
 
-class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerUser {
+class Task extends WindowContainer<AppWindowToken> {
     static final String TAG = TAG_WITH_CLASS_NAME ? "Task" : TAG_WM;
-    // Return value from {@link setBounds} indicating no change was made to the Task bounds.
-    private static final int BOUNDS_CHANGE_NONE = 0;
-    // Return value from {@link setBounds} indicating the position of the Task bounds changed.
-    private static final int BOUNDS_CHANGE_POSITION = 1;
-    // Return value from {@link setBounds} indicating the size of the Task bounds changed.
-    private static final int BOUNDS_CHANGE_SIZE = 1 << 1;
 
     // TODO: Track parent marks like this in WindowContainer.
     TaskStack mStack;
     final int mTaskId;
     final int mUserId;
     private boolean mDeferRemoval = false;
-    final WindowManagerService mService;
 
-    // Content limits relative to the DisplayContent this sits in.
-    private Rect mBounds = new Rect();
     final Rect mPreparedFrozenBounds = new Rect();
     final Configuration mPreparedFrozenMergedConfig = new Configuration();
 
@@ -78,13 +67,12 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     // Device rotation as of the last time {@link #mBounds} was set.
     private int mRotation;
 
-    // Whether mBounds is fullscreen
-    private boolean mFillsParent = true;
-
     // For comparison with DisplayContent bounds.
     private Rect mTmpRect = new Rect();
     // For handling display rotations.
     private Rect mTmpRect2 = new Rect();
+    // For retrieving dim bounds
+    private Rect mTmpRect3 = new Rect();
 
     // Resize mode of the task. See {@link ActivityInfo#resizeMode}
     private int mResizeMode;
@@ -105,17 +93,20 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     // stack moves and we in fact do so when moving from full screen to pinned.
     private boolean mPreserveNonFloatingState = false;
 
-    Task(int taskId, TaskStack stack, int userId, WindowManagerService service, Rect bounds,
-            int resizeMode, boolean supportsPictureInPicture, TaskDescription taskDescription,
+    private Dimmer mDimmer = new Dimmer(this);
+    private final Rect mTmpDimBoundsRect = new Rect();
+
+    Task(int taskId, TaskStack stack, int userId, WindowManagerService service, int resizeMode,
+            boolean supportsPictureInPicture, TaskDescription taskDescription,
             TaskWindowContainerController controller) {
+        super(service);
         mTaskId = taskId;
         mStack = stack;
         mUserId = userId;
-        mService = service;
         mResizeMode = resizeMode;
         mSupportsPictureInPicture = supportsPictureInPicture;
         setController(controller);
-        setBounds(bounds, getOverrideConfiguration());
+        setBounds(getOverrideBounds());
         mTaskDescription = taskDescription;
 
         // Tasks have no set orientation value (including SCREEN_ORIENTATION_UNSPECIFIED).
@@ -169,7 +160,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     boolean shouldDeferRemoval() {
         // TODO: This should probably return false if mChildren.isEmpty() regardless if the stack
         // is animating...
-        return hasWindowsAlive() && mStack.isAnimating();
+        return hasWindowsAlive() && mStack.isSelfOrChildAnimating();
     }
 
     @Override
@@ -187,12 +178,6 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         if (DEBUG_STACK) Slog.i(TAG, "removeTask: removing taskId=" + mTaskId);
         EventLog.writeEvent(WM_TASK_REMOVED, mTaskId, "removeTask");
         mDeferRemoval = false;
-
-        // Make sure to remove dim layer user first before removing task its from parent.
-        DisplayContent content = getDisplayContent();
-        if (content != null) {
-            content.mDimLayerController.removeDimLayerUser(this);
-        }
 
         super.removeImmediately();
     }
@@ -230,13 +215,14 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     }
 
     /** @see com.android.server.am.ActivityManagerService#positionTaskInStack(int, int, int). */
-    void positionAt(int position, Rect bounds, Configuration overrideConfig) {
+    void positionAt(int position) {
         mStack.positionChildAt(position, this, false /* includingParents */);
-        resizeLocked(bounds, overrideConfig, false /* force */);
     }
 
     @Override
     void onParentSet() {
+        super.onParentSet();
+
         // Update task bounds if needed.
         updateDisplayInfo(getDisplayContent());
 
@@ -272,50 +258,37 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         }
     }
 
-    /** Set the task bounds. Passing in null sets the bounds to fullscreen. */
-    // TODO: There is probably not a need to pass in overrideConfig anymore since any change to it
-    // will be automatically propagated from the AM. Also, mBound is going to be in
-    // WindowConfiguration long term.
-    private int setBounds(Rect bounds, Configuration overrideConfig) {
-        if (overrideConfig == null) {
-            overrideConfig = EMPTY;
+    public int setBounds(Rect bounds, boolean forceResize) {
+        final int boundsChanged = setBounds(bounds);
+
+        if (forceResize && (boundsChanged & BOUNDS_CHANGE_SIZE) != BOUNDS_CHANGE_SIZE) {
+            onResize();
+            return BOUNDS_CHANGE_SIZE | boundsChanged;
         }
 
-        boolean oldFullscreen = mFillsParent;
+        return boundsChanged;
+    }
+
+    /** Set the task bounds. Passing in null sets the bounds to fullscreen. */
+    @Override
+    public int setBounds(Rect bounds) {
         int rotation = Surface.ROTATION_0;
         final DisplayContent displayContent = mStack.getDisplayContent();
         if (displayContent != null) {
-            displayContent.getLogicalDisplayRect(mTmpRect);
             rotation = displayContent.getDisplayInfo().rotation;
-            mFillsParent = bounds == null;
-            if (mFillsParent) {
-                bounds = mTmpRect;
-            }
-        }
-
-        if (bounds == null) {
+        } else if (bounds == null) {
             // Can't set to fullscreen if we don't have a display to get bounds from...
             return BOUNDS_CHANGE_NONE;
         }
-        if (mBounds.equals(bounds) && oldFullscreen == mFillsParent && mRotation == rotation) {
+
+        if (equivalentOverrideBounds(bounds)) {
             return BOUNDS_CHANGE_NONE;
         }
 
-        int boundsChange = BOUNDS_CHANGE_NONE;
-        if (mBounds.left != bounds.left || mBounds.top != bounds.top) {
-            boundsChange |= BOUNDS_CHANGE_POSITION;
-        }
-        if (mBounds.width() != bounds.width() || mBounds.height() != bounds.height()) {
-            boundsChange |= BOUNDS_CHANGE_SIZE;
-        }
-
-        mBounds.set(bounds);
+        final int boundsChange = super.setBounds(bounds);
 
         mRotation = rotation;
-        if (displayContent != null) {
-            displayContent.mDimLayerController.updateDimLayer(this);
-        }
-        onOverrideConfigurationChanged(overrideConfig);
+
         return boundsChange;
     }
 
@@ -363,28 +336,12 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         return isResizeable();
     }
 
-    boolean resizeLocked(Rect bounds, Configuration overrideConfig, boolean forced) {
-        int boundsChanged = setBounds(bounds, overrideConfig);
-        if (forced) {
-            boundsChanged |= BOUNDS_CHANGE_SIZE;
-        }
-        if (boundsChanged == BOUNDS_CHANGE_NONE) {
-            return false;
-        }
-        if ((boundsChanged & BOUNDS_CHANGE_SIZE) == BOUNDS_CHANGE_SIZE) {
-            onResize();
-        } else {
-            onMovedByResize();
-        }
-        return true;
-    }
-
     /**
      * Prepares the task bounds to be frozen with the current size. See
      * {@link AppWindowToken#freezeBounds}.
      */
     void prepareFreezingBounds() {
-        mPreparedFrozenBounds.set(mBounds);
+        mPreparedFrozenBounds.set(getBounds());
         mPreparedFrozenMergedConfig.setTo(getConfiguration());
     }
 
@@ -410,30 +367,30 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
             mTmpRect2.offsetTo(adjustedBounds.left, adjustedBounds.top);
         }
         setTempInsetBounds(tempInsetBounds);
-        resizeLocked(mTmpRect2, getOverrideConfiguration(), false /* forced */);
+        setBounds(mTmpRect2, false /* forced */);
     }
 
     /** Return true if the current bound can get outputted to the rest of the system as-is. */
     private boolean useCurrentBounds() {
         final DisplayContent displayContent = getDisplayContent();
-        return mFillsParent
+        return matchParentBounds()
                 || !inSplitScreenSecondaryWindowingMode()
                 || displayContent == null
                 || displayContent.getSplitScreenPrimaryStackIgnoringVisibility() != null;
     }
 
-    /** Original bounds of the task if applicable, otherwise fullscreen rect. */
-    void getBounds(Rect out) {
+    @Override
+    public void getBounds(Rect out) {
         if (useCurrentBounds()) {
             // No need to adjust the output bounds if fullscreen or the docked stack is visible
             // since it is already what we want to represent to the rest of the system.
-            out.set(mBounds);
+            super.getBounds(out);
             return;
         }
 
         // The bounds has been adjusted to accommodate for a docked stack, but the docked stack is
         // not currently visible. Go ahead a represent it as fullscreen to the rest of the system.
-        mStack.getDisplayContent().getLogicalDisplayRect(out);
+        mStack.getDisplayContent().getBounds(out);
     }
 
     /**
@@ -482,7 +439,6 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     }
 
     /** Bounds of the task to be used for dimming, as well as touch related tests. */
-    @Override
     public void getDimBounds(Rect out) {
         final DisplayContent displayContent = mStack.getDisplayContent();
         // It doesn't matter if we in particular are part of the resize, since we couldn't have
@@ -494,7 +450,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
                 return;
             }
 
-            if (!mFillsParent) {
+            if (!matchParentBounds()) {
                 // When minimizing the docked stack when going home, we don't adjust the task bounds
                 // so we need to intersect the task bounds with the stack bounds here.
                 //
@@ -505,11 +461,11 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
                     mStack.getBounds(out);
                 } else {
                     mStack.getBounds(mTmpRect);
-                    mTmpRect.intersect(mBounds);
+                    mTmpRect.intersect(getBounds());
                 }
                 out.set(mTmpRect);
             } else {
-                out.set(mBounds);
+                out.set(getBounds());
             }
             return;
         }
@@ -517,7 +473,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         // The bounds has been adjusted to accommodate for a docked stack, but the docked stack is
         // not currently visible. Go ahead a represent it as fullscreen to the rest of the system.
         if (displayContent != null) {
-            displayContent.getLogicalDisplayRect(out);
+            displayContent.getBounds(out);
         }
     }
 
@@ -545,10 +501,10 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         if (displayContent == null) {
             return;
         }
-        if (mFillsParent) {
+        if (matchParentBounds()) {
             // TODO: Yeah...not sure if this works with WindowConfiguration, but shouldn't be a
             // problem once we move mBounds into WindowConfiguration.
-            setBounds(null, getOverrideConfiguration());
+            setBounds(null);
             return;
         }
         final int newRotation = displayContent.getDisplayInfo().rotation;
@@ -561,18 +517,18 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         //   task bounds so it stays in the same place.
         // - Rotate the bounds and notify activity manager if the task can be resized independently
         //   from its stack. The stack will take care of task rotation for the other case.
-        mTmpRect2.set(mBounds);
+        mTmpRect2.set(getBounds());
 
         if (!getWindowConfiguration().canResizeTask()) {
-            setBounds(mTmpRect2, getOverrideConfiguration());
+            setBounds(mTmpRect2);
             return;
         }
 
         displayContent.rotateBounds(mRotation, newRotation, mTmpRect2);
-        if (setBounds(mTmpRect2, getOverrideConfiguration()) != BOUNDS_CHANGE_NONE) {
+        if (setBounds(mTmpRect2) != BOUNDS_CHANGE_NONE) {
             final TaskWindowContainerController controller = getController();
             if (controller != null) {
-                controller.requestResize(mBounds, RESIZE_MODE_SYSTEM_SCREEN_ROTATION);
+                controller.requestResize(getBounds(), RESIZE_MODE_SYSTEM_SCREEN_ROTATION);
             }
         }
     }
@@ -580,14 +536,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
     /** Cancels any running app transitions associated with the task. */
     void cancelTaskWindowTransition() {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
-            mChildren.get(i).mAppAnimator.clearAnimation();
-        }
-    }
-
-    /** Cancels any running thumbnail transitions associated with the task. */
-    void cancelTaskThumbnailTransition() {
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            mChildren.get(i).mAppAnimator.clearThumbnail();
+            mChildren.get(i).cancelAnimation();
         }
     }
 
@@ -634,41 +583,14 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         return null;
     }
 
-    @Override
-    public boolean dimFullscreen() {
-        return isFullscreen();
-    }
-
-    @Override
-    public int getLayerForDim(WindowStateAnimator animator, int layerOffset, int defaultLayer) {
-        // If the dim layer is for a starting window, move the dim layer back in the z-order behind
-        // the lowest activity window to ensure it does not occlude the main window if it is
-        // translucent
-        final AppWindowToken appToken = animator.mWin.mAppToken;
-        if (animator.mAttrType == TYPE_APPLICATION_STARTING && hasChild(appToken) ) {
-            return Math.min(defaultLayer, appToken.getLowestAnimLayer() - layerOffset);
-        }
-        return defaultLayer;
-    }
-
     boolean isFullscreen() {
         if (useCurrentBounds()) {
-            return mFillsParent;
+            return matchParentBounds();
         }
         // The bounds has been adjusted to accommodate for a docked stack, but the docked stack
         // is not currently visible. Go ahead a represent it as fullscreen to the rest of the
         // system.
         return true;
-    }
-
-    @Override
-    public DisplayInfo getDisplayInfo() {
-        return getDisplayContent().getDisplayInfo();
-    }
-
-    @Override
-    public boolean isAttachedToDisplay() {
-        return getDisplayContent() != null;
     }
 
     void forceWindowsScaleable(boolean force) {
@@ -692,7 +614,7 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
 
     @Override
     boolean fillsParent() {
-        return mFillsParent || !getWindowConfiguration().canResizeTask();
+        return matchParentBounds() || !getWindowConfiguration().canResizeTask();
     }
 
     @Override
@@ -718,9 +640,21 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         mPreserveNonFloatingState = false;
     }
 
+    Dimmer getDimmer() {
+        return mDimmer;
+    }
+
     @Override
-    public String toShortString() {
-        return "Task=" + mTaskId;
+    void prepareSurfaces() {
+        mDimmer.resetDimStates();
+        super.prepareSurfaces();
+        getDimBounds(mTmpDimBoundsRect);
+
+        // Bounds need to be relative, as the dim layer is a child.
+        mTmpDimBoundsRect.offsetTo(0, 0);
+        if (mDimmer.updateDims(getPendingTransaction(), mTmpDimBoundsRect)) {
+            scheduleAnimation();
+        }
     }
 
     @CallSuper
@@ -733,18 +667,19 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
             final AppWindowToken appWindowToken = mChildren.get(i);
             appWindowToken.writeToProto(proto, APP_WINDOW_TOKENS, trim);
         }
-        proto.write(FILLS_PARENT, mFillsParent);
-        mBounds.writeToProto(proto, BOUNDS);
+        proto.write(FILLS_PARENT, matchParentBounds());
+        getBounds().writeToProto(proto, BOUNDS);
         mTempInsetBounds.writeToProto(proto, TEMP_INSET_BOUNDS);
         proto.end(token);
     }
 
-    public void dump(String prefix, PrintWriter pw) {
+    @Override
+    public void dump(PrintWriter pw, String prefix, boolean dumpAll) {
+        super.dump(pw, prefix, dumpAll);
         final String doublePrefix = prefix + "  ";
 
         pw.println(prefix + "taskId=" + mTaskId);
-        pw.println(doublePrefix + "mFillsParent=" + mFillsParent);
-        pw.println(doublePrefix + "mBounds=" + mBounds.toShortString());
+        pw.println(doublePrefix + "mBounds=" + getBounds().toShortString());
         pw.println(doublePrefix + "mdr=" + mDeferRemoval);
         pw.println(doublePrefix + "appTokens=" + mChildren);
         pw.println(doublePrefix + "mTempInsetBounds=" + mTempInsetBounds.toShortString());
@@ -754,7 +689,11 @@ class Task extends WindowContainer<AppWindowToken> implements DimLayer.DimLayerU
         for (int i = mChildren.size() - 1; i >= 0; i--) {
             final AppWindowToken wtoken = mChildren.get(i);
             pw.println(triplePrefix + "Activity #" + i + " " + wtoken);
-            wtoken.dump(pw, triplePrefix);
+            wtoken.dump(pw, triplePrefix, dumpAll);
         }
+    }
+
+    String toShortString() {
+        return "Task=" + mTaskId;
     }
 }

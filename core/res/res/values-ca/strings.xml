@@ -79,7 +79,7 @@
     <string name="RestrictedOnAllVoiceTitle" msgid="158800171499150681">"Sense servei de veu/emergència"</string>
     <string name="RestrictedStateContent" msgid="4278821484643362350">"La xarxa mòbil de la teva ubicació temporalment no ofereix aquest servei"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"No es pot accedir a la xarxa"</string>
-    <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"Per millorar la recepció, prova de canviar el tipus de xarxa a Configuració &gt; Xarxa i Internet &gt; Xarxes mòbils &gt; Tipus de xarxa preferit."</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7056776609127756440">"Per millorar la recepció, prova de canviar el tipus de xarxa a Configuració &gt; Xarxa i Internet &gt; Xarxes mòbils &gt; Tipus de xarxa preferit."</string>
     <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"La funció Trucades per Wi Fi està activada"</string>
     <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"Per poder fer trucades d\'emergència, cal tenir connexió a una xarxa mòbil."</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"Alertes"</string>
@@ -212,6 +212,7 @@
     <string name="global_action_power_off" msgid="4471879440839879722">"Apaga"</string>
     <string name="global_action_emergency" msgid="7112311161137421166">"Emergències"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"Informe d\'error"</string>
+    <string name="global_action_logout" msgid="935179188218826050">"Finalitza la sessió"</string>
     <string name="bugreport_title" msgid="2667494803742548533">"Crea informe d\'errors"</string>
     <string name="bugreport_message" msgid="398447048750350456">"Es recopilarà informació sobre l\'estat actual del dispositiu i se t\'enviarà per correu electrònic. Passaran uns quants minuts des de l\'inici de l\'informe d\'errors fins al seu enviament, per la qual cosa et recomanem que tinguis paciència."</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"Informe interactiu"</string>
@@ -838,8 +839,8 @@
     <string name="permdesc_setAlarm" msgid="316392039157473848">"Permet que l\'aplicació defineixi una alarma en una aplicació de despertador instal·lada. És possible que algunes aplicacions de despertador no incorporin aquesta funció."</string>
     <string name="permlab_addVoicemail" msgid="5525660026090959044">"afegeix bústia de veu"</string>
     <string name="permdesc_addVoicemail" msgid="6604508651428252437">"Permet que l\'aplicació afegeixi missatges a la safata d\'entrada de la bústia de veu."</string>
-    <string name="permlab_writeGeolocationPermissions" msgid="5962224158955273932">"Modifica els permisos d\'ubicació geogràfica del navegador"</string>
-    <string name="permdesc_writeGeolocationPermissions" msgid="1083743234522638747">"Permet que l\'aplicació modifiqui els permisos d\'ubicació geogràfica del navegador. Les aplicacions malicioses poden utilitzar-ho per enviar la informació d\'ubicació a llocs web arbitraris."</string>
+    <string name="permlab_writeGeolocationPermissions" msgid="5962224158955273932">"Modifica els permisos d\'ubicació del navegador"</string>
+    <string name="permdesc_writeGeolocationPermissions" msgid="1083743234522638747">"Permet que l\'aplicació modifiqui els permisos d\'ubicació del navegador. Les aplicacions malicioses poden utilitzar-ho per enviar la informació d\'ubicació a llocs web arbitraris."</string>
     <string name="save_password_message" msgid="767344687139195790">"Voleu que el navegador recordi aquesta contrasenya?"</string>
     <string name="save_password_notnow" msgid="6389675316706699758">"Ara no"</string>
     <string name="save_password_remember" msgid="6491879678996749466">"Recorda-ho"</string>
@@ -1051,6 +1052,9 @@
     <string name="screen_compat_mode_hint" msgid="1064524084543304459">"Torna a activar-ho a Configuració del sistema &gt; Aplicacions &gt; Baixades."</string>
     <string name="unsupported_display_size_message" msgid="6545327290756295232">"<xliff:g id="APP_NAME">%1$s</xliff:g> no admet la mida de pantalla actual i és possible que funcioni de manera inesperada."</string>
     <string name="unsupported_display_size_show" msgid="7969129195360353041">"Mostra sempre"</string>
+    <string name="unsupported_compile_sdk_message" msgid="4253168368781441759">"<xliff:g id="APP_NAME">%1$s</xliff:g> es va crear per a una versió incompatible del sistema operatiu Android i pot funcionar de manera inesperada. És possible que hi hagi disponible una versió actualitzada de l\'aplicació."</string>
+    <string name="unsupported_compile_sdk_show" msgid="2681877855260970231">"Mostra sempre"</string>
+    <string name="unsupported_compile_sdk_check_update" msgid="3312723623323216101">"Cerca actualitzacions"</string>
     <string name="smv_application" msgid="3307209192155442829">"L\'aplicació <xliff:g id="APPLICATION">%1$s</xliff:g>(procés <xliff:g id="PROCESS">%2$s</xliff:g>) ha incomplert la seva política autoimposada de mode estricte."</string>
     <string name="smv_process" msgid="5120397012047462446">"El procés <xliff:g id="PROCESS">%1$s</xliff:g> ha incomplert la seva política de mode estricte."</string>
     <string name="android_upgrading_title" msgid="1584192285441405746">"Android s\'està actualitzant..."</string>
@@ -1116,10 +1120,10 @@
     <string name="network_available_sign_in" msgid="1848877297365446605">"Inicia la sessió a la xarxa"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
     <skip />
-    <string name="wifi_no_internet" msgid="8451173622563841546">"La Wi-Fi no té accés a Internet"</string>
+    <string name="wifi_no_internet" msgid="8938267198124654938">"La Wi-Fi no té accés a Internet"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"Toca per veure les opcions"</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"Actualment en ús: <xliff:g id="NETWORK_TYPE">%1$s</xliff:g>"</string>
-    <string name="network_switch_metered_detail" msgid="5325661434777870353">"El dispositiu utilitza <xliff:g id="NEW_NETWORK">%1$s</xliff:g> en cas que <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> no tingui accés a Internet. És possible que s\'hi apliquin càrrecs."</string>
+    <string name="network_switch_metered_detail" msgid="775163331794506615">"El dispositiu utilitza <xliff:g id="NEW_NETWORK">%1$s</xliff:g> en cas que <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> no tingui accés a Internet. És possible que s\'hi apliquin càrrecs."</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"Abans es feia servir la xarxa <xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g>; ara s\'utilitza <xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
   <string-array name="network_switch_type_name">
     <item msgid="3979506840912951943">"dades mòbils"</item>
@@ -1130,7 +1134,7 @@
   </string-array>
     <string name="network_switch_type_name_unknown" msgid="4552612897806660656">"una tipus de xarxa desconegut"</string>
     <string name="wifi_watchdog_network_disabled" msgid="7904214231651546347">"No s\'ha pogut connectar a la Wi-Fi"</string>
-    <string name="wifi_watchdog_network_disabled_detailed" msgid="5548780776418332675">" té una mala connexió a Internet."</string>
+    <string name="wifi_watchdog_network_disabled_detailed" msgid="4917472096696322767">" té una mala connexió a Internet."</string>
     <string name="wifi_connect_alert_title" msgid="8455846016001810172">"Vols permetre la connexió?"</string>
     <string name="wifi_connect_alert_message" msgid="6451273376815958922">"L\'aplicació %1$s vol connectar-se a la xarxa Wi-Fi %2$s"</string>
     <string name="wifi_connect_default_application" msgid="7143109390475484319">"Una aplicació"</string>
@@ -1203,7 +1207,7 @@
     <string name="share_remote_bugreport_action" msgid="6249476773913384948">"COMPARTEIX"</string>
     <string name="decline_remote_bugreport_action" msgid="6230987241608770062">"REBUTJA"</string>
     <string name="select_input_method" msgid="8547250819326693584">"Canvia el teclat"</string>
-    <string name="show_ime" msgid="2506087537466597099">"Mantén-lo a la pantalla mentre el teclat físic està actiu"</string>
+    <string name="show_ime" msgid="2506087537466597099">"Mantén-lo en pantalla mentre el teclat físic està actiu"</string>
     <string name="hardware" msgid="194658061510127999">"Mostra el teclat virtual"</string>
     <string name="select_keyboard_layout_notification_title" msgid="597189518763083494">"Configura el teclat físic"</string>
     <string name="select_keyboard_layout_notification_message" msgid="8084622969903004900">"Toca per seleccionar l\'idioma i el disseny"</string>
@@ -1289,7 +1293,7 @@
     <string name="wallpaper_binding_label" msgid="1240087844304687662">"Fons de pantalla"</string>
     <string name="chooser_wallpaper" msgid="7873476199295190279">"Canvia el fons de pantalla"</string>
     <string name="notification_listener_binding_label" msgid="2014162835481906429">"Oient de notificacions"</string>
-    <string name="vr_listener_binding_label" msgid="4316591939343607306">"Processador d\'RV"</string>
+    <string name="vr_listener_binding_label" msgid="4316591939343607306">"Processador de RV"</string>
     <string name="condition_provider_service_binding_label" msgid="1321343352906524564">"Proveïdor de condicions"</string>
     <string name="notification_ranker_binding_label" msgid="774540592299064747">"Servei de classificació de notificacions"</string>
     <string name="vpn_title" msgid="19615213552042827">"VPN activada"</string>
@@ -1495,6 +1499,8 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="7256507885737444807">"Si la drecera està activada, prem els dos botons de volum durant 3 segons, per iniciar una funció d\'accessibilitat.\n\n Funció d\'accessibilitat actual:\n <xliff:g id="SERVICE_NAME">%1$s</xliff:g>\n\n Pots canviar la funció a Configuració &gt; Accessibilitat."</string>
     <string name="disable_accessibility_shortcut" msgid="627625354248453445">"Desactiva la drecera"</string>
     <string name="leave_accessibility_shortcut_on" msgid="7653111894438512680">"Utilitza la drecera"</string>
+    <string name="color_inversion_feature_name" msgid="4231186527799958644">"Inversió de color"</string>
+    <string name="color_correction_feature_name" msgid="6779391426096954933">"Correcció del color"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"La drecera d\'accessibilitat ha activat <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"La drecera d\'accessibilitat ha desactivat <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Tria la funció que s\'utilitzarà quan toquis el botó Accessibilitat:"</string>
@@ -1634,7 +1640,7 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Instal·lat per l\'administrador"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Actualitzat per l\'administrador"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Suprimit per l\'administrador"</string>
-    <string name="battery_saver_description" msgid="1960431123816253034">"Per tal d\'augmentar la durada de la bateria, la funció d\'estalvi de bateria redueix el rendiment del dispositiu i en limita la vibració, els serveis d\'ubicació i la majoria de dades en segon pla. És possible que el correu electrònic, la missatgeria i la resta d\'aplicacions que se sincronitzen amb freqüència no s\'actualitzin llevat que les obris.\n\nL\'estalvi de bateria es desactiva automàticament mentre el dispositiu s\'està carregant."</string>
+    <string name="battery_saver_description" msgid="5394663545060026162">"Per tal d\'augmentar la durada de la bateria, la funció Estalvi de bateria redueix el rendiment del dispositiu i en limita la vibració, els serveis d\'ubicació i la majoria de dades en segon pla. És possible que el correu electrònic, la missatgeria i la resta d\'aplicacions que se sincronitzen amb freqüència no s\'actualitzin llevat que les obris.\n\nLa funció Estalvi de bateria es desactiva automàticament mentre el dispositiu s\'està carregant."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Per reduir l\'ús de dades, la funció Economitzador de dades evita que determinades aplicacions enviïn o rebin dades en segon pla. L\'aplicació que estiguis fent servir podrà accedir a dades, però potser ho farà menys sovint. Això vol dir, per exemple, que les imatges no es mostraran fins que no les toquis."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Activar Economitzador de dades?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Activa"</string>
@@ -1681,13 +1687,16 @@
     <string name="zen_mode_default_weeknights_name" msgid="3081318299464998143">"Nit entre setmana"</string>
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Cap de setmana"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Esdeveniment"</string>
+    <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"Mentre dormo"</string>
     <string name="muted_by" msgid="6147073845094180001">"Silenciat per <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"S\'ha produït un error intern al dispositiu i és possible que funcioni de manera inestable fins que restableixis les dades de fàbrica."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"S\'ha produït un error intern al dispositiu. Contacta amb el fabricant del dispositiu per obtenir més informació."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5202342984749947872">"La sol·licitud USSD s\'ha transformat en una sol·licitud DIAL."</string>
     <string name="stk_cc_ussd_to_ss" msgid="2345360594181405482">"La sol·licitud USSD s\'ha transformat en una sol·licitud SS."</string>
     <string name="stk_cc_ussd_to_ussd" msgid="7466087659967191653">"La sol·licitud USSD s\'ha transformat en una sol·licitud USSD nova."</string>
+    <string name="stk_cc_ussd_to_dial_video" msgid="585340552561515305">"La sol·licitud USSD s\'ha transformat en una sol·licitud DIAL de vídeo."</string>
     <string name="stk_cc_ss_to_dial" msgid="2151304435775557162">"La sol·licitud SS s\'ha transformat en una sol·licitud DIAL."</string>
+    <string name="stk_cc_ss_to_dial_video" msgid="4306210904450719045">"La sol·licitud SS s\'ha transformat en una sol·licitud DIAL de vídeo."</string>
     <string name="stk_cc_ss_to_ussd" msgid="3951862188105305589">"La sol·licitud SS s\'ha transformat en una sol·licitud USSD."</string>
     <string name="stk_cc_ss_to_ss" msgid="5470768854991452695">"La sol·licitud SS s\'ha transformat en una sol·licitud SS nova."</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Perfil professional"</string>

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "src/config/ConfigManager.h"
+#include "src/metrics/MetricsManager.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -30,7 +31,7 @@ namespace os {
 namespace statsd {
 
 static ostream& operator<<(ostream& os, const StatsdConfig& config) {
-    return os << "StatsdConfig{id=" << config.config_id() << "}";
+    return os << "StatsdConfig{name=" << config.name().c_str() << "}";
 }
 
 }  // namespace statsd
@@ -56,8 +57,14 @@ MATCHER_P2(ConfigKeyEq, uid, name, "") {
 /**
  * Validate that the StatsdConfig is the one we wanted.
  */
-MATCHER_P(StatsdConfigEq, configId, "") {
-    return arg.config_id() == configId;
+MATCHER_P(StatsdConfigEq, name, "") {
+    return arg.name() == name;
+}
+
+TEST(ConfigManagerTest, TestFakeConfig) {
+    auto metricsManager = std::make_unique<MetricsManager>(ConfigKey(0, "test"),
+                                                           build_fake_config(), 1000, new UidMap());
+    EXPECT_TRUE(metricsManager->isConfigValid());
 }
 
 /**
@@ -70,42 +77,36 @@ TEST(ConfigManagerTest, TestAddUpdateRemove) {
     manager->AddListener(listener);
 
     StatsdConfig config91;
-    config91.set_config_id(91);
+    config91.set_name("91");
     StatsdConfig config92;
-    config92.set_config_id(92);
+    config92.set_name("92");
     StatsdConfig config93;
-    config93.set_config_id(93);
+    config93.set_name("93");
     StatsdConfig config94;
-    config94.set_config_id(94);
+    config94.set_name("94");
 
     {
         InSequence s;
 
-        // The built-in fake one.
-        // TODO: Remove this when we get rid of the fake one, and make this
-        // test loading one from disk somewhere.
-        EXPECT_CALL(*(listener.get()),
-                    OnConfigUpdated(ConfigKeyEq(0, "fake"), StatsdConfigEq(12345)))
-                .RetiresOnSaturation();
         manager->Startup();
 
         // Add another one
-        EXPECT_CALL(*(listener.get()), OnConfigUpdated(ConfigKeyEq(1, "zzz"), StatsdConfigEq(91)))
+        EXPECT_CALL(*(listener.get()), OnConfigUpdated(ConfigKeyEq(1, "zzz"), StatsdConfigEq("91")))
                 .RetiresOnSaturation();
         manager->UpdateConfig(ConfigKey(1, "zzz"), config91);
 
         // Update It
-        EXPECT_CALL(*(listener.get()), OnConfigUpdated(ConfigKeyEq(1, "zzz"), StatsdConfigEq(92)))
+        EXPECT_CALL(*(listener.get()), OnConfigUpdated(ConfigKeyEq(1, "zzz"), StatsdConfigEq("92")))
                 .RetiresOnSaturation();
         manager->UpdateConfig(ConfigKey(1, "zzz"), config92);
 
         // Add one with the same uid but a different name
-        EXPECT_CALL(*(listener.get()), OnConfigUpdated(ConfigKeyEq(1, "yyy"), StatsdConfigEq(93)))
+        EXPECT_CALL(*(listener.get()), OnConfigUpdated(ConfigKeyEq(1, "yyy"), StatsdConfigEq("93")))
                 .RetiresOnSaturation();
         manager->UpdateConfig(ConfigKey(1, "yyy"), config93);
 
         // Add one with the same name but a different uid
-        EXPECT_CALL(*(listener.get()), OnConfigUpdated(ConfigKeyEq(2, "zzz"), StatsdConfigEq(94)))
+        EXPECT_CALL(*(listener.get()), OnConfigUpdated(ConfigKeyEq(2, "zzz"), StatsdConfigEq("94")))
                 .RetiresOnSaturation();
         manager->UpdateConfig(ConfigKey(2, "zzz"), config94);
 
@@ -140,7 +141,7 @@ TEST(ConfigManagerTest, TestRemoveUid) {
 
     StatsdConfig config;
 
-    EXPECT_CALL(*(listener.get()), OnConfigUpdated(_, _)).Times(6);
+    EXPECT_CALL(*(listener.get()), OnConfigUpdated(_, _)).Times(5);
     EXPECT_CALL(*(listener.get()), OnConfigRemoved(ConfigKeyEq(2, "xxx")));
     EXPECT_CALL(*(listener.get()), OnConfigRemoved(ConfigKeyEq(2, "yyy")));
     EXPECT_CALL(*(listener.get()), OnConfigRemoved(ConfigKeyEq(2, "zzz")));

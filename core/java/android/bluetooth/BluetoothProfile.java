@@ -153,8 +153,6 @@ public interface BluetoothProfile {
 
     /**
      * HID Device
-     *
-     * @hide
      */
     public static final int HID_DEVICE = 19;
 
@@ -253,5 +251,29 @@ public interface BluetoothProfile {
          * @param profile - One of {@link #HEALTH}, {@link #HEADSET} or {@link #A2DP}
          */
         public void onServiceDisconnected(int profile);
+    }
+
+    /**
+     * Convert an integer value of connection state into human readable string
+     *
+     * @param connectionState - One of {@link #STATE_DISCONNECTED}, {@link #STATE_CONNECTING},
+     * {@link #STATE_CONNECTED}, or {@link #STATE_DISCONNECTED}
+     * @return a string representation of the connection state, STATE_UNKNOWN if the state
+     * is not defined
+     * @hide
+     */
+    static String getConnectionStateName(int connectionState) {
+        switch (connectionState) {
+            case STATE_DISCONNECTED:
+                return "STATE_DISCONNECTED";
+            case STATE_CONNECTING:
+                return "STATE_CONNECTING";
+            case STATE_CONNECTED:
+                return "STATE_CONNECTED";
+            case STATE_DISCONNECTING:
+                return "STATE_DISCONNECTING";
+            default:
+                return "STATE_UNKNOWN";
+        }
     }
 }

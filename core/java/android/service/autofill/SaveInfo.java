@@ -198,23 +198,22 @@ public final class SaveInfo implements Parcelable {
     public static final int NEGATIVE_BUTTON_STYLE_REJECT = 1;
 
     /** @hide */
-    @IntDef(
-        value = {
-                NEGATIVE_BUTTON_STYLE_CANCEL,
-                NEGATIVE_BUTTON_STYLE_REJECT})
+    @IntDef(prefix = { "NEGATIVE_BUTTON_STYLE_" }, value = {
+            NEGATIVE_BUTTON_STYLE_CANCEL,
+            NEGATIVE_BUTTON_STYLE_REJECT
+    })
     @Retention(RetentionPolicy.SOURCE)
     @interface NegativeButtonStyle{}
 
     /** @hide */
-    @IntDef(
-       flag = true,
-       value = {
-               SAVE_DATA_TYPE_GENERIC,
-               SAVE_DATA_TYPE_PASSWORD,
-               SAVE_DATA_TYPE_ADDRESS,
-               SAVE_DATA_TYPE_CREDIT_CARD,
-               SAVE_DATA_TYPE_USERNAME,
-               SAVE_DATA_TYPE_EMAIL_ADDRESS})
+    @IntDef(flag = true, prefix = { "SAVE_DATA_TYPE_" }, value = {
+            SAVE_DATA_TYPE_GENERIC,
+            SAVE_DATA_TYPE_PASSWORD,
+            SAVE_DATA_TYPE_ADDRESS,
+            SAVE_DATA_TYPE_CREDIT_CARD,
+            SAVE_DATA_TYPE_USERNAME,
+            SAVE_DATA_TYPE_EMAIL_ADDRESS
+    })
     @Retention(RetentionPolicy.SOURCE)
     @interface SaveDataType{}
 
@@ -235,9 +234,10 @@ public final class SaveInfo implements Parcelable {
     public static final int FLAG_DONT_SAVE_ON_FINISH = 0x2;
 
     /** @hide */
-    @IntDef(
-            flag = true,
-            value = {FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE, FLAG_DONT_SAVE_ON_FINISH})
+    @IntDef(flag = true, prefix = { "FLAG_" }, value = {
+            FLAG_SAVE_ON_ALL_VIEWS_INVISIBLE,
+            FLAG_DONT_SAVE_ON_FINISH
+    })
     @Retention(RetentionPolicy.SOURCE)
     @interface SaveInfoFlags{}
 
@@ -599,9 +599,9 @@ public final class SaveInfo implements Parcelable {
          * credit card number:
          *
          * <pre class="prettyprint">
-         * builder.addSanitizer(
-         *     new TextValueSanitizer(Pattern.compile("^(\\d{4}\s?\\d{4}\s?\\d{4}\s?\\d{4})$"),
-         *         "$1$2$3$4"), ccNumberId);
+         * builder.addSanitizer(new TextValueSanitizer(
+         *     Pattern.compile("^(\\d{4})\\s?(\\d{4})\\s?(\\d{4})\\s?(\\d{4})$", "$1$2$3$4")),
+         *     ccNumberId);
          * </pre>
          *
          * <p>The same sanitizer can be reused to sanitize multiple fields. For example, to trim
@@ -612,6 +612,11 @@ public final class SaveInfo implements Parcelable {
          *     new TextValueSanitizer(Pattern.compile("^\\s*(.*)\\s*$"), "$1"),
          *         usernameId, passwordId);
          * </pre>
+         *
+         * <p>The sanitizer can also be used as an alternative for a
+         * {@link #setValidator(Validator) validator}. If any of the {@code ids} is a
+         * {@link #SaveInfo.Builder(int, AutofillId[]) required id} and the {@code sanitizer} fails
+         * because of it, then the save UI is not shown.
          *
          * @param sanitizer an implementation provided by the Android System.
          * @param ids id of fields whose value will be sanitized.

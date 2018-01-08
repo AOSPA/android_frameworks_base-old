@@ -17,6 +17,7 @@
 package android.app.admin;
 
 import android.annotation.IntDef;
+import android.annotation.TestApi;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.SystemProperties;
@@ -26,6 +27,7 @@ import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Collection;
+import java.util.Objects;
 
 /**
  * Definitions for working with security logs.
@@ -43,10 +45,17 @@ public class SecurityLog {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({TAG_ADB_SHELL_INTERACTIVE, TAG_ADB_SHELL_CMD, TAG_SYNC_RECV_FILE, TAG_SYNC_SEND_FILE,
-        TAG_APP_PROCESS_START, TAG_KEYGUARD_DISMISSED, TAG_KEYGUARD_DISMISS_AUTH_ATTEMPT,
-        TAG_KEYGUARD_SECURED})
-    public @interface SECURITY_LOG_TAG {}
+    @IntDef(prefix = { "TAG_" }, value = {
+            TAG_ADB_SHELL_INTERACTIVE,
+            TAG_ADB_SHELL_CMD,
+            TAG_SYNC_RECV_FILE,
+            TAG_SYNC_SEND_FILE,
+            TAG_APP_PROCESS_START,
+            TAG_KEYGUARD_DISMISSED,
+            TAG_KEYGUARD_DISMISS_AUTH_ATTEMPT,
+            TAG_KEYGUARD_SECURED
+    })
+    public @interface SecurityLogTag {}
 
     /**
      * Indicate that an ADB interactive shell was opened via "adb shell".
@@ -128,9 +137,28 @@ public class SecurityLog {
      */
     public static final class SecurityEvent implements Parcelable {
         private Event mEvent;
+        private long mId;
+
+        /**
+         * Constructor used by native classes to generate SecurityEvent instances.
+         * @hide
+         */
+        /* package */ SecurityEvent(byte[] data) {
+            this(0, data);
+        }
+
+        /**
+         * Constructor used by Parcelable.Creator to generate SecurityEvent instances.
+         * @hide
+         */
+        /* package */ SecurityEvent(Parcel source) {
+            this(source.readLong(), source.createByteArray());
+        }
 
         /** @hide */
-        /*package*/ SecurityEvent(byte[] data) {
+        @TestApi
+        public SecurityEvent(long id, byte[] data) {
+            mId = id;
             mEvent = Event.fromBytes(data);
         }
 
@@ -143,13 +171,8 @@ public class SecurityLog {
 
         /**
          * Returns the tag of this log entry, which specifies entry's semantics.
-         * Could be one of {@link SecurityLog#TAG_SYNC_RECV_FILE},
-         * {@link SecurityLog#TAG_SYNC_SEND_FILE}, {@link SecurityLog#TAG_ADB_SHELL_CMD},
-         * {@link SecurityLog#TAG_ADB_SHELL_INTERACTIVE}, {@link SecurityLog#TAG_APP_PROCESS_START},
-         * {@link SecurityLog#TAG_KEYGUARD_DISMISSED}, {@link SecurityLog#TAG_KEYGUARD_SECURED},
-         * {@link SecurityLog#TAG_KEYGUARD_DISMISS_AUTH_ATTEMPT}.
          */
-        public @SECURITY_LOG_TAG int getTag() {
+        public @SecurityLogTag int getTag() {
             return mEvent.getTag();
         }
 
@@ -160,6 +183,21 @@ public class SecurityLog {
             return mEvent.getData();
         }
 
+        /**
+         * @hide
+         */
+        public void setId(long id) {
+            this.mId = id;
+        }
+
+        /**
+         * Returns the id of the event, where the id monotonically increases for each event. The id
+         * is reset when the device reboots, and when security logging is enabled.
+         */
+        public long getId() {
+            return mId;
+        }
+
         @Override
         public int describeContents() {
             return 0;
@@ -167,6 +205,7 @@ public class SecurityLog {
 
         @Override
         public void writeToParcel(Parcel dest, int flags) {
+            dest.writeLong(mId);
             dest.writeByteArray(mEvent.getBytes());
         }
 
@@ -174,7 +213,7 @@ public class SecurityLog {
                 new Parcelable.Creator<SecurityEvent>() {
             @Override
             public SecurityEvent createFromParcel(Parcel source) {
-                return new SecurityEvent(source.createByteArray());
+                return new SecurityEvent(source);
             }
 
             @Override
@@ -191,7 +230,7 @@ public class SecurityLog {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             SecurityEvent other = (SecurityEvent) o;
-            return mEvent.equals(other.mEvent);
+            return mEvent.equals(other.mEvent) && mId == other.mId;
         }
 
         /**
@@ -199,7 +238,7 @@ public class SecurityLog {
          */
         @Override
         public int hashCode() {
-            return mEvent.hashCode();
+            return Objects.hash(mEvent, mId);
         }
     }
     /**

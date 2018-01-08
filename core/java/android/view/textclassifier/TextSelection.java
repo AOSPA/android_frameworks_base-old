@@ -21,11 +21,13 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.LocaleList;
+import android.util.ArrayMap;
 import android.view.textclassifier.TextClassifier.EntityType;
 
 import com.android.internal.util.Preconditions;
 
-import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * Information about where text selection should be.
@@ -35,19 +37,15 @@ public final class TextSelection {
     private final int mStartIndex;
     private final int mEndIndex;
     @NonNull private final EntityConfidence<String> mEntityConfidence;
-    @NonNull private final List<String> mEntities;
-    @NonNull private final String mLogSource;
-    @NonNull private final String mVersionInfo;
+    @NonNull private final String mSignature;
 
     private TextSelection(
-            int startIndex, int endIndex, @NonNull EntityConfidence<String> entityConfidence,
-            @NonNull String logSource, @NonNull String versionInfo) {
+            int startIndex, int endIndex, @NonNull Map<String, Float> entityConfidence,
+            @NonNull String signature) {
         mStartIndex = startIndex;
         mEndIndex = endIndex;
         mEntityConfidence = new EntityConfidence<>(entityConfidence);
-        mEntities = mEntityConfidence.getEntities();
-        mLogSource = logSource;
-        mVersionInfo = versionInfo;
+        mSignature = signature;
     }
 
     /**
@@ -69,7 +67,7 @@ public final class TextSelection {
      */
     @IntRange(from = 0)
     public int getEntityCount() {
-        return mEntities.size();
+        return mEntityConfidence.getEntities().size();
     }
 
     /**
@@ -81,7 +79,7 @@ public final class TextSelection {
      */
     @NonNull
     public @EntityType String getEntity(int index) {
-        return mEntities.get(index);
+        return mEntityConfidence.getEntities().get(index);
     }
 
     /**
@@ -95,27 +93,21 @@ public final class TextSelection {
     }
 
     /**
-     * Returns a tag for the source classifier used to generate this result.
-     * @hide
+     * Returns the signature for this object.
+     * The TextClassifier that generates this object may use it as a way to internally identify
+     * this object.
      */
     @NonNull
-    public String getSourceClassifier() {
-        return mLogSource;
-    }
-
-    /**
-     * Returns information about the classifier model used to generate this TextSelection.
-     * @hide
-     */
-    @NonNull
-    public String getVersionInfo() {
-        return mVersionInfo;
+    public String getSignature() {
+        return mSignature;
     }
 
     @Override
     public String toString() {
-        return String.format("TextSelection {%d, %d, %s}",
-                mStartIndex, mEndIndex, mEntityConfidence);
+        return String.format(
+                Locale.US,
+                "TextSelection {startIndex=%d, endIndex=%d, entities=%s, signature=%s}",
+                mStartIndex, mEndIndex, mEntityConfidence, mSignature);
     }
 
     /**
@@ -125,10 +117,8 @@ public final class TextSelection {
 
         private final int mStartIndex;
         private final int mEndIndex;
-        @NonNull private final EntityConfidence<String> mEntityConfidence =
-                new EntityConfidence<>();
-        @NonNull private String mLogSource = "";
-        @NonNull private String mVersionInfo = "";
+        @NonNull private final Map<String, Float> mEntityConfidence = new ArrayMap<>();
+        @NonNull private String mSignature = "";
 
         /**
          * Creates a builder used to build {@link TextSelection} objects.
@@ -153,25 +143,18 @@ public final class TextSelection {
         public Builder setEntityType(
                 @NonNull @EntityType String type,
                 @FloatRange(from = 0.0, to = 1.0) float confidenceScore) {
-            mEntityConfidence.setEntityType(type, confidenceScore);
+            mEntityConfidence.put(type, confidenceScore);
             return this;
         }
 
         /**
-         * Sets a tag for the source classifier used to generate this result.
-         * @hide
+         * Sets a signature for the TextSelection object.
+         *
+         * The TextClassifier that generates the TextSelection object may use it as a way to
+         * internally identify the TextSelection object.
          */
-        Builder setLogSource(@NonNull String logSource) {
-            mLogSource = Preconditions.checkNotNull(logSource);
-            return this;
-        }
-
-        /**
-         * Sets information about the classifier model used to generate this TextSelection.
-         * @hide
-         */
-        Builder setVersionInfo(@NonNull String versionInfo) {
-            mVersionInfo = Preconditions.checkNotNull(versionInfo);
+        public Builder setSignature(@NonNull String signature) {
+            mSignature = Preconditions.checkNotNull(signature);
             return this;
         }
 
@@ -180,12 +163,12 @@ public final class TextSelection {
          */
         public TextSelection build() {
             return new TextSelection(
-                    mStartIndex, mEndIndex, mEntityConfidence, mLogSource, mVersionInfo);
+                    mStartIndex, mEndIndex, mEntityConfidence, mSignature);
         }
     }
 
     /**
-     * TextSelection optional input parameters.
+     * Optional input parameters for generating TextSelection.
      */
     public static final class Options {
 

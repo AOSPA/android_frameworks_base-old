@@ -29,8 +29,7 @@
     <string name="keyguard_password_enter_password_code" msgid="595980919238127672">"Indtast adgangskoden for at låse op"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7504123374204446086">"Indtast pinkoden for at låse op"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="6535018036285012028">"Forkert pinkode."</string>
-    <!-- no translation found for keyguard_sim_error_message_short (592109500618448312) -->
-    <skip />
+    <string name="keyguard_sim_error_message_short" msgid="592109500618448312">"Ugyldigt kort."</string>
     <string name="keyguard_charged" msgid="2222329688813033109">"Opladet"</string>
     <string name="keyguard_plugged_in" msgid="89308975354638682">"Oplader"</string>
     <string name="keyguard_plugged_in_charging_fast" msgid="8869226755413795173">"Oplader hurtigt"</string>
@@ -136,4 +135,12 @@
       <item quantity="other">Enheden blev sidst låst op for <xliff:g id="NUMBER_1">%d</xliff:g> timer siden. Bekræft adgangskoden.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Ikke genkendt"</string>
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+      <item quantity="one">Indtast pinkoden til SIM-kortet. Du har <xliff:g id="NUMBER_1">%d</xliff:g> forsøg tilbage.</item>
+      <item quantity="other">Indtast pinkoden til SIM-kortet. Du har <xliff:g id="NUMBER_1">%d</xliff:g> forsøg tilbage.</item>
+    </plurals>
+    <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
+      <item quantity="one">SIM-kortet er nu deaktiveret. Indtast PUK-koden for at fortsætte. Du har <xliff:g id="_NUMBER_1">%d</xliff:g> forsøg tilbage, før SIM-kortet bliver permanent ubrugeligt. Kontakt dit mobilselskab for at få flere oplysninger.</item>
+      <item quantity="other">SIM-kortet er nu deaktiveret. Indtast PUK-koden for at fortsætte. Du har <xliff:g id="_NUMBER_1">%d</xliff:g> forsøg tilbage, før SIM-kortet bliver permanent ubrugeligt. Kontakt dit mobilselskab for at få flere oplysninger.</item>
+    </plurals>
 </resources>

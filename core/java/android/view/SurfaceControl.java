@@ -16,17 +16,34 @@
 
 package android.view;
 
+import static android.view.Surface.ROTATION_270;
+import static android.view.Surface.ROTATION_90;
+import static android.graphics.Matrix.MSCALE_X;
+import static android.graphics.Matrix.MSCALE_Y;
+import static android.graphics.Matrix.MSKEW_X;
+import static android.graphics.Matrix.MSKEW_Y;
+import static android.graphics.Matrix.MTRANS_X;
+import static android.graphics.Matrix.MTRANS_Y;
+
 import android.annotation.Size;
 import android.graphics.Bitmap;
 import android.graphics.GraphicBuffer;
 import android.graphics.PixelFormat;
+import android.graphics.Matrix;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.IBinder;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.os.Process;
 import android.os.UserHandle;
+import android.util.ArrayMap;
 import android.util.Log;
 import android.view.Surface.OutOfResourcesException;
+
+import com.android.internal.annotations.GuardedBy;
+
 import dalvik.system.CloseGuard;
 import libcore.util.NativeAllocationRegistry;
 
@@ -36,12 +53,14 @@ import java.io.Closeable;
  * SurfaceControl
  *  @hide
  */
-public class SurfaceControl {
+public class SurfaceControl implements Parcelable {
     private static final String TAG = "SurfaceControl";
 
     private static native long nativeCreate(SurfaceSession session, String name,
             int w, int h, int format, int flags, long parentObject, int windowType, int ownerUid)
             throws OutOfResourcesException;
+    private static native long nativeReadFromParcel(Parcel in);
+    private static native void nativeWriteToParcel(long nativeObject, Parcel out);
     private static native void nativeRelease(long nativeObject);
     private static native void nativeDestroy(long nativeObject);
     private static native void nativeDisconnect(long nativeObject);
@@ -55,12 +74,14 @@ public class SurfaceControl {
     private static native void nativeScreenshot(IBinder displayToken, Surface consumer,
             Rect sourceCrop, int width, int height, int minLayer, int maxLayer,
             boolean allLayers, boolean useIdentityTransform);
-    private static native void nativeCaptureLayers(IBinder layerHandleToken, Surface consumer,
-            int rotation);
+    private static native GraphicBuffer nativeCaptureLayers(IBinder layerHandleToken,
+            Rect sourceCrop, float frameScale);
 
     private static native long nativeCreateTransaction();
     private static native long nativeGetNativeTransactionFinalizer();
     private static native void nativeApplyTransaction(long transactionObj, boolean sync);
+    private static native void nativeMergeTransaction(long transactionObj,
+            long otherTransactionObj);
     private static native void nativeSetAnimationTransaction(long transactionObj);
 
     private static native void nativeSetLayer(long transactionObj, long nativeObject, int zorder);
@@ -136,6 +157,13 @@ public class SurfaceControl {
     private final CloseGuard mCloseGuard = CloseGuard.get();
     private final String mName;
     long mNativeObject; // package visibility only for Surface.java access
+
+    // TODO: Move this to native.
+    private final Object mSizeLock = new Object();
+    @GuardedBy("mSizeLock")
+    private int mWidth;
+    @GuardedBy("mSizeLock")
+    private int mHeight;
 
     static Transaction sGlobalTransaction;
     static long sTransactionNestCount = 0;
@@ -551,6 +579,8 @@ public class SurfaceControl {
         }
 
         mName = name;
+        mWidth = w;
+        mHeight = h;
         mNativeObject = nativeCreate(session, name, w, h, format, flags,
             parent != null ? parent.mNativeObject : 0, windowType, ownerUid);
         if (mNativeObject == 0) {
@@ -566,11 +596,48 @@ public class SurfaceControl {
     // event logging.
     public SurfaceControl(SurfaceControl other) {
         mName = other.mName;
+        mWidth = other.mWidth;
+        mHeight = other.mHeight;
         mNativeObject = other.mNativeObject;
         other.mCloseGuard.close();
         other.mNativeObject = 0;
         mCloseGuard.open("release");
     }
+
+    private SurfaceControl(Parcel in) {
+        mName = in.readString();
+        mWidth = in.readInt();
+        mHeight = in.readInt();
+        mNativeObject = nativeReadFromParcel(in);
+        if (mNativeObject == 0) {
+            throw new IllegalArgumentException("Couldn't read SurfaceControl from parcel=" + in);
+        }
+        mCloseGuard.open("release");
+    }
+
+    @Override
+    public int describeContents() {
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        dest.writeString(mName);
+        dest.writeInt(mWidth);
+        dest.writeInt(mHeight);
+        nativeWriteToParcel(mNativeObject, dest);
+    }
+
+    public static final Creator<SurfaceControl> CREATOR
+            = new Creator<SurfaceControl>() {
+        public SurfaceControl createFromParcel(Parcel in) {
+            return new SurfaceControl(in);
+        }
+
+        public SurfaceControl[] newArray(int size) {
+            return new SurfaceControl[size];
+        }
+    };
 
     @Override
     protected void finalize() throws Throwable {
@@ -651,6 +718,19 @@ public class SurfaceControl {
                 return;
             }
             sGlobalTransaction.apply(sync);
+        }
+    }
+
+    /**
+     * Merge the supplied transaction in to the deprecated "global" transaction.
+     * This clears the supplied transaction in an identical fashion to {@link Transaction#merge}.
+     * <p>
+     * This is a utility for interop with legacy-code and will go away with the Global Transaction.
+     */
+    @Deprecated
+    public static void mergeToGlobalTransaction(Transaction t) {
+        synchronized(SurfaceControl.class) {
+            sGlobalTransaction.merge(t);
         }
     }
 
@@ -809,6 +889,22 @@ public class SurfaceControl {
         }
     }
 
+    /**
+     * Sets the transform and position of a {@link SurfaceControl} from a 3x3 transformation matrix.
+     *
+     * @param matrix The matrix to apply.
+     * @param float9 An array of 9 floats to be used to extract the values from the matrix.
+     */
+    public void setMatrix(Matrix matrix, float[] float9) {
+        checkNotReleased();
+        matrix.getValues(float9);
+        synchronized (SurfaceControl.class) {
+            sGlobalTransaction.setMatrix(this, float9[MSCALE_X], float9[MSKEW_Y],
+                    float9[MSKEW_X], float9[MSCALE_Y]);
+            sGlobalTransaction.setPosition(this, float9[MTRANS_X], float9[MTRANS_Y]);
+        }
+    }
+
     public void setWindowCrop(Rect crop) {
         checkNotReleased();
         synchronized (SurfaceControl.class) {
@@ -843,6 +939,18 @@ public class SurfaceControl {
 
         synchronized (SurfaceControl.class) {
             sGlobalTransaction.setSecure(this, isSecure);
+        }
+    }
+
+    public int getWidth() {
+        synchronized (mSizeLock) {
+            return mWidth;
+        }
+    }
+
+    public int getHeight() {
+        synchronized (mSizeLock) {
+            return mHeight;
         }
     }
 
@@ -1073,7 +1181,9 @@ public class SurfaceControl {
     }
 
     /**
-     * Copy the current screen contents into a bitmap and return it.
+     * Copy the current screen contents into a hardware bitmap and return it.
+     * Note: If you want to modify the Bitmap in software, you will need to copy the Bitmap into
+     * a software Bitmap using {@link Bitmap#copy(Bitmap.Config, boolean)}
      *
      * CAVEAT: Versions of screenshot that return a {@link Bitmap} can
      * be extremely slow; avoid use unless absolutely necessary; prefer
@@ -1098,7 +1208,7 @@ public class SurfaceControl {
      * screenshots in its native portrait orientation by default, so this is
      * useful for returning screenshots that are independent of device
      * orientation.
-     * @return Returns a Bitmap containing the screen contents, or null
+     * @return Returns a hardware Bitmap containing the screen contents, or null
      * if an error occurs. Make sure to call Bitmap.recycle() as soon as
      * possible, once its content is not needed anymore.
      */
@@ -1126,23 +1236,36 @@ public class SurfaceControl {
     }
 
     /**
-     * Like {@link SurfaceControl#screenshot(int, int, int, int, boolean)} but
-     * includes all Surfaces in the screenshot.
+     * Like {@link SurfaceControl#screenshot(Rect, int, int, int, int, boolean, int)} but
+     * includes all Surfaces in the screenshot. This will also update the orientation so it
+     * sends the correct coordinates to SF based on the rotation value.
      *
+     * @param sourceCrop The portion of the screen to capture into the Bitmap;
+     * caller may pass in 'new Rect()' if no cropping is desired.
      * @param width The desired width of the returned bitmap; the raw
      * screen will be scaled down to this size.
      * @param height The desired height of the returned bitmap; the raw
      * screen will be scaled down to this size.
+     * @param rotation Apply a custom clockwise rotation to the screenshot, i.e.
+     * Surface.ROTATION_0,90,180,270. Surfaceflinger will always take
+     * screenshots in its native portrait orientation by default, so this is
+     * useful for returning screenshots that are independent of device
+     * orientation.
      * @return Returns a Bitmap containing the screen contents, or null
      * if an error occurs. Make sure to call Bitmap.recycle() as soon as
      * possible, once its content is not needed anymore.
      */
-    public static Bitmap screenshot(int width, int height) {
+    public static Bitmap screenshot(Rect sourceCrop, int width, int height, int rotation) {
         // TODO: should take the display as a parameter
         IBinder displayToken = SurfaceControl.getBuiltInDisplay(
                 SurfaceControl.BUILT_IN_DISPLAY_ID_MAIN);
-        return nativeScreenshot(displayToken, new Rect(), width, height, 0, 0, true,
-                false, Surface.ROTATION_0);
+        if (rotation == ROTATION_90 || rotation == ROTATION_270) {
+            rotation = (rotation == ROTATION_90) ? ROTATION_270 : ROTATION_90;
+        }
+
+        SurfaceControl.rotateCropForSF(sourceCrop, rotation);
+        return nativeScreenshot(displayToken, sourceCrop, width, height, 0, 0, true,
+                false, rotation);
     }
 
     private static void screenshot(IBinder display, Surface consumer, Rect sourceCrop,
@@ -1158,18 +1281,31 @@ public class SurfaceControl {
                 minLayer, maxLayer, allLayers, useIdentityTransform);
     }
 
+    private static void rotateCropForSF(Rect crop, int rot) {
+        if (rot == Surface.ROTATION_90 || rot == Surface.ROTATION_270) {
+            int tmp = crop.top;
+            crop.top = crop.left;
+            crop.left = tmp;
+            tmp = crop.right;
+            crop.right = crop.bottom;
+            crop.bottom = tmp;
+        }
+    }
+
     /**
-     * Captures a layer and its children into the provided {@link Surface}.
+     * Captures a layer and its children and returns a {@link GraphicBuffer} with the content.
      *
      * @param layerHandleToken The root layer to capture.
-     * @param consumer The {@link Surface} to capture the layer into.
-     * @param rotation Apply a custom clockwise rotation to the screenshot, i.e.
-     *                 Surface.ROTATION_0,90,180,270. Surfaceflinger will always capture in its
-     *                 native portrait orientation by default, so this is useful for returning
-     *                 captures that are independent of device orientation.
+     * @param sourceCrop       The portion of the root surface to capture; caller may pass in 'new
+     *                         Rect()' or null if no cropping is desired.
+     * @param frameScale       The desired scale of the returned buffer; the raw
+     *                         screen will be scaled up/down.
+     *
+     * @return Returns a GraphicBuffer that contains the layer capture.
      */
-    public static void captureLayers(IBinder layerHandleToken, Surface consumer, int rotation) {
-        nativeCaptureLayers(layerHandleToken, consumer, rotation);
+    public static GraphicBuffer captureLayers(IBinder layerHandleToken, Rect sourceCrop,
+            float frameScale) {
+        return nativeCaptureLayers(layerHandleToken, sourceCrop, frameScale);
     }
 
     public static class Transaction implements Closeable {
@@ -1178,6 +1314,7 @@ public class SurfaceControl {
                 nativeGetNativeTransactionFinalizer(), 512);
         private long mNativeObject;
 
+        private final ArrayMap<SurfaceControl, Point> mResizedSurfaces = new ArrayMap<>();
         Runnable mFreeNativeResources;
 
         public Transaction() {
@@ -1208,7 +1345,20 @@ public class SurfaceControl {
          * Jankier version of apply. Avoid use (b/28068298).
          */
         public void apply(boolean sync) {
+            applyResizedSurfaces();
             nativeApplyTransaction(mNativeObject, sync);
+        }
+
+        private void applyResizedSurfaces() {
+            for (int i = mResizedSurfaces.size() - 1; i >= 0; i--) {
+                final Point size = mResizedSurfaces.valueAt(i);
+                final SurfaceControl surfaceControl = mResizedSurfaces.keyAt(i);
+                synchronized (surfaceControl.mSizeLock) {
+                    surfaceControl.mWidth = size.x;
+                    surfaceControl.mHeight = size.y;
+                }
+            }
+            mResizedSurfaces.clear();
         }
 
         public Transaction show(SurfaceControl sc) {
@@ -1231,6 +1381,7 @@ public class SurfaceControl {
 
         public Transaction setSize(SurfaceControl sc, int w, int h) {
             sc.checkNotReleased();
+            mResizedSurfaces.put(sc, new Point(w, h));
             nativeSetSize(mNativeObject, sc.mNativeObject, w, h);
             return this;
         }
@@ -1266,6 +1417,14 @@ public class SurfaceControl {
             sc.checkNotReleased();
             nativeSetMatrix(mNativeObject, sc.mNativeObject,
                     dsdx, dtdx, dtdy, dsdy);
+            return this;
+        }
+
+        public Transaction setMatrix(SurfaceControl sc, Matrix matrix, float[] float9) {
+            matrix.getValues(float9);
+            setMatrix(sc, float9[MSCALE_X], float9[MSKEW_Y],
+                    float9[MSKEW_X], float9[MSCALE_Y]);
+            setPosition(sc, float9[MTRANS_X], float9[MTRANS_Y]);
             return this;
         }
 
@@ -1368,7 +1527,7 @@ public class SurfaceControl {
          * Sets the security of the surface.  Setting the flag is equivalent to creating the
          * Surface with the {@link #SECURE} flag.
          */
-        Transaction setSecure(SurfaceControl sc, boolean isSecure) {
+        public Transaction setSecure(SurfaceControl sc, boolean isSecure) {
             sc.checkNotReleased();
             if (isSecure) {
                 nativeSetFlags(mNativeObject, sc.mNativeObject, SECURE, SECURE);
@@ -1447,6 +1606,17 @@ public class SurfaceControl {
         /** flag the transaction as an animation */
         public Transaction setAnimationTransaction() {
             nativeSetAnimationTransaction(mNativeObject);
+            return this;
+        }
+
+        /**
+         * Merge the other transaction into this transaction, clearing the
+         * other transaction as if it had been applied.
+         */
+        public Transaction merge(Transaction other) {
+            mResizedSurfaces.putAll(other.mResizedSurfaces);
+            other.mResizedSurfaces.clear();
+            nativeMergeTransaction(mNativeObject, other.mNativeObject);
             return this;
         }
     }
