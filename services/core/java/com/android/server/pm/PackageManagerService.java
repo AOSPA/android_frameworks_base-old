@@ -274,6 +274,7 @@ import com.android.internal.content.NativeLibraryHelper;
 import com.android.internal.content.PackageHelper;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.os.IParcelFileDescriptorFactory;
+import com.android.internal.os.RegionalizationEnvironment;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.os.Zygote;
 import com.android.internal.telephony.CarrierAppUtils;
@@ -2678,6 +2679,29 @@ public class PackageManagerService extends IPackageManager.Stub
                     | SCAN_AS_SYSTEM
                     | SCAN_AS_PRODUCT,
                     0);
+
+            // Collect all Regionalization packages form Carrier's res packages.
+            if (RegionalizationEnvironment.isSupported()) {
+                Log.d(TAG, "Load Regionalization vendor apks");
+                final List<File> RegionalizationDirs =
+                        RegionalizationEnvironment.getAllPackageDirectories();
+                for (File f : RegionalizationDirs) {
+                    File RegionalizationSystemDir = new File(f, "system");
+                    // Collect packages in <Package>/system/app
+                    scanDirLI(new File(RegionalizationSystemDir, "app"),
+                            PackageParser.PARSE_IS_SYSTEM_DIR,
+                            scanFlags
+                            | SCAN_AS_SYSTEM,
+                            0);
+                    // Collect overlay in <Package>/system/vendor
+                    scanDirLI(new File(RegionalizationSystemDir, "vendor/overlay"),
+                            PackageParser.PARSE_IS_SYSTEM_DIR,
+                            scanFlags
+                            | SCAN_AS_SYSTEM
+                            | SCAN_AS_VENDOR,
+                            0);
+                }
+            }
 
             // Prune any system packages that no longer exist.
             final List<String> possiblyDeletedUpdatedSystemApps = new ArrayList<>();
@@ -8306,6 +8330,13 @@ public class PackageManagerService extends IPackageManager.Stub
                 if (!isPackage) {
                     // Ignore entries which are not packages
                     continue;
+                }
+                // Exclude Regionalization exclude.list from Carrier's configure.
+                if (RegionalizationEnvironment.isSupported()) {
+                    if (RegionalizationEnvironment.isExcludedApp(file.getName())) {
+                        Log.d(TAG, "Regionalization Excluded:" + file.getName());
+                        continue;
+                    }
                 }
                 parallelPackageParser.submit(file, parseFlags);
                 fileCount++;
