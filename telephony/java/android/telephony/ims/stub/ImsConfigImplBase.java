@@ -16,13 +16,11 @@
 
 package android.telephony.ims.stub;
 
-import android.content.Context;
 import android.os.RemoteException;
 
 import com.android.ims.ImsConfig;
 import com.android.ims.ImsConfigListener;
 import com.android.ims.internal.IImsConfig;
-
 
 /**
  * Base implementation of ImsConfig, which implements stub versions of the methods
@@ -40,19 +38,6 @@ import com.android.ims.internal.IImsConfig;
  */
 
 public class ImsConfigImplBase extends IImsConfig.Stub {
-
-    // TODO: Remove this dummy method, used for compatibility/compilation.
-    public IImsConfig getIImsConfig() {
-        return null; // Dummy override. Will break IMS functionality.
-    }
-
-    public ImsConfigImplBase(Context context) {
-        // TODO: Remove dummy constructor.
-    }
-
-    public ImsConfigImplBase() {
-        // TODO: Remove dummy constructor.
-    }
 
     /**
      * Gets the value for ims service/capabilities parameters from the provisioned
