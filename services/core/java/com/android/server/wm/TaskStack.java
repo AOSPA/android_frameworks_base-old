@@ -31,12 +31,10 @@ import static android.view.WindowManager.DOCKED_INVALID;
 import static android.view.WindowManager.DOCKED_LEFT;
 import static android.view.WindowManager.DOCKED_RIGHT;
 import static android.view.WindowManager.DOCKED_TOP;
-import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
+
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TASK_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-import static com.android.server.wm.WindowManagerService.LAYER_OFFSET_DIM;
 import static com.android.server.wm.proto.StackProto.ANIMATION_BACKGROUND_SURFACE_IS_DIMMING;
 import static com.android.server.wm.proto.StackProto.BOUNDS;
 import static com.android.server.wm.proto.StackProto.FILLS_PARENT;
@@ -55,6 +53,7 @@ import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
 import android.view.Surface;
+import android.view.SurfaceControl;
 
 import com.android.internal.policy.DividerSnapAlgorithm;
 import com.android.internal.policy.DividerSnapAlgorithm.SnapTarget;
@@ -63,7 +62,7 @@ import com.android.server.EventLogTags;
 
 import java.io.PrintWriter;
 
-public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLayerUser,
+public class TaskStack extends WindowContainer<Task> implements
         BoundsAnimationTarget {
     /** Minimum size of an adjusted stack bounds relative to original stack bounds. Used to
      * restrict IME adjustment so that a min portion of top stack remains visible.*/
@@ -75,9 +74,6 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
     /** Unique identifier */
     final int mStackId;
 
-    /** The service */
-    private final WindowManagerService mService;
-
     /** The display this stack sits under. */
     // TODO: Track parent marks like this in WindowContainer.
     private DisplayContent mDisplayContent;
@@ -86,9 +82,6 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
     private Rect mTmpRect = new Rect();
     private Rect mTmpRect2 = new Rect();
     private Rect mTmpRect3 = new Rect();
-
-    /** Content limits relative to the DisplayContent this sits in. */
-    private Rect mBounds = new Rect();
 
     /** Stack bounds adjusted to screen content area (taking into account IM windows, etc.) */
     private final Rect mAdjustedBounds = new Rect();
@@ -99,17 +92,14 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
      */
     private final Rect mFullyAdjustedImeBounds = new Rect();
 
-    /** Whether mBounds is fullscreen */
-    private boolean mFillsParent = true;
-
     // Device rotation as of the last time {@link #mBounds} was set.
     private int mRotation;
 
     /** Density as of last time {@link #mBounds} was set. */
     private int mDensity;
 
-    /** Support for non-zero {@link android.view.animation.Animation#getBackgroundColor()} */
-    private DimLayer mAnimationBackgroundSurface;
+    private SurfaceControl mAnimationBackgroundSurface;
+    private boolean mAnimationBackgroundSurfaceIsShown = false;
 
     /** The particular window with an Animation with non-zero background color. */
     private WindowStateAnimator mAnimationBackgroundAnimator;
@@ -149,8 +139,15 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
 
     Rect mPreAnimationBounds = new Rect();
 
+    private Dimmer mDimmer = new Dimmer(this);
+
+    /**
+     * For {@link #prepareSurfaces}.
+     */
+    final Rect mTmpDimBoundsRect = new Rect();
+
     TaskStack(WindowManagerService service, int stackId, StackWindowController controller) {
-        mService = service;
+        super(service);
         mStackId = stackId;
         setController(controller);
         mDockedStackMinimizeThickness = service.mContext.getResources().getDimensionPixelSize(
@@ -172,27 +169,20 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
     /**
      * Set the bounds of the stack and its containing tasks.
      * @param stackBounds New stack bounds. Passing in null sets the bounds to fullscreen.
-     * @param configs Configuration for individual tasks, keyed by task id.
      * @param taskBounds Bounds for individual tasks, keyed by task id.
+     * @param taskTempInsetBounds Inset bounds for individual tasks, keyed by task id.
      * @return True if the stack bounds was changed.
      * */
     boolean setBounds(
-            Rect stackBounds, SparseArray<Configuration> configs, SparseArray<Rect> taskBounds,
-            SparseArray<Rect> taskTempInsetBounds) {
+            Rect stackBounds, SparseArray<Rect> taskBounds, SparseArray<Rect> taskTempInsetBounds) {
         setBounds(stackBounds);
 
         // Update bounds of containing tasks.
         for (int taskNdx = mChildren.size() - 1; taskNdx >= 0; --taskNdx) {
             final Task task = mChildren.get(taskNdx);
-            Configuration config = configs.get(task.mTaskId);
-            if (config != null) {
-                Rect bounds = taskBounds.get(task.mTaskId);
-                task.resizeLocked(bounds, config, false /* forced */);
-                task.setTempInsetBounds(taskTempInsetBounds != null ?
-                        taskTempInsetBounds.get(task.mTaskId) : null);
-            } else {
-                Slog.wtf(TAG_WM, "No config for task: " + task + ", is there a mismatch with AM?");
-            }
+            task.setBounds(taskBounds.get(task.mTaskId), false /* forced */);
+            task.setTempInsetBounds(taskTempInsetBounds != null ?
+                    taskTempInsetBounds.get(task.mTaskId) : null);
         }
         return true;
     }
@@ -219,20 +209,22 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         final boolean adjusted = !mAdjustedBounds.isEmpty();
         Rect insetBounds = null;
         if (adjusted && isAdjustedForMinimizedDockedStack()) {
-            insetBounds = mBounds;
+            insetBounds = getRawBounds();
         } else if (adjusted && mAdjustedForIme) {
             if (mImeGoingAway) {
-                insetBounds = mBounds;
+                insetBounds = getRawBounds();
             } else {
                 insetBounds = mFullyAdjustedImeBounds;
             }
         }
-        alignTasksToAdjustedBounds(adjusted ? mAdjustedBounds : mBounds, insetBounds);
+        alignTasksToAdjustedBounds(adjusted ? mAdjustedBounds : getRawBounds(), insetBounds);
         mDisplayContent.setLayoutNeeded();
+
+        updateSurfaceBounds();
     }
 
     private void alignTasksToAdjustedBounds(Rect adjustedBounds, Rect tempInsetBounds) {
-        if (mFillsParent) {
+        if (matchParentBounds()) {
             return;
         }
 
@@ -245,79 +237,118 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         }
     }
 
-    private boolean setBounds(Rect bounds) {
-        boolean oldFullscreen = mFillsParent;
+    private void updateAnimationBackgroundBounds() {
+        if (mAnimationBackgroundSurface == null) {
+            return;
+        }
+        getRawBounds(mTmpRect);
+        final Rect stackBounds = getBounds();
+        getPendingTransaction()
+                .setSize(mAnimationBackgroundSurface, mTmpRect.width(), mTmpRect.height())
+                .setPosition(mAnimationBackgroundSurface, mTmpRect.left - stackBounds.left,
+                        mTmpRect.top - stackBounds.top);
+        scheduleAnimation();
+    }
+
+    private void hideAnimationSurface() {
+        if (mAnimationBackgroundSurface == null) {
+            return;
+        }
+        getPendingTransaction().hide(mAnimationBackgroundSurface);
+        mAnimationBackgroundSurfaceIsShown = false;
+        scheduleAnimation();
+    }
+
+    private void showAnimationSurface(float alpha) {
+        if (mAnimationBackgroundSurface == null) {
+            return;
+        }
+        getPendingTransaction().setLayer(mAnimationBackgroundSurface, Integer.MIN_VALUE)
+                .setAlpha(mAnimationBackgroundSurface, alpha)
+                .show(mAnimationBackgroundSurface);
+        mAnimationBackgroundSurfaceIsShown = true;
+        scheduleAnimation();
+    }
+
+    @Override
+    public int setBounds(Rect bounds) {
+        return setBounds(getOverrideBounds(), bounds);
+    }
+
+    private int setBounds(Rect existing, Rect bounds) {
         int rotation = Surface.ROTATION_0;
         int density = DENSITY_DPI_UNDEFINED;
         if (mDisplayContent != null) {
-            mDisplayContent.getLogicalDisplayRect(mTmpRect);
+            mDisplayContent.getBounds(mTmpRect);
             rotation = mDisplayContent.getDisplayInfo().rotation;
             density = mDisplayContent.getDisplayInfo().logicalDensityDpi;
-            mFillsParent = bounds == null;
-            if (mFillsParent) {
-                bounds = mTmpRect;
-            }
         }
 
-        if (bounds == null) {
-            // Can't set to fullscreen if we don't have a display to get bounds from...
-            return false;
+        if (equivalentBounds(existing, bounds) && mRotation == rotation) {
+            return BOUNDS_CHANGE_NONE;
         }
-        if (mBounds.equals(bounds) && oldFullscreen == mFillsParent && mRotation == rotation) {
-            return false;
-        }
+
+        final int result = super.setBounds(bounds);
 
         if (mDisplayContent != null) {
-            mDisplayContent.mDimLayerController.updateDimLayer(this);
-            mAnimationBackgroundSurface.setBounds(bounds);
+            updateAnimationBackgroundBounds();
         }
 
-        mBounds.set(bounds);
         mRotation = rotation;
         mDensity = density;
 
         updateAdjustedBounds();
 
-        return true;
+        updateSurfaceBounds();
+        return result;
     }
 
     /** Bounds of the stack without adjusting for other factors in the system like visibility
      * of docked stack.
-     * Most callers should be using {@link #getBounds} as it take into consideration other system
-     * factors. */
+     * Most callers should be using {@link ConfigurationContainer#getOverrideBounds} as it take into
+     * consideration other system factors. */
     void getRawBounds(Rect out) {
-        out.set(mBounds);
+        out.set(getRawBounds());
+    }
+
+    Rect getRawBounds() {
+        return super.getBounds();
     }
 
     /** Return true if the current bound can get outputted to the rest of the system as-is. */
     private boolean useCurrentBounds() {
-        if (mFillsParent
+        if (matchParentBounds()
                 || !inSplitScreenSecondaryWindowingMode()
                 || mDisplayContent == null
-                || mDisplayContent.getSplitScreenPrimaryStack() != null) {
+                || mDisplayContent.getSplitScreenPrimaryStackIgnoringVisibility() != null) {
             return true;
         }
         return false;
     }
 
-    public void getBounds(Rect out) {
+    @Override
+    public void getBounds(Rect bounds) {
+        bounds.set(getBounds());
+    }
+
+    @Override
+    public Rect getBounds() {
         if (useCurrentBounds()) {
             // If we're currently adjusting for IME or minimized docked stack, we use the adjusted
             // bounds; otherwise, no need to adjust the output bounds if fullscreen or the docked
             // stack is visible since it is already what we want to represent to the rest of the
             // system.
             if (!mAdjustedBounds.isEmpty()) {
-                out.set(mAdjustedBounds);
+                return mAdjustedBounds;
             } else {
-                out.set(mBounds);
+                return super.getBounds();
             }
-            return;
         }
 
         // The bounds has been adjusted to accommodate for a docked stack, but the docked stack
         // is not currently visible. Go ahead a represent it as fullscreen to the rest of the
         // system.
-        mDisplayContent.getLogicalDisplayRect(out);
+        return mDisplayContent.getBounds();
     }
 
     /**
@@ -338,7 +369,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             mBoundsAnimationSourceHintBounds.setEmpty();
         }
 
-        mPreAnimationBounds.set(mBounds);
+        mPreAnimationBounds.set(getRawBounds());
     }
 
     /**
@@ -368,7 +399,6 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
     }
 
     /** Bounds of the stack with other system factors taken into consideration. */
-    @Override
     public void getDimBounds(Rect out) {
         getBounds(out);
     }
@@ -384,12 +414,12 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         if (bounds != null) {
             setBounds(bounds);
             return;
-        } else if (mFillsParent) {
+        } else if (matchParentBounds()) {
             setBounds(null);
             return;
         }
 
-        mTmpRect2.set(mBounds);
+        mTmpRect2.set(getRawBounds());
         final int newRotation = mDisplayContent.getDisplayInfo().rotation;
         final int newDensity = mDisplayContent.getDisplayInfo().logicalDensityDpi;
         if (mRotation == newRotation && mDensity == newDensity) {
@@ -432,17 +462,17 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             return false;
         }
 
-        if (mFillsParent) {
+        if (matchParentBounds()) {
             // Update stack bounds again since rotation changed since updateDisplayInfo().
             setBounds(null);
             // Return false since we don't need the client to resize.
             return false;
         }
 
-        mTmpRect2.set(mBounds);
+        mTmpRect2.set(getRawBounds());
         mDisplayContent.rotateBounds(mRotation, newRotation, mTmpRect2);
         if (inSplitScreenPrimaryWindowingMode()) {
-            repositionDockedStackAfterRotation(mTmpRect2);
+            repositionPrimarySplitScreenStackAfterRotation(mTmpRect2);
             snapDockedStackAfterRotation(mTmpRect2);
             final int newDockSide = getDockSide(mTmpRect2);
 
@@ -466,17 +496,17 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
     }
 
     /**
-     * Some dock sides are not allowed by the policy. This method queries the policy and moves
-     * the docked stack around if needed.
+     * Some primary split screen sides are not allowed by the policy. This method queries the policy
+     * and moves the primary stack around if needed.
      *
-     * @param inOutBounds the bounds of the docked stack to adjust
+     * @param inOutBounds the bounds of the primary stack to adjust
      */
-    private void repositionDockedStackAfterRotation(Rect inOutBounds) {
+    private void repositionPrimarySplitScreenStackAfterRotation(Rect inOutBounds) {
         int dockSide = getDockSide(inOutBounds);
-        if (mService.mPolicy.isDockSideAllowed(dockSide)) {
+        if (mDisplayContent.getDockedDividerController().canPrimaryStackDockTo(dockSide)) {
             return;
         }
-        mDisplayContent.getLogicalDisplayRect(mTmpRect);
+        mDisplayContent.getBounds(mTmpRect);
         dockSide = DockedDividerUtils.invertDockSide(dockSide);
         switch (dockSide) {
             case DOCKED_LEFT:
@@ -603,6 +633,14 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         } else {
             maxPosition = computeMaxPosition(maxPosition);
         }
+
+        // preserve POSITION_BOTTOM/POSITION_TOP positions if they are still valid.
+        if (targetPosition == POSITION_BOTTOM && minPosition == 0) {
+            return POSITION_BOTTOM;
+        } else if (targetPosition == POSITION_TOP
+                && maxPosition == (addingNew ? stackSize : stackSize - 1)) {
+            return POSITION_TOP;
+        }
         // Reset position based on minimum/maximum possible positions.
         return Math.min(Math.max(targetPosition, minPosition), maxPosition);
     }
@@ -676,10 +714,36 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
         final int prevWindowingMode = getWindowingMode();
+        // Only need to update surface size here since the super method will handle updating
+        // surface position.
+        updateSurfaceSize(getPendingTransaction());
         super.onConfigurationChanged(newParentConfig);
-        if (mDisplayContent != null && prevWindowingMode != getWindowingMode()) {
-            mDisplayContent.onStackWindowingModeChanged(this);
+        final int windowingMode = getWindowingMode();
+
+        if (mDisplayContent == null || prevWindowingMode == windowingMode) {
+            return;
         }
+        mDisplayContent.onStackWindowingModeChanged(this);
+        updateBoundsForWindowModeChange();
+    }
+
+    private void updateSurfaceBounds() {
+        updateSurfaceBounds(getPendingTransaction());
+        scheduleAnimation();
+    }
+
+    void updateSurfaceBounds(SurfaceControl.Transaction transaction) {
+        updateSurfaceSize(transaction);
+        updateSurfacePosition(transaction);
+    }
+
+    private void updateSurfaceSize(SurfaceControl.Transaction transaction) {
+        if (mSurfaceControl == null) {
+            return;
+        }
+
+        final Rect stackBounds = getBounds();
+        transaction.setSize(mSurfaceControl, stackBounds.width(), stackBounds.height());
     }
 
     @Override
@@ -689,41 +753,46 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         }
 
         mDisplayContent = dc;
-        mAnimationBackgroundSurface = new DimLayer(mService, this, mDisplayContent.getDisplayId(),
-                "animation background stackId=" + mStackId);
 
+        updateBoundsForWindowModeChange();
+        mAnimationBackgroundSurface = makeChildSurface(null).setColorLayer(true)
+            .setName("animation background stackId=" + mStackId)
+            .build();
+
+        super.onDisplayChanged(dc);
+    }
+
+    private void updateBoundsForWindowModeChange() {
         Rect bounds = null;
-        final TaskStack dockedStack = dc.getSplitScreenPrimaryStackIgnoringVisibility();
-        if (inSplitScreenPrimaryWindowingMode()
-                || (dockedStack != null && inSplitScreenSecondaryWindowingMode()
-                        && !dockedStack.fillsParent())) {
+        final boolean inSplitScreenPrimary = inSplitScreenPrimaryWindowingMode();
+        final TaskStack splitScreenStack =
+                mDisplayContent.getSplitScreenPrimaryStackIgnoringVisibility();
+        if (inSplitScreenPrimary || (splitScreenStack != null
+                && inSplitScreenSecondaryWindowingMode() && !splitScreenStack.fillsParent())) {
             // The existence of a docked stack affects the size of other static stack created since
             // the docked stack occupies a dedicated region on screen, but only if the dock stack is
             // not fullscreen. If it's fullscreen, it means that we are in the transition of
             // dismissing it, so we must not resize this stack.
             bounds = new Rect();
-            dc.getLogicalDisplayRect(mTmpRect);
+            mDisplayContent.getBounds(mTmpRect);
             mTmpRect2.setEmpty();
-            if (dockedStack != null) {
-                dockedStack.getRawBounds(mTmpRect2);
+            if (splitScreenStack != null) {
+                splitScreenStack.getRawBounds(mTmpRect2);
             }
             final boolean dockedOnTopOrLeft = mService.mDockedStackCreateMode
                     == SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
             getStackDockedModeBounds(mTmpRect, bounds, mTmpRect2,
-                    mDisplayContent.mDividerControllerLocked.getContentWidth(),
-                    dockedOnTopOrLeft);
+                    mDisplayContent.mDividerControllerLocked.getContentWidth(), dockedOnTopOrLeft);
         } else if (inPinnedWindowingMode()) {
             // Update the bounds based on any changes to the display info
             getAnimationOrCurrentBounds(mTmpRect2);
-            boolean updated = mDisplayContent.mPinnedStackControllerLocked.onTaskStackBoundsChanged(
-                    mTmpRect2, mTmpRect3);
-            if (updated) {
+            if (mDisplayContent.mPinnedStackControllerLocked.onTaskStackBoundsChanged(
+                    mTmpRect2, mTmpRect3)) {
                 bounds = new Rect(mTmpRect3);
             }
         }
 
         updateDisplayInfo(bounds);
-        super.onDisplayChanged(dc);
     }
 
     /**
@@ -768,7 +837,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         }
 
         if (!inSplitScreenWindowingMode() || mDisplayContent == null) {
-            outStackBounds.set(mBounds);
+            outStackBounds.set(getRawBounds());
             return;
         }
 
@@ -783,7 +852,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             // The docked stack is being dismissed, but we caught before it finished being
             // dismissed. In that case we want to treat it as if it is not occupying any space and
             // let others occupy the whole display.
-            mDisplayContent.getLogicalDisplayRect(outStackBounds);
+            mDisplayContent.getBounds(outStackBounds);
             return;
         }
 
@@ -791,11 +860,11 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         if (dockedSide == DOCKED_INVALID) {
             // Not sure how you got here...Only thing we can do is return current bounds.
             Slog.e(TAG_WM, "Failed to get valid docked side for docked stack=" + dockedStack);
-            outStackBounds.set(mBounds);
+            outStackBounds.set(getRawBounds());
             return;
         }
 
-        mDisplayContent.getLogicalDisplayRect(mTmpRect);
+        mDisplayContent.getBounds(mTmpRect);
         dockedStack.getRawBounds(mTmpRect2);
         final boolean dockedOnTopOrLeft = dockedSide == DOCKED_TOP || dockedSide == DOCKED_LEFT;
         getStackDockedModeBounds(mTmpRect, outStackBounds, mTmpRect2,
@@ -892,7 +961,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
 
     @Override
     void removeIfPossible() {
-        if (isAnimating()) {
+        if (isSelfOrChildAnimating()) {
             mDeferRemoval = true;
             return;
         }
@@ -901,21 +970,17 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
 
     @Override
     void onParentSet() {
+        super.onParentSet();
+
         if (getParent() != null || mDisplayContent == null) {
             return;
         }
 
-        // Looks like the stack was removed from the display. Go ahead and clean things up.
-        mDisplayContent.mDimLayerController.removeDimLayerUser(this);
         EventLog.writeEvent(EventLogTags.WM_STACK_REMOVED, mStackId);
 
         if (mAnimationBackgroundSurface != null) {
-            mAnimationBackgroundSurface.destroySurface();
+            mAnimationBackgroundSurface.destroy();
             mAnimationBackgroundSurface = null;
-        }
-
-        if (inSplitScreenPrimaryWindowingMode()) {
-            mDisplayContent.mDividerControllerLocked.notifyDockedStackExistsChanged(false);
         }
 
         mDisplayContent = null;
@@ -924,9 +989,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
 
     void resetAnimationBackgroundAnimator() {
         mAnimationBackgroundAnimator = null;
-        if (mAnimationBackgroundSurface != null) {
-            mAnimationBackgroundSurface.hide();
-        }
+        hideAnimationSurface();
     }
 
     void setAnimationBackground(WindowStateAnimator winAnimator, int color) {
@@ -935,8 +998,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
                 || animLayer < mAnimationBackgroundAnimator.mAnimLayer) {
             mAnimationBackgroundAnimator = winAnimator;
             animLayer = mDisplayContent.getLayerForAnimationBackground(winAnimator);
-            mAnimationBackgroundSurface.show(animLayer - LAYER_OFFSET_DIM,
-                    ((color >> 24) & 0xff) / 255f, 0);
+            showAnimationSurface(((color >> 24) & 0xff) / 255f);
         }
     }
 
@@ -1078,12 +1140,12 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             return false;
         }
 
-        final Rect displayContentRect = mTmpRect;
+        final Rect displayStableRect = mTmpRect;
         final Rect contentBounds = mTmpRect2;
 
         // Calculate the content bounds excluding the area occupied by IME
-        getDisplayContent().getContentRect(displayContentRect);
-        contentBounds.set(displayContentRect);
+        getDisplayContent().getStableRect(displayStableRect);
+        contentBounds.set(displayStableRect);
         int imeTop = Math.max(imeWin.getFrameLw().top, contentBounds.top);
 
         imeTop += imeWin.getGivenContentInsetsLw().top;
@@ -1091,7 +1153,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             contentBounds.bottom = imeTop;
         }
 
-        final int yOffset = displayContentRect.bottom - contentBounds.bottom;
+        final int yOffset = displayStableRect.bottom - contentBounds.bottom;
 
         final int dividerWidth =
                 getDisplayContent().mDividerControllerLocked.getContentWidth();
@@ -1103,14 +1165,14 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             // occluded by IME. We shift its bottom up by the height of the IME, but
             // leaves at least 30% of the top stack visible.
             final int minTopStackBottom =
-                    getMinTopStackBottom(displayContentRect, mBounds.bottom);
+                    getMinTopStackBottom(displayStableRect, getRawBounds().bottom);
             final int bottom = Math.max(
-                    mBounds.bottom - yOffset + dividerWidth - dividerWidthInactive,
+                    getRawBounds().bottom - yOffset + dividerWidth - dividerWidthInactive,
                     minTopStackBottom);
-            mTmpAdjustedBounds.set(mBounds);
-            mTmpAdjustedBounds.bottom =
-                    (int) (mAdjustImeAmount * bottom + (1 - mAdjustImeAmount) * mBounds.bottom);
-            mFullyAdjustedImeBounds.set(mBounds);
+            mTmpAdjustedBounds.set(getRawBounds());
+            mTmpAdjustedBounds.bottom = (int) (mAdjustImeAmount * bottom + (1 - mAdjustImeAmount)
+                    * getRawBounds().bottom);
+            mFullyAdjustedImeBounds.set(getRawBounds());
         } else {
             // When the stack is on bottom and has no focus, it's only adjusted for divider width.
             final int dividerWidthDelta = dividerWidthInactive - dividerWidth;
@@ -1120,22 +1182,24 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             // We try to move it up by the height of the IME window, but only to the extent
             // that leaves at least 30% of the top stack visible.
             // 'top' is where the top of bottom stack will move to in this case.
-            final int topBeforeImeAdjust = mBounds.top - dividerWidth + dividerWidthInactive;
+            final int topBeforeImeAdjust =
+                    getRawBounds().top - dividerWidth + dividerWidthInactive;
             final int minTopStackBottom =
-                    getMinTopStackBottom(displayContentRect, mBounds.top - dividerWidth);
+                    getMinTopStackBottom(displayStableRect,
+                            getRawBounds().top - dividerWidth);
             final int top = Math.max(
-                    mBounds.top - yOffset, minTopStackBottom + dividerWidthInactive);
+                    getRawBounds().top - yOffset, minTopStackBottom + dividerWidthInactive);
 
-            mTmpAdjustedBounds.set(mBounds);
+            mTmpAdjustedBounds.set(getRawBounds());
             // Account for the adjustment for IME and divider width separately.
             // (top - topBeforeImeAdjust) is the amount of movement due to IME only,
             // and dividerWidthDelta is due to divider width change only.
-            mTmpAdjustedBounds.top = mBounds.top +
+            mTmpAdjustedBounds.top = getRawBounds().top +
                     (int) (mAdjustImeAmount * (top - topBeforeImeAdjust) +
                             mAdjustDividerAmount * dividerWidthDelta);
-            mFullyAdjustedImeBounds.set(mBounds);
+            mFullyAdjustedImeBounds.set(getRawBounds());
             mFullyAdjustedImeBounds.top = top;
-            mFullyAdjustedImeBounds.bottom = top + mBounds.height();
+            mFullyAdjustedImeBounds.bottom = top + getRawBounds().height();
         }
         return true;
     }
@@ -1149,21 +1213,21 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         if (dockSide == DOCKED_TOP) {
             mService.getStableInsetsLocked(DEFAULT_DISPLAY, mTmpRect);
             int topInset = mTmpRect.top;
-            mTmpAdjustedBounds.set(mBounds);
-            mTmpAdjustedBounds.bottom =
-                    (int) (minimizeAmount * topInset + (1 - minimizeAmount) * mBounds.bottom);
+            mTmpAdjustedBounds.set(getRawBounds());
+            mTmpAdjustedBounds.bottom = (int) (minimizeAmount * topInset + (1 - minimizeAmount)
+                    * getRawBounds().bottom);
         } else if (dockSide == DOCKED_LEFT) {
-            mTmpAdjustedBounds.set(mBounds);
-            final int width = mBounds.width();
+            mTmpAdjustedBounds.set(getRawBounds());
+            final int width = getRawBounds().width();
             mTmpAdjustedBounds.right =
                     (int) (minimizeAmount * mDockedStackMinimizeThickness
-                            + (1 - minimizeAmount) * mBounds.right);
+                            + (1 - minimizeAmount) * getRawBounds().right);
             mTmpAdjustedBounds.left = mTmpAdjustedBounds.right - width;
         } else if (dockSide == DOCKED_RIGHT) {
-            mTmpAdjustedBounds.set(mBounds);
-            mTmpAdjustedBounds.left =
-                    (int) (minimizeAmount * (mBounds.right - mDockedStackMinimizeThickness)
-                            + (1 - minimizeAmount) * mBounds.left);
+            mTmpAdjustedBounds.set(getRawBounds());
+            mTmpAdjustedBounds.left = (int) (minimizeAmount *
+                    (getRawBounds().right - mDockedStackMinimizeThickness)
+                            + (1 - minimizeAmount) * getRawBounds().left);
         }
         return true;
     }
@@ -1185,9 +1249,9 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         if (dockSide == DOCKED_TOP) {
             mService.getStableInsetsLocked(DEFAULT_DISPLAY, mTmpRect);
             int topInset = mTmpRect.top;
-            return mBounds.bottom - topInset;
+            return getRawBounds().bottom - topInset;
         } else if (dockSide == DOCKED_LEFT || dockSide == DOCKED_RIGHT) {
-            return mBounds.width() - mDockedStackMinimizeThickness;
+            return getRawBounds().width() - mDockedStackMinimizeThickness;
         } else {
             return 0;
         }
@@ -1221,10 +1285,11 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             return;
         }
 
-        final Rect insetBounds = mImeGoingAway ? mBounds : mFullyAdjustedImeBounds;
+        final Rect insetBounds = mImeGoingAway ? getRawBounds() : mFullyAdjustedImeBounds;
         task.alignToAdjustedBounds(mAdjustedBounds, insetBounds, getDockSide() == DOCKED_TOP);
         mDisplayContent.setLayoutNeeded();
     }
+
 
     boolean isAdjustedForMinimizedDockedStack() {
         return mMinimizeAmount != 0f;
@@ -1239,17 +1304,17 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         for (int taskNdx = mChildren.size() - 1; taskNdx >= 0; taskNdx--) {
             mChildren.get(taskNdx).writeToProto(proto, TASKS, trim);
         }
-        proto.write(FILLS_PARENT, mFillsParent);
-        mBounds.writeToProto(proto, BOUNDS);
-        proto.write(ANIMATION_BACKGROUND_SURFACE_IS_DIMMING, mAnimationBackgroundSurface.isDimming());
+        proto.write(FILLS_PARENT, matchParentBounds());
+        getRawBounds().writeToProto(proto, BOUNDS);
+        proto.write(ANIMATION_BACKGROUND_SURFACE_IS_DIMMING, mAnimationBackgroundSurfaceIsShown);
         proto.end(token);
     }
 
-    public void dump(String prefix, PrintWriter pw) {
+    @Override
+     void dump(PrintWriter pw, String prefix, boolean dumpAll) {
         pw.println(prefix + "mStackId=" + mStackId);
         pw.println(prefix + "mDeferRemoval=" + mDeferRemoval);
-        pw.println(prefix + "mFillsParent=" + mFillsParent);
-        pw.println(prefix + "mBounds=" + mBounds.toShortString());
+        pw.println(prefix + "mBounds=" + getRawBounds().toShortString());
         if (mMinimizeAmount != 0f) {
             pw.println(prefix + "mMinimizeAmount=" + mMinimizeAmount);
         }
@@ -1262,11 +1327,10 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
             pw.println(prefix + "mAdjustedBounds=" + mAdjustedBounds.toShortString());
         }
         for (int taskNdx = mChildren.size() - 1; taskNdx >= 0; taskNdx--) {
-            mChildren.get(taskNdx).dump(prefix + "  ", pw);
+            mChildren.get(taskNdx).dump(pw, prefix + "  ", dumpAll);
         }
-        if (mAnimationBackgroundSurface.isDimming()) {
-            pw.println(prefix + "mWindowAnimationBackgroundSurface:");
-            mAnimationBackgroundSurface.printTo(prefix + "  ", pw);
+        if (mAnimationBackgroundSurfaceIsShown) {
+            pw.println(prefix + "mWindowAnimationBackgroundSurface is shown");
         }
         if (!mExitingAppTokens.isEmpty()) {
             pw.println();
@@ -1276,43 +1340,20 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
                 pw.print("  Exiting App #"); pw.print(i);
                 pw.print(' '); pw.print(token);
                 pw.println(':');
-                token.dump(pw, "    ");
+                token.dump(pw, "    ", dumpAll);
             }
         }
-    }
-
-    /** Fullscreen status of the stack without adjusting for other factors in the system like
-     * visibility of docked stack.
-     * Most callers should be using {@link #fillsParent} as it take into consideration other
-     * system factors. */
-    boolean getRawFullscreen() {
-        return mFillsParent;
-    }
-
-    @Override
-    public boolean dimFullscreen() {
-        return !isActivityTypeStandard() || fillsParent();
     }
 
     @Override
     boolean fillsParent() {
         if (useCurrentBounds()) {
-            return mFillsParent;
+            return matchParentBounds();
         }
         // The bounds has been adjusted to accommodate for a docked stack, but the docked stack
         // is not currently visible. Go ahead a represent it as fullscreen to the rest of the
         // system.
         return true;
-    }
-
-    @Override
-    public DisplayInfo getDisplayInfo() {
-        return mDisplayContent.getDisplayInfo();
-    }
-
-    @Override
-    public boolean isAttachedToDisplay() {
-        return mDisplayContent != null;
     }
 
     @Override
@@ -1324,7 +1365,6 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         return toShortString();
     }
 
-    @Override
     public String toShortString() {
         return "Stack=" + mStackId;
     }
@@ -1334,7 +1374,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
      * information which side of the screen was the dock anchored.
      */
     int getDockSide() {
-        return getDockSide(mBounds);
+        return getDockSide(getRawBounds());
     }
 
     private int getDockSide(Rect bounds) {
@@ -1344,7 +1384,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         if (mDisplayContent == null) {
             return DOCKED_INVALID;
         }
-        mDisplayContent.getLogicalDisplayRect(mTmpRect);
+        mDisplayContent.getBounds(mTmpRect);
         final int orientation = mDisplayContent.getConfiguration().orientation;
         return getDockSideUnchecked(bounds, mTmpRect, orientation);
     }
@@ -1464,7 +1504,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
              */
 
             if (task.isActivityTypeHome() && isMinimizedDockAndHomeStackResizable()) {
-                mDisplayContent.getLogicalDisplayRect(mTmpRect);
+                mDisplayContent.getBounds(mTmpRect);
             } else {
                 task.getDimBounds(mTmpRect);
             }
@@ -1630,7 +1670,7 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
 
     /** Returns true if a removal action is still being deferred. */
     boolean checkCompleteDeferredRemoval() {
-        if (isAnimating()) {
+        if (isSelfOrChildAnimating()) {
             return true;
         }
         if (mDeferRemoval) {
@@ -1638,35 +1678,6 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
         }
 
         return super.checkCompleteDeferredRemoval();
-    }
-
-    void stepAppWindowsAnimation(long currentTime) {
-        super.stepAppWindowsAnimation(currentTime);
-
-        // TODO: Why aren't we just using the loop above for this? mAppAnimator.animating isn't set
-        // below but is set in the loop above. See if it really matters...
-
-        // Clear before using.
-        mTmpAppTokens.clear();
-        // We copy the list as things can be removed from the exiting token list while we are
-        // processing.
-        mTmpAppTokens.addAll(mExitingAppTokens);
-        for (int i = 0; i < mTmpAppTokens.size(); i++) {
-            final AppWindowAnimator appAnimator = mTmpAppTokens.get(i).mAppAnimator;
-            appAnimator.wasAnimating = appAnimator.animating;
-            if (appAnimator.stepAnimationLocked(currentTime)) {
-                mService.mAnimator.setAnimating(true);
-                mService.mAnimator.mAppWindowAnimating = true;
-            } else if (appAnimator.wasAnimating) {
-                // stopped animating, do one more pass through the layout
-                appAnimator.mAppToken.setAppLayoutChanges(FINISH_LAYOUT_REDO_WALLPAPER,
-                        "exiting appToken " + appAnimator.mAppToken + " done");
-                if (DEBUG_ANIM) Slog.v(TAG_WM,
-                        "updateWindowsApps...: done animating exiting " + appAnimator.mAppToken);
-            }
-        }
-        // Clear to avoid holding reference to tokens.
-        mTmpAppTokens.clear();
     }
 
     @Override
@@ -1681,5 +1692,36 @@ public class TaskStack extends WindowContainer<Task> implements DimLayer.DimLaye
                 || activityType == ACTIVITY_TYPE_HOME
                 || activityType == ACTIVITY_TYPE_RECENTS
                 || activityType == ACTIVITY_TYPE_ASSISTANT;
+    }
+
+    Dimmer getDimmer() {
+        return mDimmer;
+    }
+
+    @Override
+    void prepareSurfaces() {
+        mDimmer.resetDimStates();
+        super.prepareSurfaces();
+        getDimBounds(mTmpDimBoundsRect);
+
+        // Bounds need to be relative, as the dim layer is a child.
+        mTmpDimBoundsRect.offsetTo(0, 0);
+        if (mDimmer.updateDims(getPendingTransaction(), mTmpDimBoundsRect)) {
+            scheduleAnimation();
+        }
+    }
+
+    public DisplayInfo getDisplayInfo() {
+        return mDisplayContent.getDisplayInfo();
+    }
+
+    void dim(float alpha) {
+        mDimmer.dimAbove(getPendingTransaction(), alpha);
+        scheduleAnimation();
+    }
+
+    void stopDimming() {
+        mDimmer.stopDim(getPendingTransaction());
+        scheduleAnimation();
     }
 }

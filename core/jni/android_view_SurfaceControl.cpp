@@ -167,7 +167,7 @@ static jobject nativeScreenshotToBuffer(JNIEnv* env, jclass clazz,
         maxLayer = INT32_MAX;
     }
     sp<GraphicBuffer> buffer;
-    status_t res = ScreenshotClient::captureToBuffer(displayToken,
+    status_t res = ScreenshotClient::capture(displayToken,
             sourceCrop, width, height, minLayer, maxLayer, useIdentityTransform,
             rotation, &buffer);
     if (res != NO_ERROR) {
@@ -201,15 +201,18 @@ static jobject nativeScreenshotBitmap(JNIEnv* env, jclass clazz,
         maxLayer = INT32_MAX;
     }
 
-    res = screenshot->update(displayToken, sourceCrop, width, height,
-        minLayer, maxLayer, useIdentityTransform, static_cast<uint32_t>(rotation));
+    sp<GraphicBuffer> buffer;
+    res = ScreenshotClient::capture(displayToken, sourceCrop, width, height,
+        minLayer, maxLayer, useIdentityTransform, static_cast<uint32_t>(rotation), &buffer);
     if (res != NO_ERROR) {
         return NULL;
     }
 
     SkColorType colorType;
     SkAlphaType alphaType;
-    switch (screenshot->getFormat()) {
+
+    PixelFormat format = buffer->getPixelFormat();
+    switch (format) {
         case PIXEL_FORMAT_RGBX_8888: {
             colorType = kRGBA_8888_SkColorType;
             alphaType = kOpaque_SkAlphaType;
@@ -235,66 +238,20 @@ static jobject nativeScreenshotBitmap(JNIEnv* env, jclass clazz,
         }
     }
 
-    sk_sp<SkColorSpace> colorSpace;
-    if (screenshot->getDataSpace() == HAL_DATASPACE_DISPLAY_P3) {
-        colorSpace = SkColorSpace::MakeRGB(
-                SkColorSpace::kSRGB_RenderTargetGamma, SkColorSpace::kDCIP3_D65_Gamut);
-    } else {
-        colorSpace = SkColorSpace::MakeSRGB();
-    }
+    SkImageInfo info = SkImageInfo::Make(buffer->getWidth(), buffer->getHeight(),
+                                         colorType, alphaType,
+                                         SkColorSpace::MakeSRGB());
 
-    SkImageInfo screenshotInfo = SkImageInfo::Make(screenshot->getWidth(),
-                                                   screenshot->getHeight(),
-                                                   colorType,
-                                                   alphaType,
-                                                   colorSpace);
-
-    const size_t rowBytes =
-            screenshot->getStride() * android::bytesPerPixel(screenshot->getFormat());
-
-    if (!screenshotInfo.width() || !screenshotInfo.height()) {
-        return NULL;
-    }
-
-    auto bitmap = new Bitmap(
-            (void*) screenshot->getPixels(), (void*) screenshot.get(), DeleteScreenshot,
-            screenshotInfo, rowBytes);
-    screenshot.release();
-    bitmap->setImmutable();
-    return bitmap::createBitmap(env, bitmap,
-            android::bitmap::kBitmapCreateFlag_Premultiplied, NULL);
+    auto bitmap = sk_sp<Bitmap>(new Bitmap(buffer.get(), info));
+    return bitmap::createBitmap(env, bitmap.release(),
+                                android::bitmap::kBitmapCreateFlag_Premultiplied, NULL);
 }
 
 static void nativeScreenshot(JNIEnv* env, jclass clazz, jobject displayTokenObj,
         jobject surfaceObj, jobject sourceCropObj, jint width, jint height,
         jint minLayer, jint maxLayer, bool allLayers, bool useIdentityTransform) {
     sp<IBinder> displayToken = ibinderForJavaObject(env, displayTokenObj);
-    if (displayToken != NULL) {
-        sp<Surface> consumer = android_view_Surface_getSurface(env, surfaceObj);
-        if (consumer != NULL) {
-            int left = env->GetIntField(sourceCropObj, gRectClassInfo.left);
-            int top = env->GetIntField(sourceCropObj, gRectClassInfo.top);
-            int right = env->GetIntField(sourceCropObj, gRectClassInfo.right);
-            int bottom = env->GetIntField(sourceCropObj, gRectClassInfo.bottom);
-            Rect sourceCrop(left, top, right, bottom);
-
-            if (allLayers) {
-                minLayer = INT32_MIN;
-                maxLayer = INT32_MAX;
-            }
-            ScreenshotClient::capture(displayToken,
-                    consumer->getIGraphicBufferProducer(), sourceCrop,
-                    width, height, minLayer, maxLayer,
-                    useIdentityTransform);
-        }
-    }
-}
-
-static void nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerHandleToken,
-        jobject surfaceObj, int rotation) {
-
-    sp<IBinder> layerHandle = ibinderForJavaObject(env, layerHandleToken);
-    if (layerHandle == NULL) {
+    if (displayToken == NULL) {
         return;
     }
 
@@ -303,12 +260,62 @@ static void nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerHandleTo
         return;
     }
 
-    ScreenshotClient::captureLayers(layerHandle, consumer->getIGraphicBufferProducer(), rotation);
+    Rect sourceCrop;
+    if (sourceCropObj != NULL) {
+        sourceCrop = rectFromObj(env, sourceCropObj);
+    }
+
+    if (allLayers) {
+        minLayer = INT32_MIN;
+        maxLayer = INT32_MAX;
+    }
+
+    sp<GraphicBuffer> buffer;
+    ScreenshotClient::capture(displayToken, sourceCrop, width, height, minLayer, maxLayer,
+                              useIdentityTransform, 0, &buffer);
+
+    Surface::attachAndQueueBuffer(consumer.get(), buffer);
+}
+
+static jobject nativeCaptureLayers(JNIEnv* env, jclass clazz, jobject layerHandleToken,
+        jobject sourceCropObj, jfloat frameScale) {
+
+    sp<IBinder> layerHandle = ibinderForJavaObject(env, layerHandleToken);
+    if (layerHandle == NULL) {
+        return NULL;
+    }
+
+    Rect sourceCrop;
+    if (sourceCropObj != NULL) {
+        sourceCrop = rectFromObj(env, sourceCropObj);
+    }
+
+    sp<GraphicBuffer> buffer;
+    status_t res = ScreenshotClient::captureLayers(layerHandle, sourceCrop, frameScale, &buffer);
+    if (res != NO_ERROR) {
+        return NULL;
+    }
+
+    return env->CallStaticObjectMethod(gGraphicBufferClassInfo.clazz,
+                                       gGraphicBufferClassInfo.builder,
+                                       buffer->getWidth(),
+                                       buffer->getHeight(),
+                                       buffer->getPixelFormat(),
+                                       (jint)buffer->getUsage(),
+                                       (jlong)buffer.get());
 }
 
 static void nativeApplyTransaction(JNIEnv* env, jclass clazz, jlong transactionObj, jboolean sync) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
     transaction->apply(sync);
+}
+
+static void nativeMergeTransaction(JNIEnv* env, jclass clazz,
+        jlong transactionObj, jlong otherTransactionObj) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+    auto otherTransaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(
+            otherTransactionObj);
+    transaction->merge(std::move(*otherTransaction));
 }
 
 static void nativeSetAnimationTransaction(JNIEnv* env, jclass clazz, jlong transactionObj) {
@@ -861,11 +868,40 @@ static jobject nativeGetHdrCapabilities(JNIEnv* env, jclass clazz, jobject token
             capabilities.getDesiredMaxAverageLuminance(), capabilities.getDesiredMinLuminance());
 }
 
+static jlong nativeReadFromParcel(JNIEnv* env, jclass clazz, jobject parcelObj) {
+    Parcel* parcel = parcelForJavaObject(env, parcelObj);
+    if (parcel == NULL) {
+        doThrowNPE(env);
+        return 0;
+    }
+    sp<SurfaceControl> surface = SurfaceControl::readFromParcel(parcel);
+    if (surface == nullptr) {
+        return 0;
+    }
+    surface->incStrong((void *)nativeCreate);
+    return reinterpret_cast<jlong>(surface.get());
+}
+
+static void nativeWriteToParcel(JNIEnv* env, jclass clazz,
+        jlong nativeObject, jobject parcelObj) {
+    Parcel* parcel = parcelForJavaObject(env, parcelObj);
+    if (parcel == NULL) {
+        doThrowNPE(env);
+        return;
+    }
+    SurfaceControl* const self = reinterpret_cast<SurfaceControl *>(nativeObject);
+    self->writeToParcel(parcel);
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod sSurfaceControlMethods[] = {
     {"nativeCreate", "(Landroid/view/SurfaceSession;Ljava/lang/String;IIIIJII)J",
             (void*)nativeCreate },
+    {"nativeReadFromParcel", "(Landroid/os/Parcel;)J",
+            (void*)nativeReadFromParcel },
+    {"nativeWriteToParcel", "(JLandroid/os/Parcel;)V",
+            (void*)nativeWriteToParcel },
     {"nativeRelease", "(J)V",
             (void*)nativeRelease },
     {"nativeDestroy", "(J)V",
@@ -882,6 +918,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeApplyTransaction },
     {"nativeGetNativeTransactionFinalizer", "()J",
             (void*)nativeGetNativeTransactionFinalizer },
+    {"nativeMergeTransaction", "(JJ)V",
+            (void*)nativeMergeTransaction },
     {"nativeSetAnimationTransaction", "(J)V",
             (void*)nativeSetAnimationTransaction },
     {"nativeSetLayer", "(JJI)V",
@@ -965,7 +1003,7 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
     {"nativeScreenshotToBuffer",
      "(Landroid/os/IBinder;Landroid/graphics/Rect;IIIIZZI)Landroid/graphics/GraphicBuffer;",
      (void*)nativeScreenshotToBuffer },
-    {"nativeCaptureLayers", "(Landroid/os/IBinder;Landroid/view/Surface;I)V",
+    {"nativeCaptureLayers", "(Landroid/os/IBinder;Landroid/graphics/Rect;F)Landroid/graphics/GraphicBuffer;",
             (void*)nativeCaptureLayers },
 };
 

@@ -21,8 +21,7 @@ namespace statsd {
 
 using std::map;
 
-void MetricProducer::onMatchedLogEvent(const size_t matcherIndex, const LogEvent& event,
-                                       bool scheduledPull) {
+void MetricProducer::onMatchedLogEventLocked(const size_t matcherIndex, const LogEvent& event) {
     uint64_t eventTimeNs = event.GetTimestampNs();
     // this is old event, maybe statsd restarted?
     if (eventTimeNs < mStartTimeNs) {
@@ -33,12 +32,7 @@ void MetricProducer::onMatchedLogEvent(const size_t matcherIndex, const LogEvent
 
     if (mDimension.size() > 0) {
         vector<KeyValuePair> key = getDimensionKey(event, mDimension);
-        eventKey = getHashableKey(key);
-        // Add the HashableDimensionKey->vector<KeyValuePair> to the map, because StatsLogReport
-        // expects vector<KeyValuePair>.
-        if (mDimensionKeyMap.find(eventKey) == mDimensionKeyMap.end()) {
-            mDimensionKeyMap[eventKey] = key;
-        }
+        eventKey = HashableDimensionKey(key);
     } else {
         eventKey = DEFAULT_DIMENSION_KEY;
     }
@@ -59,26 +53,7 @@ void MetricProducer::onMatchedLogEvent(const size_t matcherIndex, const LogEvent
     } else {
         condition = mCondition;
     }
-
-    onMatchedLogEventInternal(matcherIndex, eventKey, conditionKeys, condition, event,
-                              scheduledPull);
-}
-
-std::unique_ptr<uint8_t[]> MetricProducer::serializeProto() {
-    size_t bufferSize = mProto->size();
-
-    std::unique_ptr<uint8_t[]> buffer(new uint8_t[bufferSize]);
-
-    size_t pos = 0;
-    auto it = mProto->data();
-    while (it.readBuffer() != NULL) {
-        size_t toRead = it.currentToRead();
-        std::memcpy(&buffer[pos], it.readBuffer(), toRead);
-        pos += toRead;
-        it.rp()->move(toRead);
-    }
-
-    return buffer;
+    onMatchedLogEventInternalLocked(matcherIndex, eventKey, conditionKeys, condition, event);
 }
 
 }  // namespace statsd

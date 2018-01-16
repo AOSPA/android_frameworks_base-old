@@ -25,6 +25,7 @@
 #include "ResourceTable.h"
 #include "ResourceValues.h"
 #include "configuration/ConfigurationParser.h"
+#include "configuration/ConfigurationParser.internal.h"
 #include "process/IResourceTableConsumer.h"
 #include "test/Common.h"
 #include "util/Maybe.h"
@@ -67,7 +68,7 @@ class ResourceTableBuilder {
   ResourceTableBuilder& AddValue(const android::StringPiece& name, const ConfigDescription& config,
                                  const ResourceId& id, std::unique_ptr<Value> value);
   ResourceTableBuilder& SetSymbolState(const android::StringPiece& name, const ResourceId& id,
-                                       SymbolState state, bool allow_new = false);
+                                       Visibility::Level level, bool allow_new = false);
 
   StringPool* string_pool();
   std::unique_ptr<ResourceTable> Build();
@@ -154,38 +155,52 @@ std::unique_ptr<xml::XmlResource> BuildXmlDom(const android::StringPiece& str);
 std::unique_ptr<xml::XmlResource> BuildXmlDomForPackageName(IAaptContext* context,
                                                             const android::StringPiece& str);
 
-class PostProcessingConfigurationBuilder {
- public:
-  PostProcessingConfigurationBuilder() = default;
-
-  PostProcessingConfigurationBuilder& SetAbiGroup(const std::string& name,
-                                                  const std::vector<configuration::Abi>& abis);
-  PostProcessingConfigurationBuilder& SetLocaleGroup(const std::string& name,
-                                                     const std::vector<std::string>& locales);
-  PostProcessingConfigurationBuilder& SetDensityGroup(const std::string& name,
-                                                      const std::vector<std::string>& densities);
-  PostProcessingConfigurationBuilder& SetAndroidSdk(const std::string& name,
-                                                    const configuration::AndroidSdk& sdk);
-  PostProcessingConfigurationBuilder& AddArtifact(const configuration::Artifact& artifact);
-  configuration::PostProcessingConfiguration Build();
-
- private:
-  configuration::PostProcessingConfiguration config_;
-};
-
 class ArtifactBuilder {
  public:
   ArtifactBuilder() = default;
 
   ArtifactBuilder& SetName(const std::string& name);
-  ArtifactBuilder& SetAbiGroup(const std::string& name);
-  ArtifactBuilder& SetDensityGroup(const std::string& name);
-  ArtifactBuilder& SetLocaleGroup(const std::string& name);
-  ArtifactBuilder& SetAndroidSdk(const std::string& name);
-  configuration::Artifact Build();
+  ArtifactBuilder& SetVersion(int version);
+  ArtifactBuilder& AddAbi(configuration::Abi abi);
+  ArtifactBuilder& AddDensity(const ConfigDescription& density);
+  ArtifactBuilder& AddLocale(const ConfigDescription& locale);
+  ArtifactBuilder& SetAndroidSdk(int min_sdk);
+  configuration::OutputArtifact Build();
 
  private:
-  configuration::Artifact artifact_;
+  DISALLOW_COPY_AND_ASSIGN(ArtifactBuilder);
+
+  configuration::OutputArtifact artifact_;
+};
+
+class PostProcessingConfigurationBuilder {
+ public:
+  PostProcessingConfigurationBuilder() = default;
+
+  PostProcessingConfigurationBuilder& AddAbiGroup(const std::string& label,
+                                                  std::vector<configuration::Abi> abis = {});
+  PostProcessingConfigurationBuilder& AddDensityGroup(const std::string& label,
+                                                      std::vector<std::string> densities = {});
+  PostProcessingConfigurationBuilder& AddLocaleGroup(const std::string& label,
+                                                     std::vector<std::string> locales = {});
+  PostProcessingConfigurationBuilder& AddDeviceFeatureGroup(const std::string& label);
+  PostProcessingConfigurationBuilder& AddGlTextureGroup(const std::string& label);
+  PostProcessingConfigurationBuilder& AddAndroidSdk(std::string label, int min_sdk);
+  PostProcessingConfigurationBuilder& AddArtifact(configuration::ConfiguredArtifact artrifact);
+
+  configuration::PostProcessingConfiguration Build();
+
+ private:
+  template <typename T>
+  inline PostProcessingConfigurationBuilder& AddGroup(const std::string& label,
+                                                      configuration::Group<T>* group,
+                                                      std::vector<T> to_add = {}) {
+    auto& values = GetOrCreateGroup(label, group);
+    values.insert(std::begin(values), std::begin(to_add), std::end(to_add));
+    return *this;
+  }
+
+  configuration::PostProcessingConfiguration config_;
 };
 
 }  // namespace test

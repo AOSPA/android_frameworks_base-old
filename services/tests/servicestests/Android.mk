@@ -25,7 +25,9 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
     mockito-target-minus-junit4 \
     platform-test-annotations \
     ShortcutManagerTestUtils \
-    truth-prebuilt
+    truth-prebuilt \
+    testables \
+    testng
 
 LOCAL_AIDL_INCLUDES := $(LOCAL_PATH)/aidl
 
@@ -36,7 +38,7 @@ LOCAL_SRC_FILES += $(call all-java-files-under, test-apps/JobTestApp/src)
 LOCAL_JAVA_LIBRARIES := \
     android.hidl.manager-V1.0-java \
     android.test.mock \
-    legacy-android-test \
+    android.test.base android.test.runner \
 
 LOCAL_PACKAGE_NAME := FrameworksServicesTests
 LOCAL_COMPATIBILITY_SUITE := device-tests

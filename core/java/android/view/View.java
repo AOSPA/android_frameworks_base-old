@@ -893,6 +893,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     private static boolean sAutoFocusableOffUIThreadWontNotifyParents;
 
+    /**
+     * Prior to P things like setScaleX() allowed passing float values that were bogus such as
+     * Float.NaN. If the app is targetting P or later then passing these values will result in an
+     * exception being thrown. If the app is targetting an earlier SDK version, then we will
+     * silently clamp these values to avoid crashes elsewhere when the rendering code hits
+     * these bogus values.
+     */
+    private static boolean sThrowOnInvalidFloatProperties;
+
     /** @hide */
     @IntDef({NOT_FOCUSABLE, FOCUSABLE, FOCUSABLE_AUTO})
     @Retention(RetentionPolicy.SOURCE)
@@ -1169,7 +1178,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private AutofillId mAutofillId;
 
     /** @hide */
-    @IntDef({
+    @IntDef(prefix = { "AUTOFILL_TYPE_" }, value = {
             AUTOFILL_TYPE_NONE,
             AUTOFILL_TYPE_TEXT,
             AUTOFILL_TYPE_TOGGLE,
@@ -1240,7 +1249,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public static final int AUTOFILL_TYPE_DATE = 4;
 
     /** @hide */
-    @IntDef({
+    @IntDef(prefix = { "IMPORTANT_FOR_AUTOFILL_" }, value = {
             IMPORTANT_FOR_AUTOFILL_AUTO,
             IMPORTANT_FOR_AUTOFILL_YES,
             IMPORTANT_FOR_AUTOFILL_NO,
@@ -1291,9 +1300,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public static final int IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS = 0x8;
 
     /** @hide */
-    @IntDef(
-            flag = true,
-            value = {AUTOFILL_FLAG_INCLUDE_NOT_IMPORTANT_VIEWS})
+    @IntDef(flag = true, prefix = { "AUTOFILL_FLAG_" }, value = {
+            AUTOFILL_FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface AutofillFlags {}
 
@@ -1443,7 +1452,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({DRAWING_CACHE_QUALITY_LOW, DRAWING_CACHE_QUALITY_HIGH, DRAWING_CACHE_QUALITY_AUTO})
+    @IntDef(prefix = { "DRAWING_CACHE_QUALITY_" }, value = {
+            DRAWING_CACHE_QUALITY_LOW,
+            DRAWING_CACHE_QUALITY_HIGH,
+            DRAWING_CACHE_QUALITY_AUTO
+    })
     public @interface DrawingCacheQuality {}
 
     /**
@@ -1542,13 +1555,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     static final int CONTEXT_CLICKABLE = 0x00800000;
 
-
     /** @hide */
-    @IntDef({
-        SCROLLBARS_INSIDE_OVERLAY,
-        SCROLLBARS_INSIDE_INSET,
-        SCROLLBARS_OUTSIDE_OVERLAY,
-        SCROLLBARS_OUTSIDE_INSET
+    @IntDef(prefix = { "SCROLLBARS_" }, value = {
+            SCROLLBARS_INSIDE_OVERLAY,
+            SCROLLBARS_INSIDE_INSET,
+            SCROLLBARS_OUTSIDE_OVERLAY,
+            SCROLLBARS_OUTSIDE_INSET
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ScrollBarStyle {}
@@ -1642,11 +1654,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     static final int TOOLTIP = 0x40000000;
 
     /** @hide */
-    @IntDef(flag = true,
-            value = {
-                FOCUSABLES_ALL,
-                FOCUSABLES_TOUCH_MODE
-            })
+    @IntDef(flag = true, prefix = { "FOCUSABLES_" }, value = {
+            FOCUSABLES_ALL,
+            FOCUSABLES_TOUCH_MODE
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface FocusableMode {}
 
@@ -1663,7 +1674,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public static final int FOCUSABLES_TOUCH_MODE = 0x00000001;
 
     /** @hide */
-    @IntDef({
+    @IntDef(prefix = { "FOCUS_" }, value = {
             FOCUS_BACKWARD,
             FOCUS_FORWARD,
             FOCUS_LEFT,
@@ -1675,7 +1686,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public @interface FocusDirection {}
 
     /** @hide */
-    @IntDef({
+    @IntDef(prefix = { "FOCUS_" }, value = {
             FOCUS_LEFT,
             FOCUS_UP,
             FOCUS_RIGHT,
@@ -2417,20 +2428,20 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     static final int PFLAG2_DRAG_HOVERED               = 0x00000002;
 
     /** @hide */
-    @IntDef({
-        LAYOUT_DIRECTION_LTR,
-        LAYOUT_DIRECTION_RTL,
-        LAYOUT_DIRECTION_INHERIT,
-        LAYOUT_DIRECTION_LOCALE
+    @IntDef(prefix = { "LAYOUT_DIRECTION_" }, value = {
+            LAYOUT_DIRECTION_LTR,
+            LAYOUT_DIRECTION_RTL,
+            LAYOUT_DIRECTION_INHERIT,
+            LAYOUT_DIRECTION_LOCALE
     })
     @Retention(RetentionPolicy.SOURCE)
     // Not called LayoutDirection to avoid conflict with android.util.LayoutDirection
     public @interface LayoutDir {}
 
     /** @hide */
-    @IntDef({
-        LAYOUT_DIRECTION_LTR,
-        LAYOUT_DIRECTION_RTL
+    @IntDef(prefix = { "LAYOUT_DIRECTION_" }, value = {
+            LAYOUT_DIRECTION_LTR,
+            LAYOUT_DIRECTION_RTL
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ResolvedLayoutDir {}
@@ -2636,14 +2647,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             TEXT_DIRECTION_RESOLVED_DEFAULT << PFLAG2_TEXT_DIRECTION_RESOLVED_MASK_SHIFT;
 
     /** @hide */
-    @IntDef({
-        TEXT_ALIGNMENT_INHERIT,
-        TEXT_ALIGNMENT_GRAVITY,
-        TEXT_ALIGNMENT_CENTER,
-        TEXT_ALIGNMENT_TEXT_START,
-        TEXT_ALIGNMENT_TEXT_END,
-        TEXT_ALIGNMENT_VIEW_START,
-        TEXT_ALIGNMENT_VIEW_END
+    @IntDef(prefix = { "TEXT_ALIGNMENT_" }, value = {
+            TEXT_ALIGNMENT_INHERIT,
+            TEXT_ALIGNMENT_GRAVITY,
+            TEXT_ALIGNMENT_CENTER,
+            TEXT_ALIGNMENT_TEXT_START,
+            TEXT_ALIGNMENT_TEXT_END,
+            TEXT_ALIGNMENT_VIEW_START,
+            TEXT_ALIGNMENT_VIEW_END
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface TextAlignment {}
@@ -2929,6 +2940,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *        1                          PFLAG3_TEMPORARY_DETACH
      *       1                           PFLAG3_NO_REVEAL_ON_FOCUS
      *      1                            PFLAG3_NOTIFY_AUTOFILL_ENTER_ON_LAYOUT
+     *     1                             PFLAG3_SCREEN_READER_FOCUSABLE
      * |-------|-------|-------|-------|
      */
 
@@ -3039,15 +3051,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(flag = true,
-            value = {
-                    SCROLL_INDICATOR_TOP,
-                    SCROLL_INDICATOR_BOTTOM,
-                    SCROLL_INDICATOR_LEFT,
-                    SCROLL_INDICATOR_RIGHT,
-                    SCROLL_INDICATOR_START,
-                    SCROLL_INDICATOR_END,
-            })
+    @IntDef(flag = true, prefix = { "SCROLL_INDICATOR_" }, value = {
+            SCROLL_INDICATOR_TOP,
+            SCROLL_INDICATOR_BOTTOM,
+            SCROLL_INDICATOR_LEFT,
+            SCROLL_INDICATOR_RIGHT,
+            SCROLL_INDICATOR_START,
+            SCROLL_INDICATOR_END,
+    })
     public @interface ScrollIndicators {}
 
     /**
@@ -3208,6 +3219,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * user visibility which cannot be done until the view is laid out.
      */
     static final int PFLAG3_NOTIFY_AUTOFILL_ENTER_ON_LAYOUT = 0x8000000;
+
+    /**
+     * Works like focusable for screen readers, but without the side effects on input focus.
+     * @see #setScreenReaderFocusable(boolean)
+     */
+    private static final int PFLAG3_SCREEN_READER_FOCUSABLE = 0x10000000;
 
     /* End of masks for mPrivateFlags3 */
 
@@ -3667,8 +3684,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             | SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
 
     /** @hide */
-    @IntDef(flag = true,
-            value = { FIND_VIEWS_WITH_TEXT, FIND_VIEWS_WITH_CONTENT_DESCRIPTION })
+    @IntDef(flag = true, prefix = { "FIND_VIEWS_" }, value = {
+            FIND_VIEWS_WITH_TEXT,
+            FIND_VIEWS_WITH_CONTENT_DESCRIPTION
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface FindViewFlags {}
 
@@ -4245,6 +4264,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         OnApplyWindowInsetsListener mOnApplyWindowInsetsListener;
 
         OnCapturedPointerListener mOnCapturedPointerListener;
+
+        private ArrayList<OnKeyFallbackListener> mKeyFallbackListeners;
     }
 
     ListenerInfo mListenerInfo;
@@ -4278,6 +4299,38 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          */
         Runnable mShowTooltipRunnable;
         Runnable mHideTooltipRunnable;
+
+        /**
+         * Hover move is ignored if it is within this distance in pixels from the previous one.
+         */
+        int mHoverSlop;
+
+        /**
+         * Update the anchor position if it significantly (that is by at least mHoverSlop)
+         * different from the previously stored position. Ignoring insignificant changes
+         * filters out the jitter which is typical for such input sources as stylus.
+         *
+         * @return True if the position has been updated.
+         */
+        private boolean updateAnchorPos(MotionEvent event) {
+            final int newAnchorX = (int) event.getX();
+            final int newAnchorY = (int) event.getY();
+            if (Math.abs(newAnchorX - mAnchorX) <= mHoverSlop
+                    && Math.abs(newAnchorY - mAnchorY) <= mHoverSlop) {
+                return false;
+            }
+            mAnchorX = newAnchorX;
+            mAnchorY = newAnchorY;
+            return true;
+        }
+
+        /**
+         *  Clear the anchor position to ensure that the next change is considered significant.
+         */
+        private void clearAnchorPos() {
+            mAnchorX = Integer.MAX_VALUE;
+            mAnchorY = Integer.MAX_VALUE;
+        }
     }
 
     TooltipInfo mTooltipInfo;
@@ -4742,6 +4795,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
             sUseDefaultFocusHighlight = context.getResources().getBoolean(
                     com.android.internal.R.bool.config_useDefaultFocusHighlight);
+
+            sThrowOnInvalidFloatProperties = targetSdkVersion >= Build.VERSION_CODES.P;
 
             sCompatibilityDone = true;
         }
@@ -5340,6 +5395,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 case R.styleable.View_defaultFocusHighlightEnabled:
                     if (a.peekValue(attr) != null) {
                         setDefaultFocusHighlightEnabled(a.getBoolean(attr, true));
+                    }
+                    break;
+                case R.styleable.View_screenReaderFocusable:
+                    if (a.peekValue(attr) != null) {
+                        setScreenReaderFocusable(a.getBoolean(attr, false));
                     }
                     break;
             }
@@ -8392,6 +8452,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         info.setEnabled(isEnabled());
         info.setClickable(isClickable());
         info.setFocusable(isFocusable());
+        info.setScreenReaderFocusable(isScreenReaderFocusable());
         info.setFocused(isFocused());
         info.setAccessibilityFocused(isAccessibilityFocused());
         info.setSelected(isSelected());
@@ -10345,6 +10406,45 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @ViewDebug.ExportedProperty(category = "focus")
     public final boolean isFocusableInTouchMode() {
         return FOCUSABLE_IN_TOUCH_MODE == (mViewFlags & FOCUSABLE_IN_TOUCH_MODE);
+    }
+
+    /**
+     * Returns whether the view should be treated as a focusable unit by screen reader
+     * accessibility tools.
+     * @see #setScreenReaderFocusable(boolean)
+     *
+     * @return Whether the view should be treated as a focusable unit by screen reader.
+     */
+    public boolean isScreenReaderFocusable() {
+        return (mPrivateFlags3 & PFLAG3_SCREEN_READER_FOCUSABLE) != 0;
+    }
+
+    /**
+     * When screen readers (one type of accessibility tool) decide what should be read to the
+     * user, they typically look for input focusable ({@link #isFocusable()}) parents of
+     * non-focusable text items, and read those focusable parents and their non-focusable children
+     * as a unit. In some situations, this behavior is desirable for views that should not take
+     * input focus. Setting an item to be screen reader focusable requests that the view be
+     * treated as a unit by screen readers without any effect on input focusability. The default
+     * value of {@code false} lets screen readers use other signals, like focusable, to determine
+     * how to group items.
+     *
+     * @param screenReaderFocusable Whether the view should be treated as a unit by screen reader
+     *                              accessibility tools.
+     */
+    public void setScreenReaderFocusable(boolean screenReaderFocusable) {
+        int pflags3 = mPrivateFlags3;
+        if (screenReaderFocusable) {
+            pflags3 |= PFLAG3_SCREEN_READER_FOCUSABLE;
+        } else {
+            pflags3 &= ~PFLAG3_SCREEN_READER_FOCUSABLE;
+        }
+
+        if (pflags3 != mPrivateFlags3) {
+            mPrivateFlags3 = pflags3;
+            notifyViewAccessibilityStateChangedIfNeeded(
+                    AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
+        }
     }
 
     /**
@@ -14218,6 +14318,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public void setScaleX(float scaleX) {
         if (scaleX != getScaleX()) {
+            scaleX = sanitizeFloatPropertyValue(scaleX, "scaleX");
             invalidateViewProperty(true, false);
             mRenderNode.setScaleX(scaleX);
             invalidateViewProperty(false, true);
@@ -14254,6 +14355,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public void setScaleY(float scaleY) {
         if (scaleY != getScaleY()) {
+            scaleY = sanitizeFloatPropertyValue(scaleY, "scaleY");
             invalidateViewProperty(true, false);
             mRenderNode.setScaleY(scaleY);
             invalidateViewProperty(false, true);
@@ -14803,6 +14905,43 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
     }
 
+    private static float sanitizeFloatPropertyValue(float value, String propertyName) {
+        return sanitizeFloatPropertyValue(value, propertyName, -Float.MAX_VALUE, Float.MAX_VALUE);
+    }
+
+    private static float sanitizeFloatPropertyValue(float value, String propertyName,
+            float min, float max) {
+        // The expected "nothing bad happened" path
+        if (value >= min && value <= max) return value;
+
+        if (value < min || value == Float.NEGATIVE_INFINITY) {
+            if (sThrowOnInvalidFloatProperties) {
+                throw new IllegalArgumentException("Cannot set '" + propertyName + "' to "
+                        + value + ", the value must be >= " + min);
+            }
+            return min;
+        }
+
+        if (value > max || value == Float.POSITIVE_INFINITY) {
+            if (sThrowOnInvalidFloatProperties) {
+                throw new IllegalArgumentException("Cannot set '" + propertyName + "' to "
+                        + value + ", the value must be <= " + max);
+            }
+            return max;
+        }
+
+        if (Float.isNaN(value)) {
+            if (sThrowOnInvalidFloatProperties) {
+                throw new IllegalArgumentException(
+                        "Cannot set '" + propertyName + "' to Float.NaN");
+            }
+            return 0; // Unclear which direction this NaN went so... 0?
+        }
+
+        // Shouldn't be possible to reach this.
+        throw new IllegalStateException("How do you get here?? " + value);
+    }
+
     /**
      * The visual x position of this view, in pixels. This is equivalent to the
      * {@link #setTranslationX(float) translationX} property plus the current
@@ -14889,6 +15028,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public void setElevation(float elevation) {
         if (elevation != getElevation()) {
+            elevation = sanitizeFloatPropertyValue(elevation, "elevation");
             invalidateViewProperty(true, false);
             mRenderNode.setElevation(elevation);
             invalidateViewProperty(false, true);
@@ -14981,6 +15121,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public void setTranslationZ(float translationZ) {
         if (translationZ != getTranslationZ()) {
+            translationZ = sanitizeFloatPropertyValue(translationZ, "translationZ");
             invalidateViewProperty(true, false);
             mRenderNode.setTranslationZ(translationZ);
             invalidateViewProperty(false, true);
@@ -15167,6 +15308,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @ViewDebug.ExportedProperty(category = "drawing")
     public boolean hasShadow() {
         return mRenderNode.hasShadow();
+    }
+
+    /**
+     * @hide
+     */
+    public void setShadowColor(@ColorInt int color) {
+        if (mRenderNode.setShadowColor(color)) {
+            invalidateViewProperty(true, true);
+        }
     }
 
 
@@ -25172,6 +25322,29 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Interface definition for a callback to be invoked when a hardware key event is
+     * dispatched to this view during the fallback phase. This means no view in the hierarchy
+     * has handled this event.
+     */
+    public interface OnKeyFallbackListener {
+        /**
+         * Called when a hardware key is dispatched to a view in the fallback phase. This allows
+         * listeners to respond to events after the view hierarchy has had a chance to respond.
+         * <p>Key presses in software keyboards will generally NOT trigger this method,
+         * although some may elect to do so in some situations. Do not assume a
+         * software input method has to be key-based; even if it is, it may use key presses
+         * in a different way than you expect, so there is no way to reliably catch soft
+         * input key presses.
+         *
+         * @param v The view the key has been dispatched to.
+         * @param event The KeyEvent object containing full information about
+         *        the event.
+         * @return True if the listener has consumed the event, false otherwise.
+         */
+        boolean onKeyFallback(View v, KeyEvent event);
+    }
+
+    /**
      * Interface definition for a callback to be invoked when a touch event is
      * dispatched to this view. The callback will be invoked before the touch
      * event is given to the view.
@@ -25618,6 +25791,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * stable system windows.
          */
         final Rect mStableInsets = new Rect();
+
+        final DisplayCutout.ParcelableWrapper mDisplayCutout =
+                new DisplayCutout.ParcelableWrapper(DisplayCutout.NO_CUTOUT);
 
         /**
          * For windows that include areas that are not covered by real surface these are the outsets
@@ -26672,6 +26848,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 mTooltipInfo = new TooltipInfo();
                 mTooltipInfo.mShowTooltipRunnable = this::showHoverTooltip;
                 mTooltipInfo.mHideTooltipRunnable = this::hideTooltip;
+                mTooltipInfo.mHoverSlop = ViewConfiguration.get(mContext).getScaledHoverSlop();
+                mTooltipInfo.clearAnchorPos();
             }
             mTooltipInfo.mTooltipText = tooltipText;
         }
@@ -26712,7 +26890,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (mAttachInfo == null || mTooltipInfo == null) {
             return false;
         }
-        if ((mViewFlags & ENABLED_MASK) != ENABLED) {
+        if (fromLongClick && (mViewFlags & ENABLED_MASK) != ENABLED) {
             return false;
         }
         if (TextUtils.isEmpty(mTooltipInfo.mTooltipText)) {
@@ -26738,6 +26916,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         mTooltipInfo.mTooltipPopup.hide();
         mTooltipInfo.mTooltipPopup = null;
         mTooltipInfo.mTooltipFromLongClick = false;
+        mTooltipInfo.clearAnchorPos();
         if (mAttachInfo != null) {
             mAttachInfo.mTooltipHost = null;
         }
@@ -26759,14 +26938,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
         switch(event.getAction()) {
             case MotionEvent.ACTION_HOVER_MOVE:
-                if ((mViewFlags & TOOLTIP) != TOOLTIP || (mViewFlags & ENABLED_MASK) != ENABLED) {
+                if ((mViewFlags & TOOLTIP) != TOOLTIP) {
                     break;
                 }
-                if (!mTooltipInfo.mTooltipFromLongClick) {
+                if (!mTooltipInfo.mTooltipFromLongClick && mTooltipInfo.updateAnchorPos(event)) {
                     if (mTooltipInfo.mTooltipPopup == null) {
                         // Schedule showing the tooltip after a timeout.
-                        mTooltipInfo.mAnchorX = (int) event.getX();
-                        mTooltipInfo.mAnchorY = (int) event.getY();
                         removeCallbacks(mTooltipInfo.mShowTooltipRunnable);
                         postDelayed(mTooltipInfo.mShowTooltipRunnable,
                                 ViewConfiguration.getHoverTooltipShowTimeout());
@@ -26788,6 +26965,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 return true;
 
             case MotionEvent.ACTION_HOVER_EXIT:
+                mTooltipInfo.clearAnchorPos();
                 if (!mTooltipInfo.mTooltipFromLongClick) {
                     hideTooltip();
                 }
@@ -26843,5 +27021,57 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             return null;
         }
         return mTooltipInfo.mTooltipPopup.getContentView();
+    }
+
+    /**
+     * Allows this view to handle {@link KeyEvent}s which weren't handled by normal dispatch. This
+     * occurs after the normal view hierarchy dispatch, but before the window callback. By default,
+     * this will dispatch into all the listeners registered via
+     * {@link #addKeyFallbackListener(OnKeyFallbackListener)} in last-in-first-out order (most
+     * recently added will receive events first).
+     *
+     * @param event A not-previously-handled event.
+     * @return {@code true} if the event was handled, {@code false} otherwise.
+     * @see #addKeyFallbackListener
+     */
+    public boolean onKeyFallback(@NonNull KeyEvent event) {
+        if (mListenerInfo != null && mListenerInfo.mKeyFallbackListeners != null) {
+            for (int i = mListenerInfo.mKeyFallbackListeners.size() - 1; i >= 0; --i) {
+                if (mListenerInfo.mKeyFallbackListeners.get(i).onKeyFallback(this, event)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Adds a listener which will receive unhandled {@link KeyEvent}s.
+     * @param listener the receiver of fallback {@link KeyEvent}s.
+     * @see #onKeyFallback(KeyEvent)
+     */
+    public void addKeyFallbackListener(OnKeyFallbackListener listener) {
+        ArrayList<OnKeyFallbackListener> fallbacks = getListenerInfo().mKeyFallbackListeners;
+        if (fallbacks == null) {
+            fallbacks = new ArrayList<>();
+            getListenerInfo().mKeyFallbackListeners = fallbacks;
+        }
+        fallbacks.add(listener);
+    }
+
+    /**
+     * Removes a listener which will receive unhandled {@link KeyEvent}s.
+     * @param listener the receiver of fallback {@link KeyEvent}s.
+     * @see #onKeyFallback(KeyEvent)
+     */
+    public void removeKeyFallbackListener(OnKeyFallbackListener listener) {
+        if (mListenerInfo != null) {
+            if (mListenerInfo.mKeyFallbackListeners != null) {
+                mListenerInfo.mKeyFallbackListeners.remove(listener);
+                if (mListenerInfo.mKeyFallbackListeners.isEmpty()) {
+                    mListenerInfo.mKeyFallbackListeners = null;
+                }
+            }
+        }
     }
 }

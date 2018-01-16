@@ -25,7 +25,6 @@
 #include <unordered_map>
 #include "../matchers/matcher_util.h"
 #include "ConditionTracker.h"
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 #include "stats_util.h"
 
@@ -87,27 +86,30 @@ ConditionState evaluateCombinationCondition(const std::vector<int>& children,
         case LogicalOperation::NOR:
             newCondition = hasTrue ? ConditionState::kFalse : ConditionState::kTrue;
             break;
+        case LogicalOperation::LOGICAL_OPERATION_UNSPECIFIED:
+            newCondition = ConditionState::kFalse;
+            break;
     }
     return newCondition;
 }
 
 HashableDimensionKey getDimensionKeyForCondition(const LogEvent& event,
-                                                 const EventConditionLink& link) {
+                                                 const MetricConditionLink& link) {
     vector<KeyMatcher> eventKey;
-    eventKey.reserve(link.key_in_main().size());
+    eventKey.reserve(link.key_in_what().size());
 
-    for (const auto& key : link.key_in_main()) {
+    for (const auto& key : link.key_in_what()) {
         eventKey.push_back(key);
     }
 
     vector<KeyValuePair> dimensionKey = getDimensionKey(event, eventKey);
 
-    for (int i = 0; i < link.key_in_main_size(); i++) {
+    for (int i = 0; i < link.key_in_what_size(); i++) {
         auto& kv = dimensionKey[i];
         kv.set_key(link.key_in_condition(i).key());
     }
 
-    return getHashableKey(dimensionKey);
+    return HashableDimensionKey(dimensionKey);
 }
 
 }  // namespace statsd

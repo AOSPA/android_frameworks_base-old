@@ -22,6 +22,7 @@ import android.app.ContentProviderHolder;
 import android.app.IApplicationThread;
 import android.app.IActivityController;
 import android.app.IAppTask;
+import android.app.IAssistDataReceiver;
 import android.app.IInstrumentationWatcher;
 import android.app.IProcessObserver;
 import android.app.IServiceConnection;
@@ -63,7 +64,6 @@ import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.StrictMode;
 import android.service.voice.IVoiceInteractionSession;
-import com.android.internal.app.IAssistDataReceiver;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.policy.IKeyguardDismissCallback;
@@ -86,6 +86,9 @@ interface IActivityManager {
     // the ones in frameworks/native/libs/binder/include/binder/IActivityManager.h
     // =============== Beginning of transactions used on native side as well ======================
     ParcelFileDescriptor openContentUri(in String uriString);
+    void registerUidObserver(in IUidObserver observer, int which, int cutpoint,
+            String callingPackage);
+    void unregisterUidObserver(in IUidObserver observer);
     // =============== End of transactions used on native side as well ============================
 
     // Special low-level communication with activity manager.
@@ -108,7 +111,7 @@ interface IActivityManager {
     void unbroadcastIntent(in IApplicationThread caller, in Intent intent, int userId);
     oneway void finishReceiver(in IBinder who, int resultCode, in String resultData, in Bundle map,
             boolean abortBroadcast, int flags);
-    void attachApplication(in IApplicationThread app);
+    void attachApplication(in IApplicationThread app, long startSeq);
     oneway void activityIdle(in IBinder token, in Configuration config,
             in boolean stopProfiling);
     void activityPaused(in IBinder token);
@@ -207,7 +210,7 @@ interface IActivityManager {
     boolean moveActivityTaskToBack(in IBinder token, boolean nonRoot);
     void getMemoryInfo(out ActivityManager.MemoryInfo outInfo);
     List<ActivityManager.ProcessErrorStateInfo> getProcessesInErrorState();
-    boolean clearApplicationUserData(in String packageName,
+    boolean clearApplicationUserData(in String packageName, boolean keepState,
             in IPackageDataObserver observer, int userId);
     void forceStopPackage(in String packageName, int userId);
     boolean killPids(in int[] pids, in String reason, boolean secure);
@@ -423,7 +426,7 @@ interface IActivityManager {
     int startAssistantActivity(in String callingPackage, int callingPid, int callingUid,
             in Intent intent, in String resolvedType, in Bundle options, int userId);
     int startRecentsActivity(in IAssistDataReceiver assistDataReceiver, in Bundle options,
-            int userId);
+            in Bundle activityOptions, int userId);
     int startActivityFromRecents(int taskId, in Bundle options);
     Bundle getActivityOptions(in IBinder token);
     List<IBinder> getAppTasks(in String callingPackage);
@@ -473,14 +476,11 @@ interface IActivityManager {
     /**
      * Notify the system that the keyguard is going away.
      *
-     * @param flags See {@link android.view.WindowManagerPolicy#KEYGUARD_GOING_AWAY_FLAG_TO_SHADE}
+     * @param flags See {@link android.view.WindowManagerPolicyConstants#KEYGUARD_GOING_AWAY_FLAG_TO_SHADE}
      *              etc.
      */
     void keyguardGoingAway(int flags);
     int getUidProcessState(int uid, in String callingPackage);
-    void registerUidObserver(in IUidObserver observer, int which, int cutpoint,
-            String callingPackage);
-    void unregisterUidObserver(in IUidObserver observer);
     boolean isAssistDataAllowedOnCurrentActivity();
     boolean showAssistFromActivity(in IBinder token, in Bundle args);
     boolean isRootVoiceInteraction(in IBinder token);
@@ -502,7 +502,7 @@ interface IActivityManager {
     void reportSizeConfigurations(in IBinder token, in int[] horizontalSizeConfiguration,
             in int[] verticalSizeConfigurations, in int[] smallestWidthConfigurations);
     boolean setTaskWindowingModeSplitScreenPrimary(int taskId, int createMode, boolean toTop,
-            boolean animate, in Rect initialBounds);
+            boolean animate, in Rect initialBounds, boolean showRecents);
     /**
      * Dismisses split-screen multi-window mode.
      * {@param toTop} If true the current primary split-screen stack will be placed or left on top.
@@ -626,9 +626,6 @@ interface IActivityManager {
     /** Cancels the window transitions for the given task. */
     void cancelTaskWindowTransition(int taskId);
 
-    /** Cancels the thumbnail transitions for the given task. */
-    void cancelTaskThumbnailTransition(int taskId);
-
     /**
      * @param taskId the id of the task to retrieve the sAutoapshots for
      * @param reducedResolution if set, if the snapshot needs to be loaded from disk, this will load
@@ -667,4 +664,10 @@ interface IActivityManager {
 
      void setShowWhenLocked(in IBinder token, boolean showWhenLocked);
      void setTurnScreenOn(in IBinder token, boolean turnScreenOn);
+
+     /**
+      *  Similar to {@link #startUserInBackground(int userId), but with a listener to report
+      *  user unlock progress.
+      */
+     boolean startUserInBackgroundWithListener(int userid, IProgressListener unlockProgressListener);
 }

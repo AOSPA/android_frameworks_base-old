@@ -26,15 +26,18 @@ import static com.android.server.autofill.Helper.sVerbose;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
 import android.app.IActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ServiceInfo;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.metrics.LogMaker;
 import android.os.AsyncTask;
 import android.os.Binder;
 import android.os.Bundle;
@@ -43,14 +46,18 @@ import android.os.Looper;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.service.autofill.AutofillService;
 import android.service.autofill.AutofillServiceInfo;
+import android.service.autofill.FieldClassification;
+import android.service.autofill.FieldClassification.Match;
 import android.service.autofill.FillEventHistory;
 import android.service.autofill.FillEventHistory.Event;
 import android.service.autofill.FillResponse;
 import android.service.autofill.IAutoFillService;
+import android.service.autofill.UserData;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -69,10 +76,12 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.os.HandlerCaller;
+import com.android.server.LocalServices;
 import com.android.server.autofill.ui.AutoFillUI;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 /**
@@ -119,6 +128,11 @@ final class AutofillManagerServiceImpl {
      * Whether service was disabled for user due to {@link UserManager} restrictions.
      */
     private boolean mDisabled;
+
+    /**
+     * Data used for field classification.
+     */
+    private UserData mUserData;
 
     /**
      * Caches whether the setup completed for the current user.
@@ -181,6 +195,14 @@ final class AutofillManagerServiceImpl {
             Slog.e(TAG, "Could not get label for " + packageName + ": " + e);
             return packageName;
         }
+    }
+
+    private int getServiceUidLocked() {
+        if (mInfo == null) {
+            Slog.w(TAG,  "getServiceUidLocked(): no mInfo");
+            return -1;
+        }
+        return mInfo.getServiceInfo().applicationInfo.uid;
     }
 
     @Nullable
@@ -273,6 +295,12 @@ final class AutofillManagerServiceImpl {
         return isEnabled();
     }
 
+    void removeClientLocked(IAutoFillManagerClient client) {
+        if (mClients != null) {
+            mClients.unregister(client);
+        }
+    }
+
     void setAuthenticationResultLocked(Bundle data, int sessionId, int authenticationId, int uid) {
         if (!isEnabled()) {
             return;
@@ -328,7 +356,7 @@ final class AutofillManagerServiceImpl {
         pruneAbandonedSessionsLocked();
 
         final Session newSession = createSessionByTokenLocked(activityToken, uid, appCallbackToken,
-                hasCallback, componentName);
+                hasCallback, componentName, flags);
         if (newSession == null) {
             return NO_SESSION;
         }
@@ -372,7 +400,7 @@ final class AutofillManagerServiceImpl {
             return;
         }
 
-        session.logContextCommittedLocked();
+        session.logContextCommitted();
 
         final boolean finished = session.showSaveLocked();
         if (sVerbose) Slog.v(TAG, "finishSessionLocked(): session finished on save? " + finished);
@@ -429,7 +457,7 @@ final class AutofillManagerServiceImpl {
 
     private Session createSessionByTokenLocked(@NonNull IBinder activityToken, int uid,
             @NonNull IBinder appCallbackToken, boolean hasCallback,
-            @NonNull ComponentName componentName) {
+            @NonNull ComponentName componentName, int flags) {
         // use random ids so that one app cannot know that another app creates sessions
         int sessionId;
         int tries = 0;
@@ -443,12 +471,43 @@ final class AutofillManagerServiceImpl {
             sessionId = sRandom.nextInt();
         } while (sessionId == NO_SESSION || mSessions.indexOfKey(sessionId) >= 0);
 
+        assertCallerLocked(componentName);
+
         final Session newSession = new Session(this, mUi, mContext, mHandlerCaller, mUserId, mLock,
                 sessionId, uid, activityToken, appCallbackToken, hasCallback,
-                mUiLatencyHistory, mInfo.getServiceInfo().getComponentName(), componentName);
+                mUiLatencyHistory, mInfo.getServiceInfo().getComponentName(), componentName, flags);
         mSessions.put(newSession.id, newSession);
 
         return newSession;
+    }
+
+    /**
+     * Asserts the component is owned by the caller.
+     */
+    private void assertCallerLocked(@NonNull ComponentName componentName) {
+        final String packageName = componentName.getPackageName();
+        final PackageManager pm = mContext.getPackageManager();
+        final int callingUid = Binder.getCallingUid();
+        final int packageUid;
+        try {
+            packageUid = pm.getPackageUidAsUser(packageName, UserHandle.getCallingUserId());
+        } catch (NameNotFoundException e) {
+            throw new SecurityException("Could not verify UID for " + componentName);
+        }
+        if (callingUid != packageUid && !LocalServices.getService(ActivityManagerInternal.class)
+                .hasRunningActivity(callingUid, packageName)) {
+            final String[] packages = pm.getPackagesForUid(callingUid);
+            final String callingPackage = packages != null ? packages[0] : "uid-" + callingUid;
+            Slog.w(TAG, "App (package=" + callingPackage + ", UID=" + callingUid
+                    + ") passed component (" + componentName + ") owned by UID " + packageUid);
+            mMetricsLogger.write(
+                    Helper.newLogMaker(MetricsEvent.AUTOFILL_FORGED_COMPONENT_ATTEMPT,
+                            callingPackage, getServicePackageName())
+                    .addTaggedData(MetricsEvent.FIELD_AUTOFILL_FORGED_COMPONENT_NAME,
+                            componentName == null ? "null" : componentName.flattenToShortString()));
+
+            throw new SecurityException("Invalid component: " + componentName);
+        }
     }
 
     /**
@@ -548,6 +607,10 @@ final class AutofillManagerServiceImpl {
         }
 
         sendStateToClients(true);
+        if (mClients != null) {
+            mClients.kill();
+            mClients = null;
+        }
     }
 
     @NonNull
@@ -564,9 +627,9 @@ final class AutofillManagerServiceImpl {
      * Initializes the last fill selection after an autofill service returned a new
      * {@link FillResponse}.
      */
-    void setLastResponse(int serviceUid, int sessionId, @NonNull FillResponse response) {
+    void setLastResponse(int sessionId, @NonNull FillResponse response) {
         synchronized (mLock) {
-            mEventHistory = new FillEventHistory(serviceUid, sessionId, response.getClientState());
+            mEventHistory = new FillEventHistory(sessionId, response.getClientState());
         }
     }
 
@@ -602,7 +665,7 @@ final class AutofillManagerServiceImpl {
             if (isValidEventLocked("setAuthenticationSelected()", sessionId)) {
                 mEventHistory.addEvent(
                         new Event(Event.TYPE_AUTHENTICATION_SELECTED, null, clientState, null, null,
-                                null, null, null, null, null, -1));
+                                null, null, null, null, null, null));
             }
         }
     }
@@ -616,7 +679,7 @@ final class AutofillManagerServiceImpl {
             if (isValidEventLocked("logDatasetAuthenticationSelected()", sessionId)) {
                 mEventHistory.addEvent(
                         new Event(Event.TYPE_DATASET_AUTHENTICATION_SELECTED, selectedDataset,
-                                clientState, null, null, null, null, null, null, null, -1));
+                                clientState, null, null, null, null, null, null, null, null));
             }
         }
     }
@@ -628,7 +691,7 @@ final class AutofillManagerServiceImpl {
         synchronized (mLock) {
             if (isValidEventLocked("logSaveShown()", sessionId)) {
                 mEventHistory.addEvent(new Event(Event.TYPE_SAVE_SHOWN, null, clientState, null,
-                        null, null, null, null, null, null, -1));
+                        null, null, null, null, null, null, null));
             }
         }
     }
@@ -642,7 +705,7 @@ final class AutofillManagerServiceImpl {
             if (isValidEventLocked("logDatasetSelected()", sessionId)) {
                 mEventHistory.addEvent(
                         new Event(Event.TYPE_DATASET_SELECTED, selectedDataset, clientState, null,
-                                null, null, null, null, null, null, -1));
+                                null, null, null, null, null, null, null));
             }
         }
     }
@@ -650,22 +713,52 @@ final class AutofillManagerServiceImpl {
     /**
      * Updates the last fill response when an autofill context is committed.
      */
-    void logContextCommitted(int sessionId, @Nullable Bundle clientState,
+    void logContextCommittedLocked(int sessionId, @Nullable Bundle clientState,
             @Nullable ArrayList<String> selectedDatasets,
             @Nullable ArraySet<String> ignoredDatasets,
             @Nullable ArrayList<AutofillId> changedFieldIds,
             @Nullable ArrayList<String> changedDatasetIds,
             @Nullable ArrayList<AutofillId> manuallyFilledFieldIds,
             @Nullable ArrayList<ArrayList<String>> manuallyFilledDatasetIds,
-            @Nullable String detectedRemoteId, int detectedFieldScore) {
-        synchronized (mLock) {
-            if (isValidEventLocked("logDatasetNotSelected()", sessionId)) {
-                mEventHistory.addEvent(new Event(Event.TYPE_CONTEXT_COMMITTED, null,
-                        clientState, selectedDatasets, ignoredDatasets,
-                        changedFieldIds, changedDatasetIds,
-                        manuallyFilledFieldIds, manuallyFilledDatasetIds,
-                        detectedRemoteId, detectedFieldScore));
+            @Nullable ArrayList<AutofillId> detectedFieldIdsList,
+            @Nullable ArrayList<FieldClassification> detectedFieldClassificationsList,
+            @NonNull String appPackageName) {
+        if (isValidEventLocked("logDatasetNotSelected()", sessionId)) {
+            AutofillId[] detectedFieldsIds = null;
+            FieldClassification[] detectedFieldClassifications = null;
+            if (detectedFieldIdsList != null) {
+                detectedFieldsIds = new AutofillId[detectedFieldIdsList.size()];
+                detectedFieldIdsList.toArray(detectedFieldsIds);
+                detectedFieldClassifications =
+                        new FieldClassification[detectedFieldClassificationsList.size()];
+                detectedFieldClassificationsList.toArray(detectedFieldClassifications);
+
+                final int numberFields = detectedFieldsIds.length;
+                int totalSize = 0;
+                float totalScore = 0;
+                for (int i = 0; i < numberFields; i++) {
+                    final FieldClassification fc = detectedFieldClassifications[i];
+                    final List<Match> matches = fc.getMatches();
+                    final int size = matches.size();
+                    totalSize += size;
+                    for (int j = 0; j < size; j++) {
+                        totalScore += matches.get(j).getScore();
+                    }
+                }
+
+                final int averageScore = (int) ((totalScore * 100) / totalSize);
+                mMetricsLogger.write(Helper
+                        .newLogMaker(MetricsEvent.AUTOFILL_FIELD_CLASSIFICATION_MATCHES,
+                                appPackageName, getServicePackageName())
+                        .setCounterValue(numberFields)
+                        .addTaggedData(MetricsEvent.FIELD_AUTOFILL_MATCH_SCORE,
+                                averageScore));
             }
+            mEventHistory.addEvent(new Event(Event.TYPE_CONTEXT_COMMITTED, null,
+                    clientState, selectedDatasets, ignoredDatasets,
+                    changedFieldIds, changedDatasetIds,
+                    manuallyFilledFieldIds, manuallyFilledDatasetIds,
+                    detectedFieldsIds, detectedFieldClassifications));
         }
     }
 
@@ -678,18 +771,59 @@ final class AutofillManagerServiceImpl {
      */
     FillEventHistory getFillEventHistory(int callingUid) {
         synchronized (mLock) {
-            if (mEventHistory != null && mEventHistory.getServiceUid() == callingUid) {
+            if (mEventHistory != null
+                    && isCalledByServiceLocked("getFillEventHistory", callingUid)) {
                 return mEventHistory;
             }
         }
-
         return null;
+    }
+
+    // Called by Session - does not need to check uid
+    UserData getUserData() {
+        synchronized (mLock) {
+            return mUserData;
+        }
+    }
+
+    // Called by AutofillManager
+    UserData getUserData(int callingUid) {
+        synchronized (mLock) {
+            if (isCalledByServiceLocked("getUserData", callingUid)) {
+                return mUserData;
+            }
+        }
+        return null;
+    }
+
+    // Called by AutofillManager
+    void setUserData(int callingUid, UserData userData) {
+        synchronized (mLock) {
+            if (isCalledByServiceLocked("setUserData", callingUid)) {
+                mUserData = userData;
+                // Log it
+                int numberFields = mUserData == null ? 0: mUserData.getRemoteIds().length;
+                mMetricsLogger.write(Helper.newLogMaker(MetricsEvent.AUTOFILL_USERDATA_UPDATED,
+                        getServicePackageName(), null)
+                        .setCounterValue(numberFields));
+            }
+        }
+    }
+
+    private boolean isCalledByServiceLocked(String methodName, int callingUid) {
+        if (getServiceUidLocked() != callingUid) {
+            Slog.w(TAG, methodName + "() called by UID " + callingUid
+                    + ", but service UID is " + getServiceUidLocked());
+            return false;
+        }
+        return true;
     }
 
     void dumpLocked(String prefix, PrintWriter pw) {
         final String prefix2 = prefix + "  ";
 
         pw.print(prefix); pw.print("User: "); pw.println(mUserId);
+        pw.print(prefix); pw.print("UID: "); pw.println(getServiceUidLocked());
         pw.print(prefix); pw.print("Component: "); pw.println(mInfo != null
                 ? mInfo.getServiceInfo().getComponentName() : null);
         pw.print(prefix); pw.print("Component from settings: ");
@@ -697,7 +831,8 @@ final class AutofillManagerServiceImpl {
         pw.print(prefix); pw.print("Default component: ");
             pw.println(mContext.getString(R.string.config_defaultAutofillService));
         pw.print(prefix); pw.print("Disabled: "); pw.println(mDisabled);
-        pw.print(prefix); pw.print("Field detection: "); pw.println(isFieldDetectionEnabled());
+        pw.print(prefix); pw.print("Field classification enabled: ");
+            pw.println(isFieldClassificationEnabledLocked());
         pw.print(prefix); pw.print("Setup complete: "); pw.println(mSetupComplete);
         pw.print(prefix); pw.print("Last prune: "); pw.println(mLastPrune);
 
@@ -752,6 +887,14 @@ final class AutofillManagerServiceImpl {
             }
         }
 
+        pw.print(prefix); pw.print("Clients: ");
+        if (mClients == null) {
+            pw.println("N/A");
+        } else {
+            pw.println();
+            mClients.dump(pw, prefix2);
+        }
+
         if (mEventHistory == null || mEventHistory.getEvents() == null
                 || mEventHistory.getEvents().size() == 0) {
             pw.print(prefix); pw.println("No event on last fill response");
@@ -765,6 +908,14 @@ final class AutofillManagerServiceImpl {
                 pw.println("  " + i + ": eventType=" + event.getType() + " datasetId="
                         + event.getDatasetId());
             }
+        }
+
+        pw.print(prefix); pw.print("User data: ");
+        if (mUserData == null) {
+            pw.println("N/A");
+        } else {
+            pw.println();
+            mUserData.dump(prefix2, pw);
         }
     }
 
@@ -892,10 +1043,12 @@ final class AutofillManagerServiceImpl {
                 expiration = Long.MAX_VALUE;
             }
             mDisabledActivities.put(componentName, expiration);
-            int intDuration = duration > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) duration;
-            mMetricsLogger.write(Helper.newLogMaker(MetricsEvent.AUTOFILL_SERVICE_DISABLED_ACTIVITY,
-                    componentName.getPackageName(), getServicePackageName())
-                    .addTaggedData(MetricsEvent.FIELD_CLASS_NAME, componentName.getClassName())
+            final int intDuration = duration > Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) duration;
+            // NOTE: not using Helper.newLogMaker() because we're setting the componentName instead
+            // of package name
+            mMetricsLogger.write(new LogMaker(MetricsEvent.AUTOFILL_SERVICE_DISABLED_ACTIVITY)
+                    .setComponentName(componentName)
+                    .addTaggedData(MetricsEvent.FIELD_AUTOFILL_SERVICE, getServicePackageName())
                     .setCounterValue(intDuration));
         }
     }
@@ -913,7 +1066,8 @@ final class AutofillManagerServiceImpl {
                 if (expiration >= elapsedTime) return true;
                 // Restriction expired - clean it up.
                 if (sVerbose) {
-                    Slog.v(TAG, "Removing " + componentName.toShortString() + " from disabled list");
+                    Slog.v(TAG, "Removing " + componentName.toShortString()
+                        + " from disabled list");
                 }
                 mDisabledActivities.remove(componentName);
             }
@@ -938,10 +1092,21 @@ final class AutofillManagerServiceImpl {
         return false;
     }
 
-    // TODO(b/67867469): remove once feature is finished
-    boolean isFieldDetectionEnabled() {
+    // Called by AutofillManager, checks UID.
+    boolean isFieldClassificationEnabled(int uid) {
+        synchronized (mLock) {
+            if (!isCalledByServiceLocked("isFieldClassificationEnabled", uid)) {
+                return false;
+            }
+            return isFieldClassificationEnabledLocked();
+        }
+    }
+
+    // Called by internally, no need to check UID.
+    boolean isFieldClassificationEnabledLocked() {
         return Settings.Secure.getIntForUser(
-                mContext.getContentResolver(), Settings.Secure.AUTOFILL_FEATURE_FIELD_DETECTION, 0,
+                mContext.getContentResolver(),
+                Settings.Secure.AUTOFILL_FEATURE_FIELD_CLASSIFICATION, 0,
                 mUserId) == 1;
     }
 

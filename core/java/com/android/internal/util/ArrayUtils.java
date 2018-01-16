@@ -30,6 +30,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -131,6 +132,13 @@ public class ArrayUtils {
      */
     public static boolean isEmpty(@Nullable Collection<?> array) {
         return array == null || array.isEmpty();
+    }
+
+    /**
+     * Checks if given map is null or has zero elements.
+     */
+    public static boolean isEmpty(@Nullable Map<?, ?> map) {
+        return map == null || map.isEmpty();
     }
 
     /**
@@ -284,6 +292,15 @@ public class ArrayUtils {
         return array;
     }
 
+    public static @Nullable long[] convertToLongArray(@Nullable int[] intArray) {
+        if (intArray == null) return null;
+        long[] array = new long[intArray.length];
+        for (int i = 0; i < intArray.length; i++) {
+            array[i] = (long) intArray[i];
+        }
+        return array;
+    }
+
     /**
      * Adds value to given array if not already present, providing set-like
      * behavior.
@@ -417,20 +434,31 @@ public class ArrayUtils {
      * Adds value to given array if not already present, providing set-like
      * behavior.
      */
-    public static @NonNull long[] appendLong(@Nullable long[] cur, long val) {
+    public static @NonNull long[] appendLong(@Nullable long[] cur, long val,
+            boolean allowDuplicates) {
         if (cur == null) {
             return new long[] { val };
         }
         final int N = cur.length;
-        for (int i = 0; i < N; i++) {
-            if (cur[i] == val) {
-                return cur;
+        if (!allowDuplicates) {
+            for (int i = 0; i < N; i++) {
+                if (cur[i] == val) {
+                    return cur;
+                }
             }
         }
         long[] ret = new long[N + 1];
         System.arraycopy(cur, 0, ret, 0, N);
         ret[N] = val;
         return ret;
+    }
+
+    /**
+     * Adds value to given array if not already present, providing set-like
+     * behavior.
+     */
+    public static @NonNull long[] appendLong(@Nullable long[] cur, long val) {
+        return appendLong(cur, val, false);
     }
 
     /**

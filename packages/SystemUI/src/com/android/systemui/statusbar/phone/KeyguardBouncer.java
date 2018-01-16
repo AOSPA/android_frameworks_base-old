@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.phone;
 
-import android.app.ActivityManager;
 import android.content.Context;
 import android.os.Handler;
 import android.os.UserHandle;
@@ -102,7 +101,7 @@ public class KeyguardBouncer {
             return;
         }
 
-        final int activeUserId = ActivityManager.getCurrentUser();
+        final int activeUserId = KeyguardUpdateMonitor.getCurrentUser();
         final boolean isSystemUser =
                 UserManager.isSplitSystemUser() && activeUserId == UserHandle.USER_SYSTEM;
         final boolean allowDismissKeyguard = !isSystemUser && activeUserId == keyguardUserId;
@@ -122,6 +121,8 @@ public class KeyguardBouncer {
 
         // Split up the work over multiple frames.
         DejankUtils.postAfterTraversal(mShowRunnable);
+
+        mCallback.onBouncerVisiblityChanged(true /* shown */);
     }
 
     private final Runnable mShowRunnable = new Runnable() {
@@ -182,6 +183,7 @@ public class KeyguardBouncer {
             mDismissCallbackRegistry.notifyDismissCancelled();
         }
         mFalsingManager.onBouncerHidden();
+        mCallback.onBouncerVisiblityChanged(false /* shown */);
         cancelShowRunnable();
         if (mKeyguardView != null) {
             mKeyguardView.cancelDismissAction();

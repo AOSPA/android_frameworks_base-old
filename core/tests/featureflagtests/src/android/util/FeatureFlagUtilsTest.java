@@ -18,9 +18,13 @@ package android.util;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
+import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertTrue;
 
+import android.content.Context;
 import android.os.SystemProperties;
+import android.provider.Settings;
+import android.support.test.InstrumentationRegistry;
 import android.support.test.runner.AndroidJUnit4;
 import android.test.suitebuilder.annotation.SmallTest;
 
@@ -35,8 +39,11 @@ public class FeatureFlagUtilsTest {
 
     private static final String TEST_FEATURE_NAME = "feature_foobar";
 
+    private Context mContext;
+
     @Before
     public void setUp() {
+        mContext = InstrumentationRegistry.getTargetContext();
         cleanup();
     }
 
@@ -46,30 +53,41 @@ public class FeatureFlagUtilsTest {
     }
 
     private void cleanup() {
+        Settings.Global.putString(mContext.getContentResolver(), TEST_FEATURE_NAME, "");
         SystemProperties.set(FeatureFlagUtils.FFLAG_PREFIX + TEST_FEATURE_NAME, "");
         SystemProperties.set(FeatureFlagUtils.FFLAG_OVERRIDE_PREFIX + TEST_FEATURE_NAME, "");
     }
 
     @Test
     public void testGetFlag_enabled_shouldReturnTrue() {
-        SystemProperties.set(FeatureFlagUtils.FFLAG_PREFIX + TEST_FEATURE_NAME, "true");
+        FeatureFlagUtils.getAllFeatureFlags().put(TEST_FEATURE_NAME, "true");
 
-        assertTrue(FeatureFlagUtils.isEnabled(TEST_FEATURE_NAME));
+        assertTrue(FeatureFlagUtils.isEnabled(mContext, TEST_FEATURE_NAME));
     }
 
     @Test
-    public void testGetFlag_override_shouldReturnTrue() {
+    public void testGetFlag_adb_override_shouldReturnTrue() {
         SystemProperties.set(FeatureFlagUtils.FFLAG_PREFIX + TEST_FEATURE_NAME, "false");
         SystemProperties.set(FeatureFlagUtils.FFLAG_OVERRIDE_PREFIX + TEST_FEATURE_NAME, "true");
 
-        assertTrue(FeatureFlagUtils.isEnabled(TEST_FEATURE_NAME));
+        assertTrue(FeatureFlagUtils.isEnabled(mContext, TEST_FEATURE_NAME));
+    }
+
+    @Test
+    public void testGetFlag_settings_override_shouldReturnTrue() {
+        SystemProperties.set(FeatureFlagUtils.FFLAG_PREFIX + TEST_FEATURE_NAME, "false");
+        SystemProperties.set(FeatureFlagUtils.FFLAG_OVERRIDE_PREFIX + TEST_FEATURE_NAME, "false");
+
+        Settings.Global.putString(mContext.getContentResolver(), TEST_FEATURE_NAME, "true");
+
+        assertTrue(FeatureFlagUtils.isEnabled(mContext, TEST_FEATURE_NAME));
     }
 
     @Test
     public void testSetEnabled_shouldSetOverrideFlag() {
-        assertFalse(FeatureFlagUtils.isEnabled(TEST_FEATURE_NAME));
+        assertFalse(FeatureFlagUtils.isEnabled(mContext, TEST_FEATURE_NAME));
 
-        FeatureFlagUtils.setEnabled(TEST_FEATURE_NAME, true);
+        FeatureFlagUtils.setEnabled(null /* context */, TEST_FEATURE_NAME, true);
 
         assertEquals(SystemProperties.get(FeatureFlagUtils.FFLAG_PREFIX + TEST_FEATURE_NAME, null),
                 "");
@@ -79,7 +97,11 @@ public class FeatureFlagUtilsTest {
 
     @Test
     public void testGetFlag_notSet_shouldReturnFalse() {
-        assertFalse(FeatureFlagUtils.isEnabled(TEST_FEATURE_NAME));
+        assertFalse(FeatureFlagUtils.isEnabled(mContext, TEST_FEATURE_NAME + "does_not_exist"));
     }
 
+    @Test
+    public void getAllFeatureFlags_shouldNotBeNull() {
+        assertNotNull(FeatureFlagUtils.getAllFeatureFlags());
+    }
 }

@@ -42,8 +42,7 @@ import java.lang.ref.WeakReference;
  * {@link android.graphics.Canvas#drawText(java.lang.CharSequence, int, int, float, float, android.graphics.Paint)
  *  Canvas.drawText()} directly.</p>
  */
-public class DynamicLayout extends Layout
-{
+public class DynamicLayout extends Layout {
     private static final int PRIORITY = 128;
     private static final int BLOCK_MINIMUM_CHARACTER_LENGTH = 400;
 
@@ -303,8 +302,9 @@ public class DynamicLayout extends Layout
     }
 
     /**
-     * Make a layout for the specified text that will be updated as the text is changed.
+     * @deprecated Use {@link Builder} instead.
      */
+    @Deprecated
     public DynamicLayout(@NonNull CharSequence base,
                          @NonNull TextPaint paint,
                          @IntRange(from = 0) int width, @NonNull Alignment align,
@@ -315,9 +315,9 @@ public class DynamicLayout extends Layout
     }
 
     /**
-     * Make a layout for the transformed text (password transformation being the primary example of
-     * a transformation) that will be updated as the base text is changed.
+     * @deprecated Use {@link Builder} instead.
      */
+    @Deprecated
     public DynamicLayout(@NonNull CharSequence base, @NonNull CharSequence display,
                          @NonNull TextPaint paint,
                          @IntRange(from = 0) int width, @NonNull Alignment align,
@@ -328,10 +328,9 @@ public class DynamicLayout extends Layout
     }
 
     /**
-     * Make a layout for the transformed text (password transformation being the primary example of
-     * a transformation) that will be updated as the base text is changed. If ellipsize is non-null,
-     * the Layout will ellipsize the text down to ellipsizedWidth.
+     * @deprecated Use {@link Builder} instead.
      */
+    @Deprecated
     public DynamicLayout(@NonNull CharSequence base, @NonNull CharSequence display,
                          @NonNull TextPaint paint,
                          @IntRange(from = 0) int width, @NonNull Alignment align,
@@ -351,7 +350,9 @@ public class DynamicLayout extends Layout
      * the Layout will ellipsize the text down to ellipsizedWidth.
      *
      * @hide
+     * @deprecated Use {@link Builder} instead.
      */
+    @Deprecated
     public DynamicLayout(@NonNull CharSequence base, @NonNull CharSequence display,
                          @NonNull TextPaint paint,
                          @IntRange(from = 0) int width,
@@ -492,7 +493,9 @@ public class DynamicLayout extends Layout
         }
     }
 
-    private void reflow(CharSequence s, int where, int before, int after) {
+    /** @hide */
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public void reflow(CharSequence s, int where, int before, int after) {
         if (s != mBase)
             return;
 
@@ -805,8 +808,8 @@ public class DynamicLayout extends Layout
             return;
         }
 
-        int firstBlock = -1;
-        int lastBlock = -1;
+        /*final*/ int firstBlock = -1;
+        /*final*/ int lastBlock = -1;
         for (int i = 0; i < mNumberOfBlocks; i++) {
             if (mBlockEndLines[i] >= startLine) {
                 firstBlock = i;
@@ -821,10 +824,10 @@ public class DynamicLayout extends Layout
         }
         final int lastBlockEndLine = mBlockEndLines[lastBlock];
 
-        boolean createBlockBefore = startLine > (firstBlock == 0 ? 0 :
+        final boolean createBlockBefore = startLine > (firstBlock == 0 ? 0 :
                 mBlockEndLines[firstBlock - 1] + 1);
-        boolean createBlock = newLineCount > 0;
-        boolean createBlockAfter = endLine < mBlockEndLines[lastBlock];
+        final boolean createBlock = newLineCount > 0;
+        final boolean createBlockAfter = endLine < mBlockEndLines[lastBlock];
 
         int numAddedBlocks = 0;
         if (createBlockBefore) numAddedBlocks++;
@@ -863,12 +866,18 @@ public class DynamicLayout extends Layout
 
         if (numAddedBlocks + numRemovedBlocks != 0 && mBlocksAlwaysNeedToBeRedrawn != null) {
             final ArraySet<Integer> set = new ArraySet<>();
+            final int changedBlockCount = numAddedBlocks - numRemovedBlocks;
             for (int i = 0; i < mBlocksAlwaysNeedToBeRedrawn.size(); i++) {
                 Integer block = mBlocksAlwaysNeedToBeRedrawn.valueAt(i);
-                if (block > firstBlock) {
-                    block += numAddedBlocks - numRemovedBlocks;
+                if (block < firstBlock) {
+                    // block index is before firstBlock add it since it did not change
+                    set.add(block);
                 }
-                set.add(block);
+                if (block > lastBlock) {
+                    // block index is after lastBlock, the index reduced to += changedBlockCount
+                    block += changedBlockCount;
+                    set.add(block);
+                }
             }
             mBlocksAlwaysNeedToBeRedrawn = set;
         }

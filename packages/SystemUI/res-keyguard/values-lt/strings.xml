@@ -29,8 +29,7 @@
     <string name="keyguard_password_enter_password_code" msgid="595980919238127672">"Įveskite slaptažodį, kad atrakintumėte"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7504123374204446086">"Įveskite PIN kodą, kad atrakintumėte"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="6535018036285012028">"Netinkamas PIN kodas."</string>
-    <!-- no translation found for keyguard_sim_error_message_short (592109500618448312) -->
-    <skip />
+    <string name="keyguard_sim_error_message_short" msgid="592109500618448312">"Netinkama kortelė."</string>
     <string name="keyguard_charged" msgid="2222329688813033109">"Įkrauta"</string>
     <string name="keyguard_plugged_in" msgid="89308975354638682">"Įkraunama"</string>
     <string name="keyguard_plugged_in_charging_fast" msgid="8869226755413795173">"Greitai įkraunama"</string>
@@ -148,4 +147,16 @@
       <item quantity="other">Įrenginys nebuvo atrakintas <xliff:g id="NUMBER_1">%d</xliff:g> valandų. Patvirtinkite slaptažodį.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Neatpažinta"</string>
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+      <item quantity="one">Įveskite SIM kortelės PIN kodą. Jums liko <xliff:g id="NUMBER_1">%d</xliff:g> bandymas.</item>
+      <item quantity="few">Įveskite SIM kortelės PIN kodą. Jums liko <xliff:g id="NUMBER_1">%d</xliff:g> bandymai.</item>
+      <item quantity="many">Įveskite SIM kortelės PIN kodą. Jums liko <xliff:g id="NUMBER_1">%d</xliff:g> bandymo.</item>
+      <item quantity="other">Įveskite SIM kortelės PIN kodą. Jums liko <xliff:g id="NUMBER_1">%d</xliff:g> bandymų.</item>
+    </plurals>
+    <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
+      <item quantity="one">SIM kortelė dabar yra išjungta. Jei norite tęsti, įveskite PUK kodą. Jums liko <xliff:g id="_NUMBER_1">%d</xliff:g> bandymas. Paskui visiškai nebegalėsite naudoti SIM kortelės. Jei reikia išsamios informacijos, susisiekite su operatoriumi.</item>
+      <item quantity="few">SIM kortelė dabar yra išjungta. Jei norite tęsti, įveskite PUK kodą. Jums liko <xliff:g id="_NUMBER_1">%d</xliff:g> bandymai. Paskui visiškai nebegalėsite naudoti SIM kortelės. Jei reikia išsamios informacijos, susisiekite su operatoriumi.</item>
+      <item quantity="many">SIM kortelė dabar yra išjungta. Jei norite tęsti, įveskite PUK kodą. Jums liko <xliff:g id="_NUMBER_1">%d</xliff:g> bandymo. Paskui visiškai nebegalėsite naudoti SIM kortelės. Jei reikia išsamios informacijos, susisiekite su operatoriumi.</item>
+      <item quantity="other">SIM kortelė dabar yra išjungta. Jei norite tęsti, įveskite PUK kodą. Jums liko <xliff:g id="_NUMBER_1">%d</xliff:g> bandymų. Paskui visiškai nebegalėsite naudoti SIM kortelės. Jei reikia išsamios informacijos, susisiekite su operatoriumi.</item>
+    </plurals>
 </resources>

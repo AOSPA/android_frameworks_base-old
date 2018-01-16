@@ -19,7 +19,6 @@ package com.android.server.net;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import com.android.frameworks.servicestests.R;
 import com.android.servicestests.aidl.ICmdReceiverService;
@@ -39,9 +38,11 @@ import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.runner.AndroidJUnit4;
 import android.support.test.uiautomator.UiDevice;
+import android.text.TextUtils;
 import android.util.Log;
 
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -81,7 +82,7 @@ public class ConnOnActivityStartTest {
 
     private static final long NETWORK_CHECK_TIMEOUT_MS = 4000; // 4 sec
 
-    private static final long SCREEN_ON_DELAY_MS = 500; // 0.5 sec
+    private static final long SCREEN_ON_DELAY_MS = 2000; // 2 sec
 
     private static final long BIND_SERVICE_TIMEOUT_SEC = 4;
 
@@ -214,7 +215,6 @@ public class ConnOnActivityStartTest {
         try{
             turnBatteryOff();
             setAppIdle(true);
-            SystemClock.sleep(30000);
             turnScreenOn();
             startActivityAndCheckNetworkAccess();
         } finally {
@@ -239,7 +239,6 @@ public class ConnOnActivityStartTest {
             try {
                 Log.d(TAG, testName + " Start #" + i);
                 turnScreenOn();
-                SystemClock.sleep(SCREEN_ON_DELAY_MS);
                 startActivityAndCheckNetworkAccess();
             } finally {
                 finishActivity();
@@ -287,7 +286,7 @@ public class ConnOnActivityStartTest {
     private void setAppIdle(boolean enabled) throws Exception {
         executeCommand("am set-inactive " + TEST_PKG + " " + enabled);
         assertDelayedCommandResult("am get-inactive " + TEST_PKG, "Idle=" + enabled,
-                10 /* maxTries */, 2000 /* napTimeMs */);
+                15 /* maxTries */, 2000 /* napTimeMs */);
     }
 
     private void updateRestrictBackgroundBlacklist(boolean add) throws Exception {
@@ -345,16 +344,22 @@ public class ConnOnActivityStartTest {
     private void turnScreenOn() throws Exception {
         executeCommand("input keyevent KEYCODE_WAKEUP");
         executeCommand("wm dismiss-keyguard");
+        // Wait for screen-on state to propagate through the system.
+        SystemClock.sleep(SCREEN_ON_DELAY_MS);
     }
 
     private String executeCommand(String cmd) throws IOException {
-        final String result = mUiDevice.executeShellCommand(cmd).trim();
+        final String result = executeSilentCommand(cmd);
         Log.d(TAG, String.format("Result for '%s': %s", cmd, result));
         return result;
     }
 
+    private static String executeSilentCommand(String cmd) throws IOException {
+        return mUiDevice.executeShellCommand(cmd).trim();
+    }
+
     private void assertDelayedCommandResult(String cmd, String expectedResult,
-            int maxTries, int napTimeMs) throws IOException {
+            int maxTries, int napTimeMs) throws Exception {
         String result = "";
         for (int i = 1; i <= maxTries; ++i) {
             result = executeCommand(cmd);
@@ -392,6 +397,46 @@ public class ConnOnActivityStartTest {
         } else {
             fail("Timed out waiting for network availability status from test app " + mTestPkgUid);
         }
+    }
+
+    private static void fail(String msg) throws Exception {
+        dumpOnFailure();
+        Assert.fail(msg);
+    }
+
+    private static void dumpOnFailure() throws Exception {
+        dump("network_management");
+        dump("netpolicy");
+        dumpUsageStats();
+    }
+
+    private static void dumpUsageStats() throws Exception {
+        final String output = executeSilentCommand("dumpsys usagestats");
+        final StringBuilder sb = new StringBuilder();
+        final TextUtils.SimpleStringSplitter splitter = new TextUtils.SimpleStringSplitter('\n');
+        splitter.setString(output);
+        String str;
+        while (splitter.hasNext()) {
+            str = splitter.next();
+            if (str.contains("package=") && !str.contains(TEST_PKG)) {
+                continue;
+            }
+            if (str.trim().startsWith("config=") || str.trim().startsWith("time=")) {
+                continue;
+            }
+            sb.append(str).append('\n');
+        }
+        dump("usagestats", sb.toString());
+    }
+
+    private static void dump(String service) throws Exception {
+        dump(service, executeSilentCommand("dumpsys " + service));
+    }
+
+    private static void dump(String service, String dump) throws Exception {
+        Log.d(TAG, ">>> Begin dump " + service);
+        Log.printlns(Log.LOG_ID_MAIN, Log.DEBUG, TAG, dump, null);
+        Log.d(TAG, "<<< End dump " + service);
     }
 
     private void finishActivity() throws Exception {

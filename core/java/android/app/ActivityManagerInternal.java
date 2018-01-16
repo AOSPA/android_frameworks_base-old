@@ -99,7 +99,10 @@ public abstract class ActivityManagerInternal {
     // Called by the power manager.
     public abstract void onWakefulnessChanged(int wakefulness);
 
-    public abstract int startIsolatedProcess(String entryPoint, String[] mainArgs,
+    /**
+     * @return {@code true} if process start is successful, {@code false} otherwise.
+     */
+    public abstract boolean startIsolatedProcess(String entryPoint, String[] mainArgs,
             String processName, String abiOverride, int uid, Runnable crashHandler);
 
     /**
@@ -261,6 +264,11 @@ public abstract class ActivityManagerInternal {
     public abstract void notifyNetworkPolicyRulesUpdated(int uid, long procStateSeq);
 
     /**
+     * Called after the voice interaction service has changed.
+     */
+    public abstract void notifyActiveVoiceInteractionServiceChanged(ComponentName component);
+
+    /**
      * Called after virtual display Id is updated by
      * {@link com.android.server.vr.Vr2dDisplay} with a specific
      * {@param vr2dDisplayId}.
@@ -283,4 +291,32 @@ public abstract class ActivityManagerInternal {
      * @param token The IApplicationToken for the activity
      */
     public abstract void setFocusedActivity(IBinder token);
+
+    /**
+     * Set a uid that is allowed to bypass stopped app switches, launching an app
+     * whenever it wants.
+     *
+     * @param type Type of the caller -- unique string the caller supplies to identify itself
+     * and disambiguate with other calles.
+     * @param uid The uid of the app to be allowed, or -1 to clear the uid for this type.
+     * @param userId The user it is allowed for.
+     */
+    public abstract void setAllowAppSwitches(@NonNull String type, int uid, int userId);
+
+    /**
+     * @return true if runtime was restarted, false if it's normal boot
+     */
+    public abstract boolean isRuntimeRestarted();
+
+    /**
+     * Returns {@code true} if {@code uid} is running an activity from {@code packageName}.
+     */
+    public abstract boolean hasRunningActivity(int uid, @Nullable String packageName);
+
+    public interface ScreenObserver {
+        public void onAwakeStateChanged(boolean isAwake);
+        public void onKeyguardStateChanged(boolean isShowing);
+    }
+
+    public abstract void registerScreenObserver(ScreenObserver observer);
 }

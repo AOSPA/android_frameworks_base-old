@@ -27,11 +27,13 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PackageDeleteObserver;
 import android.app.PackageInstallObserver;
-import android.app.admin.DevicePolicyManager;
+import android.app.admin.DeviceAdminInfo;
+import android.app.admin.DevicePolicyManagerInternal;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.IntentSender.SendIntentException;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageInstaller;
 import android.content.pm.IPackageInstallerCallback;
 import android.content.pm.IPackageInstallerSession;
@@ -45,6 +47,7 @@ import android.content.pm.VersionedPackage;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -702,20 +705,25 @@ public class PackageInstallerService extends IPackageInstaller.Stub {
             mAppOps.checkPackage(callingUid, callerPackageName);
         }
 
-        // Check whether the caller is device owner, in which case we do it silently.
-        DevicePolicyManager dpm = (DevicePolicyManager) mContext.getSystemService(
-                Context.DEVICE_POLICY_SERVICE);
-        boolean isDeviceOwner = (dpm != null) && dpm.isDeviceOwnerAppOnCallingUser(
-                callerPackageName);
+        // Check whether the caller is device owner or affiliated profile owner, in which case we do
+        // it silently.
+        final int callingUserId = UserHandle.getUserId(callingUid);
+        DevicePolicyManagerInternal dpmi =
+                LocalServices.getService(DevicePolicyManagerInternal.class);
+        final boolean isDeviceOwnerOrAffiliatedProfileOwner =
+                dpmi != null && dpmi.isActiveAdminWithPolicy(callingUid,
+                        DeviceAdminInfo.USES_POLICY_PROFILE_OWNER)
+                        && dpmi.isUserAffiliatedWithDevice(callingUserId);
 
         final PackageDeleteObserverAdapter adapter = new PackageDeleteObserverAdapter(mContext,
-                statusReceiver, versionedPackage.getPackageName(), isDeviceOwner, userId);
+                statusReceiver, versionedPackage.getPackageName(),
+                isDeviceOwnerOrAffiliatedProfileOwner, userId);
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DELETE_PACKAGES)
                     == PackageManager.PERMISSION_GRANTED) {
             // Sweet, call straight through!
             mPm.deletePackageVersioned(versionedPackage, adapter.getBinder(), userId, flags);
-        } else if (isDeviceOwner) {
-            // Allow the DeviceOwner to silently delete packages
+        } else if (isDeviceOwnerOrAffiliatedProfileOwner) {
+            // Allow the device owner and affiliated profile owner to silently delete packages
             // Need to clear the calling identity to get DELETE_PACKAGES permission
             long ident = Binder.clearCallingIdentity();
             try {
@@ -724,6 +732,12 @@ public class PackageInstallerService extends IPackageInstaller.Stub {
                 Binder.restoreCallingIdentity(ident);
             }
         } else {
+            ApplicationInfo appInfo = mPm.getApplicationInfo(callerPackageName, 0, userId);
+            if (appInfo.targetSdkVersion >= Build.VERSION_CODES.P) {
+                mContext.enforceCallingOrSelfPermission(Manifest.permission.REQUEST_DELETE_PACKAGES,
+                        null);
+            }
+
             // Take a short detour to confirm with user
             final Intent intent = new Intent(Intent.ACTION_UNINSTALL_PACKAGE);
             intent.setData(Uri.fromParts("package", versionedPackage.getPackageName(), null));

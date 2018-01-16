@@ -20,6 +20,7 @@ import static android.Manifest.permission.CONFIGURE_DISPLAY_COLOR_MODE;
 
 import android.annotation.IntDef;
 import android.annotation.RequiresPermission;
+import android.app.KeyguardManager;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -209,8 +210,8 @@ public final class Display {
      * </p>
      *
      * @see DisplayManager#VIRTUAL_DISPLAY_FLAG_CAN_SHOW_WITH_INSECURE_KEYGUARD
-     * @see WindowManagerPolicy#isKeyguardSecure(int)
-     * @see WindowManagerPolicy#isKeyguardTrustedLw()
+     * @see KeyguardManager#isDeviceSecure()
+     * @see KeyguardManager#isDeviceLocked()
      * @see #getFlags
      * @hide
      */
@@ -1322,10 +1323,10 @@ public final class Display {
         public static final int HDR_TYPE_HLG = 3;
 
         /** @hide */
-        @IntDef({
-            HDR_TYPE_DOLBY_VISION,
-            HDR_TYPE_HDR10,
-            HDR_TYPE_HLG,
+        @IntDef(prefix = { "HDR_TYPE_" }, value = {
+                HDR_TYPE_DOLBY_VISION,
+                HDR_TYPE_HDR10,
+                HDR_TYPE_HLG,
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface HdrType {}

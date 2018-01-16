@@ -79,7 +79,7 @@
     <string name="RestrictedOnAllVoiceTitle" msgid="158800171499150681">"Sem serviço de voz/emergência"</string>
     <string name="RestrictedStateContent" msgid="4278821484643362350">"Serviço temporariamente bloqueado pela rede móvel no seu local"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"Não foi possível acessar a rede"</string>
-    <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"Para melhorar a recepção, tente alterar o tipo selecionado em Configurações &gt; Rede &amp; Internet &gt; Redes móveis &gt; Tipo de rede preferencial."</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7056776609127756440">"Para melhorar a recepção, tente alterar o tipo selecionado em Config. &gt; Rede e Internet &gt; Redes móveis &gt; Tipo de rede preferencial."</string>
     <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"A chamada no Wi‑Fi está ativa"</string>
     <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"As chamadas de emergência exigem uma rede móvel."</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"Alertas"</string>
@@ -212,6 +212,7 @@
     <string name="global_action_power_off" msgid="4471879440839879722">"Desligar"</string>
     <string name="global_action_emergency" msgid="7112311161137421166">"Emergência"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"Relatório de bugs"</string>
+    <string name="global_action_logout" msgid="935179188218826050">"Finalizar sessão"</string>
     <string name="bugreport_title" msgid="2667494803742548533">"Obter relatório de bugs"</string>
     <string name="bugreport_message" msgid="398447048750350456">"Isto coletará informações sobre o estado atual do dispositivo para enviá-las em uma mensagem de e-mail. Após iniciar o relatório de bugs, será necessário aguardar algum tempo até que esteja pronto para ser enviado."</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"Relatório interativo"</string>
@@ -1051,6 +1052,9 @@
     <string name="screen_compat_mode_hint" msgid="1064524084543304459">"Reativar isso em Configurações do sistema &gt; Apps &gt; Transferidos."</string>
     <string name="unsupported_display_size_message" msgid="6545327290756295232">"O app <xliff:g id="APP_NAME">%1$s</xliff:g> não é compatível com a configuração atual de tamanho de exibição e pode se comportar de forma inesperada."</string>
     <string name="unsupported_display_size_show" msgid="7969129195360353041">"Mostrar sempre"</string>
+    <string name="unsupported_compile_sdk_message" msgid="4253168368781441759">"O app <xliff:g id="APP_NAME">%1$s</xliff:g> foi criado para uma versão incompatível do sistema operacional Android e pode se comportar de forma inesperada. Uma versão atualizada do app pode estar disponível."</string>
+    <string name="unsupported_compile_sdk_show" msgid="2681877855260970231">"Mostrar sempre"</string>
+    <string name="unsupported_compile_sdk_check_update" msgid="3312723623323216101">"Verificar atualizações"</string>
     <string name="smv_application" msgid="3307209192155442829">"O app <xliff:g id="APPLICATION">%1$s</xliff:g>, processo <xliff:g id="PROCESS">%2$s</xliff:g>, violou a política StrictMode imposta automaticamente."</string>
     <string name="smv_process" msgid="5120397012047462446">"O processo <xliff:g id="PROCESS">%1$s</xliff:g> violou a política StrictMode imposta automaticamente."</string>
     <string name="android_upgrading_title" msgid="1584192285441405746">"O Android está sendo atualizado..."</string>
@@ -1116,10 +1120,10 @@
     <string name="network_available_sign_in" msgid="1848877297365446605">"Fazer login na rede"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
     <skip />
-    <string name="wifi_no_internet" msgid="8451173622563841546">"O Wi-Fi não tem acesso à Internet"</string>
+    <string name="wifi_no_internet" msgid="8938267198124654938">"O Wi‑Fi não tem acesso à Internet"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"Toque para ver opções"</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"Alternado para <xliff:g id="NETWORK_TYPE">%1$s</xliff:g>"</string>
-    <string name="network_switch_metered_detail" msgid="5325661434777870353">"O dispositivo usa <xliff:g id="NEW_NETWORK">%1$s</xliff:g> quando <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> não tem acesso à Internet. Cobranças podem ser aplicadas."</string>
+    <string name="network_switch_metered_detail" msgid="775163331794506615">"O dispositivo usa <xliff:g id="NEW_NETWORK">%1$s</xliff:g> quando <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> não tem acesso à Internet. Esse serviço pode ser cobrado."</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"Alternado de <xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> para <xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
   <string-array name="network_switch_type_name">
     <item msgid="3979506840912951943">"dados móveis"</item>
@@ -1130,7 +1134,7 @@
   </string-array>
     <string name="network_switch_type_name_unknown" msgid="4552612897806660656">"um tipo de rede desconhecido"</string>
     <string name="wifi_watchdog_network_disabled" msgid="7904214231651546347">"Não foi possível se conectar a redes Wi-Fi"</string>
-    <string name="wifi_watchdog_network_disabled_detailed" msgid="5548780776418332675">" tem uma conexão de baixa qualidade com a Internet."</string>
+    <string name="wifi_watchdog_network_disabled_detailed" msgid="4917472096696322767">" tem uma conexão de baixa qualidade com a Internet."</string>
     <string name="wifi_connect_alert_title" msgid="8455846016001810172">"Permitir conexão?"</string>
     <string name="wifi_connect_alert_message" msgid="6451273376815958922">"O app %1$s deseja se conectar à rede Wi-Fi %2$s"</string>
     <string name="wifi_connect_default_application" msgid="7143109390475484319">"Um app"</string>
@@ -1495,6 +1499,8 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="7256507885737444807">"Quando o atalho está ativado, pressione os dois botões de volume por três segundos para iniciar um recurso de acessibilidade.\n\n Recurso de acessibilidade atual:\n <xliff:g id="SERVICE_NAME">%1$s</xliff:g>\n\n É possível alterar o recurso em Configurações &gt; Acessibilidade."</string>
     <string name="disable_accessibility_shortcut" msgid="627625354248453445">"Desativar atalho"</string>
     <string name="leave_accessibility_shortcut_on" msgid="7653111894438512680">"Usar atalho"</string>
+    <string name="color_inversion_feature_name" msgid="4231186527799958644">"Inversão de cores"</string>
+    <string name="color_correction_feature_name" msgid="6779391426096954933">"Correção de cor"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"O atalho de acessibilidade ativou o <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"O atalho de acessibilidade desativou o <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Escolha um recurso a ser usado ao tocar no botão Acessibilidade:"</string>
@@ -1626,7 +1632,6 @@
     <string name="managed_profile_label_badge_2" msgid="5048136430082124036">"Segundo <xliff:g id="LABEL">%1$s</xliff:g> de trabalho"</string>
     <string name="managed_profile_label_badge_3" msgid="2808305070321719040">"Terceiro <xliff:g id="LABEL">%1$s</xliff:g> de trabalho"</string>
     <string name="lock_to_app_toast" msgid="6820571533009838261">"Para liberar esta tela, mantenha os botões Voltar e Visão geral pressionados"</string>
-    <string name="lock_to_app_toast_locked" msgid="7849470948648628704">"Não é possível liberar este app"</string>
     <string name="lock_to_app_start" msgid="6643342070839862795">"Tela fixada"</string>
     <string name="lock_to_app_exit" msgid="8598219838213787430">"Tela liberada"</string>
     <string name="lock_to_app_unlock_pin" msgid="2552556656504331634">"Pedir PIN antes de liberar"</string>
@@ -1635,7 +1640,7 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Instalado pelo seu administrador"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Atualizado pelo seu administrador"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Excluído pelo seu administrador"</string>
-    <string name="battery_saver_description" msgid="1960431123816253034">"A economia de bateria reduz o desempenho do dispositivo e limita a vibração, os serviços de localização e a maioria dos dados em segundo plano para aumentar a duração da bateria. E-mails, mensagens e outros apps que dependem de sincronização não serão atualizados, a não ser que você os abra.\n\nA economia de bateria é desligada automaticamente quando o dispositivo está sendo carregado."</string>
+    <string name="battery_saver_description" msgid="5394663545060026162">"Para ajudar a melhorar a duração da bateria, a Economia de bateria reduz o desempenho do seu dispositivo e limita a vibração, os serviços de localização e a maioria dos dados em segundo plano. E-mails, mensagens e outros apps que dependem da sincronização podem não ser atualizados, a menos que você os abra.\n\nA Economia de bateria é desativada automaticamente quando o dispositivo está sendo carregado."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Para ajudar a reduzir o uso de dados, a Economia de dados impede que alguns apps enviem ou recebam dados em segundo plano. Um app que você esteja usando no momento pode acessar dados, mas com menos frequência. Isso pode significar que as imagens não serão exibidas até que você toque nelas."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Ativar Economia de dados?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Ativar"</string>
@@ -1682,13 +1687,16 @@
     <string name="zen_mode_default_weeknights_name" msgid="3081318299464998143">"Durante a semana à noite"</string>
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Fim de semana"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Evento"</string>
+    <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"Dormindo"</string>
     <string name="muted_by" msgid="6147073845094180001">"Som desativado por <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"Há um problema interno com seu dispositivo. Ele pode ficar instável até que você faça a redefinição para configuração original."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"Há um problema interno com seu dispositivo. Entre em contato com o fabricante para saber mais detalhes."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5202342984749947872">"A solicitação USSD foi modificada para a solicitação DIAL."</string>
     <string name="stk_cc_ussd_to_ss" msgid="2345360594181405482">"A solicitação USSD foi modificada para a solicitação SS."</string>
     <string name="stk_cc_ussd_to_ussd" msgid="7466087659967191653">"A solicitação USSD foi modificada para a nova solicitação USSD."</string>
+    <string name="stk_cc_ussd_to_dial_video" msgid="585340552561515305">"A solicitação USSD foi modificada para a solicitação DIAL de vídeo."</string>
     <string name="stk_cc_ss_to_dial" msgid="2151304435775557162">"A solicitação SS foi modificada para a solicitação DIAL."</string>
+    <string name="stk_cc_ss_to_dial_video" msgid="4306210904450719045">"A solicitação SS foi modificada para a solicitação DIAL de vídeo."</string>
     <string name="stk_cc_ss_to_ussd" msgid="3951862188105305589">"A solicitação SS foi modificada para a solicitação USSD."</string>
     <string name="stk_cc_ss_to_ss" msgid="5470768854991452695">"A solicitação SS foi modificada para a nova solicitação SS."</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Perfil de trabalho"</string>
@@ -1782,14 +1790,10 @@
     <string name="etws_primary_default_message_test" msgid="2709597093560037455">"Teste de mensagens de emergência"</string>
     <string name="notification_reply_button_accessibility" msgid="3621714652387814344">"Responder"</string>
     <string name="etws_primary_default_message_others" msgid="6293148756130398971"></string>
-    <!-- no translation found for mmcc_authentication_reject (5767701075994754356) -->
-    <skip />
-    <!-- no translation found for mmcc_imsi_unknown_in_hlr (5316658473301462825) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_ms (807334478177362062) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_me (1950705155760872972) -->
-    <skip />
+    <string name="mmcc_authentication_reject" msgid="5767701075994754356">"SIM não autorizado para voz"</string>
+    <string name="mmcc_imsi_unknown_in_hlr" msgid="5316658473301462825">"SIM não aprovisionado para voz"</string>
+    <string name="mmcc_illegal_ms" msgid="807334478177362062">"SIM não autorizado para voz"</string>
+    <string name="mmcc_illegal_me" msgid="1950705155760872972">"Smartphone não autorizado para voz"</string>
     <string name="popup_window_default_title" msgid="4874318849712115433">"Janela pop-up"</string>
     <string name="slice_more_content" msgid="8504342889413274608">"Mais <xliff:g id="NUMBER">%1$d</xliff:g>"</string>
     <string name="shortcut_restored_on_lower_version" msgid="5270675146351613828">"Esse atalho requer o app mais recente"</string>

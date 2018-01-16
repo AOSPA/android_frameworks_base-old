@@ -21,7 +21,7 @@
 #include <vector>
 
 #include "../condition/ConditionTracker.h"
-#include "../external/StatsPullerManager.h"
+#include "../external/StatsPullerManagerImpl.h"
 #include "../matchers/LogMatchingTracker.h"
 
 namespace android {
@@ -36,18 +36,20 @@ namespace statsd {
 
 // Initialize the LogMatchingTrackers.
 // input:
+// [key]: the config key that this config belongs to
 // [config]: the input StatsdConfig
 // output:
 // [logTrackerMap]: this map should contain matcher name to index mapping
-// [allLogEntryMatchers]: should store the sp to all the LogMatchingTracker
+// [allAtomMatchers]: should store the sp to all the LogMatchingTracker
 // [allTagIds]: contains the set of all interesting tag ids to this config.
 bool initLogTrackers(const StatsdConfig& config,
                      std::unordered_map<std::string, int>& logTrackerMap,
-                     std::vector<sp<LogMatchingTracker>>& allLogEntryMatchers,
+                     std::vector<sp<LogMatchingTracker>>& allAtomMatchers,
                      std::set<int>& allTagIds);
 
 // Initialize ConditionTrackers
 // input:
+// [key]: the config key that this config belongs to
 // [config]: the input config
 // [logTrackerMap]: LogMatchingTracker name to index mapping from previous step.
 // output:
@@ -55,16 +57,18 @@ bool initLogTrackers(const StatsdConfig& config,
 // [allConditionTrackers]: stores the sp to all the ConditionTrackers
 // [trackerToConditionMap]: contain the mapping from index of
 //                        log tracker to condition trackers that use the log tracker
-bool initConditions(const StatsdConfig& config,
+bool initConditions(const ConfigKey& key, const StatsdConfig& config,
                     const std::unordered_map<std::string, int>& logTrackerMap,
                     std::unordered_map<std::string, int>& conditionTrackerMap,
                     std::vector<sp<ConditionTracker>>& allConditionTrackers,
                     std::unordered_map<int, std::vector<int>>& trackerToConditionMap,
-                    std::unordered_map<int, std::vector<EventConditionLink>>& eventConditionLinks);
+                    std::unordered_map<int, std::vector<MetricConditionLink>>& eventConditionLinks);
 
 // Initialize MetricProducers.
 // input:
+// [key]: the config key that this config belongs to
 // [config]: the input config
+// [timeBaseSec]: start time base for all metrics
 // [logTrackerMap]: LogMatchingTracker name to index mapping from previous step.
 // [conditionTrackerMap]: condition name to index mapping
 // output:
@@ -73,10 +77,11 @@ bool initConditions(const StatsdConfig& config,
 //                          the list of MetricProducer index
 // [trackerToMetricMap]: contains the mapping from log tracker to MetricProducer index.
 bool initMetrics(
-        const StatsdConfig& config, const std::unordered_map<std::string, int>& logTrackerMap,
+        const ConfigKey& key, const StatsdConfig& config, const long timeBaseSec,
+        const std::unordered_map<std::string, int>& logTrackerMap,
         const std::unordered_map<std::string, int>& conditionTrackerMap,
-        const std::unordered_map<int, std::vector<EventConditionLink>>& eventConditionLinks,
-        const vector<sp<LogMatchingTracker>>& allLogEntryMatchers,
+        const std::unordered_map<int, std::vector<MetricConditionLink>>& eventConditionLinks,
+        const vector<sp<LogMatchingTracker>>& allAtomMatchers,
         vector<sp<ConditionTracker>>& allConditionTrackers,
         std::vector<sp<MetricProducer>>& allMetricProducers,
         std::unordered_map<int, std::vector<int>>& conditionToMetricMap,
@@ -84,10 +89,11 @@ bool initMetrics(
 
 // Initialize MetricsManager from StatsdConfig.
 // Parameters are the members of MetricsManager. See MetricsManager for declaration.
-bool initStatsdConfig(const StatsdConfig& config, std::set<int>& allTagIds,
-                      std::vector<sp<LogMatchingTracker>>& allLogEntryMatchers,
+bool initStatsdConfig(const ConfigKey& key, const StatsdConfig& config, const long timeBaseSec, std::set<int>& allTagIds,
+                      std::vector<sp<LogMatchingTracker>>& allAtomMatchers,
                       std::vector<sp<ConditionTracker>>& allConditionTrackers,
                       std::vector<sp<MetricProducer>>& allMetricProducers,
+                      vector<sp<AnomalyTracker>>& allAnomalyTrackers,
                       std::unordered_map<int, std::vector<int>>& conditionToMetricMap,
                       std::unordered_map<int, std::vector<int>>& trackerToMetricMap,
                       std::unordered_map<int, std::vector<int>>& trackerToConditionMap);

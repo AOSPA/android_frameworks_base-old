@@ -997,6 +997,10 @@ public class WebView extends AbsoluteLayout
      * hex encoding of URLs for octets outside that range. For example, '#',
      * '%', '\', '?' should be replaced by %23, %25, %27, %3f respectively.
      * <p>
+     * The {@code mimeType} parameter specifies the format of the data.
+     * If WebView can't handle the specified MIME type, it will download the data.
+     * If {@code null}, defaults to 'text/html'.
+     * <p>
      * The 'data' scheme URL formed by this method uses the default US-ASCII
      * charset. If you need need to set a different charset, you should form a
      * 'data' scheme URL which explicitly specifies a charset parameter in the
@@ -1005,8 +1009,7 @@ public class WebView extends AbsoluteLayout
      * always overrides that specified in the HTML or XML document itself.
      *
      * @param data a String of data in the given encoding
-     * @param mimeType the MIMEType of the data, e.g. 'text/html'. If {@code null},
-     *                 defaults to 'text/html'.
+     * @param mimeType the MIME type of the data, e.g. 'text/html'.
      * @param encoding the encoding of the data
      */
     public void loadData(String data, @Nullable String mimeType, @Nullable String encoding) {
@@ -1019,6 +1022,10 @@ public class WebView extends AbsoluteLayout
      * the content. The base URL is used both to resolve relative URLs and when
      * applying JavaScript's same origin policy. The historyUrl is used for the
      * history entry.
+     * <p>
+     * The {@code mimeType} parameter specifies the format of the data.
+     * If WebView can't handle the specified MIME type, it will download the data.
+     * If {@code null}, defaults to 'text/html'.
      * <p>
      * Note that content specified in this way can access local device files
      * (via 'file' scheme URLs) only if baseUrl specifies a scheme other than
@@ -1037,8 +1044,7 @@ public class WebView extends AbsoluteLayout
      * @param baseUrl the URL to use as the page's base URL. If {@code null} defaults to
      *                'about:blank'.
      * @param data a String of data in the given encoding
-     * @param mimeType the MIMEType of the data, e.g. 'text/html'. If {@code null},
-     *                 defaults to 'text/html'.
+     * @param mimeType the MIME type of the data, e.g. 'text/html'.
      * @param encoding the encoding of the data
      * @param historyUrl the URL to use as the history entry. If {@code null} defaults
      *                   to 'about:blank'. If non-null, this must be a valid URL.
@@ -2075,6 +2081,48 @@ public class WebView extends AbsoluteLayout
     }
 
     /**
+     * Define the directory used to store WebView data for the current process.
+     * The provided suffix will be used when constructing data and cache
+     * directory paths. If this API is not called, no suffix will be used.
+     * Each directory can be used by only one process in the application. If more
+     * than one process in an app wishes to use WebView, only one process can use
+     * the default directory, and other processes must call this API to define
+     * a unique suffix.
+     * <p>
+     * This API must be called before any instances of WebView are created in
+     * this process and before any other methods in the android.webkit package
+     * are called by this process.
+     *
+     * @param suffix The directory name suffix to be used for the current
+     *               process. Must not contain a path separator.
+     * @throws IllegalStateException if WebView has already been initialized
+     *                               in the current process.
+     * @throws IllegalArgumentException if the suffix contains a path separator.
+     */
+    public static void setDataDirectorySuffix(String suffix) {
+        WebViewFactory.setDataDirectorySuffix(suffix);
+    }
+
+    /**
+     * Indicate that the current process does not intend to use WebView, and
+     * that an exception should be thrown if a WebView is created or any other
+     * methods in the android.webkit package are used.
+     * <p>
+     * Applications with multiple processes may wish to call this in processes
+     * which are not intended to use WebView to prevent potential data directory
+     * conflicts (see {@link #setDataDirectorySuffix}) and to avoid accidentally
+     * incurring the memory usage of initializing WebView in long-lived
+     * processes which have no need for it.
+     *
+     * @throws IllegalStateException if WebView has already been initialized
+     *                               in the current process.
+     */
+    public static void disableWebView() {
+        WebViewFactory.disableWebView();
+    }
+
+
+    /**
      * @deprecated This was used for Gears, which has been deprecated.
      * @hide
      */
@@ -2249,10 +2297,10 @@ public class WebView extends AbsoluteLayout
     }
 
     /** @hide */
-    @IntDef({
-        RENDERER_PRIORITY_WAIVED,
-        RENDERER_PRIORITY_BOUND,
-        RENDERER_PRIORITY_IMPORTANT
+    @IntDef(prefix = { "RENDERER_PRIORITY_" }, value = {
+            RENDERER_PRIORITY_WAIVED,
+            RENDERER_PRIORITY_BOUND,
+            RENDERER_PRIORITY_IMPORTANT
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface RendererPriority {}
@@ -2758,7 +2806,9 @@ public class WebView extends AbsoluteLayout
      * <p>For example, an HTML form with 2 fields for username and password:
      *
      * <pre class="prettyprint">
+     *    &lt;label&gt;Username:&lt;/label&gt;
      *    &lt;input type="text" name="username" id="user" value="Type your username" autocomplete="username" placeholder="Email or username"&gt;
+     *    &lt;label&gt;Password:&lt;/label&gt;
      *    &lt;input type="password" name="password" id="pass" autocomplete="current-password" placeholder="Password"&gt;
      * </pre>
      *
@@ -2772,6 +2822,7 @@ public class WebView extends AbsoluteLayout
      *     username.setHtmlInfo(username.newHtmlInfoBuilder("input")
      *         .addAttribute("type", "text")
      *         .addAttribute("name", "username")
+     *         .addAttribute("label", "Username:")
      *         .build());
      *     username.setHint("Email or username");
      *     username.setAutofillType(View.AUTOFILL_TYPE_TEXT);
@@ -2785,6 +2836,7 @@ public class WebView extends AbsoluteLayout
      *     password.setHtmlInfo(password.newHtmlInfoBuilder("input")
      *         .addAttribute("type", "password")
      *         .addAttribute("name", "password")
+     *         .addAttribute("label", "Password:")
      *         .build());
      *     password.setHint("Password");
      *     password.setAutofillType(View.AUTOFILL_TYPE_TEXT);

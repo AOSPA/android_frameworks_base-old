@@ -16,7 +16,6 @@
 
 #include "Log.h"
 
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 #include "matchers/LogMatchingTracker.h"
 #include "matchers/matcher_util.h"
@@ -85,11 +84,14 @@ bool combinationMatch(const vector<int>& children, const LogicalOperation& opera
                 }
             }
             break;
+        case LogicalOperation::LOGICAL_OPERATION_UNSPECIFIED:
+            matched = false;
+            break;
     }
     return matched;
 }
 
-bool matchesSimple(const SimpleLogEntryMatcher& simpleMatcher, const LogEvent& event) {
+bool matchesSimple(const SimpleAtomMatcher& simpleMatcher, const LogEvent& event) {
     const int tagId = event.GetTagId();
 
     if (simpleMatcher.tag() != tagId) {
@@ -113,7 +115,11 @@ bool matchesSimple(const SimpleLogEntryMatcher& simpleMatcher, const LogEvent& e
             if (err == NO_ERROR && val != NULL) {
                 if (!(cur.eq_string() == val)) {
                     allMatched = false;
+                    break;
                 }
+            } else {
+                allMatched = false;
+                break;
             }
         } else if (matcherCase == KeyValueMatcher::ValueMatcherCase::kEqInt ||
                    matcherCase == KeyValueMatcher::ValueMatcherCase::kLtInt ||
@@ -127,26 +133,33 @@ bool matchesSimple(const SimpleLogEntryMatcher& simpleMatcher, const LogEvent& e
                 if (matcherCase == KeyValueMatcher::ValueMatcherCase::kEqInt) {
                     if (!(val == cur.eq_int())) {
                         allMatched = false;
+                        break;
                     }
                 } else if (matcherCase == KeyValueMatcher::ValueMatcherCase::kLtInt) {
                     if (!(val < cur.lt_int())) {
                         allMatched = false;
+                        break;
                     }
                 } else if (matcherCase == KeyValueMatcher::ValueMatcherCase::kGtInt) {
                     if (!(val > cur.gt_int())) {
                         allMatched = false;
+                        break;
                     }
                 } else if (matcherCase == KeyValueMatcher::ValueMatcherCase::kLteInt) {
                     if (!(val <= cur.lte_int())) {
                         allMatched = false;
+                        break;
                     }
                 } else if (matcherCase == KeyValueMatcher::ValueMatcherCase::kGteInt) {
                     if (!(val >= cur.gte_int())) {
                         allMatched = false;
+                        break;
                     }
                 }
+            } else {
+                allMatched = false;
+                break;
             }
-            break;
         } else if (matcherCase == KeyValueMatcher::ValueMatcherCase::kEqBool) {
             // Boolean fields
             status_t err = NO_ERROR;
@@ -154,23 +167,32 @@ bool matchesSimple(const SimpleLogEntryMatcher& simpleMatcher, const LogEvent& e
             if (err == NO_ERROR) {
                 if (!(cur.eq_bool() == val)) {
                     allMatched = false;
+                    break;
                 }
+            } else {
+                allMatched = false;
+                break;
             }
         } else if (matcherCase == KeyValueMatcher::ValueMatcherCase::kLtFloat ||
                    matcherCase == KeyValueMatcher::ValueMatcherCase::kGtFloat) {
             // Float fields
             status_t err = NO_ERROR;
-            bool val = event.GetFloat(key, &err);
+            float val = event.GetFloat(key, &err);
             if (err == NO_ERROR) {
                 if (matcherCase == KeyValueMatcher::ValueMatcherCase::kLtFloat) {
-                    if (!(cur.lt_float() <= val)) {
+                    if (!(val < cur.lt_float())) {
                         allMatched = false;
+                        break;
                     }
                 } else if (matcherCase == KeyValueMatcher::ValueMatcherCase::kGtFloat) {
-                    if (!(cur.gt_float() >= val)) {
+                    if (!(val > cur.gt_float())) {
                         allMatched = false;
+                        break;
                     }
                 }
+            } else {
+                allMatched = false;
+                break;
             }
         } else {
             // If value matcher is not present, assume that we match.

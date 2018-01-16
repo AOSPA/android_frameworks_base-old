@@ -120,7 +120,6 @@ import java.util.function.BiConsumer;
  */
 @SmallTest
 public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
-
     /**
      * Test for the first launch path, no settings file available.
      */
@@ -780,6 +779,7 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
 
         dumpsysOnLogcat();
 
+        mService.waitForBitmapSavesForTest();
         // Check files and directories.
         // Package 3 has no bitmaps, so we don't create a directory.
         assertBitmapDirectories(USER_0, CALLING_PACKAGE_1, CALLING_PACKAGE_2);
@@ -835,6 +835,7 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
         makeFile(mService.getUserBitmapFilePath(USER_10), CALLING_PACKAGE_2, "3").createNewFile();
         makeFile(mService.getUserBitmapFilePath(USER_10), CALLING_PACKAGE_2, "4").createNewFile();
 
+        mService.waitForBitmapSavesForTest();
         assertBitmapDirectories(USER_0, CALLING_PACKAGE_1, CALLING_PACKAGE_2, CALLING_PACKAGE_3,
                 "a.b.c", "d.e.f");
 
@@ -849,6 +850,7 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
         // The below check is the same as above, except this time USER_0 use the CALLING_PACKAGE_3
         // directory.
 
+        mService.waitForBitmapSavesForTest();
         assertBitmapDirectories(USER_0, CALLING_PACKAGE_1, CALLING_PACKAGE_2, CALLING_PACKAGE_3);
         assertBitmapDirectories(USER_10, CALLING_PACKAGE_1, CALLING_PACKAGE_2);
 
@@ -1127,13 +1129,13 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
                             .setIcon(Icon.createWithResource(getTestContext(), R.drawable.black_32x32))
                             .build()
             )));
-
+            mService.waitForBitmapSavesForTest();
             assertWith(getCallerShortcuts())
                     .forShortcutWithId("s1", si -> {
                         assertTrue(si.hasIconResource());
                         assertEquals(R.drawable.black_32x32, si.getIconResourceId());
                     });
-
+            mService.waitForBitmapSavesForTest();
             // Set bitmap icon
             assertTrue(mManager.updateShortcuts(list(
                     new ShortcutInfo.Builder(mClientContext, "s1")
@@ -1141,7 +1143,7 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
                                     getTestContext().getResources(), R.drawable.black_64x64)))
                             .build()
             )));
-
+            mService.waitForBitmapSavesForTest();
             assertWith(getCallerShortcuts())
                     .forShortcutWithId("s1", si -> {
                         assertTrue(si.hasIconFile());
@@ -1161,7 +1163,7 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
                                     getTestContext().getResources(), R.drawable.black_64x64)))
                             .build()
             )));
-
+            mService.waitForBitmapSavesForTest();
             assertWith(getCallerShortcuts())
                     .forShortcutWithId("s1", si -> {
                         assertTrue(si.hasIconFile());
@@ -1173,7 +1175,7 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
                             .setIcon(Icon.createWithResource(getTestContext(), R.drawable.black_32x32))
                             .build()
             )));
-
+            mService.waitForBitmapSavesForTest();
             assertWith(getCallerShortcuts())
                     .forShortcutWithId("s1", si -> {
                         assertTrue(si.hasIconResource());
@@ -1918,7 +1920,7 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
             // Make sure FLAG_MATCH_ALL_PINNED will be ignored.
             assertWith(mLauncherApps.getShortcuts(buildQuery(/* time =*/ 0, CALLING_PACKAGE_2,
                     /* activity =*/ null, ShortcutQuery.FLAG_MATCH_PINNED
-                            | ShortcutQuery.FLAG_MATCH_ALL_PINNED), getCallingUser()))
+                            | ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER), getCallingUser()))
                     .isEmpty();
 
             // Make sure the special permission works.
@@ -1928,13 +1930,17 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
 
             assertWith(mLauncherApps.getShortcuts(buildQuery(/* time =*/ 0, CALLING_PACKAGE_2,
                     /* activity =*/ null, ShortcutQuery.FLAG_MATCH_PINNED
-                            | ShortcutQuery.FLAG_MATCH_ALL_PINNED), getCallingUser()))
+                            | ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER), getCallingUser()))
                     .haveIds("s1", "s2");
             assertWith(mLauncherApps.getShortcuts(buildQuery(/* time =*/ 0, CALLING_PACKAGE_2,
                     /* activity =*/ null, ShortcutQuery.FLAG_MATCH_PINNED), getCallingUser()))
                     .isEmpty();
 
+            assertShortcutLaunchable(CALLING_PACKAGE_2, "s1", getCallingUser().getIdentifier());
+
             mInjectCheckAccessShortcutsPermission = false;
+
+            assertShortcutNotLaunched(CALLING_PACKAGE_2, "s1", getCallingUser().getIdentifier());
 
             assertShortcutIds(assertAllDynamic(
                     mLauncherApps.getShortcuts(buildQuery(/* time =*/ 0, CALLING_PACKAGE_1,
@@ -2103,6 +2109,62 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
         runWithCaller(CALLING_PACKAGE_2, USER_0, () -> {
             assertEquals(0, mManager.getDynamicShortcuts().size());
             assertEquals(0, mManager.getPinnedShortcuts().size());
+        });
+    }
+
+    public void testPinShortcutAndGetPinnedShortcuts_assistant() {
+        // Create some shortcuts.
+        runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
+            assertTrue(mManager.setDynamicShortcuts(list(
+                    makeShortcut("s1"), makeShortcut("s2"), makeShortcut("s3"))));
+        });
+
+        // Pin some.
+        runWithCaller(LAUNCHER_1, USER_0, () -> {
+            mLauncherApps.pinShortcuts(CALLING_PACKAGE_1,
+                    list("s3", "s4"), getCallingUser());
+        });
+
+        runWithCaller(CALLING_PACKAGE_1, USER_0, () -> {
+            assertTrue(mManager.setDynamicShortcuts(list(
+                    makeShortcut("s1"))));
+        });
+
+        runWithCaller(LAUNCHER_2, USER_0, () -> {
+            final ShortcutQuery allPinned = new ShortcutQuery().setQueryFlags(
+                    ShortcutQuery.FLAG_MATCH_PINNED_BY_ANY_LAUNCHER);
+
+            assertWith(mLauncherApps.getShortcuts(allPinned, HANDLE_USER_0))
+                    .isEmpty();
+
+            assertShortcutLaunchable(CALLING_PACKAGE_1, "s1", USER_0);
+            assertShortcutNotLaunched(CALLING_PACKAGE_1, "s3", USER_0);
+            assertShortcutNotLaunched(CALLING_PACKAGE_1, "s4", USER_0);
+
+            // Make it the assistant app.
+            mInternal.setShortcutHostPackage("assistant", LAUNCHER_2, USER_0);
+            assertWith(mLauncherApps.getShortcuts(allPinned, HANDLE_USER_0))
+                    .haveIds("s3");
+
+            assertShortcutLaunchable(CALLING_PACKAGE_1, "s1", USER_0);
+            assertShortcutLaunchable(CALLING_PACKAGE_1, "s3", USER_0);
+            assertShortcutNotLaunched(CALLING_PACKAGE_1, "s4", USER_0);
+
+            mInternal.setShortcutHostPackage("another-type", LAUNCHER_3, USER_0);
+            assertWith(mLauncherApps.getShortcuts(allPinned, HANDLE_USER_0))
+                    .haveIds("s3");
+
+            mInternal.setShortcutHostPackage("assistant", null, USER_0);
+            assertWith(mLauncherApps.getShortcuts(allPinned, HANDLE_USER_0))
+                    .isEmpty();
+
+            mInternal.setShortcutHostPackage("assistant", LAUNCHER_2, USER_0);
+            assertWith(mLauncherApps.getShortcuts(allPinned, HANDLE_USER_0))
+                    .haveIds("s3");
+
+            mInternal.setShortcutHostPackage("assistant", LAUNCHER_1, USER_0);
+            assertWith(mLauncherApps.getShortcuts(allPinned, HANDLE_USER_0))
+                    .isEmpty();
         });
     }
 
@@ -7851,5 +7913,36 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
                     .haveIds("s1")
                     .forAllShortcuts(si -> assertTrue(si.isReturnedByServer()));
         });
+    }
+
+    public void testIsForegroundDefaultLauncher_true() {
+        final ComponentName defaultLauncher = new ComponentName("default", "launcher");
+        final int uid = 1024;
+
+        setDefaultLauncher(UserHandle.USER_SYSTEM, defaultLauncher);
+        makeUidForeground(uid);
+
+        assertTrue(mInternal.isForegroundDefaultLauncher("default", uid));
+    }
+
+
+    public void testIsForegroundDefaultLauncher_defaultButNotForeground() {
+        final ComponentName defaultLauncher = new ComponentName("default", "launcher");
+        final int uid = 1024;
+
+        setDefaultLauncher(UserHandle.USER_SYSTEM, defaultLauncher);
+        makeUidBackground(uid);
+
+        assertFalse(mInternal.isForegroundDefaultLauncher("default", uid));
+    }
+
+    public void testIsForegroundDefaultLauncher_foregroundButNotDefault() {
+        final ComponentName defaultLauncher = new ComponentName("default", "launcher");
+        final int uid = 1024;
+
+        setDefaultLauncher(UserHandle.USER_SYSTEM, defaultLauncher);
+        makeUidForeground(uid);
+
+        assertFalse(mInternal.isForegroundDefaultLauncher("another", uid));
     }
 }

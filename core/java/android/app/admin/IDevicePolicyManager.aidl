@@ -36,6 +36,8 @@ import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.os.RemoteCallback;
 import android.os.UserHandle;
+import android.security.keymaster.KeymasterCertificateChain;
+import android.security.keystore.ParcelableKeyGenParameterSpec;
 
 import java.util.List;
 
@@ -76,8 +78,13 @@ interface IDevicePolicyManager {
 
     long getPasswordExpiration(in ComponentName who, int userHandle, boolean parent);
 
+    boolean setPasswordBlacklist(in ComponentName who, String name, in List<String> blacklist, boolean parent);
+    String getPasswordBlacklistName(in ComponentName who, int userId, boolean parent);
+    boolean isPasswordBlacklisted(int userId, String password);
+
     boolean isActivePasswordSufficient(int userHandle, boolean parent);
     boolean isProfileActivePasswordSufficientForParent(int userHandle);
+    boolean isUsingUnifiedPassword(in ComponentName admin);
     int getCurrentFailedPasswordAttempts(int userHandle, boolean parent);
     int getProfileWithMinimumFailedPasswordsForWipe(int userHandle, boolean parent);
 
@@ -88,7 +95,6 @@ interface IDevicePolicyManager {
 
     void setMaximumTimeToLock(in ComponentName who, long timeMs, boolean parent);
     long getMaximumTimeToLock(in ComponentName who, int userHandle, boolean parent);
-    long getMaximumTimeToLockForUserAndProfiles(int userHandle);
 
     void setRequiredStrongAuthTimeout(in ComponentName who, long timeMs, boolean parent);
     long getRequiredStrongAuthTimeout(in ComponentName who, int userId, boolean parent);
@@ -162,8 +168,14 @@ interface IDevicePolicyManager {
     boolean isCaCertApproved(in String alias, int userHandle);
 
     boolean installKeyPair(in ComponentName who, in String callerPackage, in byte[] privKeyBuffer,
-            in byte[] certBuffer, in byte[] certChainBuffer, String alias, boolean requestAccess);
+            in byte[] certBuffer, in byte[] certChainBuffer, String alias, boolean requestAccess,
+            boolean isUserSelectable);
     boolean removeKeyPair(in ComponentName who, in String callerPackage, String alias);
+    boolean generateKeyPair(in ComponentName who, in String callerPackage, in String algorithm,
+            in ParcelableKeyGenParameterSpec keySpec,
+            out KeymasterCertificateChain attestationChain);
+    boolean setKeyPairCertificate(in ComponentName who, in String callerPackage, in String alias,
+            in byte[] certBuffer, in byte[] certChainBuffer, boolean isUserSelectable);
     void choosePrivateKeyAlias(int uid, in Uri uri, in String alias, IBinder aliasCallback);
 
     void setDelegatedScopes(in ComponentName who, in String delegatePackage, in List<String> scopes);
@@ -214,9 +226,13 @@ interface IDevicePolicyManager {
     UserHandle createAndManageUser(in ComponentName who, in String name, in ComponentName profileOwner, in PersistableBundle adminExtras, in int flags);
     boolean removeUser(in ComponentName who, in UserHandle userHandle);
     boolean switchUser(in ComponentName who, in UserHandle userHandle);
+    boolean stopUser(in ComponentName who, in UserHandle userHandle);
+    boolean logoutUser(in ComponentName who);
+    List<UserHandle> getSecondaryUsers(in ComponentName who);
 
     void enableSystemApp(in ComponentName admin, in String callerPackage, in String packageName);
     int enableSystemAppWithIntent(in ComponentName admin, in String callerPackage, in Intent intent);
+    boolean installExistingPackage(in ComponentName admin, in String callerPackage, in String packageName);
 
     void setAccountManagementDisabled(in ComponentName who, in String accountType, in boolean disabled);
     String[] getAccountTypesWithManagementDisabled();
@@ -230,6 +246,7 @@ interface IDevicePolicyManager {
     int getLockTaskFeatures(in ComponentName who);
 
     void setGlobalSetting(in ComponentName who, in String setting, in String value);
+    void setSystemSetting(in ComponentName who, in String setting, in String value);
     void setSecureSetting(in ComponentName who, in String setting, in String value);
 
     boolean setTime(in ComponentName who, long millis);
@@ -350,6 +367,7 @@ interface IDevicePolicyManager {
         IApplicationThread caller, IBinder token, in Intent service,
         IServiceConnection connection, int flags, int targetUserId);
     List<UserHandle> getBindDeviceAdminTargetUsers(in ComponentName admin);
+    boolean isEphemeralUser(in ComponentName admin);
 
     long getLastSecurityLogRetrievalTime();
     long getLastBugReportRequestTime();
@@ -364,4 +382,10 @@ interface IDevicePolicyManager {
     StringParceledListSlice getOwnerInstalledCaCerts(in UserHandle user);
 
     boolean clearApplicationUserData(in ComponentName admin, in String packageName, in IPackageDataObserver callback);
+
+    void setLogoutEnabled(in ComponentName admin, boolean enabled);
+    boolean isLogoutEnabled();
+
+    List<String> getDisallowedSystemApps(in ComponentName admin, int userId, String provisioningAction);
+    void transferOwner(in ComponentName admin, in ComponentName target, in PersistableBundle bundle);
 }

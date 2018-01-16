@@ -79,7 +79,7 @@
     <string name="RestrictedOnAllVoiceTitle" msgid="158800171499150681">"Geen service voor spraak-/noodoproepen"</string>
     <string name="RestrictedStateContent" msgid="4278821484643362350">"Tijdelijk niet aangeboden door het mobiele netwerk op je locatie"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"Kan netwerk niet bereiken"</string>
-    <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"Als je de ontvangst wilt verbeteren, kun je het netwerktype wijzigen dat is geselecteerd bij Instellingen &gt; Netwerk en internet &gt; Mobiele netwerken &gt; Voorkeursnetwerktype."</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7056776609127756440">"Als je de ontvangst wilt verbeteren, kun je het netwerktype wijzigen dat is geselecteerd bij Instellingen &gt; Netwerk en internet &gt; Mobiele netwerken &gt; Voorkeursnetwerktype."</string>
     <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"Bellen via wifi is actief"</string>
     <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"Voor noodoproepen is een mobiel netwerk vereist."</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"Meldingen"</string>
@@ -212,6 +212,7 @@
     <string name="global_action_power_off" msgid="4471879440839879722">"Uitschakelen"</string>
     <string name="global_action_emergency" msgid="7112311161137421166">"Noodgeval"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"Bugrapport"</string>
+    <string name="global_action_logout" msgid="935179188218826050">"Sessie beëindigen"</string>
     <string name="bugreport_title" msgid="2667494803742548533">"Bugrapport genereren"</string>
     <string name="bugreport_message" msgid="398447048750350456">"Hiermee worden gegevens over de huidige status van je apparaat verzameld en als e-mail verzonden. Wanneer u een bugrapport start, duurt het even voordat het kan worden verzonden. Even geduld alstublieft."</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"Interactief rapport"</string>
@@ -1051,6 +1052,9 @@
     <string name="screen_compat_mode_hint" msgid="1064524084543304459">"U kunt dit opnieuw inschakelen via Systeeminstellingen &gt; Apps &gt; Gedownload."</string>
     <string name="unsupported_display_size_message" msgid="6545327290756295232">"<xliff:g id="APP_NAME">%1$s</xliff:g> biedt geen ondersteuning voor de huidige instelling voor weergavegrootte en kan onverwacht gedrag vertonen."</string>
     <string name="unsupported_display_size_show" msgid="7969129195360353041">"Altijd weergeven"</string>
+    <string name="unsupported_compile_sdk_message" msgid="4253168368781441759">"<xliff:g id="APP_NAME">%1$s</xliff:g> is gemaakt voor een niet-geschikte versie van het Android-besturingssysteem en kan onverwacht gedrag vertonen. Mogelijk is er een geüpdatete versie van de app beschikbaar."</string>
+    <string name="unsupported_compile_sdk_show" msgid="2681877855260970231">"Altijd weergeven"</string>
+    <string name="unsupported_compile_sdk_check_update" msgid="3312723623323216101">"Controleren op update"</string>
     <string name="smv_application" msgid="3307209192155442829">"De app <xliff:g id="APPLICATION">%1$s</xliff:g> (proces <xliff:g id="PROCESS">%2$s</xliff:g>) heeft het zelf afgedwongen StrictMode-beleid geschonden."</string>
     <string name="smv_process" msgid="5120397012047462446">"Het proces <xliff:g id="PROCESS">%1$s</xliff:g> heeft het zelf afgedwongen StrictMode-beleid geschonden."</string>
     <string name="android_upgrading_title" msgid="1584192285441405746">"Android wordt bijgewerkt..."</string>
@@ -1116,10 +1120,10 @@
     <string name="network_available_sign_in" msgid="1848877297365446605">"Inloggen bij netwerk"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
     <skip />
-    <string name="wifi_no_internet" msgid="8451173622563841546">"Wifi-netwerk heeft geen internettoegang"</string>
+    <string name="wifi_no_internet" msgid="8938267198124654938">"Wifi-netwerk heeft geen internettoegang"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"Tik voor opties"</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"Overgeschakeld naar <xliff:g id="NETWORK_TYPE">%1$s</xliff:g>"</string>
-    <string name="network_switch_metered_detail" msgid="5325661434777870353">"Apparaat gebruikt <xliff:g id="NEW_NETWORK">%1$s</xliff:g> wanneer <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> geen internetverbinding heeft. Er kunnen kosten in rekening worden gebracht."</string>
+    <string name="network_switch_metered_detail" msgid="775163331794506615">"Apparaat gebruikt <xliff:g id="NEW_NETWORK">%1$s</xliff:g> wanneer <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> geen internetverbinding heeft. Er kunnen kosten in rekening worden gebracht."</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"Overgeschakeld van <xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> naar <xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
   <string-array name="network_switch_type_name">
     <item msgid="3979506840912951943">"mobiele data"</item>
@@ -1130,7 +1134,7 @@
   </string-array>
     <string name="network_switch_type_name_unknown" msgid="4552612897806660656">"een onbekend netwerktype"</string>
     <string name="wifi_watchdog_network_disabled" msgid="7904214231651546347">"Kan geen verbinding maken met wifi"</string>
-    <string name="wifi_watchdog_network_disabled_detailed" msgid="5548780776418332675">" heeft een slechte internetverbinding."</string>
+    <string name="wifi_watchdog_network_disabled_detailed" msgid="4917472096696322767">" heeft een slechte internetverbinding."</string>
     <string name="wifi_connect_alert_title" msgid="8455846016001810172">"Verbinding toestaan?"</string>
     <string name="wifi_connect_alert_message" msgid="6451273376815958922">"App %1$s wil verbinding maken met wifi-netwerk %2$s"</string>
     <string name="wifi_connect_default_application" msgid="7143109390475484319">"Een app"</string>
@@ -1495,6 +1499,8 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="7256507885737444807">"Wanneer de snelkoppeling is ingeschakeld, kun je drie seconden op beide volumeknoppen drukken om een toegankelijkheidsfunctie te starten.\n\n Huidige toegankelijkheidsfunctie:\n <xliff:g id="SERVICE_NAME">%1$s</xliff:g>\n\n Je kunt de functie wijzigen in Instellingen &gt; Toegankelijkheid."</string>
     <string name="disable_accessibility_shortcut" msgid="627625354248453445">"Sneltoets uitschakelen"</string>
     <string name="leave_accessibility_shortcut_on" msgid="7653111894438512680">"Sneltoets gebruiken"</string>
+    <string name="color_inversion_feature_name" msgid="4231186527799958644">"Kleurinversie"</string>
+    <string name="color_correction_feature_name" msgid="6779391426096954933">"Kleurcorrectie"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"\'Snelle link voor toegankelijkheid\' heeft <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ingeschakeld"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"\'Snelle link voor toegankelijkheid\' heeft <xliff:g id="SERVICE_NAME">%1$s</xliff:g> uitgeschakeld"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Kies een functie om te gebruiken wanneer je op de knop Toegankelijkheid tikt:"</string>
@@ -1634,7 +1640,7 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Geïnstalleerd door je beheerder"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Geüpdatet door je beheerder"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Verwijderd door je beheerder"</string>
-    <string name="battery_saver_description" msgid="1960431123816253034">"Batterijbesparing beperkt de prestaties van je apparaat, de trilstand, locatieservices en de meeste achtergrondgegevens om de gebruiksduur van de batterij te verlengen.\n\nBatterijbesparing wordt automatisch uitgeschakeld terwijl je apparaat wordt opgeladen."</string>
+    <string name="battery_saver_description" msgid="5394663545060026162">"Batterijbesparing beperkt de prestaties van je apparaat, de trilstand, locatieservices en de meeste achtergrondgegevens om de gebruiksduur van de batterij te verlengen.\n\nBatterijbesparing wordt automatisch uitgeschakeld terwijl je apparaat wordt opgeladen."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Databesparing beperkt het datagebruik door te voorkomen dat sommige apps gegevens verzenden of ontvangen op de achtergrond. De apps die je open hebt, kunnen nog steeds data verbruiken, maar doen dit minder vaak. Afbeeldingen worden dan bijvoorbeeld niet weergegeven totdat je erop tikt."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Databesparing inschakelen?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Inschakelen"</string>
@@ -1681,13 +1687,16 @@
     <string name="zen_mode_default_weeknights_name" msgid="3081318299464998143">"Doordeweekse avond"</string>
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Weekend"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Evenement"</string>
+    <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"Slapen"</string>
     <string name="muted_by" msgid="6147073845094180001">"Gedempt door <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"Er is een intern probleem met je apparaat. Het apparaat kan instabiel zijn totdat u het apparaat terugzet naar de fabrieksinstellingen."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"Er is een intern probleem met je apparaat. Neem contact op met de fabrikant voor meer informatie."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5202342984749947872">"USSD-verzoek is gewijzigd in DIAL-verzoek."</string>
     <string name="stk_cc_ussd_to_ss" msgid="2345360594181405482">"USSD-verzoek is gewijzigd in SS-verzoek."</string>
     <string name="stk_cc_ussd_to_ussd" msgid="7466087659967191653">"USSD-verzoek is gewijzigd in nieuw USSD-verzoek."</string>
+    <string name="stk_cc_ussd_to_dial_video" msgid="585340552561515305">"USSD-verzoek is gewijzigd in Video DIAL-verzoek."</string>
     <string name="stk_cc_ss_to_dial" msgid="2151304435775557162">"SS-verzoek is gewijzigd in DIAL-verzoek."</string>
+    <string name="stk_cc_ss_to_dial_video" msgid="4306210904450719045">"SS-verzoek is gewijzigd in Video DIAL-verzoek."</string>
     <string name="stk_cc_ss_to_ussd" msgid="3951862188105305589">"SS-verzoek is gewijzigd in USSD-verzoek."</string>
     <string name="stk_cc_ss_to_ss" msgid="5470768854991452695">"SS-verzoek is gewijzigd in nieuw SS-verzoek."</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Werkprofiel"</string>

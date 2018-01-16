@@ -18,8 +18,13 @@ package com.android.server.power;
 import android.os.PowerManager.ServiceType;
 import android.os.PowerSaveState;
 import android.os.Handler;
+import android.provider.Settings.Global;
 import android.test.AndroidTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.util.ArrayMap;
+
+import com.android.frameworks.servicestests.R;
+import com.android.internal.annotations.VisibleForTesting;
 
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -36,7 +41,7 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
     private static final float DEFAULT_BRIGHTNESS_FACTOR = 0.5f;
     private static final float PRECISION = 0.001f;
     private static final int GPS_MODE = 0;
-    private static final int DEFAULT_GPS_MODE = 1;
+    private static final int DEFAULT_GPS_MODE = 0;
     private static final String BATTERY_SAVER_CONSTANTS = "vibration_disabled=true,"
             + "animation_disabled=false,"
             + "soundtrigger_disabled=true,"
@@ -49,15 +54,40 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
             + "gps_mode=0";
     private static final String BATTERY_SAVER_INCORRECT_CONSTANTS = "vi*,!=,,true";
 
+    private class BatterySaverPolicyForTest extends BatterySaverPolicy {
+        public BatterySaverPolicyForTest(Handler handler) {
+            super(handler);
+        }
+
+        @Override
+        String getGlobalSetting(String key) {
+            return mMockGlobalSettings.get(key);
+        }
+
+        @Override
+        int getDeviceSpecificConfigResId() {
+            return mDeviceSpecificConfigResId;
+        }
+
+
+        @VisibleForTesting
+        void onChange() {
+            onChange(true, null);
+        }
+    }
+
     @Mock
     Handler mHandler;
-    private BatterySaverPolicy mBatterySaverPolicy;
+    private BatterySaverPolicyForTest mBatterySaverPolicy;
+
+    private final ArrayMap<String, String> mMockGlobalSettings = new ArrayMap<>();
+    private int mDeviceSpecificConfigResId = R.string.config_batterySaverDeviceSpecificConfig_1;
 
     public void setUp() throws Exception {
         super.setUp();
         MockitoAnnotations.initMocks(this);
-        mBatterySaverPolicy = new BatterySaverPolicy(mHandler);
-        mBatterySaverPolicy.start(getContext().getContentResolver());
+        mBatterySaverPolicy = new BatterySaverPolicyForTest(mHandler);
+        mBatterySaverPolicy.systemReady(getContext());
     }
 
     @SmallTest
@@ -102,7 +132,7 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
 
     @SmallTest
     public void testGetBatterySaverPolicy_PolicyDataSaver_DefaultValueCorrect() {
-        mBatterySaverPolicy.updateConstants("");
+        mBatterySaverPolicy.updateConstantsLocked("", "");
         final PowerSaveState batterySaverStateOn =
                 mBatterySaverPolicy.getBatterySaverPolicy(ServiceType.DATA_SAVER, BATTERY_SAVER_ON);
         assertThat(batterySaverStateOn.batterySaverEnabled).isFalse();
@@ -132,7 +162,7 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
 
     @SmallTest
     public void testUpdateConstants_getCorrectData() {
-        mBatterySaverPolicy.updateConstants(BATTERY_SAVER_CONSTANTS);
+        mBatterySaverPolicy.updateConstantsLocked(BATTERY_SAVER_CONSTANTS, "");
 
         final PowerSaveState vibrationState =
                 mBatterySaverPolicy.getBatterySaverPolicy(ServiceType.VIBRATION, BATTERY_SAVER_ON);
@@ -177,12 +207,12 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
     @SmallTest
     public void testUpdateConstants_IncorrectData_NotCrash() {
         //Should not crash
-        mBatterySaverPolicy.updateConstants(BATTERY_SAVER_INCORRECT_CONSTANTS);
-        mBatterySaverPolicy.updateConstants(null);
+        mBatterySaverPolicy.updateConstantsLocked(BATTERY_SAVER_INCORRECT_CONSTANTS, "");
+        mBatterySaverPolicy.updateConstantsLocked(null, "");
     }
 
     private void testServiceDefaultValue(@ServiceType int type) {
-        mBatterySaverPolicy.updateConstants("");
+        mBatterySaverPolicy.updateConstantsLocked("", "");
         final PowerSaveState batterySaverStateOn =
                 mBatterySaverPolicy.getBatterySaverPolicy(type, BATTERY_SAVER_ON);
         assertThat(batterySaverStateOn.batterySaverEnabled).isTrue();
@@ -190,5 +220,44 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
         final PowerSaveState batterySaverStateOff =
                 mBatterySaverPolicy.getBatterySaverPolicy(type, BATTERY_SAVER_OFF);
         assertThat(batterySaverStateOff.batterySaverEnabled).isFalse();
+    }
+
+    public void testDeviceSpecific() {
+        mDeviceSpecificConfigResId = R.string.config_batterySaverDeviceSpecificConfig_1;
+        mMockGlobalSettings.put(Global.BATTERY_SAVER_CONSTANTS, "");
+        mMockGlobalSettings.put(Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS, "");
+
+        mBatterySaverPolicy.onChange();
+        assertThat(mBatterySaverPolicy.getFileValues(true).toString()).isEqualTo("{}");
+        assertThat(mBatterySaverPolicy.getFileValues(false).toString()).isEqualTo("{}");
+
+
+        mDeviceSpecificConfigResId = R.string.config_batterySaverDeviceSpecificConfig_2;
+
+        mBatterySaverPolicy.onChange();
+        assertThat(mBatterySaverPolicy.getFileValues(true).toString()).isEqualTo("{}");
+        assertThat(mBatterySaverPolicy.getFileValues(false).toString())
+                .isEqualTo("{/sys/devices/system/cpu/cpu1/cpufreq/scaling_max_freq=123, " +
+                "/sys/devices/system/cpu/cpu2/cpufreq/scaling_max_freq=456}");
+
+        mDeviceSpecificConfigResId = R.string.config_batterySaverDeviceSpecificConfig_3;
+
+        mBatterySaverPolicy.onChange();
+        assertThat(mBatterySaverPolicy.getFileValues(true).toString())
+                .isEqualTo("{/sys/devices/system/cpu/cpu3/cpufreq/scaling_max_freq=333, " +
+                        "/sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq=444}");
+        assertThat(mBatterySaverPolicy.getFileValues(false).toString())
+                .isEqualTo("{/sys/devices/system/cpu/cpu2/cpufreq/scaling_max_freq=222}");
+
+
+        mMockGlobalSettings.put(Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS,
+                "cpufreq-i=3:1234567890/4:014/5:015");
+
+        mBatterySaverPolicy.onChange();
+        assertThat(mBatterySaverPolicy.getFileValues(true).toString())
+                .isEqualTo("{/sys/devices/system/cpu/cpu3/cpufreq/scaling_max_freq=1234567890, " +
+                        "/sys/devices/system/cpu/cpu4/cpufreq/scaling_max_freq=14, " +
+                        "/sys/devices/system/cpu/cpu5/cpufreq/scaling_max_freq=15}");
+        assertThat(mBatterySaverPolicy.getFileValues(false).toString()).isEqualTo("{}");
     }
 }

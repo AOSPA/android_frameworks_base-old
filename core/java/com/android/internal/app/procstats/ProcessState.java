@@ -28,6 +28,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.DebugUtils;
 import android.util.Log;
+import android.util.LongSparseArray;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
@@ -90,18 +91,19 @@ public final class ProcessState {
         STATE_TOP,                      // ActivityManager.PROCESS_STATE_TOP
         STATE_IMPORTANT_FOREGROUND,     // ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
         STATE_IMPORTANT_FOREGROUND,     // ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE
-        STATE_TOP,                      // ActivityManager.PROCESS_STATE_TOP_SLEEPING
         STATE_IMPORTANT_FOREGROUND,     // ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND
         STATE_IMPORTANT_BACKGROUND,     // ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND
         STATE_IMPORTANT_BACKGROUND,     // ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND
         STATE_BACKUP,                   // ActivityManager.PROCESS_STATE_BACKUP
-        STATE_HEAVY_WEIGHT,             // ActivityManager.PROCESS_STATE_HEAVY_WEIGHT
         STATE_SERVICE,                  // ActivityManager.PROCESS_STATE_SERVICE
         STATE_RECEIVER,                 // ActivityManager.PROCESS_STATE_RECEIVER
+        STATE_TOP,                      // ActivityManager.PROCESS_STATE_TOP_SLEEPING
+        STATE_HEAVY_WEIGHT,             // ActivityManager.PROCESS_STATE_HEAVY_WEIGHT
         STATE_HOME,                     // ActivityManager.PROCESS_STATE_HOME
         STATE_LAST_ACTIVITY,            // ActivityManager.PROCESS_STATE_LAST_ACTIVITY
         STATE_CACHED_ACTIVITY,          // ActivityManager.PROCESS_STATE_CACHED_ACTIVITY
         STATE_CACHED_ACTIVITY_CLIENT,   // ActivityManager.PROCESS_STATE_CACHED_ACTIVITY_CLIENT
+        STATE_CACHED_ACTIVITY,          // ActivityManager.PROCESS_STATE_CACHED_RECENT
         STATE_CACHED_EMPTY,             // ActivityManager.PROCESS_STATE_CACHED_EMPTY
     };
 
@@ -136,7 +138,7 @@ public final class ProcessState {
     private final String mName;
     private final String mPackage;
     private final int mUid;
-    private final int mVersion;
+    private final long mVersion;
     private final DurationsTable mDurations;
     private final PssTable mPssTable;
 
@@ -169,7 +171,7 @@ public final class ProcessState {
      * Create a new top-level process state, for the initial case where there is only
      * a single package running in a process.  The initial state is not running.
      */
-    public ProcessState(ProcessStats processStats, String pkg, int uid, int vers, String name) {
+    public ProcessState(ProcessStats processStats, String pkg, int uid, long vers, String name) {
         mStats = processStats;
         mName = name;
         mCommonProcess = this;
@@ -185,7 +187,7 @@ public final class ProcessState {
      * state.  The current running state of the top-level process is also copied,
      * marked as started running at 'now'.
      */
-    public ProcessState(ProcessState commonProcess, String pkg, int uid, int vers, String name,
+    public ProcessState(ProcessState commonProcess, String pkg, int uid, long vers, String name,
             long now) {
         mStats = commonProcess.mStats;
         mName = name;
@@ -237,7 +239,7 @@ public final class ProcessState {
         return mUid;
     }
 
-    public int getVersion() {
+    public long getVersion() {
         return mVersion;
     }
 
@@ -545,7 +547,7 @@ public final class ProcessState {
             // The array map is still pointing to a common process state
             // that is now shared across packages.  Update it to point to
             // the new per-package state.
-            SparseArray<PackageState> vpkg = mStats.mPackages.get(pkgName, mUid);
+            LongSparseArray<PackageState> vpkg = mStats.mPackages.get(pkgName, mUid);
             if (vpkg == null) {
                 throw new IllegalStateException("Didn't find package " + pkgName
                         + " / " + mUid);
@@ -583,7 +585,7 @@ public final class ProcessState {
             // The array map is still pointing to a common process state
             // that is now shared across packages.  Update it to point to
             // the new per-package state.
-            SparseArray<PackageState> vpkg = mStats.mPackages.get(pkgList.keyAt(index),
+            LongSparseArray<PackageState> vpkg = mStats.mPackages.get(pkgList.keyAt(index),
                     proc.mUid);
             if (vpkg == null) {
                 throw new IllegalStateException("No existing package "
@@ -1036,7 +1038,7 @@ public final class ProcessState {
         }
     }
 
-    public void dumpPackageProcCheckin(PrintWriter pw, String pkgName, int uid, int vers,
+    public void dumpPackageProcCheckin(PrintWriter pw, String pkgName, int uid, long vers,
             String itemName, long now) {
         pw.print("pkgproc,");
         pw.print(pkgName);

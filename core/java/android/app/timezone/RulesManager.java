@@ -69,7 +69,11 @@ public final class RulesManager {
     private static final boolean DEBUG = false;
 
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({SUCCESS, ERROR_UNKNOWN_FAILURE, ERROR_OPERATION_IN_PROGRESS})
+    @IntDef(prefix = { "SUCCESS", "ERROR_" }, value = {
+            SUCCESS,
+            ERROR_UNKNOWN_FAILURE,
+            ERROR_OPERATION_IN_PROGRESS
+    })
     public @interface ResultCode {}
 
     /**
@@ -105,9 +109,9 @@ public final class RulesManager {
      */
     public RulesState getRulesState() {
         try {
-            logDebug("sIRulesManager.getRulesState()");
+            logDebug("mIRulesManager.getRulesState()");
             RulesState rulesState = mIRulesManager.getRulesState();
-            logDebug("sIRulesManager.getRulesState() returned " + rulesState);
+            logDebug("mIRulesManager.getRulesState() returned " + rulesState);
             return rulesState;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -131,7 +135,7 @@ public final class RulesManager {
 
         ICallback iCallback = new CallbackWrapper(mContext, callback);
         try {
-            logDebug("sIRulesManager.requestInstall()");
+            logDebug("mIRulesManager.requestInstall()");
             return mIRulesManager.requestInstall(distroFileDescriptor, checkToken, iCallback);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -151,7 +155,7 @@ public final class RulesManager {
     public int requestUninstall(byte[] checkToken, Callback callback) {
         ICallback iCallback = new CallbackWrapper(mContext, callback);
         try {
-            logDebug("sIRulesManager.requestUninstall()");
+            logDebug("mIRulesManager.requestUninstall()");
             return mIRulesManager.requestUninstall(checkToken, iCallback);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -196,7 +200,7 @@ public final class RulesManager {
      */
     public void requestNothing(byte[] checkToken, boolean succeeded) {
         try {
-            logDebug("sIRulesManager.requestNothing() with token=" + Arrays.toString(checkToken));
+            logDebug("mIRulesManager.requestNothing() with token=" + Arrays.toString(checkToken));
             mIRulesManager.requestNothing(checkToken, succeeded);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();

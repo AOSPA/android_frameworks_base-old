@@ -20,13 +20,17 @@
 #include <string>
 
 #include "android-base/macros.h"
+#include "androidfw/StringPiece.h"
 
 #include "JavaClassGenerator.h"
 #include "ResourceUtils.h"
 #include "ValueVisitor.h"
-#include "androidfw/StringPiece.h"
+#include "text/Printer.h"
 #include "util/Util.h"
 #include "xml/XmlDom.h"
+
+using ::aapt::io::OutputStream;
+using ::aapt::text::Printer;
 
 namespace aapt {
 namespace proguard {
@@ -326,12 +330,13 @@ bool CollectProguardRules(xml::XmlResource* res, KeepSet* keep_set) {
   return true;
 }
 
-bool WriteKeepSet(std::ostream* out, const KeepSet& keep_set) {
+void WriteKeepSet(const KeepSet& keep_set, OutputStream* out) {
+  Printer printer(out);
   for (const auto& entry : keep_set.manifest_class_set_) {
     for (const UsageLocation& location : entry.second) {
-      *out << "# Referenced at " << location.source << "\n";
+      printer.Print("# Referenced at ").Println(location.source.to_string());
     }
-    *out << "-keep class " << entry.first << " { <init>(...); }\n" << std::endl;
+    printer.Print("-keep class ").Print(entry.first).Println(" { <init>(...); }");
   }
 
   for (const auto& entry : keep_set.conditional_class_set_) {
@@ -341,28 +346,30 @@ bool WriteKeepSet(std::ostream* out, const KeepSet& keep_set) {
       can_be_conditional &= CollectLocations(location, keep_set, &locations);
     }
 
-    for (const UsageLocation& location : entry.second) {
-      *out << "# Referenced at " << location.source << "\n";
-    }
     if (keep_set.conditional_keep_rules_ && can_be_conditional) {
-      *out << "-keep class " << entry.first << " {\n  ifused class **.R$layout {\n";
       for (const UsageLocation& location : locations) {
-        auto transformed_name = JavaClassGenerator::TransformToFieldName(location.name.entry);
-        *out << "    int " << transformed_name << ";\n";
+        printer.Print("# Referenced at ").Println(location.source.to_string());
+        printer.Print("-if class **.R$layout { int ")
+            .Print(JavaClassGenerator::TransformToFieldName(location.name.entry))
+            .Println("; }");
+        printer.Print("-keep class ").Print(entry.first).Println(" { <init>(...); }");
       }
-      *out << "  };\n  <init>(...);\n}\n" << std::endl;
     } else {
-      *out << "-keep class " << entry.first << " { <init>(...); }\n" << std::endl;
+      for (const UsageLocation& location : entry.second) {
+        printer.Print("# Referenced at ").Println(location.source.to_string());
+      }
+      printer.Print("-keep class ").Print(entry.first).Println(" { <init>(...); }");
     }
+    printer.Println();
   }
 
   for (const auto& entry : keep_set.method_set_) {
     for (const UsageLocation& location : entry.second) {
-      *out << "# Referenced at " << location.source << "\n";
+      printer.Print("# Referenced at ").Println(location.source.to_string());
     }
-    *out << "-keepclassmembers class * { *** " << entry.first << "(...); }\n" << std::endl;
+    printer.Print("-keepclassmembers class * { *** ").Print(entry.first).Println("(...); }");
+    printer.Println();
   }
-  return true;
 }
 
 bool CollectLocations(const UsageLocation& location, const KeepSet& keep_set,

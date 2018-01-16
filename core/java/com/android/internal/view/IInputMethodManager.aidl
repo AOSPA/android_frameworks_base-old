@@ -36,6 +36,7 @@ import com.android.internal.view.IInputMethodClient;
 interface IInputMethodManager {
     // TODO: Use ParceledListSlice instead
     List<InputMethodInfo> getInputMethodList();
+    List<InputMethodInfo> getVrInputMethodList();
     // TODO: Use ParceledListSlice instead
     List<InputMethodInfo> getEnabledInputMethodList();
     List<InputMethodSubtype> getEnabledInputMethodSubtypeList(in String imiId,
@@ -55,12 +56,14 @@ interface IInputMethodManager {
             in ResultReceiver resultReceiver);
     // If windowToken is null, this just does startInput().  Otherwise this reports that a window
     // has gained focus, and if 'attribute' is non-null then also does startInput.
+    // @NonNull
     InputBindResult startInputOrWindowGainedFocus(
             /* @InputMethodClient.StartInputReason */ int startInputReason,
             in IInputMethodClient client, in IBinder windowToken, int controlFlags,
             /* @android.view.WindowManager.LayoutParams.SoftInputModeFlags */ int softInputMode,
             int windowFlags, in EditorInfo attribute, IInputContext inputContext,
-            /* @InputConnectionInspector.MissingMethodFlags */ int missingMethodFlags);
+            /* @InputConnectionInspector.MissingMethodFlags */ int missingMethodFlags,
+            int unverifiedTargetSdkVersion);
 
     void showInputMethodPickerFromClient(in IInputMethodClient client,
             int auxiliarySubtypeMode);
@@ -79,7 +82,6 @@ interface IInputMethodManager {
     boolean switchToLastInputMethod(in IBinder token);
     boolean switchToNextInputMethod(in IBinder token, boolean onlyCurrentIme);
     boolean shouldOfferSwitchingToNextInputMethod(in IBinder token);
-    boolean setInputMethodEnabled(String id, boolean enabled);
     void setAdditionalInputMethodSubtypes(String id, in InputMethodSubtype[] subtypes);
     int getInputMethodWindowVisibleHeight();
     void clearLastInputMethodWindowForTransition(in IBinder token);

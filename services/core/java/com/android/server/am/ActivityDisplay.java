@@ -42,6 +42,8 @@ import android.annotation.Nullable;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
+import android.graphics.Point;
+import android.graphics.Rect;
 import android.util.IntArray;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
@@ -62,6 +64,12 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
 
     static final int POSITION_TOP = Integer.MAX_VALUE;
     static final int POSITION_BOTTOM = Integer.MIN_VALUE;
+
+
+    /**
+     * Counter for next free stack ID to use for dynamic activity stacks. Unique across displays.
+     */
+    private static int sNextFreeStackId = 0;
 
     private ActivityStackSupervisor mSupervisor;
     /** Actual Display this object tracks. */
@@ -89,6 +97,9 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
     private ActivityStack mPinnedStack = null;
     private ActivityStack mSplitScreenPrimaryStack = null;
 
+    // Used in updating the display size
+    private Point mTmpDisplaySize = new Point();
+
     ActivityDisplay(ActivityStackSupervisor supervisor, int displayId) {
         mSupervisor = supervisor;
         mDisplayId = displayId;
@@ -97,6 +108,13 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
             throw new IllegalStateException("Display does not exist displayId=" + displayId);
         }
         mDisplay = display;
+
+        updateBounds();
+    }
+
+    void updateBounds() {
+        mDisplay.getSize(mTmpDisplaySize);
+        setBounds(0, 0, mTmpDisplaySize.x, mTmpDisplaySize.y);
     }
 
     void addChild(ActivityStack stack, int position) {
@@ -219,6 +237,10 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
         return getOrCreateStack(windowingMode, activityType, onTop);
     }
 
+    private int getNextStackId() {
+        return sNextFreeStackId++;
+    }
+
     /**
      * Creates a stack matching the input windowing mode and activity type on this display.
      * @param windowingMode The windowing mode the stack should be created in. If
@@ -266,7 +288,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
             }
         }
 
-        final int stackId = mSupervisor.getNextStackId();
+        final int stackId = getNextStackId();
         return createStackUnchecked(windowingMode, activityType, stackId, onTop);
     }
 
@@ -276,17 +298,8 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
         if (windowingMode == WINDOWING_MODE_PINNED) {
             return (T) new PinnedActivityStack(this, stackId, mSupervisor, onTop);
         }
-        final T stack = (T) new ActivityStack(
+        return (T) new ActivityStack(
                         this, stackId, mSupervisor, windowingMode, activityType, onTop);
-
-        if (mDisplayId == DEFAULT_DISPLAY && windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
-            // Make sure recents stack exist when creating a dock stack as it normally needs to be
-            // on the other side of the docked stack and we make visibility decisions based on that.
-            // TODO: Not sure if this is needed after we change to calculate visibility based on
-            // stack z-order vs. id.
-            getOrCreateStack(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, ACTIVITY_TYPE_RECENTS, onTop);
-        }
-        return stack;
     }
 
     /**
@@ -365,6 +378,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
                         + " already exist on display=" + this + " stack=" + stack);
             }
             mSplitScreenPrimaryStack = stack;
+            onSplitScreenModeActivated();
         }
     }
 
@@ -377,6 +391,55 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
             mPinnedStack = null;
         } else if (stack == mSplitScreenPrimaryStack) {
             mSplitScreenPrimaryStack = null;
+            // Inform the reset of the system that split-screen mode was dismissed so things like
+            // resizing all the other stacks can take place.
+            onSplitScreenModeDismissed();
+        }
+    }
+
+    private void onSplitScreenModeDismissed() {
+        mSupervisor.mWindowManager.deferSurfaceLayout();
+        try {
+            // Adjust the windowing mode of any stack in secondary split-screen to fullscreen.
+            for (int i = mStacks.size() - 1; i >= 0; --i) {
+                final ActivityStack otherStack = mStacks.get(i);
+                if (!otherStack.inSplitScreenSecondaryWindowingMode()) {
+                    continue;
+                }
+                otherStack.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+            }
+        } finally {
+            final ActivityStack topFullscreenStack =
+                    getStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
+            if (topFullscreenStack != null && mHomeStack != null && !isTopStack(mHomeStack)) {
+                // Whenever split-screen is dismissed we want the home stack directly behind the
+                // current top fullscreen stack so it shows up when the top stack is finished.
+                // TODO: Would be better to use ActivityDisplay.positionChildAt() for this, however
+                // ActivityDisplay doesn't have a direct controller to WM side yet. We can switch
+                // once we have that.
+                mHomeStack.moveToFront("onSplitScreenModeDismissed");
+                topFullscreenStack.moveToFront("onSplitScreenModeDismissed");
+            }
+            mSupervisor.mWindowManager.continueSurfaceLayout();
+        }
+    }
+
+    private void onSplitScreenModeActivated() {
+        mSupervisor.mWindowManager.deferSurfaceLayout();
+        try {
+            // Adjust the windowing mode of any affected by split-screen to split-screen secondary.
+            for (int i = mStacks.size() - 1; i >= 0; --i) {
+                final ActivityStack otherStack = mStacks.get(i);
+                if (otherStack == mSplitScreenPrimaryStack
+                        || !otherStack.affectedBySplitScreenResize()) {
+                    continue;
+                }
+                otherStack.setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY,
+                        false /* animate */, false /* showRecents */,
+                        true /* enteringSplitScreenMode */);
+            }
+        } finally {
+            mSupervisor.mWindowManager.continueSurfaceLayout();
         }
     }
 
@@ -475,22 +538,10 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
                 supportsFreeform, supportsPip, activityType)) {
             return windowingMode;
         }
-        // Return the display's windowing mode
-        return getWindowingMode();
-    }
-
-    /** Returns the top visible stack activity type that isn't in the exclude windowing mode. */
-    int getTopVisibleStackActivityType(int excludeWindowingMode) {
-        for (int i = mStacks.size() - 1; i >= 0; --i) {
-            final ActivityStack stack = mStacks.get(i);
-            if (stack.getWindowingMode() == excludeWindowingMode) {
-                continue;
-            }
-            if (stack.shouldBeVisible(null /* starting */)) {
-                return stack.getActivityType();
-            }
-        }
-        return ACTIVITY_TYPE_UNDEFINED;
+        // Try to use the display's windowing mode otherwise fallback to fullscreen.
+        windowingMode = getWindowingMode();
+        return windowingMode != WINDOWING_MODE_UNDEFINED
+                ? windowingMode : WINDOWING_MODE_FULLSCREEN;
     }
 
     /**
@@ -503,6 +554,16 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
 
     boolean isTopStack(ActivityStack stack) {
         return stack == getTopStack();
+    }
+
+    boolean isTopFullscreenStack(ActivityStack stack) {
+        for (int i = mStacks.size() - 1; i >= 0; --i) {
+            final ActivityStack current = mStacks.get(i);
+            if (current.getWindowingMode() == WINDOWING_MODE_FULLSCREEN) {
+                return current == stack;
+            }
+        }
+        return false;
     }
 
     int getIndexOf(ActivityStack stack) {
@@ -599,7 +660,20 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack> {
     }
 
     public void dump(PrintWriter pw, String prefix) {
-        pw.println(prefix + "displayId=" + mDisplayId + " mStacks=" + mStacks);
+        pw.println(prefix + "displayId=" + mDisplayId + " stacks=" + mStacks.size());
+        final String myPrefix = prefix + " ";
+        if (mHomeStack != null) {
+            pw.println(myPrefix + "mHomeStack=" + mHomeStack);
+        }
+        if (mRecentsStack != null) {
+            pw.println(myPrefix + "mRecentsStack=" + mRecentsStack);
+        }
+        if (mPinnedStack != null) {
+            pw.println(myPrefix + "mPinnedStack=" + mPinnedStack);
+        }
+        if (mSplitScreenPrimaryStack != null) {
+            pw.println(myPrefix + "mSplitScreenPrimaryStack=" + mSplitScreenPrimaryStack);
+        }
     }
 
     public void writeToProto(ProtoOutputStream proto, long fieldId) {

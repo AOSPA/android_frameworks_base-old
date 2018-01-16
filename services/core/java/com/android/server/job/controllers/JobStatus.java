@@ -16,6 +16,8 @@
 
 package com.android.server.job.controllers;
 
+import static com.android.server.job.JobSchedulerService.sElapsedRealtimeClock;
+
 import android.app.AppGlobals;
 import android.app.IActivityManager;
 import android.app.job.JobInfo;
@@ -25,7 +27,6 @@ import android.content.ComponentName;
 import android.net.Network;
 import android.net.Uri;
 import android.os.RemoteException;
-import android.os.SystemClock;
 import android.os.UserHandle;
 import android.text.format.Time;
 import android.util.ArraySet;
@@ -33,7 +34,9 @@ import android.util.Pair;
 import android.util.Slog;
 import android.util.TimeUtils;
 
+import com.android.server.LocalServices;
 import com.android.server.job.GrantedUriPermissions;
+import com.android.server.job.JobSchedulerInternal;
 import com.android.server.job.JobSchedulerService;
 
 import java.io.PrintWriter;
@@ -64,18 +67,11 @@ public final class JobStatus {
     static final int CONSTRAINT_STORAGE_NOT_LOW = JobInfo.CONSTRAINT_FLAG_STORAGE_NOT_LOW;
     static final int CONSTRAINT_TIMING_DELAY = 1<<31;
     static final int CONSTRAINT_DEADLINE = 1<<30;
-    static final int CONSTRAINT_UNMETERED = 1<<29;
     static final int CONSTRAINT_CONNECTIVITY = 1<<28;
     static final int CONSTRAINT_APP_NOT_IDLE = 1<<27;
     static final int CONSTRAINT_CONTENT_TRIGGER = 1<<26;
     static final int CONSTRAINT_DEVICE_NOT_DOZING = 1<<25;
-    static final int CONSTRAINT_NOT_ROAMING = 1<<24;
-    static final int CONSTRAINT_METERED = 1<<23;
     static final int CONSTRAINT_BACKGROUND_NOT_RESTRICTED = 1<<22;
-
-    static final int CONNECTIVITY_MASK =
-            CONSTRAINT_UNMETERED | CONSTRAINT_CONNECTIVITY |
-            CONSTRAINT_NOT_ROAMING | CONSTRAINT_METERED;
 
     // Soft override: ignore constraints like time that don't affect API availability
     public static final int OVERRIDE_SOFT = 1;
@@ -125,6 +121,24 @@ public final class JobStatus {
 
     /** How many times this job has failed, used to compute back-off. */
     private final int numFailures;
+
+    /**
+     * Current standby heartbeat when this job was scheduled or last ran.  Used to
+     * pin the runnability check regardless of the job's app moving between buckets.
+     */
+    private final long baseHeartbeat;
+
+    /**
+     * Which app standby bucket this job's app is in.  Updated when the app is moved to a
+     * different bucket.
+     */
+    private int standbyBucket;
+
+    /**
+     * Debugging: timestamp if we ever defer this job based on standby bucketing, this
+     * is when we did so.
+     */
+    private long whenStandbyDeferred;
 
     // Constraints.
     final int requiredConstraints;
@@ -227,10 +241,13 @@ public final class JobStatus {
     }
 
     private JobStatus(JobInfo job, int callingUid, String sourcePackageName,
-            int sourceUserId, String tag, int numFailures, long earliestRunTimeElapsedMillis,
-            long latestRunTimeElapsedMillis, long lastSuccessfulRunTime, long lastFailedRunTime) {
+            int sourceUserId, int standbyBucket, long heartbeat, String tag, int numFailures,
+            long earliestRunTimeElapsedMillis, long latestRunTimeElapsedMillis,
+            long lastSuccessfulRunTime, long lastFailedRunTime) {
         this.job = job;
         this.callingUid = callingUid;
+        this.standbyBucket = standbyBucket;
+        this.baseHeartbeat = heartbeat;
 
         int tempSourceUid = -1;
         if (sourceUserId != -1 && sourcePackageName != null) {
@@ -264,27 +281,9 @@ public final class JobStatus {
 
         int requiredConstraints = job.getConstraintFlags();
 
-        switch (job.getNetworkType()) {
-            case JobInfo.NETWORK_TYPE_NONE:
-                // No constraint.
-                break;
-            case JobInfo.NETWORK_TYPE_ANY:
-                requiredConstraints |= CONSTRAINT_CONNECTIVITY;
-                break;
-            case JobInfo.NETWORK_TYPE_UNMETERED:
-                requiredConstraints |= CONSTRAINT_UNMETERED;
-                break;
-            case JobInfo.NETWORK_TYPE_NOT_ROAMING:
-                requiredConstraints |= CONSTRAINT_NOT_ROAMING;
-                break;
-            case JobInfo.NETWORK_TYPE_METERED:
-                requiredConstraints |= CONSTRAINT_METERED;
-                break;
-            default:
-                Slog.w(TAG, "Unrecognized networking constraint " + job.getNetworkType());
-                break;
+        if (job.getRequiredNetwork() != null) {
+            requiredConstraints |= CONSTRAINT_CONNECTIVITY;
         }
-
         if (earliestRunTimeElapsedMillis != NO_EARLIEST_RUNTIME) {
             requiredConstraints |= CONSTRAINT_TIMING_DELAY;
         }
@@ -307,6 +306,7 @@ public final class JobStatus {
     public JobStatus(JobStatus jobStatus) {
         this(jobStatus.getJob(), jobStatus.getUid(),
                 jobStatus.getSourcePackageName(), jobStatus.getSourceUserId(),
+                jobStatus.getStandbyBucket(), jobStatus.getBaseHeartbeat(),
                 jobStatus.getSourceTag(), jobStatus.getNumFailures(),
                 jobStatus.getEarliestRunTime(), jobStatus.getLatestRunTimeElapsed(),
                 jobStatus.getLastSuccessfulRunTime(), jobStatus.getLastFailedRunTime());
@@ -323,13 +323,17 @@ public final class JobStatus {
      * {@link android.app.job.JobInfo} time criteria because we can load a persisted periodic job
      * from the {@link com.android.server.job.JobStore} and still want to respect its
      * wallclock runtime rather than resetting it on every boot.
-     * We consider a freshly loaded job to no longer be in back-off.
+     * We consider a freshly loaded job to no longer be in back-off, and the associated
+     * standby bucket is whatever the OS thinks it should be at this moment.
      */
-    public JobStatus(JobInfo job, int callingUid, String sourcePackageName, int sourceUserId,
-            String sourceTag, long earliestRunTimeElapsedMillis, long latestRunTimeElapsedMillis,
+    public JobStatus(JobInfo job, int callingUid, String sourcePkgName, int sourceUserId,
+            int standbyBucket, long baseHeartbeat, String sourceTag,
+            long earliestRunTimeElapsedMillis, long latestRunTimeElapsedMillis,
             long lastSuccessfulRunTime, long lastFailedRunTime,
             Pair<Long, Long> persistedExecutionTimesUTC) {
-        this(job, callingUid, sourcePackageName, sourceUserId, sourceTag, 0,
+        this(job, callingUid, sourcePkgName, sourceUserId,
+                standbyBucket, baseHeartbeat,
+                sourceTag, 0,
                 earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis,
                 lastSuccessfulRunTime, lastFailedRunTime);
 
@@ -346,11 +350,13 @@ public final class JobStatus {
     }
 
     /** Create a new job to be rescheduled with the provided parameters. */
-    public JobStatus(JobStatus rescheduling, long newEarliestRuntimeElapsedMillis,
+    public JobStatus(JobStatus rescheduling, long newBaseHeartbeat,
+            long newEarliestRuntimeElapsedMillis,
             long newLatestRuntimeElapsedMillis, int backoffAttempt,
             long lastSuccessfulRunTime, long lastFailedRunTime) {
         this(rescheduling.job, rescheduling.getUid(),
                 rescheduling.getSourcePackageName(), rescheduling.getSourceUserId(),
+                rescheduling.getStandbyBucket(), newBaseHeartbeat,
                 rescheduling.getSourceTag(), backoffAttempt, newEarliestRuntimeElapsedMillis,
                 newLatestRuntimeElapsedMillis,
                 lastSuccessfulRunTime, lastFailedRunTime);
@@ -359,13 +365,14 @@ public final class JobStatus {
     /**
      * Create a newly scheduled job.
      * @param callingUid Uid of the package that scheduled this job.
-     * @param sourcePackageName Package name on whose behalf this job is scheduled. Null indicates
+     * @param sourcePkg Package name on whose behalf this job is scheduled. Null indicates
      *                          the calling package is the source.
      * @param sourceUserId User id for whom this job is scheduled. -1 indicates this is same as the
+     *     caller.
      */
-    public static JobStatus createFromJobInfo(JobInfo job, int callingUid, String sourcePackageName,
+    public static JobStatus createFromJobInfo(JobInfo job, int callingUid, String sourcePkg,
             int sourceUserId, String tag) {
-        final long elapsedNow = SystemClock.elapsedRealtime();
+        final long elapsedNow = sElapsedRealtimeClock.millis();
         final long earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis;
         if (job.isPeriodic()) {
             latestRunTimeElapsedMillis = elapsedNow + job.getIntervalMillis();
@@ -376,7 +383,14 @@ public final class JobStatus {
             latestRunTimeElapsedMillis = job.hasLateConstraint() ?
                     elapsedNow + job.getMaxExecutionDelayMillis() : NO_LATEST_RUNTIME;
         }
-        return new JobStatus(job, callingUid, sourcePackageName, sourceUserId, tag, 0,
+        String jobPackage = (sourcePkg != null) ? sourcePkg : job.getService().getPackageName();
+
+        int standbyBucket = JobSchedulerService.standbyBucketForPackage(jobPackage,
+                sourceUserId, elapsedNow);
+        JobSchedulerInternal js = LocalServices.getService(JobSchedulerInternal.class);
+        long currentHeartbeat = js != null ? js.currentHeartbeat() : 0;
+        return new JobStatus(job, callingUid, sourcePkg, sourceUserId,
+                standbyBucket, currentHeartbeat, tag, 0,
                 earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis,
                 0 /* lastSuccessfulRunTime */, 0 /* lastFailedRunTime */);
     }
@@ -552,6 +566,29 @@ public final class JobStatus {
         return UserHandle.getUserId(callingUid);
     }
 
+    public int getStandbyBucket() {
+        return standbyBucket;
+    }
+
+    public long getBaseHeartbeat() {
+        return baseHeartbeat;
+    }
+
+    // Called only by the standby monitoring code
+    public void setStandbyBucket(int newBucket) {
+        standbyBucket = newBucket;
+    }
+
+    // Called only by the standby monitoring code
+    public long getWhenStandbyDeferred() {
+        return whenStandbyDeferred;
+    }
+
+    // Called only by the standby monitoring code
+    public void setWhenStandbyDeferred(long now) {
+        whenStandbyDeferred = now;
+    }
+
     public String getSourceTag() {
         return sourceTag;
     }
@@ -610,23 +647,7 @@ public final class JobStatus {
 
     /** Does this job have any sort of networking constraint? */
     public boolean hasConnectivityConstraint() {
-        return (requiredConstraints&CONNECTIVITY_MASK) != 0;
-    }
-
-    public boolean needsAnyConnectivity() {
         return (requiredConstraints&CONSTRAINT_CONNECTIVITY) != 0;
-    }
-
-    public boolean needsUnmeteredConnectivity() {
-        return (requiredConstraints&CONSTRAINT_UNMETERED) != 0;
-    }
-
-    public boolean needsMeteredConnectivity() {
-        return (requiredConstraints&CONSTRAINT_METERED) != 0;
-    }
-
-    public boolean needsNonRoamingConnectivity() {
-        return (requiredConstraints&CONSTRAINT_NOT_ROAMING) != 0;
     }
 
     public boolean hasChargingConstraint() {
@@ -725,18 +746,6 @@ public final class JobStatus {
         return setConstraintSatisfied(CONSTRAINT_CONNECTIVITY, state);
     }
 
-    boolean setUnmeteredConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_UNMETERED, state);
-    }
-
-    boolean setMeteredConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_METERED, state);
-    }
-
-    boolean setNotRoamingConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_NOT_ROAMING, state);
-    }
-
     boolean setAppNotIdleConstraintSatisfied(boolean state) {
         return setConstraintSatisfied(CONSTRAINT_APP_NOT_IDLE, state);
     }
@@ -817,12 +826,9 @@ public final class JobStatus {
                 && notRestrictedInBg;
     }
 
-    static final int CONSTRAINTS_OF_INTEREST =
-            CONSTRAINT_CHARGING | CONSTRAINT_BATTERY_NOT_LOW | CONSTRAINT_STORAGE_NOT_LOW |
-            CONSTRAINT_TIMING_DELAY |
-            CONSTRAINT_CONNECTIVITY | CONSTRAINT_UNMETERED |
-            CONSTRAINT_NOT_ROAMING | CONSTRAINT_METERED |
-            CONSTRAINT_IDLE | CONSTRAINT_CONTENT_TRIGGER;
+    static final int CONSTRAINTS_OF_INTEREST = CONSTRAINT_CHARGING | CONSTRAINT_BATTERY_NOT_LOW
+            | CONSTRAINT_STORAGE_NOT_LOW | CONSTRAINT_TIMING_DELAY | CONSTRAINT_CONNECTIVITY
+            | CONSTRAINT_IDLE | CONSTRAINT_CONTENT_TRIGGER;
 
     // Soft override covers all non-"functional" constraints
     static final int SOFT_OVERRIDE_CONSTRAINTS =
@@ -870,15 +876,14 @@ public final class JobStatus {
         sb.append(getSourceUid());
         if (earliestRunTimeElapsedMillis != NO_EARLIEST_RUNTIME
                 || latestRunTimeElapsedMillis != NO_LATEST_RUNTIME) {
-            long now = SystemClock.elapsedRealtime();
+            long now = sElapsedRealtimeClock.millis();
             sb.append(" TIME=");
             formatRunTime(sb, earliestRunTimeElapsedMillis, NO_EARLIEST_RUNTIME, now);
             sb.append(":");
             formatRunTime(sb, latestRunTimeElapsedMillis, NO_LATEST_RUNTIME, now);
         }
-        if (job.getNetworkType() != JobInfo.NETWORK_TYPE_NONE) {
-            sb.append(" NET=");
-            sb.append(job.getNetworkType());
+        if (job.getRequiredNetwork() != null) {
+            sb.append(" NET");
         }
         if (job.isRequireCharging()) {
             sb.append(" CHARGING");
@@ -985,15 +990,6 @@ public final class JobStatus {
         if ((constraints&CONSTRAINT_CONNECTIVITY) != 0) {
             pw.print(" CONNECTIVITY");
         }
-        if ((constraints&CONSTRAINT_UNMETERED) != 0) {
-            pw.print(" UNMETERED");
-        }
-        if ((constraints&CONSTRAINT_NOT_ROAMING) != 0) {
-            pw.print(" NOT_ROAMING");
-        }
-        if ((constraints&CONSTRAINT_METERED) != 0) {
-            pw.print(" METERED");
-        }
         if ((constraints&CONSTRAINT_APP_NOT_IDLE) != 0) {
             pw.print(" APP_NOT_IDLE");
         }
@@ -1012,6 +1008,19 @@ public final class JobStatus {
         if (work.getGrants() != null) {
             pw.print(prefix); pw.println("  URI grants:");
             ((GrantedUriPermissions)work.getGrants()).dump(pw, prefix + "    ");
+        }
+    }
+
+    // normalized bucket indices, not the AppStandby constants
+    private String bucketName(int bucket) {
+        switch (bucket) {
+            case 0: return "ACTIVE";
+            case 1: return "WORKING_SET";
+            case 2: return "FREQUENT";
+            case 3: return "RARE";
+            case 4: return "NEVER";
+            default:
+                return "Unknown: " + bucket;
         }
     }
 
@@ -1084,11 +1093,13 @@ public final class JobStatus {
                 pw.print(prefix); pw.println("  Granted URI permissions:");
                 uriPerms.dump(pw, prefix + "  ");
             }
-            if (job.getNetworkType() != JobInfo.NETWORK_TYPE_NONE) {
-                pw.print(prefix); pw.print("  Network type: "); pw.println(job.getNetworkType());
+            if (job.getRequiredNetwork() != null) {
+                pw.print(prefix); pw.print("  Network type: ");
+                pw.println(job.getRequiredNetwork());
             }
             if (totalNetworkBytes != JobInfo.NETWORK_BYTES_UNKNOWN) {
-                pw.print(prefix); pw.print("  Network bytes: "); pw.println(totalNetworkBytes);
+                pw.print(prefix); pw.print("  Network bytes: ");
+                pw.println(totalNetworkBytes);
             }
             if (job.getMinLatencyMillis() != 0) {
                 pw.print(prefix); pw.print("  Minimum latency: ");
@@ -1161,6 +1172,8 @@ public final class JobStatus {
                 dumpJobWorkItem(pw, prefix, executingWork.get(i), i);
             }
         }
+        pw.print(prefix); pw.print("Standby bucket: ");
+        pw.println(bucketName(standbyBucket));
         pw.print(prefix); pw.print("Enqueue time: ");
         TimeUtils.formatDuration(enqueueTime, elapsedRealtimeMillis, pw);
         pw.println();

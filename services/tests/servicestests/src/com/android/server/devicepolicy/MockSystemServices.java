@@ -86,6 +86,7 @@ public class MockSystemServices {
     public final IBackupManager ibackupManager;
     public final IAudioService iaudioService;
     public final LockPatternUtils lockPatternUtils;
+    public final PasswordBlacklist passwordBlacklist;
     public final StorageManagerForMock storageManager;
     public final WifiManager wifiManager;
     public final SettingsForMock settings;
@@ -120,6 +121,7 @@ public class MockSystemServices {
         ibackupManager = mock(IBackupManager.class);
         iaudioService = mock(IAudioService.class);
         lockPatternUtils = mock(LockPatternUtils.class);
+        passwordBlacklist = mock(PasswordBlacklist.class);
         storageManager = mock(StorageManagerForMock.class);
         wifiManager = mock(WifiManager.class);
         settings = mock(SettingsForMock.class);
@@ -177,6 +179,13 @@ public class MockSystemServices {
                 invocation -> {
                     final int userId1 = (int) invocation.getArguments()[0];
                     return getUserInfo(userId1);
+                }
+        );
+        when(userManager.getProfileParent(anyInt())).thenAnswer(
+                invocation -> {
+                    final int userId1 = (int) invocation.getArguments()[0];
+                    final UserInfo ui = getUserInfo(userId1);
+                    return ui == null ? null : getUserInfo(ui.profileGroupId);
                 }
         );
         when(userManager.getProfiles(anyInt())).thenAnswer(
@@ -377,6 +386,9 @@ public class MockSystemServices {
         }
 
         public void settingsGlobalPutString(String name, String value) {
+        }
+
+        public void settingsSystemPutString(String name, String value) {
         }
 
         public int settingsGlobalGetInt(String name, int value) {

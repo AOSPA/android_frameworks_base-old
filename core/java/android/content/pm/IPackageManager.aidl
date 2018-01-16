@@ -48,6 +48,7 @@ import android.content.pm.ServiceInfo;
 import android.content.pm.UserInfo;
 import android.content.pm.VerifierDeviceIdentity;
 import android.content.pm.VersionedPackage;
+import android.content.pm.dex.IArtManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
@@ -543,9 +544,10 @@ interface IPackageManager {
     void forceDexOpt(String packageName);
 
     /**
-     * Execute the background dexopt job immediately.
+     * Execute the background dexopt job immediately on packages in packageNames.
+     * If null, then execute on all packages.
      */
-    boolean runBackgroundDexoptJob();
+    boolean runBackgroundDexoptJob(in List<String> packageNames);
 
     /**
      * Reconcile the information we have about the secondary dex files belonging to
@@ -656,4 +658,6 @@ interface IPackageManager {
     ComponentName getInstantAppInstallerComponent();
 
     String getInstantAppAndroidId(String packageName, int userId);
+
+    IArtManager getArtManager();
 }

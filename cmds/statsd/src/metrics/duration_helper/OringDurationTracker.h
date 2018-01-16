@@ -27,16 +27,27 @@ namespace statsd {
 // Tracks the "Or'd" duration -- if 2 durations are overlapping, they won't be double counted.
 class OringDurationTracker : public DurationTracker {
 public:
-    OringDurationTracker(sp<ConditionWizard> wizard, int conditionIndex,
-                         uint64_t currentBucketStartNs, uint64_t bucketSizeNs,
-                         std::vector<DurationBucket>& bucket);
+    OringDurationTracker(const ConfigKey& key, const string& name,
+                         const HashableDimensionKey& eventKey, sp<ConditionWizard> wizard,
+                         int conditionIndex, bool nesting, uint64_t currentBucketStartNs,
+                         uint64_t bucketSizeNs,
+                         const std::vector<sp<AnomalyTracker>>& anomalyTrackers);
+
     void noteStart(const HashableDimensionKey& key, bool condition, const uint64_t eventTime,
                    const ConditionKey& conditionKey) override;
-    void noteStop(const HashableDimensionKey& key, const uint64_t eventTime) override;
+    void noteStop(const HashableDimensionKey& key, const uint64_t eventTime,
+                  const bool stopAll) override;
     void noteStopAll(const uint64_t eventTime) override;
+
     void onSlicedConditionMayChange(const uint64_t timestamp) override;
     void onConditionChanged(bool condition, const uint64_t timestamp) override;
-    bool flushIfNeeded(uint64_t timestampNs) override;
+
+    bool flushIfNeeded(
+            uint64_t timestampNs,
+            std::unordered_map<HashableDimensionKey, std::vector<DurationBucket>>* output) override;
+
+    int64_t predictAnomalyTimestampNs(const AnomalyTracker& anomalyTracker,
+                                      const uint64_t currentTimestamp) const override;
 
 private:
     // We don't need to keep track of individual durations. The information that's needed is:
@@ -44,10 +55,19 @@ private:
     // 2) which keys are paused (started but condition was false)
     // 3) whenever a key stops, we remove it from the started set. And if the set becomes empty,
     //    it means everything has stopped, we then record the end time.
-    std::set<HashableDimensionKey> mStarted;
-    std::set<HashableDimensionKey> mPaused;
+    std::map<HashableDimensionKey, int> mStarted;
+    std::map<HashableDimensionKey, int> mPaused;
     int64_t mLastStartTime;
     std::map<HashableDimensionKey, ConditionKey> mConditionKeyMap;
+
+    // return true if we should not allow newKey to be tracked because we are above the threshold
+    bool hitGuardRail(const HashableDimensionKey& newKey);
+
+    FRIEND_TEST(OringDurationTrackerTest, TestDurationOverlap);
+    FRIEND_TEST(OringDurationTrackerTest, TestCrossBucketBoundary);
+    FRIEND_TEST(OringDurationTrackerTest, TestDurationConditionChange);
+    FRIEND_TEST(OringDurationTrackerTest, TestPredictAnomalyTimestamp);
+    FRIEND_TEST(OringDurationTrackerTest, TestAnomalyDetection);
 };
 
 }  // namespace statsd

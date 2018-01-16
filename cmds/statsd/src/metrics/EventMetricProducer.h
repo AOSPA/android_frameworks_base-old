@@ -24,7 +24,6 @@
 #include "../condition/ConditionTracker.h"
 #include "../matchers/matcher_util.h"
 #include "MetricProducer.h"
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 #include "stats_util.h"
 
@@ -35,37 +34,36 @@ namespace statsd {
 class EventMetricProducer : public MetricProducer {
 public:
     // TODO: Pass in the start time from MetricsManager, it should be consistent for all metrics.
-    EventMetricProducer(const EventMetric& eventMetric, const int conditionIndex,
-                        const sp<ConditionWizard>& wizard, const uint64_t startTimeNs);
+    EventMetricProducer(const ConfigKey& key, const EventMetric& eventMetric,
+                        const int conditionIndex, const sp<ConditionWizard>& wizard,
+                        const uint64_t startTimeNs);
 
     virtual ~EventMetricProducer();
 
-    void onMatchedLogEventInternal(const size_t matcherIndex, const HashableDimensionKey& eventKey,
-                                   const std::map<std::string, HashableDimensionKey>& conditionKey,
-                                   bool condition, const LogEvent& event,
-                                   bool scheduledPull) override;
-
-    void onConditionChanged(const bool conditionMet, const uint64_t eventTime) override;
-
-    void finish() override;
-
-    // TODO: Pass a timestamp as a parameter in onDumpReport.
-    StatsLogReport onDumpReport() override;
-
-    void onSlicedConditionMayChange(const uint64_t eventTime) override;
-
-    size_t byteSize() override;
-
-    // TODO: Implement this later.
-    virtual void notifyAppUpgrade(const string& apk, const int uid, const int version) override{};
-    // TODO: Implement this later.
-    virtual void notifyAppRemoved(const string& apk, const int uid) override{};
-
 protected:
-    void startNewProtoOutputStream(long long timestamp) override;
+    void startNewProtoOutputStreamLocked();
 
 private:
-    const EventMetric mMetric;
+    void onMatchedLogEventInternalLocked(
+            const size_t matcherIndex, const HashableDimensionKey& eventKey,
+            const std::map<std::string, HashableDimensionKey>& conditionKey, bool condition,
+            const LogEvent& event) override;
+
+    void onDumpReportLocked(const uint64_t dumpTimeNs,
+                            android::util::ProtoOutputStream* protoOutput) override;
+
+    // Internal interface to handle condition change.
+    void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
+
+    // Internal interface to handle sliced condition change.
+    void onSlicedConditionMayChangeLocked(const uint64_t eventTime) override;
+
+    // Internal function to calculate the current used bytes.
+    size_t byteSizeLocked() const override;
+
+    // Maps to a EventMetricDataWrapper. Storing atom events in ProtoOutputStream
+    // is more space efficient than storing LogEvent.
+    std::unique_ptr<android::util::ProtoOutputStream> mProto;
 };
 
 }  // namespace statsd

@@ -14,14 +14,14 @@
 
 package com.android.server.policy;
 
-import com.android.server.LocalServices;
-import com.android.server.statusbar.StatusBarManagerInternal;
-import com.android.server.statusbar.StatusBarManagerInternal.GlobalActionsListener;
-
 import android.content.Context;
 import android.os.Handler;
 import android.util.Slog;
-import android.view.WindowManagerPolicy.WindowManagerFuncs;
+
+import com.android.server.LocalServices;
+import com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs;
+import com.android.server.statusbar.StatusBarManagerInternal;
+import com.android.server.statusbar.StatusBarManagerInternal.GlobalActionsListener;
 
 class GlobalActions implements GlobalActionsListener {
 
@@ -58,7 +58,7 @@ class GlobalActions implements GlobalActionsListener {
 
     public void showDialog(boolean keyguardShowing, boolean deviceProvisioned) {
         if (DEBUG) Slog.d(TAG, "showDialog " + keyguardShowing + " " + deviceProvisioned);
-        if (mStatusBarInternal.isGlobalActionsDisabled()) {
+        if (mStatusBarInternal != null && mStatusBarInternal.isGlobalActionsDisabled()) {
             return;
         }
         mKeyguardShowing = keyguardShowing;

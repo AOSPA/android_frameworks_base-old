@@ -160,7 +160,7 @@ public class AppOpsManager {
     public static final int OP_WRITE_ICC_SMS = 22;
     /** @hide */
     public static final int OP_WRITE_SETTINGS = 23;
-    /** @hide */
+    /** @hide Required to draw on top of other apps. */
     public static final int OP_SYSTEM_ALERT_WINDOW = 24;
     /** @hide */
     public static final int OP_ACCESS_NOTIFICATIONS = 25;
@@ -256,8 +256,12 @@ public class AppOpsManager {
     public static final int OP_RUN_ANY_IN_BACKGROUND = 70;
     /** @hide Change Wi-Fi connectivity state */
     public static final int OP_CHANGE_WIFI_STATE = 71;
+    /** @hide Request package deletion through package installer */
+    public static final int OP_REQUEST_DELETE_PACKAGES = 72;
+    /** @hide Bind an accessibility service. */
+    public static final int OP_BIND_ACCESSIBILITY_SERVICE = 73;
     /** @hide */
-    public static final int _NUM_OP = 72;
+    public static final int _NUM_OP = 74;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -410,6 +414,7 @@ public class AppOpsManager {
             OP_CAMERA,
             // Body sensors
             OP_BODY_SENSORS,
+            OP_REQUEST_DELETE_PACKAGES,
 
             // APPOP PERMISSIONS
             OP_ACCESS_NOTIFICATIONS,
@@ -499,6 +504,8 @@ public class AppOpsManager {
             OP_ANSWER_PHONE_CALLS,
             OP_RUN_ANY_IN_BACKGROUND,
             OP_CHANGE_WIFI_STATE,
+            OP_REQUEST_DELETE_PACKAGES,
+            OP_BIND_ACCESSIBILITY_SERVICE,
     };
 
     /**
@@ -578,6 +585,8 @@ public class AppOpsManager {
             OPSTR_ANSWER_PHONE_CALLS,
             null, // OP_RUN_ANY_IN_BACKGROUND
             null, // OP_CHANGE_WIFI_STATE
+            null, // OP_REQUEST_DELETE_PACKAGES
+            null, // OP_BIND_ACCESSIBILITY_SERVICE
     };
 
     /**
@@ -657,6 +666,8 @@ public class AppOpsManager {
             "ANSWER_PHONE_CALLS",
             "RUN_ANY_IN_BACKGROUND",
             "CHANGE_WIFI_STATE",
+            "REQUEST_DELETE_PACKAGES",
+            "BIND_ACCESSIBILITY_SERVICE",
     };
 
     /**
@@ -736,6 +747,8 @@ public class AppOpsManager {
             Manifest.permission.ANSWER_PHONE_CALLS,
             null, // no permission for OP_RUN_ANY_IN_BACKGROUND
             Manifest.permission.CHANGE_WIFI_STATE,
+            Manifest.permission.REQUEST_DELETE_PACKAGES,
+            Manifest.permission.BIND_ACCESSIBILITY_SERVICE,
     };
 
     /**
@@ -816,6 +829,8 @@ public class AppOpsManager {
             null, // ANSWER_PHONE_CALLS
             null, // OP_RUN_ANY_IN_BACKGROUND
             null, // OP_CHANGE_WIFI_STATE
+            null, // REQUEST_DELETE_PACKAGES
+            null, // OP_BIND_ACCESSIBILITY_SERVICE
     };
 
     /**
@@ -895,6 +910,8 @@ public class AppOpsManager {
             false, // ANSWER_PHONE_CALLS
             false, // OP_RUN_ANY_IN_BACKGROUND
             false, // OP_CHANGE_WIFI_STATE
+            false, // OP_REQUEST_DELETE_PACKAGES
+            false, // OP_BIND_ACCESSIBILITY_SERVICE
     };
 
     /**
@@ -973,6 +990,8 @@ public class AppOpsManager {
             AppOpsManager.MODE_ALLOWED, // ANSWER_PHONE_CALLS
             AppOpsManager.MODE_ALLOWED,  // OP_RUN_ANY_IN_BACKGROUND
             AppOpsManager.MODE_ALLOWED,  // OP_CHANGE_WIFI_STATE
+            AppOpsManager.MODE_ALLOWED,  // REQUEST_DELETE_PACKAGES
+            AppOpsManager.MODE_ALLOWED,  // OP_BIND_ACCESSIBILITY_SERVICE
     };
 
     /**
@@ -1055,6 +1074,8 @@ public class AppOpsManager {
             false, // ANSWER_PHONE_CALLS
             false, // OP_RUN_ANY_IN_BACKGROUND
             false, // OP_CHANGE_WIFI_STATE
+            false, // OP_REQUEST_DELETE_PACKAGES
+            false, // OP_BIND_ACCESSIBILITY_SERVICE
     };
 
     /**

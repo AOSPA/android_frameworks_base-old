@@ -23,7 +23,12 @@ import static android.system.OsConstants.SOCK_DGRAM;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.anyInt;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.argThat;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,20 +41,27 @@ import android.net.IpSecTransform;
 import android.net.IpSecUdpEncapResponse;
 import android.os.Binder;
 import android.os.ParcelFileDescriptor;
+import android.os.Process;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 import android.system.ErrnoException;
 import android.system.Os;
+import android.system.StructStat;
+
+import dalvik.system.SocketTagger;
 
 import java.io.FileDescriptor;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentMatcher;
 
 /** Unit tests for {@link IpSecService}. */
 @SmallTest
@@ -57,6 +69,8 @@ import org.junit.runner.RunWith;
 public class IpSecServiceTest {
 
     private static final int DROID_SPI = 0xD1201D;
+    private static final int MAX_NUM_ENCAP_SOCKETS = 100;
+    private static final int MAX_NUM_SPIS = 100;
     private static final int TEST_UDP_ENCAP_INVALID_PORT = 100;
     private static final int TEST_UDP_ENCAP_PORT_OUT_RANGE = 100000;
 
@@ -123,7 +137,39 @@ public class IpSecServiceTest {
         mIpSecService.closeUdpEncapsulationSocket(udpEncapResp.resourceId);
         udpEncapResp.fileDescriptor.close();
 
-        // TODO: Added check for the resource tracker
+        IpSecService.UserRecord userRecord =
+                mIpSecService.mUserResourceTracker.getUserRecord(Os.getuid());
+        assertEquals(0, userRecord.mSocketQuotaTracker.mCurrent);
+        try {
+            userRecord.mEncapSocketRecords.getRefcountedResourceOrThrow(udpEncapResp.resourceId);
+            fail("Expected IllegalArgumentException on attempt to access deleted resource");
+        } catch (IllegalArgumentException expected) {
+
+        }
+    }
+
+    @Test
+    public void testUdpEncapsulationSocketBinderDeath() throws Exception {
+        int localport = findUnusedPort();
+
+        IpSecUdpEncapResponse udpEncapResp =
+                mIpSecService.openUdpEncapsulationSocket(localport, new Binder());
+
+        IpSecService.UserRecord userRecord =
+                mIpSecService.mUserResourceTracker.getUserRecord(Os.getuid());
+        IpSecService.RefcountedResource refcountedRecord =
+                userRecord.mEncapSocketRecords.getRefcountedResourceOrThrow(
+                        udpEncapResp.resourceId);
+
+        refcountedRecord.binderDied();
+
+        assertEquals(0, userRecord.mSocketQuotaTracker.mCurrent);
+        try {
+            userRecord.mEncapSocketRecords.getRefcountedResourceOrThrow(udpEncapResp.resourceId);
+            fail("Expected IllegalArgumentException on attempt to access deleted resource");
+        } catch (IllegalArgumentException expected) {
+
+        }
     }
 
     @Test
@@ -247,7 +293,7 @@ public class IpSecServiceTest {
         for (String address : invalidAddresses) {
             try {
                 IpSecSpiResponse spiResp =
-                        mIpSecService.reserveSecurityParameterIndex(
+                        mIpSecService.allocateSecurityParameterIndex(
                                 IpSecTransform.DIRECTION_OUT, address, DROID_SPI, new Binder());
                 fail("Invalid address was passed through IpSecService validation: " + address);
             } catch (IllegalArgumentException e) {
@@ -259,5 +305,196 @@ public class IpSecServiceTest {
                                 + e);
             }
         }
+    }
+
+    /**
+     * This function checks if the number of encap UDP socket that one UID can reserve has a
+     * reasonable limit.
+     */
+    @Test
+    public void testSocketResourceTrackerLimitation() throws Exception {
+        List<IpSecUdpEncapResponse> openUdpEncapSockets = new ArrayList<IpSecUdpEncapResponse>();
+        // Reserve sockets until it fails.
+        for (int i = 0; i < MAX_NUM_ENCAP_SOCKETS; i++) {
+            IpSecUdpEncapResponse newUdpEncapSocket =
+                    mIpSecService.openUdpEncapsulationSocket(0, new Binder());
+            assertNotNull(newUdpEncapSocket);
+            if (IpSecManager.Status.OK != newUdpEncapSocket.status) {
+                break;
+            }
+            openUdpEncapSockets.add(newUdpEncapSocket);
+        }
+        // Assert that the total sockets quota has a reasonable limit.
+        assertTrue("No UDP encap socket was open", !openUdpEncapSockets.isEmpty());
+        assertTrue(
+                "Number of open UDP encap sockets is out of bound",
+                openUdpEncapSockets.size() < MAX_NUM_ENCAP_SOCKETS);
+
+        // Try to reserve one more UDP encapsulation socket, and should fail.
+        IpSecUdpEncapResponse extraUdpEncapSocket =
+                mIpSecService.openUdpEncapsulationSocket(0, new Binder());
+        assertNotNull(extraUdpEncapSocket);
+        assertEquals(IpSecManager.Status.RESOURCE_UNAVAILABLE, extraUdpEncapSocket.status);
+
+        // Close one of the open UDP encapsulation sockets.
+        mIpSecService.closeUdpEncapsulationSocket(openUdpEncapSockets.get(0).resourceId);
+        openUdpEncapSockets.get(0).fileDescriptor.close();
+        openUdpEncapSockets.remove(0);
+
+        // Try to reserve one more UDP encapsulation socket, and should be successful.
+        extraUdpEncapSocket = mIpSecService.openUdpEncapsulationSocket(0, new Binder());
+        assertNotNull(extraUdpEncapSocket);
+        assertEquals(IpSecManager.Status.OK, extraUdpEncapSocket.status);
+        openUdpEncapSockets.add(extraUdpEncapSocket);
+
+        // Close open UDP sockets.
+        for (IpSecUdpEncapResponse openSocket : openUdpEncapSockets) {
+            mIpSecService.closeUdpEncapsulationSocket(openSocket.resourceId);
+            openSocket.fileDescriptor.close();
+        }
+    }
+
+    /**
+     * This function checks if the number of SPI that one UID can reserve has a reasonable limit.
+     * This test does not test for both address families or duplicate SPIs because resource tracking
+     * code does not depend on them.
+     */
+    @Test
+    public void testSpiResourceTrackerLimitation() throws Exception {
+        List<IpSecSpiResponse> reservedSpis = new ArrayList<IpSecSpiResponse>();
+        // Return the same SPI for all SPI allocation since IpSecService only
+        // tracks the resource ID.
+        when(mMockNetd.ipSecAllocateSpi(
+                        anyInt(),
+                        eq(IpSecTransform.DIRECTION_OUT),
+                        anyString(),
+                        eq(InetAddress.getLoopbackAddress().getHostAddress()),
+                        anyInt()))
+                .thenReturn(DROID_SPI);
+        // Reserve spis until it fails.
+        for (int i = 0; i < MAX_NUM_SPIS; i++) {
+            IpSecSpiResponse newSpi =
+                    mIpSecService.allocateSecurityParameterIndex(
+                            0x1,
+                            InetAddress.getLoopbackAddress().getHostAddress(),
+                            DROID_SPI + i,
+                            new Binder());
+            assertNotNull(newSpi);
+            if (IpSecManager.Status.OK != newSpi.status) {
+                break;
+            }
+            reservedSpis.add(newSpi);
+        }
+        // Assert that the SPI quota has a reasonable limit.
+        assertTrue(reservedSpis.size() > 0 && reservedSpis.size() < MAX_NUM_SPIS);
+
+        // Try to reserve one more SPI, and should fail.
+        IpSecSpiResponse extraSpi =
+                mIpSecService.allocateSecurityParameterIndex(
+                        0x1,
+                        InetAddress.getLoopbackAddress().getHostAddress(),
+                        DROID_SPI + MAX_NUM_SPIS,
+                        new Binder());
+        assertNotNull(extraSpi);
+        assertEquals(IpSecManager.Status.RESOURCE_UNAVAILABLE, extraSpi.status);
+
+        // Release one reserved spi.
+        mIpSecService.releaseSecurityParameterIndex(reservedSpis.get(0).resourceId);
+        reservedSpis.remove(0);
+
+        // Should successfully reserve one more spi.
+        extraSpi =
+                mIpSecService.allocateSecurityParameterIndex(
+                        0x1,
+                        InetAddress.getLoopbackAddress().getHostAddress(),
+                        DROID_SPI + MAX_NUM_SPIS,
+                        new Binder());
+        assertNotNull(extraSpi);
+        assertEquals(IpSecManager.Status.OK, extraSpi.status);
+
+        // Release reserved SPIs.
+        for (IpSecSpiResponse spiResp : reservedSpis) {
+            mIpSecService.releaseSecurityParameterIndex(spiResp.resourceId);
+        }
+    }
+
+    @Test
+    public void testUidFdtagger() throws Exception {
+        SocketTagger actualSocketTagger = SocketTagger.get();
+
+        try {
+            FileDescriptor sockFd = Os.socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+
+            // Has to be done after socket creation because BlockGuardOS calls tag on new sockets
+            SocketTagger mockSocketTagger = mock(SocketTagger.class);
+            SocketTagger.set(mockSocketTagger);
+
+            mIpSecService.mUidFdTagger.tag(sockFd, Process.LAST_APPLICATION_UID);
+            verify(mockSocketTagger).tag(eq(sockFd));
+        } finally {
+            SocketTagger.set(actualSocketTagger);
+        }
+    }
+
+    /**
+     * Checks if two file descriptors point to the same file.
+     *
+     * <p>According to stat.h documentation, the correct way to check for equivalent or duplicated
+     * file descriptors is to check their inode and device. These two entries uniquely identify any
+     * file.
+     */
+    private boolean fileDescriptorsEqual(FileDescriptor fd1, FileDescriptor fd2) {
+        try {
+            StructStat fd1Stat = Os.fstat(fd1);
+            StructStat fd2Stat = Os.fstat(fd2);
+
+            return fd1Stat.st_ino == fd2Stat.st_ino && fd1Stat.st_dev == fd2Stat.st_dev;
+        } catch (ErrnoException e) {
+            return false;
+        }
+    }
+
+    @Test
+    public void testOpenUdpEncapSocketTagsSocket() throws Exception {
+        IpSecService.UidFdTagger mockTagger = mock(IpSecService.UidFdTagger.class);
+        IpSecService testIpSecService =
+                new IpSecService(mMockContext, mMockIpSecSrvConfig, mockTagger);
+
+        IpSecUdpEncapResponse udpEncapResp =
+                testIpSecService.openUdpEncapsulationSocket(0, new Binder());
+        assertNotNull(udpEncapResp);
+        assertEquals(IpSecManager.Status.OK, udpEncapResp.status);
+
+        FileDescriptor sockFd = udpEncapResp.fileDescriptor.getFileDescriptor();
+        ArgumentMatcher<FileDescriptor> fdMatcher =
+                (argFd) -> {
+                    return fileDescriptorsEqual(sockFd, argFd);
+                };
+        verify(mockTagger).tag(argThat(fdMatcher), eq(Os.getuid()));
+
+        testIpSecService.closeUdpEncapsulationSocket(udpEncapResp.resourceId);
+        udpEncapResp.fileDescriptor.close();
+    }
+
+    @Test
+    public void testOpenUdpEncapsulationSocketCallsSetEncapSocketOwner() throws Exception {
+        IpSecUdpEncapResponse udpEncapResp =
+                mIpSecService.openUdpEncapsulationSocket(0, new Binder());
+
+        FileDescriptor sockFd = udpEncapResp.fileDescriptor.getFileDescriptor();
+        ArgumentMatcher<FileDescriptor> fdMatcher = (arg) -> {
+                    try {
+                        StructStat sockStat = Os.fstat(sockFd);
+                        StructStat argStat = Os.fstat(arg);
+
+                        return sockStat.st_ino == argStat.st_ino
+                                && sockStat.st_dev == argStat.st_dev;
+                    } catch (ErrnoException e) {
+                        return false;
+                    }
+                };
+
+        verify(mMockNetd).ipSecSetEncapSocketOwner(argThat(fdMatcher), eq(Os.getuid()));
+        mIpSecService.closeUdpEncapsulationSocket(udpEncapResp.resourceId);
     }
 }

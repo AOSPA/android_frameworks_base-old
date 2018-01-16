@@ -175,7 +175,7 @@ public class ActivityManager {
      * @hide
      */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({
+    @IntDef(prefix = { "BUGREPORT_OPTION_" }, value = {
             BUGREPORT_OPTION_FULL,
             BUGREPORT_OPTION_INTERACTIVE,
             BUGREPORT_OPTION_REMOTE,
@@ -457,6 +457,20 @@ public class ActivityManager {
     /** @hide User operation call: one of related users cannot be stopped. */
     public static final int USER_OP_ERROR_RELATED_USERS_CANNOT_STOP = -4;
 
+    /**
+     * @hide
+     * Process states, describing the kind of state a particular process is in.
+     * When updating these, make sure to also check all related references to the
+     * constant in code, and update these arrays:
+     *
+     * @see com.android.internal.app.procstats.ProcessState#PROCESS_STATE_TO_STATE
+     * @see com.android.server.am.ProcessList#sProcStateToProcMem
+     * @see com.android.server.am.ProcessList#sFirstAwakePssTimes
+     * @see com.android.server.am.ProcessList#sSameAwakePssTimes
+     * @see com.android.server.am.ProcessList#sTestFirstPssTimes
+     * @see com.android.server.am.ProcessList#sTestSamePssTimes
+     */
+
     /** @hide Not a real process state. */
     public static final int PROCESS_STATE_UNKNOWN = -1;
 
@@ -476,35 +490,35 @@ public class ActivityManager {
     /** @hide Process is hosting a foreground service. */
     public static final int PROCESS_STATE_FOREGROUND_SERVICE = 4;
 
-    /** @hide Same as {@link #PROCESS_STATE_TOP} but while device is sleeping. */
-    public static final int PROCESS_STATE_TOP_SLEEPING = 5;
-
     /** @hide Process is important to the user, and something they are aware of. */
-    public static final int PROCESS_STATE_IMPORTANT_FOREGROUND = 6;
+    public static final int PROCESS_STATE_IMPORTANT_FOREGROUND = 5;
 
     /** @hide Process is important to the user, but not something they are aware of. */
-    public static final int PROCESS_STATE_IMPORTANT_BACKGROUND = 7;
+    public static final int PROCESS_STATE_IMPORTANT_BACKGROUND = 6;
 
     /** @hide Process is in the background transient so we will try to keep running. */
-    public static final int PROCESS_STATE_TRANSIENT_BACKGROUND = 8;
+    public static final int PROCESS_STATE_TRANSIENT_BACKGROUND = 7;
 
     /** @hide Process is in the background running a backup/restore operation. */
-    public static final int PROCESS_STATE_BACKUP = 9;
-
-    /** @hide Process is in the background, but it can't restore its state so we want
-     * to try to avoid killing it. */
-    public static final int PROCESS_STATE_HEAVY_WEIGHT = 10;
+    public static final int PROCESS_STATE_BACKUP = 8;
 
     /** @hide Process is in the background running a service.  Unlike oom_adj, this level
      * is used for both the normal running in background state and the executing
      * operations state. */
-    public static final int PROCESS_STATE_SERVICE = 11;
+    public static final int PROCESS_STATE_SERVICE = 9;
 
     /** @hide Process is in the background running a receiver.   Note that from the
      * perspective of oom_adj, receivers run at a higher foreground level, but for our
      * prioritization here that is not necessary and putting them below services means
      * many fewer changes in some process states as they receive broadcasts. */
-    public static final int PROCESS_STATE_RECEIVER = 12;
+    public static final int PROCESS_STATE_RECEIVER = 10;
+
+    /** @hide Same as {@link #PROCESS_STATE_TOP} but while device is sleeping. */
+    public static final int PROCESS_STATE_TOP_SLEEPING = 11;
+
+    /** @hide Process is in the background, but it can't restore its state so we want
+     * to try to avoid killing it. */
+    public static final int PROCESS_STATE_HEAVY_WEIGHT = 12;
 
     /** @hide Process is in the background but hosts the home activity. */
     public static final int PROCESS_STATE_HOME = 13;
@@ -519,20 +533,24 @@ public class ActivityManager {
      * process that contains activities. */
     public static final int PROCESS_STATE_CACHED_ACTIVITY_CLIENT = 16;
 
+    /** @hide Process is being cached for later use and has an activity that corresponds
+     * to an existing recent task. */
+    public static final int PROCESS_STATE_CACHED_RECENT = 17;
+
     /** @hide Process is being cached for later use and is empty. */
-    public static final int PROCESS_STATE_CACHED_EMPTY = 17;
+    public static final int PROCESS_STATE_CACHED_EMPTY = 18;
 
     /** @hide Process does not exist. */
-    public static final int PROCESS_STATE_NONEXISTENT = 18;
+    public static final int PROCESS_STATE_NONEXISTENT = 19;
 
     // NOTE: If PROCESS_STATEs are added or changed, then new fields must be added
     // to frameworks/base/core/proto/android/app/activitymanager.proto and the following method must
     // be updated to correctly map between them.
     /**
-     * Maps ActivityManager.PROCESS_STATE_ values to ActivityManagerProto.ProcessState enum.
+     * Maps ActivityManager.PROCESS_STATE_ values to ProcessState enum.
      *
      * @param amInt a process state of the form ActivityManager.PROCESS_STATE_
-     * @return the value of the corresponding android.app.ActivityManagerProto's ProcessState enum.
+     * @return the value of the corresponding ActivityManager's ProcessState enum.
      * @hide
      */
     public static final int processStateAmToProto(int amInt) {
@@ -806,7 +824,7 @@ public class ActivityManager {
      * impose on your application to let the overall system work best.  The
      * returned value is in megabytes; the baseline Android memory class is
      * 16 (which happens to be the Java heap limit of those devices); some
-     * device with more memory may return 24 or even higher numbers.
+     * devices with more memory may return 24 or even higher numbers.
      */
     public int getMemoryClass() {
         return staticGetMemoryClass();
@@ -833,7 +851,7 @@ public class ActivityManager {
      * constrained devices, or it may be significantly larger on devices with
      * a large amount of available RAM.
      *
-     * <p>The is the size of the application's Dalvik heap if it has
+     * <p>This is the size of the application's Dalvik heap if it has
      * specified <code>android:largeHeap="true"</code> in its manifest.
      */
     public int getLargeMemoryClass() {
@@ -1940,15 +1958,17 @@ public class ActivityManager {
      * @param animate Whether we should play an animation for the moving the task
      * @param initialBounds If the primary stack gets created, it will use these bounds for the
      *                      docked stack. Pass {@code null} to use default bounds.
+     * @param showRecents If the recents activity should be shown on the other side of the task
+     *                    going into split-screen mode.
      * @hide
      */
     @TestApi
     @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_STACKS)
     public void setTaskWindowingModeSplitScreenPrimary(int taskId, int createMode, boolean toTop,
-            boolean animate, Rect initialBounds) throws SecurityException {
+            boolean animate, Rect initialBounds, boolean showRecents) throws SecurityException {
         try {
             getService().setTaskWindowingModeSplitScreenPrimary(taskId, createMode, toTop, animate,
-                    initialBounds);
+                    initialBounds, showRecents);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2607,7 +2627,7 @@ public class ActivityManager {
             Manifest.permission.ACCESS_INSTANT_APPS})
     public boolean clearApplicationUserData(String packageName, IPackageDataObserver observer) {
         try {
-            return getService().clearApplicationUserData(packageName,
+            return getService().clearApplicationUserData(packageName, false,
                     observer, UserHandle.myUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -2878,13 +2898,13 @@ public class ActivityManager {
         public static final int IMPORTANCE_FOREGROUND_SERVICE = 125;
 
         /**
-         * Constant for {@link #importance}: This process is running the foreground
-         * UI, but the device is asleep so it is not visible to the user.  This means
-         * the user is not really aware of the process, because they can not see or
-         * interact with it, but it is quite important because it what they expect to
-         * return to once unlocking the device.
+         * @deprecated Pre-{@link android.os.Build.VERSION_CODES#P} version of
+         * {@link #IMPORTANCE_TOP_SLEEPING}.  As of Android
+         * {@link android.os.Build.VERSION_CODES#P}, this is considered much less
+         * important since we want to reduce what apps can do when the screen is off.
          */
-        public static final int IMPORTANCE_TOP_SLEEPING = 150;
+        @Deprecated
+        public static final int IMPORTANCE_TOP_SLEEPING_PRE_28 = 150;
 
         /**
          * Constant for {@link #importance}: This process is running something
@@ -2936,14 +2956,6 @@ public class ActivityManager {
         public static final int IMPORTANCE_CANT_SAVE_STATE_PRE_26 = 170;
 
         /**
-         * Constant for {@link #importance}: This process is running an
-         * application that can not save its state, and thus can't be killed
-         * while in the background.
-         * @hide
-         */
-        public static final int IMPORTANCE_CANT_SAVE_STATE= 270;
-
-        /**
          * Constant for {@link #importance}: This process is contains services
          * that should remain running.  These are background services apps have
          * started, not something the user is aware of, so they may be killed by
@@ -2951,6 +2963,23 @@ public class ActivityManager {
          * stay running as long as they want to).
          */
         public static final int IMPORTANCE_SERVICE = 300;
+
+        /**
+         * Constant for {@link #importance}: This process is running the foreground
+         * UI, but the device is asleep so it is not visible to the user.  Though the
+         * system will try hard to keep its process from being killed, in all other
+         * ways we consider it a kind of cached process, with the limitations that go
+         * along with that state: network access, running background services, etc.
+         */
+        public static final int IMPORTANCE_TOP_SLEEPING = 325;
+
+        /**
+         * Constant for {@link #importance}: This process is running an
+         * application that can not save its state, and thus can't be killed
+         * while in the background.  This will be used with apps that have
+         * {@link android.R.attr#cantSaveState} set on their application tag.
+         */
+        public static final int IMPORTANCE_CANT_SAVE_STATE = 350;
 
         /**
          * Constant for {@link #importance}: This process process contains
@@ -2987,16 +3016,16 @@ public class ActivityManager {
                 return IMPORTANCE_GONE;
             } else if (procState >= PROCESS_STATE_HOME) {
                 return IMPORTANCE_CACHED;
+            } else if (procState == PROCESS_STATE_HEAVY_WEIGHT) {
+                return IMPORTANCE_CANT_SAVE_STATE;
+            } else if (procState >= PROCESS_STATE_TOP_SLEEPING) {
+                return IMPORTANCE_TOP_SLEEPING;
             } else if (procState >= PROCESS_STATE_SERVICE) {
                 return IMPORTANCE_SERVICE;
-            } else if (procState > PROCESS_STATE_HEAVY_WEIGHT) {
-                return IMPORTANCE_CANT_SAVE_STATE;
             } else if (procState >= PROCESS_STATE_TRANSIENT_BACKGROUND) {
                 return IMPORTANCE_PERCEPTIBLE;
             } else if (procState >= PROCESS_STATE_IMPORTANT_FOREGROUND) {
                 return IMPORTANCE_VISIBLE;
-            } else if (procState >= PROCESS_STATE_TOP_SLEEPING) {
-                return IMPORTANCE_TOP_SLEEPING;
             } else if (procState >= PROCESS_STATE_FOREGROUND_SERVICE) {
                 return IMPORTANCE_FOREGROUND_SERVICE;
             } else {
@@ -3030,6 +3059,8 @@ public class ActivityManager {
                 switch (importance) {
                     case IMPORTANCE_PERCEPTIBLE:
                         return IMPORTANCE_PERCEPTIBLE_PRE_26;
+                    case IMPORTANCE_TOP_SLEEPING:
+                        return IMPORTANCE_TOP_SLEEPING_PRE_28;
                     case IMPORTANCE_CANT_SAVE_STATE:
                         return IMPORTANCE_CANT_SAVE_STATE_PRE_26;
                 }
@@ -3043,16 +3074,18 @@ public class ActivityManager {
                 return PROCESS_STATE_NONEXISTENT;
             } else if (importance >= IMPORTANCE_CACHED) {
                 return PROCESS_STATE_HOME;
+            } else if (importance >= IMPORTANCE_CANT_SAVE_STATE) {
+                return PROCESS_STATE_HEAVY_WEIGHT;
+            } else if (importance >= IMPORTANCE_TOP_SLEEPING) {
+                return PROCESS_STATE_TOP_SLEEPING;
             } else if (importance >= IMPORTANCE_SERVICE) {
                 return PROCESS_STATE_SERVICE;
-            } else if (importance > IMPORTANCE_CANT_SAVE_STATE) {
-                return PROCESS_STATE_HEAVY_WEIGHT;
             } else if (importance >= IMPORTANCE_PERCEPTIBLE) {
                 return PROCESS_STATE_TRANSIENT_BACKGROUND;
             } else if (importance >= IMPORTANCE_VISIBLE) {
                 return PROCESS_STATE_IMPORTANT_FOREGROUND;
-            } else if (importance >= IMPORTANCE_TOP_SLEEPING) {
-                return PROCESS_STATE_TOP_SLEEPING;
+            } else if (importance >= IMPORTANCE_TOP_SLEEPING_PRE_28) {
+                return PROCESS_STATE_FOREGROUND_SERVICE;
             } else if (importance >= IMPORTANCE_FOREGROUND_SERVICE) {
                 return PROCESS_STATE_FOREGROUND_SERVICE;
             } else {
@@ -3831,7 +3864,7 @@ public class ActivityManager {
         pw.println();
         dumpService(pw, fd, ProcessStats.SERVICE_NAME, new String[] { packageName });
         pw.println();
-        dumpService(pw, fd, "usagestats", new String[] { "--packages", packageName });
+        dumpService(pw, fd, "usagestats", new String[] { packageName });
         pw.println();
         dumpService(pw, fd, BatteryStats.SERVICE_NAME, new String[] { packageName });
         pw.flush();

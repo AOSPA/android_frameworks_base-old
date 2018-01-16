@@ -34,7 +34,6 @@ import static org.mockito.Matchers.isNull;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.nullable;
 import static org.mockito.Mockito.reset;
@@ -2244,27 +2243,32 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         reset(getServices().settings);
 
         dpm.setMaximumTimeToLock(admin1, 0);
-        verifyScreenTimeoutCall(null, false);
+        verifyScreenTimeoutCall(null, UserHandle.USER_SYSTEM);
+        verifyStayOnWhilePluggedCleared(false);
         reset(getServices().powerManagerInternal);
         reset(getServices().settings);
 
         dpm.setMaximumTimeToLock(admin1, 1);
-        verifyScreenTimeoutCall(1, true);
+        verifyScreenTimeoutCall(1L, UserHandle.USER_SYSTEM);
+        verifyStayOnWhilePluggedCleared(true);
         reset(getServices().powerManagerInternal);
         reset(getServices().settings);
 
         dpm.setMaximumTimeToLock(admin2, 10);
-        verifyScreenTimeoutCall(null, false);
+        verifyScreenTimeoutCall(null, UserHandle.USER_SYSTEM);
+        verifyStayOnWhilePluggedCleared(false);
         reset(getServices().powerManagerInternal);
         reset(getServices().settings);
 
         dpm.setMaximumTimeToLock(admin1, 5);
-        verifyScreenTimeoutCall(5, true);
+        verifyScreenTimeoutCall(5L, UserHandle.USER_SYSTEM);
+        verifyStayOnWhilePluggedCleared(true);
         reset(getServices().powerManagerInternal);
         reset(getServices().settings);
 
         dpm.setMaximumTimeToLock(admin2, 4);
-        verifyScreenTimeoutCall(4, true);
+        verifyScreenTimeoutCall(4L, UserHandle.USER_SYSTEM);
+        verifyStayOnWhilePluggedCleared(true);
         reset(getServices().powerManagerInternal);
         reset(getServices().settings);
 
@@ -2272,24 +2276,89 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         reset(getServices().powerManagerInternal);
         reset(getServices().settings);
 
-        dpm.setMaximumTimeToLock(admin2, Integer.MAX_VALUE);
-        verifyScreenTimeoutCall(Integer.MAX_VALUE, true);
-        reset(getServices().powerManagerInternal);
-        reset(getServices().settings);
-
-        dpm.setMaximumTimeToLock(admin2, Integer.MAX_VALUE + 1);
-        verifyScreenTimeoutCall(Integer.MAX_VALUE, true);
+        dpm.setMaximumTimeToLock(admin2, Long.MAX_VALUE);
+        verifyScreenTimeoutCall(Long.MAX_VALUE, UserHandle.USER_SYSTEM);
+        verifyStayOnWhilePluggedCleared(true);
         reset(getServices().powerManagerInternal);
         reset(getServices().settings);
 
         dpm.setMaximumTimeToLock(admin2, 10);
-        verifyScreenTimeoutCall(10, true);
+        verifyScreenTimeoutCall(10L, UserHandle.USER_SYSTEM);
+        verifyStayOnWhilePluggedCleared(true);
         reset(getServices().powerManagerInternal);
         reset(getServices().settings);
 
-        // There's no restriction; shold be set to MAX.
+        // There's no restriction; should be set to MAX.
         dpm.setMaximumTimeToLock(admin2, 0);
-        verifyScreenTimeoutCall(Integer.MAX_VALUE, false);
+        verifyScreenTimeoutCall(Long.MAX_VALUE, UserHandle.USER_SYSTEM);
+        verifyStayOnWhilePluggedCleared(false);
+    }
+
+    // Test if lock timeout on managed profile is handled correctly depending on whether profile
+    // uses separate challenge.
+    public void testSetMaximumTimeToLockProfile() throws Exception {
+        final int PROFILE_USER = 15;
+        final int PROFILE_ADMIN = UserHandle.getUid(PROFILE_USER, 19436);
+        addManagedProfile(admin1, PROFILE_ADMIN, admin1);
+        mContext.binder.callingUid = PROFILE_ADMIN;
+        final DevicePolicyManagerInternal dpmi =
+                LocalServices.getService(DevicePolicyManagerInternal.class);
+
+        dpm.setMaximumTimeToLock(admin1, 0);
+
+        reset(getServices().powerManagerInternal);
+        reset(getServices().settings);
+
+        // First add timeout for the profile.
+        dpm.setMaximumTimeToLock(admin1, 10);
+        verifyScreenTimeoutCall(10L, UserHandle.USER_SYSTEM);
+
+        reset(getServices().powerManagerInternal);
+        reset(getServices().settings);
+
+        // Add separate challenge
+        when(getServices().lockPatternUtils
+                .isSeparateProfileChallengeEnabled(eq(PROFILE_USER))).thenReturn(true);
+        dpmi.reportSeparateProfileChallengeChanged(PROFILE_USER);
+
+        verifyScreenTimeoutCall(10L, PROFILE_USER);
+        verifyScreenTimeoutCall(Long.MAX_VALUE, UserHandle.USER_SYSTEM);
+
+        reset(getServices().powerManagerInternal);
+        reset(getServices().settings);
+
+        // Remove the timeout.
+        dpm.setMaximumTimeToLock(admin1, 0);
+        verifyScreenTimeoutCall(Long.MAX_VALUE, PROFILE_USER);
+        verifyScreenTimeoutCall(null , UserHandle.USER_SYSTEM);
+
+        reset(getServices().powerManagerInternal);
+        reset(getServices().settings);
+
+        // Add it back.
+        dpm.setMaximumTimeToLock(admin1, 10);
+        verifyScreenTimeoutCall(10L, PROFILE_USER);
+        verifyScreenTimeoutCall(null, UserHandle.USER_SYSTEM);
+
+        reset(getServices().powerManagerInternal);
+        reset(getServices().settings);
+
+        // Remove separate challenge.
+        reset(getServices().lockPatternUtils);
+        when(getServices().lockPatternUtils
+                .isSeparateProfileChallengeEnabled(eq(PROFILE_USER))).thenReturn(false);
+        dpmi.reportSeparateProfileChallengeChanged(PROFILE_USER);
+
+        verifyScreenTimeoutCall(Long.MAX_VALUE, PROFILE_USER);
+        verifyScreenTimeoutCall(10L , UserHandle.USER_SYSTEM);
+
+        reset(getServices().powerManagerInternal);
+        reset(getServices().settings);
+
+        // Remove the timeout.
+        dpm.setMaximumTimeToLock(admin1, 0);
+        verifyScreenTimeoutCall(null, PROFILE_USER);
+        verifyScreenTimeoutCall(Long.MAX_VALUE, UserHandle.USER_SYSTEM);
     }
 
     public void testSetRequiredStrongAuthTimeout_DeviceOwner() throws Exception {
@@ -2365,15 +2434,17 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 () -> dpm.setRequiredStrongAuthTimeout(admin1, -ONE_MINUTE));
     }
 
-    private void verifyScreenTimeoutCall(Integer expectedTimeout,
-            boolean shouldStayOnWhilePluggedInBeCleared) {
+    private void verifyScreenTimeoutCall(Long expectedTimeout, int userId) {
         if (expectedTimeout == null) {
             verify(getServices().powerManagerInternal, times(0))
-                    .setMaximumScreenOffTimeoutFromDeviceAdmin(anyInt());
+                    .setMaximumScreenOffTimeoutFromDeviceAdmin(eq(userId), anyLong());
         } else {
             verify(getServices().powerManagerInternal, times(1))
-                    .setMaximumScreenOffTimeoutFromDeviceAdmin(eq(expectedTimeout));
+                    .setMaximumScreenOffTimeoutFromDeviceAdmin(eq(userId), eq(expectedTimeout));
         }
+    }
+
+    private void verifyStayOnWhilePluggedCleared(boolean cleared) {
         // TODO Verify calls to settingsGlobalPutInt.  Tried but somehow mockito threw
         // UnfinishedVerificationException.
     }
@@ -3090,6 +3161,27 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertEquals(-1, dpm.getLastSecurityLogRetrievalTime());
     }
 
+    public void testSetSystemSettingFailWithNonWhitelistedSettings() throws Exception {
+        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
+        setupDeviceOwner();
+        assertExpectException(SecurityException.class, null, () ->
+                dpm.setSystemSetting(admin1, Settings.System.SCREEN_BRIGHTNESS_FOR_VR, "0"));
+    }
+
+    public void testSetSystemSettingFailWithPO() throws Exception {
+        setupProfileOwner();
+        assertExpectException(SecurityException.class, null, () ->
+                dpm.setSystemSetting(admin1, Settings.System.SCREEN_BRIGHTNESS, "0"));
+    }
+
+    public void testSetSystemSetting() throws Exception {
+        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
+        setupDeviceOwner();
+        dpm.setSystemSetting(admin1, Settings.System.SCREEN_BRIGHTNESS, "0");
+        verify(getServices().settings).settingsSystemPutString(
+                Settings.System.SCREEN_BRIGHTNESS, "0");
+    }
+
     public void testSetTime() throws Exception {
         mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
         setupDeviceOwner();
@@ -3193,7 +3285,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // setUp() adds a secondary user for CALLER_USER_HANDLE. Remove it as otherwise the
         // feature is disabled because there are non-affiliated secondary users.
         getServices().removeUser(DpmMockContext.CALLER_USER_HANDLE);
-        when(getServices().iipConnectivityMetrics.registerNetdEventCallback(anyObject()))
+        when(getServices().iipConnectivityMetrics.addNetdEventCallback(anyInt(), anyObject()))
                 .thenReturn(true);
 
         // No logs were retrieved so far.
@@ -3742,6 +3834,36 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         when(getServices().lockPatternUtils.removeEscrowToken(eq(handle), eq(UserHandle.USER_SYSTEM)))
                 .thenReturn(true);
         assertTrue(dpm.clearResetPasswordToken(admin1));
+    }
+
+    public void testSetPasswordBlacklistCannotBeCalledByNonAdmin() throws Exception {
+        assertExpectException(SecurityException.class, /* messageRegex= */ null,
+                () -> dpm.setPasswordBlacklist(admin1, null, null));
+        verifyZeroInteractions(getServices().passwordBlacklist);
+    }
+
+    public void testClearingPasswordBlacklistDoesNotCreateNewBlacklist() throws Exception {
+        setupProfileOwner();
+        dpm.setPasswordBlacklist(admin1, null, null);
+        verifyZeroInteractions(getServices().passwordBlacklist);
+    }
+
+    public void testSetPasswordBlacklistCreatesNewBlacklist() throws Exception {
+        final String name = "myblacklist";
+        final List<String> explicit = Arrays.asList("password", "letmein");
+        setupProfileOwner();
+        dpm.setPasswordBlacklist(admin1, name, explicit);
+        verify(getServices().passwordBlacklist).savePasswordBlacklist(name, explicit);
+    }
+
+    public void testSetPasswordBlacklistOnlyConvertsExplicitToLowerCase() throws Exception {
+        final List<String> mixedCase = Arrays.asList("password", "LETMEIN", "FooTBAll");
+        final List<String> lowerCase = Arrays.asList("password", "letmein", "football");
+        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
+        setupDeviceOwner();
+        final String name = "Name of the Blacklist";
+        dpm.setPasswordBlacklist(admin1, name, mixedCase);
+        verify(getServices().passwordBlacklist).savePasswordBlacklist(name, lowerCase);
     }
 
     public void testIsActivePasswordSufficient() throws Exception {

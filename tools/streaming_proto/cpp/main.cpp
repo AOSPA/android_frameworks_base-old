@@ -2,8 +2,6 @@
 #include "stream_proto_utils.h"
 #include "string_utils.h"
 
-#include <frameworks/base/tools/streaming_proto/stream.pb.h>
-
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -11,6 +9,8 @@
 using namespace android::stream_proto;
 using namespace google::protobuf::io;
 using namespace std;
+
+const bool GENERATE_MAPPING = true;
 
 static string
 make_filename(const FileDescriptorProto& file_descriptor)
@@ -25,10 +25,27 @@ write_enum(stringstream& text, const EnumDescriptorProto& enu, const string& ind
     text << indent << "// enum " << enu.name() << endl;
     for (int i=0; i<N; i++) {
         const EnumValueDescriptorProto& value = enu.value(i);
-        text << indent << "const uint32_t "
+        text << indent << "const int "
                 << make_constant_name(value.name())
                 << " = " << value.number() << ";" << endl;
     }
+
+    if (GENERATE_MAPPING) {
+        string name = make_constant_name(enu.name());
+        string prefix = name + "_";
+        text << indent << "const int _ENUM_" << name << "_COUNT = " << N << ";" << endl;
+        text << indent << "const char* _ENUM_" << name << "_NAMES[" << N << "] = {" << endl;
+        for (int i=0; i<N; i++) {
+            text << indent << INDENT << "\"" << stripPrefix(enu.value(i).name(), prefix) << "\"," << endl;
+        }
+        text << indent << "};" << endl;
+        text << indent << "const int _ENUM_" << name << "_VALUES[" << N << "] = {" << endl;
+        for (int i=0; i<N; i++) {
+            text << indent << INDENT << make_constant_name(enu.value(i).name()) << "," << endl;
+        }
+        text << indent << "};" << endl;
+    }
+
     text << endl;
 }
 
@@ -54,12 +71,6 @@ write_field(stringstream& text, const FieldDescriptorProto& field, const string&
     text << "LL;" << endl;
 
     text << endl;
-}
-
-static inline bool
-should_generate_fields_mapping(const DescriptorProto& message)
-{
-    return message.options().GetExtension(stream).enable_fields_mapping();
 }
 
 static void
@@ -89,7 +100,7 @@ write_message(stringstream& text, const DescriptorProto& message, const string& 
         write_field(text, message.field(i), indented);
     }
 
-    if (should_generate_fields_mapping(message)) {
+    if (GENERATE_MAPPING) {
         N = message.field_size();
         text << indented << "const int _FIELD_COUNT = " << N << ";" << endl;
         text << indented << "const char* _FIELD_NAMES[" << N << "] = {" << endl;

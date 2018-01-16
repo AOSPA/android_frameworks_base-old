@@ -17,7 +17,6 @@
 package com.android.server.wm;
 
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 
 import static com.android.server.wm.AppTransition.TRANSIT_DOCK_TASK_FROM_RECENTS;
@@ -25,7 +24,6 @@ import static com.android.server.wm.AppTransition.TRANSIT_UNSET;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_APP_TRANSITIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ORIENTATION;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_SCREENSHOT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TOKEN_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
@@ -34,21 +32,19 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import android.app.ActivityManager.TaskSnapshot;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
-import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
-import android.os.Trace;
 import android.util.Slog;
-import android.view.DisplayInfo;
 import android.view.IApplicationToken;
-import android.view.WindowManagerPolicy.StartingSurface;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.AttributeCache;
+import com.android.server.policy.WindowManagerPolicy.StartingSurface;
+
 /**
  * Controller for the app window token container. This is created by activity manager to link
  * activity records to the app window token container they use in window manager.
@@ -180,13 +176,12 @@ public class AppWindowContainerController
             IApplicationToken token, AppWindowContainerListener listener, int index,
             int requestedOrientation, boolean fullscreen, boolean showForAllUsers, int configChanges,
             boolean voiceInteraction, boolean launchTaskBehind, boolean alwaysFocusable,
-            int targetSdkVersion, int rotationAnimationHint, long inputDispatchingTimeoutNanos,
-            Rect bounds) {
+            int targetSdkVersion, int rotationAnimationHint, long inputDispatchingTimeoutNanos) {
         this(taskController, token, listener, index, requestedOrientation, fullscreen,
                 showForAllUsers,
                 configChanges, voiceInteraction, launchTaskBehind, alwaysFocusable,
                 targetSdkVersion, rotationAnimationHint, inputDispatchingTimeoutNanos,
-                WindowManagerService.getInstance(), bounds);
+                WindowManagerService.getInstance());
     }
 
     public AppWindowContainerController(TaskWindowContainerController taskController,
@@ -194,7 +189,7 @@ public class AppWindowContainerController
             int requestedOrientation, boolean fullscreen, boolean showForAllUsers, int configChanges,
             boolean voiceInteraction, boolean launchTaskBehind, boolean alwaysFocusable,
             int targetSdkVersion, int rotationAnimationHint, long inputDispatchingTimeoutNanos,
-            WindowManagerService service, Rect bounds) {
+            WindowManagerService service) {
         super(listener, service);
         mHandler = new H(service.mH.getLooper());
         mToken = token;
@@ -215,7 +210,7 @@ public class AppWindowContainerController
             atoken = createAppWindow(mService, token, voiceInteraction, task.getDisplayContent(),
                     inputDispatchingTimeoutNanos, fullscreen, showForAllUsers, targetSdkVersion,
                     requestedOrientation, rotationAnimationHint, configChanges, launchTaskBehind,
-                    alwaysFocusable, this, bounds);
+                    alwaysFocusable, this);
             if (DEBUG_TOKEN_MOVEMENT || DEBUG_ADD_REMOVE) Slog.v(TAG_WM, "addAppToken: " + atoken
                     + " controller=" + taskController + " at " + index);
             task.addChild(atoken, index);
@@ -227,11 +222,11 @@ public class AppWindowContainerController
             boolean voiceInteraction, DisplayContent dc, long inputDispatchingTimeoutNanos,
             boolean fullscreen, boolean showForAllUsers, int targetSdk, int orientation,
             int rotationAnimationHint, int configChanges, boolean launchTaskBehind,
-            boolean alwaysFocusable, AppWindowContainerController controller, Rect bounds) {
+            boolean alwaysFocusable, AppWindowContainerController controller) {
         return new AppWindowToken(service, token, voiceInteraction, dc,
                 inputDispatchingTimeoutNanos, fullscreen, showForAllUsers, targetSdk, orientation,
                 rotationAnimationHint, configChanges, launchTaskBehind, alwaysFocusable,
-                controller, bounds);
+                controller);
     }
 
     public void removeContainer(int displayId) {
@@ -298,17 +293,6 @@ public class AppWindowContainerController
         }
     }
 
-    // TODO(b/36505427): Maybe move to WindowContainerController so other sub-classes can use it as
-    // a generic way to set override config. Need to untangle current ways the override config is
-    // currently set for tasks and displays before we are doing that though.
-    public void onOverrideConfigurationChanged(Configuration overrideConfiguration, Rect bounds) {
-        synchronized(mWindowMap) {
-            if (mContainer != null) {
-                mContainer.onOverrideConfigurationChanged(overrideConfiguration, bounds);
-            }
-        }
-    }
-
     public void setDisablePreviewScreenshots(boolean disable) {
         synchronized (mWindowMap) {
             if (mContainer == null) {
@@ -350,7 +334,7 @@ public class AppWindowContainerController
 
             if (DEBUG_APP_TRANSITIONS || DEBUG_ORIENTATION) Slog.v(TAG_WM, "setAppVisibility("
                     + mToken + ", visible=" + visible + "): " + mService.mAppTransition
-                    + " hidden=" + wtoken.hidden + " hiddenRequested="
+                    + " hidden=" + wtoken.isHidden() + " hiddenRequested="
                     + wtoken.hiddenRequested + " Callers=" + Debug.getCallers(6));
 
             mService.mOpeningApps.remove(wtoken);
@@ -375,11 +359,11 @@ public class AppWindowContainerController
                 wtoken.startingMoved = false;
                 // If the token is currently hidden (should be the common case), or has been
                 // stopped, then we need to set up to wait for its windows to be ready.
-                if (wtoken.hidden || wtoken.mAppStopped) {
+                if (wtoken.isHidden() || wtoken.mAppStopped) {
                     wtoken.clearAllDrawn();
 
                     // If the app was already visible, don't reset the waitingToShow state.
-                    if (wtoken.hidden) {
+                    if (wtoken.isHidden()) {
                         wtoken.waitingToShow = true;
                     }
 
@@ -400,21 +384,6 @@ public class AppWindowContainerController
             // If we are preparing an app transition, then delay changing
             // the visibility of this token until we execute that transition.
             if (wtoken.okToAnimate() && mService.mAppTransition.isTransitionSet()) {
-                // A dummy animation is a placeholder animation which informs others that an
-                // animation is going on (in this case an application transition). If the animation
-                // was transferred from another application/animator, no dummy animator should be
-                // created since an animation is already in progress.
-                if (wtoken.mAppAnimator.usingTransferredAnimation
-                        && wtoken.mAppAnimator.animation == null) {
-                    Slog.wtf(TAG_WM, "Will NOT set dummy animation on: " + wtoken
-                            + ", using null transferred animation!");
-                }
-                if (!wtoken.mAppAnimator.usingTransferredAnimation &&
-                        (!wtoken.startingDisplayed || mService.mSkipAppTransitionAnimation)) {
-                    if (DEBUG_APP_TRANSITIONS) Slog.v(
-                            TAG_WM, "Setting dummy animation on: " + wtoken);
-                    wtoken.mAppAnimator.setDummyAnimation();
-                }
                 wtoken.inPendingTransaction = true;
                 if (visible) {
                     mService.mOpeningApps.add(wtoken);
@@ -434,7 +403,7 @@ public class AppWindowContainerController
                             if (DEBUG_APP_TRANSITIONS) Slog.d(TAG_WM, "TRANSIT_TASK_OPEN_BEHIND, "
                                     + " adding " + focusedToken + " to mOpeningApps");
                             // Force animation to be loaded.
-                            focusedToken.hidden = true;
+                            focusedToken.setHidden(true);
                             mService.mOpeningApps.add(focusedToken);
                         }
                     }
@@ -721,7 +690,7 @@ public class AppWindowContainerController
                 return;
             }
             if (DEBUG_ORIENTATION) Slog.v(TAG_WM, "Clear freezing of " + mToken + ": hidden="
-                    + mContainer.hidden + " freezing=" + mContainer.mAppAnimator.freezingScreen);
+                    + mContainer.isHidden() + " freezing=" + mContainer.isFreezingScreen());
             mContainer.stopFreezingScreen(true, force);
         }
     }

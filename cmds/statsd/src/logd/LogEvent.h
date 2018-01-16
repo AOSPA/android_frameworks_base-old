@@ -21,6 +21,7 @@
 #include <android/util/ProtoOutputStream.h>
 #include <log/log_event_list.h>
 #include <log/log_read.h>
+#include <private/android_logger.h>
 #include <utils/Errors.h>
 
 #include <memory>
@@ -45,12 +46,9 @@ public:
     explicit LogEvent(log_msg& msg);
 
     /**
-     * Constructs a LogEvent with the specified tag and creates an android_log_event_list in write
-     * mode. Obtain this list with the getter. Make sure to call init() before attempting to read
-     * any of the values. This constructor is useful for unit-testing since we can't pass in an
-     * android_log_event_list since there is no copy constructor or assignment operator available.
+     * Constructs a LogEvent with synthetic data for testing. Must call init() before reading.
      */
-    explicit LogEvent(int tag, uint64_t timestampNs);
+    explicit LogEvent(int32_t tagId, uint64_t timestampNs);
 
     ~LogEvent();
 
@@ -64,6 +62,10 @@ public:
      */
     int GetTagId() const { return mTagId; }
 
+    uint32_t GetUid() const {
+        return mLogUid;
+    }
+
     /**
      * Get the nth value, starting at 1.
      *
@@ -74,6 +76,17 @@ public:
     const char* GetString(size_t key, status_t* err) const;
     bool GetBool(size_t key, status_t* err) const;
     float GetFloat(size_t key, status_t* err) const;
+
+    /**
+     * Write test data to the LogEvent. This can only be used when the LogEvent is constructed
+     * using LogEvent(tagId, timestampNs). You need to call init() before you can read from it.
+     */
+    bool write(uint32_t value);
+    bool write(int32_t value);
+    bool write(uint64_t value);
+    bool write(int64_t value);
+    bool write(const string& value);
+    bool write(float value);
 
     /**
      * Return a string representation of this event.
@@ -91,17 +104,19 @@ public:
     KeyValuePair GetKeyValueProto(size_t key) const;
 
     /**
-     * A pointer to the contained log_event_list.
-     *
-     * @return The android_log_event_list contained within.
-     */
-    android_log_event_list* GetAndroidLogEventList();
-
-    /**
      * Used with the constructor where tag is passed in. Converts the log_event_list to read mode
      * and prepares the list for reading.
      */
     void init();
+
+    /**
+     * Set timestamp if the original timestamp is missing.
+     */
+    void setTimestampNs(uint64_t timestampNs) {mTimestampNs = timestampNs;}
+
+    int size() const {
+        return mElements.size();
+    }
 
 private:
     /**
@@ -113,20 +128,17 @@ private:
     /**
      * Parses a log_msg into a LogEvent object.
      */
-    void init(const log_msg& msg);
-
-    /**
-     * Parses a log_msg into a LogEvent object.
-     */
-    void init(int64_t timestampNs, android_log_event_list* reader);
+    void init(android_log_context context);
 
     vector<android_log_list_element> mElements;
-    // Need a copy of the android_log_event_list so the strings are not cleared.
-    android_log_event_list mList;
+
+    android_log_context mContext;
 
     uint64_t mTimestampNs;
 
     int mTagId;
+
+    uint32_t mLogUid;
 };
 
 }  // namespace statsd

@@ -47,11 +47,11 @@ import android.view.InputChannel;
 import android.view.InputEventReceiver;
 import android.view.KeyEvent;
 import android.view.WindowManager;
-import android.view.WindowManagerPolicy;
 
 import com.android.server.input.InputApplicationHandle;
 import com.android.server.input.InputManagerService;
 import com.android.server.input.InputWindowHandle;
+import com.android.server.policy.WindowManagerPolicy;
 
 import java.io.PrintWriter;
 import java.util.Arrays;
@@ -390,12 +390,13 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
             }
         }
 
-        final boolean inPositioning = (mService.mTaskPositioner != null);
+        final boolean inPositioning = mService.mTaskPositioningController.isPositioningLocked();
         if (inPositioning) {
             if (DEBUG_TASK_POSITIONING) {
                 Log.d(TAG_WM, "Inserting window handle for repositioning");
             }
-            final InputWindowHandle dragWindowHandle = mService.mTaskPositioner.mDragWindowHandle;
+            final InputWindowHandle dragWindowHandle =
+                    mService.mTaskPositioningController.getDragWindowHandleLocked();
             if (dragWindowHandle != null) {
                 addInputWindowHandle(dragWindowHandle);
             } else {
@@ -661,8 +662,8 @@ final class InputMonitor implements InputManagerService.WindowManagerCallbacks {
             if (w.inPinnedWindowingMode()) {
                 if (mAddPipInputConsumerHandle
                         && (inputWindowHandle.layer <= pipInputConsumer.mWindowHandle.layer)) {
-                    // Update the bounds of the Pip input consumer to match the Pinned stack
-                    w.getStack().getBounds(pipTouchableBounds);
+                    // Update the bounds of the Pip input consumer to match the window bounds.
+                    w.getBounds(pipTouchableBounds);
                     pipInputConsumer.mWindowHandle.touchableRegion.set(pipTouchableBounds);
                     addInputWindowHandle(pipInputConsumer.mWindowHandle);
                     mAddPipInputConsumerHandle = false;

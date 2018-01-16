@@ -40,14 +40,11 @@ import android.content.pm.InstantAppIntentFilter;
 import android.content.pm.InstantAppResolveInfo;
 import android.content.pm.InstantAppResolveInfo.InstantAppDigest;
 import android.metrics.LogMaker;
-import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.util.Log;
-import android.util.Pair;
-import android.util.Slog;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
@@ -56,11 +53,9 @@ import com.android.server.pm.EphemeralResolverConnection.PhaseTwoCallback;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeoutException;
 
 /** @hide */
 public abstract class InstantAppResolver {
@@ -159,8 +154,9 @@ public abstract class InstantAppResolver {
                     long startTime) {
                 final String packageName;
                 final String splitName;
-                final int versionCode;
+                final long versionCode;
                 final Intent failureIntent;
+                final Bundle extras;
                 if (instantAppResolveInfoList != null && instantAppResolveInfoList.size() > 0) {
                     final AuxiliaryResolveInfo instantAppIntentInfo =
                             InstantAppResolver.filterInstantAppIntent(
@@ -172,17 +168,20 @@ public abstract class InstantAppResolver {
                         splitName = instantAppIntentInfo.splitName;
                         versionCode = instantAppIntentInfo.resolveInfo.getVersionCode();
                         failureIntent = instantAppIntentInfo.failureIntent;
+                        extras = instantAppIntentInfo.resolveInfo.getExtras();
                     } else {
                         packageName = null;
                         splitName = null;
                         versionCode = -1;
                         failureIntent = null;
+                        extras = null;
                     }
                 } else {
                     packageName = null;
                     splitName = null;
                     versionCode = -1;
                     failureIntent = null;
+                    extras = null;
                 }
                 final Intent installerIntent = buildEphemeralInstallerIntent(
                         Intent.ACTION_RESOLVE_INSTANT_APP_PACKAGE,
@@ -197,6 +196,7 @@ public abstract class InstantAppResolver {
                         requestObj.responseObj.installFailureActivity,
                         versionCode,
                         token,
+                        extras,
                         false /*needsPhaseTwo*/);
                 installerIntent.setComponent(new ComponentName(
                         instantAppInstaller.packageName, instantAppInstaller.name));
@@ -241,8 +241,9 @@ public abstract class InstantAppResolver {
             @NonNull String instantAppPackageName,
             @Nullable String instantAppSplitName,
             @Nullable ComponentName installFailureActivity,
-            int versionCode,
+            long versionCode,
             @Nullable String token,
+            @Nullable Bundle extras,
             boolean needsPhaseTwo) {
         // Construct the intent that launches the instant installer
         int flags = origIntent.getFlags();
@@ -257,6 +258,10 @@ public abstract class InstantAppResolver {
         }
         if (origIntent.getData() != null) {
             intent.putExtra(Intent.EXTRA_EPHEMERAL_HOSTNAME, origIntent.getData().getHost());
+        }
+        intent.putExtra(Intent.EXTRA_INSTANT_APP_ACTION, origIntent.getAction());
+        if (extras != null) {
+            intent.putExtra(Intent.EXTRA_INSTANT_APP_EXTRAS, extras);
         }
 
         // We have all of the data we need; just start the installer without a second phase
@@ -307,7 +312,8 @@ public abstract class InstantAppResolver {
 
             intent.putExtra(Intent.EXTRA_PACKAGE_NAME, instantAppPackageName);
             intent.putExtra(Intent.EXTRA_SPLIT_NAME, instantAppSplitName);
-            intent.putExtra(Intent.EXTRA_VERSION_CODE, versionCode);
+            intent.putExtra(Intent.EXTRA_VERSION_CODE, (int) (versionCode & 0x7fffffff));
+            intent.putExtra(Intent.EXTRA_LONG_VERSION_CODE, versionCode);
             intent.putExtra(Intent.EXTRA_CALLING_PACKAGE, callingPackage);
             if (verificationBundle != null) {
                 intent.putExtra(Intent.EXTRA_VERIFICATION_BUNDLE, verificationBundle);

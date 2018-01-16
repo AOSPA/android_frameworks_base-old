@@ -141,8 +141,9 @@ void EglManager::initialize() {
         GrContextOptions options;
         options.fDisableDistanceFieldPaths = true;
         mRenderThread.cacheManager().configureContext(&options);
-        mRenderThread.setGrContext(GrContext::Create(GrBackend::kOpenGL_GrBackend,
-                                                     (GrBackendContext)glInterface.get(), options));
+        sk_sp<GrContext> grContext(GrContext::MakeGL(std::move(glInterface), options));
+        LOG_ALWAYS_FATAL_IF(!grContext.get());
+        mRenderThread.setGrContext(grContext);
     }
 }
 
@@ -238,9 +239,9 @@ void EglManager::loadConfigs() {
         if (!eglChooseConfig(mEglDisplay, attribs16F, &mEglConfigWideGamut, numConfigs,
                              &numConfigs) ||
             numConfigs != 1) {
-            LOG_ALWAYS_FATAL(
-                    "Device claims wide gamut support, cannot find matching config, error = %s",
+            ALOGE("Device claims wide gamut support, cannot find matching config, error = %s",
                     eglErrorString());
+            EglExtensions.pixelFormatFloat = false;
         }
     }
 }

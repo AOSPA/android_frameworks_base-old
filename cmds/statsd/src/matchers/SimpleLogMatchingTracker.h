@@ -23,7 +23,6 @@
 #include <unordered_map>
 #include <vector>
 #include "LogMatchingTracker.h"
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 
 namespace android {
@@ -33,11 +32,11 @@ namespace statsd {
 class SimpleLogMatchingTracker : public virtual LogMatchingTracker {
 public:
     SimpleLogMatchingTracker(const std::string& name, const int index,
-                             const SimpleLogEntryMatcher& matcher);
+                             const SimpleAtomMatcher& matcher);
 
     ~SimpleLogMatchingTracker();
 
-    bool init(const std::vector<LogEntryMatcher>& allLogMatchers,
+    bool init(const std::vector<AtomMatcher>& allLogMatchers,
               const std::vector<sp<LogMatchingTracker>>& allTrackers,
               const std::unordered_map<std::string, int>& matcherMap,
               std::vector<bool>& stack) override;
@@ -47,7 +46,7 @@ public:
                     std::vector<MatchingState>& matcherResults) override;
 
 private:
-    const SimpleLogEntryMatcher mMatcher;
+    const SimpleAtomMatcher mMatcher;
 };
 
 }  // namespace statsd

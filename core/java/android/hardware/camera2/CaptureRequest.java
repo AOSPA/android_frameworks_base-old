@@ -21,15 +21,18 @@ import android.annotation.Nullable;
 import android.hardware.camera2.impl.CameraMetadataNative;
 import android.hardware.camera2.impl.PublicKey;
 import android.hardware.camera2.impl.SyntheticKey;
+import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.utils.HashCodeHelpers;
 import android.hardware.camera2.utils.TypeReference;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.util.ArraySet;
+import android.util.Log;
+import android.util.SparseArray;
 import android.view.Surface;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -198,7 +201,24 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
         }
     }
 
-    private final HashSet<Surface> mSurfaceSet;
+    private final String            TAG = "CaptureRequest-JV";
+
+    private final ArraySet<Surface> mSurfaceSet = new ArraySet<Surface>();
+
+    // Speed up sending CaptureRequest across IPC:
+    // mSurfaceConverted should only be set to true during capture request
+    // submission by {@link #convertSurfaceToStreamId}. The method will convert
+    // surfaces to stream/surface indexes based on passed in stream configuration at that time.
+    // This will save significant unparcel time for remote camera device.
+    // Once the request is submitted, camera device will call {@link #recoverStreamIdToSurface}
+    // to reset the capture request back to its original state.
+    private final Object           mSurfacesLock = new Object();
+    private boolean                mSurfaceConverted = false;
+    private int[]                  mStreamIdxArray;
+    private int[]                  mSurfaceIdxArray;
+
+    private static final ArraySet<Surface> mEmptySurfaceSet = new ArraySet<Surface>();
+
     private final CameraMetadataNative mSettings;
     private boolean mIsReprocess;
     // If this request is part of constrained high speed request list that was created by
@@ -218,7 +238,6 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
     private CaptureRequest() {
         mSettings = new CameraMetadataNative();
         setNativeInstance(mSettings);
-        mSurfaceSet = new HashSet<Surface>();
         mIsReprocess = false;
         mReprocessableSessionId = CameraCaptureSession.SESSION_ID_NONE;
     }
@@ -232,7 +251,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
     private CaptureRequest(CaptureRequest source) {
         mSettings = new CameraMetadataNative(source.mSettings);
         setNativeInstance(mSettings);
-        mSurfaceSet = (HashSet<Surface>) source.mSurfaceSet.clone();
+        mSurfaceSet.addAll(source.mSurfaceSet);
         mIsReprocess = source.mIsReprocess;
         mIsPartOfCHSRequestList = source.mIsPartOfCHSRequestList;
         mReprocessableSessionId = source.mReprocessableSessionId;
@@ -263,7 +282,6 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
             int reprocessableSessionId) {
         mSettings = CameraMetadataNative.move(settings);
         setNativeInstance(mSettings);
-        mSurfaceSet = new HashSet<Surface>();
         mIsReprocess = isReprocess;
         if (isReprocess) {
             if (reprocessableSessionId == CameraCaptureSession.SESSION_ID_NONE) {
@@ -463,22 +481,25 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
     private void readFromParcel(Parcel in) {
         mSettings.readFromParcel(in);
         setNativeInstance(mSettings);
-
-        mSurfaceSet.clear();
-
-        Parcelable[] parcelableArray = in.readParcelableArray(Surface.class.getClassLoader());
-
-        if (parcelableArray == null) {
-            return;
-        }
-
-        for (Parcelable p : parcelableArray) {
-            Surface s = (Surface) p;
-            mSurfaceSet.add(s);
-        }
-
         mIsReprocess = (in.readInt() == 0) ? false : true;
         mReprocessableSessionId = CameraCaptureSession.SESSION_ID_NONE;
+
+        synchronized (mSurfacesLock) {
+            mSurfaceSet.clear();
+            Parcelable[] parcelableArray = in.readParcelableArray(Surface.class.getClassLoader());
+            if (parcelableArray != null) {
+                for (Parcelable p : parcelableArray) {
+                    Surface s = (Surface) p;
+                    mSurfaceSet.add(s);
+                }
+            }
+            // Intentionally disallow java side readFromParcel to receive streamIdx/surfaceIdx
+            // Since there is no good way to convert indexes back to Surface
+            int streamSurfaceSize = in.readInt();
+            if (streamSurfaceSize != 0) {
+                throw new RuntimeException("Reading cached CaptureRequest is not supported");
+            }
+        }
     }
 
     @Override
@@ -489,8 +510,21 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
     @Override
     public void writeToParcel(Parcel dest, int flags) {
         mSettings.writeToParcel(dest, flags);
-        dest.writeParcelableArray(mSurfaceSet.toArray(new Surface[mSurfaceSet.size()]), flags);
         dest.writeInt(mIsReprocess ? 1 : 0);
+
+        synchronized (mSurfacesLock) {
+            final ArraySet<Surface> surfaces = mSurfaceConverted ? mEmptySurfaceSet : mSurfaceSet;
+            dest.writeParcelableArray(surfaces.toArray(new Surface[surfaces.size()]), flags);
+            if (mSurfaceConverted) {
+                dest.writeInt(mStreamIdxArray.length);
+                for (int i = 0; i < mStreamIdxArray.length; i++) {
+                    dest.writeInt(mStreamIdxArray[i]);
+                    dest.writeInt(mSurfaceIdxArray[i]);
+                }
+            } else {
+                dest.writeInt(0);
+            }
+        }
     }
 
     /**
@@ -505,6 +539,67 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      */
     public Collection<Surface> getTargets() {
         return Collections.unmodifiableCollection(mSurfaceSet);
+    }
+
+    /**
+     * @hide
+     */
+    public void convertSurfaceToStreamId(
+            final SparseArray<OutputConfiguration> configuredOutputs) {
+        synchronized (mSurfacesLock) {
+            if (mSurfaceConverted) {
+                Log.v(TAG, "Cannot convert already converted surfaces!");
+                return;
+            }
+
+            mStreamIdxArray = new int[mSurfaceSet.size()];
+            mSurfaceIdxArray = new int[mSurfaceSet.size()];
+            int i = 0;
+            for (Surface s : mSurfaceSet) {
+                boolean streamFound = false;
+                for (int j = 0; j < configuredOutputs.size(); ++j) {
+                    int streamId = configuredOutputs.keyAt(j);
+                    OutputConfiguration outConfig = configuredOutputs.valueAt(j);
+                    int surfaceId = 0;
+                    for (Surface outSurface : outConfig.getSurfaces()) {
+                        if (s == outSurface) {
+                            streamFound = true;
+                            mStreamIdxArray[i] = streamId;
+                            mSurfaceIdxArray[i] = surfaceId;
+                            i++;
+                            break;
+                        }
+                        surfaceId++;
+                    }
+                    if (streamFound) {
+                        break;
+                    }
+                }
+                if (!streamFound) {
+                    mStreamIdxArray = null;
+                    mSurfaceIdxArray = null;
+                    throw new IllegalArgumentException(
+                            "CaptureRequest contains unconfigured Input/Output Surface!");
+                }
+            }
+            mSurfaceConverted = true;
+        }
+    }
+
+    /**
+     * @hide
+     */
+    public void recoverStreamIdToSurface() {
+        synchronized (mSurfacesLock) {
+            if (!mSurfaceConverted) {
+                Log.v(TAG, "Cannot convert already converted surfaces!");
+                return;
+            }
+
+            mStreamIdxArray = null;
+            mSurfaceIdxArray = null;
+            mSurfaceConverted = false;
+        }
     }
 
     /**
@@ -680,7 +775,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * FAST or HIGH_QUALITY will yield a picture with the same white point
      * as what was produced by the camera device in the earlier frame.</p>
      * <p>The expected processing pipeline is as follows:</p>
-     * <p><img alt="White balance processing pipeline" src="../../../../images/camera2/metadata/android.colorCorrection.mode/processing_pipeline.png" /></p>
+     * <p><img alt="White balance processing pipeline" src="/reference/images/camera2/metadata/android.colorCorrection.mode/processing_pipeline.png" /></p>
      * <p>The white balance is encoded by two values, a 4-channel white-balance
      * gain vector (applied in the Bayer domain), and a 3x3 color transform
      * matrix (applied after demosaic).</p>
@@ -1470,10 +1565,10 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * <p>When set to AUTO, the individual algorithm controls in
      * android.control.* are in effect, such as {@link CaptureRequest#CONTROL_AF_MODE android.control.afMode}.</p>
      * <p>When set to USE_SCENE_MODE, the individual controls in
-     * android.control.* are mostly disabled, and the camera device implements
-     * one of the scene mode settings (such as ACTION, SUNSET, or PARTY)
-     * as it wishes. The camera device scene mode 3A settings are provided by
-     * {@link android.hardware.camera2.CaptureResult capture results}.</p>
+     * android.control.* are mostly disabled, and the camera device
+     * implements one of the scene mode settings (such as ACTION,
+     * SUNSET, or PARTY) as it wishes. The camera device scene mode
+     * 3A settings are provided by {@link android.hardware.camera2.CaptureResult capture results}.</p>
      * <p>When set to OFF_KEEP_STATE, it is similar to OFF mode, the only difference
      * is that this frame will not be used by camera device background 3A statistics
      * update, as if this frame is never captured. This mode can be used in the scenario
@@ -2268,45 +2363,35 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * can run concurrently to the rest of the camera pipeline, but
      * cannot process more than 1 capture at a time.</li>
      * </ul>
-     * <p>The necessary information for the application, given the model above,
-     * is provided via the {@link CameraCharacteristics#SCALER_STREAM_CONFIGURATION_MAP android.scaler.streamConfigurationMap} field using
+     * <p>The necessary information for the application, given the model above, is provided via
      * {@link android.hardware.camera2.params.StreamConfigurationMap#getOutputMinFrameDuration }.
-     * These are used to determine the maximum frame rate / minimum frame
-     * duration that is possible for a given stream configuration.</p>
+     * These are used to determine the maximum frame rate / minimum frame duration that is
+     * possible for a given stream configuration.</p>
      * <p>Specifically, the application can use the following rules to
      * determine the minimum frame duration it can request from the camera
      * device:</p>
      * <ol>
-     * <li>Let the set of currently configured input/output streams
-     * be called <code>S</code>.</li>
-     * <li>Find the minimum frame durations for each stream in <code>S</code>, by looking
-     * it up in {@link CameraCharacteristics#SCALER_STREAM_CONFIGURATION_MAP android.scaler.streamConfigurationMap} using {@link android.hardware.camera2.params.StreamConfigurationMap#getOutputMinFrameDuration }
-     * (with its respective size/format). Let this set of frame durations be
-     * called <code>F</code>.</li>
-     * <li>For any given request <code>R</code>, the minimum frame duration allowed
-     * for <code>R</code> is the maximum out of all values in <code>F</code>. Let the streams
-     * used in <code>R</code> be called <code>S_r</code>.</li>
+     * <li>Let the set of currently configured input/output streams be called <code>S</code>.</li>
+     * <li>Find the minimum frame durations for each stream in <code>S</code>, by looking it up in {@link android.hardware.camera2.params.StreamConfigurationMap#getOutputMinFrameDuration }
+     * (with its respective size/format). Let this set of frame durations be called <code>F</code>.</li>
+     * <li>For any given request <code>R</code>, the minimum frame duration allowed for <code>R</code> is the maximum
+     * out of all values in <code>F</code>. Let the streams used in <code>R</code> be called <code>S_r</code>.</li>
      * </ol>
      * <p>If none of the streams in <code>S_r</code> have a stall time (listed in {@link android.hardware.camera2.params.StreamConfigurationMap#getOutputStallDuration }
-     * using its respective size/format), then the frame duration in <code>F</code>
-     * determines the steady state frame rate that the application will get
-     * if it uses <code>R</code> as a repeating request. Let this special kind of
-     * request be called <code>Rsimple</code>.</p>
-     * <p>A repeating request <code>Rsimple</code> can be <em>occasionally</em> interleaved
-     * by a single capture of a new request <code>Rstall</code> (which has at least
-     * one in-use stream with a non-0 stall time) and if <code>Rstall</code> has the
-     * same minimum frame duration this will not cause a frame rate loss
-     * if all buffers from the previous <code>Rstall</code> have already been
-     * delivered.</p>
-     * <p>For more details about stalling, see
-     * {@link android.hardware.camera2.params.StreamConfigurationMap#getOutputStallDuration }.</p>
+     * using its respective size/format), then the frame duration in <code>F</code> determines the steady
+     * state frame rate that the application will get if it uses <code>R</code> as a repeating request. Let
+     * this special kind of request be called <code>Rsimple</code>.</p>
+     * <p>A repeating request <code>Rsimple</code> can be <em>occasionally</em> interleaved by a single capture of a
+     * new request <code>Rstall</code> (which has at least one in-use stream with a non-0 stall time) and if
+     * <code>Rstall</code> has the same minimum frame duration this will not cause a frame rate loss if all
+     * buffers from the previous <code>Rstall</code> have already been delivered.</p>
+     * <p>For more details about stalling, see {@link android.hardware.camera2.params.StreamConfigurationMap#getOutputStallDuration }.</p>
      * <p>This control is only effective if {@link CaptureRequest#CONTROL_AE_MODE android.control.aeMode} or {@link CaptureRequest#CONTROL_MODE android.control.mode} is set to
      * OFF; otherwise the auto-exposure algorithm will override this value.</p>
      * <p><b>Units</b>: Nanoseconds</p>
      * <p><b>Range of valid values:</b><br>
-     * See {@link CameraCharacteristics#SENSOR_INFO_MAX_FRAME_DURATION android.sensor.info.maxFrameDuration},
-     * {@link CameraCharacteristics#SCALER_STREAM_CONFIGURATION_MAP android.scaler.streamConfigurationMap}. The duration
-     * is capped to <code>max(duration, exposureTime + overhead)</code>.</p>
+     * See {@link CameraCharacteristics#SENSOR_INFO_MAX_FRAME_DURATION android.sensor.info.maxFrameDuration}, {@link android.hardware.camera2.params.StreamConfigurationMap }.
+     * The duration is capped to <code>max(duration, exposureTime + overhead)</code>.</p>
      * <p><b>Optional</b> - This value may be {@code null} on some devices.</p>
      * <p><b>Full capability</b> -
      * Present on all camera devices that report being {@link CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL_FULL HARDWARE_LEVEL_FULL} devices in the
@@ -2315,7 +2400,6 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * @see CaptureRequest#CONTROL_AE_MODE
      * @see CaptureRequest#CONTROL_MODE
      * @see CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL
-     * @see CameraCharacteristics#SCALER_STREAM_CONFIGURATION_MAP
      * @see CameraCharacteristics#SENSOR_INFO_MAX_FRAME_DURATION
      */
     @PublicKey
@@ -2584,11 +2668,11 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * <p>Linear mapping:</p>
      * <pre><code>android.tonemap.curveRed = [ 0, 0, 1.0, 1.0 ]
      * </code></pre>
-     * <p><img alt="Linear mapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/linear_tonemap.png" /></p>
+     * <p><img alt="Linear mapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/linear_tonemap.png" /></p>
      * <p>Invert mapping:</p>
      * <pre><code>android.tonemap.curveRed = [ 0, 1.0, 1.0, 0 ]
      * </code></pre>
-     * <p><img alt="Inverting mapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/inverse_tonemap.png" /></p>
+     * <p><img alt="Inverting mapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/inverse_tonemap.png" /></p>
      * <p>Gamma 1/2.2 mapping, with 16 control points:</p>
      * <pre><code>android.tonemap.curveRed = [
      *   0.0000, 0.0000, 0.0667, 0.2920, 0.1333, 0.4002, 0.2000, 0.4812,
@@ -2596,7 +2680,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      *   0.5333, 0.7515, 0.6000, 0.7928, 0.6667, 0.8317, 0.7333, 0.8685,
      *   0.8000, 0.9035, 0.8667, 0.9370, 0.9333, 0.9691, 1.0000, 1.0000 ]
      * </code></pre>
-     * <p><img alt="Gamma = 1/2.2 tonemapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/gamma_tonemap.png" /></p>
+     * <p><img alt="Gamma = 1/2.2 tonemapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/gamma_tonemap.png" /></p>
      * <p>Standard sRGB gamma mapping, per IEC 61966-2-1:1999, with 16 control points:</p>
      * <pre><code>android.tonemap.curveRed = [
      *   0.0000, 0.0000, 0.0667, 0.2864, 0.1333, 0.4007, 0.2000, 0.4845,
@@ -2604,7 +2688,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      *   0.5333, 0.7569, 0.6000, 0.7977, 0.6667, 0.8360, 0.7333, 0.8721,
      *   0.8000, 0.9063, 0.8667, 0.9389, 0.9333, 0.9701, 1.0000, 1.0000 ]
      * </code></pre>
-     * <p><img alt="sRGB tonemapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/srgb_tonemap.png" /></p>
+     * <p><img alt="sRGB tonemapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/srgb_tonemap.png" /></p>
      * <p><b>Range of valid values:</b><br>
      * 0-1 on both input and output coordinates, normalized
      * as a floating-point value such that 0 == black and 1 == white.</p>
@@ -2646,11 +2730,11 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * <p>Linear mapping:</p>
      * <pre><code>curveRed = [ (0, 0), (1.0, 1.0) ]
      * </code></pre>
-     * <p><img alt="Linear mapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/linear_tonemap.png" /></p>
+     * <p><img alt="Linear mapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/linear_tonemap.png" /></p>
      * <p>Invert mapping:</p>
      * <pre><code>curveRed = [ (0, 1.0), (1.0, 0) ]
      * </code></pre>
-     * <p><img alt="Inverting mapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/inverse_tonemap.png" /></p>
+     * <p><img alt="Inverting mapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/inverse_tonemap.png" /></p>
      * <p>Gamma 1/2.2 mapping, with 16 control points:</p>
      * <pre><code>curveRed = [
      *   (0.0000, 0.0000), (0.0667, 0.2920), (0.1333, 0.4002), (0.2000, 0.4812),
@@ -2658,7 +2742,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      *   (0.5333, 0.7515), (0.6000, 0.7928), (0.6667, 0.8317), (0.7333, 0.8685),
      *   (0.8000, 0.9035), (0.8667, 0.9370), (0.9333, 0.9691), (1.0000, 1.0000) ]
      * </code></pre>
-     * <p><img alt="Gamma = 1/2.2 tonemapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/gamma_tonemap.png" /></p>
+     * <p><img alt="Gamma = 1/2.2 tonemapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/gamma_tonemap.png" /></p>
      * <p>Standard sRGB gamma mapping, per IEC 61966-2-1:1999, with 16 control points:</p>
      * <pre><code>curveRed = [
      *   (0.0000, 0.0000), (0.0667, 0.2864), (0.1333, 0.4007), (0.2000, 0.4845),
@@ -2666,7 +2750,7 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      *   (0.5333, 0.7569), (0.6000, 0.7977), (0.6667, 0.8360), (0.7333, 0.8721),
      *   (0.8000, 0.9063), (0.8667, 0.9389), (0.9333, 0.9701), (1.0000, 1.0000) ]
      * </code></pre>
-     * <p><img alt="sRGB tonemapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/srgb_tonemap.png" /></p>
+     * <p><img alt="sRGB tonemapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/srgb_tonemap.png" /></p>
      * <p><b>Optional</b> - This value may be {@code null} on some devices.</p>
      * <p><b>Full capability</b> -
      * Present on all camera devices that report being {@link CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL_FULL HARDWARE_LEVEL_FULL} devices in the
@@ -2756,9 +2840,9 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * PRESET_CURVE</p>
      * <p>The tonemap curve will be defined by specified standard.</p>
      * <p>sRGB (approximated by 16 control points):</p>
-     * <p><img alt="sRGB tonemapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/srgb_tonemap.png" /></p>
+     * <p><img alt="sRGB tonemapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/srgb_tonemap.png" /></p>
      * <p>Rec. 709 (approximated by 16 control points):</p>
-     * <p><img alt="Rec. 709 tonemapping curve" src="../../../../images/camera2/metadata/android.tonemap.curveRed/rec709_tonemap.png" /></p>
+     * <p><img alt="Rec. 709 tonemapping curve" src="/reference/images/camera2/metadata/android.tonemap.curveRed/rec709_tonemap.png" /></p>
      * <p>Note that above figures show a 16 control points approximation of preset
      * curves. Camera devices may apply a different approximation to the curve.</p>
      * <p><b>Possible values:</b>

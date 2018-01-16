@@ -216,7 +216,12 @@ public final class Dataset implements Parcelable {
         }
 
         /**
-         * Requires a dataset authentication before autofilling the activity with this dataset.
+         * Triggers a custom UI before before autofilling the screen with the contents of this
+         * dataset.
+         *
+         * <p><b>Note:</b> Although the name of this method suggests that it should be used just for
+         * authentication flow, it can be used for other advanced flows; see {@link AutofillService}
+         * for examples.
          *
          * <p>This method is called when you need to provide an authentication
          * UI for the data set. For example, when a data set contains credit card information
@@ -298,6 +303,10 @@ public final class Dataset implements Parcelable {
          * in the constructor in a dataset that is meant to be shown to the user, the autofill UI
          * for this field will not be displayed.
          *
+         * <p><b>Note:</b> On Android {@link android.os.Build.VERSION_CODES#P} and
+         * higher, datasets that require authentication can be also be filtered by passing a
+         * {@link AutofillValue#forText(CharSequence) text value} as the {@code value} parameter.
+         *
          * @param id id returned by {@link
          *         android.app.assist.AssistStructure.ViewNode#getAutofillId()}.
          * @param value value to be autofilled. Pass {@code null} if you do not have the value
@@ -314,6 +323,10 @@ public final class Dataset implements Parcelable {
         /**
          * Sets the value of a field, using a custom {@link RemoteViews presentation} to
          * visualize it.
+         *
+         * <p><b>Note:</b> On Android {@link android.os.Build.VERSION_CODES#P} and
+         * higher, datasets that require authentication can be also be filtered by passing a
+         * {@link AutofillValue#forText(CharSequence) text value} as the  {@code value} parameter.
          *
          * @param id id returned by {@link
          *         android.app.assist.AssistStructure.ViewNode#getAutofillId()}.
@@ -335,9 +348,15 @@ public final class Dataset implements Parcelable {
         /**
          * Sets the value of a field using an <a href="#Filtering">explicit filter</a>.
          *
-         * <p>This method is typically used when the dataset is not authenticated and the field
-         * value is not {@link AutofillValue#isText() text} but the service still wants to allow
-         * the user to filter it out.
+         * <p>This method is typically used when the dataset requires authentication and the service
+         * does not know its value but wants to hide the dataset after the user enters a minimum
+         * number of characters. For example, if the dataset represents a credit card number and the
+         * service does not want to show the "Tap to authenticate" message until the user tapped
+         * 4 digits, in which case the filter would be {@code Pattern.compile("\\d.{4,}")}.
+         *
+         * <p><b>Note:</b> If the dataset requires authentication but the service knows its text
+         * value it's easier to filter by calling {@link #setValue(AutofillId, AutofillValue)} and
+         * use the value to filter.
          *
          * @param id id returned by {@link
          *         android.app.assist.AssistStructure.ViewNode#getAutofillId()}.
@@ -364,11 +383,15 @@ public final class Dataset implements Parcelable {
          * Sets the value of a field, using a custom {@link RemoteViews presentation} to
          * visualize it and a <a href="#Filtering">explicit filter</a>.
          *
-         * <p>Typically used to allow filtering on
-         * {@link Dataset.Builder#setAuthentication(IntentSender) authenticated datasets}. For
-         * example, if the dataset represents a credit card number and the service does not want to
-         * show the "Tap to authenticate" message until the user tapped 4 digits, in which case
-         * the filter would be {@code Pattern.compile("\\d.{4,}")}.
+         * <p>This method is typically used when the dataset requires authentication and the service
+         * does not know its value but wants to hide the dataset after the user enters a minimum
+         * number of characters. For example, if the dataset represents a credit card number and the
+         * service does not want to show the "Tap to authenticate" message until the user tapped
+         * 4 digits, in which case the filter would be {@code Pattern.compile("\\d.{4,}")}.
+         *
+         * <p><b>Note:</b> If the dataset requires authentication but the service knows its text
+         * value it's easier to filter by calling
+         * {@link #setValue(AutofillId, AutofillValue, RemoteViews)} and using the value to filter.
          *
          * @param id id returned by {@link
          *         android.app.assist.AssistStructure.ViewNode#getAutofillId()}.
@@ -398,6 +421,7 @@ public final class Dataset implements Parcelable {
                 if (existingIdx >= 0) {
                     mFieldValues.set(existingIdx, value);
                     mFieldPresentations.set(existingIdx, presentation);
+                    mFieldFilters.set(existingIdx, filter);
                     return;
                 }
             } else {

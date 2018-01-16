@@ -31,6 +31,7 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.split.SplitDependencyLoader;
 import android.content.res.AssetManager;
 import android.content.res.CompatibilityInfo;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.Build;
 import android.os.Bundle;
@@ -48,15 +49,13 @@ import android.text.TextUtils;
 import android.util.AndroidRuntimeException;
 import android.util.ArrayMap;
 import android.util.Log;
+import android.util.LogPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Display;
 import android.view.DisplayAdjustments;
-
 import com.android.internal.util.ArrayUtils;
-
 import dalvik.system.VMRuntime;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -125,6 +124,7 @@ public final class LoadedApk {
         = new ArrayMap<>();
     private final ArrayMap<Context, ArrayMap<ServiceConnection, LoadedApk.ServiceDispatcher>> mUnboundServices
         = new ArrayMap<>();
+    private AppComponentFactory mAppComponentFactory;
 
     Application getApplication() {
         return mApplication;
@@ -148,6 +148,7 @@ public final class LoadedApk {
         mIncludeCode = includeCode;
         mRegisterPackage = registerPackage;
         mDisplayAdjustments.setCompatibilityInfo(compatInfo);
+        mAppComponentFactory = createAppFactory(mApplicationInfo, mBaseClassLoader);
     }
 
     private static ApplicationInfo adjustNativeLibraryPaths(ApplicationInfo info) {
@@ -203,6 +204,7 @@ public final class LoadedApk {
         mRegisterPackage = false;
         mClassLoader = ClassLoader.getSystemClassLoader();
         mResources = Resources.getSystem();
+        mAppComponentFactory = createAppFactory(mApplicationInfo, mClassLoader);
     }
 
     /**
@@ -212,6 +214,23 @@ public final class LoadedApk {
         assert info.packageName.equals("android");
         mApplicationInfo = info;
         mClassLoader = classLoader;
+        mAppComponentFactory = createAppFactory(info, classLoader);
+    }
+
+    private AppComponentFactory createAppFactory(ApplicationInfo appInfo, ClassLoader cl) {
+        if (appInfo.appComponentFactory != null) {
+            try {
+                return (AppComponentFactory) cl.loadClass(appInfo.appComponentFactory)
+                        .newInstance();
+            } catch (InstantiationException | IllegalAccessException | ClassNotFoundException e) {
+                Slog.e(TAG, "Unable to instantiate appComponentFactory", e);
+            }
+        }
+        return AppComponentFactory.DEFAULT;
+    }
+
+    public AppComponentFactory getAppFactory() {
+        return mAppComponentFactory;
     }
 
     public String getPackageName() {
@@ -313,6 +332,7 @@ public final class LoadedApk {
                         getClassLoader());
             }
         }
+        mAppComponentFactory = createAppFactory(aInfo, mClassLoader);
     }
 
     private void setApplicationInfo(ApplicationInfo aInfo) {
@@ -638,8 +658,7 @@ public final class LoadedApk {
         final String defaultSearchPaths = System.getProperty("java.library.path");
         final boolean treatVendorApkAsUnbundled = !defaultSearchPaths.contains("/vendor/lib");
         if (mApplicationInfo.getCodePath() != null
-                && mApplicationInfo.getCodePath().startsWith("/vendor/")
-                && treatVendorApkAsUnbundled) {
+                && mApplicationInfo.isVendor() && treatVendorApkAsUnbundled) {
             isBundledApp = false;
         }
 
@@ -948,12 +967,76 @@ public final class LoadedApk {
                 throw new AssertionError("null split not found");
             }
 
-            mResources = ResourcesManager.getInstance().getResources(null, mResDir,
-                    splitPaths, mOverlayDirs, mApplicationInfo.sharedLibraryFiles,
-                    Display.DEFAULT_DISPLAY, null, getCompatibilityInfo(),
+            mResources = ResourcesManager.getInstance().getResources(
+                    null,
+                    mResDir,
+                    splitPaths,
+                    mOverlayDirs,
+                    mApplicationInfo.sharedLibraryFiles,
+                    Display.DEFAULT_DISPLAY,
+                    null,
+                    getCompatibilityInfo(),
                     getClassLoader());
         }
         return mResources;
+    }
+
+    public Resources getOrCreateResourcesForSplit(@NonNull String splitName,
+            @Nullable IBinder activityToken, int displayId) throws NameNotFoundException {
+        return ResourcesManager.getInstance().getResources(
+                activityToken,
+                mResDir,
+                getSplitPaths(splitName),
+                mOverlayDirs,
+                mApplicationInfo.sharedLibraryFiles,
+                displayId,
+                null,
+                getCompatibilityInfo(),
+                getSplitClassLoader(splitName));
+    }
+
+    /**
+     * Creates the top level resources for the given package. Will return an existing
+     * Resources if one has already been created.
+     */
+    public Resources getOrCreateTopLevelResources(@NonNull ApplicationInfo appInfo) {
+        // Request for this app, short circuit
+        if (appInfo.uid == Process.myUid()) {
+            return getResources();
+        }
+
+        // Get resources for a different package
+        return ResourcesManager.getInstance().getResources(
+                null,
+                appInfo.publicSourceDir,
+                appInfo.splitPublicSourceDirs,
+                appInfo.resourceDirs,
+                appInfo.sharedLibraryFiles,
+                Display.DEFAULT_DISPLAY,
+                null,
+                getCompatibilityInfo(),
+                getClassLoader());
+    }
+
+    public Resources createResources(IBinder activityToken, String splitName,
+            int displayId, Configuration overrideConfig, CompatibilityInfo compatInfo) {
+        final String[] splitResDirs;
+        final ClassLoader classLoader;
+        try {
+            splitResDirs = getSplitPaths(splitName);
+            classLoader = getSplitClassLoader(splitName);
+        } catch (NameNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+        return ResourcesManager.getInstance().getResources(activityToken,
+                mResDir,
+                splitResDirs,
+                mOverlayDirs,
+                mApplicationInfo.sharedLibraryFiles,
+                displayId,
+                overrideConfig,
+                compatInfo,
+                classLoader);
     }
 
     public Application makeApplication(boolean forceDefaultAppClass,
@@ -1647,9 +1730,12 @@ public final class LoadedApk {
             if (dead) {
                 mConnection.onBindingDied(name);
             }
-            // If there is a new service, it is now connected.
+            // If there is a new viable service, it is now connected.
             if (service != null) {
                 mConnection.onServiceConnected(name, service);
+            } else {
+                // The binding machinery worked, but the remote returned null from onBind().
+                mConnection.onNullBinding(name);
             }
         }
 

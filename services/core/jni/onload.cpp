@@ -39,7 +39,6 @@ int register_android_server_UsbMidiDevice(JNIEnv* env);
 int register_android_server_UsbHostManager(JNIEnv* env);
 int register_android_server_vr_VrManagerService(JNIEnv* env);
 int register_android_server_VibratorService(JNIEnv* env);
-int register_android_server_location_ContextHubService(JNIEnv* env);
 int register_android_server_location_GnssLocationProvider(JNIEnv* env);
 int register_android_server_connectivity_Vpn(JNIEnv* env);
 int register_android_server_connectivity_tethering_OffloadHardwareInterface(JNIEnv*);
@@ -52,6 +51,7 @@ int register_android_server_HardwarePropertiesManagerService(JNIEnv* env);
 int register_android_server_SyntheticPasswordManager(JNIEnv* env);
 int register_android_server_GraphicsStatsService(JNIEnv* env);
 int register_android_hardware_display_DisplayViewport(JNIEnv* env);
+int register_android_server_net_NetworkStatsService(JNIEnv* env);
 };
 
 using namespace android;
@@ -82,7 +82,6 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
     register_android_server_vr_VrManagerService(env);
     register_android_server_VibratorService(env);
     register_android_server_SystemServer(env);
-    register_android_server_location_ContextHubService(env);
     register_android_server_location_GnssLocationProvider(env);
     register_android_server_connectivity_Vpn(env);
     register_android_server_connectivity_tethering_OffloadHardwareInterface(env);
@@ -97,6 +96,7 @@ extern "C" jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
     register_android_server_SyntheticPasswordManager(env);
     register_android_server_GraphicsStatsService(env);
     register_android_hardware_display_DisplayViewport(env);
+    register_android_server_net_NetworkStatsService(env);
 
     return JNI_VERSION_1_4;
 }

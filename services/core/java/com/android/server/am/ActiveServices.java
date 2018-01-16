@@ -58,6 +58,7 @@ import com.android.internal.os.TransferPipe;
 import com.android.internal.util.FastPrintWriter;
 import com.android.server.am.ActivityManagerService.ItemMatcher;
 import com.android.server.am.ActivityManagerService.NeededUriGrants;
+import com.android.server.am.proto.ActiveServicesProto;
 
 import android.app.ActivityManager;
 import android.app.AppGlobals;
@@ -85,6 +86,7 @@ import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
+import android.util.proto.ProtoOutputStream;
 import android.webkit.WebViewZygote;
 
 public final class ActiveServices {
@@ -346,7 +348,7 @@ public final class ActiveServices {
 
         ServiceLookupResult res =
             retrieveServiceLocked(service, resolvedType, callingPackage,
-                    callingPid, callingUid, userId, true, callerFg, false);
+                    callingPid, callingUid, userId, true, callerFg, false, false);
         if (res == null) {
             return null;
         }
@@ -595,7 +597,7 @@ public final class ActiveServices {
 
         // If this service is active, make sure it is stopped.
         ServiceLookupResult r = retrieveServiceLocked(service, resolvedType, null,
-                Binder.getCallingPid(), Binder.getCallingUid(), userId, false, false, false);
+                Binder.getCallingPid(), Binder.getCallingUid(), userId, false, false, false, false);
         if (r != null) {
             if (r.record != null) {
                 final long origId = Binder.clearCallingIdentity();
@@ -633,7 +635,7 @@ public final class ActiveServices {
                         sb.append("Stopping service due to app idle: ");
                         UserHandle.formatUid(sb, service.appInfo.uid);
                         sb.append(" ");
-                        TimeUtils.formatDuration(service.createTime
+                        TimeUtils.formatDuration(service.createRealTime
                                 - SystemClock.elapsedRealtime(), sb);
                         sb.append(" ");
                         sb.append(compName);
@@ -656,7 +658,7 @@ public final class ActiveServices {
     IBinder peekServiceLocked(Intent service, String resolvedType, String callingPackage) {
         ServiceLookupResult r = retrieveServiceLocked(service, resolvedType, callingPackage,
                 Binder.getCallingPid(), Binder.getCallingUid(),
-                UserHandle.getCallingUserId(), false, false, false);
+                UserHandle.getCallingUserId(), false, false, false, false);
 
         IBinder ret = null;
         if (r != null) {
@@ -1043,8 +1045,8 @@ public final class ActiveServices {
                         try {
                             if (AppGlobals.getPackageManager().checkPermission(
                                     android.Manifest.permission.INSTANT_APP_FOREGROUND_SERVICE,
-                                    r.appInfo.packageName,
-                                    r.appInfo.uid) != PackageManager.PERMISSION_GRANTED) {
+                                    r.appInfo.packageName, UserHandle.getUserId(r.appInfo.uid))
+                                            != PackageManager.PERMISSION_GRANTED) {
                                 throw new SecurityException("Instant app " + r.appInfo.packageName
                                         + " does not have permission to create foreground"
                                         + "services");
@@ -1280,12 +1282,19 @@ public final class ActiveServices {
                     + ") set BIND_ALLOW_WHITELIST_MANAGEMENT when binding service " + service);
         }
 
+        if ((flags & Context.BIND_ALLOW_INSTANT) != 0 && !isCallerSystem) {
+            throw new SecurityException(
+                    "Non-system caller " + caller + " (pid=" + Binder.getCallingPid()
+                            + ") set BIND_ALLOW_INSTANT when binding service " + service);
+        }
+
         final boolean callerFg = callerApp.setSchedGroup != ProcessList.SCHED_GROUP_BACKGROUND;
         final boolean isBindExternal = (flags & Context.BIND_EXTERNAL_SERVICE) != 0;
+        final boolean allowInstant = (flags & Context.BIND_ALLOW_INSTANT) != 0;
 
         ServiceLookupResult res =
             retrieveServiceLocked(service, resolvedType, callingPackage, Binder.getCallingPid(),
-                    Binder.getCallingUid(), userId, true, callerFg, isBindExternal);
+                    Binder.getCallingUid(), userId, true, callerFg, isBindExternal, allowInstant);
         if (res == null) {
             return 0;
         }
@@ -1655,7 +1664,8 @@ public final class ActiveServices {
 
     private ServiceLookupResult retrieveServiceLocked(Intent service,
             String resolvedType, String callingPackage, int callingPid, int callingUid, int userId,
-            boolean createIfNeeded, boolean callingFromFg, boolean isBindExternal) {
+            boolean createIfNeeded, boolean callingFromFg, boolean isBindExternal,
+            boolean allowInstant) {
         ServiceRecord r = null;
         if (DEBUG_SERVICE) Slog.v(TAG_SERVICE, "retrieveServiceLocked: " + service
                 + " type=" + resolvedType + " callingUid=" + callingUid);
@@ -1683,11 +1693,14 @@ public final class ActiveServices {
         }
         if (r == null) {
             try {
+                int flags = ActivityManagerService.STOCK_PM_FLAGS
+                        | PackageManager.MATCH_DEBUG_TRIAGED_MISSING;
+                if (allowInstant) {
+                    flags |= PackageManager.MATCH_INSTANT;
+                }
                 // TODO: come back and remove this assumption to triage all services
                 ResolveInfo rInfo = mAm.getPackageManagerInternalLocked().resolveService(service,
-                        resolvedType, ActivityManagerService.STOCK_PM_FLAGS
-                                | PackageManager.MATCH_DEBUG_TRIAGED_MISSING,
-                        userId, callingUid);
+                        resolvedType, flags, userId, callingUid);
                 ServiceInfo sInfo =
                     rInfo != null ? rInfo.serviceInfo : null;
                 if (sInfo == null) {
@@ -2638,7 +2651,7 @@ public final class ActiveServices {
                 try {
                     bumpServiceExecutingLocked(s, false, "unbind");
                     if (b.client != s.app && (c.flags&Context.BIND_WAIVE_PRIORITY) == 0
-                            && s.app.setProcState <= ActivityManager.PROCESS_STATE_RECEIVER) {
+                            && s.app.setProcState <= ActivityManager.PROCESS_STATE_HEAVY_WEIGHT) {
                         // If this service's process is not already in the cached list,
                         // then update it in the LRU list here because this may be causing
                         // it to go down there and we want it to start out near the top.
@@ -3220,7 +3233,7 @@ public final class ActiveServices {
         info.uid = r.appInfo.uid;
         info.process = r.processName;
         info.foreground = r.isForeground;
-        info.activeSince = r.createTime;
+        info.activeSince = r.createRealTime;
         info.started = r.startRequested;
         info.clientCount = r.connections.size();
         info.crashCount = r.crashCount;
@@ -3574,7 +3587,7 @@ public final class ActiveServices {
                 pw.print("    app=");
                 pw.println(r.app);
                 pw.print("    created=");
-                TimeUtils.formatDuration(r.createTime, nowReal, pw);
+                TimeUtils.formatDuration(r.createRealTime, nowReal, pw);
                 pw.print(" started=");
                 pw.print(r.startRequested);
                 pw.print(" connections=");
@@ -3838,6 +3851,26 @@ public final class ActiveServices {
     ServiceDumper newServiceDumperLocked(FileDescriptor fd, PrintWriter pw, String[] args,
             int opti, boolean dumpAll, String dumpPackage) {
         return new ServiceDumper(fd, pw, args, opti, dumpAll, dumpPackage);
+    }
+
+    protected void writeToProto(ProtoOutputStream proto) {
+        synchronized (mAm) {
+            int[] users = mAm.mUserController.getUsers();
+            for (int user : users) {
+                ServiceMap smap = mServiceMap.get(user);
+                if (smap == null) {
+                    continue;
+                }
+                long token = proto.start(ActiveServicesProto.SERVICES_BY_USERS);
+                proto.write(ActiveServicesProto.ServicesByUser.USER_ID, user);
+                ArrayMap<ComponentName, ServiceRecord> alls = smap.mServicesByName;
+                for (int i=0; i<alls.size(); i++) {
+                    alls.valueAt(i).writeToProto(proto,
+                            ActiveServicesProto.ServicesByUser.SERVICE_RECORDS);
+                }
+                proto.end(token);
+            }
+        }
     }
 
     /**

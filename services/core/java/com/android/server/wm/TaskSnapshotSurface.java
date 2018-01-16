@@ -18,9 +18,7 @@ package com.android.server.wm;
 
 import static android.graphics.Color.WHITE;
 import static android.graphics.Color.alpha;
-import static android.view.SurfaceControl.HIDDEN;
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
-import static android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND;
 import static android.view.WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
 import static android.view.WindowManager.LayoutParams.FLAG_IGNORE_CHEEK_PRESSES;
 import static android.view.WindowManager.LayoutParams.FLAG_LOCAL_FOCUS_MODE;
@@ -59,6 +57,7 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.MergedConfiguration;
 import android.util.Slog;
+import android.view.DisplayCutout;
 import android.view.IWindowSession;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -67,12 +66,12 @@ import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
-import android.view.WindowManagerPolicy.StartingSurface;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.policy.DecorView;
 import com.android.internal.view.BaseIWindow;
+import com.android.server.policy.WindowManagerPolicy.StartingSurface;
 
 /**
  * This class represents a starting window that shows a snapshot.
@@ -136,6 +135,7 @@ class TaskSnapshotSurface implements StartingSurface {
         window.setSession(session);
         final Surface surface = new Surface();
         final Rect tmpRect = new Rect();
+        final DisplayCutout.ParcelableWrapper tmpCutout = new DisplayCutout.ParcelableWrapper();
         final Rect tmpFrame = new Rect();
         final Rect taskBounds;
         final Rect tmpContentInsets = new Rect();
@@ -197,8 +197,8 @@ class TaskSnapshotSurface implements StartingSurface {
         }
         try {
             final int res = session.addToDisplay(window, window.mSeq, layoutParams,
-                    View.VISIBLE, token.getDisplayContent().getDisplayId(), tmpRect, tmpRect,
-                    tmpRect, null);
+                    View.GONE, token.getDisplayContent().getDisplayId(), tmpRect, tmpRect,
+                    tmpRect, tmpCutout, null);
             if (res < 0) {
                 Slog.w(TAG, "Failed to add snapshot starting window res=" + res);
                 return null;
@@ -214,7 +214,7 @@ class TaskSnapshotSurface implements StartingSurface {
         try {
             session.relayout(window, window.mSeq, layoutParams, -1, -1, View.VISIBLE, 0, tmpFrame,
                     tmpRect, tmpContentInsets, tmpRect, tmpStableInsets, tmpRect, tmpRect,
-                    tmpMergedConfiguration, surface);
+                    tmpCutout, tmpMergedConfiguration, surface);
         } catch (RemoteException e) {
             // Local call.
         }
@@ -351,8 +351,9 @@ class TaskSnapshotSurface implements StartingSurface {
 
         // Let's remove all system decorations except the status bar, but only if the task is at the
         // very top of the screen.
+        final boolean isTop = mTaskBounds.top == 0 && mFrame.top == 0;
         rect.inset((int) (insets.left * mSnapshot.getScale()),
-                mTaskBounds.top != 0 ? (int) (insets.top * mSnapshot.getScale()) : 0,
+                isTop ? 0 : (int) (insets.top * mSnapshot.getScale()),
                 (int) (insets.right * mSnapshot.getScale()),
                 (int) (insets.bottom * mSnapshot.getScale()));
         return rect;
@@ -439,7 +440,8 @@ class TaskSnapshotSurface implements StartingSurface {
         public void resized(Rect frame, Rect overscanInsets, Rect contentInsets, Rect visibleInsets,
                 Rect stableInsets, Rect outsets, boolean reportDraw,
                 MergedConfiguration mergedConfiguration, Rect backDropFrame, boolean forceLayout,
-                boolean alwaysConsumeNavBar, int displayId) {
+                boolean alwaysConsumeNavBar, int displayId,
+                DisplayCutout.ParcelableWrapper displayCutout) {
             if (mergedConfiguration != null && mOuter != null
                     && mOuter.mOrientationOnCreation
                             != mergedConfiguration.getMergedConfiguration().orientation) {

@@ -77,6 +77,7 @@ import android.text.InputFilter;
 import android.text.InputType;
 import android.text.Layout;
 import android.text.ParcelableSpan;
+import android.text.PremeasuredText;
 import android.text.Selection;
 import android.text.SpanWatcher;
 import android.text.Spannable;
@@ -159,6 +160,7 @@ import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textclassifier.TextClassifier;
+import android.view.textclassifier.TextLinks;
 import android.view.textservice.SpellCheckerSubtype;
 import android.view.textservice.TextServicesManager;
 import android.widget.RemoteViews.RemoteView;
@@ -167,6 +169,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.FastMath;
+import com.android.internal.util.Preconditions;
 import com.android.internal.widget.EditableInputConnection;
 
 import libcore.util.EmptyArray;
@@ -750,7 +753,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public static final int AUTO_SIZE_TEXT_TYPE_UNIFORM = 1;
 
     /** @hide */
-    @IntDef({AUTO_SIZE_TEXT_TYPE_NONE, AUTO_SIZE_TEXT_TYPE_UNIFORM})
+    @IntDef(prefix = { "AUTO_SIZE_TEXT_TYPE_" }, value = {
+            AUTO_SIZE_TEXT_TYPE_NONE,
+            AUTO_SIZE_TEXT_TYPE_UNIFORM
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface AutoSizeTextType {}
     // Default minimum size for auto-sizing text in scaled pixels.
@@ -4861,6 +4867,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * Sets line spacing for this TextView.  Each line other than the last line will have its height
      * multiplied by {@code mult} and have {@code add} added to it.
      *
+     * @param add The value in pixels that should be added to each line other than the last line.
+     *            This will be applied after the multiplier
+     * @param mult The value by which each line height other than the last line will be multiplied
+     *             by
      *
      * @attr ref android.R.styleable#TextView_lineSpacingExtra
      * @attr ref android.R.styleable#TextView_lineSpacingMultiplier
@@ -5326,7 +5336,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (imm != null) imm.restartInput(this);
         } else if (type == BufferType.SPANNABLE || mMovement != null) {
             text = mSpannableFactory.newSpannable(text);
-        } else if (!(text instanceof CharWrapper)) {
+        } else if (!(text instanceof PremeasuredText || text instanceof CharWrapper)) {
             text = TextUtils.stringOrSpannedString(text);
         }
 
@@ -5610,10 +5620,15 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 spannable = (Spannable) text;
             } else {
                 spannable = mSpannableFactory.newSpannable(text);
-                text = spannable;
             }
 
             SuggestionSpan[] spans = spannable.getSpans(0, text.length(), SuggestionSpan.class);
+            if (spans.length == 0) {
+                return text;
+            } else {
+                text = spannable;
+            }
+
             for (int i = 0; i < spans.length; i++) {
                 spannable.removeSpan(spans[i]);
             }
@@ -11141,6 +11156,20 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return mTextClassifier;
     }
 
+    /**
+     * Starts an ActionMode for the specified TextLink.
+     *
+     * @return Whether or not we're attempting to start the action mode.
+     * @hide
+     */
+    public boolean requestActionMode(@NonNull TextLinks.TextLink link) {
+        Preconditions.checkNotNull(link);
+        if (mEditor != null) {
+            mEditor.startLinkActionModeAsync(link);
+            return true;
+        }
+        return false;
+    }
     /**
      * @hide
      */

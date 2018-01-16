@@ -20,6 +20,7 @@ import static android.content.pm.ActivityInfo.COLOR_MODE_DEFAULT;
 
 import android.Manifest.permission;
 import android.annotation.IntDef;
+import android.annotation.LongDef;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
@@ -604,8 +605,10 @@ public interface WindowManager extends ViewManager {
         public static final int TYPE_DRAG               = FIRST_SYSTEM_WINDOW+16;
 
         /**
-         * Window type: panel that slides out from under the status bar
-         * In multiuser systems shows on all users' windows.
+         * Window type: panel that slides out from over the status bar
+         * In multiuser systems shows on all users' windows. These windows
+         * are displayed on top of the stauts bar and any {@link #TYPE_STATUS_BAR_PANEL}
+         * windows.
          * @hide
          */
         public static final int TYPE_STATUS_BAR_SUB_PANEL = FIRST_SYSTEM_WINDOW+17;
@@ -1266,6 +1269,33 @@ public interface WindowManager extends ViewManager {
         }, formatToHexString = true)
         public int flags;
 
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @LongDef(
+            flag = true,
+            value = {
+                    LayoutParams.FLAG2_LAYOUT_IN_DISPLAY_CUTOUT_AREA,
+            })
+        @interface Flags2 {}
+
+        /**
+         * Window flag: allow placing the window within the area that overlaps with the
+         * display cutout.
+         *
+         * <p>
+         * The window must correctly position its contents to take the display cutout into account.
+         *
+         * @see DisplayCutout
+         */
+        public static final long FLAG2_LAYOUT_IN_DISPLAY_CUTOUT_AREA = 0x00000001;
+
+        /**
+         * Various behavioral options/flags.  Default is none.
+         *
+         * @see #FLAG2_LAYOUT_IN_DISPLAY_CUTOUT_AREA
+         */
+        @Flags2 public long flags2;
+
         /**
          * If the window has requested hardware acceleration, but this is not
          * allowed in the process it is in, then still render it as if it is
@@ -1640,12 +1670,20 @@ public interface WindowManager extends ViewManager {
          * Visibility state for {@link #softInputMode}: please show the soft
          * input area when normally appropriate (when the user is navigating
          * forward to your window).
+         *
+         * <p>Applications that target {@link android.os.Build.VERSION_CODES#P} and later, this flag
+         * is ignored unless there is a focused view that returns {@code true} from
+         * {@link View#isInEditMode()} when the window is focused.</p>
          */
         public static final int SOFT_INPUT_STATE_VISIBLE = 4;
 
         /**
          * Visibility state for {@link #softInputMode}: please always make the
          * soft input area visible when this window receives input focus.
+         *
+         * <p>Applications that target {@link android.os.Build.VERSION_CODES#P} and later, this flag
+         * is ignored unless there is a focused view that returns {@code true} from
+         * {@link View#isInEditMode()} when the window is focused.</p>
          */
         public static final int SOFT_INPUT_STATE_ALWAYS_VISIBLE = 5;
 
@@ -1706,7 +1744,7 @@ public interface WindowManager extends ViewManager {
          * @hide
          */
         @Retention(RetentionPolicy.SOURCE)
-        @IntDef(flag = true, value = {
+        @IntDef(flag = true, prefix = { "SOFT_INPUT_" }, value = {
                 SOFT_INPUT_STATE_UNSPECIFIED,
                 SOFT_INPUT_STATE_UNCHANGED,
                 SOFT_INPUT_STATE_HIDDEN,
@@ -2209,6 +2247,7 @@ public interface WindowManager extends ViewManager {
             out.writeInt(y);
             out.writeInt(type);
             out.writeInt(flags);
+            out.writeLong(flags2);
             out.writeInt(privateFlags);
             out.writeInt(softInputMode);
             out.writeInt(gravity);
@@ -2264,6 +2303,7 @@ public interface WindowManager extends ViewManager {
             y = in.readInt();
             type = in.readInt();
             flags = in.readInt();
+            flags2 = in.readLong();
             privateFlags = in.readInt();
             softInputMode = in.readInt();
             gravity = in.readInt();
@@ -2394,6 +2434,10 @@ public interface WindowManager extends ViewManager {
                     changes |= TRANSLUCENT_FLAGS_CHANGED;
                 }
                 flags = o.flags;
+                changes |= FLAGS_CHANGED;
+            }
+            if (flags2 != o.flags2) {
+                flags2 = o.flags2;
                 changes |= FLAGS_CHANGED;
             }
             if (privateFlags != o.privateFlags) {
@@ -2649,6 +2693,11 @@ public interface WindowManager extends ViewManager {
             sb.append(System.lineSeparator());
             sb.append(prefix).append("  fl=").append(
                     ViewDebug.flagsToString(LayoutParams.class, "flags", flags));
+            if (flags2 != 0) {
+                sb.append(System.lineSeparator());
+                // TODO(roosa): add a long overload for ViewDebug.flagsToString.
+                sb.append(prefix).append("  fl2=0x").append(Long.toHexString(flags2));
+            }
             if (privateFlags != 0) {
                 sb.append(System.lineSeparator());
                 sb.append(prefix).append("  pfl=").append(ViewDebug.flagsToString(

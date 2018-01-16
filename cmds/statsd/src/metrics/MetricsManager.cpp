@@ -16,16 +16,23 @@
 #define DEBUG true  // STOPSHIP if true
 #include "Log.h"
 #include "MetricsManager.h"
+#include "statslog.h"
 
 #include "CountMetricProducer.h"
 #include "condition/CombinationConditionTracker.h"
 #include "condition/SimpleConditionTracker.h"
+#include "guardrail/StatsdStats.h"
 #include "matchers/CombinationLogMatchingTracker.h"
 #include "matchers/SimpleLogMatchingTracker.h"
 #include "metrics_manager_util.h"
 #include "stats_util.h"
 
 #include <log/logprint.h>
+
+using android::util::FIELD_COUNT_REPEATED;
+using android::util::FIELD_TYPE_MESSAGE;
+using android::util::ProtoOutputStream;
+
 using std::make_unique;
 using std::set;
 using std::string;
@@ -36,41 +43,130 @@ namespace android {
 namespace os {
 namespace statsd {
 
-MetricsManager::MetricsManager(const StatsdConfig& config) {
-    mConfigValid = initStatsdConfig(config, mTagIds, mAllLogEntryMatchers, mAllConditionTrackers,
-                                    mAllMetricProducers, mConditionToMetricMap, mTrackerToMetricMap,
-                                    mTrackerToConditionMap);
+const int FIELD_ID_METRICS = 1;
+
+MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
+                               const long timeBaseSec, sp<UidMap> uidMap)
+    : mConfigKey(key), mUidMap(uidMap) {
+    mConfigValid =
+            initStatsdConfig(key, config, timeBaseSec, mTagIds, mAllAtomMatchers, mAllConditionTrackers,
+                             mAllMetricProducers, mAllAnomalyTrackers, mConditionToMetricMap,
+                             mTrackerToMetricMap, mTrackerToConditionMap);
+
+    if (!config.has_log_source()) {
+        // TODO(b/70794411): uncomment the following line and remove the hard coded log source
+        // after all configs have the log source added.
+        // mConfigValid = false;
+        // ALOGE("Log source white list is empty! This config won't get any data.");
+
+        mAllowedUid.push_back(1000);
+        mAllowedUid.push_back(0);
+        mAllowedLogSources.insert(mAllowedUid.begin(), mAllowedUid.end());
+    } else {
+        mAllowedUid.insert(mAllowedUid.begin(), config.log_source().uid().begin(),
+                           config.log_source().uid().end());
+        mAllowedPkg.insert(mAllowedPkg.begin(), config.log_source().package().begin(),
+                           config.log_source().package().end());
+
+        if (mAllowedUid.size() + mAllowedPkg.size() > StatsdStats::kMaxLogSourceCount) {
+            ALOGE("Too many log sources. This is likely to be an error in the config.");
+            mConfigValid = false;
+        } else {
+            initLogSourceWhiteList();
+        }
+    }
+
+    // Guardrail. Reject the config if it's too big.
+    if (mAllMetricProducers.size() > StatsdStats::kMaxMetricCountPerConfig ||
+        mAllConditionTrackers.size() > StatsdStats::kMaxConditionCountPerConfig ||
+        mAllAtomMatchers.size() > StatsdStats::kMaxMatcherCountPerConfig) {
+        ALOGE("This config is too big! Reject!");
+        mConfigValid = false;
+    }
+
+    // TODO: add alert size.
+    // no matter whether this config is valid, log it in the stats.
+    StatsdStats::getInstance().noteConfigReceived(key, mAllMetricProducers.size(),
+                                                  mAllConditionTrackers.size(),
+                                                  mAllAtomMatchers.size(), 0, mConfigValid);
 }
 
 MetricsManager::~MetricsManager() {
     VLOG("~MetricsManager()");
 }
 
+void MetricsManager::initLogSourceWhiteList() {
+    std::lock_guard<std::mutex> lock(mAllowedLogSourcesMutex);
+    mAllowedLogSources.clear();
+    mAllowedLogSources.insert(mAllowedUid.begin(), mAllowedUid.end());
+
+    for (const auto& pkg : mAllowedPkg) {
+        auto uids = mUidMap->getAppUid(pkg);
+        mAllowedLogSources.insert(uids.begin(), uids.end());
+    }
+    if (DEBUG) {
+        for (const auto& uid : mAllowedLogSources) {
+            VLOG("Allowed uid %d", uid);
+        }
+    }
+}
+
 bool MetricsManager::isConfigValid() const {
     return mConfigValid;
 }
 
-void MetricsManager::finish() {
-    for (auto& metricProducer : mAllMetricProducers) {
-        metricProducer->finish();
+void MetricsManager::notifyAppUpgrade(const string& apk, const int uid, const int64_t version) {
+    // check if we care this package
+    if (std::find(mAllowedPkg.begin(), mAllowedPkg.end(), apk) == mAllowedPkg.end()) {
+        return;
     }
+    // We will re-initialize the whole list because we don't want to keep the multi mapping of
+    // UID<->pkg inside MetricsManager to reduce the memory usage.
+    initLogSourceWhiteList();
 }
 
-vector<StatsLogReport> MetricsManager::onDumpReport() {
+void MetricsManager::notifyAppRemoved(const string& apk, const int uid) {
+    // check if we care this package
+    if (std::find(mAllowedPkg.begin(), mAllowedPkg.end(), apk) == mAllowedPkg.end()) {
+        return;
+    }
+    // We will re-initialize the whole list because we don't want to keep the multi mapping of
+    // UID<->pkg inside MetricsManager to reduce the memory usage.
+    initLogSourceWhiteList();
+}
+
+void MetricsManager::onUidMapReceived() {
+    if (mAllowedPkg.size() == 0) {
+        return;
+    }
+    initLogSourceWhiteList();
+}
+
+void MetricsManager::onDumpReport(ProtoOutputStream* protoOutput) {
     VLOG("=========================Metric Reports Start==========================");
+    uint64_t dumpTimeStampNs = time(nullptr) * NS_PER_SEC;
     // one StatsLogReport per MetricProduer
-    vector<StatsLogReport> reportList;
     for (auto& metric : mAllMetricProducers) {
-        reportList.push_back(metric->onDumpReport());
+        long long token =
+                protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_METRICS);
+        metric->onDumpReport(dumpTimeStampNs, protoOutput);
+        protoOutput->end(token);
     }
     VLOG("=========================Metric Reports End==========================");
-    return reportList;
 }
 
 // Consume the stats log if it's interesting to this metric.
 void MetricsManager::onLogEvent(const LogEvent& event) {
     if (!mConfigValid) {
         return;
+    }
+
+    if (event.GetTagId() != android::util::APP_HOOK) {
+        std::lock_guard<std::mutex> lock(mAllowedLogSourcesMutex);
+        if (mAllowedLogSources.find(event.GetUid()) == mAllowedLogSources.end()) {
+            VLOG("log source %d not on the whitelist", event.GetUid());
+            return;
+        }
     }
 
     int tagId = event.GetTagId();
@@ -80,12 +176,10 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
         return;
     }
 
-    // Since at least one of the metrics is interested in this event, we parse it now.
-    ALOGD("%s", event.ToString().c_str());
-    vector<MatchingState> matcherCache(mAllLogEntryMatchers.size(), MatchingState::kNotComputed);
+    vector<MatchingState> matcherCache(mAllAtomMatchers.size(), MatchingState::kNotComputed);
 
-    for (auto& matcher : mAllLogEntryMatchers) {
-        matcher->onLogEvent(event, mAllLogEntryMatchers, matcherCache);
+    for (auto& matcher : mAllAtomMatchers) {
+        matcher->onLogEvent(event, mAllAtomMatchers, matcherCache);
     }
 
     // A bitmap to see which ConditionTracker needs to be re-evaluated.
@@ -104,18 +198,17 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
                                           ConditionState::kNotEvaluated);
     // A bitmap to track if a condition has changed value.
     vector<bool> changedCache(mAllConditionTrackers.size(), false);
-    vector<bool> slicedChangedCache(mAllConditionTrackers.size(), false);
     for (size_t i = 0; i < mAllConditionTrackers.size(); i++) {
         if (conditionToBeEvaluated[i] == false) {
             continue;
         }
         sp<ConditionTracker>& condition = mAllConditionTrackers[i];
         condition->evaluateCondition(event, matcherCache, mAllConditionTrackers, conditionCache,
-                                     changedCache, slicedChangedCache);
+                                     changedCache);
     }
 
     for (size_t i = 0; i < mAllConditionTrackers.size(); i++) {
-        if (changedCache[i] == false && slicedChangedCache[i] == false) {
+        if (changedCache[i] == false) {
             continue;
         }
         auto pair = mConditionToMetricMap.find(i);
@@ -124,33 +217,46 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
             for (auto metricIndex : metricList) {
                 // metric cares about non sliced condition, and it's changed.
                 // Push the new condition to it directly.
-                if (!mAllMetricProducers[metricIndex]->isConditionSliced() && changedCache[i]) {
+                if (!mAllMetricProducers[metricIndex]->isConditionSliced()) {
                     mAllMetricProducers[metricIndex]->onConditionChanged(conditionCache[i],
                                                                          eventTime);
                     // metric cares about sliced conditions, and it may have changed. Send
                     // notification, and the metric can query the sliced conditions that are
                     // interesting to it.
-                } else if (mAllMetricProducers[metricIndex]->isConditionSliced() &&
-                           slicedChangedCache[i]) {
+                } else {
                     mAllMetricProducers[metricIndex]->onSlicedConditionMayChange(eventTime);
                 }
             }
         }
     }
 
-    // For matched LogEntryMatchers, tell relevant metrics that a matched event has come.
-    for (size_t i = 0; i < mAllLogEntryMatchers.size(); i++) {
+    // For matched AtomMatchers, tell relevant metrics that a matched event has come.
+    for (size_t i = 0; i < mAllAtomMatchers.size(); i++) {
         if (matcherCache[i] == MatchingState::kMatched) {
+            StatsdStats::getInstance().noteMatcherMatched(mConfigKey,
+                                                          mAllAtomMatchers[i]->getName());
             auto pair = mTrackerToMetricMap.find(i);
             if (pair != mTrackerToMetricMap.end()) {
                 auto& metricList = pair->second;
                 for (const int metricIndex : metricList) {
                     // pushed metrics are never scheduled pulls
-                    mAllMetricProducers[metricIndex]->onMatchedLogEvent(
-                        i, event, false /* schedulePull */);
+                    mAllMetricProducers[metricIndex]->onMatchedLogEvent(i, event);
                 }
             }
         }
+    }
+}
+
+void MetricsManager::onAnomalyAlarmFired(const uint64_t timestampNs,
+                         unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>>& anomalySet) {
+    for (const auto& itr : mAllAnomalyTrackers) {
+        itr->informAlarmsFired(timestampNs, anomalySet);
+    }
+}
+
+void MetricsManager::setAnomalyMonitor(const sp<AnomalyMonitor>& anomalyMonitor) {
+    for (auto& itr : mAllAnomalyTrackers) {
+        itr->setAnomalyMonitor(anomalyMonitor);
     }
 }
 

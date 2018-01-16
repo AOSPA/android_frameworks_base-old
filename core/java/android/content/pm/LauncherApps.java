@@ -265,6 +265,14 @@ public class LauncherApps {
 
         /**
          * Include pinned shortcuts in the result.
+         *
+         * <p>If you are the selected assistant app, and wishes to fetch all shortcuts that the
+         * user owns on the launcher (or by other launchers, in case the user has multiple), use
+         * {@link #FLAG_MATCH_PINNED_BY_ANY_LAUNCHER} instead.
+         *
+         * <p>If you're a regular launcher app, there's no way to get shortcuts pinned by other
+         * launchers, and {@link #FLAG_MATCH_PINNED_BY_ANY_LAUNCHER} will be ignored. So use this
+         * flag to get own pinned shortcuts.
          */
         public static final int FLAG_MATCH_PINNED = 1 << 1;
 
@@ -282,13 +290,20 @@ public class LauncherApps {
         public static final int FLAG_GET_MANIFEST = FLAG_MATCH_MANIFEST;
 
         /**
-         * @hide include all pinned shortcuts by any launchers, not just by the caller,
+         * Include all pinned shortcuts by any launchers, not just by the caller,
          * in the result.
-         * If the caller doesn't havve the {@link android.Manifest.permission#ACCESS_SHORTCUTS}
-         * permission, this flag will be ignored.
+         *
+         * <p>The caller must be the selected assistant app to use this flag, or have the system
+         * {@code ACCESS_SHORTCUTS} permission.
+         *
+         * <p>If you are the selected assistant app, and wishes to fetch all shortcuts that the
+         * user owns on the launcher (or by other launchers, in case the user has multiple), use
+         * {@link #FLAG_MATCH_PINNED_BY_ANY_LAUNCHER} instead.
+         *
+         * <p>If you're a regular launcher app (or any app that's not the selected assistant app)
+         * then this flag will be ignored.
          */
-        @TestApi
-        public static final int FLAG_MATCH_ALL_PINNED = 1 << 10;
+        public static final int FLAG_MATCH_PINNED_BY_ANY_LAUNCHER = 1 << 10;
 
         /**
          * FLAG_MATCH_DYNAMIC | FLAG_MATCH_PINNED | FLAG_MATCH_MANIFEST
@@ -302,7 +317,7 @@ public class LauncherApps {
          * @hide
          */
         public static final int FLAG_MATCH_ALL_KINDS_WITH_ALL_PINNED =
-                FLAG_MATCH_ALL_KINDS | FLAG_MATCH_ALL_PINNED;
+                FLAG_MATCH_ALL_KINDS | FLAG_MATCH_PINNED_BY_ANY_LAUNCHER;
 
         /** @hide kept for unit tests */
         @Deprecated
@@ -328,14 +343,13 @@ public class LauncherApps {
         public static final int FLAG_GET_KEY_FIELDS_ONLY = 1 << 2;
 
         /** @hide */
-        @IntDef(flag = true,
-                value = {
-                        FLAG_MATCH_DYNAMIC,
-                        FLAG_MATCH_PINNED,
-                        FLAG_MATCH_MANIFEST,
-                        FLAG_GET_KEY_FIELDS_ONLY,
-                        FLAG_MATCH_MANIFEST,
-                })
+        @IntDef(flag = true, prefix = { "FLAG_" }, value = {
+                FLAG_MATCH_DYNAMIC,
+                FLAG_MATCH_PINNED,
+                FLAG_MATCH_MANIFEST,
+                FLAG_GET_KEY_FIELDS_ONLY,
+                FLAG_MATCH_MANIFEST,
+        })
         @Retention(RetentionPolicy.SOURCE)
         public @interface QueryFlags {}
 
@@ -1365,7 +1379,10 @@ public class LauncherApps {
         public static final int REQUEST_TYPE_APPWIDGET = 2;
 
         /** @hide */
-        @IntDef(value = {REQUEST_TYPE_SHORTCUT})
+        @IntDef(prefix = { "REQUEST_TYPE_" }, value = {
+                REQUEST_TYPE_SHORTCUT,
+                REQUEST_TYPE_APPWIDGET
+        })
         @Retention(RetentionPolicy.SOURCE)
         public @interface RequestType {}
 

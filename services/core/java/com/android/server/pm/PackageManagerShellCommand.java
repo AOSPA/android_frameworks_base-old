@@ -264,7 +264,7 @@ class PackageManagerShellCommand extends ShellCommand {
                 PackageLite pkgLite = new PackageLite(null, baseApk, null, null, null, null,
                         null, null);
                 params.sessionParams.setSize(PackageHelper.calculateInstalledSize(
-                        pkgLite, params.sessionParams.abiOverride));
+                        pkgLite, params.sessionParams.abiOverride, fd.getFileDescriptor()));
             } catch (PackageParserException | IOException e) {
                 getErrPrintWriter().println("Error: Failed to parse APK file: " + inPath);
                 throw new IllegalArgumentException(
@@ -1169,9 +1169,15 @@ class PackageManagerShellCommand extends ShellCommand {
         }
 
         List<String> failedPackages = new ArrayList<>();
+        int index = 0;
         for (String packageName : packageNames) {
             if (clearProfileData) {
                 mInterface.clearApplicationProfileData(packageName);
+            }
+
+            if (allPackages) {
+                pw.println(++index + "/" + packageNames.size() + ": " + packageName);
+                pw.flush();
             }
 
             boolean result = secondaryDex
@@ -1219,7 +1225,13 @@ class PackageManagerShellCommand extends ShellCommand {
     }
 
     private int runDexoptJob() throws RemoteException {
-        boolean result = mInterface.runBackgroundDexoptJob();
+        String arg;
+        List<String> packageNames = new ArrayList<>();
+        while ((arg = getNextArg()) != null) {
+            packageNames.add(arg);
+        }
+        boolean result = mInterface.runBackgroundDexoptJob(packageNames.isEmpty() ? null :
+                packageNames);
         return result ? 0 : -1;
     }
 
@@ -1233,7 +1245,7 @@ class PackageManagerShellCommand extends ShellCommand {
         final PrintWriter pw = getOutPrintWriter();
         int flags = 0;
         int userId = UserHandle.USER_ALL;
-        int versionCode = PackageManager.VERSION_CODE_HIGHEST;
+        long versionCode = PackageManager.VERSION_CODE_HIGHEST;
 
         String opt;
         while ((opt = getNextOption()) != null) {
@@ -1245,7 +1257,7 @@ class PackageManagerShellCommand extends ShellCommand {
                     userId = UserHandle.parseUserArg(getNextArgRequired());
                     break;
                 case "--versionCode":
-                    versionCode = Integer.parseInt(getNextArgRequired());
+                    versionCode = Long.parseLong(getNextArgRequired());
                     break;
                 default:
                     pw.println("Error: Unknown option: " + opt);
@@ -1362,7 +1374,7 @@ class PackageManagerShellCommand extends ShellCommand {
         }
 
         ClearDataObserver obs = new ClearDataObserver();
-        ActivityManager.getService().clearApplicationUserData(pkg, obs, userId);
+        ActivityManager.getService().clearApplicationUserData(pkg, false, obs, userId);
         synchronized (obs) {
             while (!obs.finished) {
                 try {
@@ -1526,13 +1538,26 @@ class PackageManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private boolean isVendorApp(String pkg) {
+        try {
+            final PackageInfo info = mInterface.getPackageInfo(pkg, 0, UserHandle.USER_SYSTEM);
+            return info != null && info.applicationInfo.isVendor();
+        } catch (RemoteException e) {
+            return false;
+        }
+    }
+
     private int runGetPrivappPermissions() {
         final String pkg = getNextArg();
         if (pkg == null) {
             getErrPrintWriter().println("Error: no package specified.");
             return 1;
         }
-        ArraySet<String> privAppPermissions = SystemConfig.getInstance().getPrivAppPermissions(pkg);
+
+        ArraySet<String> privAppPermissions = isVendorApp(pkg) ?
+                SystemConfig.getInstance().getVendorPrivAppPermissions(pkg)
+                    : SystemConfig.getInstance().getPrivAppPermissions(pkg);
+
         getOutPrintWriter().println(privAppPermissions == null
                 ? "{}" : privAppPermissions.toString());
         return 0;
@@ -1544,10 +1569,13 @@ class PackageManagerShellCommand extends ShellCommand {
             getErrPrintWriter().println("Error: no package specified.");
             return 1;
         }
-        ArraySet<String> privAppDenyPermissions =
-                SystemConfig.getInstance().getPrivAppDenyPermissions(pkg);
-        getOutPrintWriter().println(privAppDenyPermissions == null
-                ? "{}" : privAppDenyPermissions.toString());
+
+        ArraySet<String> privAppPermissions = isVendorApp(pkg) ?
+                SystemConfig.getInstance().getVendorPrivAppDenyPermissions(pkg)
+                    : SystemConfig.getInstance().getPrivAppDenyPermissions(pkg);
+
+        getOutPrintWriter().println(privAppPermissions == null
+                ? "{}" : privAppPermissions.toString());
         return 0;
     }
 
@@ -1864,13 +1892,16 @@ class PackageManagerShellCommand extends ShellCommand {
         final InstallParams params = new InstallParams();
         params.sessionParams = sessionParams;
         String opt;
+        boolean replaceExisting = true;
         while ((opt = getNextOption()) != null) {
             switch (opt) {
                 case "-l":
                     sessionParams.installFlags |= PackageManager.INSTALL_FORWARD_LOCK;
                     break;
-                case "-r":
-                    sessionParams.installFlags |= PackageManager.INSTALL_REPLACE_EXISTING;
+                case "-r": // ignore
+                    break;
+                case "-R":
+                    replaceExisting = false;
                     break;
                 case "-i":
                     params.installerPackageName = getNextArg();
@@ -1954,6 +1985,9 @@ class PackageManagerShellCommand extends ShellCommand {
                     break;
                 default:
                     throw new IllegalArgumentException("Unknown option " + opt);
+            }
+            if (replaceExisting) {
+                sessionParams.installFlags |= PackageManager.INSTALL_REPLACE_EXISTING;
             }
         }
         return params;
@@ -2423,7 +2457,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("    Install an application.  Must provide the apk data to install, either as a");
         pw.println("    file path or '-' to read from stdin.  Options are:");
         pw.println("      -l: forward lock application");
-        pw.println("      -r: allow replacement of existing application");
+        pw.println("      -R: disallow replacement of existing application");
         pw.println("      -t: allow test packages");
         pw.println("      -i: specify package name of installer owning the app");
         pw.println("      -s: install application on sdcard");

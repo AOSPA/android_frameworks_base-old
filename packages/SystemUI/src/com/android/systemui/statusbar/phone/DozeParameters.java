@@ -26,6 +26,7 @@ import android.util.SparseBooleanArray;
 
 import com.android.internal.hardware.AmbientDisplayConfiguration;
 import com.android.systemui.R;
+import com.android.systemui.doze.AlwaysOnDisplayPolicy;
 
 import java.io.PrintWriter;
 
@@ -37,19 +38,19 @@ public class DozeParameters {
     private final AmbientDisplayConfiguration mAmbientDisplayConfiguration;
 
     private static IntInOutMatcher sPickupSubtypePerformsProxMatcher;
+    private final AlwaysOnDisplayPolicy mAlwaysOnPolicy;
 
     public DozeParameters(Context context) {
         mContext = context;
         mAmbientDisplayConfiguration = new AmbientDisplayConfiguration(mContext);
+        mAlwaysOnPolicy = new AlwaysOnDisplayPolicy(context);
     }
 
     public void dump(PrintWriter pw) {
         pw.println("  DozeParameters:");
         pw.print("    getDisplayStateSupported(): "); pw.println(getDisplayStateSupported());
-        pw.print("    getPulseDuration(pickup=false): "); pw.println(getPulseDuration(false));
-        pw.print("    getPulseDuration(pickup=true): "); pw.println(getPulseDuration(true));
-        pw.print("    getPulseInDuration(pickup=false): "); pw.println(getPulseInDuration(false));
-        pw.print("    getPulseInDuration(pickup=true): "); pw.println(getPulseInDuration(true));
+        pw.print("    getPulseDuration(): "); pw.println(getPulseDuration());
+        pw.print("    getPulseInDuration(): "); pw.println(getPulseInDuration());
         pw.print("    getPulseInVisibleDuration(): "); pw.println(getPulseVisibleDuration());
         pw.print("    getPulseOutDuration(): "); pw.println(getPulseOutDuration());
         pw.print("    getPulseOnSigMotion(): "); pw.println(getPulseOnSigMotion());
@@ -81,14 +82,17 @@ public class DozeParameters {
         return mContext.getResources().getBoolean(R.bool.doze_suspend_display_state_supported);
     }
 
-    public int getPulseDuration(boolean pickup) {
-        return getPulseInDuration(pickup) + getPulseVisibleDuration() + getPulseOutDuration();
+    public int getPulseDuration() {
+        return getPulseInDuration() + getPulseVisibleDuration() + getPulseOutDuration();
     }
 
-    public int getPulseInDuration(boolean pickupOrDoubleTap) {
-        return pickupOrDoubleTap
-                ? getInt("doze.pulse.duration.in.pickup", R.integer.doze_pulse_duration_in_pickup)
-                : getInt("doze.pulse.duration.in", R.integer.doze_pulse_duration_in);
+    public float getScreenBrightnessDoze() {
+        return mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_screenBrightnessDoze) / 255f;
+    }
+
+    public int getPulseInDuration() {
+        return getInt("doze.pulse.duration.in", R.integer.doze_pulse_duration_in);
     }
 
     public int getPulseVisibleDuration() {
@@ -119,8 +123,50 @@ public class DozeParameters {
         return getInt("doze.pickup.vibration.threshold", R.integer.doze_pickup_vibration_threshold);
     }
 
+    /**
+     * For how long a wallpaper can be visible in AoD before it fades aways.
+     * @return duration in millis.
+     */
+    public long getWallpaperAodDuration() {
+        return mAlwaysOnPolicy.wallpaperVisibilityDuration;
+    }
+
+    /**
+     * How long it takes for the wallpaper fade away (Animation duration.)
+     * @return duration in millis.
+     */
+    public long getWallpaperFadeOutDuration() {
+        return mAlwaysOnPolicy.wallpaperFadeOutDuration;
+    }
+
+    /**
+     * Checks if always on is available and enabled for the current user.
+     * @return {@code true} if enabled and available.
+     */
     public boolean getAlwaysOn() {
         return mAmbientDisplayConfiguration.alwaysOnEnabled(UserHandle.USER_CURRENT);
+    }
+
+    /**
+     * Some screens need to be completely black before changing the display power mode,
+     * unexpected behavior might happen if this parameter isn't respected.
+     *
+     * @return {@code true} if screen needs to be completely black before a power transition.
+     */
+    public boolean getDisplayNeedsBlanking() {
+        return mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_displayBlanksAfterDoze);
+    }
+
+    /**
+     * Whether we can implement our own screen off animation or if we need
+     * to rely on DisplayPowerManager to dim the display.
+     *
+     * @return {@code true} if SystemUI can control the screen off animation.
+     */
+    public boolean getCanControlScreenOffAnimation() {
+        return !mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_dozeAfterScreenOff);
     }
 
     private boolean getBoolean(String propName, int resId) {

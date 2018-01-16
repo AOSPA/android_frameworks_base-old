@@ -453,7 +453,7 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
         }
 
         @Override
-        boolean injectCheckAccessShortcutsPermission(int callingPid, int callingUid) {
+        boolean injectHasAccessShortcutsPermission(int callingPid, int callingUid) {
             return mInjectCheckAccessShortcutsPermission;
         }
 
@@ -1075,6 +1075,7 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
         final PackageInfo ret = new PackageInfo();
         ret.packageName = pi.packageName;
         ret.versionCode = pi.versionCode;
+        ret.versionCodeMajor = pi.versionCodeMajor;
         ret.lastUpdateTime = pi.lastUpdateTime;
 
         ret.applicationInfo = new ApplicationInfo(pi.applicationInfo);
@@ -1648,7 +1649,6 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
     protected void assertShortcutLaunchable(@NonNull String packageName, @NonNull String shortcutId,
             int userId) {
         assertNotNull(launchShortcutAndGetIntent(packageName, shortcutId, userId));
-        assertNotNull(launchShortcutAndGetIntent_withShortcutInfo(packageName, shortcutId, userId));
     }
 
     protected void assertShortcutNotLaunched(@NonNull String packageName,
@@ -2121,22 +2121,30 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
                 PACKAGE_FALLBACK_LAUNCHER_PRIORITY);
     }
 
-    protected void makeCallerForeground() {
+    protected void makeUidForeground(int uid) {
         try {
             mService.mUidObserver.onUidStateChanged(
-                    mInjectedCallingUid, ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE, 0);
+                    uid, ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE, 0);
+        } catch (RemoteException e) {
+            e.rethrowAsRuntimeException();
+        }
+    }
+
+    protected void makeCallerForeground() {
+        makeUidForeground(mInjectedCallingUid);
+    }
+
+    protected void makeUidBackground(int uid) {
+        try {
+            mService.mUidObserver.onUidStateChanged(
+                    uid, ActivityManager.PROCESS_STATE_TOP_SLEEPING, 0);
         } catch (RemoteException e) {
             e.rethrowAsRuntimeException();
         }
     }
 
     protected void makeCallerBackground() {
-        try {
-            mService.mUidObserver.onUidStateChanged(
-                    mInjectedCallingUid, ActivityManager.PROCESS_STATE_TOP_SLEEPING, 0);
-        } catch (RemoteException e) {
-            e.rethrowAsRuntimeException();
-        }
+        makeUidBackground(mInjectedCallingUid);
     }
 
     protected void publishManifestShortcutsAsCaller(int resId) {

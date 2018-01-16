@@ -206,8 +206,8 @@ public class PackageManagerSettingsTests {
             new File(InstrumentationRegistry.getContext().getFilesDir(), "com.android.bar-1");
     private static final File UPDATED_CODE_PATH =
             new File(InstrumentationRegistry.getContext().getFilesDir(), "com.android.bar-2");
-    private static final int INITIAL_VERSION_CODE = 10023;
-    private static final int UPDATED_VERSION_CODE = 10025;
+    private static final long INITIAL_VERSION_CODE = 10023L;
+    private static final long UPDATED_VERSION_CODE = 10025L;
 
     @Test
     public void testPackageStateCopy01() {
@@ -305,7 +305,6 @@ public class PackageManagerSettingsTests {
                 null /*usesStaticLibrariesVersions*/);
         assertThat(testPkgSetting01.primaryCpuAbiString, is("arm64-v8a"));
         assertThat(testPkgSetting01.secondaryCpuAbiString, is("armeabi"));
-        assertThat(testPkgSetting01.origPackage, is(nullValue()));
         assertThat(testPkgSetting01.pkgFlags, is(0));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(0));
         final PackageUserState userState = testPkgSetting01.readUserState(0);
@@ -339,7 +338,6 @@ public class PackageManagerSettingsTests {
                 null /*usesStaticLibrariesVersions*/);
         assertThat(testPkgSetting01.primaryCpuAbiString, is("arm64-v8a"));
         assertThat(testPkgSetting01.secondaryCpuAbiString, is("armeabi"));
-        assertThat(testPkgSetting01.origPackage, is(nullValue()));
         assertThat(testPkgSetting01.pkgFlags, is(ApplicationInfo.FLAG_SYSTEM));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(ApplicationInfo.PRIVATE_FLAG_PRIVILEGED));
         final PackageUserState userState = testPkgSetting01.readUserState(0);
@@ -419,7 +417,6 @@ public class PackageManagerSettingsTests {
         assertThat(testPkgSetting01.primaryCpuAbiString, is("arm64-v8a"));
         assertThat(testPkgSetting01.resourcePath, is(UPDATED_CODE_PATH));
         assertThat(testPkgSetting01.secondaryCpuAbiString, is("armeabi"));
-        assertSame(testPkgSetting01.origPackage, originalPkgSetting01);
         // signatures object must be different
         assertNotSame(testPkgSetting01.signatures, originalSignatures);
         assertThat(testPkgSetting01.versionCode, is(UPDATED_VERSION_CODE));
@@ -457,7 +454,6 @@ public class PackageManagerSettingsTests {
         assertThat(testPkgSetting01.appId, is(0));
         assertThat(testPkgSetting01.codePath, is(INITIAL_CODE_PATH));
         assertThat(testPkgSetting01.name, is(PACKAGE_NAME));
-        assertThat(testPkgSetting01.origPackage, is(nullValue()));
         assertThat(testPkgSetting01.pkgFlags, is(0));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(0));
         assertThat(testPkgSetting01.primaryCpuAbiString, is("x86_64"));
@@ -506,7 +502,6 @@ public class PackageManagerSettingsTests {
         assertThat(testPkgSetting01.appId, is(10064));
         assertThat(testPkgSetting01.codePath, is(INITIAL_CODE_PATH));
         assertThat(testPkgSetting01.name, is(PACKAGE_NAME));
-        assertThat(testPkgSetting01.origPackage, is(nullValue()));
         assertThat(testPkgSetting01.pkgFlags, is(0));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(0));
         assertThat(testPkgSetting01.primaryCpuAbiString, is("x86_64"));
@@ -551,7 +546,6 @@ public class PackageManagerSettingsTests {
         assertThat(testPkgSetting01.appId, is(10064));
         assertThat(testPkgSetting01.codePath, is(UPDATED_CODE_PATH));
         assertThat(testPkgSetting01.name, is(PACKAGE_NAME));
-        assertThat(testPkgSetting01.origPackage, is(nullValue()));
         assertThat(testPkgSetting01.pkgFlags, is(0));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(0));
         assertThat(testPkgSetting01.primaryCpuAbiString, is("arm64-v8a"));
@@ -577,7 +571,7 @@ public class PackageManagerSettingsTests {
                 new Settings(context.getFilesDir(), pmInt.getPermissionSettings(), lock);
         pkg.usesStaticLibraries = new ArrayList<>(
                 Arrays.asList("foo.bar1", "foo.bar2", "foo.bar3"));
-        pkg.usesStaticLibrariesVersions = new int[] {2, 4, 6};
+        pkg.usesStaticLibrariesVersions = new long[] {2, 4, 6};
         settings.insertPackageSettingLPw(ps, pkg);
         assertEquals(pkg, ps.pkg);
         assertArrayEquals(pkg.usesStaticLibraries.toArray(new String[0]), ps.usesStaticLibraries);
@@ -598,6 +592,11 @@ public class PackageManagerSettingsTests {
     }
 
     private void assertArrayEquals(int[] a, int[] b) {
+        assertTrue("Expected: " + Arrays.toString(a) + ", actual: " + Arrays.toString(b),
+                Arrays.equals(a, b));
+    }
+
+    private void assertArrayEquals(long[] a, long[] b) {
         assertTrue("Expected: " + Arrays.toString(a) + ", actual: " + Arrays.toString(b),
                 Arrays.equals(a, b));
     }
@@ -653,8 +652,6 @@ public class PackageManagerSettingsTests {
         // oldCodePaths is _not_ copied
         // assertNotSame(origPkgSetting.oldCodePaths, testPkgSetting.oldCodePaths);
         // assertThat(origPkgSetting.oldCodePaths, is(not(testPkgSetting.oldCodePaths)));
-        assertSame(origPkgSetting.origPackage, testPkgSetting.origPackage);
-        assertThat(origPkgSetting.origPackage, is(testPkgSetting.origPackage));
         assertSame(origPkgSetting.parentPackageName, testPkgSetting.parentPackageName);
         assertThat(origPkgSetting.parentPackageName, is(testPkgSetting.parentPackageName));
         assertSame(origPkgSetting.pkg, testPkgSetting.pkg);

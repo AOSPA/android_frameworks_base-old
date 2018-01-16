@@ -47,6 +47,7 @@ import com.android.systemui.R;
 import com.android.systemui.pip.BasePipManager;
 import com.android.systemui.recents.misc.SysUiTaskStackChangeListener;
 import com.android.systemui.recents.misc.SystemServicesProxy;
+import com.android.systemui.shared.system.ActivityManagerWrapper;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -234,7 +235,7 @@ public class PipManager implements BasePipManager {
 
         mActivityManager = ActivityManager.getService();
         mWindowManager = WindowManagerGlobal.getWindowManagerService();
-        SystemServicesProxy.getInstance(context).registerTaskStackListener(mTaskStackListener);
+        ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(Intent.ACTION_MEDIA_RESOURCE_GRANTED);
         mContext.registerReceiver(mBroadcastReceiver, intentFilter);
@@ -624,9 +625,7 @@ public class PipManager implements BasePipManager {
         @Override
         public void onTaskStackChanged() {
             if (DEBUG) Log.d(TAG, "onTaskStackChanged()");
-            if (!checkCurrentUserId(mContext, DEBUG)) {
-                return;
-            }
+
             if (getState() != STATE_NO_PIP) {
                 boolean hasPip = false;
 
@@ -661,9 +660,7 @@ public class PipManager implements BasePipManager {
         @Override
         public void onActivityPinned(String packageName, int userId, int taskId, int stackId) {
             if (DEBUG) Log.d(TAG, "onActivityPinned()");
-            if (!checkCurrentUserId(mContext, DEBUG)) {
-                return;
-            }
+
             StackInfo stackInfo = getPinnedStackInfo();
             if (stackInfo == null) {
                 Log.w(TAG, "Cannot find pinned stack");
@@ -689,9 +686,7 @@ public class PipManager implements BasePipManager {
         @Override
         public void onPinnedActivityRestartAttempt(boolean clearedTask) {
             if (DEBUG) Log.d(TAG, "onPinnedActivityRestartAttempt()");
-            if (!checkCurrentUserId(mContext, DEBUG)) {
-                return;
-            }
+
             // If PIPed activity is launched again by Launcher or intent, make it fullscreen.
             movePipToFullscreen();
         }
@@ -699,9 +694,7 @@ public class PipManager implements BasePipManager {
         @Override
         public void onPinnedStackAnimationEnded() {
             if (DEBUG) Log.d(TAG, "onPinnedStackAnimationEnded()");
-            if (!checkCurrentUserId(mContext, DEBUG)) {
-                return;
-            }
+
             switch (getState()) {
                 case STATE_PIP_MENU:
                     showPipMenu();

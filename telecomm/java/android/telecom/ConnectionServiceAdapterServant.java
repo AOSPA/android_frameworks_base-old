@@ -73,6 +73,7 @@ final class ConnectionServiceAdapterServant {
     private static final int MSG_ON_RTT_REMOTELY_TERMINATED = 32;
     private static final int MSG_ON_RTT_UPGRADE_REQUEST = 33;
     private static final int MSG_SET_PHONE_ACCOUNT_CHANGED = 34;
+    private static final int MSG_CONNECTION_SERVICE_FOCUS_RELEASED = 35;
 
     private final IConnectionServiceAdapter mDelegate;
 
@@ -298,8 +299,8 @@ final class ConnectionServiceAdapterServant {
                 case MSG_SET_AUDIO_ROUTE: {
                     SomeArgs args = (SomeArgs) msg.obj;
                     try {
-                        mDelegate.setAudioRoute((String) args.arg1, args.argi1,
-                                (Session.Info) args.arg2);
+                        mDelegate.setAudioRoute((String) args.arg1, args.argi1, (String) args.arg2,
+                                (Session.Info) args.arg3);
                     } finally {
                         args.recycle();
                     }
@@ -329,6 +330,9 @@ final class ConnectionServiceAdapterServant {
                     }
                     break;
                 }
+                case MSG_CONNECTION_SERVICE_FOCUS_RELEASED:
+                    mDelegate.onConnectionServiceFocusReleased(null /*Session.Info*/);
+                    break;
             }
         }
     };
@@ -548,12 +552,12 @@ final class ConnectionServiceAdapterServant {
 
         @Override
         public final void setAudioRoute(String connectionId, int audioRoute,
-                Session.Info sessionInfo) {
-
+                String bluetoothAddress, Session.Info sessionInfo) {
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = connectionId;
             args.argi1 = audioRoute;
-            args.arg2 = sessionInfo;
+            args.arg2 = bluetoothAddress;
+            args.arg3 = sessionInfo;
             mHandler.obtainMessage(MSG_SET_AUDIO_ROUTE, args).sendToTarget();
         }
 
@@ -600,6 +604,11 @@ final class ConnectionServiceAdapterServant {
             args.arg1 = callId;
             args.arg2 = pHandle;
             mHandler.obtainMessage(MSG_SET_PHONE_ACCOUNT_CHANGED, args).sendToTarget();
+        }
+
+        @Override
+        public void onConnectionServiceFocusReleased(Session.Info sessionInfo) {
+            mHandler.obtainMessage(MSG_CONNECTION_SERVICE_FOCUS_RELEASED).sendToTarget();
         }
     };
 

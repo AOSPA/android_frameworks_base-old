@@ -67,7 +67,7 @@
     <string name="battery_low_percent_format"><xliff:g id="percentage">%s</xliff:g> remaining</string>
 
     <!-- Same as battery_low_percent_format, with a notice about battery saver if on. [CHAR LIMIT=none]-->
-    <string name="battery_low_percent_format_saver_started"><xliff:g id="percentage">%s</xliff:g> remaining. Battery saver is on.</string>
+    <string name="battery_low_percent_format_saver_started"><xliff:g id="percentage">%s</xliff:g> remaining. Battery Saver is on.</string>
 
     <!-- A message that appears when a USB charger is plugged in and the device does not
     support charging on it.  That is, a charger that fits into the USB port and goes into
@@ -86,13 +86,13 @@
     <string name="battery_low_why">Settings</string>
 
     <!-- Battery saver confirmation dialog title [CHAR LIMIT=NONE]-->
-    <string name="battery_saver_confirmation_title">Turn on battery saver?</string>
+    <string name="battery_saver_confirmation_title">Turn on Battery Saver?</string>
 
     <!-- Battery saver confirmation dialog ok text [CHAR LIMIT=40]-->
     <string name="battery_saver_confirmation_ok">Turn on</string>
 
     <!-- Battery saver notification action [CHAR LIMIT=NONE]-->
-    <string name="battery_saver_start_action">Turn on battery saver</string>
+    <string name="battery_saver_start_action">Turn on Battery Saver</string>
 
     <!-- Name of the button that links to the Settings app. [CHAR LIMIT=NONE] -->
     <string name="status_bar_settings_settings_button">Settings</string>
@@ -124,16 +124,16 @@
     <string name="status_bar_use_physical_keyboard">Physical keyboard</string>
 
     <!-- Prompt for the USB device permission dialog [CHAR LIMIT=80] -->
-    <string name="usb_device_permission_prompt">Allow the app <xliff:g id="application">%1$s</xliff:g> to access the USB device?</string>
+    <string name="usb_device_permission_prompt">Allow <xliff:g id="application">%1$s</xliff:g> to access <xliff:g id="usb_device">%2$s</xliff:g>?</string>
 
     <!-- Prompt for the USB accessory permission dialog [CHAR LIMIT=80] -->
-    <string name="usb_accessory_permission_prompt">Allow the app <xliff:g id="application">%1$s</xliff:g> to access the USB accessory?</string>
+    <string name="usb_accessory_permission_prompt">Allow <xliff:g id="application">%1$s</xliff:g> to access <xliff:g id="usb_accessory">%2$s</xliff:g>?</string>
 
     <!-- Prompt for the USB device confirm dialog [CHAR LIMIT=80] -->
-    <string name="usb_device_confirm_prompt">Open <xliff:g id="activity">%1$s</xliff:g> when this USB device is connected?</string>
+    <string name="usb_device_confirm_prompt">Open <xliff:g id="application">%1$s</xliff:g> to handle <xliff:g id="usb_device">%2$s</xliff:g>?</string>
 
     <!-- Prompt for the USB accessory confirm dialog [CHAR LIMIT=80] -->
-    <string name="usb_accessory_confirm_prompt">Open <xliff:g id="activity">%1$s</xliff:g> when this USB accessory is connected?</string>
+    <string name="usb_accessory_confirm_prompt">Open <xliff:g id="application">%1$s</xliff:g> to handle <xliff:g id="usb_accessory">%2$s</xliff:g>?</string>
 
     <!-- Prompt for the USB accessory URI dialog [CHAR LIMIT=80] -->
     <string name="usb_accessory_uri_prompt">No installed apps work with this USB accessory. Learn more about this accessory at <xliff:g id="url">%1$s</xliff:g></string>
@@ -145,10 +145,10 @@
     <string name="label_view">View</string>
 
     <!-- Checkbox label for USB device dialogs.  [CHAR LIMIT=50] -->
-    <string name="always_use_device">Use by default for this USB device</string>
+    <string name="always_use_device">Always open <xliff:g id="application">%1$s</xliff:g> when <xliff:g id="usb_device">%2$s</xliff:g> is connected</string>
 
-    <!-- Checkbox label for USB accessory dialogs.  [CHAR LIMIT=50] -->
-    <string name="always_use_accessory">Use by default for this USB accessory</string>
+    <!-- Checkbox label for USB accessory dialogs.  [CHAR LIMIT=50]-->
+    <string name="always_use_accessory">Always open <xliff:g id="application">%1$s</xliff:g> when <xliff:g id="usb_accessory">%2$s</xliff:g> is connected</string>
 
     <!-- Title of confirmation dialog for USB debugging -->
     <string name="usb_debugging_title">Allow USB debugging?</string>
@@ -583,18 +583,6 @@
     <!-- Dialog button indicating that data connection should be re-enabled. [CHAR LIMIT=28] -->
     <string name="data_usage_disabled_dialog_enable">Resume</string>
 
-    <!-- Text to display underneath the graphical signal strength meter when
-         no connection is available. [CHAR LIMIT=20] -->
-    <string name="status_bar_settings_signal_meter_disconnected">
-        No Internet connection
-    </string>
-
-    <!-- Text to display underneath the graphical signal strength meter when
-         it is displaying Wi-Fi status and Wi-Fi is connected to a network
-         whose SSID is not available.
-         [CHAR LIMIT=20] -->
-    <string name="status_bar_settings_signal_meter_wifi_nossid">Wi-Fi connected</string>
-
     <!-- Notification text: when GPS is getting a fix [CHAR LIMIT=50] -->
     <string name="gps_notification_searching_text">Searching for GPS</string>
 
@@ -989,13 +977,13 @@
     <string name="user_remove_user_remove">Remove</string>
 
     <!-- Battery saver notification title. [CHAR LIMIT=60]-->
-    <string name="battery_saver_notification_title">Battery saver is on</string>
+    <string name="battery_saver_notification_title">Battery Saver is on</string>
 
     <!-- Battery saver notification text. [CHAR LIMIT=60] -->
     <string name="battery_saver_notification_text">Reduces performance and background data</string>
 
     <!-- Battery saver notification action text. [CHAR LIMIT=60] -->
-    <string name="battery_saver_notification_action_text">Turn off battery saver</string>
+    <string name="battery_saver_notification_action_text">Turn off Battery Saver</string>
 
     <!-- Media projection permission dialog warning text. [CHAR LIMIT=NONE] -->
     <string name="media_projection_dialog_text"><xliff:g id="app_seeking_permission" example="Hangouts">%s</xliff:g> will start capturing everything that\'s displayed on your screen.</string>
@@ -1260,6 +1248,11 @@
     <string name="stream_tts" translatable="false">Transmitted Through Speaker</string> <!-- STREAM_TTS -->
     <string name="stream_accessibility">Accessibility</string> <!-- STREAM_ACCESSIBILITY -->
 
+    <string name="ring_toggle_title">Calls</string>
+    <string name="volume_ringer_status_normal">Ring</string>
+    <string name="volume_ringer_status_vibrate">Vibrate</string>
+    <string name="volume_ringer_status_silent">Mute</string>
+
     <string name="volume_stream_muted" translatable="false">%s silent</string>
     <string name="volume_stream_vibrate" translatable="false">%s vibrate</string>
     <string name="volume_stream_suppressed" translatable="false">%1$s silent — %2$s</string>
@@ -1275,6 +1268,14 @@
 
     <string name="volume_dialog_accessibility_shown_message">%s volume controls shown. Swipe up to dismiss.</string>
     <string name="volume_dialog_accessibility_dismissed_message">Volume controls hidden</string>
+
+    <string name="output_title">Media output</string>
+    <string name="output_calls_title">Phone call output</string>
+    <string name="output_none_found">No devices found</string>
+    <string name="output_none_found_service_off">No devices found. Try turning on <xliff:g id="service" example="Bluetooth">%1$s</xliff:g></string>
+    <string name="output_service_bt">Bluetooth</string>
+    <string name="output_service_wifi">Wi-Fi</string>
+    <string name="output_service_bt_wifi">Bluetooth and Wi-Fi</string>
 
     <!-- Name of special SystemUI debug settings -->
     <string name="system_ui_tuner">System UI Tuner</string>
@@ -1532,10 +1533,10 @@
     <string name="battery_panel_title">Battery usage</string>
 
     <!-- Summary of battery saver not available [CHAR LIMIT=NONE] -->
-    <string name="battery_detail_charging_summary">Battery saver not available during charging</string>
+    <string name="battery_detail_charging_summary">Battery Saver not available during charging</string>
 
     <!-- Title of switch for battery saver [CHAR LIMIT=NONE] -->
-    <string name="battery_detail_switch_title">Battery saver</string>
+    <string name="battery_detail_switch_title">Battery Saver</string>
 
     <!-- Summary of switch for battery saver [CHAR LIMIT=NONE] -->
     <string name="battery_detail_switch_summary">Reduces performance and background data</string>
@@ -2001,8 +2002,8 @@
     <!-- Action label for launching app info on the specified app [CHAR LIMIT=20] -->
     <string name="app_info">App info</string>
 
-    <!-- Action label for switching to web for an instant app [CHAR LIMIT=20] -->
-    <string name="go_to_web">Go to web</string>
+    <!-- Action label for switching to a browser for an instant app [CHAR LIMIT=20] -->
+    <string name="go_to_web">Go to browser</string>
 
     <!-- Quick settings tile for toggling mobile data [CHAR LIMIT=20] -->
     <string name="mobile_data">Mobile data</string>

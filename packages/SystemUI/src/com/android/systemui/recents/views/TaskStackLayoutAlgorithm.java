@@ -431,14 +431,14 @@ public class TaskStackLayoutAlgorithm {
      * in the stack.
      */
     public void update(TaskStack stack, ArraySet<Task.TaskKey> ignoreTasksSet,
-            RecentsActivityLaunchState launchState) {
+            RecentsActivityLaunchState launchState, float lastScrollPPercent) {
         SystemServicesProxy ssp = Recents.getSystemServices();
 
         // Clear the progress map
         mTaskIndexMap.clear();
 
         // Return early if we have no tasks
-        ArrayList<Task> tasks = stack.getStackTasks();
+        ArrayList<Task> tasks = stack.getTasks();
         if (tasks.isEmpty()) {
             mFrontMostTaskP = 0;
             mMinScrollP = mMaxScrollP = mInitialScrollP = 0;
@@ -468,7 +468,7 @@ public class TaskStackLayoutAlgorithm {
         // Calculate the min/max/initial scroll
         Task launchTask = stack.getLaunchTarget();
         int launchTaskIndex = launchTask != null
-                ? stack.indexOfStackTask(launchTask)
+                ? stack.indexOfTask(launchTask)
                 : mNumStackTasks - 1;
         if (getInitialFocusState() == STATE_FOCUSED) {
             int maxBottomOffset = mStackBottomOffset + mTaskRect.height();
@@ -506,6 +506,8 @@ public class TaskStackLayoutAlgorithm {
 
             if (launchState.launchedWithAltTab) {
                 mInitialScrollP = Utilities.clamp(launchTaskIndex, mMinScrollP, mMaxScrollP);
+            } else if (0 <= lastScrollPPercent && lastScrollPPercent <= 1) {
+                mInitialScrollP = Utilities.mapRange(lastScrollPPercent, mMinScrollP, mMaxScrollP);
             } else if (Recents.getConfiguration().isLowRamDevice) {
                 mInitialScrollP = mTaskStackLowRamLayoutAlgorithm.getInitialScrollP(mNumStackTasks,
                         scrollToFront);
@@ -557,7 +559,7 @@ public class TaskStackLayoutAlgorithm {
                 }
 
                 mUnfocusedRange.offset(0f);
-                List<Task> tasks = stack.getStackTasks();
+                List<Task> tasks = stack.getTasks();
                 int taskCount = tasks.size();
                 for (int i = taskCount - 1; i >= 0; i--) {
                     int indexFromFront = taskCount - i - 1;

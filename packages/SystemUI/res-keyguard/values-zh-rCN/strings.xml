@@ -29,8 +29,7 @@
     <string name="keyguard_password_enter_password_code" msgid="595980919238127672">"输入密码即可解锁"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7504123374204446086">"输入 PIN 码即可解锁"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="6535018036285012028">"PIN 码有误。"</string>
-    <!-- no translation found for keyguard_sim_error_message_short (592109500618448312) -->
-    <skip />
+    <string name="keyguard_sim_error_message_short" msgid="592109500618448312">"SIM 卡无效。"</string>
     <string name="keyguard_charged" msgid="2222329688813033109">"已充满电"</string>
     <string name="keyguard_plugged_in" msgid="89308975354638682">"正在充电"</string>
     <string name="keyguard_plugged_in_charging_fast" msgid="8869226755413795173">"正在快速充电"</string>
@@ -136,4 +135,12 @@
       <item quantity="one">设备已保持锁定状态达 <xliff:g id="NUMBER_0">%d</xliff:g> 小时。请确认密码。</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"无法识别"</string>
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+      <item quantity="other">请输入 SIM 卡 PIN 码，您还可以尝试 <xliff:g id="NUMBER_1">%d</xliff:g> 次。</item>
+      <item quantity="one">请输入 SIM 卡 PIN 码，您还可以尝试 <xliff:g id="NUMBER_0">%d</xliff:g> 次。如果仍不正确，则需要联系运营商帮您解锁设备。</item>
+    </plurals>
+    <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
+      <item quantity="other">SIM 卡现已停用，请输入 PUK 码继续使用。您还可以尝试 <xliff:g id="_NUMBER_1">%d</xliff:g> 次。如果仍不正确，该 SIM 卡将永远无法使用。有关详情，请联系您的运营商。</item>
+      <item quantity="one">SIM 卡现已停用，请输入 PUK 码继续使用。您还可以尝试 <xliff:g id="_NUMBER_0">%d</xliff:g> 次。如果仍不正确，该 SIM 卡将永远无法使用。有关详情，请联系您的运营商。</item>
+    </plurals>
 </resources>

@@ -21,15 +21,12 @@
 
 #include <android/util/ProtoOutputStream.h>
 #include <gtest/gtest_prod.h>
+#include "../anomaly/AnomalyTracker.h"
 #include "../condition/ConditionTracker.h"
 #include "../matchers/matcher_util.h"
-#include "CountAnomalyTracker.h"
 #include "MetricProducer.h"
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 #include "stats_util.h"
-
-using namespace std;
 
 namespace android {
 namespace os {
@@ -39,58 +36,54 @@ struct CountBucket {
     int64_t mBucketStartNs;
     int64_t mBucketEndNs;
     int64_t mCount;
+    uint64_t mBucketNum;
 };
 
 class CountMetricProducer : public MetricProducer {
 public:
     // TODO: Pass in the start time from MetricsManager, it should be consistent for all metrics.
-    CountMetricProducer(const CountMetric& countMetric, const int conditionIndex,
-                        const sp<ConditionWizard>& wizard, const uint64_t startTimeNs);
+    CountMetricProducer(const ConfigKey& key, const CountMetric& countMetric,
+                        const int conditionIndex, const sp<ConditionWizard>& wizard,
+                        const uint64_t startTimeNs);
 
     virtual ~CountMetricProducer();
 
-    void onConditionChanged(const bool conditionMet, const uint64_t eventTime) override;
-
-    void finish() override;
-
-    // TODO: Pass a timestamp as a parameter in onDumpReport.
-    StatsLogReport onDumpReport() override;
-
-    void onSlicedConditionMayChange(const uint64_t eventTime) override;
-
-    size_t byteSize() override;
-
-    // TODO: Implement this later.
-    virtual void notifyAppUpgrade(const string& apk, const int uid, const int version) override{};
-    // TODO: Implement this later.
-    virtual void notifyAppRemoved(const string& apk, const int uid) override{};
-
 protected:
-    void onMatchedLogEventInternal(const size_t matcherIndex, const HashableDimensionKey& eventKey,
-                                   const std::map<std::string, HashableDimensionKey>& conditionKey,
-                                   bool condition, const LogEvent& event,
-                                   bool scheduledPull) override;
-
-    void startNewProtoOutputStream(long long timestamp) override;
+    void onMatchedLogEventInternalLocked(
+            const size_t matcherIndex, const HashableDimensionKey& eventKey,
+            const std::map<std::string, HashableDimensionKey>& conditionKey, bool condition,
+            const LogEvent& event) override;
 
 private:
-    const CountMetric mMetric;
+    void onDumpReportLocked(const uint64_t dumpTimeNs,
+                            android::util::ProtoOutputStream* protoOutput) override;
+
+    // Internal interface to handle condition change.
+    void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
+
+    // Internal interface to handle sliced condition change.
+    void onSlicedConditionMayChangeLocked(const uint64_t eventTime) override;
+
+    // Internal function to calculate the current used bytes.
+    size_t byteSizeLocked() const override;
+
+    // Util function to flush the old packet.
+    void flushIfNeededLocked(const uint64_t& newEventTime);
 
     // TODO: Add a lock to mPastBuckets.
     std::unordered_map<HashableDimensionKey, std::vector<CountBucket>> mPastBuckets;
 
-    size_t mByteSize;
-
     // The current bucket.
-    std::unordered_map<HashableDimensionKey, int> mCurrentSlicedCounter;
+    std::shared_ptr<DimToValMap> mCurrentSlicedCounter = std::make_shared<DimToValMap>();
 
-    vector<unique_ptr<CountAnomalyTracker>> mAnomalyTrackers;
+    static const size_t kBucketSize = sizeof(CountBucket{});
 
-    void flushCounterIfNeeded(const uint64_t newEventTime);
+    bool hitGuardRailLocked(const HashableDimensionKey& newKey);
 
     FRIEND_TEST(CountMetricProducerTest, TestNonDimensionalEvents);
     FRIEND_TEST(CountMetricProducerTest, TestEventsWithNonSlicedCondition);
     FRIEND_TEST(CountMetricProducerTest, TestEventsWithSlicedCondition);
+    FRIEND_TEST(CountMetricProducerTest, TestAnomalyDetection);
 };
 
 }  // namespace statsd

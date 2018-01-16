@@ -1514,7 +1514,8 @@ public class MediaPlayer extends PlayerBase
             if (listener != null && !mRoutingChangeListeners.containsKey(listener)) {
                 enableNativeRoutingCallbacksLocked(true);
                 mRoutingChangeListeners.put(
-                        listener, new NativeRoutingEventHandlerDelegate(this, listener, handler));
+                        listener, new NativeRoutingEventHandlerDelegate(this, listener,
+                                handler != null ? handler : mEventHandler));
             }
         }
     }
@@ -1531,36 +1532,6 @@ public class MediaPlayer extends PlayerBase
             if (mRoutingChangeListeners.containsKey(listener)) {
                 mRoutingChangeListeners.remove(listener);
                 enableNativeRoutingCallbacksLocked(false);
-            }
-        }
-    }
-
-    /**
-     * Helper class to handle the forwarding of native events to the appropriate listener
-     * (potentially) handled in a different thread
-     */
-    private class NativeRoutingEventHandlerDelegate {
-        private MediaPlayer mMediaPlayer;
-        private AudioRouting.OnRoutingChangedListener mOnRoutingChangedListener;
-        private Handler mHandler;
-
-        NativeRoutingEventHandlerDelegate(final MediaPlayer mediaPlayer,
-                final AudioRouting.OnRoutingChangedListener listener, Handler handler) {
-            mMediaPlayer = mediaPlayer;
-            mOnRoutingChangedListener = listener;
-            mHandler = handler != null ? handler : mEventHandler;
-        }
-
-        void notifyClient() {
-            if (mHandler != null) {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (mOnRoutingChangedListener != null) {
-                            mOnRoutingChangedListener.onRoutingChanged(mMediaPlayer);
-                        }
-                    }
-                });
             }
         }
     }
@@ -1698,21 +1669,9 @@ public class MediaPlayer extends PlayerBase
     public native boolean isPlaying();
 
     /**
-     * Gets the default buffering management params.
-     * Calling it only after {@code setDataSource} has been called.
-     * Each type of data source might have different set of default params.
-     *
-     * @return the default buffering management params supported by the source component.
-     * @throws IllegalStateException if the internal player engine has not been
-     * initialized, or {@code setDataSource} has not been called.
-     * @hide
-     */
-    @NonNull
-    public native BufferingParams getDefaultBufferingParams();
-
-    /**
      * Gets the current buffering management params used by the source component.
      * Calling it only after {@code setDataSource} has been called.
+     * Each type of data source might have different set of default params.
      *
      * @return the current buffering management params used by the source component.
      * @throws IllegalStateException if the internal player engine has not been
@@ -1727,8 +1686,7 @@ public class MediaPlayer extends PlayerBase
      * The object sets its internal BufferingParams to the input, except that the input is
      * invalid or not supported.
      * Call it only after {@code setDataSource} has been called.
-     * Users should only use supported mode returned by {@link #getDefaultBufferingParams()}
-     * or its downsized version as described in {@link BufferingParams}.
+     * The input is a hint to MediaPlayer.
      *
      * @param params the buffering management params.
      *

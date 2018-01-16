@@ -17,6 +17,7 @@
 #include "MultiApkGenerator.h"
 
 #include <algorithm>
+#include <regex>
 #include <string>
 
 #include "androidfw/StringPiece.h"
@@ -39,32 +40,10 @@
 namespace aapt {
 
 using ::aapt::configuration::AndroidSdk;
-using ::aapt::configuration::Artifact;
-using ::aapt::configuration::PostProcessingConfiguration;
+using ::aapt::configuration::OutputArtifact;
 using ::aapt::xml::kSchemaAndroid;
 using ::aapt::xml::XmlResource;
 using ::android::StringPiece;
-
-namespace {
-
-Maybe<AndroidSdk> GetAndroidSdk(const Artifact& artifact, const PostProcessingConfiguration& config,
-                                IDiagnostics* diag) {
-  if (!artifact.android_sdk_group) {
-    return {};
-  }
-
-  const std::string& group_name = artifact.android_sdk_group.value();
-  auto group = config.android_sdk_groups.find(group_name);
-  // TODO: Remove validation when configuration parser ensures referential integrity.
-  if (group == config.android_sdk_groups.end()) {
-    diag->Error(DiagMessage() << "could not find referenced group '" << group_name << "'");
-    return {};
-  }
-
-  return group->second;
-}
-
-}  // namespace
 
 /**
  * Context wrapper that allows the min Android SDK value to be overridden.
@@ -84,6 +63,9 @@ class ContextWrapper : public IAaptContext {
   }
 
   IDiagnostics* GetDiagnostics() override {
+    if (source_diag_) {
+      return source_diag_.get();
+    }
     return context_->GetDiagnostics();
   }
 
@@ -111,10 +93,26 @@ class ContextWrapper : public IAaptContext {
     min_sdk_ = min_sdk;
   }
 
+  void SetSource(const std::string& source) {
+    source_diag_ =
+        util::make_unique<SourcePathDiagnostics>(Source{source}, context_->GetDiagnostics());
+  }
+
  private:
   IAaptContext* context_;
+  std::unique_ptr<SourcePathDiagnostics> source_diag_;
 
   int min_sdk_ = -1;
+};
+
+class SignatureFilter : public IPathFilter {
+  bool Keep(const std::string& path) override {
+    static std::regex signature_regex(R"regex(^META-INF/.*\.(RSA|DSA|EC|SF)$)regex");
+    if (std::regex_search(path, signature_regex)) {
+      return false;
+    }
+    return !(path == "META-INF/MANIFEST.MF");
+  }
 };
 
 MultiApkGenerator::MultiApkGenerator(LoadedApk* apk, IAaptContext* context)
@@ -122,137 +120,130 @@ MultiApkGenerator::MultiApkGenerator(LoadedApk* apk, IAaptContext* context)
 }
 
 bool MultiApkGenerator::FromBaseApk(const MultiApkGeneratorOptions& options) {
-  // TODO(safarmer): Handle APK version codes for the generated APKs.
-  IDiagnostics* diag = context_->GetDiagnostics();
-  const PostProcessingConfiguration& config = options.config;
-
-  const std::string& apk_name = file::GetFilename(apk_->GetSource().path).to_string();
-  const StringPiece ext = file::GetExtension(apk_name);
-  const std::string base_name = apk_name.substr(0, apk_name.rfind(ext.to_string()));
+  std::unordered_set<std::string> artifacts_to_keep = options.kept_artifacts;
+  std::unordered_set<std::string> filtered_artifacts;
+  std::unordered_set<std::string> kept_artifacts;
 
   // For now, just write out the stripped APK since ABI splitting doesn't modify anything else.
-  for (const Artifact& artifact : config.artifacts) {
+  for (const OutputArtifact& artifact : options.apk_artifacts) {
     FilterChain filters;
 
-    if (!artifact.name && !config.artifact_format) {
-      diag->Error(
-          DiagMessage() << "Artifact does not have a name and no global name template defined");
-      return false;
-    }
+    ContextWrapper wrapped_context{context_};
+    wrapped_context.SetSource(artifact.name);
 
-    Maybe<std::string> artifact_name =
-        (artifact.name) ? artifact.Name(apk_name, diag)
-                        : artifact.ToArtifactName(config.artifact_format.value(), apk_name, diag);
-
-    if (!artifact_name) {
-      diag->Error(DiagMessage() << "Could not determine split APK artifact name");
-      return false;
+    if (!options.kept_artifacts.empty()) {
+      const auto& it = artifacts_to_keep.find(artifact.name);
+      if (it == artifacts_to_keep.end()) {
+        filtered_artifacts.insert(artifact.name);
+        if (context_->IsVerbose()) {
+          context_->GetDiagnostics()->Note(DiagMessage(artifact.name) << "skipping artifact");
+        }
+        continue;
+      } else {
+        artifacts_to_keep.erase(it);
+        kept_artifacts.insert(artifact.name);
+      }
     }
 
     std::unique_ptr<ResourceTable> table =
-        FilterTable(artifact, config, *apk_->GetResourceTable(), &filters);
+        FilterTable(context_, artifact, *apk_->GetResourceTable(), &filters);
     if (!table) {
       return false;
     }
 
+    IDiagnostics* diag = wrapped_context.GetDiagnostics();
+
     std::unique_ptr<XmlResource> manifest;
-    if (!UpdateManifest(artifact, config, &manifest, diag)) {
-      diag->Error(DiagMessage() << "could not update AndroidManifest.xml for "
-                                << artifact_name.value());
+    if (!UpdateManifest(artifact, &manifest, diag)) {
+      diag->Error(DiagMessage() << "could not update AndroidManifest.xml for output artifact");
       return false;
     }
 
     std::string out = options.out_dir;
     if (!file::mkdirs(out)) {
-      context_->GetDiagnostics()->Warn(DiagMessage() << "could not create out dir: " << out);
+      diag->Warn(DiagMessage() << "could not create out dir: " << out);
     }
-    file::AppendPath(&out, artifact_name.value());
+    file::AppendPath(&out, artifact.name);
 
     if (context_->IsVerbose()) {
-      context_->GetDiagnostics()->Note(DiagMessage() << "Generating split: " << out);
+      diag->Note(DiagMessage() << "Generating split: " << out);
     }
 
-    std::unique_ptr<IArchiveWriter> writer =
-        CreateZipFileArchiveWriter(context_->GetDiagnostics(), out);
+    std::unique_ptr<IArchiveWriter> writer = CreateZipFileArchiveWriter(diag, out);
 
     if (context_->IsVerbose()) {
       diag->Note(DiagMessage() << "Writing output: " << out);
     }
 
-    if (!apk_->WriteToArchive(context_, table.get(), options.table_flattener_options, &filters,
-                              writer.get(), manifest.get())) {
+    filters.AddFilter(util::make_unique<SignatureFilter>());
+    if (!apk_->WriteToArchive(&wrapped_context, table.get(), options.table_flattener_options,
+                              &filters, writer.get(), manifest.get())) {
       return false;
     }
+  }
+
+  // Make sure all of the requested artifacts were valid. If there are any kept artifacts left,
+  // either the config or the command line was wrong.
+  if (!artifacts_to_keep.empty()) {
+    context_->GetDiagnostics()->Error(
+        DiagMessage() << "The configuration and command line to filter artifacts do not match");
+
+    context_->GetDiagnostics()->Error(DiagMessage() << kept_artifacts.size() << " kept:");
+    for (const auto& artifact : kept_artifacts) {
+      context_->GetDiagnostics()->Error(DiagMessage() << "  " << artifact);
+    }
+
+    context_->GetDiagnostics()->Error(DiagMessage() << filtered_artifacts.size() << " filtered:");
+    for (const auto& artifact : filtered_artifacts) {
+      context_->GetDiagnostics()->Error(DiagMessage() << "  " << artifact);
+    }
+
+    context_->GetDiagnostics()->Error(DiagMessage() << artifacts_to_keep.size() << " missing:");
+    for (const auto& artifact : artifacts_to_keep) {
+      context_->GetDiagnostics()->Error(DiagMessage() << "  " << artifact);
+    }
+
+    return false;
   }
 
   return true;
 }
 
-std::unique_ptr<ResourceTable> MultiApkGenerator::FilterTable(
-    const configuration::Artifact& artifact,
-    const configuration::PostProcessingConfiguration& config, const ResourceTable& old_table,
-    FilterChain* filters) {
+std::unique_ptr<ResourceTable> MultiApkGenerator::FilterTable(IAaptContext* context,
+                                                              const OutputArtifact& artifact,
+                                                              const ResourceTable& old_table,
+                                                              FilterChain* filters) {
   TableSplitterOptions splits;
   AxisConfigFilter axis_filter;
-  ContextWrapper wrappedContext{context_};
+  ContextWrapper wrapped_context{context};
+  wrapped_context.SetSource(artifact.name);
 
-  if (artifact.abi_group) {
-    const std::string& group_name = artifact.abi_group.value();
-
-    auto group = config.abi_groups.find(group_name);
-    // TODO: Remove validation when configuration parser ensures referential integrity.
-    if (group == config.abi_groups.end()) {
-      context_->GetDiagnostics()->Error(DiagMessage() << "could not find referenced ABI group '"
-                                                      << group_name << "'");
-      return {};
-    }
-    filters->AddFilter(AbiFilter::FromAbiList(group->second));
+  if (!artifact.abis.empty()) {
+    filters->AddFilter(AbiFilter::FromAbiList(artifact.abis));
   }
 
-  if (artifact.screen_density_group) {
-    const std::string& group_name = artifact.screen_density_group.value();
-
-    auto group = config.screen_density_groups.find(group_name);
-    // TODO: Remove validation when configuration parser ensures referential integrity.
-    if (group == config.screen_density_groups.end()) {
-      context_->GetDiagnostics()->Error(DiagMessage() << "could not find referenced group '"
-                                                      << group_name << "'");
-      return {};
-    }
-
-    const std::vector<ConfigDescription>& densities = group->second;
-    for(const auto& density_config : densities) {
+  if (!artifact.screen_densities.empty()) {
+    for (const auto& density_config : artifact.screen_densities) {
       splits.preferred_densities.push_back(density_config.density);
     }
   }
 
-  if (artifact.locale_group) {
-    const std::string& group_name = artifact.locale_group.value();
-    auto group = config.locale_groups.find(group_name);
-    // TODO: Remove validation when configuration parser ensures referential integrity.
-    if (group == config.locale_groups.end()) {
-      context_->GetDiagnostics()->Error(DiagMessage() << "could not find referenced group '"
-                                                      << group_name << "'");
-      return {};
-    }
-
-    const std::vector<ConfigDescription>& locales = group->second;
-    for (const auto& locale : locales) {
+  if (!artifact.locales.empty()) {
+    for (const auto& locale : artifact.locales) {
       axis_filter.AddConfig(locale);
     }
     splits.config_filter = &axis_filter;
   }
 
-  Maybe<AndroidSdk> sdk = GetAndroidSdk(artifact, config, context_->GetDiagnostics());
-  if (sdk && sdk.value().min_sdk_version) {
-    wrappedContext.SetMinSdkVersion(sdk.value().min_sdk_version.value());
+  if (artifact.android_sdk) {
+    wrapped_context.SetMinSdkVersion(artifact.android_sdk.value().min_sdk_version);
   }
 
   std::unique_ptr<ResourceTable> table = old_table.Clone();
 
   VersionCollapser collapser;
-  if (!collapser.Consume(&wrappedContext, table.get())) {
-    context_->GetDiagnostics()->Error(DiagMessage() << "Failed to strip versioned resources");
+  if (!collapser.Consume(&wrapped_context, table.get())) {
+    context->GetDiagnostics()->Error(DiagMessage() << "Failed to strip versioned resources");
     return {};
   }
 
@@ -261,8 +252,7 @@ std::unique_ptr<ResourceTable> MultiApkGenerator::FilterTable(
   return table;
 }
 
-bool MultiApkGenerator::UpdateManifest(const Artifact& artifact,
-                                       const PostProcessingConfiguration& config,
+bool MultiApkGenerator::UpdateManifest(const OutputArtifact& artifact,
                                        std::unique_ptr<XmlResource>* updated_manifest,
                                        IDiagnostics* diag) {
   const xml::XmlResource* apk_manifest = apk_->GetManifest();
@@ -301,16 +291,15 @@ bool MultiApkGenerator::UpdateManifest(const Artifact& artifact,
   versionCode->compiled_value = ResourceUtils::TryParseInt(std::to_string(new_version));
 
   // Check to see if the minSdkVersion needs to be updated.
-  Maybe<AndroidSdk> maybe_sdk = GetAndroidSdk(artifact, config, diag);
-  if (maybe_sdk) {
+  if (artifact.android_sdk) {
     // TODO(safarmer): Handle the rest of the Android SDK.
-    const AndroidSdk& android_sdk = maybe_sdk.value();
+    const AndroidSdk& android_sdk = artifact.android_sdk.value();
 
     if (xml::Element* uses_sdk_el = manifest_el->FindChild({}, "uses-sdk")) {
       if (xml::Attribute* min_sdk_attr =
               uses_sdk_el->FindAttribute(xml::kSchemaAndroid, "minSdkVersion")) {
         // Populate with a pre-compiles attribute to we don't need to relink etc.
-        const std::string& min_sdk_str = std::to_string(android_sdk.min_sdk_version.value());
+        const std::string& min_sdk_str = std::to_string(android_sdk.min_sdk_version);
         min_sdk_attr->compiled_value = ResourceUtils::TryParseInt(min_sdk_str);
       } else {
         // There was no minSdkVersion. This is strange since at this point we should have been
@@ -326,10 +315,7 @@ bool MultiApkGenerator::UpdateManifest(const Artifact& artifact,
     }
   }
 
-  if (artifact.screen_density_group) {
-    auto densities = config.screen_density_groups.find(artifact.screen_density_group.value());
-    CHECK(densities != config.screen_density_groups.end()) << "Missing density group";
-
+  if (!artifact.screen_densities.empty()) {
     xml::Element* screens_el = manifest_el->FindChild({}, "compatible-screens");
     if (!screens_el) {
       // create a new element.
@@ -342,7 +328,7 @@ bool MultiApkGenerator::UpdateManifest(const Artifact& artifact,
       screens_el->GetChildElements().clear();
     }
 
-    for (const auto& density : densities->second) {
+    for (const auto& density : artifact.screen_densities) {
       std::unique_ptr<xml::Element> screen_el = util::make_unique<xml::Element>();
       screen_el->name = "screen";
       const char* density_str = density.toString().string();

@@ -33,6 +33,7 @@ import android.util.AndroidRuntimeException;
 import android.util.ArraySet;
 import android.util.Log;
 
+import java.io.File;
 import java.lang.reflect.Method;
 
 /**
@@ -46,7 +47,7 @@ public final class WebViewFactory {
     // visible for WebViewZygoteInit to look up the class by reflection and call preloadInZygote.
     /** @hide */
     private static final String CHROMIUM_WEBVIEW_FACTORY =
-            "com.android.webview.chromium.WebViewChromiumFactoryProviderForOMR1";
+            "com.android.webview.chromium.WebViewChromiumFactoryProviderForP";
 
     private static final String CHROMIUM_WEBVIEW_FACTORY_METHOD = "create";
 
@@ -63,6 +64,8 @@ public final class WebViewFactory {
     private static final Object sProviderLock = new Object();
     private static PackageInfo sPackageInfo;
     private static Boolean sWebViewSupported;
+    private static boolean sWebViewDisabled;
+    private static String sDataDirectorySuffix; // stored here so it can be set without loading WV
 
     // Error codes for loadWebViewNativeLibraryFromPackage
     public static final int LIBLOAD_SUCCESS = 0;
@@ -110,6 +113,45 @@ public final class WebViewFactory {
                     .hasSystemFeature(PackageManager.FEATURE_WEBVIEW);
         }
         return sWebViewSupported;
+    }
+
+    /**
+     * @hide
+     */
+    static void disableWebView() {
+        synchronized (sProviderLock) {
+            if (sProviderInstance != null) {
+                throw new IllegalStateException(
+                        "Can't disable WebView: WebView already initialized");
+            }
+            sWebViewDisabled = true;
+        }
+    }
+
+    /**
+     * @hide
+     */
+    static void setDataDirectorySuffix(String suffix) {
+        synchronized (sProviderLock) {
+            if (sProviderInstance != null) {
+                throw new IllegalStateException(
+                        "Can't set data directory suffix: WebView already initialized");
+            }
+            if (suffix.indexOf(File.separatorChar) >= 0) {
+                throw new IllegalArgumentException("Suffix " + suffix
+                                                   + " contains a path separator");
+            }
+            sDataDirectorySuffix = suffix;
+        }
+    }
+
+    /**
+     * @hide
+     */
+    static String getDataDirectorySuffix() {
+        synchronized (sProviderLock) {
+            return sDataDirectorySuffix;
+        }
     }
 
     /**
@@ -204,6 +246,11 @@ public final class WebViewFactory {
                 throw new UnsupportedOperationException();
             }
 
+            if (sWebViewDisabled) {
+                throw new IllegalStateException(
+                        "WebView.disableWebView() was called: WebView is disabled");
+            }
+
             StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
             Trace.traceBegin(Trace.TRACE_TAG_WEBVIEW, "WebViewFactory.getProvider()");
             try {
@@ -265,10 +312,10 @@ public final class WebViewFactory {
                     + "packageName mismatch, expected: "
                     + chosen.packageName + " actual: " + toUse.packageName);
         }
-        if (chosen.versionCode > toUse.versionCode) {
+        if (chosen.getLongVersionCode() > toUse.getLongVersionCode()) {
             throw new MissingWebViewPackageException("Failed to verify WebView provider, "
-                    + "version code is lower than expected: " + chosen.versionCode
-                    + " actual: " + toUse.versionCode);
+                    + "version code is lower than expected: " + chosen.getLongVersionCode()
+                    + " actual: " + toUse.getLongVersionCode());
         }
         if (getWebViewLibrary(toUse.applicationInfo) == null) {
             throw new MissingWebViewPackageException("Tried to load an invalid WebView provider: "
@@ -401,7 +448,7 @@ public final class WebViewFactory {
                 Trace.traceEnd(Trace.TRACE_TAG_WEBVIEW);
             }
             Log.i(LOGTAG, "Loading " + sPackageInfo.packageName + " version " +
-                    sPackageInfo.versionName + " (code " + sPackageInfo.versionCode + ")");
+                    sPackageInfo.versionName + " (code " + sPackageInfo.getLongVersionCode() + ")");
 
             Trace.traceBegin(Trace.TRACE_TAG_WEBVIEW, "WebViewFactory.getChromiumProviderClass()");
             try {

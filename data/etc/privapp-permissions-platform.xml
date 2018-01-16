@@ -236,6 +236,7 @@ applications that come with the platform
         <permission name="android.permission.CHANGE_CONFIGURATION"/>
         <permission name="android.permission.DELETE_PACKAGES"/>
         <permission name="android.permission.FORCE_STOP_PACKAGES"/>
+        <permission name="android.permission.LOCAL_MAC_ADDRESS"/>
         <permission name="android.permission.MANAGE_DEVICE_ADMINS"/>
         <permission name="android.permission.MANAGE_FINGERPRINT"/>
         <permission name="android.permission.MANAGE_USB"/>
@@ -256,6 +257,12 @@ applications that come with the platform
         <permission name="android.permission.WRITE_APN_SETTINGS"/>
         <permission name="android.permission.WRITE_MEDIA_STORAGE"/>
         <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
+    </privapp-permissions>
+
+    <privapp-permissions package="com.android.settings.intelligence">
+        <permission name="android.permission.MANAGE_FINGERPRINT"/>
+        <permission name="android.permission.MODIFY_PHONE_STATE"/>
+        <permission name="android.permission.READ_SEARCH_INDEXABLES"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.sharedstoragebackup">

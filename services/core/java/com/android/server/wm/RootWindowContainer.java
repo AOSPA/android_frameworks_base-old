@@ -59,10 +59,10 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SUSTAINED_PERFORMANCE_MODE;
 import static android.view.WindowManager.LayoutParams.TYPE_DREAM;
 import static android.view.WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG;
-import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
-import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
-import static android.view.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 
+import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
+import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
+import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_DISPLAY;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_KEEP_SCREEN_ON;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
@@ -101,8 +101,6 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
     private static final int SET_SCREEN_BRIGHTNESS_OVERRIDE = 1;
     private static final int SET_USER_ACTIVITY_TIMEOUT = 2;
 
-    WindowManagerService mService;
-
     private boolean mWallpaperForceHidingChanged = false;
     private Object mLastWindowFreezeSource = null;
     private Session mHoldScreen = null;
@@ -138,7 +136,6 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
     ParcelFileDescriptor mSurfaceTraceFd;
     RemoteEventTrace mRemoteEventTrace;
 
-    private final WindowLayersController mLayersController;
     final WallpaperController mWallpaperController;
 
     private final Handler mHandler;
@@ -161,9 +158,8 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
     };
 
     RootWindowContainer(WindowManagerService service) {
-        mService = service;
+        super(service);
         mHandler = new MyHandler(service.mH.getLooper());
-        mLayersController = new WindowLayersController(mService);
         mWallpaperController = new WallpaperController(mService);
     }
 
@@ -231,7 +227,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
     }
 
     private DisplayContent createDisplayContent(final Display display) {
-        final DisplayContent dc = new DisplayContent(display, mService, mLayersController,
+        final DisplayContent dc = new DisplayContent(display, mService,
                 mWallpaperController);
         final int displayId = display.getDisplayId();
 
@@ -247,7 +243,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         if (mService.mDisplayManagerInternal != null) {
             mService.mDisplayManagerInternal.setDisplayInfoOverrideFromWindowManager(
                     displayId, displayInfo);
-            mService.configureDisplayPolicyLocked(dc);
+            dc.configureDisplayPolicy();
 
             // Tap Listeners are supported for:
             // 1. All physical displays (multi-display).
@@ -435,7 +431,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
             if (w.mAppOp == OP_NONE) {
                 return;
             }
-            final int mode = mService.mAppOps.checkOpNoThrow(w.mAppOp, w.getOwningUid(),
+            final int mode = mService.mAppOps.noteOpNoThrow(w.mAppOp, w.getOwningUid(),
                     w.getOwningPackage());
             w.setAppOpVisibilityLw(mode == MODE_ALLOWED || mode == MODE_DEFAULT);
         }, false /* traverseTopToBottom */);
@@ -616,7 +612,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
                         defaultDisplay.pendingLayoutChanges);
         }
 
-        if (!mService.mAnimator.mAppWindowAnimating && mService.mAppTransition.isRunning()) {
+        if (!isAppAnimating() && mService.mAppTransition.isRunning()) {
             // We have finished the animation of an app transition. To do this, we have delayed a
             // lot of operations like showing and hiding apps, moving apps in Z-order, etc. The app
             // token list reflects the correct Z-order, but the window list may now be out of sync
@@ -1039,7 +1035,7 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
             final int count = mChildren.size();
             for (int i = 0; i < count; ++i) {
                 final DisplayContent displayContent = mChildren.get(i);
-                displayContent.dump("  ", pw);
+                displayContent.dump(pw, "  ", true /* dumpAll */);
             }
         } else {
             pw.println("  NO DISPLAY");
@@ -1102,5 +1098,10 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
     @Override
     String getName() {
         return "ROOT";
+    }
+
+    @Override
+    void scheduleAnimation() {
+        mService.scheduleAnimationLocked();
     }
 }

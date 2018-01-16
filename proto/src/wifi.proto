@@ -364,6 +364,15 @@ message WifiLog {
   // (one value added per unique ESS - potentially multiple counts per single
   // scan!)
   repeated NumConnectableNetworksBucket observed_hotspot_r2_aps_per_ess_in_scan_histogram = 88;
+
+  // SoftAP event list tracking sessions and client counts in tethered mode
+  repeated SoftApConnectedClientsEvent soft_ap_connected_clients_events_tethered = 89;
+
+  // SoftAP event list tracking sessions and client counts in local only mode
+  repeated SoftApConnectedClientsEvent soft_ap_connected_clients_events_local_only = 90;
+
+  // Wps connection metrics
+  optional WpsMetrics wps_metrics = 91;
 }
 
 // Information that gets logged for every WiFi connection.
@@ -1070,4 +1079,58 @@ message ConnectToNetworkNotificationAndActionCount {
 
   // Occurrences of this action.
   optional int32 count = 4;
+}
+
+// SoftAP event tracking sessions and client counts
+message SoftApConnectedClientsEvent {
+
+  // Soft AP event Types
+  enum SoftApEventType {
+
+    // Soft AP is Up and ready for use
+    SOFT_AP_UP = 0;
+
+    // Soft AP is Down
+    SOFT_AP_DOWN = 1;
+
+    // Number of connected soft AP clients has changed
+    NUM_CLIENTS_CHANGED = 2;
+  }
+
+  // Type of event being recorded
+  optional SoftApEventType event_type = 1;
+
+  // Absolute time when event happened
+  optional int64 time_stamp_millis = 2;
+
+  // Number of connected clients if event_type is NUM_CLIENTS_CHANGED, otherwise zero.
+  optional int32 num_connected_clients = 3;
+}
+
+// Wps connection metrics
+// Keeps track of Wi-Fi Protected Setup usage
+message WpsMetrics {
+  // Total number of wps connection attempts
+  optional int32 num_wps_attempts = 1;
+
+  // Total number of wps connection successes
+  optional int32 num_wps_success = 2;
+
+  // Total number of wps failures on start
+  optional int32 num_wps_start_failure = 3;
+
+  // Total number of wps overlap failure
+  optional int32 num_wps_overlap_failure = 4;
+
+  // Total number of wps timeout failure
+  optional int32 num_wps_timeout_failure = 5;
+
+  // Total number of other wps failure during connection
+  optional int32 num_wps_other_connection_failure = 6;
+
+  // Total number of supplicant failure after wps
+  optional int32 num_wps_supplicant_failure = 7;
+
+  // Total number of wps cancellation
+  optional int32 num_wps_cancellation = 8;
 }

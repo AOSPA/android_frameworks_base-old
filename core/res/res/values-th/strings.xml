@@ -79,7 +79,7 @@
     <string name="RestrictedOnAllVoiceTitle" msgid="158800171499150681">"ไม่มีบริการเสียง/บริการฉุกเฉิน"</string>
     <string name="RestrictedStateContent" msgid="4278821484643362350">"งดให้บริการชั่วคราวโดยเครือข่ายมือถือในตำแหน่งของคุณ"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"เข้าถึงเครือข่ายไม่ได้"</string>
-    <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"ลองเปลี่ยนประเภทที่เลือกใน \"การตั้งค่า\" &gt; \"เครือข่ายและอินเทอร์เน็ต\" &gt; \"เครือข่ายมือถือ\" &gt; \"ประเภทเครือข่ายที่ต้องการ\" เพื่อให้การรับสัญญาณดีขึ้น"</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7056776609127756440">"ลองเปลี่ยนประเภทที่เลือกใน \"การตั้งค่า\" &gt; \"เครือข่ายและอินเทอร์เน็ต\" &gt; \"เครือข่ายมือถือ\" &gt; \"ประเภทเครือข่ายที่ต้องการ\" เพื่อให้การรับสัญญาณดีขึ้น"</string>
     <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"กำลังใช้งานการโทรผ่าน Wi-Fi"</string>
     <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"หมายเลขฉุกเฉินต้องใช้เครือข่ายมือถือ"</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"การแจ้งเตือน"</string>
@@ -212,6 +212,7 @@
     <string name="global_action_power_off" msgid="4471879440839879722">"ปิดเครื่อง"</string>
     <string name="global_action_emergency" msgid="7112311161137421166">"เหตุฉุกเฉิน"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"รายงานข้อบกพร่อง"</string>
+    <string name="global_action_logout" msgid="935179188218826050">"จบเซสชัน"</string>
     <string name="bugreport_title" msgid="2667494803742548533">"ใช้รายงานข้อบกพร่อง"</string>
     <string name="bugreport_message" msgid="398447048750350456">"การดำเนินการนี้จะรวบรวมข้อมูลเกี่ยวกับสถานะปัจจุบันของอุปกรณ์ของคุณ โดยจะส่งไปในรูปแบบข้อความอีเมล อาจใช้เวลาสักครู่ตั้งแต่เริ่มการสร้างรายงานข้อบกพร่องจนกระทั่งเสร็จสมบูรณ์ โปรดอดทนรอ"</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"รายงานแบบอินเทอร์แอกทีฟ"</string>
@@ -1051,6 +1052,9 @@
     <string name="screen_compat_mode_hint" msgid="1064524084543304459">"เปิดใช้งานอีกครั้งในการตั้งค่าระบบ &gt; แอปพลิเคชัน &gt; ดาวน์โหลด"</string>
     <string name="unsupported_display_size_message" msgid="6545327290756295232">"<xliff:g id="APP_NAME">%1$s</xliff:g> ไม่สนับสนุนการตั้งค่าขนาดการแสดงผลปัจจุบันและอาจแสดงผลผิดปกติ"</string>
     <string name="unsupported_display_size_show" msgid="7969129195360353041">"แสดงเสมอ"</string>
+    <string name="unsupported_compile_sdk_message" msgid="4253168368781441759">"<xliff:g id="APP_NAME">%1$s</xliff:g> ไม่ได้สร้างมาเพื่อใช้งานกับระบบปฏิบัติการ Android เวอร์ชันนี้ จึงอาจแสดงผลผิดปกติ ทั้งนี้ แอปเวอร์ชันอัปเดตอาจพร้อมใช้งานแล้ว"</string>
+    <string name="unsupported_compile_sdk_show" msgid="2681877855260970231">"แสดงเสมอ"</string>
+    <string name="unsupported_compile_sdk_check_update" msgid="3312723623323216101">"ตรวจสอบอัปเดต"</string>
     <string name="smv_application" msgid="3307209192155442829">"แอปพลิเคชัน <xliff:g id="APPLICATION">%1$s</xliff:g> (กระบวนการ <xliff:g id="PROCESS">%2$s</xliff:g>) ละเมิดนโยบาย StrictMode ที่บังคับใช้ด้วยตัวเอง"</string>
     <string name="smv_process" msgid="5120397012047462446">"กระบวนการ <xliff:g id="PROCESS">%1$s</xliff:g> ละเมิดนโยบาย StrictMode ที่บังคับใช้ด้วยตัวเอง"</string>
     <string name="android_upgrading_title" msgid="1584192285441405746">"กำลังอัปเกรด Android ..."</string>
@@ -1116,10 +1120,10 @@
     <string name="network_available_sign_in" msgid="1848877297365446605">"ลงชื่อเข้าใช้เครือข่าย"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
     <skip />
-    <string name="wifi_no_internet" msgid="8451173622563841546">"Wi-Fi เชื่อมต่ออินเทอร์เน็ตไม่ได้"</string>
+    <string name="wifi_no_internet" msgid="8938267198124654938">"Wi-Fi เชื่อมต่ออินเทอร์เน็ตไม่ได้"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"แตะเพื่อดูตัวเลือก"</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"เปลี่ยนเป็น <xliff:g id="NETWORK_TYPE">%1$s</xliff:g>"</string>
-    <string name="network_switch_metered_detail" msgid="5325661434777870353">"อุปกรณ์จะใช้ <xliff:g id="NEW_NETWORK">%1$s</xliff:g> เมื่อ <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> ไม่สามารถเข้าถึงอินเทอร์เน็ต อาจมีค่าบริการ"</string>
+    <string name="network_switch_metered_detail" msgid="775163331794506615">"อุปกรณ์จะใช้ <xliff:g id="NEW_NETWORK">%1$s</xliff:g> เมื่อ <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> เข้าถึงอินเทอร์เน็ตไม่ได้ โดยอาจมีค่าบริการ"</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"เปลี่ยนจาก <xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> เป็น <xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
   <string-array name="network_switch_type_name">
     <item msgid="3979506840912951943">"อินเทอร์เน็ตมือถือ"</item>
@@ -1130,7 +1134,7 @@
   </string-array>
     <string name="network_switch_type_name_unknown" msgid="4552612897806660656">"ประเภทเครือข่ายที่ไม่รู้จัก"</string>
     <string name="wifi_watchdog_network_disabled" msgid="7904214231651546347">"ไม่สามารถเชื่อมต่อ WiFi"</string>
-    <string name="wifi_watchdog_network_disabled_detailed" msgid="5548780776418332675">" มีสัญญาณอินเทอร์เน็ตไม่ดี"</string>
+    <string name="wifi_watchdog_network_disabled_detailed" msgid="4917472096696322767">" มีสัญญาณอินเทอร์เน็ตไม่ดี"</string>
     <string name="wifi_connect_alert_title" msgid="8455846016001810172">"อนุญาตการเชื่อมต่อใช่ไหม"</string>
     <string name="wifi_connect_alert_message" msgid="6451273376815958922">"แอปพลิเคชัน %1$s ต้องการเชื่อมต่อเครือข่าย Wi-Fi %2$s"</string>
     <string name="wifi_connect_default_application" msgid="7143109390475484319">"แอปพลิเคชัน"</string>
@@ -1495,6 +1499,8 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="7256507885737444807">"เมื่อทางลัดเปิดอยู่ การกดปุ่มปรับระดับเสียงทั้ง 2 ปุ่มเป็นเวลา 3 วินาทีจะเริ่มฟีเจอร์การเข้าถึงพิเศษ\n\n ฟีเจอร์การเข้าถึงพิเศษปัจจุบัน:\n <xliff:g id="SERVICE_NAME">%1$s</xliff:g>\n\n คุณสามารถเปลี่ยนฟีเจอร์ในการตั้งค่า &gt; การเข้าถึงพิเศษ"</string>
     <string name="disable_accessibility_shortcut" msgid="627625354248453445">"ปิดทางลัด"</string>
     <string name="leave_accessibility_shortcut_on" msgid="7653111894438512680">"ใช้ทางลัด"</string>
+    <string name="color_inversion_feature_name" msgid="4231186527799958644">"การกลับสี"</string>
+    <string name="color_correction_feature_name" msgid="6779391426096954933">"การปรับแก้สี"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"ทางลัดการเข้าถึงเปิด <xliff:g id="SERVICE_NAME">%1$s</xliff:g> แล้ว"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"ทางลัดการเข้าถึงปิด <xliff:g id="SERVICE_NAME">%1$s</xliff:g> แล้ว"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"เลือกฟีเจอร์ที่จะใช้เมื่อคุณแตะปุ่ม \"การเข้าถึงพิเศษ\":"</string>
@@ -1626,7 +1632,6 @@
     <string name="managed_profile_label_badge_2" msgid="5048136430082124036">"<xliff:g id="LABEL">%1$s</xliff:g> งานที่ 2"</string>
     <string name="managed_profile_label_badge_3" msgid="2808305070321719040">"<xliff:g id="LABEL">%1$s</xliff:g> งานที่ 3"</string>
     <string name="lock_to_app_toast" msgid="6820571533009838261">"หากต้องการเลิกตรึงหน้าจอนี้ ให้แตะปุ่ม \"กลับ\" และ \"ภาพรวม\" ค้างไว้"</string>
-    <string name="lock_to_app_toast_locked" msgid="7849470948648628704">"เลิกตรึงแอปนี้ไม่ได้"</string>
     <string name="lock_to_app_start" msgid="6643342070839862795">"ตรึงหน้าจอแล้ว"</string>
     <string name="lock_to_app_exit" msgid="8598219838213787430">"เลิกตรึงหน้าจอแล้ว"</string>
     <string name="lock_to_app_unlock_pin" msgid="2552556656504331634">"ขอ PIN ก่อนเลิกตรึง"</string>
@@ -1635,7 +1640,7 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"ติดตั้งโดยผู้ดูแลระบบ"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"อัปเดตโดยผู้ดูแลระบบ"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"ลบโดยผู้ดูแลระบบ"</string>
-    <string name="battery_saver_description" msgid="1960431123816253034">"เพื่อช่วยยืดอายุการใช้งานแบตเตอรี่ โหมดประหยัดแบตเตอรี่จะลดการทำงานของอุปกรณ์และจำกัดการสั่น บริการตำแหน่ง และข้อมูลแบ็กกราวด์ส่วนใหญ่ สำหรับอีเมล การรับส่งข้อความ และแอปอื่นๆ ที่ใช้การซิงค์จะไม่อัปเดตหากคุณไม่เปิดขึ้นมา\n\nโหมดประหยัดแบตเตอรี่จะปิดโดยอัตโนมัติขณะชาร์จอุปกรณ์"</string>
+    <string name="battery_saver_description" msgid="5394663545060026162">"เพื่อช่วยปรับปรุงอายุการใช้งานแบตเตอรี่ โหมดประหยัดแบตเตอรี่จะลดการทำงานของอุปกรณ์และจำกัดการสั่น บริการตำแหน่ง และข้อมูลแบ็กกราวด์ส่วนใหญ่ สำหรับอีเมล การรับส่งข้อความ และแอปอื่นๆ ที่ใช้การซิงค์จะไม่อัปเดตหากคุณไม่เปิดขึ้นมา\n\nโหมดประหยัดแบตเตอรี่จะปิดโดยอัตโนมัติขณะชาร์จอุปกรณ์"</string>
     <string name="data_saver_description" msgid="6015391409098303235">"เพื่อช่วยลดปริมาณการใช้อินเทอร์เน็ต โปรแกรมประหยัดอินเทอร์เน็ตจะช่วยป้องกันไม่ให้บางแอปส่งหรือรับข้อมูลเครือข่ายมือถือในการทำงานเบื้องหลัง แอปที่คุณกำลังใช้งานสามารถเข้าถึงข้อมูลเครือข่ายมือถือได้ แต่อาจไม่บ่อยเท่าเดิม ตัวอย่างเช่น ภาพต่างๆ จะไม่แสดงจนกว่าคุณจะแตะที่ภาพเหล่านั้น"</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"เปิดการประหยัดอินเทอร์เน็ตไหม"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"เปิด"</string>
@@ -1682,13 +1687,16 @@
     <string name="zen_mode_default_weeknights_name" msgid="3081318299464998143">"คืนวันธรรมดา"</string>
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"สุดสัปดาห์"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"กิจกรรม"</string>
+    <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"นอนหลับ"</string>
     <string name="muted_by" msgid="6147073845094180001">"ปิดเสียงโดย <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"อุปกรณ์ของคุณเกิดปัญหาภายในเครื่อง อุปกรณ์อาจทำงานไม่เสถียรจนกว่าคุณจะรีเซ็ตข้อมูลเป็นค่าเริ่มต้น"</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"อุปกรณ์ของคุณเกิดปัญหาภายในเครื่อง โปรดติดต่อผู้ผลิตเพื่อขอรายละเอียดเพิ่มเติม"</string>
     <string name="stk_cc_ussd_to_dial" msgid="5202342984749947872">"คำขอ USSD ได้รับการแก้ไขให้เป็นคำขอ DIAL"</string>
     <string name="stk_cc_ussd_to_ss" msgid="2345360594181405482">"คำขอ USSD ได้รับการแก้ไขให้เป็นคำขอ SS"</string>
     <string name="stk_cc_ussd_to_ussd" msgid="7466087659967191653">"คำขอ USSD ได้รับการแก้ไขให้เป็นคำขอ USSD ใหม่"</string>
+    <string name="stk_cc_ussd_to_dial_video" msgid="585340552561515305">"คำขอ USSD ได้รับการแก้ไขให้เป็นคำขอ Video DIAL"</string>
     <string name="stk_cc_ss_to_dial" msgid="2151304435775557162">"คำขอ SS ได้รับการแก้ไขให้เป็นคำขอ DIAL"</string>
+    <string name="stk_cc_ss_to_dial_video" msgid="4306210904450719045">"คำขอ SS ได้รับการแก้ไขให้เป็นคำขอ Video DIAL"</string>
     <string name="stk_cc_ss_to_ussd" msgid="3951862188105305589">"คำขอ SS ได้รับการแก้ไขให้เป็นคำขอ USSD"</string>
     <string name="stk_cc_ss_to_ss" msgid="5470768854991452695">"คำขอ SS ได้รับการแก้ไขให้เป็นคำขอ SS ใหม่"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"โปรไฟล์งาน"</string>
@@ -1782,14 +1790,10 @@
     <string name="etws_primary_default_message_test" msgid="2709597093560037455">"การทดสอบข้อความกรณีฉุกเฉิน"</string>
     <string name="notification_reply_button_accessibility" msgid="3621714652387814344">"ตอบ"</string>
     <string name="etws_primary_default_message_others" msgid="6293148756130398971"></string>
-    <!-- no translation found for mmcc_authentication_reject (5767701075994754356) -->
-    <skip />
-    <!-- no translation found for mmcc_imsi_unknown_in_hlr (5316658473301462825) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_ms (807334478177362062) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_me (1950705155760872972) -->
-    <skip />
+    <string name="mmcc_authentication_reject" msgid="5767701075994754356">"ไม่อนุญาตให้ใช้ซิมสำหรับเสียง"</string>
+    <string name="mmcc_imsi_unknown_in_hlr" msgid="5316658473301462825">"ไม่มีการจัดสรรซิมสำหรับเสียง"</string>
+    <string name="mmcc_illegal_ms" msgid="807334478177362062">"ไม่อนุญาตให้ใช้ซิมสำหรับเสียง"</string>
+    <string name="mmcc_illegal_me" msgid="1950705155760872972">"ไม่อนุญาตให้ใช้โทรศัพท์สำหรับเสียง"</string>
     <string name="popup_window_default_title" msgid="4874318849712115433">"หน้าต่างป๊อปอัป"</string>
     <string name="slice_more_content" msgid="8504342889413274608">"+ <xliff:g id="NUMBER">%1$d</xliff:g>"</string>
     <string name="shortcut_restored_on_lower_version" msgid="5270675146351613828">"ทางลัดนี้ต้องใช้แอปล่าสุด"</string>

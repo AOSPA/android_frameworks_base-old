@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2016, The Android Open Source Project
+ * Copyright (c) 2017, The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
  */
 
 package android.os;
-
-import android.os.IStatsCallbacks;
 
 /**
   * Binder interface to communicate with the statistics management service.
@@ -49,15 +47,20 @@ interface IStatsManager {
     void informPollAlarmFired();
 
     /**
+     * Tells statsd to store data to disk.
+     */
+    void writeDataToDisk();
+
+    /**
      * Inform statsd what the version and package are for each uid. Note that each array should
      * have the same number of elements, and version[i] and package[i] correspond to uid[i].
      */
-    oneway void informAllUidData(in int[] uid, in int[] version, in String[] app);
+    oneway void informAllUidData(in int[] uid, in long[] version, in String[] app);
 
     /**
      * Inform statsd what the uid and version are for one app that was updated.
      */
-    oneway void informOnePackage(in String app, in int uid, in int version);
+    oneway void informOnePackage(in String app, in int uid, in long version);
 
     /**
      * Inform stats that an app was removed.
@@ -65,13 +68,31 @@ interface IStatsManager {
     oneway void informOnePackageRemoved(in String app, in int uid);
 
     /**
-     * Trigger pushLog to force push stats log entries from statsd on client side.
+     * Fetches data for the specified configuration key. Returns a byte array representing proto
+     * wire-encoded of ConfigMetricsReportList.
      */
-    void requestPush();
+    byte[] getData(in String key);
 
     /**
-     * Listen to statsd to send stats log entries.
-     * TODO: Limit callbacks with specific configurations.
+     * Fetches metadata across statsd. Returns byte array representing wire-encoded proto.
      */
-    void subscribeStatsLog(IStatsCallbacks callbacks);
+    byte[] getMetadata();
+
+    /**
+     * Sets a configuration with the specified config key and subscribes to updates for this
+     * configuration key. Broadcasts will be sent if this configuration needs to be collected.
+     * The configuration must be a wire-encoded StatsDConfig. The caller specifies the name of the
+     * package and class that should receive these broadcasts.
+     *
+     * Returns if this configuration was correctly registered.
+     */
+    boolean addConfiguration(in String configKey, in byte[] config, in String pkg, in String cls);
+
+    /**
+     * Removes the configuration with the matching config key. No-op if this config key does not
+     * exist.
+     *
+     * Returns if this configuration key was removed.
+     */
+    boolean removeConfiguration(in String configKey);
 }

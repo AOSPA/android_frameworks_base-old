@@ -23,216 +23,228 @@ option java_package = "com.android.internal.os";
 option java_outer_classname = "StatsdConfigProto";
 
 message KeyMatcher {
-  optional int32 key = 1;
+    optional int32 key = 1;
 
-  optional bool as_package_name = 2 [ default = false ];
+    optional bool as_package_name = 2 [default = false];
 }
 
 message KeyValueMatcher {
-  optional KeyMatcher key_matcher = 1;
+    optional KeyMatcher key_matcher = 1;
 
-  oneof value_matcher {
-    bool eq_bool = 2;
-    string eq_string = 3;
-    int32 eq_int = 4;
+    oneof value_matcher {
+        bool eq_bool = 2;
+        string eq_string = 3;
+        int32 eq_int = 4;
 
-    int64 lt_int = 5;
-    int64 gt_int = 6;
-    float lt_float = 7;
-    float gt_float = 8;
+        int64 lt_int = 5;
+        int64 gt_int = 6;
+        float lt_float = 7;
+        float gt_float = 8;
 
-    int64 lte_int = 9;
-    int64 gte_int = 10;
-  }
+        int64 lte_int = 9;
+        int64 gte_int = 10;
+    }
 }
 
 enum LogicalOperation {
-  AND = 1;
-  OR = 2;
-  NOT = 3;
-  NAND = 4;
-  NOR = 5;
+    LOGICAL_OPERATION_UNSPECIFIED = 0;
+    AND = 1;
+    OR = 2;
+    NOT = 3;
+    NAND = 4;
+    NOR = 5;
 }
 
-message SimpleLogEntryMatcher {
-  optional int32 tag = 1;
+message SimpleAtomMatcher {
+    optional int32 tag = 1;
 
-  repeated KeyValueMatcher key_value_matcher = 2;
+    repeated KeyValueMatcher key_value_matcher = 2;
 }
 
-message LogEntryMatcher {
-  optional string name = 1;
+message AtomMatcher {
+    optional string name = 1;
 
-  message Combination {
-    optional LogicalOperation operation = 1;
+    message Combination {
+        optional LogicalOperation operation = 1;
 
-    repeated string matcher = 2;
-  }
-  oneof contents {
-    SimpleLogEntryMatcher simple_log_entry_matcher = 2;
-    Combination combination = 3;
-  }
+        repeated string matcher = 2;
+    }
+    oneof contents {
+        SimpleAtomMatcher simple_atom_matcher = 2;
+        Combination combination = 3;
+    }
 }
 
-message SimpleCondition {
-  optional string start = 1;
+message SimplePredicate {
+    optional string start = 1;
 
-  optional string stop = 2;
+    optional string stop = 2;
 
-  optional bool count_nesting = 3 [default = true];
+    optional bool count_nesting = 3 [default = true];
 
-  optional string stop_all = 4;
+    optional string stop_all = 4;
 
-  repeated KeyMatcher dimension = 5;
+    enum InitialValue {
+        UNKNOWN = 0;
+        FALSE = 1;
+    }
+    optional InitialValue initial_value = 5 [default = FALSE];
+
+    repeated KeyMatcher dimension = 6;
 }
 
-message Condition {
-  optional string name = 1;
+message Predicate {
+    optional string name = 1;
 
-  message Combination {
-    optional LogicalOperation operation = 1;
+    message Combination {
+        optional LogicalOperation operation = 1;
 
-    repeated string condition = 2;
-  }
+        repeated string predicate = 2;
+    }
 
-  oneof contents {
-    SimpleCondition simple_condition = 2;
-    Combination combination = 3;
-  }
+    oneof contents {
+        SimplePredicate simple_predicate = 2;
+        Combination combination = 3;
+    }
 }
 
 message Bucket {
-  optional int64 bucket_size_millis = 1;
+    optional int64 bucket_size_millis = 1;
 }
 
-message Alert {
-  message IncidentdDetails {
-    optional string alert_name = 1;
-    repeated int32 incidentd_sections = 2;
-  }
-  optional IncidentdDetails incidentd_details = 1;
+message MetricConditionLink {
+    optional string condition = 1;
 
-  optional int32 number_of_buckets = 3;
+    repeated KeyMatcher key_in_what = 2;
 
-  optional int32 refractory_period_secs = 4;
+    repeated KeyMatcher key_in_condition = 3;
+}
 
-  optional int64 trigger_if_sum_gt = 5;
+message FieldFilter {
+    optional bool include_all = 1;
+    repeated int32 field_num = 2;
 }
 
 message EventMetric {
-  optional int64 metric_id = 1;
+    optional string name = 1;
 
-  optional string what = 2;
+    optional string what = 2;
 
-  optional string condition = 3;
+    optional string condition = 3;
 
-  repeated EventConditionLink links = 4;
+    repeated MetricConditionLink links = 4;
 }
 
 message CountMetric {
-  optional int64 metric_id = 1;
+    optional string name = 1;
 
-  optional string what = 2;
+    optional string what = 2;
 
-  optional string condition = 3;
+    optional string condition = 3;
 
-  repeated KeyMatcher dimension = 4;
+    repeated KeyMatcher dimension = 4;
 
-  optional Bucket bucket = 5;
+    optional Bucket bucket = 5;
 
-  repeated Alert alerts = 6;
-
-  optional bool include_in_output = 7;
-
-  repeated EventConditionLink links = 8;
+    repeated MetricConditionLink links = 6;
 }
 
 message DurationMetric {
-  optional int64 metric_id = 1;
+    optional string name = 1;
 
-  optional string what = 2;
+    optional string what = 2;
 
-  enum AggregationType {
-    DURATION_SUM = 1;
+    optional string condition = 3;
 
-    DURATION_MAX_SPARSE = 2;
-  }
-  optional AggregationType type = 3;
+    repeated MetricConditionLink links = 4;
 
-  optional string predicate = 4;
+    enum AggregationType {
+        SUM = 1;
 
-  repeated KeyMatcher dimension = 5;
+        MAX_SPARSE = 2;
+    }
+    optional AggregationType aggregation_type = 5 [default = SUM];
 
-  optional Bucket bucket = 6;
+    repeated KeyMatcher dimension = 6;
 
-  repeated Alert alerts = 7;
-
-  repeated EventConditionLink links = 8;
-
+    optional Bucket bucket = 7;
 }
 
 message GaugeMetric {
-  optional int64 metric_id = 1;
+    optional string name = 1;
 
-  optional string what = 2;
+    optional string what = 2;
 
-  optional int32 gauge_field = 3;
+    optional FieldFilter gauge_fields = 3;
 
-  optional string condition = 4;
+    optional string condition = 4;
 
-  repeated KeyMatcher dimension = 5;
+    repeated KeyMatcher dimension = 5;
 
-  optional Bucket bucket = 6;
+    optional Bucket bucket = 6;
 
-  repeated Alert alerts = 7;
-
-  repeated EventConditionLink links = 8;
+    repeated MetricConditionLink links = 7;
 }
 
 message ValueMetric {
-  optional int64 metric_id = 1;
+    optional string name = 1;
 
-  optional string what = 2;
+    optional string what = 2;
 
-  optional int32 value_field = 3;
+    optional int32 value_field = 3;
 
-  optional string condition = 4;
+    optional string condition = 4;
 
-  repeated KeyMatcher dimension = 5;
+    repeated KeyMatcher dimension = 5;
 
-  optional Bucket bucket = 6;
+    optional Bucket bucket = 6;
 
-  repeated Alert alerts = 7;
+    repeated MetricConditionLink links = 7;
 
-  repeated EventConditionLink links = 8;
-
-  enum Operation {
-    SUM = 1;
-  }
-  optional Operation operation = 9 [default = SUM];
+    enum AggregationType { SUM = 1; }
+    optional AggregationType aggregation_type = 8 [default = SUM];
 }
 
-message EventConditionLink {
-  optional string condition = 1;
+message Alert {
+    optional string name = 1;
 
-  repeated KeyMatcher key_in_main = 2;
-  repeated KeyMatcher key_in_condition = 3;
-};
+    optional string metric_name = 2;
+
+    message IncidentdDetails {
+        repeated int32 section = 1;
+    }
+    optional IncidentdDetails incidentd_details = 3;
+
+    optional int32 number_of_buckets = 4;
+
+    optional int32 refractory_period_secs = 5;
+
+    optional int64 trigger_if_sum_gt = 6;
+}
+
+message AllowedLogSource {
+    repeated int32 uid = 1;
+    repeated string package = 2;
+}
 
 message StatsdConfig {
-  optional int64 config_id = 1;
+    optional string name = 1;
 
-  repeated EventMetric event_metric = 2;
+    repeated EventMetric event_metric = 2;
 
-  repeated CountMetric count_metric = 3;
+    repeated CountMetric count_metric = 3;
 
-  repeated ValueMetric value_metric = 4;
+    repeated ValueMetric value_metric = 4;
 
-  repeated DurationMetric duration_metric = 5;
+    repeated GaugeMetric gauge_metric = 5;
 
-  repeated GaugeMetric gauge_metric = 6;
+    repeated DurationMetric duration_metric = 6;
 
-  repeated LogEntryMatcher log_entry_matcher = 7;
+    repeated AtomMatcher atom_matcher = 7;
 
-  repeated Condition condition = 8;
+    repeated Predicate predicate = 8;
+
+    repeated Alert alert = 9;
+
+    optional AllowedLogSource log_source = 10;
 }

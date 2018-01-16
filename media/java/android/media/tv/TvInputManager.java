@@ -1330,6 +1330,7 @@ public final class TvInputManager {
      *
      * @return the list of content ratings blocked by the user.
      */
+    @SystemApi
     public List<TvContentRating> getBlockedRatings() {
         try {
             List<TvContentRating> ratings = new ArrayList<>();
@@ -1585,8 +1586,10 @@ public final class TvInputManager {
      * @param info The TV input which will use the acquired Hardware.
      * @return Hardware on success, {@code null} otherwise.
      *
+     * @hide
      * @removed
      */
+    @SystemApi
     @RequiresPermission(android.Manifest.permission.TV_INPUT_HARDWARE)
     public Hardware acquireTvInputHardware(int deviceId, final HardwareCallback callback,
             TvInputInfo info) {
@@ -2591,6 +2594,7 @@ public final class TvInputManager {
         }
 
         /** @removed */
+        @SystemApi
         public boolean dispatchKeyEventToHdmi(KeyEvent event) {
             return false;
         }

@@ -18,39 +18,55 @@ syntax = "proto2";
 option java_multiple_files = true;
 option java_outer_classname = "IncidentProtoMetadata";
 
-import "frameworks/base/libs/incident/proto/android/privacy.proto";
-import "frameworks/base/libs/incident/proto/android/section.proto";
-import "frameworks/base/core/proto/android/providers/settings.proto";
+import "frameworks/base/core/proto/android/os/cpufreq.proto";
+import "frameworks/base/core/proto/android/os/cpuinfo.proto";
 import "frameworks/base/core/proto/android/os/incidentheader.proto";
 import "frameworks/base/core/proto/android/os/kernelwake.proto";
 import "frameworks/base/core/proto/android/os/pagetypeinfo.proto";
 import "frameworks/base/core/proto/android/os/procrank.proto";
+import "frameworks/base/core/proto/android/os/system_properties.proto";
+import "frameworks/base/core/proto/android/providers/settings.proto";
 import "frameworks/base/core/proto/android/server/activitymanagerservice.proto";
 import "frameworks/base/core/proto/android/server/alarmmanagerservice.proto";
-import "frameworks/base/core/proto/android/server/windowmanagerservice.proto";
 import "frameworks/base/core/proto/android/server/fingerprint.proto";
 import "frameworks/base/core/proto/android/server/powermanagerservice.proto";
+import "frameworks/base/core/proto/android/server/windowmanagerservice.proto";
 import "frameworks/base/core/proto/android/service/appwidget.proto";
 import "frameworks/base/core/proto/android/service/battery.proto";
 import "frameworks/base/core/proto/android/service/batterystats.proto";
 import "frameworks/base/core/proto/android/service/diskstats.proto";
+import "frameworks/base/core/proto/android/service/graphicsstats.proto";
 import "frameworks/base/core/proto/android/service/netstats.proto";
 import "frameworks/base/core/proto/android/service/notification.proto";
 import "frameworks/base/core/proto/android/service/package.proto";
 import "frameworks/base/core/proto/android/service/print.proto";
 import "frameworks/base/core/proto/android/service/procstats.proto";
+import "frameworks/base/libs/incident/proto/android/privacy.proto";
+import "frameworks/base/libs/incident/proto/android/section.proto";
 
 package android.os;
+
+// This field contains internal metadata associated with an incident report,
+// such as the section ids and privacy policy specs from caller as well as how long
+// and how many bytes a section takes, etc.
+message IncidentMetadata {
+
+}
 
 // privacy field options must not be set at this level because all
 // the sections are able to be controlled and configured by section ids.
 // Instead privacy field options need to be configured in each section proto message.
 message IncidentProto {
-    // Incident header
+    // Incident header from callers
     repeated IncidentHeaderProto header = 1;
+    // Internal metadata of incidentd
+    optional IncidentMetadata metadata = 2;
 
     // Device information
-    //SystemProperties system_properties = 1000;
+    optional SystemPropertiesProto system_properties = 1000 [
+        (section).type = SECTION_COMMAND,
+        (section).args = "/system/bin/getprop"
+    ];
 
     // Linux services
     optional Procrank procrank = 2000 [
@@ -68,6 +84,15 @@ message IncidentProto {
         (section).args = "/d/wakeup_sources"
     ];
 
+    optional CpuInfo cpu_info = 2003 [
+        (section).type = SECTION_COMMAND,
+        (section).args = "/system/bin/top -b -n 1 -H -s 6 -o pid,tid,user,pr,ni,%cpu,s,virt,res,pcy,cmd,name"
+    ];
+
+    optional CpuFreq cpu_freq = 2004 [
+        (section).type = SECTION_FILE,
+        (section).args = "/sys/devices/system/cpu/cpufreq/all_time_in_state"
+    ];
 
     // System Services
     optional com.android.server.fingerprint.FingerprintServiceDumpProto fingerprint = 3000 [
@@ -80,7 +105,11 @@ message IncidentProto {
         (section).args = "netstats --proto"
     ];
 
-    optional android.providers.settings.SettingsServiceDumpProto settings = 3002;
+    optional android.providers.settings.SettingsServiceDumpProto settings = 3002 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "settings --proto"
+    ];
+
     optional android.service.appwidget.AppWidgetServiceDumpProto appwidget = 3003;
     optional android.service.notification.NotificationServiceDumpProto notification = 3004 [
         (section).type = SECTION_DUMPSYS,
@@ -129,7 +158,11 @@ message IncidentProto {
         (section).args = "activity --proto broadcasts"
     ];
 
-    optional com.android.server.am.proto.ServiceProto amservices = 3014;
+    optional com.android.server.am.proto.ActiveServicesProto amservices = 3014 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "activity --proto service"
+    ];
+
     optional com.android.server.am.proto.ProcessProto amprocesses = 3015;
 
     optional com.android.server.AlarmManagerServiceProto alarm = 3016 [
@@ -140,5 +173,15 @@ message IncidentProto {
     optional com.android.server.wm.proto.WindowManagerServiceProto window = 3017 [
         (section).type = SECTION_DUMPSYS,
         (section).args = "window --proto"
+    ];
+
+    optional com.android.server.am.proto.MemInfoProto meminfo = 3018 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "meminfo -a --proto"
+    ];
+
+    optional android.service.GraphicsStatsServiceDumpProto graphicsstats = 3019 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "graphicsstats --proto"
     ];
 }

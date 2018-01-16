@@ -202,6 +202,10 @@ public abstract class ExpandableView extends FrameLayout {
         return mDark;
     }
 
+    public boolean isRemoved() {
+        return false;
+    }
+
     /**
      * See {@link #setHideSensitive}. This is a variant which notifies this view in advance about
      * the upcoming state of hiding sensitive notifications. It gets called at the very beginning
@@ -472,6 +476,9 @@ public abstract class ExpandableView extends FrameLayout {
 
     public boolean isGroupExpanded() {
         return false;
+    }
+
+    public void setHeadsUpIsVisible() {
     }
 
     public boolean isChildInGroup() {

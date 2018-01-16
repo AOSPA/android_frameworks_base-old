@@ -76,6 +76,7 @@ import android.util.SparseBooleanArray;
 import android.util.TimeUtils;
 import android.util.Xml;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.os.AtomicFile;
 import com.android.internal.os.BackgroundThread;
@@ -119,7 +120,6 @@ public class DeviceIdleController extends SystemService
     private PowerManagerInternal mLocalPowerManager;
     private PowerManager mPowerManager;
     private ConnectivityService mConnectivityService;
-    private AlarmManagerService.LocalService mLocalAlarmManager;
     private INetworkPolicyManager mNetworkPolicyManager;
     private SensorManager mSensorManager;
     private Sensor mMotionSensor;
@@ -1435,7 +1435,6 @@ public class DeviceIdleController extends SystemService
                 mGoingIdleWakeLock.setReferenceCounted(true);
                 mConnectivityService = (ConnectivityService)ServiceManager.getService(
                         Context.CONNECTIVITY_SERVICE);
-                mLocalAlarmManager = getLocalService(AlarmManagerService.LocalService.class);
                 mNetworkPolicyManager = INetworkPolicyManager.Stub.asInterface(
                         ServiceManager.getService(Context.NETWORK_POLICY_SERVICE));
                 mNetworkPolicyManagerInternal = getLocalService(NetworkPolicyManagerInternal.class);
@@ -1500,8 +1499,8 @@ public class DeviceIdleController extends SystemService
 
                 mLocalActivityManager.setDeviceIdleWhitelist(mPowerSaveWhitelistAllAppIdArray);
                 mLocalPowerManager.setDeviceIdleWhitelist(mPowerSaveWhitelistAllAppIdArray);
-                mLocalAlarmManager.setDeviceIdleUserWhitelist(mPowerSaveWhitelistUserAppIdArray);
 
+                passWhiteListToForceAppStandbyTrackerLocked();
                 updateInteractivityLocked();
             }
             updateConnectivityState(null);
@@ -1756,6 +1755,27 @@ public class DeviceIdleController extends SystemService
         }
     }
 
+    void removePowerSaveTempWhitelistAppChecked(String packageName, int userId)
+            throws RemoteException {
+        getContext().enforceCallingPermission(
+                Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST,
+                "No permission to change device idle whitelist");
+        final int callingUid = Binder.getCallingUid();
+        userId = ActivityManager.getService().handleIncomingUser(
+                Binder.getCallingPid(),
+                callingUid,
+                userId,
+                /*allowAll=*/ false,
+                /*requireFull=*/ false,
+                "removePowerSaveTempWhitelistApp", null);
+        final long token = Binder.clearCallingIdentity();
+        try {
+            removePowerSaveTempWhitelistAppInternal(packageName, userId);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     /**
      * Adds an app to the temporary whitelist and resets the endTime for granting the
      * app an exemption to access network and acquire wakelocks.
@@ -1821,6 +1841,32 @@ public class DeviceIdleController extends SystemService
         }
     }
 
+    /**
+     * Removes an app from the temporary whitelist and notifies the observers.
+     */
+    private void removePowerSaveTempWhitelistAppInternal(String packageName, int userId) {
+        try {
+            final int uid = getContext().getPackageManager().getPackageUidAsUser(
+                    packageName, userId);
+            final int appId = UserHandle.getAppId(uid);
+            removePowerSaveTempWhitelistAppDirectInternal(appId);
+        } catch (NameNotFoundException e) {
+        }
+    }
+
+    private void removePowerSaveTempWhitelistAppDirectInternal(int appId) {
+        synchronized (this) {
+            final int idx = mTempWhitelistAppIdEndTimes.indexOfKey(appId);
+            if (idx < 0) {
+                // Nothing else to do
+                return;
+            }
+            final String reason = mTempWhitelistAppIdEndTimes.valueAt(idx).second;
+            mTempWhitelistAppIdEndTimes.removeAt(idx);
+            onAppRemovedFromTempWhitelistLocked(appId, reason);
+        }
+    }
+
     private void postTempActiveTimeoutMessage(int uid, long delay) {
         if (DEBUG) {
             Slog.d(TAG, "postTempActiveTimeoutMessage: uid=" + uid + ", delay=" + delay);
@@ -1842,18 +1888,7 @@ public class DeviceIdleController extends SystemService
             }
             if (timeNow >= entry.first.value) {
                 mTempWhitelistAppIdEndTimes.delete(uid);
-                if (DEBUG) {
-                    Slog.d(TAG, "Removing UID " + uid + " from temp whitelist");
-                }
-                updateTempWhitelistAppIdsLocked(uid, false);
-                mHandler.obtainMessage(MSG_REPORT_TEMP_APP_WHITELIST_CHANGED, uid, 0)
-                        .sendToTarget();
-                reportTempWhitelistChangedLocked();
-                try {
-                    mBatteryStats.noteEvent(BatteryStats.HistoryItem.EVENT_TEMP_WHITELIST_FINISH,
-                            entry.second, uid);
-                } catch (RemoteException e) {
-                }
+                onAppRemovedFromTempWhitelistLocked(uid, entry.second);
             } else {
                 // Need more time
                 if (DEBUG) {
@@ -1861,6 +1896,22 @@ public class DeviceIdleController extends SystemService
                 }
                 postTempActiveTimeoutMessage(uid, entry.first.value - timeNow);
             }
+        }
+    }
+
+    @GuardedBy("this")
+    private void onAppRemovedFromTempWhitelistLocked(int appId, String reason) {
+        if (DEBUG) {
+            Slog.d(TAG, "Removing appId " + appId + " from temp whitelist");
+        }
+        updateTempWhitelistAppIdsLocked(appId, false);
+        mHandler.obtainMessage(MSG_REPORT_TEMP_APP_WHITELIST_CHANGED, appId, 0)
+                .sendToTarget();
+        reportTempWhitelistChangedLocked();
+        try {
+            mBatteryStats.noteEvent(BatteryStats.HistoryItem.EVENT_TEMP_WHITELIST_FINISH,
+                    reason, appId);
+        } catch (RemoteException e) {
         }
     }
 
@@ -2477,13 +2528,7 @@ public class DeviceIdleController extends SystemService
             }
             mLocalPowerManager.setDeviceIdleWhitelist(mPowerSaveWhitelistAllAppIdArray);
         }
-        if (mLocalAlarmManager != null) {
-            if (DEBUG) {
-                Slog.d(TAG, "Setting alarm whitelist to "
-                        + Arrays.toString(mPowerSaveWhitelistUserAppIdArray));
-            }
-            mLocalAlarmManager.setDeviceIdleUserWhitelist(mPowerSaveWhitelistUserAppIdArray);
-        }
+        passWhiteListToForceAppStandbyTrackerLocked();
     }
 
     private void updateTempWhitelistAppIdsLocked(int appId, boolean adding) {
@@ -2509,6 +2554,7 @@ public class DeviceIdleController extends SystemService
             }
             mLocalPowerManager.setDeviceIdleTempWhitelist(mTempWhitelistAppIdArray);
         }
+        passWhiteListToForceAppStandbyTrackerLocked();
     }
 
     private void reportPowerSaveWhitelistChangedLocked() {
@@ -2521,6 +2567,12 @@ public class DeviceIdleController extends SystemService
         Intent intent = new Intent(PowerManager.ACTION_POWER_SAVE_TEMP_WHITELIST_CHANGED);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
         getContext().sendBroadcastAsUser(intent, UserHandle.SYSTEM);
+    }
+
+    private void passWhiteListToForceAppStandbyTrackerLocked() {
+        ForceAppStandbyTracker.getInstance(getContext()).setPowerSaveWhitelistAppIds(
+                mPowerSaveWhitelistAllAppIdArray,
+                mTempWhitelistAppIdArray);
     }
 
     void readConfigFileLocked() {
@@ -2700,9 +2752,11 @@ public class DeviceIdleController extends SystemService
                 + "changes made using this won't be persisted across boots");
         pw.println("  tempwhitelist");
         pw.println("    Print packages that are temporarily whitelisted.");
-        pw.println("  tempwhitelist [-u USER] [-d DURATION] [package ..]");
-        pw.println("    Temporarily place packages in whitelist for DURATION milliseconds.");
+        pw.println("  tempwhitelist [-u USER] [-d DURATION] [-r] [package]");
+        pw.println("    Temporarily place package in whitelist for DURATION milliseconds.");
         pw.println("    If no DURATION is specified, 10 seconds is used");
+        pw.println("    If [-r] option is used, then the package is removed from temp whitelist "
+                + "and any [-d] is ignored");
     }
 
     class Shell extends ShellCommand {
@@ -2774,7 +2828,7 @@ public class DeviceIdleController extends SystemService
                         becomeInactiveIfAppropriateLocked();
                         int curLightState = mLightState;
                         while (curLightState != LIGHT_STATE_IDLE) {
-                            stepIdleStateLocked("s:shell");
+                            stepLightIdleStateLocked("s:shell");
                             if (curLightState == mLightState) {
                                 pw.print("Unable to go light idle; stopped at ");
                                 pw.println(lightStateToString(mLightState));
@@ -2986,6 +3040,7 @@ public class DeviceIdleController extends SystemService
             }
         } else if ("tempwhitelist".equals(cmd)) {
             long duration = 10000;
+            boolean removePkg = false;
             String opt;
             while ((opt=shell.getNextOption()) != null) {
                 if ("-u".equals(opt)) {
@@ -3002,16 +3057,25 @@ public class DeviceIdleController extends SystemService
                         return -1;
                     }
                     duration = Long.parseLong(opt);
+                } else if ("-r".equals(opt)) {
+                    removePkg = true;
                 }
             }
             String arg = shell.getNextArg();
             if (arg != null) {
                 try {
-                    addPowerSaveTempWhitelistAppChecked(arg, duration, shell.userId, "shell");
+                    if (removePkg) {
+                        removePowerSaveTempWhitelistAppChecked(arg, shell.userId);
+                    } else {
+                        addPowerSaveTempWhitelistAppChecked(arg, duration, shell.userId, "shell");
+                    }
                 } catch (Exception e) {
                     pw.println("Failed: " + e);
                     return -1;
                 }
+            } else if (removePkg) {
+                pw.println("[-r] requires a package name");
+                return -1;
             } else {
                 dumpTempWhitelistSchedule(pw, false);
             }

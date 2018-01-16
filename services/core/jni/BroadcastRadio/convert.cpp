@@ -21,7 +21,7 @@
 
 #include "regions.h"
 
-#include <broadcastradio-utils/Utils.h>
+#include <broadcastradio-utils-1x/Utils.h>
 #include <core_jni_helpers.h>
 #include <nativehelper/JNIHelp.h>
 #include <utils/Log.h>
@@ -34,6 +34,7 @@ namespace convert {
 namespace utils = hardware::broadcastradio::utils;
 
 using hardware::Return;
+using hardware::hidl_string;
 using hardware::hidl_vec;
 using regions::RegionalBandConfig;
 
@@ -98,6 +99,11 @@ static struct {
     } HashMap;
 
     struct {
+        jmethodID get;
+        jmethodID size;
+    } List;
+
+    struct {
         jmethodID put;
     } Map;
 
@@ -145,7 +151,20 @@ static struct {
         jclass clazz;
         jmethodID cstor;
     } ParcelableException;
+
+    struct {
+        jclass clazz;
+    } String;
 } gjni;
+
+static jstring CastToString(JNIEnv *env, jobject obj) {
+    if (env->IsInstanceOf(obj, gjni.String.clazz)) {
+        return static_cast<jstring>(obj);
+    } else {
+        ALOGE("Cast failed, object is not a string");
+        return nullptr;
+    }
+}
 
 template <>
 bool ThrowIfFailed(JNIEnv *env, const hardware::Return<void> &hidlResult) {
@@ -250,10 +269,24 @@ static JavaRef<jobjectArray> ArrayFromHal(JNIEnv *env, const hidl_vec<T>& vec,
 }
 
 static std::string StringFromJava(JNIEnv *env, JavaRef<jstring> &jStr) {
-    auto cstr = (jStr == nullptr) ? nullptr : env->GetStringUTFChars(jStr.get(), nullptr);
+    if (jStr == nullptr) return {};
+    auto cstr = env->GetStringUTFChars(jStr.get(), nullptr);
     std::string str(cstr);
     env->ReleaseStringUTFChars(jStr.get(), cstr);
     return str;
+}
+
+hidl_vec<hidl_string> StringListToHal(JNIEnv *env, jobject jList) {
+    auto len = (jList == nullptr) ? 0 : env->CallIntMethod(jList, gjni.List.size);
+    hidl_vec<hidl_string> list(len);
+
+    for (decltype(len) i = 0; i < len; i++) {
+        auto jString = make_javaref(env, CastToString(env, env->CallObjectMethod(
+                jList, gjni.List.get, i)));
+        list[i] = StringFromJava(env, jString);
+    }
+
+    return list;
 }
 
 JavaRef<jobject> VendorInfoFromHal(JNIEnv *env, const hidl_vec<VendorKeyValue> &info) {
@@ -275,7 +308,10 @@ hidl_vec<VendorKeyValue> VendorInfoToHal(JNIEnv *env, jobject jInfo) {
 
     auto jInfoArr = make_javaref(env, static_cast<jobjectArray>(env->CallStaticObjectMethod(
             gjni.Convert.clazz, gjni.Convert.stringMapToNative, jInfo)));
-    LOG_FATAL_IF(jInfoArr == nullptr, "Converted array is null");
+    if (jInfoArr == nullptr) {
+        ALOGE("Converted array is null");
+        return {};
+    }
 
     auto len = env->GetArrayLength(jInfoArr.get());
     hidl_vec<VendorKeyValue> vec;
@@ -642,7 +678,7 @@ void register_android_server_broadcastradio_convert(JNIEnv *env) {
     gjni.AmBandDescriptor.cstor = GetMethodIDOrDie(env, amBandDescriptorClass,
             "<init>", "(IIIIIZ)V");
 
-    auto convertClass = FindClassOrDie(env, "com/android/server/broadcastradio/Convert");
+    auto convertClass = FindClassOrDie(env, "com/android/server/broadcastradio/hal1/Convert");
     gjni.Convert.clazz = MakeGlobalRefOrDie(env, convertClass);
     gjni.Convert.stringMapToNative = GetStaticMethodIDOrDie(env, convertClass, "stringMapToNative",
             "(Ljava/util/Map;)[[Ljava/lang/String;");
@@ -650,6 +686,10 @@ void register_android_server_broadcastradio_convert(JNIEnv *env) {
     auto hashMapClass = FindClassOrDie(env, "java/util/HashMap");
     gjni.HashMap.clazz = MakeGlobalRefOrDie(env, hashMapClass);
     gjni.HashMap.cstor = GetMethodIDOrDie(env, hashMapClass, "<init>", "()V");
+
+    auto listClass = FindClassOrDie(env, "java/util/List");
+    gjni.List.get = GetMethodIDOrDie(env, listClass, "get", "(I)Ljava/lang/Object;");
+    gjni.List.size = GetMethodIDOrDie(env, listClass, "size", "()I");
 
     auto mapClass = FindClassOrDie(env, "java/util/Map");
     gjni.Map.put = GetMethodIDOrDie(env, mapClass, "put",
@@ -713,6 +753,9 @@ void register_android_server_broadcastradio_convert(JNIEnv *env) {
     gjni.ParcelableException.clazz = MakeGlobalRefOrDie(env, parcelableExcClass);
     gjni.ParcelableException.cstor = GetMethodIDOrDie(env, parcelableExcClass, "<init>",
             "(Ljava/lang/Throwable;)V");
+
+    auto stringClass = FindClassOrDie(env, "java/lang/String");
+    gjni.String.clazz = MakeGlobalRefOrDie(env, stringClass);
 }
 
 } // namespace android

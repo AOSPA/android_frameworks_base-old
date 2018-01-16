@@ -63,9 +63,10 @@ public class DozeFactory {
                 new DozeFalsingManagerAdapter(FalsingManager.getInstance(context)),
                 createDozeTriggers(context, sensorManager, host, alarmManager, config, params,
                         handler, wakeLock, machine),
-                createDozeUi(context, host, wakeLock, machine, handler, alarmManager),
+                createDozeUi(context, host, wakeLock, machine, handler, alarmManager, params),
                 new DozeScreenState(wrappedService, handler),
                 createDozeScreenBrightness(context, wrappedService, sensorManager, host, handler),
+                new DozeWallpaperState()
         });
 
         return machine;
@@ -89,8 +90,9 @@ public class DozeFactory {
     }
 
     private DozeMachine.Part createDozeUi(Context context, DozeHost host, WakeLock wakeLock,
-            DozeMachine machine, Handler handler, AlarmManager alarmManager) {
-        return new DozeUi(context, alarmManager, machine, wakeLock, host, handler);
+            DozeMachine machine, Handler handler, AlarmManager alarmManager,
+            DozeParameters params) {
+        return new DozeUi(context, alarmManager, machine, wakeLock, host, handler, params);
     }
 
     public static DozeHost getHost(DozeService service) {

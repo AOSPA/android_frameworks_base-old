@@ -16,7 +16,9 @@
 
 package android.app.admin;
 
+import android.annotation.CallbackExecutor;
 import android.annotation.ColorInt;
+import android.annotation.Condemned;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -49,6 +51,7 @@ import android.net.ProxyInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.Parcelable;
 import android.os.PersistableBundle;
 import android.os.Process;
@@ -57,7 +60,15 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.ContactsContract.Directory;
+import android.security.AttestedKeyPair;
 import android.security.Credentials;
+import android.security.KeyChain;
+import android.security.KeyChainException;
+import android.security.keymaster.KeymasterCertificateChain;
+import android.security.keystore.AttestationUtils;
+import android.security.keystore.KeyAttestationException;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.ParcelableKeyGenParameterSpec;
 import android.service.restrictions.RestrictionsReceiver;
 import android.telephony.TelephonyManager;
 import android.util.ArraySet;
@@ -75,6 +86,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.security.KeyFactory;
+import java.security.KeyPair;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
@@ -88,6 +100,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executor;
 
 /**
  * Public interface for managing policies enforced on a device. Most clients of this class must be
@@ -1315,9 +1328,15 @@ public class DevicePolicyManager {
     public static final String DELEGATION_ENABLE_SYSTEM_APP = "delegation-enable-system-app";
 
     /**
+     * Delegation for installing existing packages. This scope grants access to the
+     * {@link #installExistingPackage} API.
+     */
+    public static final String DELEGATION_INSTALL_EXISTING_PACKAGE =
+            "delegation-install-existing-package";
+
+    /**
      * Delegation of management of uninstalled packages. This scope grants access to the
      * {@code #setKeepUninstalledPackages} and {@code #getKeepUninstalledPackages} APIs.
-     * @hide
      */
     public static final String DELEGATION_KEEP_UNINSTALLED_PACKAGES =
             "delegation-keep-uninstalled-packages";
@@ -1360,8 +1379,13 @@ public class DevicePolicyManager {
     /**
      * @hide
      */
-    @IntDef({STATE_USER_UNMANAGED, STATE_USER_SETUP_INCOMPLETE, STATE_USER_SETUP_COMPLETE,
-            STATE_USER_SETUP_FINALIZED, STATE_USER_PROFILE_COMPLETE})
+    @IntDef(prefix = { "STATE_USER_" }, value = {
+            STATE_USER_UNMANAGED,
+            STATE_USER_SETUP_INCOMPLETE,
+            STATE_USER_SETUP_COMPLETE,
+            STATE_USER_SETUP_FINALIZED,
+            STATE_USER_PROFILE_COMPLETE
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface UserProvisioningState {}
 
@@ -1534,11 +1558,13 @@ public class DevicePolicyManager {
      * @hide
      */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({CODE_OK, CODE_HAS_DEVICE_OWNER, CODE_USER_HAS_PROFILE_OWNER, CODE_USER_NOT_RUNNING,
+    @IntDef(prefix = { "CODE_" }, value = {
+            CODE_OK, CODE_HAS_DEVICE_OWNER, CODE_USER_HAS_PROFILE_OWNER, CODE_USER_NOT_RUNNING,
             CODE_USER_SETUP_COMPLETED, CODE_NOT_SYSTEM_USER, CODE_HAS_PAIRED,
             CODE_MANAGED_USERS_NOT_SUPPORTED, CODE_SYSTEM_USER, CODE_CANNOT_ADD_MANAGED_PROFILE,
             CODE_NOT_SYSTEM_USER_SPLIT, CODE_DEVICE_ADMIN_NOT_SUPPORTED,
-            CODE_SPLIT_SYSTEM_USER_DEVICE_SYSTEM_USER, CODE_ADD_MANAGED_PROFILE_DISALLOWED})
+            CODE_SPLIT_SYSTEM_USER_DEVICE_SYSTEM_USER, CODE_ADD_MANAGED_PROFILE_DISALLOWED
+    })
     public @interface ProvisioningPreCondition {}
 
     /**
@@ -1620,11 +1646,15 @@ public class DevicePolicyManager {
      * @hide
      */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(flag = true,
-            value = {LOCK_TASK_FEATURE_NONE, LOCK_TASK_FEATURE_SYSTEM_INFO,
-                    LOCK_TASK_FEATURE_NOTIFICATIONS, LOCK_TASK_FEATURE_HOME,
-                    LOCK_TASK_FEATURE_RECENTS, LOCK_TASK_FEATURE_GLOBAL_ACTIONS,
-                    LOCK_TASK_FEATURE_KEYGUARD})
+    @IntDef(flag = true, prefix = { "LOCK_TASK_FEATURE_" }, value = {
+            LOCK_TASK_FEATURE_NONE,
+            LOCK_TASK_FEATURE_SYSTEM_INFO,
+            LOCK_TASK_FEATURE_NOTIFICATIONS,
+            LOCK_TASK_FEATURE_HOME,
+            LOCK_TASK_FEATURE_RECENTS,
+            LOCK_TASK_FEATURE_GLOBAL_ACTIONS,
+            LOCK_TASK_FEATURE_KEYGUARD
+    })
     public @interface LockTaskFeature {}
 
     /**
@@ -2605,10 +2635,115 @@ public class DevicePolicyManager {
     }
 
     /**
+     * The maximum number of characters allowed in the password blacklist.
+     */
+    private static final int PASSWORD_BLACKLIST_CHARACTER_LIMIT = 128 * 1000;
+
+    /**
+     * Throws an exception if the password blacklist is too large.
+     *
+     * @hide
+     */
+    public static void enforcePasswordBlacklistSize(List<String> blacklist) {
+        if (blacklist == null) {
+            return;
+        }
+        long characterCount = 0;
+        for (final String item : blacklist) {
+            characterCount += item.length();
+        }
+        if (characterCount > PASSWORD_BLACKLIST_CHARACTER_LIMIT) {
+            throw new IllegalArgumentException("128 thousand blacklist character limit exceeded by "
+                      + (characterCount - PASSWORD_BLACKLIST_CHARACTER_LIMIT) + " characters");
+        }
+    }
+
+    /**
+     * Called by an application that is administering the device to blacklist passwords.
+     * <p>
+     * Any blacklisted password or PIN is prevented from being enrolled by the user or the admin.
+     * Note that the match against the blacklist is case insensitive. The blacklist applies for all
+     * password qualities requested by {@link #setPasswordQuality} however it is not taken into
+     * consideration by {@link #isActivePasswordSufficient}.
+     * <p>
+     * The blacklist can be cleared by passing {@code null} or an empty list. The blacklist is
+     * given a name that is used to track which blacklist is currently set by calling {@link
+     * #getPasswordBlacklistName}. If the blacklist is being cleared, the name is ignored and {@link
+     * #getPasswordBlacklistName} will return {@code null}. The name can only be {@code null} when
+     * the blacklist is being cleared.
+     * <p>
+     * The blacklist is limited to a total of 128 thousand characters rather than limiting to a
+     * number of entries.
+     * <p>
+     * This method can be called on the {@link DevicePolicyManager} instance returned by
+     * {@link #getParentProfileInstance(ComponentName)} in order to set restrictions on the parent
+     * profile.
+     *
+     * @param admin the {@link DeviceAdminReceiver} this request is associated with
+     * @param name name to associate with the blacklist
+     * @param blacklist list of passwords to blacklist or {@code null} to clear the blacklist
+     * @return whether the new blacklist was successfully installed
+     * @throws SecurityException if {@code admin} is not a device or profile owner
+     * @throws IllegalArgumentException if the blacklist surpasses the character limit
+     * @throws NullPointerException if {@code name} is {@code null} when setting a non-empty list
+     *
+     * @see #getPasswordBlacklistName
+     * @see #isActivePasswordSufficient
+     * @see #resetPasswordWithToken
+     */
+    public boolean setPasswordBlacklist(@NonNull ComponentName admin, @Nullable String name,
+            @Nullable List<String> blacklist) {
+        enforcePasswordBlacklistSize(blacklist);
+
+        try {
+            return mService.setPasswordBlacklist(admin, name, blacklist, mParentInstance);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the name of the password blacklist set by the given admin.
+     *
+     * @param admin the {@link DeviceAdminReceiver} this request is associated with
+     * @return the name of the blacklist or {@code null} if no blacklist is set
+     *
+     * @see #setPasswordBlacklist
+     */
+    public @Nullable String getPasswordBlacklistName(@NonNull ComponentName admin) {
+        try {
+            return mService.getPasswordBlacklistName(admin, myUserId(), mParentInstance);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Test if a given password is blacklisted.
+     *
+     * @param userId the user to valiate for
+     * @param password the password to check against the blacklist
+     * @return whether the password is blacklisted
+     *
+     * @see #setPasswordBlacklist
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.TEST_BLACKLISTED_PASSWORD)
+    public boolean isPasswordBlacklisted(@UserIdInt int userId, @NonNull String password) {
+        try {
+            return mService.isPasswordBlacklisted(userId, password);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Determine whether the current password the user has set is sufficient to meet the policy
      * requirements (e.g. quality, minimum length) that have been requested by the admins of this
      * user and its participating profiles. Restrictions on profiles that have a separate challenge
-     * are not taken into account. The user must be unlocked in order to perform the check.
+     * are not taken into account. The user must be unlocked in order to perform the check. The
+     * password blacklist is not considered when checking sufficiency.
      * <p>
      * The calling device admin must have requested
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
@@ -2632,6 +2767,29 @@ public class DevicePolicyManager {
             }
         }
         return false;
+    }
+
+    /**
+     * When called by a profile owner of a managed profile returns true if the profile uses unified
+     * challenge with its parent user.
+     *
+     * <strong>Note: This method is not concerned with password quality and will return false if
+     * the profile has empty password as a separate challenge.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @throws SecurityException if {@code admin} is not a profile owner of a managed profile.
+     * @see UserManager#DISALLOW_UNIFIED_PASSWORD
+     */
+    public boolean isUsingUnifiedPassword(@NonNull ComponentName admin) {
+        throwIfParentInstance("isUsingUnifiedPassword");
+        if (mService != null) {
+            try {
+                return mService.isUsingUnifiedPassword(admin);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return true;
     }
 
     /**
@@ -3049,23 +3207,6 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Returns maximum time to lock that applied by all profiles in this user. We do this because we
-     * do not have a separate timeout to lock for work challenge only.
-     *
-     * @hide
-     */
-    public long getMaximumTimeToLockForUserAndProfiles(int userHandle) {
-        if (mService != null) {
-            try {
-                return mService.getMaximumTimeToLockForUserAndProfiles(userHandle);
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
-        }
-        return 0;
-    }
-
-    /**
      * Called by a device/profile owner to set the timeout after which unlocking with secondary, non
      * strong auth (e.g. fingerprint, trust agents) times out, i.e. the user has to use a strong
      * authentication method like password, pin or pattern.
@@ -3153,7 +3294,9 @@ public class DevicePolicyManager {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(flag=true, value={FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY})
+    @IntDef(flag = true, prefix = { "FLAG_EVICT_" }, value = {
+            FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY
+    })
     public @interface LockNowFlag {}
 
     /**
@@ -3468,6 +3611,16 @@ public class DevicePolicyManager {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_START_ENCRYPTION
             = "android.app.action.START_ENCRYPTION";
+
+    /**
+     * Broadcast action: notify managed provisioning that new managed user is created.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_MANAGED_USER_CREATED =
+            "android.app.action.MANAGED_USER_CREATED";
+
     /**
      * Widgets are enabled in keyguard
      */
@@ -3858,6 +4011,47 @@ public class DevicePolicyManager {
      */
     public boolean installKeyPair(@Nullable ComponentName admin, @NonNull PrivateKey privKey,
             @NonNull Certificate[] certs, @NonNull String alias, boolean requestAccess) {
+        return installKeyPair(admin, privKey, certs, alias, requestAccess, true);
+    }
+
+    /**
+     * Called by a device or profile owner, or delegated certificate installer, to install a
+     * certificate chain and corresponding private key for the leaf certificate. All apps within the
+     * profile will be able to access the certificate chain and use the private key, given direct
+     * user approval (if the user is allowed to select the private key).
+     *
+     * <p>The caller of this API may grant itself access to the certificate and private key
+     * immediately, without user approval. It is a best practice not to request this unless strictly
+     * necessary since it opens up additional security vulnerabilities.
+     *
+     * <p>Whether this key is offered to the user for approval at all or not depends on the
+     * {@code isUserSelectable} parameter.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *        {@code null} if calling from a delegated certificate installer.
+     * @param privKey The private key to install.
+     * @param certs The certificate chain to install. The chain should start with the leaf
+     *        certificate and include the chain of trust in order. This will be returned by
+     *        {@link android.security.KeyChain#getCertificateChain}.
+     * @param alias The private key alias under which to install the certificate. If a certificate
+     *        with that alias already exists, it will be overwritten.
+     * @param requestAccess {@code true} to request that the calling app be granted access to the
+     *        credentials immediately. Otherwise, access to the credentials will be gated by user
+     *        approval.
+     * @param isUserSelectable {@code true} to indicate that a user can select this key via the
+     *        Certificate Selection prompt, false to indicate that this key can only be granted
+     *        access by implementing
+     *        {@link android.app.admin.DeviceAdminReceiver#onChoosePrivateKeyAlias}.
+     * @return {@code true} if the keys were installed, {@code false} otherwise.
+     * @throws SecurityException if {@code admin} is not {@code null} and not a device or profile
+     *         owner.
+     * @see android.security.KeyChain#getCertificateChain
+     * @see #setDelegatedScopes
+     * @see #DELEGATION_CERT_INSTALL
+     */
+    public boolean installKeyPair(@Nullable ComponentName admin, @NonNull PrivateKey privKey,
+            @NonNull Certificate[] certs, @NonNull String alias, boolean requestAccess,
+            boolean isUserSelectable) {
         throwIfParentInstance("installKeyPair");
         try {
             final byte[] pemCert = Credentials.convertToPem(certs[0]);
@@ -3868,7 +4062,7 @@ public class DevicePolicyManager {
             final byte[] pkcs8Key = KeyFactory.getInstance(privKey.getAlgorithm())
                     .getKeySpec(privKey, PKCS8EncodedKeySpec.class).getEncoded();
             return mService.installKeyPair(admin, mContext.getPackageName(), pkcs8Key, pemCert,
-                    pemChain, alias, requestAccess);
+                    pemChain, alias, requestAccess, isUserSelectable);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
@@ -3900,6 +4094,108 @@ public class DevicePolicyManager {
             throw e.rethrowFromSystemServer();
         }
     }
+
+    /**
+     * Called by a device or profile owner, or delegated certificate installer, to generate a
+     * new private/public key pair. If the device supports key generation via secure hardware,
+     * this method is useful for creating a key in KeyChain that never left the secure hardware.
+     *
+     * Access to the key is controlled the same way as in {@link #installKeyPair}.
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if calling from a delegated certificate installer.
+     * @param algorithm The key generation algorithm, see {@link java.security.KeyPairGenerator}.
+     * @param keySpec Specification of the key to generate, see
+     * {@link java.security.KeyPairGenerator}.
+     * @return A non-null {@code AttestedKeyPair} if the key generation succeeded, null otherwise.
+     * @throws SecurityException if {@code admin} is not {@code null} and not a device or profile
+     *         owner.
+     * @throws IllegalArgumentException if the alias in {@code keySpec} is empty, or if the
+     *         algorithm specification in {@code keySpec} is not {@code RSAKeyGenParameterSpec}
+     *         or {@code ECGenParameterSpec}.
+     */
+    public AttestedKeyPair generateKeyPair(@Nullable ComponentName admin,
+            @NonNull String algorithm, @NonNull KeyGenParameterSpec keySpec) {
+        throwIfParentInstance("generateKeyPair");
+        try {
+            final ParcelableKeyGenParameterSpec parcelableSpec =
+                    new ParcelableKeyGenParameterSpec(keySpec);
+            KeymasterCertificateChain attestationChain = new KeymasterCertificateChain();
+            final boolean success = mService.generateKeyPair(
+                    admin, mContext.getPackageName(), algorithm, parcelableSpec, attestationChain);
+            if (!success) {
+                Log.e(TAG, "Error generating key via DevicePolicyManagerService.");
+                return null;
+            }
+
+            final String alias = keySpec.getKeystoreAlias();
+            final KeyPair keyPair = KeyChain.getKeyPair(mContext, alias);
+            Certificate[] outputChain = null;
+            try {
+                if (AttestationUtils.isChainValid(attestationChain)) {
+                    outputChain = AttestationUtils.parseCertificateChain(attestationChain);
+                }
+            } catch (KeyAttestationException e) {
+                Log.e(TAG, "Error parsing attestation chain for alias " + alias, e);
+                mService.removeKeyPair(admin, mContext.getPackageName(), alias);
+                return null;
+            }
+            return new AttestedKeyPair(keyPair, outputChain);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        } catch (KeyChainException e) {
+            Log.w(TAG, "Failed to generate key", e);
+        } catch (InterruptedException e) {
+            Log.w(TAG, "Interrupted while generating key", e);
+            Thread.currentThread().interrupt();
+        }
+        return null;
+    }
+
+
+    /**
+     * Called by a device or profile owner, or delegated certificate installer, to associate
+     * certificates with a key pair that was generated using {@link #generateKeyPair}, and
+     * set whether the key is available for the user to choose in the certificate selection
+     * prompt.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
+     *            {@code null} if calling from a delegated certificate installer.
+     * @param alias The private key alias under which to install the certificate. The {@code alias}
+     *        should denote an existing private key. If a certificate with that alias already
+     *        exists, it will be overwritten.
+     * @param certs The certificate chain to install. The chain should start with the leaf
+     *        certificate and include the chain of trust in order. This will be returned by
+     *        {@link android.security.KeyChain#getCertificateChain}.
+     * @param isUserSelectable {@code true} to indicate that a user can select this key via the
+     *        certificate selection prompt, {@code false} to indicate that this key can only be
+     *        granted access by implementing
+     *        {@link android.app.admin.DeviceAdminReceiver#onChoosePrivateKeyAlias}.
+     * @return {@code true} if the provided {@code alias} exists and the certificates has been
+     *        successfully associated with it, {@code false} otherwise.
+     * @throws SecurityException if {@code admin} is not {@code null} and not a device or profile
+     *         owner, or {@code admin} is null but the calling application is not a delegated
+     *         certificate installer.
+     */
+    public boolean setKeyPairCertificate(@Nullable ComponentName admin,
+            @NonNull String alias, @NonNull List<Certificate> certs, boolean isUserSelectable) {
+        throwIfParentInstance("setKeyPairCertificate");
+        try {
+            final byte[] pemCert = Credentials.convertToPem(certs.get(0));
+            byte[] pemChain = null;
+            if (certs.size() > 1) {
+                pemChain = Credentials.convertToPem(
+                        certs.subList(1, certs.size()).toArray(new Certificate[0]));
+            }
+            return mService.setKeyPairCertificate(admin, mContext.getPackageName(), alias, pemCert,
+                    pemChain, isUserSelectable);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        } catch (CertificateException | IOException e) {
+            Log.w(TAG, "Could not pem-encode certificate", e);
+        }
+        return false;
+    }
+
 
     /**
      * @return the alias of a given CA certificate in the certificate store, or {@code null} if it
@@ -4171,16 +4467,16 @@ public class DevicePolicyManager {
     /**
      * Called by a device owner to request a bugreport.
      * <p>
-     * If the device contains secondary users or profiles, they must be affiliated with the device
-     * owner user. Otherwise a {@link SecurityException} will be thrown. See
-     * {@link #setAffiliationIds}.
+     * If the device contains secondary users or profiles, they must be affiliated with the device.
+     * Otherwise a {@link SecurityException} will be thrown. See {@link #isAffiliatedUser}.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @return {@code true} if the bugreport collection started successfully, or {@code false} if it
      *         wasn't triggered because a previous bugreport operation is still active (either the
      *         bugreport is still running or waiting for the user to share or decline)
      * @throws SecurityException if {@code admin} is not a device owner, or there is at least one
-     *         profile or secondary user that is not affiliated with the device owner user.
+     *         profile or secondary user that is not affiliated with the device.
+     * @see #isAffiliatedUser
      */
     public boolean requestBugreport(@NonNull ComponentName admin) {
         throwIfParentInstance("requestBugreport");
@@ -5994,7 +6290,6 @@ public class DevicePolicyManager {
      * @return List of package names to keep cached.
      * @see #setDelegatedScopes
      * @see #DELEGATION_KEEP_UNINSTALLED_PACKAGES
-     * @hide
      */
     public @Nullable List<String> getKeepUninstalledPackages(@Nullable ComponentName admin) {
         throwIfParentInstance("getKeepUninstalledPackages");
@@ -6022,7 +6317,6 @@ public class DevicePolicyManager {
      * @throws SecurityException if {@code admin} is not a device owner.
      * @see #setDelegatedScopes
      * @see #DELEGATION_KEEP_UNINSTALLED_PACKAGES
-     * @hide
      */
     public void setKeepUninstalledPackages(@Nullable ComponentName admin,
             @NonNull List<String> packageNames) {
@@ -6110,21 +6404,27 @@ public class DevicePolicyManager {
     public static final int MAKE_USER_DEMO = 0x0004;
 
     /**
-     * Flag used by {@link #createAndManageUser} to specificy that the newly created user should be
+     * Flag used by {@link #createAndManageUser} to specify that the newly created user should be
      * started in the background as part of the user creation.
      */
-    // TODO: Investigate solutions for the case where reboot happens before setup is completed.
     public static final int START_USER_IN_BACKGROUND = 0x0008;
+
+    /**
+     * Flag used by {@link #createAndManageUser} to specify that the newly created user should skip
+     * the disabling of system apps during provisioning.
+     */
+    public static final int LEAVE_ALL_SYSTEM_APPS_ENABLED = 0x0010;
 
     /**
      * @hide
      */
-    @IntDef(
-            flag = true,
-            prefix = {"SKIP_", "MAKE_USER_", "START_"},
-            value = {SKIP_SETUP_WIZARD, MAKE_USER_EPHEMERAL, MAKE_USER_DEMO,
-                    START_USER_IN_BACKGROUND}
-    )
+    @IntDef(flag = true, prefix = { "SKIP_", "MAKE_USER_", "START_", "LEAVE_" }, value = {
+            SKIP_SETUP_WIZARD,
+            MAKE_USER_EPHEMERAL,
+            MAKE_USER_DEMO,
+            START_USER_IN_BACKGROUND,
+            LEAVE_ALL_SYSTEM_APPS_ENABLED
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CreateAndManageUserFlags {}
 
@@ -6178,7 +6478,7 @@ public class DevicePolicyManager {
      * @return {@code true} if the user was removed, {@code false} otherwise.
      * @throws SecurityException if {@code admin} is not a device owner.
      */
-    public boolean removeUser(@NonNull ComponentName admin, UserHandle userHandle) {
+    public boolean removeUser(@NonNull ComponentName admin, @NonNull UserHandle userHandle) {
         throwIfParentInstance("removeUser");
         try {
             return mService.removeUser(admin, userHandle);
@@ -6189,6 +6489,7 @@ public class DevicePolicyManager {
 
     /**
      * Called by a device owner to switch the specified user to the foreground.
+     * <p> This cannot be used to switch to a managed profile.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param userHandle the user to switch to; null will switch to primary.
@@ -6200,6 +6501,80 @@ public class DevicePolicyManager {
         throwIfParentInstance("switchUser");
         try {
             return mService.switchUser(admin, userHandle);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Called by a device owner to stop the specified secondary user.
+     * <p> This cannot be used to stop the primary user or a managed profile.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param userHandle the user to be stopped.
+     * @return {@code true} if the user can be stopped, {@code false} otherwise.
+     * @throws SecurityException if {@code admin} is not a device owner.
+     */
+    public boolean stopUser(@NonNull ComponentName admin, @NonNull UserHandle userHandle) {
+        throwIfParentInstance("stopUser");
+        try {
+            return mService.stopUser(admin, userHandle);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Called by a profile owner that is affiliated with the device to stop the calling user
+     * and switch back to primary.
+     * <p> This has no effect when called on a managed profile.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @return {@code true} if the exit was successful, {@code false} otherwise.
+     * @throws SecurityException if {@code admin} is not a profile owner affiliated with the device.
+     * @see #isAffiliatedUser
+     */
+    public boolean logoutUser(@NonNull ComponentName admin) {
+        throwIfParentInstance("logoutUser");
+        try {
+            return mService.logoutUser(admin);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Called by a device owner to list all secondary users on the device, excluding managed
+     * profiles.
+     * <p> Used for various user management APIs, including {@link #switchUser}, {@link #removeUser}
+     * and {@link #stopUser}.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @return list of other {@link UserHandle}s on the device.
+     * @throws SecurityException if {@code admin} is not a device owner.
+     * @see #switchUser
+     * @see #removeUser
+     * @see #stopUser
+     */
+    public List<UserHandle> getSecondaryUsers(@NonNull ComponentName admin) {
+        throwIfParentInstance("getSecondaryUsers");
+        try {
+            return mService.getSecondaryUsers(admin);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Checks if the profile owner is running in an ephemeral user.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @return whether the profile owner is running in an ephemeral user.
+     */
+    public boolean isEphemeralUser(@NonNull ComponentName admin) {
+        throwIfParentInstance("isEphemeralUser");
+        try {
+            return mService.isEphemeralUser(admin);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -6440,6 +6815,37 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Install an existing package that has been installed in another user, or has been kept after
+     * removal via {@link #setKeepUninstalledPackages}.
+     * This function can be called by a device owner, profile owner or a delegate given
+     * the {@link #DELEGATION_INSTALL_EXISTING_PACKAGE} scope via {@link #setDelegatedScopes}.
+     * When called in a secondary user or managed profile, the user/profile must be affiliated with
+     * the device. See {@link #isAffiliatedUser}.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param packageName The package to be installed in the calling profile.
+     * @return {@code true} if the app is installed; {@code false} otherwise.
+     * @throws SecurityException if {@code admin} is not the device owner, or the profile owner of
+     * an affiliated user or profile.
+     * @see #setKeepUninstalledPackages
+     * @see #setDelegatedScopes
+     * @see #isAffiliatedUser
+     * @see #DELEGATION_PACKAGE_ACCESS
+     */
+    public boolean installExistingPackage(@NonNull ComponentName admin, String packageName) {
+        throwIfParentInstance("installExistingPackage");
+        if (mService != null) {
+            try {
+                return mService.installExistingPackage(admin, mContext.getPackageName(),
+                        packageName);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+        return false;
+    }
+
+    /**
      * Called by a device owner or profile owner to disable account management for a specific type
      * of account.
      * <p>
@@ -6510,13 +6916,14 @@ public class DevicePolicyManager {
      * package list results in locked tasks belonging to those packages to be finished.
      * <p>
      * This function can only be called by the device owner or by a profile owner of a user/profile
-     * that is affiliated with the device owner user. See {@link #setAffiliationIds}. Any packages
+     * that is affiliated with the device. See {@link #isAffiliatedUser}. Any packages
      * set via this method will be cleared if the user becomes unaffiliated.
      *
      * @param packages The list of packages allowed to enter lock task mode
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @throws SecurityException if {@code admin} is not the device owner, or the profile owner of
      * an affiliated user or profile.
+     * @see #isAffiliatedUser
      * @see Activity#startLockTask()
      * @see DeviceAdminReceiver#onLockTaskModeEntering(Context, Intent, String)
      * @see DeviceAdminReceiver#onLockTaskModeExiting(Context, Intent)
@@ -6539,6 +6946,7 @@ public class DevicePolicyManager {
      *
      * @throws SecurityException if {@code admin} is not the device owner, or the profile owner of
      * an affiliated user or profile.
+     * @see #isAffiliatedUser
      * @see #setLockTaskPackages
      */
     public @NonNull String[] getLockTaskPackages(@NonNull ComponentName admin) {
@@ -6578,7 +6986,7 @@ public class DevicePolicyManager {
      * enabled.
      * <p>
      * This function can only be called by the device owner or by a profile owner of a user/profile
-     * that is affiliated with the device owner user. See {@link #setAffiliationIds}. Any features
+     * that is affiliated with the device. See {@link #isAffiliatedUser}. Any features
      * set via this method will be cleared if the user becomes unaffiliated.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
@@ -6592,6 +7000,7 @@ public class DevicePolicyManager {
      *              {@link #LOCK_TASK_FEATURE_KEYGUARD}
      * @throws SecurityException if {@code admin} is not the device owner, or the profile owner of
      * an affiliated user or profile.
+     * @see #isAffiliatedUser
      */
     public void setLockTaskFeatures(@NonNull ComponentName admin, @LockTaskFeature int flags) {
         throwIfParentInstance("setLockTaskFeatures");
@@ -6611,7 +7020,8 @@ public class DevicePolicyManager {
      * @return bitfield of flags. See {@link #setLockTaskFeatures(ComponentName, int)} for a list.
      * @throws SecurityException if {@code admin} is not the device owner, or the profile owner of
      * an affiliated user or profile.
-     * @see #setLockTaskFeatures(ComponentName, int)
+     * @see #isAffiliatedUser
+     * @see #setLockTaskFeatures
      */
     public @LockTaskFeature int getLockTaskFeatures(@NonNull ComponentName admin) {
         throwIfParentInstance("getLockTaskFeatures");
@@ -6626,7 +7036,7 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owners to update {@link android.provider.Settings.Global} settings.
+     * Called by device owner to update {@link android.provider.Settings.Global} settings.
      * Validation that the value of the setting is in the correct form for the setting type should
      * be performed by the caller.
      * <p>
@@ -6668,6 +7078,37 @@ public class DevicePolicyManager {
         if (mService != null) {
             try {
                 mService.setGlobalSetting(admin, setting, value);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Called by device owner to update {@link android.provider.Settings.System} settings.
+     * Validation that the value of the setting is in the correct form for the setting type should
+     * be performed by the caller.
+     * <p>
+     * The settings that can be updated with this method are:
+     * <ul>
+     * <li>{@link android.provider.Settings.System#SCREEN_BRIGHTNESS}</li>
+     * <li>{@link android.provider.Settings.System#SCREEN_BRIGHTNESS_MODE}</li>
+     * <li>{@link android.provider.Settings.System#SCREEN_OFF_TIMEOUT}</li>
+     * </ul>
+     * <p>
+     *
+     * @see android.provider.Settings.System#SCREEN_OFF_TIMEOUT
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param setting The name of the setting to update.
+     * @param value The value to update the setting to.
+     * @throws SecurityException if {@code admin} is not a device owner.
+     */
+    public void setSystemSetting(@NonNull ComponentName admin, @NonNull String setting,
+            String value) {
+        throwIfParentInstance("setSystemSetting");
+        if (mService != null) {
+            try {
+                mService.setSystemSetting(admin, setting, value);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -7578,6 +8019,7 @@ public class DevicePolicyManager {
      * @param admin Which device owner this request is associated with.
      * @param enabled whether security logging should be enabled or not.
      * @throws SecurityException if {@code admin} is not a device owner.
+     * @see #setAffiliationIds
      * @see #retrieveSecurityLogs
      */
     public void setSecurityLoggingEnabled(@NonNull ComponentName admin, boolean enabled) {
@@ -7616,14 +8058,14 @@ public class DevicePolicyManager {
      * owner has been notified via {@link DeviceAdminReceiver#onSecurityLogsAvailable}.
      *
      * <p>If there is any other user or profile on the device, it must be affiliated with the
-     * device owner. Otherwise a {@link SecurityException} will be thrown. See
-     * {@link #setAffiliationIds}
+     * device. Otherwise a {@link SecurityException} will be thrown. See {@link #isAffiliatedUser}.
      *
      * @param admin Which device owner this request is associated with.
      * @return the new batch of security logs which is a list of {@link SecurityEvent},
      * or {@code null} if rate limitation is exceeded or if logging is currently disabled.
      * @throws SecurityException if {@code admin} is not a device owner, or there is at least one
-     * profile or secondary user that is not affiliated with the device owner user.
+     * profile or secondary user that is not affiliated with the device.
+     * @see #isAffiliatedUser
      * @see DeviceAdminReceiver#onSecurityLogsAvailable
      */
     public @Nullable List<SecurityEvent> retrieveSecurityLogs(@NonNull ComponentName admin) {
@@ -7666,14 +8108,14 @@ public class DevicePolicyManager {
      * about data corruption when parsing. </strong>
      *
      * <p>If there is any other user or profile on the device, it must be affiliated with the
-     * device owner. Otherwise a {@link SecurityException} will be thrown. See
-     * {@link #setAffiliationIds}
+     * device. Otherwise a {@link SecurityException} will be thrown. See {@link #isAffiliatedUser}.
      *
      * @param admin Which device owner this request is associated with.
      * @return Device logs from before the latest reboot of the system, or {@code null} if this API
      *         is not supported on the device.
      * @throws SecurityException if {@code admin} is not a device owner, or there is at least one
-     * profile or secondary user that is not affiliated with the device owner user.
+     * profile or secondary user that is not affiliated with the device.
+     * @see #isAffiliatedUser
      * @see #retrieveSecurityLogs
      */
     public @Nullable List<SecurityEvent> retrievePreRebootSecurityLogs(
@@ -7881,6 +8323,9 @@ public class DevicePolicyManager {
      * Indicates the entity that controls the device or profile owner. Two users/profiles are
      * affiliated if the set of ids set by their device or profile owners intersect.
      *
+     * <p>A user/profile that is affiliated with the device owner user is considered to be
+     * affiliated with the device.
+     *
      * <p><strong>Note:</strong> Features that depend on user affiliation (such as security logging
      * or {@link #bindDeviceAdminServiceAsUser}) won't be available when a secondary user or profile
      * is created, until it becomes affiliated. Therefore it is recommended that the appropriate
@@ -7891,6 +8336,7 @@ public class DevicePolicyManager {
      * @param ids A set of opaque non-empty affiliation ids.
      *
      * @throws IllegalArgumentException if {@code ids} is null or contains an empty string.
+     * @see #isAffiliatedUser
      */
     public void setAffiliationIds(@NonNull ComponentName admin, @NonNull Set<String> ids) {
         throwIfParentInstance("setAffiliationIds");
@@ -7918,13 +8364,12 @@ public class DevicePolicyManager {
     }
 
     /**
-     * @hide
      * Returns whether this user/profile is affiliated with the device.
      * <p>
      * By definition, the user that the device owner runs on is always affiliated with the device.
      * Any other user/profile is considered affiliated with the device if the set specified by its
      * profile owner via {@link #setAffiliationIds} intersects with the device owner's.
-     *
+     * @see #setAffiliationIds
      */
     public boolean isAffiliatedUser() {
         throwIfParentInstance("isAffiliatedUser");
@@ -8137,6 +8582,7 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param enabled whether network logging should be enabled or not.
      * @throws SecurityException if {@code admin} is not a device owner.
+     * @see #setAffiliationIds
      * @see #retrieveNetworkLogs
      */
     public void setNetworkLoggingEnabled(@NonNull ComponentName admin, boolean enabled) {
@@ -8192,7 +8638,8 @@ public class DevicePolicyManager {
      *        {@code null} if the batch represented by batchToken is no longer available or if
      *        logging is disabled.
      * @throws SecurityException if {@code admin} is not a device owner, or there is at least one
-     * profile or secondary user that is not affiliated with the device owner user.
+     * profile or secondary user that is not affiliated with the device.
+     * @see #setAffiliationIds
      * @see DeviceAdminReceiver#onNetworkLogsAvailable
      */
     public @Nullable List<NetworkEvent> retrieveNetworkLogs(@NonNull ComponentName admin,
@@ -8370,6 +8817,15 @@ public class DevicePolicyManager {
         }
     }
 
+    /** {@hide} */
+    @Condemned
+    @Deprecated
+    public boolean clearApplicationUserData(@NonNull ComponentName admin,
+            @NonNull String packageName, @NonNull OnClearApplicationUserDataListener listener,
+            @NonNull Handler handler) {
+        return clearApplicationUserData(admin, packageName, listener, new HandlerExecutor(handler));
+    }
+
     /**
      * Called by the device owner or profile owner to clear application user data of a given
      * package. The behaviour of this is equivalent to the target application calling
@@ -8381,22 +8837,54 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param packageName The name of the package which will have its user data wiped.
      * @param listener A callback object that will inform the caller when the clearing is done.
-     * @param handler The handler indicating the thread on which the listener should be invoked.
+     * @param executor The executor through which the listener should be invoked.
      * @throws SecurityException if the caller is not the device owner/profile owner.
      * @return whether the clearing succeeded.
      */
     public boolean clearApplicationUserData(@NonNull ComponentName admin,
             @NonNull String packageName, @NonNull OnClearApplicationUserDataListener listener,
-            @NonNull Handler handler) {
+            @NonNull @CallbackExecutor Executor executor) {
         throwIfParentInstance("clearAppData");
+        Preconditions.checkNotNull(executor);
         try {
             return mService.clearApplicationUserData(admin, packageName,
                     new IPackageDataObserver.Stub() {
                         public void onRemoveCompleted(String pkg, boolean succeeded) {
-                            handler.post(() ->
+                            executor.execute(() ->
                                     listener.onApplicationUserDataCleared(pkg, succeeded));
                         }
                     });
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Called by a device owner to specify whether logout is enabled for all secondary users. The
+     * system may show a logout button that stops the user and switches back to the primary user.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param enabled whether logout should be enabled or not.
+     * @throws SecurityException if {@code admin} is not a device owner.
+     */
+    public void setLogoutEnabled(@NonNull ComponentName admin, boolean enabled) {
+        throwIfParentInstance("setLogoutEnabled");
+        try {
+            mService.setLogoutEnabled(admin, enabled);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns whether logout is enabled by a device owner.
+     *
+     * @return {@code true} if logout is enabled by device owner, {@code false} otherwise.
+     */
+    public boolean isLogoutEnabled() {
+        throwIfParentInstance("isLogoutEnabled");
+        try {
+            return mService.isLogoutEnabled();
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -8415,5 +8903,66 @@ public class DevicePolicyManager {
          *                  apps and protected system packages.
          */
         void onApplicationUserDataCleared(String packageName, boolean succeeded);
+    }
+
+    /**
+     * Returns set of system apps that should be removed during provisioning.
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param userId ID of the user to be provisioned.
+     * @param provisioningAction action indicating type of provisioning, should be one of
+     * {@link #ACTION_PROVISION_MANAGED_DEVICE}, {@link #ACTION_PROVISION_MANAGED_PROFILE} or
+     * {@link #ACTION_PROVISION_MANAGED_USER}.
+     *
+     * @hide
+     */
+    public Set<String> getDisallowedSystemApps(ComponentName admin, int userId,
+            String provisioningAction) {
+        try {
+            return new ArraySet<>(
+                    mService.getDisallowedSystemApps(admin, userId, provisioningAction));
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    //TODO STOPSHIP Add link to onTransferComplete callback when implemented.
+    /**
+     * Transfers the current administrator. All policies from the current administrator are
+     * migrated to the new administrator. The whole operation is atomic - the transfer is either
+     * complete or not done at all.
+     *
+     * Depending on the current administrator (device owner, profile owner, corporate owned
+     * profile owner), you have the following expected behaviour:
+     * <ul>
+     *     <li>A device owner can only be transferred to a new device owner</li>
+     *     <li>A profile owner can only be transferred to a new profile owner</li>
+     *     <li>A corporate owned managed profile can have two cases:
+     *          <ul>
+     *              <li>If the device owner and profile owner are the same package,
+     *              both will be transferred.</li>
+     *              <li>If the device owner and profile owner are different packages,
+     *              and if this method is called from the profile owner, only the profile owner
+     *              is transferred. Similarly, if it is called from the device owner, only
+     *              the device owner is transferred.</li>
+     *          </ul>
+     *     </li>
+     * </ul>
+     *
+     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
+     * @param target Which {@link DeviceAdminReceiver} we want the new administrator to be.
+     * @param bundle Parameters - This bundle allows the current administrator to pass data to the
+     *               new administrator. The parameters will be received in the
+     *               onTransferComplete callback.
+     * @hide
+     */
+    public void transferOwner(@NonNull ComponentName admin, @NonNull ComponentName target,
+            PersistableBundle bundle) {
+        throwIfParentInstance("transferOwner");
+        try {
+            mService.transferOwner(admin, target, bundle);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
     }
 }

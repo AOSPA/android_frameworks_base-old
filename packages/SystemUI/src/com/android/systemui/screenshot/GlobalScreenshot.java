@@ -38,7 +38,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
@@ -49,7 +48,6 @@ import android.graphics.Rect;
 import android.media.MediaActionSound;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.Bundle;
 import android.os.Environment;
 import android.os.PowerManager;
 import android.os.Process;
@@ -59,10 +57,13 @@ import android.provider.MediaStore;
 import android.util.DisplayMetrics;
 import android.util.Slog;
 import android.view.Display;
+import android.view.DisplayListCanvas;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.RenderNode;
 import android.view.Surface;
 import android.view.SurfaceControl;
+import android.view.ThreadedRenderer;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -154,7 +155,6 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
         int previewWidth = data.previewWidth;
         int previewHeight = data.previewheight;
 
-        Canvas c = new Canvas();
         Paint paint = new Paint();
         ColorMatrix desat = new ColorMatrix();
         desat.setSaturation(0.25f);
@@ -162,23 +162,17 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
         Matrix matrix = new Matrix();
         int overlayColor = 0x40FFFFFF;
 
-        Bitmap picture = Bitmap.createBitmap(previewWidth, previewHeight, data.image.getConfig());
         matrix.setTranslate((previewWidth - mImageWidth) / 2, (previewHeight - mImageHeight) / 2);
-        c.setBitmap(picture);
-        c.drawBitmap(data.image, matrix, paint);
-        c.drawColor(overlayColor);
-        c.setBitmap(null);
+        Bitmap picture = generateAdjustedHwBitmap(data.image, previewWidth, previewHeight, matrix,
+                paint, overlayColor);
 
         // Note, we can't use the preview for the small icon, since it is non-square
         float scale = (float) iconSize / Math.min(mImageWidth, mImageHeight);
-        Bitmap icon = Bitmap.createBitmap(iconSize, iconSize, data.image.getConfig());
         matrix.setScale(scale, scale);
         matrix.postTranslate((iconSize - (scale * mImageWidth)) / 2,
                 (iconSize - (scale * mImageHeight)) / 2);
-        c.setBitmap(icon);
-        c.drawBitmap(data.image, matrix, paint);
-        c.drawColor(overlayColor);
-        c.setBitmap(null);
+        Bitmap icon = generateAdjustedHwBitmap(data.image, iconSize, iconSize, matrix, paint,
+                overlayColor);
 
         // Show the intermediate notification
         mTickerAddSpace = !mTickerAddSpace;
@@ -230,6 +224,22 @@ class SaveImageInBackgroundTask extends AsyncTask<Void, Void, Void> {
         mNotificationBuilder.setLargeIcon(icon.createAshmemBitmap());
         // But we still don't set it for the expanded view, allowing the smallIcon to show here.
         mNotificationStyle.bigLargeIcon((Bitmap) null);
+    }
+
+    /**
+     * Generates a new hardware bitmap with specified values, copying the content from the passed
+     * in bitmap.
+     */
+    private Bitmap generateAdjustedHwBitmap(Bitmap bitmap, int width, int height, Matrix matrix,
+            Paint paint, int color) {
+        RenderNode node = RenderNode.create("ScreenshotCanvas", null);
+        node.setLeftTopRightBottom(0, 0, width, height);
+        node.setClipToBounds(false);
+        DisplayListCanvas canvas = node.start(width, height);
+        canvas.drawColor(color);
+        canvas.drawBitmap(bitmap, matrix, paint);
+        node.end(canvas);
+        return ThreadedRenderer.createHardwareBitmap(node, width, height);
     }
 
     @Override
@@ -557,53 +567,19 @@ class GlobalScreenshot {
     /**
      * Takes a screenshot of the current display and shows an animation.
      */
-    void takeScreenshot(Runnable finisher, boolean statusBarVisible, boolean navBarVisible,
-            int x, int y, int width, int height) {
-        // We need to orient the screenshot correctly (and the Surface api seems to take screenshots
-        // only in the natural orientation of the device :!)
-        mDisplay.getRealMetrics(mDisplayMetrics);
-        float[] dims = {mDisplayMetrics.widthPixels, mDisplayMetrics.heightPixels};
-        float degrees = getDegreesForRotation(mDisplay.getRotation());
-        boolean requiresRotation = (degrees > 0);
-        if (requiresRotation) {
-            // Get the dimensions of the device in its native orientation
-            mDisplayMatrix.reset();
-            mDisplayMatrix.preRotate(-degrees);
-            mDisplayMatrix.mapPoints(dims);
-            dims[0] = Math.abs(dims[0]);
-            dims[1] = Math.abs(dims[1]);
-        }
+    private void takeScreenshot(Runnable finisher, boolean statusBarVisible, boolean navBarVisible,
+            Rect crop) {
+        int rot = mDisplay.getRotation();
+        int width = crop.width();
+        int height = crop.height();
 
         // Take the screenshot
-        mScreenBitmap = SurfaceControl.screenshot((int) dims[0], (int) dims[1]);
+        mScreenBitmap = SurfaceControl.screenshot(crop, width, height, rot);
         if (mScreenBitmap == null) {
             notifyScreenshotError(mContext, mNotificationManager,
                     R.string.screenshot_failed_to_capture_text);
             finisher.run();
             return;
-        }
-
-        if (requiresRotation) {
-            // Rotate the screenshot to the current orientation
-            Bitmap ss = Bitmap.createBitmap(mDisplayMetrics.widthPixels,
-                    mDisplayMetrics.heightPixels, Bitmap.Config.ARGB_8888,
-                    mScreenBitmap.hasAlpha(), mScreenBitmap.getColorSpace());
-            Canvas c = new Canvas(ss);
-            c.translate(ss.getWidth() / 2, ss.getHeight() / 2);
-            c.rotate(degrees);
-            c.translate(-dims[0] / 2, -dims[1] / 2);
-            c.drawBitmap(mScreenBitmap, 0, 0, null);
-            c.setBitmap(null);
-            // Recycle the previous bitmap
-            mScreenBitmap.recycle();
-            mScreenBitmap = ss;
-        }
-
-        if (width != mDisplayMetrics.widthPixels || height != mDisplayMetrics.heightPixels) {
-            // Crop the screenshot to selected region
-            Bitmap cropped = Bitmap.createBitmap(mScreenBitmap, x, y, width, height);
-            mScreenBitmap.recycle();
-            mScreenBitmap = cropped;
         }
 
         // Optimizations
@@ -617,8 +593,8 @@ class GlobalScreenshot {
 
     void takeScreenshot(Runnable finisher, boolean statusBarVisible, boolean navBarVisible) {
         mDisplay.getRealMetrics(mDisplayMetrics);
-        takeScreenshot(finisher, statusBarVisible, navBarVisible, 0, 0, mDisplayMetrics.widthPixels,
-                mDisplayMetrics.heightPixels);
+        takeScreenshot(finisher, statusBarVisible, navBarVisible,
+                new Rect(0, 0, mDisplayMetrics.widthPixels, mDisplayMetrics.heightPixels));
     }
 
     /**
@@ -648,7 +624,7 @@ class GlobalScreenshot {
                                 mScreenshotLayout.post(new Runnable() {
                                     public void run() {
                                         takeScreenshot(finisher, statusBarVisible, navBarVisible,
-                                                rect.left, rect.top, rect.width(), rect.height());
+                                                rect);
                                     }
                                 });
                             }

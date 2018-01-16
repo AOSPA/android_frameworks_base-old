@@ -31,7 +31,8 @@ import android.support.test.InstrumentationRegistry;
 import android.support.test.annotation.UiThreadTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
-import android.view.WindowManagerInternal.AppTransitionListener;
+
+import com.android.server.wm.WindowManagerInternal.AppTransitionListener;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -109,7 +110,7 @@ public class BoundsAnimationControllerTests extends WindowTestsBase {
         }
 
         public void notifyTransitionStarting(int transit) {
-            mListener.onAppTransitionStartingLocked(transit, null, null, null, null);
+            mListener.onAppTransitionStartingLocked(transit, null, null, 0, 0, 0);
         }
 
         public void notifyTransitionFinished() {

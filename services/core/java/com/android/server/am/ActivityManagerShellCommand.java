@@ -48,6 +48,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ShellCommand;
+import android.os.StrictMode;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -69,7 +70,9 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static android.app.ActivityManager.RESIZE_MODE_SYSTEM;
 import static android.app.ActivityManager.RESIZE_MODE_USER;
@@ -126,7 +129,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
         if (cmd == null) {
             return handleDefaultCommands(cmd);
         }
-        PrintWriter pw = getOutPrintWriter();
+        final PrintWriter pw = getOutPrintWriter();
         try {
             switch (cmd) {
                 case "start":
@@ -224,6 +227,8 @@ final class ActivityManagerShellCommand extends ShellCommand {
                     return runGetInactive(pw);
                 case "set-standby-bucket":
                     return runSetStandbyBucket(pw);
+                case "get-standby-bucket":
+                    return runGetStandbyBucket(pw);
                 case "send-trim-memory":
                     return runSendTrimMemory(pw);
                 case "display":
@@ -1324,65 +1329,95 @@ final class ActivityManagerShellCommand extends ShellCommand {
         @Override
         public void onUidStateChanged(int uid, int procState, long procStateSeq) throws RemoteException {
             synchronized (this) {
-                mPw.print(uid);
-                mPw.print(" procstate ");
-                mPw.print(ProcessList.makeProcStateString(procState));
-                mPw.print(" seq ");
-                mPw.println(procStateSeq);
-                mPw.flush();
+                final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
+                try {
+                    mPw.print(uid);
+                    mPw.print(" procstate ");
+                    mPw.print(ProcessList.makeProcStateString(procState));
+                    mPw.print(" seq ");
+                    mPw.println(procStateSeq);
+                    mPw.flush();
+                } finally {
+                    StrictMode.setThreadPolicy(oldPolicy);
+                }
             }
         }
 
         @Override
         public void onUidGone(int uid, boolean disabled) throws RemoteException {
             synchronized (this) {
-                mPw.print(uid);
-                mPw.print(" gone");
-                if (disabled) {
-                    mPw.print(" disabled");
+                final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
+                try {
+                    mPw.print(uid);
+                    mPw.print(" gone");
+                    if (disabled) {
+                        mPw.print(" disabled");
+                    }
+                    mPw.println();
+                    mPw.flush();
+                } finally {
+                    StrictMode.setThreadPolicy(oldPolicy);
                 }
-                mPw.println();
-                mPw.flush();
             }
         }
 
         @Override
         public void onUidActive(int uid) throws RemoteException {
             synchronized (this) {
-                mPw.print(uid);
-                mPw.println(" active");
-                mPw.flush();
+                final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
+                try {
+                    mPw.print(uid);
+                    mPw.println(" active");
+                    mPw.flush();
+                } finally {
+                    StrictMode.setThreadPolicy(oldPolicy);
+                }
             }
         }
 
         @Override
         public void onUidIdle(int uid, boolean disabled) throws RemoteException {
             synchronized (this) {
-                mPw.print(uid);
-                mPw.print(" idle");
-                if (disabled) {
-                    mPw.print(" disabled");
+                final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
+                try {
+                    mPw.print(uid);
+                    mPw.print(" idle");
+                    if (disabled) {
+                        mPw.print(" disabled");
+                    }
+                    mPw.println();
+                    mPw.flush();
+                } finally {
+                    StrictMode.setThreadPolicy(oldPolicy);
                 }
-                mPw.println();
-                mPw.flush();
             }
         }
 
         @Override
         public void onUidCachedChanged(int uid, boolean cached) throws RemoteException {
             synchronized (this) {
-                mPw.print(uid);
-                mPw.println(cached ? " cached" : " uncached");
-                mPw.flush();
+                final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
+                try {
+                    mPw.print(uid);
+                    mPw.println(cached ? " cached" : " uncached");
+                    mPw.flush();
+                } finally {
+                    StrictMode.setThreadPolicy(oldPolicy);
+                }
             }
         }
 
         @Override
         public void onOomAdjMessage(String msg) {
             synchronized (this) {
-                mPw.print("# ");
-                mPw.println(msg);
-                mPw.flush();
+                final StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskWrites();
+                try {
+                    mPw.print("# ");
+                    mPw.println(msg);
+                    mPw.flush();
+                } finally {
+                    StrictMode.setThreadPolicy(oldPolicy);
+                }
             }
         }
 
@@ -1826,6 +1861,29 @@ final class ActivityManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int bucketNameToBucketValue(String name) {
+        String lower = name.toLowerCase();
+        if (lower.startsWith("ac")) {
+            return UsageStatsManager.STANDBY_BUCKET_ACTIVE;
+        } else if (lower.startsWith("wo")) {
+            return UsageStatsManager.STANDBY_BUCKET_WORKING_SET;
+        } else if (lower.startsWith("fr")) {
+            return UsageStatsManager.STANDBY_BUCKET_FREQUENT;
+        } else if (lower.startsWith("ra")) {
+            return UsageStatsManager.STANDBY_BUCKET_RARE;
+        } else if (lower.startsWith("ne")) {
+            return UsageStatsManager.STANDBY_BUCKET_NEVER;
+        } else {
+            try {
+                int bucket = Integer.parseInt(lower);
+                return bucket;
+            } catch (NumberFormatException nfe) {
+                getErrPrintWriter().println("Error: Unknown bucket: " + name);
+            }
+        }
+        return -1;
+    }
+
     int runSetStandbyBucket(PrintWriter pw) throws RemoteException {
         int userId = UserHandle.USER_CURRENT;
 
@@ -1840,10 +1898,56 @@ final class ActivityManagerShellCommand extends ShellCommand {
         }
         String packageName = getNextArgRequired();
         String value = getNextArgRequired();
+        int bucket = bucketNameToBucketValue(value);
+        if (bucket < 0) return -1;
+        boolean multiple = peekNextArg() != null;
+
 
         IUsageStatsManager usm = IUsageStatsManager.Stub.asInterface(ServiceManager.getService(
                 Context.USAGE_STATS_SERVICE));
-        usm.setAppStandbyBucket(packageName, Integer.parseInt(value), userId);
+        if (!multiple) {
+            usm.setAppStandbyBucket(packageName, bucketNameToBucketValue(value), userId);
+        } else {
+            HashMap<String, Integer> buckets = new HashMap<>();
+            buckets.put(packageName, bucket);
+            while ((packageName = getNextArg()) != null) {
+                value = getNextArgRequired();
+                bucket = bucketNameToBucketValue(value);
+                if (bucket < 0) continue;
+                buckets.put(packageName, bucket);
+            }
+            usm.setAppStandbyBuckets(buckets, userId);
+        }
+        return 0;
+    }
+
+    int runGetStandbyBucket(PrintWriter pw) throws RemoteException {
+        int userId = UserHandle.USER_CURRENT;
+
+        String opt;
+        while ((opt=getNextOption()) != null) {
+            if (opt.equals("--user")) {
+                userId = UserHandle.parseUserArg(getNextArgRequired());
+            } else {
+                getErrPrintWriter().println("Error: Unknown option: " + opt);
+                return -1;
+            }
+        }
+        String packageName = getNextArg();
+
+        IUsageStatsManager usm = IUsageStatsManager.Stub.asInterface(ServiceManager.getService(
+                Context.USAGE_STATS_SERVICE));
+        if (packageName != null) {
+            int bucket = usm.getAppStandbyBucket(packageName, null, userId);
+            pw.println(bucket);
+        } else {
+            Map<String, Integer> buckets = (Map<String, Integer>) usm.getAppStandbyBuckets(
+                    SHELL_PACKAGE_NAME, userId);
+            for (Map.Entry<String, Integer> entry: buckets.entrySet()) {
+                pw.print(entry.getKey()); pw.print(": ");
+                pw.println(entry.getValue());
+            }
+        }
         return 0;
     }
 
@@ -2597,8 +2701,10 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("      Sets the inactive state of an app.");
             pw.println("  get-inactive [--user <USER_ID>] <PACKAGE>");
             pw.println("      Returns the inactive state of an app.");
-            pw.println("  set-standby-bucket [--user <USER_ID>] <PACKAGE> <BUCKET>");
+            pw.println("  set-standby-bucket [--user <USER_ID>] <PACKAGE> active|working_set|frequent|rare");
             pw.println("      Puts an app in the standby bucket.");
+            pw.println("  get-standby-bucket [--user <USER_ID>] <PACKAGE>");
+            pw.println("      Returns the standby bucket of an app.");
             pw.println("  send-trim-memory [--user <USER_ID>] <PROCESS>");
             pw.println("          [HIDDEN|RUNNING_MODERATE|BACKGROUND|RUNNING_LOW|MODERATE|RUNNING_CRITICAL|COMPLETE]");
             pw.println("      Send a memory trim event to a <PROCESS>.  May also supply a raw trim int level.");

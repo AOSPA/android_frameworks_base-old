@@ -99,6 +99,7 @@ import com.android.server.EventLogTags;
 import com.android.server.FgThread;
 import com.android.server.SystemService;
 
+import java.lang.reflect.InvocationTargetException;
 import libcore.io.IoUtils;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -119,14 +120,16 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import com.android.internal.R;
 
-public class WallpaperManagerService extends IWallpaperManager.Stub {
+public class WallpaperManagerService extends IWallpaperManager.Stub
+        implements IWallpaperManagerService {
     static final String TAG = "WallpaperManagerService";
     static final boolean DEBUG = false;
     static final boolean DEBUG_LIVE = DEBUG || true;
 
     public static class Lifecycle extends SystemService {
-        private WallpaperManagerService mService;
+        private IWallpaperManagerService mService;
 
         public Lifecycle(Context context) {
             super(context);
@@ -134,22 +137,30 @@ public class WallpaperManagerService extends IWallpaperManager.Stub {
 
         @Override
         public void onStart() {
-            mService = new WallpaperManagerService(getContext());
-            publishBinderService(Context.WALLPAPER_SERVICE, mService);
+            try {
+                final Class<? extends IWallpaperManagerService> klass =
+                        (Class<? extends IWallpaperManagerService>)Class.forName(
+                                getContext().getResources().getString(
+                                        R.string.config_wallpaperManagerServiceName));
+                mService = klass.getConstructor(Context.class).newInstance(getContext());
+                publishBinderService(Context.WALLPAPER_SERVICE, mService);
+            } catch (Exception exp) {
+                Slog.wtf(TAG, "Failed to instantiate WallpaperManagerService", exp);
+            }
         }
 
         @Override
         public void onBootPhase(int phase) {
-            if (phase == SystemService.PHASE_ACTIVITY_MANAGER_READY) {
-                mService.systemReady();
-            } else if (phase == SystemService.PHASE_THIRD_PARTY_APPS_CAN_START) {
-                mService.switchUser(UserHandle.USER_SYSTEM, null);
+            if (mService != null) {
+                mService.onBootPhase(phase);
             }
         }
 
         @Override
         public void onUnlockUser(int userHandle) {
-            mService.onUnlockUser(userHandle);
+            if (mService != null) {
+                mService.onUnlockUser(userHandle);
+            }
         }
     }
 
@@ -664,6 +675,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub {
 
     final SparseArray<Boolean> mUserRestorecon = new SparseArray<Boolean>();
     int mCurrentUserId;
+    boolean mInAmbientMode;
 
     static class WallpaperData {
 
@@ -941,6 +953,13 @@ public class WallpaperManagerService extends IWallpaperManager.Stub {
                         Slog.w(TAG, "Failed to set wallpaper padding", e);
                     }
                     mPaddingChanged = false;
+                }
+                if (mInfo != null && mInfo.getSupportsAmbientMode()) {
+                    try {
+                        mEngine.setInAmbientMode(mInAmbientMode);
+                    } catch (RemoteException e) {
+                        Slog.w(TAG, "Failed to set ambient mode state", e);
+                    }
                 }
                 try {
                     // This will trigger onComputeColors in the wallpaper engine.
@@ -1255,7 +1274,17 @@ public class WallpaperManagerService extends IWallpaperManager.Stub {
         mLockWallpaperMap.remove(userId);
     }
 
-    void onUnlockUser(final int userId) {
+    @Override
+    public void onBootPhase(int phase) {
+        if (phase == SystemService.PHASE_ACTIVITY_MANAGER_READY) {
+            systemReady();
+        } else if (phase == SystemService.PHASE_THIRD_PARTY_APPS_CAN_START) {
+            switchUser(UserHandle.USER_SYSTEM, null);
+        }
+    }
+
+    @Override
+    public void onUnlockUser(final int userId) {
         synchronized (mLock) {
             if (mCurrentUserId == userId) {
                 if (mWaitingForUnlock) {
@@ -1718,6 +1747,28 @@ public class WallpaperManagerService extends IWallpaperManager.Stub {
                     mColorsChangedListeners.get(userId);
             if (userColorsChangedListeners != null) {
                 userColorsChangedListeners.unregister(cb);
+            }
+        }
+    }
+
+    public void setInAmbientMode(boolean inAmbienMode) {
+        final IWallpaperEngine engine;
+        synchronized (mLock) {
+            mInAmbientMode = inAmbienMode;
+            final WallpaperData data = mWallpaperMap.get(mCurrentUserId);
+            if (data != null && data.connection != null && data.connection.mInfo != null
+                    && data.connection.mInfo.getSupportsAmbientMode()) {
+                engine = data.connection.mEngine;
+            } else {
+                engine = null;
+            }
+        }
+
+        if (engine != null) {
+            try {
+                engine.setInAmbientMode(inAmbienMode);
+            } catch (RemoteException e) {
+                // Cannot talk to wallpaper engine.
             }
         }
     }

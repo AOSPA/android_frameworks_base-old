@@ -314,6 +314,20 @@ public class CameraCaptureSessionImpl extends CameraCaptureSession
     }
 
     @Override
+    public void updateOutputConfiguration(OutputConfiguration config)
+            throws CameraAccessException {
+        synchronized (mDeviceImpl.mInterfaceLock) {
+            checkNotClosed();
+
+            if (DEBUG) {
+                Log.v(TAG, mIdString + "updateOutputConfiguration");
+            }
+
+            mDeviceImpl.updateOutputConfiguration(config);
+        }
+    }
+
+    @Override
     public boolean isReprocessable() {
         return mInput != null;
     }
@@ -786,7 +800,8 @@ public class CameraCaptureSessionImpl extends CameraCaptureSession
                 try {
                     // begin transition to unconfigured
                     mDeviceImpl.configureStreamsChecked(/*inputConfig*/null, /*outputs*/null,
-                            /*operatingMode*/ ICameraDeviceUser.NORMAL_MODE);
+                            /*operatingMode*/ ICameraDeviceUser.NORMAL_MODE,
+                            /*sessionParams*/ null);
                 } catch (CameraAccessException e) {
                     // OK: do not throw checked exceptions.
                     Log.e(TAG, mIdString + "Exception while unconfiguring outputs: ", e);

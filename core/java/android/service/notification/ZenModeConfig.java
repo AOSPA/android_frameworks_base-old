@@ -46,8 +46,10 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.GregorianCalendar;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.TimeZone;
 import java.util.UUID;
 
 /**
@@ -64,11 +66,13 @@ public class ZenModeConfig implements Parcelable {
     public static final int MAX_SOURCE = SOURCE_STAR;
     private static final int DEFAULT_SOURCE = SOURCE_CONTACT;
 
+    public static final String EVENTS_DEFAULT_RULE_ID = "EVENTS_DEFAULT_RULE";
+    public static final String EVERY_NIGHT_DEFAULT_RULE_ID = "EVERY_NIGHT_DEFAULT_RULE";
+    public static final List<String> DEFAULT_RULE_IDS = Arrays.asList(EVERY_NIGHT_DEFAULT_RULE_ID,
+            EVENTS_DEFAULT_RULE_ID);
+
     public static final int[] ALL_DAYS = { Calendar.SUNDAY, Calendar.MONDAY, Calendar.TUESDAY,
             Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY };
-    public static final int[] WEEKNIGHT_DAYS = { Calendar.SUNDAY, Calendar.MONDAY, Calendar.TUESDAY,
-            Calendar.WEDNESDAY, Calendar.THURSDAY };
-    public static final int[] WEEKEND_DAYS = { Calendar.FRIDAY, Calendar.SATURDAY };
 
     public static final int[] MINUTE_BUCKETS = generateMinuteBuckets();
     private static final int SECONDS_MS = 1000;
@@ -529,6 +533,13 @@ public class ZenModeConfig implements Parcelable {
         rt.creationTime = safeLong(parser, RULE_ATT_CREATION_TIME, 0);
         rt.enabler = parser.getAttributeValue(null, RULE_ATT_ENABLER);
         rt.condition = readConditionXml(parser);
+
+        // all default rules and user created rules updated to zenMode important interruptions
+        if (rt.zenMode != Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS
+                && Condition.isValidId(rt.conditionId, SYSTEM_AUTHORITY)) {
+            Slog.i(TAG, "Updating zenMode of automatic rule " + rt.name);
+            rt.zenMode = Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS;
+        }
         return rt;
     }
 
@@ -692,6 +703,20 @@ public class ZenModeConfig implements Parcelable {
                 suppressedVisualEffects);
     }
 
+    /**
+     * Creates scheduleCalendar from a condition id
+     * @param conditionId
+     * @return ScheduleCalendar with info populated with conditionId
+     */
+    public static ScheduleCalendar toScheduleCalendar(Uri conditionId) {
+        final ScheduleInfo schedule = ZenModeConfig.tryParseScheduleConditionId(conditionId);
+        if (schedule == null || schedule.days == null || schedule.days.length == 0) return null;
+        final ScheduleCalendar sc = new ScheduleCalendar();
+        sc.setSchedule(schedule);
+        sc.setTimeZone(TimeZone.getDefault());
+        return sc;
+    }
+
     private static int sourceToPrioritySenders(int source, int def) {
         switch (source) {
             case SOURCE_ANYONE: return Policy.PRIORITY_SENDERS_ANY;
@@ -793,7 +818,10 @@ public class ZenModeConfig implements Parcelable {
                 Condition.FLAG_RELEVANT_NOW);
     }
 
-    private static CharSequence getFormattedTime(Context context, long time, boolean isSameDay,
+    /**
+     * Creates readable time from time in milliseconds
+     */
+    public static CharSequence getFormattedTime(Context context, long time, boolean isSameDay,
             int userHandle) {
         String skeleton = (!isSameDay ? "EEE " : "")
                 + (DateFormat.is24HourFormat(context, userHandle) ? "Hm" : "hma");
@@ -801,7 +829,10 @@ public class ZenModeConfig implements Parcelable {
         return DateFormat.format(pattern, time);
     }
 
-    private static boolean isToday(long time) {
+    /**
+     * Determines whether a time in milliseconds is today or not
+     */
+    public static boolean isToday(long time) {
         GregorianCalendar now = new GregorianCalendar();
         GregorianCalendar endTime = new GregorianCalendar();
         endTime.setTimeInMillis(time);
@@ -890,7 +921,17 @@ public class ZenModeConfig implements Parcelable {
     }
 
     public static boolean isValidScheduleConditionId(Uri conditionId) {
-        return tryParseScheduleConditionId(conditionId) != null;
+        ScheduleInfo info;
+        try {
+            info = tryParseScheduleConditionId(conditionId);
+        } catch (NullPointerException | ArrayIndexOutOfBoundsException e) {
+            return false;
+        }
+
+        if (info == null || info.days == null || info.days.length == 0) {
+            return false;
+        }
+        return true;
     }
 
     public static ScheduleInfo tryParseScheduleConditionId(Uri conditionId) {
@@ -1071,7 +1112,10 @@ public class ZenModeConfig implements Parcelable {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
-    private static String getOwnerCaption(Context context, String owner) {
+    /**
+     * Gets the name of the app associated with owner
+     */
+    public static String getOwnerCaption(Context context, String owner) {
         final PackageManager pm = context.getPackageManager();
         try {
             final ApplicationInfo info = pm.getApplicationInfo(owner, 0);

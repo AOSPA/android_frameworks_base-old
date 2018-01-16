@@ -197,6 +197,8 @@ public class PackageParserTest {
         assertEquals(a.coreApp, b.coreApp);
         assertEquals(a.mRequiredForAllUsers, b.mRequiredForAllUsers);
         assertEquals(a.mTrustedOverlay, b.mTrustedOverlay);
+        assertEquals(a.mCompileSdkVersion, b.mCompileSdkVersion);
+        assertEquals(a.mCompileSdkVersionCodename, b.mCompileSdkVersionCodename);
         assertEquals(a.use32bitAbi, b.use32bitAbi);
         assertEquals(a.packageName, b.packageName);
         assertTrue(Arrays.equals(a.splitNames, b.splitNames));
@@ -469,7 +471,7 @@ public class PackageParserTest {
         pkg.usesStaticLibraries.add("foo23");
         pkg.usesStaticLibrariesCertDigests = new String[1][];
         pkg.usesStaticLibrariesCertDigests[0] = new String[] { "digest" };
-        pkg.usesStaticLibrariesVersions = new int[] { 100 };
+        pkg.usesStaticLibrariesVersions = new long[] { 100 };
 
         pkg.libraryNames = new ArrayList<>();
         pkg.libraryNames.add("foo10");
@@ -518,6 +520,10 @@ public class PackageParserTest {
 
         pkg.featureGroups = new ArrayList<>();
         pkg.featureGroups.add(new FeatureGroupInfo());
+
+        pkg.mCompileSdkVersionCodename = "foo23";
+        pkg.mCompileSdkVersion = 100;
+        pkg.mVersionCodeMajor = 100;
     }
 
     private static void assertAllFieldsExist(PackageParser.Package pkg) throws Exception {

@@ -210,9 +210,9 @@ HeaderSection::Execute(ReportRequestSet* requests) const
 {
     for (ReportRequestSet::iterator it=requests->begin(); it!=requests->end(); it++) {
         const sp<ReportRequest> request = *it;
-        const vector<vector<int8_t>>& headers = request->args.headers();
+        const vector<vector<uint8_t>>& headers = request->args.headers();
 
-        for (vector<vector<int8_t>>::const_iterator buf=headers.begin(); buf!=headers.end(); buf++) {
+        for (vector<vector<uint8_t>>::const_iterator buf=headers.begin(); buf!=headers.end(); buf++) {
             if (buf->empty()) continue;
 
             // So the idea is only requests with negative fd are written to dropbox file.
@@ -232,6 +232,7 @@ FileSection::FileSection(int id, const char* filename, const int64_t timeoutMs)
      mFilename(filename)
 {
     name = filename;
+    mIsSysfs = strncmp(filename, "/sys/", 5) == 0;
 }
 
 FileSection::~FileSection() {}
@@ -264,7 +265,7 @@ FileSection::Execute(ReportRequestSet* requests) const
 
     // parent process
     status_t readStatus = buffer.readProcessedDataInStream(fd, p2cPipe.writeFd(), c2pPipe.readFd(),
-            this->timeoutMs);
+            this->timeoutMs, mIsSysfs);
     if (readStatus != NO_ERROR || buffer.timedOut()) {
         ALOGW("FileSection '%s' failed to read data from incident helper: %s, timedout: %s, kill: %s",
             this->name.string(), strerror(-readStatus), buffer.timedOut() ? "true" : "false",

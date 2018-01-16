@@ -38,6 +38,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /** Tests that ensure appropriate settings are backed up. */
+@Presubmit
 @RunWith(AndroidJUnit4.class)
 @SmallTest
 public class SettingsBackupTest {
@@ -53,6 +54,7 @@ public class SettingsBackupTest {
                     Settings.System.ALARM_ALERT, // backup candidate?
                     Settings.System.ALARM_ALERT_CACHE, // internal cache
                     Settings.System.APPEND_FOR_LAST_AUDIBLE, // suffix deprecated since API 2
+                    Settings.System.DISPLAY_COLOR_MODE, // bug?
                     Settings.System.EGG_MODE, // I am the lolrus
                     Settings.System.END_BUTTON_BEHAVIOR, // bug?
                     Settings.System
@@ -104,16 +106,18 @@ public class SettingsBackupTest {
                     Settings.Global.APN_DB_UPDATE_CONTENT_URL,
                     Settings.Global.APN_DB_UPDATE_METADATA_URL,
                     Settings.Global.APP_IDLE_CONSTANTS,
+                    Settings.Global.APP_STANDBY_ENABLED,
                     Settings.Global.ASSISTED_GPS_ENABLED,
                     Settings.Global.AUDIO_SAFE_VOLUME_STATE,
-                    Settings.Global.BACKUP_REFACTORED_SERVICE_DISABLED,
                     Settings.Global.BATTERY_DISCHARGE_DURATION_THRESHOLD,
                     Settings.Global.BATTERY_DISCHARGE_THRESHOLD,
+                    Settings.Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS,
                     Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE,
                     Settings.Global.BLUETOOTH_A2DP_SINK_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_A2DP_SUPPORTS_OPTIONAL_CODECS_PREFIX,
                     Settings.Global.BLUETOOTH_A2DP_OPTIONAL_CODECS_ENABLED_PREFIX,
+                    Settings.Global.BLUETOOTH_CLASS_OF_DEVICE,
                     Settings.Global.BLUETOOTH_DISABLED_PROFILES,
                     Settings.Global.BLUETOOTH_HEADSET_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_INPUT_DEVICE_PRIORITY_PREFIX,
@@ -123,6 +127,7 @@ public class SettingsBackupTest {
                     Settings.Global.BLUETOOTH_PAN_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_PBAP_CLIENT_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_SAP_PRIORITY_PREFIX,
+                    Settings.Global.BLUETOOTH_HEARING_AID_PRIORITY_PREFIX,
                     Settings.Global.BOOT_COUNT,
                     Settings.Global.CAPTIVE_PORTAL_FALLBACK_URL,
                     Settings.Global.CAPTIVE_PORTAL_HTTPS_URL,
@@ -168,6 +173,7 @@ public class SettingsBackupTest {
                     Settings.Global.DEVICE_DEMO_MODE,
                     Settings.Global.DEVICE_IDLE_CONSTANTS,
                     Settings.Global.BATTERY_SAVER_CONSTANTS,
+                    Settings.Global.BATTERY_TIP_CONSTANTS,
                     Settings.Global.DEFAULT_SM_DP_PLUS,
                     Settings.Global.DEVICE_NAME,
                     Settings.Global.DEVICE_POLICY_CONSTANTS,
@@ -190,6 +196,7 @@ public class SettingsBackupTest {
                     Settings.Global.DROPBOX_RESERVE_PERCENT,
                     Settings.Global.DROPBOX_TAG_PREFIX,
                     Settings.Global.EMERGENCY_AFFORDANCE_NEEDED,
+                    Settings.Global.EMULATE_DISPLAY_CUTOUT,
                     Settings.Global.ENABLE_ACCESSIBILITY_GLOBAL_GESTURE_ENABLED,
                     Settings.Global.ENABLE_CACHE_QUOTA_CALCULATION,
                     Settings.Global.ENABLE_CELLULAR_ON_BOOT,
@@ -226,6 +233,7 @@ public class SettingsBackupTest {
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_INTERVAL_MS,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_PROXIMITY_ALERT_INTERVAL_MS,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_PACKAGE_WHITELIST,
+                    Settings.Global.LOCATION_GLOBAL_KILL_SWITCH,
                     Settings.Global.LOCATION_SETTINGS_LINK_TO_PERMISSIONS_ENABLED,
                     Settings.Global.LOCK_SOUND,
                     Settings.Global.LOW_BATTERY_SOUND,
@@ -264,6 +272,7 @@ public class SettingsBackupTest {
                     Settings.Global.NETSTATS_UID_TAG_ROTATE_AGE,
                     Settings.Global.NETWORK_AVOID_BAD_WIFI,
                     Settings.Global.NETWORK_METERED_MULTIPATH_PREFERENCE,
+                    Settings.Global.NETWORK_WATCHLIST_LAST_REPORT_TIME,
                     Settings.Global.NETWORK_PREFERENCE,
                     Settings.Global.NETWORK_RECOMMENDATIONS_PACKAGE,
                     Settings.Global.NETWORK_RECOMMENDATION_REQUEST_TIMEOUT_MS,
@@ -296,6 +305,7 @@ public class SettingsBackupTest {
                     Settings.Global.POLICY_CONTROL,
                     Settings.Global.POWER_MANAGER_CONSTANTS,
                     Settings.Global.PREFERRED_NETWORK_MODE,
+                    Settings.Global.PRIV_APP_OOB_ENABLED,
                     Settings.Global.PROVISIONING_APN_ALARM_DELAY_IN_MS,
                     Settings.Global.RADIO_BLUETOOTH,
                     Settings.Global.RADIO_CELL,
@@ -327,6 +337,7 @@ public class SettingsBackupTest {
                     Settings.Global.SMS_SHORT_CODES_UPDATE_CONTENT_URL,
                     Settings.Global.SMS_SHORT_CODES_UPDATE_METADATA_URL,
                     Settings.Global.SPEED_LABEL_CACHE_EVICTION_AGE_MILLIS,
+                    Settings.Global.SQLITE_COMPATIBILITY_WAL_FLAGS,
                     Settings.Global.STORAGE_BENCHMARK_INTERVAL,
                     Settings.Global.STORAGE_SETTINGS_CLOBBER_THRESHOLD,
                     Settings.Global.SYNC_MAX_RETRY_DELAY_IN_SECONDS,
@@ -356,6 +367,10 @@ public class SettingsBackupTest {
                     Settings.Global.USE_GOOGLE_MAIL,
                     Settings.Global.VT_IMS_ENABLED,
                     Settings.Global.WAIT_FOR_DEBUGGER,
+                    Settings.Global.ENABLE_GPU_DEBUG_LAYERS,
+                    Settings.Global.GPU_DEBUG_APP,
+                    Settings.Global.GPU_DEBUG_LAYERS,
+                    Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING,
                     Settings.Global.NETWORK_ACCESS_TIMEOUT_MS,
                     Settings.Global.WARNING_TEMPERATURE,
                     Settings.Global.WEBVIEW_DATA_REDUCTION_PROXY_KEY,
@@ -417,6 +432,11 @@ public class SettingsBackupTest {
                  Settings.Secure.ASSIST_DISCLOSURE_ENABLED,
                  Settings.Secure.ASSIST_SCREENSHOT_ENABLED,
                  Settings.Secure.ASSIST_STRUCTURE_ENABLED,
+                 Settings.Secure.AUTOFILL_FEATURE_FIELD_CLASSIFICATION,
+                 Settings.Secure.AUTOFILL_USER_DATA_MAX_FIELD_CLASSIFICATION_IDS_SIZE,
+                 Settings.Secure.AUTOFILL_USER_DATA_MAX_USER_DATA_SIZE,
+                 Settings.Secure.AUTOFILL_USER_DATA_MAX_VALUE_LENGTH,
+                 Settings.Secure.AUTOFILL_USER_DATA_MIN_VALUE_LENGTH,
                  Settings.Secure.AUTOFILL_SERVICE_SEARCH_URI,
                  Settings.Secure.AUTOMATIC_STORAGE_MANAGER_BYTES_CLEARED,
                  Settings.Secure.AUTOMATIC_STORAGE_MANAGER_ENABLED,

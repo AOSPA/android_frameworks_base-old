@@ -79,7 +79,7 @@
     <string name="RestrictedOnAllVoiceTitle" msgid="158800171499150681">"Няма услуга за гласови/спешни обаждания"</string>
     <string name="RestrictedStateContent" msgid="4278821484643362350">"Временно не се предлага от мобилната мрежа в местоположението ви"</string>
     <string name="NetworkPreferenceSwitchTitle" msgid="4008877505368566980">"Не може да се установи връзка с мрежата"</string>
-    <string name="NetworkPreferenceSwitchSummary" msgid="1203771446683319957">"За да подобрите сигнала, променете избрания тип мрежа от „Настройки“ &gt; „Мрежа и интернет“ &gt; „Мобилни мрежи“ &gt; „Предпочитан тип мрежа“."</string>
+    <string name="NetworkPreferenceSwitchSummary" msgid="7056776609127756440">"За да подобрите сигнала, променете избрания тип мрежа от „Настройки“ &gt; „Мрежа и интернет“ &gt; „Мобилни мрежи“ &gt; „Предпочитан тип мрежа“."</string>
     <string name="EmergencyCallWarningTitle" msgid="4790413876281901612">"Функцията за обаждания през Wi-Fi е активна"</string>
     <string name="EmergencyCallWarningSummary" msgid="8973232888021643293">"За спешните обаждания се изисква мобилна мрежа."</string>
     <string name="notification_channel_network_alert" msgid="4427736684338074967">"Сигнали"</string>
@@ -212,6 +212,7 @@
     <string name="global_action_power_off" msgid="4471879440839879722">"Изключване"</string>
     <string name="global_action_emergency" msgid="7112311161137421166">"Спешно обаждане"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"Сигнал за програмна грешка"</string>
+    <string name="global_action_logout" msgid="935179188218826050">"Прекратяване на сесията"</string>
     <string name="bugreport_title" msgid="2667494803742548533">"Сигнал за програмна грешка"</string>
     <string name="bugreport_message" msgid="398447048750350456">"По този начин ще се събере информация за текущото състояние на устройството ви, която да се изпрати като имейл съобщение. След стартирането на процеса ще мине известно време, докато сигналът за програмна грешка бъде готов за подаване. Моля, имайте търпение."</string>
     <string name="bugreport_option_interactive_title" msgid="8635056131768862479">"Интерактивен сигнал"</string>
@@ -1051,6 +1052,9 @@
     <string name="screen_compat_mode_hint" msgid="1064524084543304459">"Активирайте отново това в „Системни настройки“ &gt; „Приложения“ &gt; „Изтеглени“."</string>
     <string name="unsupported_display_size_message" msgid="6545327290756295232">"<xliff:g id="APP_NAME">%1$s</xliff:g> не поддържа текущата настройка за размер на дисплея и може да се държи по неочакван начин."</string>
     <string name="unsupported_display_size_show" msgid="7969129195360353041">"Винаги да се показва"</string>
+    <string name="unsupported_compile_sdk_message" msgid="4253168368781441759">"Приложението <xliff:g id="APP_NAME">%1$s</xliff:g> бе създадено за несъвместима версия на операционната система Android и може да се държи по неочакван начин. Възможно е да е налице актуализирана версия."</string>
+    <string name="unsupported_compile_sdk_show" msgid="2681877855260970231">"Винаги да се показва"</string>
+    <string name="unsupported_compile_sdk_check_update" msgid="3312723623323216101">"Проверка за актуализация"</string>
     <string name="smv_application" msgid="3307209192155442829">"Приложението „<xliff:g id="APPLICATION">%1$s</xliff:g>“ (процес „<xliff:g id="PROCESS">%2$s</xliff:g>“) наруши правилото за стриктен режим, наложено от самото него."</string>
     <string name="smv_process" msgid="5120397012047462446">"Процесът <xliff:g id="PROCESS">%1$s</xliff:g> наруши правилото за стриктен режим, наложено от самия него."</string>
     <string name="android_upgrading_title" msgid="1584192285441405746">"Android се надстройва..."</string>
@@ -1116,10 +1120,10 @@
     <string name="network_available_sign_in" msgid="1848877297365446605">"Вход в мрежата"</string>
     <!-- no translation found for network_available_sign_in_detailed (8000081941447976118) -->
     <skip />
-    <string name="wifi_no_internet" msgid="8451173622563841546">"Wi-Fi мрежата няма достъп до интернет"</string>
+    <string name="wifi_no_internet" msgid="8938267198124654938">"Wi-Fi мрежата няма достъп до интернет"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"Докоснете за опции"</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"Превключи се към <xliff:g id="NETWORK_TYPE">%1$s</xliff:g>"</string>
-    <string name="network_switch_metered_detail" msgid="5325661434777870353">"Устройството използва <xliff:g id="NEW_NETWORK">%1$s</xliff:g>, когато <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> няма достъп до интернет. Възможно е да бъдете таксувани."</string>
+    <string name="network_switch_metered_detail" msgid="775163331794506615">"Устройството използва <xliff:g id="NEW_NETWORK">%1$s</xliff:g>, когато <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> няма достъп до интернет. Възможно е да бъдете таксувани."</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"Превключи се от <xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> към <xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
   <string-array name="network_switch_type_name">
     <item msgid="3979506840912951943">"мобилни данни"</item>
@@ -1130,7 +1134,7 @@
   </string-array>
     <string name="network_switch_type_name_unknown" msgid="4552612897806660656">"неизвестен тип мрежа"</string>
     <string name="wifi_watchdog_network_disabled" msgid="7904214231651546347">"Не можа да се свърже с Wi-Fi"</string>
-    <string name="wifi_watchdog_network_disabled_detailed" msgid="5548780776418332675">" има лоша връзка с интернет."</string>
+    <string name="wifi_watchdog_network_disabled_detailed" msgid="4917472096696322767">" има лоша връзка с интернет."</string>
     <string name="wifi_connect_alert_title" msgid="8455846016001810172">"Да се разреши ли връзката?"</string>
     <string name="wifi_connect_alert_message" msgid="6451273376815958922">"Приложението %1$s иска да се свърже с Wi-Fi мрежата „%2$s“"</string>
     <string name="wifi_connect_default_application" msgid="7143109390475484319">"Приложение"</string>
@@ -1495,6 +1499,8 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="7256507885737444807">"Когато прекият път е включен, можете да стартирате дадена функция за достъпност, като натиснете двата бутона за промяна на силата на звука и ги задържите 3 секунди.\n\n Текущата функция за достъпност е:\n <xliff:g id="SERVICE_NAME">%1$s</xliff:g>\n\n Можете да промените функцията от „Настройки“ &gt; „Достъпност“."</string>
     <string name="disable_accessibility_shortcut" msgid="627625354248453445">"Изключване на прекия път"</string>
     <string name="leave_accessibility_shortcut_on" msgid="7653111894438512680">"Използване на пряк път"</string>
+    <string name="color_inversion_feature_name" msgid="4231186527799958644">"Инвертиране на цветовете"</string>
+    <string name="color_correction_feature_name" msgid="6779391426096954933">"Коригиране на цветовете"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="7771852911861522636">"Прекият път за достъпност включи <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="2747243438223109821">"Прекият път за достъпност изключи <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
     <string name="accessibility_button_prompt_text" msgid="4234556536456854251">"Изберете функция, която да използвате, когато докоснете бутона за достъпност:"</string>
@@ -1626,7 +1632,6 @@
     <string name="managed_profile_label_badge_2" msgid="5048136430082124036">"Втори служебен профил (<xliff:g id="LABEL">%1$s</xliff:g>)"</string>
     <string name="managed_profile_label_badge_3" msgid="2808305070321719040">"Трети служебен профил (<xliff:g id="LABEL">%1$s</xliff:g>)"</string>
     <string name="lock_to_app_toast" msgid="6820571533009838261">"За да освободите този екран, докоснете и задръжте бутона за връщане назад и този за общ преглед"</string>
-    <string name="lock_to_app_toast_locked" msgid="7849470948648628704">"Това приложение не може да бъде освободено"</string>
     <string name="lock_to_app_start" msgid="6643342070839862795">"Екранът е фиксиран"</string>
     <string name="lock_to_app_exit" msgid="8598219838213787430">"Екранът е освободен"</string>
     <string name="lock_to_app_unlock_pin" msgid="2552556656504331634">"Запитване за ПИН код преди освобождаване"</string>
@@ -1635,7 +1640,7 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Инсталирано от администратора ви"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Актуализирано от администратора ви"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Изтрито от администратора ви"</string>
-    <string name="battery_saver_description" msgid="1960431123816253034">"С цел удължаване на живота на батерията режимът за запазването й намалява ефективността на устройството ви и ограничава вибрирането, услугите за местоположение и повечето данни на заден план. Приложенията за електронна поща, съобщения и др., които разчитат на синхронизиране, може да не се актуализират, освен ако не ги отворите.\n\nРежимът за запазване на батерията се изключва автоматично, когато устройството ви се зарежда."</string>
+    <string name="battery_saver_description" msgid="5394663545060026162">"С цел удължаване на живота на батерията режимът за запазването й намалява ефективността на устройството ви и ограничава вибрирането, услугите за местоположение и повечето данни на заден план. Приложенията за електронна поща, съобщения и др., които разчитат на синхронизиране, може да не се актуализират, освен ако не ги отворите.\n\nРежимът за запазване на батерията се изключва автоматично, когато устройството ви се зарежда."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"С цел намаляване на преноса на данни функцията за икономия на данни не позволява на някои приложения да изпращат или получават данни на заден план. Понастоящем използвано от вас приложение може да използва данни, но по-рядко. Това например може да означава, че изображенията не се показват, докато не ги докоснете."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Ще вкл. ли Икономия на данни?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Включване"</string>
@@ -1682,13 +1687,16 @@
     <string name="zen_mode_default_weeknights_name" msgid="3081318299464998143">"Делнична нощ"</string>
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Събота и неделя"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Събитие"</string>
+    <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"Време за сън"</string>
     <string name="muted_by" msgid="6147073845094180001">"Заглушено от <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"Възникна вътрешен проблем с устройството ви. То може да е нестабилно, докато не възстановите фабричните настройки."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"Възникна вътрешен проблем с устройството ви. За подробности се свържете с производителя."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5202342984749947872">"USSD заявката е променена на DIAL заявка."</string>
     <string name="stk_cc_ussd_to_ss" msgid="2345360594181405482">"USSD заявката е променена на SS заявка."</string>
     <string name="stk_cc_ussd_to_ussd" msgid="7466087659967191653">"USSD заявката е променена на нова USSD заявка."</string>
+    <string name="stk_cc_ussd_to_dial_video" msgid="585340552561515305">"USSD заявката е променена на DIAL заявка за видеообаждане."</string>
     <string name="stk_cc_ss_to_dial" msgid="2151304435775557162">"SS заявката е променена на DIAL заявка."</string>
+    <string name="stk_cc_ss_to_dial_video" msgid="4306210904450719045">"SS заявката е променена на DIAL заявка за видеообаждане."</string>
     <string name="stk_cc_ss_to_ussd" msgid="3951862188105305589">"SS заявката е променена на USSD заявка."</string>
     <string name="stk_cc_ss_to_ss" msgid="5470768854991452695">"SS заявката е променена на нова SS заявка."</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Служебен потребителски профил"</string>
@@ -1782,14 +1790,10 @@
     <string name="etws_primary_default_message_test" msgid="2709597093560037455">"Тест за спешни съобщения"</string>
     <string name="notification_reply_button_accessibility" msgid="3621714652387814344">"Отговор"</string>
     <string name="etws_primary_default_message_others" msgid="6293148756130398971"></string>
-    <!-- no translation found for mmcc_authentication_reject (5767701075994754356) -->
-    <skip />
-    <!-- no translation found for mmcc_imsi_unknown_in_hlr (5316658473301462825) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_ms (807334478177362062) -->
-    <skip />
-    <!-- no translation found for mmcc_illegal_me (1950705155760872972) -->
-    <skip />
+    <string name="mmcc_authentication_reject" msgid="5767701075994754356">"Гласовите услуги не са разрешени за SIM картата"</string>
+    <string name="mmcc_imsi_unknown_in_hlr" msgid="5316658473301462825">"SIM картата не е обезпечена за гласови услуги"</string>
+    <string name="mmcc_illegal_ms" msgid="807334478177362062">"Гласовите услуги не са разрешени за SIM картата"</string>
+    <string name="mmcc_illegal_me" msgid="1950705155760872972">"Гласовите услуги не са разрешени за телефона"</string>
     <string name="popup_window_default_title" msgid="4874318849712115433">"Изскачащ прозорец"</string>
     <string name="slice_more_content" msgid="8504342889413274608">"+ <xliff:g id="NUMBER">%1$d</xliff:g>"</string>
     <string name="shortcut_restored_on_lower_version" msgid="5270675146351613828">"За този пряк път се изисква най-новата версия на приложението"</string>

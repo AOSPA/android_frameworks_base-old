@@ -15,8 +15,8 @@
  */
 
 #include <sys/stat.h>
+#include <cinttypes>
 
-#include <fstream>
 #include <queue>
 #include <unordered_map>
 #include <vector>
@@ -37,6 +37,7 @@
 #include "ValueVisitor.h"
 #include "cmd/Util.h"
 #include "compile/IdAssigner.h"
+#include "compile/XmlIdCollector.h"
 #include "filter/ConfigFilter.h"
 #include "format/Archive.h"
 #include "format/Container.h"
@@ -212,6 +213,8 @@ class LinkContext : public IAaptContext {
 // This delegate will attempt to masquerade any '@id/' references with ID 0xPPTTEEEE,
 // where PP > 7f, as 0x7fPPEEEE. Any potential overlapping is verified and an error occurs if such
 // an overlap exists.
+//
+// See b/37498913.
 class FeatureSplitSymbolTableDelegate : public DefaultSymbolTableDelegate {
  public:
   FeatureSplitSymbolTableDelegate(IAaptContext* context) : context_(context) {
@@ -628,9 +631,9 @@ bool ResourceFileFlattener::Flatten(ResourceTable* table, IArchiveWriter* archiv
 
               dst_path =
                   ResourceUtils::BuildResourceFileName(doc->file, context_->GetNameMangler());
-              bool result = table->AddFileReferenceAllowMangled(doc->file.name, doc->file.config,
-                                                                doc->file.source, dst_path, nullptr,
-                                                                context_->GetDiagnostics());
+              bool result =
+                  table->AddFileReferenceMangled(doc->file.name, doc->file.config, doc->file.source,
+                                                 dst_path, nullptr, context_->GetDiagnostics());
               if (!result) {
                 return false;
               }
@@ -652,24 +655,26 @@ bool ResourceFileFlattener::Flatten(ResourceTable* table, IArchiveWriter* archiv
 static bool WriteStableIdMapToPath(IDiagnostics* diag,
                                    const std::unordered_map<ResourceName, ResourceId>& id_map,
                                    const std::string& id_map_path) {
-  std::ofstream fout(id_map_path, std::ofstream::binary);
-  if (!fout) {
-    diag->Error(DiagMessage(id_map_path) << strerror(errno));
+  io::FileOutputStream fout(id_map_path);
+  if (fout.HadError()) {
+    diag->Error(DiagMessage(id_map_path) << "failed to open: " << fout.GetError());
     return false;
   }
 
+  text::Printer printer(&fout);
   for (const auto& entry : id_map) {
     const ResourceName& name = entry.first;
     const ResourceId& id = entry.second;
-    fout << name << " = " << id << "\n";
+    printer.Print(name.to_string());
+    printer.Print(" = ");
+    printer.Println(id.to_string());
   }
+  fout.Flush();
 
-  if (!fout) {
-    diag->Error(DiagMessage(id_map_path) << "failed writing to file: "
-                                         << android::base::SystemErrorCodeToString(errno));
+  if (fout.HadError()) {
+    diag->Error(DiagMessage(id_map_path) << "failed writing to file: " << fout.GetError());
     return false;
   }
-
   return true;
 }
 
@@ -721,6 +726,30 @@ static bool LoadStableIdMap(IDiagnostics* diag, const std::string& path,
   return true;
 }
 
+static int32_t FindFrameworkAssetManagerCookie(const android::AssetManager& assets) {
+  using namespace android;
+
+  // Find the system package (0x01). AAPT always generates attributes with the type 0x01, so
+  // we're looking for the first attribute resource in the system package.
+  const ResTable& table = assets.getResources(true);
+  Res_value val;
+  ssize_t idx = table.getResource(0x01010000, &val, true);
+  if (idx != NO_ERROR) {
+    // Try as a bag.
+    const ResTable::bag_entry* entry;
+    ssize_t cnt = table.lockBag(0x01010000, &entry);
+    if (cnt >= 0) {
+      idx = entry->stringBlock;
+    }
+    table.unlockBag(entry);
+  }
+
+  if (idx < 0) {
+    return 0;
+  }
+  return table.getTableCookie(idx);
+}
+
 class LinkCommand {
  public:
   LinkCommand(LinkContext* context, const LinkOptions& options)
@@ -730,7 +759,65 @@ class LinkCommand {
         file_collection_(util::make_unique<io::FileCollection>()) {
   }
 
+  void ExtractCompileSdkVersions(android::AssetManager* assets) {
+    using namespace android;
+
+    int32_t cookie = FindFrameworkAssetManagerCookie(*assets);
+    if (cookie == 0) {
+      // No Framework assets loaded. Not a failure.
+      return;
+    }
+
+    std::unique_ptr<Asset> manifest(
+        assets->openNonAsset(cookie, kAndroidManifestPath, Asset::AccessMode::ACCESS_BUFFER));
+    if (manifest == nullptr) {
+      // No errors.
+      return;
+    }
+
+    std::string error;
+    std::unique_ptr<xml::XmlResource> manifest_xml =
+        xml::Inflate(manifest->getBuffer(true /*wordAligned*/), manifest->getLength(), &error);
+    if (manifest_xml == nullptr) {
+      // No errors.
+      return;
+    }
+
+    xml::Attribute* attr = manifest_xml->root->FindAttribute(xml::kSchemaAndroid, "versionCode");
+    if (attr != nullptr) {
+      Maybe<std::string>& compile_sdk_version = options_.manifest_fixer_options.compile_sdk_version;
+      if (BinaryPrimitive* prim = ValueCast<BinaryPrimitive>(attr->compiled_value.get())) {
+        switch (prim->value.dataType) {
+          case Res_value::TYPE_INT_DEC:
+            compile_sdk_version = StringPrintf("%" PRId32, static_cast<int32_t>(prim->value.data));
+            break;
+          case Res_value::TYPE_INT_HEX:
+            compile_sdk_version = StringPrintf("%" PRIx32, prim->value.data);
+            break;
+          default:
+            break;
+        }
+      } else if (String* str = ValueCast<String>(attr->compiled_value.get())) {
+        compile_sdk_version = *str->value;
+      } else {
+        compile_sdk_version = attr->value;
+      }
+    }
+
+    attr = manifest_xml->root->FindAttribute(xml::kSchemaAndroid, "versionName");
+    if (attr != nullptr) {
+      Maybe<std::string>& compile_sdk_version_codename =
+          options_.manifest_fixer_options.compile_sdk_version_codename;
+      if (String* str = ValueCast<String>(attr->compiled_value.get())) {
+        compile_sdk_version_codename = *str->value;
+      } else {
+        compile_sdk_version_codename = attr->value;
+      }
+    }
+  }
+
   // Creates a SymbolTable that loads symbols from the various APKs.
+  // Pre-condition: context_->GetCompilationPackage() needs to be set.
   bool LoadSymbolsFromIncludePaths() {
     auto asset_source = util::make_unique<AssetManagerSymbolSource>();
     for (const std::string& path : options_.include_paths) {
@@ -795,6 +882,20 @@ class LinkCommand {
     for (auto& entry : asset_source->GetAssignedPackageIds()) {
       if (entry.first > kFrameworkPackageId && entry.first < kAppPackageId) {
         final_table_.included_packages_[entry.first] = entry.second;
+      } else if (entry.first == kAppPackageId) {
+        // Capture the included base feature package.
+        included_feature_base_ = entry.second;
+      } else if (entry.first == kFrameworkPackageId) {
+        // Try to embed which version of the framework we're compiling against.
+        // First check if we should use compileSdkVersion at all. Otherwise compilation may fail
+        // when linking our synthesized 'android:compileSdkVersion' attribute.
+        std::unique_ptr<SymbolTable::Symbol> symbol = asset_source->FindByName(
+            ResourceName("android", ResourceType::kAttr, "compileSdkVersion"));
+        if (symbol != nullptr && symbol->is_public) {
+          // The symbol is present and public, extract the android:versionName and
+          // android:versionCode from the framework AndroidManifest.xml.
+          ExtractCompileSdkVersions(asset_source->GetAssetManager());
+        }
       }
     }
 
@@ -968,52 +1069,48 @@ class LinkCommand {
   bool WriteJavaFile(ResourceTable* table, const StringPiece& package_name_to_generate,
                      const StringPiece& out_package, const JavaClassGeneratorOptions& java_options,
                      const Maybe<std::string>& out_text_symbols_path = {}) {
-    if (!options_.generate_java_class_path) {
+    if (!options_.generate_java_class_path && !out_text_symbols_path) {
       return true;
     }
 
-    std::string out_path = options_.generate_java_class_path.value();
-    file::AppendPath(&out_path, file::PackageToPath(out_package));
-    if (!file::mkdirs(out_path)) {
-      context_->GetDiagnostics()->Error(DiagMessage() << "failed to create directory '" << out_path
-                                                      << "'");
-      return false;
+    std::string out_path;
+    std::unique_ptr<io::FileOutputStream> fout;
+    if (options_.generate_java_class_path) {
+      out_path = options_.generate_java_class_path.value();
+      file::AppendPath(&out_path, file::PackageToPath(out_package));
+      if (!file::mkdirs(out_path)) {
+        context_->GetDiagnostics()->Error(DiagMessage()
+                                          << "failed to create directory '" << out_path << "'");
+        return false;
+      }
+
+      file::AppendPath(&out_path, "R.java");
+
+      fout = util::make_unique<io::FileOutputStream>(out_path);
+      if (fout->HadError()) {
+        context_->GetDiagnostics()->Error(DiagMessage() << "failed writing to '" << out_path
+                                                        << "': " << fout->GetError());
+        return false;
+      }
     }
 
-    file::AppendPath(&out_path, "R.java");
-
-    std::ofstream fout(out_path, std::ofstream::binary);
-    if (!fout) {
-      context_->GetDiagnostics()->Error(DiagMessage()
-                                        << "failed writing to '" << out_path
-                                        << "': " << android::base::SystemErrorCodeToString(errno));
-      return false;
-    }
-
-    std::unique_ptr<std::ofstream> fout_text;
+    std::unique_ptr<io::FileOutputStream> fout_text;
     if (out_text_symbols_path) {
-      fout_text =
-          util::make_unique<std::ofstream>(out_text_symbols_path.value(), std::ofstream::binary);
-      if (!*fout_text) {
-        context_->GetDiagnostics()->Error(
-            DiagMessage() << "failed writing to '" << out_text_symbols_path.value()
-                          << "': " << android::base::SystemErrorCodeToString(errno));
+      fout_text = util::make_unique<io::FileOutputStream>(out_text_symbols_path.value());
+      if (fout_text->HadError()) {
+        context_->GetDiagnostics()->Error(DiagMessage()
+                                          << "failed writing to '" << out_text_symbols_path.value()
+                                          << "': " << fout_text->GetError());
         return false;
       }
     }
 
     JavaClassGenerator generator(context_, table, java_options);
-    if (!generator.Generate(package_name_to_generate, out_package, &fout, fout_text.get())) {
-      context_->GetDiagnostics()->Error(DiagMessage(out_path) << generator.getError());
+    if (!generator.Generate(package_name_to_generate, out_package, fout.get(), fout_text.get())) {
+      context_->GetDiagnostics()->Error(DiagMessage(out_path) << generator.GetError());
       return false;
     }
 
-    if (!fout) {
-      context_->GetDiagnostics()->Error(DiagMessage()
-                                        << "failed writing to '" << out_path
-                                        << "': " << android::base::SystemErrorCodeToString(errno));
-      return false;
-    }
     return true;
   }
 
@@ -1139,18 +1236,19 @@ class LinkCommand {
 
     file::AppendPath(&out_path, "Manifest.java");
 
-    std::ofstream fout(out_path, std::ofstream::binary);
-    if (!fout) {
-      context_->GetDiagnostics()->Error(DiagMessage()
-                                        << "failed writing to '" << out_path
-                                        << "': " << android::base::SystemErrorCodeToString(errno));
+    io::FileOutputStream fout(out_path);
+    if (fout.HadError()) {
+      context_->GetDiagnostics()->Error(DiagMessage() << "failed to open '" << out_path
+                                                      << "': " << fout.GetError());
       return false;
     }
 
-    if (!ClassDefinition::WriteJavaFile(manifest_class.get(), package_utf8, true, &fout)) {
-      context_->GetDiagnostics()->Error(DiagMessage()
-                                        << "failed writing to '" << out_path
-                                        << "': " << android::base::SystemErrorCodeToString(errno));
+    ClassDefinition::WriteJavaFile(manifest_class.get(), package_utf8, true, &fout);
+    fout.Flush();
+
+    if (fout.HadError()) {
+      context_->GetDiagnostics()->Error(DiagMessage() << "failed writing to '" << out_path
+                                                      << "': " << fout.GetError());
       return false;
     }
     return true;
@@ -1162,19 +1260,19 @@ class LinkCommand {
     }
 
     const std::string& out_path = out.value();
-    std::ofstream fout(out_path, std::ofstream::binary);
-    if (!fout) {
-      context_->GetDiagnostics()->Error(DiagMessage()
-                                        << "failed to open '" << out_path
-                                        << "': " << android::base::SystemErrorCodeToString(errno));
+    io::FileOutputStream fout(out_path);
+    if (fout.HadError()) {
+      context_->GetDiagnostics()->Error(DiagMessage() << "failed to open '" << out_path
+                                                      << "': " << fout.GetError());
       return false;
     }
 
-    proguard::WriteKeepSet(&fout, keep_set);
-    if (!fout) {
-      context_->GetDiagnostics()->Error(DiagMessage()
-                                        << "failed writing to '" << out_path
-                                        << "': " << android::base::SystemErrorCodeToString(errno));
+    proguard::WriteKeepSet(keep_set, &fout);
+    fout.Flush();
+
+    if (fout.HadError()) {
+      context_->GetDiagnostics()->Error(DiagMessage() << "failed writing to '" << out_path
+                                                      << "': " << fout.GetError());
       return false;
     }
     return true;
@@ -1229,19 +1327,10 @@ class LinkCommand {
     return true;
   }
 
-  bool MergeCompiledFile(const ResourceFile& compiled_file, io::IFile* file, bool override) {
-    if (context_->IsVerbose()) {
-      context_->GetDiagnostics()->Note(DiagMessage()
-                                       << "merging '" << compiled_file.name
-                                       << "' from compiled file " << compiled_file.source);
-    }
-
-    if (!table_merger_->MergeFile(compiled_file, override, file)) {
-      return false;
-    }
-
+  bool MergeExportedSymbols(const Source& source,
+                            const std::vector<SourcedResourceName>& exported_symbols) {
     // Add the exports of this file to the table.
-    for (const SourcedResourceName& exported_symbol : compiled_file.exported_symbols) {
+    for (const SourcedResourceName& exported_symbol : exported_symbols) {
       ResourceName res_name = exported_symbol.name;
       if (res_name.package.empty()) {
         res_name.package = context_->GetCompilationPackage();
@@ -1253,15 +1342,28 @@ class LinkCommand {
       }
 
       std::unique_ptr<Id> id = util::make_unique<Id>();
-      id->SetSource(compiled_file.source.WithLine(exported_symbol.line));
-      bool result = final_table_.AddResourceAllowMangled(
-          res_name, ConfigDescription::DefaultConfig(), std::string(), std::move(id),
-          context_->GetDiagnostics());
+      id->SetSource(source.WithLine(exported_symbol.line));
+      bool result =
+          final_table_.AddResourceMangled(res_name, ConfigDescription::DefaultConfig(),
+                                          std::string(), std::move(id), context_->GetDiagnostics());
       if (!result) {
         return false;
       }
     }
     return true;
+  }
+
+  bool MergeCompiledFile(const ResourceFile& compiled_file, io::IFile* file, bool override) {
+    if (context_->IsVerbose()) {
+      context_->GetDiagnostics()->Note(DiagMessage()
+                                       << "merging '" << compiled_file.name
+                                       << "' from compiled file " << compiled_file.source);
+    }
+
+    if (!table_merger_->MergeFile(compiled_file, override, file)) {
+      return false;
+    }
+    return MergeExportedSymbols(compiled_file.source, compiled_file.exported_symbols);
   }
 
   // Takes a path to load as a ZIP file and merges the files within into the master ResourceTable.
@@ -1465,11 +1567,48 @@ class LinkCommand {
       return false;
     }
 
-    if (!FlattenTable(table, options_.output_format, writer)) {
-      context_->GetDiagnostics()->Error(DiagMessage() << "failed to write resource table");
-      return false;
+    // Hack to fix b/68820737.
+    // We need to modify the ResourceTable's package name, but that should NOT affect
+    // anything else being generated, which includes the Java classes.
+    // If required, the package name is modifed before flattening, and then modified back
+    // to its original name.
+    ResourceTablePackage* package_to_rewrite = nullptr;
+    if (context_->GetPackageId() > kAppPackageId &&
+        included_feature_base_ == make_value(context_->GetCompilationPackage())) {
+      // The base APK is included, and this is a feature split. If the base package is
+      // the same as this package, then we are building an old style Android Instant Apps feature
+      // split and must apply this workaround to avoid requiring namespaces support.
+      package_to_rewrite = table->FindPackage(context_->GetCompilationPackage());
+      if (package_to_rewrite != nullptr) {
+        CHECK_EQ(1u, table->packages.size()) << "can't change name of package when > 1 package";
+
+        std::string new_package_name =
+            StringPrintf("%s.%s", package_to_rewrite->name.c_str(),
+                         app_info_.split_name.value_or_default("feature").c_str());
+
+        if (context_->IsVerbose()) {
+          context_->GetDiagnostics()->Note(
+              DiagMessage() << "rewriting resource package name for feature split to '"
+                            << new_package_name << "'");
+        }
+        package_to_rewrite->name = new_package_name;
+      }
     }
-    return true;
+
+    bool success = FlattenTable(table, options_.output_format, writer);
+
+    if (package_to_rewrite != nullptr) {
+      // Change the name back.
+      package_to_rewrite->name = context_->GetCompilationPackage();
+      if (package_to_rewrite->id) {
+        table->included_packages_.erase(package_to_rewrite->id.value());
+      }
+    }
+
+    if (!success) {
+      context_->GetDiagnostics()->Error(DiagMessage() << "failed to write resource table");
+    }
+    return success;
   }
 
   int Run(const std::vector<std::string>& input_files) {
@@ -1487,6 +1626,12 @@ class LinkCommand {
       context_->SetCompilationPackage(app_info.package);
     }
 
+    // Now that the compilation package is set, load the dependencies. This will also extract
+    // the Android framework's versionCode and versionName, if they exist.
+    if (!LoadSymbolsFromIncludePaths()) {
+      return 1;
+    }
+
     ManifestFixer manifest_fixer(options_.manifest_fixer_options);
     if (!manifest_fixer.Consume(context_, manifest_xml.get())) {
       return 1;
@@ -1498,8 +1643,8 @@ class LinkCommand {
       return 1;
     }
 
-    const AppInfo& app_info = maybe_app_info.value();
-    context_->SetMinSdkVersion(app_info.min_sdk_version.value_or_default(0));
+    app_info_ = maybe_app_info.value();
+    context_->SetMinSdkVersion(app_info_.min_sdk_version.value_or_default(0));
 
     context_->SetNameManglerPolicy(NameManglerPolicy{context_->GetCompilationPackage()});
 
@@ -1515,10 +1660,6 @@ class LinkCommand {
       }
     }
 
-    if (!LoadSymbolsFromIncludePaths()) {
-      return 1;
-    }
-
     TableMergerOptions table_merger_options;
     table_merger_options.auto_add_overlay = options_.auto_add_overlay;
     table_merger_ = util::make_unique<TableMerger>(context_, &final_table_, table_merger_options);
@@ -1528,6 +1669,19 @@ class LinkCommand {
                                        << StringPrintf("linking package '%s' using package ID %02x",
                                                        context_->GetCompilationPackage().data(),
                                                        context_->GetPackageId()));
+    }
+
+    // Extract symbols from AndroidManifest.xml, since this isn't merged like the other XML files
+    // in res/**/*.
+    {
+      XmlIdCollector collector;
+      if (!collector.Consume(context_, manifest_xml.get())) {
+        return false;
+      }
+
+      if (!MergeExportedSymbols(manifest_xml->file.source, manifest_xml->file.exported_symbols)) {
+        return false;
+      }
     }
 
     for (const std::string& input : input_files) {
@@ -1699,7 +1853,7 @@ class LinkCommand {
 
         // Generate an AndroidManifest.xml for each split.
         std::unique_ptr<xml::XmlResource> split_manifest =
-            GenerateSplitManifest(app_info, *split_constraints_iter);
+            GenerateSplitManifest(app_info_, *split_constraints_iter);
 
         XmlReferenceLinker linker;
         if (!linker.Consume(context_, split_manifest.get())) {
@@ -1777,7 +1931,7 @@ class LinkCommand {
       return 1;
     }
 
-    if (options_.generate_java_class_path) {
+    if (options_.generate_java_class_path || options_.generate_text_symbols_path) {
       if (!GenerateJavaClasses()) {
         return 1;
       }
@@ -1799,6 +1953,8 @@ class LinkCommand {
   LinkContext* context_;
   ResourceTable final_table_;
 
+  AppInfo app_info_;
+
   std::unique_ptr<TableMerger> table_merger_;
 
   // A pointer to the FileCollection representing the filesystem (not archives).
@@ -1816,6 +1972,9 @@ class LinkCommand {
 
   // The set of shared libraries being used, mapping their assigned package ID to package name.
   std::map<size_t, std::string> shared_libs_;
+
+  // The package name of the base application, if it is included.
+  Maybe<std::string> included_feature_base_;
 };
 
 int Link(const std::vector<StringPiece>& args, IDiagnostics* diagnostics) {
@@ -1962,6 +2121,9 @@ int Link(const std::vector<StringPiece>& args, IDiagnostics* diagnostics) {
                         &options.manifest_fixer_options.rename_instrumentation_target_package)
           .OptionalFlagList("-0", "File extensions not to compress.",
                             &options.extensions_to_not_compress)
+          .OptionalSwitch("--warn-manifest-validation",
+                          "Treat manifest validation errors as warnings.",
+                          &options.manifest_fixer_options.warn_validation)
           .OptionalFlagList("--split",
                             "Split resources matching a set of configs out to a Split APK.\n"
                             "Syntax: path/to/output.apk:<config>[,<config>[...]].\n"

@@ -28,7 +28,6 @@
 #include "data/libclient/R.h"
 #include "data/styles/R.h"
 #include "data/system/R.h"
-#include "data/unverified/R.h"
 
 namespace app = com::android::app;
 namespace appaslib = com::android::appaslib::app;
@@ -36,7 +35,6 @@ namespace basic = com::android::basic;
 namespace lib_one = com::android::lib_one;
 namespace lib_two = com::android::lib_two;
 namespace libclient = com::android::libclient;
-namespace unverified = com::android::unverified;
 
 namespace android {
 
@@ -319,7 +317,7 @@ TEST_F(AssetManager2Test, ResolveReferenceToResource) {
   EXPECT_EQ(Res_value::TYPE_REFERENCE, value.dataType);
   EXPECT_EQ(basic::R::integer::ref2, value.data);
 
-  uint32_t last_ref;
+  uint32_t last_ref = 0u;
   cookie = assetmanager.ResolveReference(cookie, &value, &selected_config, &flags, &last_ref);
   ASSERT_NE(kInvalidCookie, cookie);
   EXPECT_EQ(Res_value::TYPE_INT_DEC, value.dataType);
@@ -342,12 +340,31 @@ TEST_F(AssetManager2Test, ResolveReferenceToBag) {
   EXPECT_EQ(Res_value::TYPE_REFERENCE, value.dataType);
   EXPECT_EQ(basic::R::array::integerArray1, value.data);
 
-  uint32_t last_ref;
+  uint32_t last_ref = 0u;
   cookie = assetmanager.ResolveReference(cookie, &value, &selected_config, &flags, &last_ref);
   ASSERT_NE(kInvalidCookie, cookie);
   EXPECT_EQ(Res_value::TYPE_REFERENCE, value.dataType);
   EXPECT_EQ(basic::R::array::integerArray1, value.data);
   EXPECT_EQ(basic::R::array::integerArray1, last_ref);
+}
+
+TEST_F(AssetManager2Test, KeepLastReferenceIdUnmodifiedIfNoReferenceIsResolved) {
+  AssetManager2 assetmanager;
+  assetmanager.SetApkAssets({basic_assets_.get()});
+
+  ResTable_config selected_config;
+  memset(&selected_config, 0, sizeof(selected_config));
+
+  uint32_t flags = 0u;
+
+  // Create some kind of Res_value that is NOT a reference.
+  Res_value value;
+  value.dataType = Res_value::TYPE_STRING;
+  value.data = 0;
+
+  uint32_t last_ref = basic::R::string::test1;
+  EXPECT_EQ(1, assetmanager.ResolveReference(1, &value, &selected_config, &flags, &last_ref));
+  EXPECT_EQ(basic::R::string::test1, last_ref);
 }
 
 static bool IsConfigurationPresent(const std::set<ResTable_config>& configurations,
@@ -432,31 +449,5 @@ TEST_F(AssetManager2Test, GetResourceId) {
 TEST_F(AssetManager2Test, OpensFileFromSingleApkAssets) {}
 
 TEST_F(AssetManager2Test, OpensFileFromMultipleApkAssets) {}
-
-TEST_F(AssetManager2Test, OperateOnUnverifiedApkAssets) {
-  std::unique_ptr<const ApkAssets> unverified_assets =
-      ApkAssets::Load(GetTestDataPath() + "/unverified/unverified.apk");
-  ASSERT_NE(nullptr, unverified_assets);
-
-  AssetManager2 assetmanager;
-  assetmanager.SetApkAssets({unverified_assets.get()});
-
-  Res_value value;
-  ResTable_config config;
-  uint32_t flags;
-
-  EXPECT_EQ(kInvalidCookie,
-            assetmanager.GetResource(unverified::R::string::test1, false /*may_be_bag*/, 0u, &value,
-                                     &config, &flags));
-  EXPECT_EQ(kInvalidCookie,
-            assetmanager.GetResource(unverified::R::string::test2, false /*may_be_bag*/, 0u, &value,
-                                     &config, &flags));
-  EXPECT_NE(kInvalidCookie,
-            assetmanager.GetResource(unverified::R::integer::number1, false /*may_be_bag*/, 0u,
-                                     &value, &config, &flags));
-
-  EXPECT_EQ(nullptr, assetmanager.GetBag(unverified::R::style::Theme1));
-  EXPECT_NE(nullptr, assetmanager.GetBag(unverified::R::array::integerArray1));
-}
 
 }  // namespace android

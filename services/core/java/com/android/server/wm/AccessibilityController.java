@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_MAGNIFICATION_OVERLAY;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
 
@@ -55,14 +56,14 @@ import android.view.SurfaceControl;
 import android.view.ViewConfiguration;
 import android.view.WindowInfo;
 import android.view.WindowManager;
-import android.view.WindowManagerInternal.MagnificationCallbacks;
-import android.view.WindowManagerInternal.WindowsForAccessibilityCallback;
-import android.view.WindowManagerPolicy;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 
 import com.android.internal.R;
 import com.android.internal.os.SomeArgs;
+import com.android.server.policy.WindowManagerPolicy;
+import com.android.server.wm.WindowManagerInternal.MagnificationCallbacks;
+import com.android.server.wm.WindowManagerInternal.WindowsForAccessibilityCallback;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -234,16 +235,7 @@ final class AccessibilityController {
 
     private static void populateTransformationMatrixLocked(WindowState windowState,
             Matrix outMatrix) {
-        sTempFloats[Matrix.MSCALE_X] = windowState.mWinAnimator.mDsDx;
-        sTempFloats[Matrix.MSKEW_Y] = windowState.mWinAnimator.mDtDx;
-        sTempFloats[Matrix.MSKEW_X] = windowState.mWinAnimator.mDtDy;
-        sTempFloats[Matrix.MSCALE_Y] = windowState.mWinAnimator.mDsDy;
-        sTempFloats[Matrix.MTRANS_X] = windowState.mShownPosition.x;
-        sTempFloats[Matrix.MTRANS_Y] = windowState.mShownPosition.y;
-        sTempFloats[Matrix.MPERSP_0] = 0;
-        sTempFloats[Matrix.MPERSP_1] = 0;
-        sTempFloats[Matrix.MPERSP_2] = 1;
-        outMatrix.setValues(sTempFloats);
+        windowState.getTransformationMatrix(sTempFloats, outMatrix);
     }
 
     /**
@@ -292,6 +284,8 @@ final class AccessibilityController {
         public void setMagnificationSpecLocked(MagnificationSpec spec) {
             mMagnifedViewport.updateMagnificationSpecLocked(spec);
             mMagnifedViewport.recomputeBoundsLocked();
+
+            mService.applyMagnificationSpec(spec);
             mService.scheduleAnimationLocked();
         }
 
@@ -421,7 +415,7 @@ final class AccessibilityController {
         public MagnificationSpec getMagnificationSpecForWindowLocked(WindowState windowState) {
             MagnificationSpec spec = mMagnifedViewport.getMagnificationSpecLocked();
             if (spec != null && !spec.isNop()) {
-                if (!mService.mPolicy.canMagnifyWindow(windowState.mAttrs.type)) {
+                if (!windowState.shouldMagnify()) {
                     return null;
                 }
             }
@@ -476,6 +470,7 @@ final class AccessibilityController {
             private final ViewportWindow mWindow;
 
             private boolean mFullRedrawNeeded;
+            private int mTempLayer = 0;
 
             public MagnifiedViewport() {
                 mWindowManager = (WindowManager) mContext.getSystemService(Service.WINDOW_SERVICE);
@@ -565,7 +560,7 @@ final class AccessibilityController {
                     portionOfWindowAlreadyAccountedFor.op(nonMagnifiedBounds, Region.Op.UNION);
                     windowBounds.op(portionOfWindowAlreadyAccountedFor, Region.Op.DIFFERENCE);
 
-                    if (mService.mPolicy.canMagnifyWindow(windowState.mAttrs.type)) {
+                    if (windowState.shouldMagnify()) {
                         mMagnificationRegion.op(windowBounds, Region.Op.UNION);
                         mMagnificationRegion.op(availableBounds, Region.Op.INTERSECT);
                     } else {
@@ -676,10 +671,12 @@ final class AccessibilityController {
 
             private void populateWindowsOnScreenLocked(SparseArray<WindowState> outWindows) {
                 final DisplayContent dc = mService.getDefaultDisplayContentLocked();
+                mTempLayer = 0;
                 dc.forAllWindows((w) -> {
                     if (w.isOnScreen() && w.isVisibleLw()
                             && !w.mWinAnimator.mEnterAnimationPending) {
-                        outWindows.put(w.mLayer, w);
+                        mTempLayer++;
+                        outWindows.put(mTempLayer, w);
                     }
                 }, false /* traverseTopToBottom */ );
             }
@@ -705,7 +702,7 @@ final class AccessibilityController {
                     SurfaceControl surfaceControl = null;
                     try {
                         mWindowManager.getDefaultDisplay().getRealSize(mTempPoint);
-                        surfaceControl = new SurfaceControl.Builder(mService.mFxSession)
+                        surfaceControl = mService.getDefaultDisplayContentLocked().makeOverlay()
                                 .setName(SURFACE_TITLE)
                                 .setSize(mTempPoint.x, mTempPoint.y) // not a typo
                                 .setFormat(PixelFormat.TRANSLUCENT)
@@ -714,8 +711,6 @@ final class AccessibilityController {
                         /* ignore */
                     }
                     mSurfaceControl = surfaceControl;
-                    mSurfaceControl.setLayerStack(mWindowManager.getDefaultDisplay()
-                            .getLayerStack());
                     mSurfaceControl.setLayer(mService.mPolicy.getWindowLayerFromTypeLw(
                             TYPE_MAGNIFICATION_OVERLAY)
                             * WindowManagerService.TYPE_LAYER_MULTIPLIER);
@@ -1005,6 +1000,8 @@ final class AccessibilityController {
 
         private final long mRecurringAccessibilityEventsIntervalMillis;
 
+        private int mTempLayer = 0;
+
         public WindowsForAccessibilityObserver(WindowManagerService windowManagerService,
                 WindowsForAccessibilityCallback callback) {
             mContext = windowManagerService.mContext;
@@ -1072,8 +1069,11 @@ final class AccessibilityController {
                         continue;
                     }
 
-                    // If the window is not touchable - ignore.
-                    if ((flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) != 0) {
+                    // Ignore non-touchable windows, except the split-screen divider, which is
+                    // occasionally non-touchable but still useful for identifying split-screen
+                    // mode.
+                    if (((flags & WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE) != 0)
+                            && (windowState.mAttrs.type != TYPE_DOCK_DIVIDER)) {
                         continue;
                     }
 
@@ -1090,6 +1090,7 @@ final class AccessibilityController {
                     if (isReportedWindowType(windowState.mAttrs.type)) {
                         // Add the window to the ones to be reported.
                         WindowInfo window = obtainPopulatedWindowInfo(windowState, boundsInScreen);
+                        window.layer = addedWindows.size();
                         addedWindows.add(window.token);
                         windows.add(window);
                         if (windowState.isFocused()) {
@@ -1323,9 +1324,10 @@ final class AccessibilityController {
 
         private void populateVisibleWindowsOnScreenLocked(SparseArray<WindowState> outWindows) {
             final DisplayContent dc = mService.getDefaultDisplayContentLocked();
+            mTempLayer = 0;
             dc.forAllWindows((w) -> {
                 if (w.isVisibleLw()) {
-                    outWindows.put(w.mLayer, w);
+                    outWindows.put(mTempLayer++, w);
                 }
             }, false /* traverseTopToBottom */ );
         }

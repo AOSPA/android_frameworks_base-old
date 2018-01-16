@@ -22,6 +22,7 @@ import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
 import android.app.job.IJobScheduler;
 import android.app.job.JobScheduler;
+import android.app.slice.SliceManager;
 import android.app.timezone.RulesManager;
 import android.app.trust.TrustManager;
 import android.app.usage.IStorageStatsManager;
@@ -41,6 +42,8 @@ import android.content.pm.IShortcutService;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
+import android.content.pm.crossprofile.CrossProfileApps;
+import android.content.pm.crossprofile.ICrossProfileApps;
 import android.content.res.Resources;
 import android.hardware.ConsumerIrManager;
 import android.hardware.ISerialManager;
@@ -81,6 +84,7 @@ import android.net.INetworkPolicyManager;
 import android.net.IpSecManager;
 import android.net.NetworkPolicyManager;
 import android.net.NetworkScoreManager;
+import android.net.NetworkWatchlistManager;
 import android.net.lowpan.ILowpanManager;
 import android.net.lowpan.LowpanManager;
 import android.net.nsd.INsdManager;
@@ -134,6 +138,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.euicc.EuiccManager;
 import android.util.Log;
+import android.util.StatsManager;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.WindowManager;
@@ -150,6 +155,7 @@ import com.android.internal.app.IAppOpsService;
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.app.ISoundTriggerService;
 import com.android.internal.appwidget.IAppWidgetService;
+import com.android.internal.net.INetworkWatchlistManager;
 import com.android.internal.os.IDropBoxManagerService;
 import com.android.internal.policy.PhoneLayoutInflater;
 
@@ -448,6 +454,13 @@ final class SystemServiceRegistry {
                   ctx.mMainThread.getHandler().getLooper());
             }});
 
+        registerService(Context.STATS_MANAGER, StatsManager.class,
+                new StaticServiceFetcher<StatsManager>() {
+                    @Override
+                    public StatsManager createService() throws ServiceNotFoundException {
+                        return new StatsManager();
+                    }});
+
         registerService(Context.STATUS_BAR_SERVICE, StatusBarManager.class,
                 new CachedServiceFetcher<StatusBarManager>() {
             @Override
@@ -539,8 +552,16 @@ final class SystemServiceRegistry {
         registerService(Context.WALLPAPER_SERVICE, WallpaperManager.class,
                 new CachedServiceFetcher<WallpaperManager>() {
             @Override
-            public WallpaperManager createService(ContextImpl ctx) {
-                return new WallpaperManager(ctx.getOuterContext(),
+            public WallpaperManager createService(ContextImpl ctx)
+                    throws ServiceNotFoundException {
+                final IBinder b;
+                if (ctx.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.P) {
+                    b = ServiceManager.getServiceOrThrow(Context.WALLPAPER_SERVICE);
+                } else {
+                    b = ServiceManager.getService(Context.WALLPAPER_SERVICE);
+                }
+                IWallpaperManager service = IWallpaperManager.Stub.asInterface(b);
+                return new WallpaperManager(service, ctx.getOuterContext(),
                         ctx.mMainThread.getHandler());
             }});
 
@@ -605,12 +626,13 @@ final class SystemServiceRegistry {
                         ConnectivityThread.getInstanceLooper());
             }});
 
-        registerService(Context.WIFI_RTT2_SERVICE, WifiRttManager.class,
+        registerService(Context.WIFI_RTT_RANGING_SERVICE, WifiRttManager.class,
                 new CachedServiceFetcher<WifiRttManager>() {
                     @Override
                     public WifiRttManager createService(ContextImpl ctx)
                             throws ServiceNotFoundException {
-                        IBinder b = ServiceManager.getServiceOrThrow(Context.WIFI_RTT2_SERVICE);
+                        IBinder b = ServiceManager.getServiceOrThrow(
+                                Context.WIFI_RTT_RANGING_SERVICE);
                         IWifiRttManager service = IWifiRttManager.Stub.asInterface(b);
                         return new WifiRttManager(ctx.getOuterContext(), service);
                     }});
@@ -862,6 +884,17 @@ final class SystemServiceRegistry {
                 return new ShortcutManager(ctx, IShortcutService.Stub.asInterface(b));
             }});
 
+        registerService(Context.NETWORK_WATCHLIST_SERVICE, NetworkWatchlistManager.class,
+                new CachedServiceFetcher<NetworkWatchlistManager>() {
+                    @Override
+                    public NetworkWatchlistManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b =
+                                ServiceManager.getServiceOrThrow(Context.NETWORK_WATCHLIST_SERVICE);
+                        return new NetworkWatchlistManager(ctx,
+                                INetworkWatchlistManager.Stub.asInterface(b));
+                    }});
+
         registerService(Context.SYSTEM_HEALTH_SERVICE, SystemHealthManager.class,
                 new CachedServiceFetcher<SystemHealthManager>() {
             @Override
@@ -909,6 +942,28 @@ final class SystemServiceRegistry {
             public RulesManager createService(ContextImpl ctx) {
                 return new RulesManager(ctx.getOuterContext());
             }});
+
+        registerService(Context.CROSS_PROFILE_APPS_SERVICE, CrossProfileApps.class,
+                new CachedServiceFetcher<CrossProfileApps>() {
+                    @Override
+                    public CrossProfileApps createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(
+                                Context.CROSS_PROFILE_APPS_SERVICE);
+                        return new CrossProfileApps(ctx.getOuterContext(),
+                                ICrossProfileApps.Stub.asInterface(b));
+                    }
+                });
+
+        registerService(Context.SLICE_SERVICE, SliceManager.class,
+                new CachedServiceFetcher<SliceManager>() {
+                    @Override
+                    public SliceManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new SliceManager(ctx.getOuterContext(),
+                                ctx.mMainThread.getHandler());
+                    }
+            });
     }
 
     /**

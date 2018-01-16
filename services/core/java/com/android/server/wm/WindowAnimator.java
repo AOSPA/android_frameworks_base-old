@@ -30,10 +30,9 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.view.Choreographer;
-import android.view.SurfaceControl;
-import android.view.WindowManagerPolicy;
 
 import com.android.server.AnimationThread;
+import com.android.server.policy.WindowManagerPolicy;
 
 import java.io.PrintWriter;
 
@@ -51,16 +50,14 @@ public class WindowAnimator {
 
     /** Is any window animating? */
     private boolean mAnimating;
-    private boolean mLastAnimating;
-
-    /** Is any app window animating? */
-    boolean mAppWindowAnimating;
+    private boolean mLastRootAnimating;
 
     final Choreographer.FrameCallback mAnimationFrameCallback;
 
     /** Time of current animation step. Reset on each iteration */
     long mCurrentTime;
 
+    boolean mAppWindowAnimating;
     /** Skip repeated AppWindowTokens initialization. Note that AppWindowsToken's version of this
      * is a long initialized to Long.MIN_VALUE so that it doesn't match this value on startup. */
     int mAnimTransactionSequence;
@@ -143,21 +140,10 @@ public class WindowAnimator {
             scheduleAnimation();
         }
 
-        // Simulate back-pressure by opening and closing an empty animation transaction. This makes
-        // sure that an animation frame is at least presented once on the screen. We do this outside
-        // of the regular transaction such that we can avoid holding the window manager lock in case
-        // we receive back-pressure from SurfaceFlinger. Since closing an animation transaction
-        // without the window manager locks leads to ordering issues (as the transaction will be
-        // processed only at the beginning of the next frame which may result in another transaction
-        // that was executed later in WM side gets executed first on SF side), we don't update any
-        // Surface properties here such that reordering doesn't cause issues.
-        mService.executeEmptyAnimationTransaction();
-
         synchronized (mService.mWindowMap) {
             mCurrentTime = frameTimeNs / TimeUtils.NANOS_PER_MS;
             mBulkUpdateParams = SET_ORIENTATION_CHANGE_COMPLETE;
             mAnimating = false;
-            mAppWindowAnimating = false;
             if (DEBUG_WINDOW_TRACE) {
                 Slog.i(TAG, "!!! animate: entry time=" + mCurrentTime);
             }
@@ -171,7 +157,6 @@ public class WindowAnimator {
                 for (int i = 0; i < numDisplays; i++) {
                     final int displayId = mDisplayContentsAnimators.keyAt(i);
                     final DisplayContent dc = mService.mRoot.getDisplayContentOrCreate(displayId);
-                    dc.stepAppWindowsAnimation(mCurrentTime);
                     DisplayContentsAnimator displayAnimator = mDisplayContentsAnimators.valueAt(i);
 
                     final ScreenRotationAnimation screenRotationAnimation =
@@ -200,7 +185,7 @@ public class WindowAnimator {
                     ++mAnimTransactionSequence;
                     dc.updateWindowsForAnimator(this);
                     dc.updateWallpaperForAnimator(this);
-                    dc.prepareWindowSurfaces();
+                    dc.prepareSurfaces();
                 }
 
                 for (int i = 0; i < numDisplays; i++) {
@@ -214,8 +199,6 @@ public class WindowAnimator {
                     if (screenRotationAnimation != null) {
                         screenRotationAnimation.updateSurfacesInTransaction();
                     }
-
-                    orAnimating(dc.animateDimLayers());
                     orAnimating(dc.getDockedDividerController().animate(mCurrentTime));
                     //TODO (multidisplay): Magnification is supported only for the default display.
                     if (accessibilityController != null && dc.isDefaultDisplay) {
@@ -237,6 +220,13 @@ public class WindowAnimator {
                 if (SHOW_TRANSACTIONS) Slog.i(TAG, "<<< CLOSE TRANSACTION animate");
             }
 
+            final int numDisplays = mDisplayContentsAnimators.size();
+            for (int i = 0; i < numDisplays; i++) {
+                final int displayId = mDisplayContentsAnimators.keyAt(i);
+                final DisplayContent dc = mService.mRoot.getDisplayContentOrCreate(displayId);
+                dc.onPendingTransactionApplied();
+            }
+
             boolean hasPendingLayoutChanges = mService.mRoot.hasPendingLayoutChanges(this);
             boolean doRequest = false;
             if (mBulkUpdateParams != 0) {
@@ -247,7 +237,8 @@ public class WindowAnimator {
                 mWindowPlacerLocked.requestTraversal();
             }
 
-            if (mAnimating && !mLastAnimating) {
+            final boolean rootAnimating = mService.mRoot.isSelfOrChildAnimating();
+            if (rootAnimating && !mLastRootAnimating) {
 
                 // Usually app transitions but quite a load onto the system already (with all the
                 // things happening in app), so pause task snapshot persisting to not increase the
@@ -255,13 +246,13 @@ public class WindowAnimator {
                 mService.mTaskSnapshotController.setPersisterPaused(true);
                 Trace.asyncTraceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "animating", 0);
             }
-            if (!mAnimating && mLastAnimating) {
+            if (!rootAnimating && mLastRootAnimating) {
                 mWindowPlacerLocked.requestTraversal();
                 mService.mTaskSnapshotController.setPersisterPaused(false);
                 Trace.asyncTraceEnd(Trace.TRACE_TAG_WINDOW_MANAGER, "animating", 0);
             }
 
-            mLastAnimating = mAnimating;
+            mLastRootAnimating = rootAnimating;
 
             if (mRemoveReplacedWindows) {
                 mService.mRoot.removeReplacedWindows();
@@ -270,6 +261,7 @@ public class WindowAnimator {
 
             mService.destroyPreservedSurfaceLocked();
             mService.mWindowPlacerLocked.destroyPendingSurfaces();
+
 
             if (DEBUG_WINDOW_TRACE) {
                 Slog.i(TAG, "!!! animate: exit mAnimating=" + mAnimating

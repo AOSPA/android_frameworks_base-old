@@ -16,6 +16,7 @@
 
 package android.telecom;
 
+import android.bluetooth.BluetoothDevice;
 import android.os.Bundle;
 import android.os.RemoteException;
 
@@ -128,7 +129,22 @@ public final class InCallAdapter {
      */
     public void setAudioRoute(int route) {
         try {
-            mAdapter.setAudioRoute(route);
+            mAdapter.setAudioRoute(route, null);
+        } catch (RemoteException e) {
+        }
+    }
+
+    /**
+     * Request audio routing to a specific bluetooth device. Calling this method may result in
+     * the device routing audio to a different bluetooth device than the one specified. A list of
+     * available devices can be obtained via {@link CallAudioState#getSupportedBluetoothDevices()}
+     *
+     * @param bluetoothAddress The address of the bluetooth device to connect to, as returned by
+     * {@link BluetoothDevice#getAddress()}, or {@code null} if no device is preferred.
+     */
+    public void requestBluetoothAudio(String bluetoothAddress) {
+        try {
+            mAdapter.setAudioRoute(CallAudioState.ROUTE_BLUETOOTH, bluetoothAddress);
         } catch (RemoteException e) {
         }
     }
@@ -416,6 +432,23 @@ public final class InCallAdapter {
     public void setRttMode(String callId, int mode) {
         try {
             mAdapter.setRttMode(callId, mode);
+        } catch (RemoteException ignored) {
+        }
+    }
+
+
+    /**
+     * Initiates a handover of this {@link Call} to the {@link ConnectionService} identified
+     * by destAcct.
+     * @param callId The callId of the Call which calls this function.
+     * @param destAcct ConnectionService to which the call should be handed over.
+     * @param videoState The video state desired after the handover.
+     * @param extras Extra information to be passed to ConnectionService
+     */
+    public void handoverTo(String callId, PhoneAccountHandle destAcct, int videoState,
+                           Bundle extras) {
+        try {
+            mAdapter.handoverTo(callId, destAcct, videoState, extras);
         } catch (RemoteException ignored) {
         }
     }

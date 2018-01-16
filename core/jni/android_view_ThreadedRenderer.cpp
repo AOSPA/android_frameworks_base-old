@@ -937,6 +937,11 @@ static void android_view_ThreadedRenderer_setHighContrastText(JNIEnv*, jclass, j
     Properties::enableHighContrastText = enable;
 }
 
+static void android_view_ThreadedRenderer_hackySetRTAnimationsEnabled(JNIEnv*, jclass,
+        jboolean enable) {
+    Properties::enableRTAnimations = enable;
+}
+
 // ----------------------------------------------------------------------------
 // FrameMetricsObserver
 // ----------------------------------------------------------------------------
@@ -1041,9 +1046,26 @@ static const JNINativeMethod gMethods[] = {
             (void*)android_view_ThreadedRenderer_createHardwareBitmapFromRenderNode },
     { "disableVsync", "()V", (void*)android_view_ThreadedRenderer_disableVsync },
     { "nSetHighContrastText", "(Z)V", (void*)android_view_ThreadedRenderer_setHighContrastText },
+    { "nHackySetRTAnimationsEnabled", "(Z)V",
+            (void*)android_view_ThreadedRenderer_hackySetRTAnimationsEnabled },
 };
 
+static JavaVM* mJvm = nullptr;
+
+static void attachRenderThreadToJvm() {
+    LOG_ALWAYS_FATAL_IF(!mJvm, "No jvm but we set the hook??");
+
+    JavaVMAttachArgs args;
+    args.version = JNI_VERSION_1_4;
+    args.name = (char*) "RenderThread";
+    args.group = NULL;
+    JNIEnv* env;
+    mJvm->AttachCurrentThreadAsDaemon(&env, (void*) &args);
+}
+
 int register_android_view_ThreadedRenderer(JNIEnv* env) {
+    env->GetJavaVM(&mJvm);
+    RenderThread::setOnStartHook(&attachRenderThreadToJvm);
     jclass observerClass = FindClassOrDie(env, "android/view/FrameMetricsObserver");
     gFrameMetricsObserverClassInfo.frameMetrics = GetFieldIDOrDie(
             env, observerClass, "mFrameMetrics", "Landroid/view/FrameMetrics;");

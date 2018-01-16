@@ -24,6 +24,7 @@ import static org.junit.Assert.assertTrue;
 import android.graphics.Canvas;
 import android.graphics.Paint.FontMetricsInt;
 import android.os.LocaleList;
+import android.platform.test.annotations.Presubmit;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 import android.text.Layout.Alignment;
@@ -43,6 +44,7 @@ import java.util.Locale;
 /**
  * Tests StaticLayout vertical metrics behavior.
  */
+@Presubmit
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class StaticLayoutTest {
@@ -695,9 +697,13 @@ public class StaticLayoutTest {
     public void testGetOffset_UNICODE_Hebrew() {
         String testString = "\u05DE\u05E1\u05E2\u05D3\u05D4"; // Hebrew Characters
         for (CharSequence seq: buildTestCharSequences(testString, Normalizer.Form.values())) {
-            StaticLayout layout = new StaticLayout(seq, mDefaultPaint,
-                    DEFAULT_OUTER_WIDTH, DEFAULT_ALIGN,
-                    TextDirectionHeuristics.RTL, SPACE_MULTI, SPACE_ADD, true);
+            StaticLayout.Builder b = StaticLayout.Builder.obtain(
+                    seq, 0, seq.length(), mDefaultPaint, DEFAULT_OUTER_WIDTH)
+                    .setAlignment(DEFAULT_ALIGN)
+                    .setTextDirection(TextDirectionHeuristics.RTL)
+                    .setLineSpacing(SPACE_ADD, SPACE_MULTI)
+                    .setIncludePad(true);
+            StaticLayout layout = b.build();
 
             String testLabel = buildTestMessage(seq);
 

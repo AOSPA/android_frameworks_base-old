@@ -87,12 +87,6 @@ public class StackWindowController
         }
     }
 
-    public boolean isVisible() {
-        synchronized (mWindowMap) {
-            return mContainer != null && mContainer.isVisible();
-        }
-    }
-
     public void reparent(int displayId, Rect outStackBounds, boolean onTop) {
         synchronized (mWindowMap) {
             if (mContainer == null) {
@@ -111,8 +105,7 @@ public class StackWindowController
         }
     }
 
-    public void positionChildAt(TaskWindowContainerController child, int position, Rect bounds,
-            Configuration overrideConfig) {
+    public void positionChildAt(TaskWindowContainerController child, int position) {
         synchronized (mWindowMap) {
             if (DEBUG_STACK) Slog.i(TAG_WM, "positionChildAt: positioning task=" + child
                     + " at " + position);
@@ -126,7 +119,7 @@ public class StackWindowController
                         "positionChildAt: could not find stack for task=" + mContainer);
                 return;
             }
-            child.mContainer.positionAt(position, bounds, overrideConfig);
+            child.mContainer.positionAt(position);
             mContainer.getDisplayContent().layoutAndAssignWindowLayersIfNeeded();
         }
     }
@@ -178,24 +171,22 @@ public class StackWindowController
      * Re-sizes a stack and its containing tasks.
      *
      * @param bounds New stack bounds. Passing in null sets the bounds to fullscreen.
-     * @param configs Configurations for tasks in the resized stack, keyed by task id.
      * @param taskBounds Bounds for tasks in the resized stack, keyed by task id.
-     * @return True if the stack is now fullscreen.
+     * @param taskTempInsetBounds Inset bounds for individual tasks, keyed by task id.
      */
-    public boolean resize(Rect bounds, SparseArray<Configuration> configs,
-            SparseArray<Rect> taskBounds, SparseArray<Rect> taskTempInsetBounds) {
+    public void resize(Rect bounds, SparseArray<Rect> taskBounds,
+            SparseArray<Rect> taskTempInsetBounds) {
         synchronized (mWindowMap) {
             if (mContainer == null) {
                 throw new IllegalArgumentException("resizeStack: stack " + this + " not found.");
             }
             // We might trigger a configuration change. Save the current task bounds for freezing.
             mContainer.prepareFreezingTaskBounds();
-            if (mContainer.setBounds(bounds, configs, taskBounds, taskTempInsetBounds)
+            if (mContainer.setBounds(bounds, taskBounds, taskTempInsetBounds)
                     && mContainer.isVisible()) {
                 mContainer.getDisplayContent().setLayoutNeeded();
                 mService.mWindowPlacerLocked.performSurfacePlacement();
             }
-            return mContainer.getRawFullscreen();
         }
     }
 
@@ -225,11 +216,13 @@ public class StackWindowController
         }
     }
 
-    private void getRawBounds(Rect outBounds) {
-        if (mContainer.getRawFullscreen()) {
-            outBounds.setEmpty();
-        } else {
-            mContainer.getRawBounds(outBounds);
+    public void getRawBounds(Rect outBounds) {
+        synchronized (mWindowMap) {
+            if (mContainer.matchParentBounds()) {
+                outBounds.setEmpty();
+            } else {
+                mContainer.getRawBounds(outBounds);
+            }
         }
     }
 
@@ -273,6 +266,7 @@ public class StackWindowController
 
             final Rect parentAppBounds = parentConfig.windowConfiguration.getAppBounds();
 
+            config.windowConfiguration.setBounds(bounds);
             config.windowConfiguration.setAppBounds(!bounds.isEmpty() ? bounds : null);
             boolean intersectParentBounds = false;
 

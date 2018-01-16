@@ -16,11 +16,15 @@
 
 #pragma once
 
+#include "anomaly/AnomalyMonitor.h"
+#include "anomaly/AnomalyTracker.h"
 #include "condition/ConditionTracker.h"
+#include "config/ConfigKey.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 #include "logd/LogEvent.h"
 #include "matchers/LogMatchingTracker.h"
 #include "metrics/MetricProducer.h"
+#include "packages/UidMap.h"
 
 #include <unordered_map>
 
@@ -29,26 +33,56 @@ namespace os {
 namespace statsd {
 
 // A MetricsManager is responsible for managing metrics from one single config source.
-class MetricsManager {
+class MetricsManager : public PackageInfoListener {
 public:
-    MetricsManager(const StatsdConfig& config);
+    MetricsManager(const ConfigKey& configKey, const StatsdConfig& config, const long timeBaseSec,
+                   sp<UidMap> uidMap);
 
-    ~MetricsManager();
+    virtual ~MetricsManager();
 
     // Return whether the configuration is valid.
     bool isConfigValid() const;
 
     void onLogEvent(const LogEvent& event);
 
-    // Called when everything should wrap up. We are about to finish (e.g., new config comes).
-    void finish();
+    void onAnomalyAlarmFired(const uint64_t timestampNs,
+                         unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>>& anomalySet);
+
+    void setAnomalyMonitor(const sp<AnomalyMonitor>& anomalyMonitor);
+
+    void notifyAppUpgrade(const string& apk, const int uid, const int64_t version) override;
+
+    void notifyAppRemoved(const string& apk, const int uid) override;
+
+    void onUidMapReceived() override;
 
     // Config source owner can call onDumpReport() to get all the metrics collected.
-    std::vector<StatsLogReport> onDumpReport();
+    virtual void onDumpReport(android::util::ProtoOutputStream* protoOutput);
 
-    size_t byteSize();
+    // Computes the total byte size of all metrics managed by a single config source.
+    // Does not change the state.
+    virtual size_t byteSize();
 
 private:
+    const ConfigKey mConfigKey;
+
+    sp<UidMap> mUidMap;
+
+    bool mConfigValid = false;
+
+    // The uid log sources from StatsdConfig.
+    std::vector<int32_t> mAllowedUid;
+
+    // The pkg log sources from StatsdConfig.
+    std::vector<std::string> mAllowedPkg;
+
+    // The combined uid sources (after translating pkg name to uid).
+    // Logs from uids that are not in the list will be ignored to avoid spamming.
+    std::set<int32_t> mAllowedLogSources;
+
+    // To guard access to mAllowedLogSources
+    mutable std::mutex mAllowedLogSourcesMutex;
+
     // All event tags that are interesting to my metrics.
     std::set<int> mTagIds;
 
@@ -59,14 +93,17 @@ private:
     // holds A's sp. (2) When we evaluate matcher results, or condition results, we can quickly get
     // the related results from a cache using the index.
 
-    // Hold all the log entry matchers from the config.
-    std::vector<sp<LogMatchingTracker>> mAllLogEntryMatchers;
+    // Hold all the atom matchers from the config.
+    std::vector<sp<LogMatchingTracker>> mAllAtomMatchers;
 
     // Hold all the conditions from the config.
     std::vector<sp<ConditionTracker>> mAllConditionTrackers;
 
     // Hold all metrics from the config.
     std::vector<sp<MetricProducer>> mAllMetricProducers;
+
+    // Hold all alert trackers.
+    std::vector<sp<AnomalyTracker>> mAllAnomalyTrackers;
 
     // To make the log processing more efficient, we want to do as much filtering as possible
     // before we go into individual trackers and conditions to match.
@@ -90,7 +127,7 @@ private:
     // maps from ConditionTracker to MetricProducer
     std::unordered_map<int, std::vector<int>> mConditionToMetricMap;
 
-    bool mConfigValid;
+    void initLogSourceWhiteList();
 };
 
 }  // namespace statsd

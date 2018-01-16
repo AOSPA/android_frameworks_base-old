@@ -123,6 +123,9 @@
          be sent during a change to the audio output device. -->
     <bool name="config_sendAudioBecomingNoisy">true</bool>
 
+    <!-- Flag to disable all transition animations -->
+    <bool name="config_disableTransitionAnimation">false</bool>
+
     <!-- The duration (in milliseconds) of a short animation. -->
     <integer name="config_shortAnimTime">200</integer>
 
@@ -562,6 +565,12 @@
     <integer translatable="false" name="config_wifi_framework_wifi_score_good_link_speed_24">24</integer>
     <integer translatable="false" name="config_wifi_framework_wifi_score_good_link_speed_5">36</integer>
 
+    <!-- Integer delay in milliseconds before shutting down soft AP when there
+         are no connected devices. Framework will enforce a minimum limit on
+         this value and this setting will be overridden if the provided value is
+         smaller than the limit. -->
+    <integer translatable="false" name="config_wifi_framework_soft_ap_timeout_delay">600000</integer>
+
     <string  translatable="false" name="config_wifi_random_mac_oui">DA-A1-19</string>
     <string  translatable="false" name="config_wifi_framework_sap_2G_channel_list">1,6,11</string>
 
@@ -876,7 +885,7 @@
     <bool name="config_nightDisplayAvailable">@bool/config_setColorTransformAccelerated</bool>
 
     <!-- Default mode to control how Night display is automatically activated.
-         One of the following values (see NightDisplayController.java):
+         One of the following values (see ColorDisplayController.java):
              0 - AUTO_MODE_DISABLED
              1 - AUTO_MODE_CUSTOM
              2 - AUTO_MODE_TWILIGHT
@@ -937,8 +946,15 @@
             1 - Global actions menu
             2 - Power off (with confirmation)
             3 - Power off (without confirmation)
+            4 - Go to voice assist
     -->
     <integer name="config_longPressOnPowerBehavior">1</integer>
+
+    <!-- Control the behavior when the user long presses the power button for a long time.
+            0 - Nothing
+            1 - Global actions menu
+    -->
+    <integer name="config_veryLongPressOnPowerBehavior">0</integer>
 
     <!-- Control the behavior when the user long presses the back button.  Non-zero values are only
          valid for watches as part of CDD/CTS.
@@ -946,12 +962,6 @@
             1 - Go to voice assist
     -->
     <integer name="config_longPressOnBackBehavior">0</integer>
-
-    <!-- Control the behavior when the user panic presses the back button.
-            0 - Nothing
-            1 - Go to home
-    -->
-    <integer name="config_backPanicBehavior">0</integer>
 
     <!-- Control the behavior when the user short presses the power button.
             0 - Nothing
@@ -982,6 +992,9 @@
             1 - Go to sleep (doze) and go home
     -->
     <integer name="config_shortPressOnSleepBehavior">0</integer>
+
+    <!-- Time to wait while a button is pressed before triggering a very long press. -->
+    <integer name="config_veryLongPressTimeout">6000</integer>
 
     <!-- Package name for default keyguard appwidget [DO NOT TRANSLATE] -->
     <string name="widget_default_package_name" translatable="false"></string>
@@ -1282,6 +1295,22 @@
     <integer-array name="config_autoBrightnessLcdBacklightValues">
     </integer-array>
 
+    <!-- Array of desired screen brightness in nits corresponding to the lux values
+         in the config_autoBrightnessLevels array. As with config_screenBrightnessMinimumNits and
+         config_screenBrightnessMaximumNits, the display brightness is defined as the measured
+         brightness of an all-white image.
+
+         If this is defined then:
+            - config_autoBrightnessLcdBacklightValues should not be defined
+            - config_screenBrightnessMinimumNits must be defined
+            - config_screenBrightnessMaximumNits must be defined
+
+         This array should have size one greater than the size of the config_autoBrightnessLevels
+         array. The brightness values must be non-negative and non-decreasing. This must be
+         overridden in platform specific overlays -->
+    <array name="config_autoBrightnessDisplayValuesNits">
+    </array>
+
     <!-- Array of output values for button backlight corresponding to the LUX values
          in the config_autoBrightnessLevels array.  This array should have size one greater
          than the size of the config_autoBrightnessLevels array.
@@ -1317,6 +1346,29 @@
     <integer-array name="config_dynamicHysteresisDarkLevels">
         <item>200</item>
     </integer-array>
+
+    <!-- The minimum brightness of the display in nits. On OLED displays this should be measured
+         with an all white image while the display is fully on and the backlight is set to
+         config_screenBrightnessSettingMinimum or config_screenBrightnessSettingDark, whichever
+         is darker.
+
+         If this and config_screenBrightnessMinimumNits are set, then the display's brightness
+         range is assumed to be linear between
+         (config_screenBrightnessSettingMinimum, config_screenBrightnessMinimumNits) and
+         (config_screenBrightnessSettingMaximum, config_screenBrightnessMaximumNits). -->
+    <item name="config_screenBrightnessMinimumNits" format="float" type="dimen">-1.0</item>
+
+    <!-- The maximum brightness of the display in nits. On OLED displays this should be measured
+         with an all white image while the display is fully on and the "backlight" is set to
+         config_screenBrightnessSettingMaximum. Note that this value should *not* reflect the
+         maximum brightness value for any high brightness modes but only the maximum brightness
+         value obtainable in a sustainable manner.
+
+         If this and config_screenBrightnessMinimumNits are set to something non-negative, then the
+         display's brightness range is assumed to be linear between
+         (config_screenBrightnessSettingMinimum, config_screenBrightnessMaximumNits) and
+         (config_screenBrightnessSettingMaximum, config_screenBrightnessMaximumNits). -->
+    <item name="config_screenBrightnessMaximumNits" format="float" type="dimen">-1.0</item>
 
     <!-- Array of ambient lux threshold values. This is used for determining hysteresis constraint
          values by calculating the index to use for lookup and then setting the constraint value
@@ -1367,6 +1419,9 @@
 
     <!-- True if WallpaperService is enabled -->
     <bool name="config_enableWallpaperService">true</bool>
+
+    <!-- Class name of WallpaperManagerService. -->
+    <string name="config_wallpaperManagerServiceName">com.android.server.wallpaper.WallpaperManagerService</string>
 
     <!-- Enables the TimeZoneRuleManager service. This is the master switch for the updateable time
          zone update mechanism. -->
@@ -1942,7 +1997,7 @@
     <string name="config_dozeLongPressSensorType" translatable="false"></string>
 
     <!-- Control whether the always on display mode is available. This should only be enabled on
-         devices where the display has be tuned to be power efficient in DOZE and/or DOZE_SUSPEND
+         devices where the display has been tuned to be power efficient in DOZE and/or DOZE_SUSPEND
          states. -->
     <bool name="config_dozeAlwaysOnDisplayAvailable">false</bool>
 
@@ -2041,6 +2096,10 @@
     <!-- Base "touch slop" value used by ViewConfiguration as a
          movement threshold where scrolling should begin. -->
     <dimen name="config_viewConfigurationTouchSlop">8dp</dimen>
+
+    <!-- Base "hover slop" value used by ViewConfiguration as a
+         movement threshold under which hover is considered "stationary". -->
+    <dimen name="config_viewConfigurationHoverSlop">4dp</dimen>
 
     <!-- Minimum velocity to initiate a fling, as measured in dips per second. -->
     <dimen name="config_viewMinFlingVelocity">50dp</dimen>
@@ -2422,10 +2481,12 @@
          "users" = list of users
          "restart" = restart device
          "lockdown" = Lock down device until the user authenticates
+         "logout" =  Logout the current user
          -->
     <string-array translatable="false" name="config_globalActionsList">
         <item>power</item>
         <item>restart</item>
+        <item>logout</item>
         <item>bugreport</item>
         <item>users</item>
         <item>lockdown</item>
@@ -3156,9 +3217,21 @@
          classes are instantiated in the order of the array. -->
     <string-array translatable="false" name="config_deviceSpecificSystemServices"></string-array>
 
+    <!-- Class name of the device specific implementation to replace the DevicePolicyManagerService
+         or empty if the default should be used. -->
+    <string translatable="false" name="config_deviceSpecificDevicePolicyManagerService"></string>
+
     <!-- Component name of media projection permission dialog -->
     <string name="config_mediaProjectionPermissionDialogComponent" translateable="false">com.android.systemui/com.android.systemui.media.MediaProjectionPermissionActivity</string>
 
     <!-- Corner radius of system dialogs -->
     <dimen name="config_dialogCornerRadius">2dp</dimen>
+    <!-- Corner radius of system buttons -->
+    <dimen name="config_buttonCornerRadius">@dimen/control_corner_material</dimen>
+    <!-- Controls whether system buttons use all caps for text -->
+    <bool name="config_buttonTextAllCaps">true</bool>
+    <!-- Name of the font family used for system buttons -->
+    <string name="config_fontFamilyButton">@string/font_family_button_material</string>
+
+    <string translatable="false" name="config_batterySaverDeviceSpecificConfig"></string>
 </resources>

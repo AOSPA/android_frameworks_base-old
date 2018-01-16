@@ -66,6 +66,7 @@ import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.speech.tts.TextToSpeech;
+import android.telephony.SubscriptionManager;
 import android.text.TextUtils;
 import android.util.AndroidException;
 import android.util.ArrayMap;
@@ -1688,7 +1689,7 @@ public final class Settings {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({
+    @IntDef(prefix = { "RESET_MODE_" }, value = {
             RESET_MODE_PACKAGE_DEFAULTS,
             RESET_MODE_UNTRUSTED_DEFAULTS,
             RESET_MODE_UNTRUSTED_CHANGES,
@@ -2113,6 +2114,9 @@ public final class Settings {
      * functions for accessing individual settings entries.
      */
     public static final class System extends NameValueTable {
+        // NOTE: If you add new settings here, be sure to add them to
+        // com.android.providers.settings.SettingsProtoDumpUtil#dumpProtoSystemSettingsLocked.
+
         private static final float DEFAULT_FONT_SCALE = 1.0f;
 
         /** @hide */
@@ -3119,6 +3123,10 @@ public final class Settings {
          * to dream after a period of inactivity.  This value is also known as the
          * user activity timeout period since the screen isn't necessarily turned off
          * when it expires.
+         *
+         * <p>
+         * This value is bounded by maximum timeout set by
+         * {@link android.app.admin.DevicePolicyManager#setMaximumTimeToLock(ComponentName, long)}.
          */
         public static final String SCREEN_OFF_TIMEOUT = "screen_off_timeout";
 
@@ -4562,6 +4570,9 @@ public final class Settings {
      * APIs for those values, not modified directly by applications.
      */
     public static final class Secure extends NameValueTable {
+        // NOTE: If you add new settings here, be sure to add them to
+        // com.android.providers.settings.SettingsProtoDumpUtil#dumpProtoSecureSettingsLocked.
+
         /**
          * The content:// style URL for this table
          */
@@ -5317,13 +5328,57 @@ public final class Settings {
         public static final String AUTOFILL_SERVICE = "autofill_service";
 
         /**
-         * Experimental autofill feature.
+         * Boolean indicating if Autofill supports field classification.
          *
-         * <p>TODO(b/67867469): remove once feature is finished
+         * @see android.service.autofill.AutofillService
+         *
          * @hide
          */
+        @SystemApi
         @TestApi
-        public static final String AUTOFILL_FEATURE_FIELD_DETECTION = "autofill_field_detection";
+        public static final String AUTOFILL_FEATURE_FIELD_CLASSIFICATION =
+                "autofill_field_classification";
+
+        /**
+         * Defines value returned by {@link android.service.autofill.UserData#getMaxUserDataSize()}.
+         *
+         * @hide
+         */
+        @SystemApi
+        @TestApi
+        public static final String AUTOFILL_USER_DATA_MAX_USER_DATA_SIZE =
+                "autofill_user_data_max_user_data_size";
+
+        /**
+         * Defines value returned by
+         * {@link android.service.autofill.UserData#getMaxFieldClassificationIdsSize()}.
+         *
+         * @hide
+         */
+        @SystemApi
+        @TestApi
+        public static final String AUTOFILL_USER_DATA_MAX_FIELD_CLASSIFICATION_IDS_SIZE =
+                "autofill_user_data_max_field_classification_size";
+
+        /**
+         * Defines value returned by {@link android.service.autofill.UserData#getMaxValueLength()}.
+         *
+         * @hide
+         */
+        @SystemApi
+        @TestApi
+        public static final String AUTOFILL_USER_DATA_MAX_VALUE_LENGTH =
+                "autofill_user_data_max_value_length";
+
+        /**
+         * Defines value returned by {@link android.service.autofill.UserData#getMinValueLength()}.
+         *
+         * @hide
+         */
+        @SystemApi
+        @TestApi
+        public static final String AUTOFILL_USER_DATA_MIN_VALUE_LENGTH =
+                "autofill_user_data_min_value_length";
 
         /**
          * @deprecated Use {@link android.provider.Settings.Global#DEVICE_PROVISIONED} instead
@@ -7564,6 +7619,9 @@ public final class Settings {
      * explicitly modify through the system UI or specialized APIs for those values.
      */
     public static final class Global extends NameValueTable {
+        // NOTE: If you add new settings here, be sure to add them to
+        // com.android.providers.settings.SettingsProtoDumpUtil#dumpProtoGlobalSettingsLocked.
+
         /**
          * The content:// style URL for global secure settings items.  Not public.
          */
@@ -8522,6 +8580,13 @@ public final class Settings {
        public static final String NETWORK_METERED_MULTIPATH_PREFERENCE =
                "network_metered_multipath_preference";
 
+        /**
+         * Network watchlist last report time.
+         * @hide
+         */
+        public static final String NETWORK_WATCHLIST_LAST_REPORT_TIME =
+                "network_watchlist_last_report_time";
+
        /**
         * The thresholds of the wifi throughput badging (SD, HD etc.) as a comma-delimited list of
         * colon-delimited key-value pairs. The key is the badging enum value defined in
@@ -8632,6 +8697,12 @@ public final class Settings {
         */
        public static final String WIFI_SCAN_ALWAYS_AVAILABLE =
                 "wifi_scan_always_enabled";
+
+        /**
+         * Whether soft AP will shut down after a timeout period when no devices are connected.
+         * @hide
+         */
+        public static final String SOFT_AP_TIMEOUT_ENABLED = "soft_ap_timeout_enabled";
 
         /**
          * Value to specify if Wi-Fi Wakeup feature is enabled.
@@ -9362,6 +9433,9 @@ public final class Settings {
         /** {@hide} */
         public static final String
                 BLUETOOTH_PAN_PRIORITY_PREFIX = "bluetooth_pan_priority_";
+        /** {@hide} */
+        public static final String
+                BLUETOOTH_HEARING_AID_PRIORITY_PREFIX = "bluetooth_hearing_aid_priority_";
 
         /**
          * Activity manager specific settings.
@@ -9396,6 +9470,7 @@ public final class Settings {
          * service_min_restart_time_between     (long)
          * service_max_inactivity               (long)
          * service_bg_start_timeout             (long)
+         * process_start_async                  (boolean)
          * </pre>
          *
          * <p>
@@ -9461,6 +9536,16 @@ public final class Settings {
         public static final String BATTERY_SAVER_CONSTANTS = "battery_saver_constants";
 
         /**
+         * Battery Saver device specific settings
+         * This is encoded as a key=value list, separated by commas.
+         * See {@link com.android.server.power.BatterySaverPolicy} for the details.
+         *
+         * @hide
+         */
+        public static final String BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS =
+                "battery_saver_device_specific_constants";
+
+        /**
          * Battery anomaly detection specific settings
          * This is encoded as a key=value list, separated by commas.
          * wakeup_blacklisted_tags is a string, encoded as a set of tags, encoded via
@@ -9486,6 +9571,31 @@ public final class Settings {
         public static final String ANOMALY_DETECTION_CONSTANTS = "anomaly_detection_constants";
 
         /**
+         * Battery tip specific settings
+         * This is encoded as a key=value list, separated by commas. Ex:
+         *
+         * "battery_tip_enabled=true,summary_enabled=true,high_usage_enabled=true,"
+         * "high_usage_app_count=3,reduced_battery_enabled=false,reduced_battery_percent=50"
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * battery_tip_enabled              (boolean)
+         * summary_enabled                  (boolean)
+         * battery_saver_tip_enabled        (boolean)
+         * high_usage_enabled               (boolean)
+         * high_usage_app_count             (int)
+         * app_restriction_enabled          (boolean)
+         * reduced_battery_enabled          (boolean)
+         * reduced_battery_percent          (int)
+         * low_battery_enabled              (boolean)
+         * low_battery_hour                 (int)
+         * </pre>
+         * @hide
+         */
+        public static final String BATTERY_TIP_CONSTANTS = "battery_tip_constants";
+
+        /**
          * Always on display(AOD) specific settings
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -9494,8 +9604,8 @@ public final class Settings {
          * The following keys are supported:
          *
          * <pre>
-         * screen_brightness_array         (string)
-         * dimming_scrim_array             (string)
+         * screen_brightness_array         (int[])
+         * dimming_scrim_array             (int[])
          * prox_screen_off_delay           (long)
          * prox_cooldown_trigger           (long)
          * prox_cooldown_period            (long)
@@ -9507,9 +9617,10 @@ public final class Settings {
         /**
          * App standby (app idle) specific settings.
          * This is encoded as a key=value list, separated by commas. Ex:
-         *
+         * <p>
          * "idle_duration=5000,parole_interval=4500"
-         *
+         * <p>
+         * All durations are in millis.
          * The following keys are supported:
          *
          * <pre>
@@ -9659,6 +9770,15 @@ public final class Settings {
         public static final String TEXT_CLASSIFIER_CONSTANTS = "text_classifier_constants";
 
         /**
+         * Whether or not App Standby feature is enabled. This controls throttling of apps
+         * based on usage patterns and predictions.
+         * Type: int (0 for false, 1 for true)
+         * Default: 1
+         * @hide
+         */
+        public static final java.lang.String APP_STANDBY_ENABLED = "app_standby_enabled";
+
+        /**
          * Get the key that retrieves a bluetooth headset's priority.
          * @hide
          */
@@ -9715,6 +9835,14 @@ public final class Settings {
          */
         public static final String getBluetoothPanPriorityKey(String address) {
             return BLUETOOTH_PAN_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
+        }
+
+        /**
+         * Get the key that retrieves a bluetooth hearing aid priority.
+         * @hide
+         */
+        public static final String getBluetoothHearingAidPriorityKey(String address) {
+            return BLUETOOTH_HEARING_AID_PRIORITY_PREFIX + address.toUpperCase(Locale.ROOT);
         }
 
         /**
@@ -9825,6 +9953,27 @@ public final class Settings {
          * starting user code.  If 0, it will run normally.
          */
         public static final String WAIT_FOR_DEBUGGER = "wait_for_debugger";
+
+        /**
+         * Allow GPU debug layers?
+         * 0 = no
+         * 1 = yes
+         * @hide
+         */
+        public static final String ENABLE_GPU_DEBUG_LAYERS = "enable_gpu_debug_layers";
+
+        /**
+         * App allowed to load GPU debug layers
+         * @hide
+         */
+        public static final String GPU_DEBUG_APP = "gpu_debug_app";
+
+        /**
+         * Ordered GPU debug layer list
+         * i.e. <layer1>:<layer2>:...:<layerN>
+         * @hide
+         */
+        public static final String GPU_DEBUG_LAYERS = "gpu_debug_layers";
 
         /**
          * Control whether the process CPU usage meter should be shown.
@@ -10058,6 +10207,16 @@ public final class Settings {
         public static final String POLICY_CONTROL = "policy_control";
 
         /**
+         * {@link android.view.DisplayCutout DisplayCutout} emulation mode.
+         *
+         * @hide
+         */
+        public static final String EMULATE_DISPLAY_CUTOUT = "emulate_display_cutout";
+
+        /** @hide */ public static final int EMULATE_DISPLAY_CUTOUT_OFF = 0;
+        /** @hide */ public static final int EMULATE_DISPLAY_CUTOUT_ON = 1;
+
+        /**
          * Defines global zen mode.  ZEN_MODE_OFF, ZEN_MODE_IMPORTANT_INTERRUPTIONS,
          * or ZEN_MODE_NO_INTERRUPTIONS.
          *
@@ -10137,12 +10296,17 @@ public final class Settings {
         public static final String REQUIRE_PASSWORD_TO_DECRYPT = "require_password_to_decrypt";
 
         /**
-         * Whether the Volte is enabled
+         * Whether the Volte is enabled. If this setting is not set then we use the Carrier Config
+         * value {@link CarrierConfigManager#KEY_ENHANCED_4G_LTE_ON_BY_DEFAULT_BOOL}.
          * <p>
          * Type: int (0 for false, 1 for true)
          * @hide
+         * @deprecated Use {@link android.telephony.SubscriptionManager#ENHANCED_4G_MODE_ENABLED}
+         * instead.
          */
-        public static final String ENHANCED_4G_MODE_ENABLED = "volte_vt_enabled";
+        @Deprecated
+        public static final String ENHANCED_4G_MODE_ENABLED =
+                SubscriptionManager.ENHANCED_4G_MODE_ENABLED;
 
         /**
          * Whether VT (Video Telephony over IMS) is enabled
@@ -10150,8 +10314,10 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          *
          * @hide
+         * @deprecated Use {@link android.telephony.SubscriptionManager#VT_IMS_ENABLED} instead.
          */
-        public static final String VT_IMS_ENABLED = "vt_ims_enabled";
+        @Deprecated
+        public static final String VT_IMS_ENABLED = SubscriptionManager.VT_IMS_ENABLED;
 
         /**
          * Whether WFC is enabled
@@ -10159,8 +10325,10 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          *
          * @hide
+         * @deprecated Use {@link android.telephony.SubscriptionManager#WFC_IMS_ENABLED} instead.
          */
-        public static final String WFC_IMS_ENABLED = "wfc_ims_enabled";
+        @Deprecated
+        public static final String WFC_IMS_ENABLED = SubscriptionManager.WFC_IMS_ENABLED;
 
         /**
          * WFC mode on home/non-roaming network.
@@ -10168,8 +10336,10 @@ public final class Settings {
          * Type: int - 2=Wi-Fi preferred, 1=Cellular preferred, 0=Wi-Fi only
          *
          * @hide
+         * @deprecated Use {@link android.telephony.SubscriptionManager#WFC_IMS_MODE} instead.
          */
-        public static final String WFC_IMS_MODE = "wfc_ims_mode";
+        @Deprecated
+        public static final String WFC_IMS_MODE = SubscriptionManager.WFC_IMS_MODE;
 
         /**
          * WFC mode on roaming network.
@@ -10177,8 +10347,11 @@ public final class Settings {
          * Type: int - see {@link #WFC_IMS_MODE} for values
          *
          * @hide
+         * @deprecated Use {@link android.telephony.SubscriptionManager#WFC_IMS_ROAMING_MODE}
+         * instead.
          */
-        public static final String WFC_IMS_ROAMING_MODE = "wfc_ims_roaming_mode";
+        @Deprecated
+        public static final String WFC_IMS_ROAMING_MODE = SubscriptionManager.WFC_IMS_ROAMING_MODE;
 
         /**
          * Whether WFC roaming is enabled
@@ -10186,8 +10359,12 @@ public final class Settings {
          * Type: int (0 for false, 1 for true)
          *
          * @hide
+         * @deprecated Use {@link android.telephony.SubscriptionManager#WFC_IMS_ROAMING_ENABLED}
+         * instead
          */
-        public static final String WFC_IMS_ROAMING_ENABLED = "wfc_ims_roaming_enabled";
+        @Deprecated
+        public static final String WFC_IMS_ROAMING_ENABLED =
+                SubscriptionManager.WFC_IMS_ROAMING_ENABLED;
 
         /**
          * Whether user can enable/disable LTE as a preferred network. A carrier might control
@@ -10353,14 +10530,6 @@ public final class Settings {
                 "location_settings_link_to_permissions_enabled";
 
         /**
-         * Flag to enable use of RefactoredBackupManagerService.
-         *
-         * @hide
-         */
-        public static final String BACKUP_REFACTORED_SERVICE_DISABLED =
-            "backup_refactored_service_disabled";
-
-        /**
          * Flag to set the waiting time for euicc factory reset inside System > Settings
          * Type: long
          *
@@ -10377,6 +10546,15 @@ public final class Settings {
          */
         public static final String STORAGE_SETTINGS_CLOBBER_THRESHOLD =
                 "storage_settings_clobber_threshold";
+
+        /**
+         * If set to 1, {@link Secure#LOCATION_MODE} will be set to {@link Secure#LOCATION_MODE_OFF}
+         * temporarily for all users.
+         *
+         * @hide
+         */
+        public static final String LOCATION_GLOBAL_KILL_SWITCH =
+                "location_global_kill_switch";
 
         /**
          * Settings to backup. This is here so that it's in the same place as the settings
@@ -10415,7 +10593,17 @@ public final class Settings {
             LOW_POWER_MODE_TRIGGER_LEVEL,
             BLUETOOTH_ON,
             PRIVATE_DNS_MODE,
-            PRIVATE_DNS_SPECIFIER
+            PRIVATE_DNS_SPECIFIER,
+            SOFT_AP_TIMEOUT_ENABLED
+        };
+
+        /**
+         * Global settings that shouldn't be persisted.
+         *
+         * @hide
+         */
+        public static final String[] TRANSIENT_SETTINGS = {
+                LOCATION_GLOBAL_KILL_SWITCH,
         };
 
         /** @hide */
@@ -10868,7 +11056,7 @@ public final class Settings {
 
         /** User preferred subscriptions setting.
           * This holds the details of the user selected subscription from the card and
-          * the activation status. Each settings string have the coma separated values
+          * the activation status. Each settings string have the comma separated values
           * iccId,appType,appId,activationStatus,3gppIndex,3gpp2Index
           * @hide
          */
@@ -10945,6 +11133,7 @@ public final class Settings {
             INSTANT_APP_SETTINGS.add(DEBUG_VIEW_ATTRIBUTES);
             INSTANT_APP_SETTINGS.add(WTF_IS_FATAL);
             INSTANT_APP_SETTINGS.add(SEND_ACTION_APP_ERROR);
+            INSTANT_APP_SETTINGS.add(ZEN_MODE);
         }
 
         /**
@@ -10989,7 +11178,7 @@ public final class Settings {
          *
          * <pre>
          * default               (int)
-         * options_array         (string)
+         * options_array         (int[])
          * </pre>
          *
          * All delays in integer minutes. Array order is respected.
@@ -10998,6 +11187,28 @@ public final class Settings {
          */
         public static final String NOTIFICATION_SNOOZE_OPTIONS =
                 "notification_snooze_options";
+
+        /**
+         * Configuration flags for SQLite Compatibility WAL. Encoded as a key-value list, separated
+         * by commas. E.g.: compatibility_wal_supported=true, wal_syncmode=OFF
+         *
+         * Supported keys:
+         * compatibility_wal_supported      (boolean)
+         * wal_syncmode       (String)
+         *
+         * @hide
+         */
+        public static final String SQLITE_COMPATIBILITY_WAL_FLAGS =
+                "sqlite_compatibility_wal_flags";
+
+        /**
+         * Enable GNSS Raw Measurements Full Tracking?
+         * 0 = no
+         * 1 = yes
+         * @hide
+         */
+        public static final String ENABLE_GNSS_RAW_MEAS_FULL_TRACKING =
+                "enable_gnss_raw_meas_full_tracking";
     }
 
     /**

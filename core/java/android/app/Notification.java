@@ -68,6 +68,7 @@ import android.text.style.TextAppearanceSpan;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.SparseArray;
+import android.util.proto.ProtoOutputStream;
 import android.view.Gravity;
 import android.view.NotificationHeaderView;
 import android.view.View;
@@ -576,7 +577,13 @@ public class Notification implements Parcelable
     public int flags;
 
     /** @hide */
-    @IntDef({PRIORITY_DEFAULT,PRIORITY_LOW,PRIORITY_MIN,PRIORITY_HIGH,PRIORITY_MAX})
+    @IntDef(prefix = { "PRIORITY_" }, value = {
+            PRIORITY_DEFAULT,
+            PRIORITY_LOW,
+            PRIORITY_MIN,
+            PRIORITY_HIGH,
+            PRIORITY_MAX
+    })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Priority {}
 
@@ -1081,6 +1088,12 @@ public class Notification implements Parcelable
      * array of bundles.
      */
     public static final String EXTRA_HISTORIC_MESSAGES = "android.messages.historic";
+
+    /**
+     * {@link #extras} key: whether the {@link android.app.Notification.MessagingStyle} notification
+     * represents a group conversation.
+     */
+    public static final String EXTRA_IS_GROUP_CONVERSATION = "android.isGroupConversation";
 
     /**
      * {@link #extras} key: whether the notification should be colorized as
@@ -1940,6 +1953,7 @@ public class Notification implements Parcelable
         mSortKey = parcel.readString();
 
         extras = Bundle.setDefusable(parcel.readBundle(), true); // may be null
+        fixDuplicateExtras();
 
         actions = parcel.createTypedArray(Action.CREATOR); // may be null
 
@@ -2388,6 +2402,33 @@ public class Notification implements Parcelable
     };
 
     /**
+     * Parcelling creates multiple copies of objects in {@code extras}. Fix them.
+     * <p>
+     * For backwards compatibility {@code extras} holds some references to "real" member data such
+     * as {@link getLargeIcon()} which is mirrored by {@link #EXTRA_LARGE_ICON}. This is mostly
+     * fine as long as the object stays in one process.
+     * <p>
+     * However, once the notification goes into a parcel each reference gets marshalled separately,
+     * wasting memory. Especially with large images on Auto and TV, this is worth fixing.
+     */
+    private void fixDuplicateExtras() {
+        if (extras != null) {
+            fixDuplicateExtra(mSmallIcon, EXTRA_SMALL_ICON);
+            fixDuplicateExtra(mLargeIcon, EXTRA_LARGE_ICON);
+        }
+    }
+
+    /**
+     * If we find an extra that's exactly the same as one of the "real" fields but refers to a
+     * separate object, replace it with the field's version to avoid holding duplicate copies.
+     */
+    private void fixDuplicateExtra(@Nullable Parcelable original, @NonNull String extraName) {
+        if (original != null && extras.getParcelable(extraName) != null) {
+            extras.putParcelable(extraName, original);
+        }
+    }
+
+    /**
      * Sets the {@link #contentView} field to be a view with the standard "Latest Event"
      * layout.
      *
@@ -2445,6 +2486,30 @@ public class Notification implements Parcelable
      */
     public static void addFieldsFromContext(ApplicationInfo ai, Notification notification) {
         notification.extras.putParcelable(EXTRA_BUILDER_APPLICATION_INFO, ai);
+    }
+
+    /**
+     * @hide
+     */
+    public void writeToProto(ProtoOutputStream proto, long fieldId) {
+        long token = proto.start(fieldId);
+        proto.write(NotificationProto.CHANNEL_ID, getChannelId());
+        proto.write(NotificationProto.HAS_TICKER_TEXT, this.tickerText != null);
+        proto.write(NotificationProto.FLAGS, this.flags);
+        proto.write(NotificationProto.COLOR, this.color);
+        proto.write(NotificationProto.CATEGORY, this.category);
+        proto.write(NotificationProto.GROUP_KEY, this.mGroupKey);
+        proto.write(NotificationProto.SORT_KEY, this.mSortKey);
+        if (this.actions != null) {
+            proto.write(NotificationProto.ACTION_LENGTH, this.actions.length);
+        }
+        if (this.visibility >= VISIBILITY_SECRET && this.visibility <= VISIBILITY_PUBLIC) {
+            proto.write(NotificationProto.VISIBILITY, this.visibility);
+        }
+        if (publicVersion != null) {
+            publicVersion.writeToProto(proto, NotificationProto.PUBLIC_VERSION);
+        }
+        proto.end(token);
     }
 
     @Override
@@ -5901,9 +5966,10 @@ public class Notification implements Parcelable
         public static final int MAXIMUM_RETAINED_MESSAGES = 25;
 
         CharSequence mUserDisplayName;
-        CharSequence mConversationTitle;
+        @Nullable CharSequence mConversationTitle;
         List<Message> mMessages = new ArrayList<>();
         List<Message> mHistoricMessages = new ArrayList<>();
+        boolean mIsGroupConversation;
 
         MessagingStyle() {
         }
@@ -5926,20 +5992,20 @@ public class Notification implements Parcelable
         }
 
         /**
-         * Sets the title to be displayed on this conversation. This should only be used for
-         * group messaging and left unset for one-on-one conversations.
-         * @param conversationTitle
+         * Sets the title to be displayed on this conversation. May be set to {@code null}.
+         *
+         * @param conversationTitle A name for the conversation, or {@code null}
          * @return this object for method chaining.
          */
-        public MessagingStyle setConversationTitle(CharSequence conversationTitle) {
+        public MessagingStyle setConversationTitle(@Nullable CharSequence conversationTitle) {
             mConversationTitle = conversationTitle;
             return this;
         }
 
         /**
-         * Return the title to be displayed on this conversation. Can be <code>null</code> and
-         * should be for one-on-one conversations
+         * Return the title to be displayed on this conversation. May return {@code null}.
          */
+        @Nullable
         public CharSequence getConversationTitle() {
             return mConversationTitle;
         }
@@ -6016,6 +6082,24 @@ public class Notification implements Parcelable
         }
 
         /**
+         * Sets whether this conversation notification represents a group.
+         * @param isGroupConversation {@code true} if the conversation represents a group,
+         * {@code false} otherwise.
+         * @return this object for method chaining
+         */
+        public MessagingStyle setGroupConversation(boolean isGroupConversation) {
+            mIsGroupConversation = isGroupConversation;
+            return this;
+        }
+
+        /**
+         * Returns {@code true} if this notification represents a group conversation.
+         */
+        public boolean isGroupConversation() {
+            return mIsGroupConversation;
+        }
+
+        /**
          * @hide
          */
         @Override
@@ -6035,6 +6119,7 @@ public class Notification implements Parcelable
             }
 
             fixTitleAndTextExtras(extras);
+            extras.putBoolean(EXTRA_IS_GROUP_CONVERSATION, mIsGroupConversation);
         }
 
         private void fixTitleAndTextExtras(Bundle extras) {
@@ -6077,6 +6162,7 @@ public class Notification implements Parcelable
             mMessages = Message.getMessagesFromBundleArray(messages);
             Parcelable[] histMessages = extras.getParcelableArray(EXTRA_HISTORIC_MESSAGES);
             mHistoricMessages = Message.getMessagesFromBundleArray(histMessages);
+            mIsGroupConversation = extras.getBoolean(EXTRA_IS_GROUP_CONVERSATION);
         }
 
         /**

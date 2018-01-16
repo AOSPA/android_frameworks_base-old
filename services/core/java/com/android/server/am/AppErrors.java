@@ -407,10 +407,10 @@ class AppErrors {
                         // recents entry. Let's see if we have a safe-to-restart intent.
                         final Set<String> cats = task.intent.getCategories();
                         if (cats != null && cats.contains(Intent.CATEGORY_LAUNCHER)) {
-                            mService.startActivityInPackage(task.mCallingUid,
-                                    task.mCallingPackage, task.intent, null, null, null, 0, 0,
-                                    ActivityOptions.makeBasic().toBundle(), task.userId, null,
-                                    "AppErrors");
+                            mService.getActivityStartController().startActivityInPackage(
+                                    task.mCallingUid, task.mCallingPackage, task.intent, null, null,
+                                    null, 0, 0, ActivityOptions.makeBasic().toBundle(), task.userId,
+                                    null, "AppErrors");
                         }
                     }
                 }
@@ -521,13 +521,13 @@ class AppErrors {
      *
      * @param app The ProcessRecord in which the error occurred.
      * @param condition Crashing, Application Not Responding, etc.  Values are defined in
-     *                      ActivityManager.AppErrorStateInfo
+     *                      ActivityManager.ProcessErrorStateInfo
      * @param activity The activity associated with the crash, if known.
      * @param shortMsg Short message describing the crash.
      * @param longMsg Long message describing the crash.
      * @param stackTrace Full crash stack trace, may be null.
      *
-     * @return Returns a fully-formed AppErrorStateInfo record.
+     * @return Returns a fully-formed ProcessErrorStateInfo record.
      */
     private ActivityManager.ProcessErrorStateInfo generateProcessError(ProcessRecord app,
             int condition, String activity, String shortMsg, String longMsg, String stackTrace) {

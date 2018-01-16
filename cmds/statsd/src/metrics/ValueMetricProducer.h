@@ -16,14 +16,14 @@
 
 #pragma once
 
+#include <gtest/gtest_prod.h>
 #include <utils/threads.h>
 #include <list>
+#include "../anomaly/AnomalyTracker.h"
 #include "../condition/ConditionTracker.h"
 #include "../external/PullDataReceiver.h"
 #include "../external/StatsPullerManager.h"
-#include "CountAnomalyTracker.h"
 #include "MetricProducer.h"
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 
 namespace android {
@@ -34,61 +34,69 @@ struct ValueBucket {
     int64_t mBucketStartNs;
     int64_t mBucketEndNs;
     int64_t mValue;
+    uint64_t mBucketNum;
 };
 
 class ValueMetricProducer : public virtual MetricProducer, public virtual PullDataReceiver {
 public:
-    ValueMetricProducer(const ValueMetric& valueMetric, const int conditionIndex,
-                        const sp<ConditionWizard>& wizard, const int pullTagId,
-                        const uint64_t startTimeNs);
+    ValueMetricProducer(const ConfigKey& key, const ValueMetric& valueMetric,
+                        const int conditionIndex, const sp<ConditionWizard>& wizard,
+                        const int pullTagId, const uint64_t startTimeNs);
 
     virtual ~ValueMetricProducer();
 
-    void onConditionChanged(const bool condition, const uint64_t eventTime) override;
-
-    void finish() override;
-
-    // TODO: Pass a timestamp as a parameter in onDumpReport.
-    StatsLogReport onDumpReport() override;
-
-    void onSlicedConditionMayChange(const uint64_t eventTime);
-
     void onDataPulled(const std::vector<std::shared_ptr<LogEvent>>& data) override;
 
-    size_t byteSize() override;
-
-    // TODO: Implement this later.
-    virtual void notifyAppUpgrade(const string& apk, const int uid, const int version) override{};
-    // TODO: Implement this later.
-    virtual void notifyAppRemoved(const string& apk, const int uid) override{};
-
 protected:
-    void onMatchedLogEventInternal(const size_t matcherIndex, const HashableDimensionKey& eventKey,
-                                   const std::map<std::string, HashableDimensionKey>& conditionKey,
-                                   bool condition, const LogEvent& event,
-                                   bool scheduledPull) override;
-
-    void startNewProtoOutputStream(long long timestamp) override;
+    void onMatchedLogEventInternalLocked(
+            const size_t matcherIndex, const HashableDimensionKey& eventKey,
+            const std::map<std::string, HashableDimensionKey>& conditionKey, bool condition,
+            const LogEvent& event) override;
 
 private:
-    const ValueMetric mMetric;
+    void onDumpReportLocked(const uint64_t dumpTimeNs,
+                            android::util::ProtoOutputStream* protoOutput) override;
 
-    StatsPullerManager& mStatsPullerManager = StatsPullerManager::GetInstance();
+    // Internal interface to handle condition change.
+    void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
 
-    Mutex mLock;
+    // Internal interface to handle sliced condition change.
+    void onSlicedConditionMayChangeLocked(const uint64_t eventTime) override;
+
+    // Internal function to calculate the current used bytes.
+    size_t byteSizeLocked() const override;
+
+    // Util function to flush the old packet.
+    void flushIfNeededLocked(const uint64_t& eventTime);
+
+    const int32_t mValueField;
+
+    std::shared_ptr<StatsPullerManager> mStatsPullerManager;
+
+    // for testing
+    ValueMetricProducer(const ConfigKey& key, const ValueMetric& valueMetric,
+                        const int conditionIndex, const sp<ConditionWizard>& wizard,
+                        const int pullTagId, const uint64_t startTimeNs,
+                        std::shared_ptr<StatsPullerManager> statsPullerManager);
 
     // tagId for pulled data. -1 if this is not pulled
     const int mPullTagId;
 
     // internal state of a bucket.
     typedef struct {
-        std::vector<std::pair<long, long>> raw;
+        // Pulled data always come in pair of <start, end>. This holds the value
+        // for start. The diff (end - start) is added to sum.
+        long start;
+        // Whether the start data point is updated
+        bool startUpdated;
+        // If end data point comes before the start, record this pair as tainted
+        // and the value is not added to the running sum.
+        int tainted;
+        // Running sum of known pairs in this bucket
+        long sum;
     } Interval;
 
     std::unordered_map<HashableDimensionKey, Interval> mCurrentSlicedBucket;
-    // If condition is true and pulling on schedule, the previous bucket value needs to be carried
-    // over to the next bucket.
-    std::unordered_map<HashableDimensionKey, Interval> mNextSlicedBucket;
 
     // Save the past buckets and we can clear when the StatsLogReport is dumped.
     // TODO: Add a lock to mPastBuckets.
@@ -96,9 +104,15 @@ private:
 
     long get_value(const LogEvent& event);
 
-    void flush_if_needed(const uint64_t eventTimeNs);
+    // Util function to check whether the specified dimension hits the guardrail.
+    bool hitGuardRailLocked(const HashableDimensionKey& newKey);
 
-    size_t mByteSize;
+    static const size_t kBucketSize = sizeof(ValueBucket{});
+
+    FRIEND_TEST(ValueMetricProducerTest, TestNonDimensionalEvents);
+    FRIEND_TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition);
+    FRIEND_TEST(ValueMetricProducerTest, TestPushedEventsWithoutCondition);
+    FRIEND_TEST(ValueMetricProducerTest, TestAnomalyDetection);
 };
 
 }  // namespace statsd

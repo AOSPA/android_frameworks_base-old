@@ -204,16 +204,6 @@ public class PhoneStateListener {
     public static final int LISTEN_VOLTE_STATE                              = 0x00004000;
 
     /**
-     * Listen for OEM hook raw event
-     *
-     * @see #onOemHookRawEvent
-     * @hide
-     * @deprecated OEM needs a vendor-extension hal and their apps should use that instead
-     */
-    @Deprecated
-    public static final int LISTEN_OEM_HOOK_RAW_EVENT                       = 0x00008000;
-
-    /**
      * Listen for carrier network changes indicated by a carrier app.
      *
      * @see #onCarrierNetworkRequest
@@ -359,9 +349,6 @@ public class PhoneStateListener {
                     case LISTEN_DATA_ACTIVATION_STATE:
                         PhoneStateListener.this.onDataActivationStateChanged((int)msg.obj);
                         break;
-                    case LISTEN_OEM_HOOK_RAW_EVENT:
-                        PhoneStateListener.this.onOemHookRawEvent((byte[])msg.obj);
-                        break;
                     case LISTEN_CARRIER_NETWORK_CHANGE:
                         PhoneStateListener.this.onCarrierNetworkChange((boolean)msg.obj);
                         break;
@@ -421,7 +408,7 @@ public class PhoneStateListener {
     /**
      * Callback invoked when device call state changes.
      * @param state call state
-     * @param incomingNumber incoming call phone number. If application does not have
+     * @param phoneNumber call phone number. If application does not have
      * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE} permission, an empty
      * string will be passed as an argument.
      *
@@ -429,7 +416,7 @@ public class PhoneStateListener {
      * @see TelephonyManager#CALL_STATE_RINGING
      * @see TelephonyManager#CALL_STATE_OFFHOOK
      */
-    public void onCallStateChanged(int state, String incomingNumber) {
+    public void onCallStateChanged(int state, String phoneNumber) {
         // default implementation empty
     }
 
@@ -556,16 +543,6 @@ public class PhoneStateListener {
     }
 
     /**
-     * Callback invoked when OEM hook raw event is received. Requires
-     * the READ_PRIVILEGED_PHONE_STATE permission.
-     * @param rawData is the byte array of the OEM hook raw data.
-     * @hide
-     */
-    public void onOemHookRawEvent(byte[] rawData) {
-        // default implementation empty
-    }
-
-    /**
      * Callback invoked when telephony has received notice from a carrier
      * app that a network action that could result in connectivity loss
      * has been requested by an app using
@@ -675,10 +652,6 @@ public class PhoneStateListener {
 
         public void onDataActivationStateChanged(int activationState) {
             send(LISTEN_DATA_ACTIVATION_STATE, 0, 0, activationState);
-        }
-
-        public void onOemHookRawEvent(byte[] rawData) {
-            send(LISTEN_OEM_HOOK_RAW_EVENT, 0, 0, rawData);
         }
 
         public void onCarrierNetworkChange(boolean active) {

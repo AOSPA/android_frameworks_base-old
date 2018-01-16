@@ -35,6 +35,7 @@ import android.text.GetChars;
 import android.text.Layout;
 import android.text.Selection;
 import android.text.Spannable;
+import android.util.TypedValue;
 import android.view.View;
 
 import org.junit.Before;
@@ -204,7 +205,7 @@ public class TextViewTest {
         int lineCount = layout.getLineCount();
         boolean hyphenationHappend = false;
         for (int i = 0; i < lineCount; ++i) {
-            if (layout.getHyphen(i) != 1) {
+            if (layout.getHyphen(i) == 0) {
                 continue;  // Hyphantion does not happen.
             }
             hyphenationHappend = true;
@@ -274,7 +275,7 @@ public class TextViewTest {
                 new FontFallbackSetup("DynamicLayout", testFontFiles, xml)) {
             mTextView = new TextView(mActivity);
             mTextView.setTypeface(setup.getTypefaceFor("sans-serif"));
-            mTextView.setTextSize(100);
+            mTextView.setTextSize(TypedValue.COMPLEX_UNIT_PX, 100);
             mTextView.setText("aaaaa aabaa aaaaa"); // This should result in three lines.
             mTextView.setPadding(0, 0, 0, 0);
             mTextView.setIncludeFontPadding(false);

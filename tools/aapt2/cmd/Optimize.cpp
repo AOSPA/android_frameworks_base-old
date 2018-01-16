@@ -17,6 +17,7 @@
 #include <memory>
 #include <vector>
 
+#include "android-base/file.h"
 #include "android-base/stringprintf.h"
 
 #include "androidfw/ResourceTypes.h"
@@ -43,10 +44,10 @@
 #include "util/Util.h"
 
 using ::aapt::configuration::Abi;
-using ::aapt::configuration::Artifact;
-using ::aapt::configuration::PostProcessingConfiguration;
+using ::aapt::configuration::OutputArtifact;
 using ::android::ResTable_config;
 using ::android::StringPiece;
+using ::android::base::ReadFileToString;
 using ::android::base::StringAppendF;
 using ::android::base::StringPrintf;
 
@@ -72,7 +73,11 @@ struct OptimizeOptions {
 
   TableFlattenerOptions table_flattener_options;
 
-  Maybe<PostProcessingConfiguration> configuration;
+  Maybe<std::vector<OutputArtifact>> apk_artifacts;
+
+  // Set of artifacts to keep when generating multi-APK splits. If the list is empty, all artifacts
+  // are kept and will be written as output.
+  std::unordered_set<std::string> kept_artifacts;
 };
 
 class OptimizeContext : public IAaptContext {
@@ -193,11 +198,11 @@ class OptimizeCommand {
       ++split_constraints_iter;
     }
 
-    if (options_.configuration && options_.output_dir) {
+    if (options_.apk_artifacts && options_.output_dir) {
       MultiApkGenerator generator{apk.get(), context_};
-      MultiApkGeneratorOptions generator_options = {options_.output_dir.value(),
-                                                    options_.configuration.value(),
-                                                    options_.table_flattener_options};
+      MultiApkGeneratorOptions generator_options = {
+          options_.output_dir.value(), options_.apk_artifacts.value(),
+          options_.table_flattener_options, options_.kept_artifacts};
       if (!generator.FromBaseApk(generator_options)) {
         return 1;
       }
@@ -256,10 +261,8 @@ class OptimizeCommand {
 
         for (auto& entry : config_sorted_files) {
           FileReference* file_ref = entry.second;
-          uint32_t compression_flags =
-              file_ref->file->WasCompressed() ? ArchiveEntry::kCompress : 0u;
-          if (!io::CopyFileToArchive(context_, file_ref->file, *file_ref->path, compression_flags,
-                                     writer)) {
+          if (!io::CopyFileToArchivePreserveCompression(context_, file_ref->file, *file_ref->path,
+                                                        writer)) {
             return false;
           }
         }
@@ -280,6 +283,20 @@ class OptimizeCommand {
   OptimizeOptions options_;
   OptimizeContext* context_;
 };
+
+bool ExtractWhitelistFromConfig(const std::string& path, OptimizeContext* context,
+                                OptimizeOptions* options) {
+  std::string contents;
+  if (!ReadFileToString(path, &contents, true)) {
+    context->GetDiagnostics()->Error(DiagMessage()
+                                     << "failed to parse whitelist from config file: " << path);
+    return false;
+  }
+  for (const StringPiece& resource_name : util::Tokenize(contents, ',')) {
+    options->table_flattener_options.whitelisted_resources.insert(resource_name.to_string());
+  }
+  return true;
+}
 
 bool ExtractAppDataFromManifest(OptimizeContext* context, const LoadedApk* apk,
                                 OptimizeOptions* out_options) {
@@ -304,10 +321,11 @@ int Optimize(const std::vector<StringPiece>& args) {
   OptimizeContext context;
   OptimizeOptions options;
   Maybe<std::string> config_path;
+  Maybe<std::string> whitelist_path;
   Maybe<std::string> target_densities;
-  Maybe<std::string> target_abis;
   std::vector<std::string> configs;
   std::vector<std::string> split_args;
+  std::unordered_set<std::string> kept_artifacts;
   bool verbose = false;
   bool print_only = false;
   Flags flags =
@@ -322,12 +340,10 @@ int Optimize(const std::vector<StringPiece>& args) {
               "All the resources that would be unused on devices of the given densities will be \n"
               "removed from the APK.",
               &target_densities)
-          .OptionalFlag(
-              "--target-abis",
-              "Comma separated list of the CPU ABIs that the APK will be optimized for.\n"
-              "All the native libraries that would be unused on devices of the given ABIs will \n"
-              "be removed from the APK.",
-              &target_abis)
+          .OptionalFlag("--whitelist-config-path",
+                        "Path to the whitelist.cfg file containing whitelisted resources \n"
+                        "whose names should not be altered in final resource tables.",
+                        &whitelist_path)
           .OptionalFlagList("-c",
                             "Comma separated list of configurations to include. The default\n"
                             "is all configurations.",
@@ -337,10 +353,17 @@ int Optimize(const std::vector<StringPiece>& args) {
                             "Split APK.\nSyntax: path/to/output.apk;<config>[,<config>[...]].\n"
                             "On Windows, use a semicolon ';' separator instead.",
                             &split_args)
+          .OptionalFlagList("--keep-artifacts",
+                            "Comma separated list of artifacts to keep. If none are specified,\n"
+                            "all artifacts will be kept.",
+                            &kept_artifacts)
           .OptionalSwitch("--enable-sparse-encoding",
                           "Enables encoding sparse entries using a binary search tree.\n"
                           "This decreases APK size at the cost of resource retrieval performance.",
                           &options.table_flattener_options.use_sparse_entries)
+          .OptionalSwitch("--enable-resource-obfuscation",
+                          "Enables obfuscation of key string pool to single value",
+                          &options.table_flattener_options.collapse_key_stringpool)
           .OptionalSwitch("-v", "Enables verbose logging", &verbose);
 
   if (!flags.Parse("aapt2 optimize", args, &std::cerr)) {
@@ -354,13 +377,55 @@ int Optimize(const std::vector<StringPiece>& args) {
   }
 
   const std::string& apk_path = flags.GetArgs()[0];
+
+  context.SetVerbose(verbose);
+  IDiagnostics* diag = context.GetDiagnostics();
+
+  if (config_path) {
+    std::string& path = config_path.value();
+    Maybe<ConfigurationParser> for_path = ConfigurationParser::ForPath(path);
+    if (for_path) {
+      options.apk_artifacts = for_path.value().WithDiagnostics(diag).Parse(apk_path);
+      if (!options.apk_artifacts) {
+        diag->Error(DiagMessage() << "Failed to parse the output artifact list");
+        return 1;
+      }
+
+    } else {
+      diag->Error(DiagMessage() << "Could not parse config file " << path);
+      return 1;
+    }
+
+    if (print_only) {
+      for (const OutputArtifact& artifact : options.apk_artifacts.value()) {
+        std::cout << artifact.name << std::endl;
+      }
+      return 0;
+    }
+
+    if (!kept_artifacts.empty()) {
+      for (const std::string& artifact_str : kept_artifacts) {
+        for (const StringPiece& artifact : util::Tokenize(artifact_str, ',')) {
+          options.kept_artifacts.insert(artifact.to_string());
+        }
+      }
+    }
+
+    // Since we know that we are going to process the APK (not just print targets), make sure we
+    // have somewhere to write them to.
+    if (!options.output_dir) {
+      diag->Error(DiagMessage() << "Output directory is required when using a configuration file");
+      return 1;
+    }
+  } else if (print_only) {
+    diag->Error(DiagMessage() << "Asked to print artifacts without providing a configurations");
+    return 1;
+  }
+
   std::unique_ptr<LoadedApk> apk = LoadedApk::LoadApkFromPath(apk_path, context.GetDiagnostics());
   if (!apk) {
     return 1;
   }
-
-  context.SetVerbose(verbose);
-  IDiagnostics* diag = context.GetDiagnostics();
 
   if (target_densities) {
     // Parse the target screen densities.
@@ -392,39 +457,13 @@ int Optimize(const std::vector<StringPiece>& args) {
     }
   }
 
-  if (config_path) {
-    std::string& path = config_path.value();
-    Maybe<ConfigurationParser> for_path = ConfigurationParser::ForPath(path);
-    if (for_path) {
-      options.configuration = for_path.value().WithDiagnostics(diag).Parse();
-    } else {
-      diag->Error(DiagMessage() << "Could not parse config file " << path);
-      return 1;
-    }
-
-    if (print_only) {
-      std::vector<std::string> names;
-      const PostProcessingConfiguration& config = options.configuration.value();
-      if (!config.AllArtifactNames(file::GetFilename(apk_path), &names, diag)) {
-        diag->Error(DiagMessage() << "Failed to generate output artifact list");
+  if (options.table_flattener_options.collapse_key_stringpool) {
+    if (whitelist_path) {
+      std::string& path = whitelist_path.value();
+      if (!ExtractWhitelistFromConfig(path, &context, &options)) {
         return 1;
       }
-
-      for (const auto& name : names) {
-        std::cout << name << std::endl;
-      }
-      return 0;
     }
-
-    // Since we know that we are going to process the APK (not just print targets), make sure we
-    // have somewhere to write them to.
-    if (!options.output_dir) {
-      diag->Error(DiagMessage() << "Output directory is required when using a configuration file");
-      return 1;
-    }
-  } else if (print_only) {
-    diag->Error(DiagMessage() << "Asked to print artifacts without providing a configurations");
-    return 1;
   }
 
   if (!ExtractAppDataFromManifest(&context, apk.get(), &options)) {

@@ -17,6 +17,7 @@
 #include "CacheManager.h"
 
 #include "Layer.h"
+#include "Properties.h"
 #include "RenderThread.h"
 #include "pipeline/skia/ShaderCache.h"
 #include "renderstate/RenderState.h"
@@ -47,15 +48,18 @@ CacheManager::CacheManager(const DisplayInfo& display) : mMaxSurfaceArea(display
     mVectorDrawableAtlas = new skiapipeline::VectorDrawableAtlas(
             mMaxSurfaceArea / 2,
             skiapipeline::VectorDrawableAtlas::StorageMode::disallowSharedSurface);
+    if (Properties::isSkiaEnabled()) {
+        skiapipeline::ShaderCache::get().initShaderDiskCache();
+    }
 }
 
-void CacheManager::reset(GrContext* context) {
-    if (context != mGrContext.get()) {
+void CacheManager::reset(sk_sp<GrContext> context) {
+    if (context != mGrContext) {
         destroy();
     }
 
     if (context) {
-        mGrContext = sk_ref_sp(context);
+        mGrContext = std::move(context);
         mGrContext->getResourceCacheLimits(&mMaxResources, nullptr);
         updateContextCacheSizes();
     }

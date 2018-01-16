@@ -295,19 +295,20 @@ public class PackageManagerServiceUtils {
         return false;
     }
 
-    public static long getLastModifiedTime(PackageParser.Package pkg, File srcFile) {
-        if (srcFile.isDirectory()) {
-            final File baseFile = new File(pkg.baseCodePath);
-            long maxModifiedTime = baseFile.lastModified();
-            if (pkg.splitCodePaths != null) {
-                for (int i = pkg.splitCodePaths.length - 1; i >=0; --i) {
-                    final File splitFile = new File(pkg.splitCodePaths[i]);
-                    maxModifiedTime = Math.max(maxModifiedTime, splitFile.lastModified());
-                }
-            }
-            return maxModifiedTime;
+    public static long getLastModifiedTime(PackageParser.Package pkg) {
+        final File srcFile = new File(pkg.codePath);
+        if (!srcFile.isDirectory()) {
+            return srcFile.lastModified();
         }
-        return srcFile.lastModified();
+        final File baseFile = new File(pkg.baseCodePath);
+        long maxModifiedTime = baseFile.lastModified();
+        if (pkg.splitCodePaths != null) {
+            for (int i = pkg.splitCodePaths.length - 1; i >=0; --i) {
+                final File splitFile = new File(pkg.splitCodePaths[i]);
+                maxModifiedTime = Math.max(maxModifiedTime, splitFile.lastModified());
+            }
+        }
+        return maxModifiedTime;
     }
 
     /**
@@ -570,7 +571,7 @@ public class PackageManagerServiceUtils {
             if (!match) {
                 throw new PackageManagerException(INSTALL_FAILED_UPDATE_INCOMPATIBLE,
                         "Package " + packageName +
-                        " signatures don't match previously installed version; ignoring!");
+                        " signatures do not match previously installed version; ignoring!");
             }
         }
         // Check for shared user signatures
@@ -578,16 +579,16 @@ public class PackageManagerServiceUtils {
             // Already existing package. Make sure signatures match
             boolean match = compareSignatures(pkgSetting.sharedUser.signatures.mSignatures,
                     parsedSignatures) == PackageManager.SIGNATURE_MATCH;
-            if (!match) {
+            if (!match && compareCompat) {
                 match = matchSignaturesCompat(
                         packageName, pkgSetting.sharedUser.signatures, parsedSignatures);
             }
-            if (!match && compareCompat) {
+            if (!match && compareRecover) {
                 match = matchSignaturesRecover(
                         packageName, pkgSetting.sharedUser.signatures.mSignatures, parsedSignatures);
                 compatMatch |= match;
             }
-            if (!match && compareRecover) {
+            if (!match) {
                 throw new PackageManagerException(INSTALL_FAILED_SHARED_USER_INCOMPATIBLE,
                         "Package " + packageName
                         + " has no signatures that match those in shared user "

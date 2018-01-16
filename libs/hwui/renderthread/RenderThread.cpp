@@ -16,7 +16,6 @@
 
 #include "RenderThread.h"
 
-#include "pipeline/skia/ShaderCache.h"
 #include "CanvasContext.h"
 #include "EglManager.h"
 #include "OpenGLReadback.h"
@@ -52,8 +51,15 @@ static const nsecs_t DISPATCH_FRAME_CALLBACKS_DELAY = milliseconds_to_nanosecond
 
 static bool gHasRenderThreadInstance = false;
 
+static void (*gOnStartHook)() = nullptr;
+
 bool RenderThread::hasInstance() {
     return gHasRenderThreadInstance;
+}
+
+void RenderThread::setOnStartHook(void (*onStartHook)()) {
+    LOG_ALWAYS_FATAL_IF(hasInstance(), "can't set an onStartHook after we've started...");
+    gOnStartHook = onStartHook;
 }
 
 RenderThread& RenderThread::getInstance() {
@@ -106,7 +112,6 @@ void RenderThread::initThreadLocals() {
     mRenderState = new RenderState(*this);
     mVkManager = new VulkanManager(*this);
     mCacheManager = new CacheManager(mDisplayInfo);
-    uirenderer::skiapipeline::ShaderCache::get().initShaderDiskCache();
 }
 
 void RenderThread::dumpGraphicsMemory(int fd) {
@@ -141,10 +146,8 @@ void RenderThread::dumpGraphicsMemory(int fd) {
             break;
     }
 
-    FILE* file = fdopen(fd, "a");
-    fprintf(file, "\n%s\n", cachesOutput.string());
-    fprintf(file, "\nPipeline=%s\n", pipeline.string());
-    fflush(file);
+    dprintf(fd, "\n%s\n", cachesOutput.string());
+    dprintf(fd, "\nPipeline=%s\n", pipeline.string());
 }
 
 Readback& RenderThread::readback() {
@@ -170,12 +173,12 @@ Readback& RenderThread::readback() {
     return *mReadback;
 }
 
-void RenderThread::setGrContext(GrContext* context) {
+void RenderThread::setGrContext(sk_sp<GrContext> context) {
     mCacheManager->reset(context);
-    if (mGrContext.get()) {
+    if (mGrContext) {
         mGrContext->releaseResourcesAndAbandonContext();
     }
-    mGrContext.reset(context);
+    mGrContext = std::move(context);
 }
 
 int RenderThread::displayEventReceiverCallback(int fd, int events, void* data) {
@@ -260,6 +263,9 @@ void RenderThread::requestVsync() {
 
 bool RenderThread::threadLoop() {
     setpriority(PRIO_PROCESS, 0, PRIORITY_DISPLAY);
+    if (gOnStartHook) {
+        gOnStartHook();
+    }
     initThreadLocals();
 
     while (true) {

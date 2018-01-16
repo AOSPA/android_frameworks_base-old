@@ -26,13 +26,8 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_PRIVILEGED_MODULE := true
 
 LOCAL_STATIC_JAVA_LIBRARIES := \
-    frameworks-base-testutils \
     services.backup \
-    services.core \
-    android-support-test \
-    mockito-target-minus-junit4 \
-    platform-test-annotations \
-    truth-prebuilt
+    services.core
 
 include $(BUILD_PACKAGE)
 
@@ -45,11 +40,16 @@ LOCAL_SRC_FILES := $(call all-java-files-under, src)
 
 # Include the testing libraries (JUnit4 + Robolectric libs).
 LOCAL_STATIC_JAVA_LIBRARIES := \
-    truth-prebuilt
+    platform-robolectric-android-all-stubs \
+    android-support-test \
+    mockito-robolectric-prebuilt \
+    platform-test-annotations \
+    truth-prebuilt \
+    testng
 
 LOCAL_JAVA_LIBRARIES := \
     junit \
-    platform-robolectric-prebuilt
+    platform-robolectric-3.5.1-prebuilt
 
 LOCAL_INSTRUMENTATION_FOR := FrameworksServicesLib
 LOCAL_MODULE := FrameworksServicesRoboTests
@@ -74,4 +74,4 @@ LOCAL_TEST_PACKAGE := FrameworksServicesLib
 
 LOCAL_INSTRUMENT_SOURCE_DIRS := $(dir $(LOCAL_PATH))backup/java
 
-include prebuilts/misc/common/robolectric/run_robotests.mk
+include prebuilts/misc/common/robolectric/3.5.1/run_robotests.mk

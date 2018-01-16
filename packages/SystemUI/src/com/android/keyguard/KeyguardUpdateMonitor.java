@@ -71,6 +71,7 @@ import android.util.Log;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.IccCardConstants.State;
 import com.android.internal.telephony.PhoneConstants;
@@ -78,6 +79,7 @@ import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.systemui.recents.misc.SysUiTaskStackChangeListener;
 import com.android.systemui.recents.misc.SystemServicesProxy;
+import com.android.systemui.shared.system.ActivityManagerWrapper;
 
 import com.google.android.collect.Lists;
 
@@ -346,6 +348,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private SparseBooleanArray mUserFaceUnlockRunning = new SparseBooleanArray();
 
     private static int sCurrentUser;
+    private Runnable mUpdateFingerprintListeningState = this::updateFingerprintListeningState;
 
     public synchronized static void setCurrentUser(int currentUser) {
         sCurrentUser = currentUser;
@@ -1109,7 +1112,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
-    private KeyguardUpdateMonitor(Context context) {
+    @VisibleForTesting
+    protected KeyguardUpdateMonitor(Context context) {
         mContext = context;
         mSubscriptionManager = SubscriptionManager.from(context);
         mDeviceProvisioned = isDeviceProvisionedInSettingsDb();
@@ -1187,7 +1191,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             mFpm.addLockoutResetCallback(mLockoutResetCallback);
         }
 
-        SystemServicesProxy.getInstance(mContext).registerTaskStackListener(mTaskStackListener);
+        ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
         mUserManager = context.getSystemService(UserManager.class);
     }
 
@@ -1665,7 +1669,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     public void setSwitchingUser(boolean switching) {
         mSwitchingUser = switching;
-        updateFingerprintListeningState();
+        // Since this comes in on a binder thread, we need to post if first
+        mHandler.post(mUpdateFingerprintListeningState);
     }
 
     private void sendUpdates(KeyguardUpdateMonitorCallback callback) {

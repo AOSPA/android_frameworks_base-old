@@ -29,8 +29,7 @@
     <string name="keyguard_password_enter_password_code" msgid="595980919238127672">"Idatzi desblokeatzeko pasahitza"</string>
     <string name="keyguard_password_enter_pin_password_code" msgid="7504123374204446086">"Idatzi desblokeatzeko PIN kodea"</string>
     <string name="keyguard_password_wrong_pin_code" msgid="6535018036285012028">"PIN kode hori ez da zuzena."</string>
-    <!-- no translation found for keyguard_sim_error_message_short (592109500618448312) -->
-    <skip />
+    <string name="keyguard_sim_error_message_short" msgid="592109500618448312">"Txartelak ez du balio."</string>
     <string name="keyguard_charged" msgid="2222329688813033109">"Kargatuta"</string>
     <string name="keyguard_plugged_in" msgid="89308975354638682">"Kargatzen"</string>
     <string name="keyguard_plugged_in_charging_fast" msgid="8869226755413795173">"Bizkor kargatzen"</string>
@@ -136,4 +135,12 @@
       <item quantity="one">Gailua ez da desblokeatu <xliff:g id="NUMBER_0">%d</xliff:g> orduz. Berretsi pasahitza.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Ez da ezagutu"</string>
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+      <item quantity="other">Idatzi SIM txartelaren PIN kodea. <xliff:g id="NUMBER_1">%d</xliff:g> saiakera geratzen zaizkizu.</item>
+      <item quantity="one">Idatzi SIM txartelaren PIN kodea. <xliff:g id="NUMBER_0">%d</xliff:g> saiakera geratzen zaizu; oker idatziz gero, operadoreari eskatu beharko diozu gailua desblokeatzeko.</item>
+    </plurals>
+    <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
+      <item quantity="other">Desgaitu egin da SIM txartela. Aurrera egiteko, idatzi PUK kodea. <xliff:g id="_NUMBER_1">%d</xliff:g> saiakera geratzen zaizkizu SIM txartela betiko erabilgaitz geratu aurretik. Xehetasunak lortzeko, jarri operadorearekin harremanetan.</item>
+      <item quantity="one">Desgaitu egin da SIM txartela. Aurrera egiteko, idatzi PUK kodea. <xliff:g id="_NUMBER_0">%d</xliff:g> saiakera geratzen zaizu SIM txartela betiko erabilgaitz geratu aurretik. Xehetasunak lortzeko, jarri operadorearekin harremanetan.</item>
+    </plurals>
 </resources>

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define DEBUG true  // STOPSHIP if true
+#define DEBUG false  // STOPSHIP if true
 #include "Log.h"
 #include "CombinationConditionTracker.h"
 
@@ -39,11 +39,11 @@ CombinationConditionTracker::~CombinationConditionTracker() {
     VLOG("~CombinationConditionTracker() %s", mName.c_str());
 }
 
-bool CombinationConditionTracker::init(const vector<Condition>& allConditionConfig,
+bool CombinationConditionTracker::init(const vector<Predicate>& allConditionConfig,
                                        const vector<sp<ConditionTracker>>& allConditionTrackers,
                                        const unordered_map<string, int>& conditionNameIndexMap,
                                        vector<bool>& stack) {
-    VLOG("Combiniation condition init() %s", mName.c_str());
+    VLOG("Combination predicate init() %s", mName.c_str());
     if (mInitialized) {
         return true;
     }
@@ -51,22 +51,22 @@ bool CombinationConditionTracker::init(const vector<Condition>& allConditionConf
     // mark this node as visited in the recursion stack.
     stack[mIndex] = true;
 
-    Condition_Combination combinationCondition = allConditionConfig[mIndex].combination();
+    Predicate_Combination combinationCondition = allConditionConfig[mIndex].combination();
 
     if (!combinationCondition.has_operation()) {
         return false;
     }
     mLogicalOperation = combinationCondition.operation();
 
-    if (mLogicalOperation == LogicalOperation::NOT && combinationCondition.condition_size() != 1) {
+    if (mLogicalOperation == LogicalOperation::NOT && combinationCondition.predicate_size() != 1) {
         return false;
     }
 
-    for (string child : combinationCondition.condition()) {
+    for (string child : combinationCondition.predicate()) {
         auto it = conditionNameIndexMap.find(child);
 
         if (it == conditionNameIndexMap.end()) {
-            ALOGW("Condition %s not found in the config", child.c_str());
+            ALOGW("Predicate %s not found in the config", child.c_str());
             return false;
         }
 
@@ -104,7 +104,8 @@ bool CombinationConditionTracker::init(const vector<Condition>& allConditionConf
 
 void CombinationConditionTracker::isConditionMet(
         const map<string, HashableDimensionKey>& conditionParameters,
-        const vector<sp<ConditionTracker>>& allConditions, vector<ConditionState>& conditionCache) {
+        const vector<sp<ConditionTracker>>& allConditions,
+        vector<ConditionState>& conditionCache) const {
     for (const int childIndex : mChildren) {
         if (conditionCache[childIndex] == ConditionState::kNotEvaluated) {
             allConditions[childIndex]->isConditionMet(conditionParameters, allConditions,
@@ -115,49 +116,47 @@ void CombinationConditionTracker::isConditionMet(
             evaluateCombinationCondition(mChildren, mLogicalOperation, conditionCache);
 }
 
-bool CombinationConditionTracker::evaluateCondition(
+void CombinationConditionTracker::evaluateCondition(
         const LogEvent& event, const std::vector<MatchingState>& eventMatcherValues,
         const std::vector<sp<ConditionTracker>>& mAllConditions,
         std::vector<ConditionState>& nonSlicedConditionCache,
-        std::vector<bool>& nonSlicedChangedCache, vector<bool>& slicedConditionChanged) {
+        std::vector<bool>& conditionChangedCache) {
     // value is up to date.
     if (nonSlicedConditionCache[mIndex] != ConditionState::kNotEvaluated) {
-        return false;
+        return;
     }
 
     for (const int childIndex : mChildren) {
         if (nonSlicedConditionCache[childIndex] == ConditionState::kNotEvaluated) {
             const sp<ConditionTracker>& child = mAllConditions[childIndex];
             child->evaluateCondition(event, eventMatcherValues, mAllConditions,
-                                     nonSlicedConditionCache, nonSlicedChangedCache,
-                                     slicedConditionChanged);
+                                     nonSlicedConditionCache, conditionChangedCache);
         }
     }
 
-    ConditionState newCondition =
-            evaluateCombinationCondition(mChildren, mLogicalOperation, nonSlicedConditionCache);
+    if (!mSliced) {
+        ConditionState newCondition =
+                evaluateCombinationCondition(mChildren, mLogicalOperation, nonSlicedConditionCache);
 
-    bool nonSlicedChanged = (mNonSlicedConditionState != newCondition);
-    mNonSlicedConditionState = newCondition;
+        bool nonSlicedChanged = (mNonSlicedConditionState != newCondition);
+        mNonSlicedConditionState = newCondition;
 
-    nonSlicedConditionCache[mIndex] = mNonSlicedConditionState;
+        nonSlicedConditionCache[mIndex] = mNonSlicedConditionState;
 
-    nonSlicedChangedCache[mIndex] = nonSlicedChanged;
-
-    if (mSliced) {
+        conditionChangedCache[mIndex] = nonSlicedChanged;
+    } else {
         for (const int childIndex : mChildren) {
             // If any of the sliced condition in children condition changes, the combination
             // condition may be changed too.
-            if (slicedConditionChanged[childIndex]) {
-                slicedConditionChanged[mIndex] = true;
+            if (conditionChangedCache[childIndex]) {
+                conditionChangedCache[mIndex] = true;
                 break;
             }
         }
-        ALOGD("CombinationCondition %s sliced may changed? %d", mName.c_str(),
-              slicedConditionChanged[mIndex] == true);
+        nonSlicedConditionCache[mIndex] = ConditionState::kUnknown;
+        ALOGD("CombinationPredicate %s sliced may changed? %d", mName.c_str(),
+              conditionChangedCache[mIndex] == true);
     }
-
-    return nonSlicedChanged;
 }
 
 }  // namespace statsd

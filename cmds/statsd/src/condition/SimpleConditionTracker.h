@@ -17,7 +17,9 @@
 #ifndef SIMPLE_CONDITION_TRACKER_H
 #define SIMPLE_CONDITION_TRACKER_H
 
+#include <gtest/gtest_prod.h>
 #include "ConditionTracker.h"
+#include "config/ConfigKey.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 #include "stats_util.h"
 
@@ -27,29 +29,29 @@ namespace statsd {
 
 class SimpleConditionTracker : public virtual ConditionTracker {
 public:
-    SimpleConditionTracker(const std::string& name, const int index,
-                           const SimpleCondition& simpleCondition,
+    SimpleConditionTracker(const ConfigKey& key, const std::string& name, const int index,
+                           const SimplePredicate& simplePredicate,
                            const std::unordered_map<std::string, int>& trackerNameIndexMap);
 
     ~SimpleConditionTracker();
 
-    bool init(const std::vector<Condition>& allConditionConfig,
+    bool init(const std::vector<Predicate>& allConditionConfig,
               const std::vector<sp<ConditionTracker>>& allConditionTrackers,
               const std::unordered_map<std::string, int>& conditionNameIndexMap,
               std::vector<bool>& stack) override;
 
-    bool evaluateCondition(const LogEvent& event,
+    void evaluateCondition(const LogEvent& event,
                            const std::vector<MatchingState>& eventMatcherValues,
                            const std::vector<sp<ConditionTracker>>& mAllConditions,
                            std::vector<ConditionState>& conditionCache,
-                           std::vector<bool>& changedCache,
-                           std::vector<bool>& slicedChangedCache) override;
+                           std::vector<bool>& changedCache) override;
 
     void isConditionMet(const std::map<std::string, HashableDimensionKey>& conditionParameters,
                         const std::vector<sp<ConditionTracker>>& allConditions,
-                        std::vector<ConditionState>& conditionCache) override;
+                        std::vector<ConditionState>& conditionCache) const override;
 
 private:
+    const ConfigKey mConfigKey;
     // The index of the LogEventMatcher which defines the start.
     int mStartLogMatcherIndex;
 
@@ -62,15 +64,24 @@ private:
     // The index of the LogEventMatcher which defines the stop all.
     int mStopAllLogMatcherIndex;
 
-    // The dimension defines at the atom level, how start and stop should match.
-    // e.g., APP_IN_FOREGROUND, the dimension should be the uid field. Each "start" and
-    // "stop" tells you the state change of a particular app. Without this dimension, this
-    // condition does not make sense.
-    std::vector<KeyMatcher> mDimension;
+    ConditionState mInitialValue;
 
-    // Keep the map from the internal HashableDimensionKey to std::vector<KeyValuePair>
-    // that StatsLogReport wants.
-    std::unordered_map<HashableDimensionKey, ConditionState> mSlicedConditionState;
+    std::vector<KeyMatcher> mOutputDimension;
+
+    std::map<HashableDimensionKey, int> mSlicedConditionState;
+
+    void handleStopAll(std::vector<ConditionState>& conditionCache,
+                       std::vector<bool>& changedCache);
+
+    void handleConditionEvent(const HashableDimensionKey& outputKey, bool matchStart,
+                              std::vector<ConditionState>& conditionCache,
+                              std::vector<bool>& changedCache);
+
+    bool hitGuardRail(const HashableDimensionKey& newKey);
+
+    FRIEND_TEST(SimpleConditionTrackerTest, TestSlicedCondition);
+    FRIEND_TEST(SimpleConditionTrackerTest, TestSlicedWithNoOutputDim);
+    FRIEND_TEST(SimpleConditionTrackerTest, TestStopAll);
 };
 
 }  // namespace statsd
