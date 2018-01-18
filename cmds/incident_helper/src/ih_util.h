@@ -34,6 +34,8 @@ const std::string DEFAULT_WHITESPACE = " \t";
 const std::string DEFAULT_NEWLINE = "\r\n";
 const std::string TAB_DELIMITER = "\t";
 const std::string COMMA_DELIMITER = ",";
+const std::string PIPE_DELIMITER = "|";
+const std::string PARENTHESES_DELIMITER = "()";
 
 // returns true if c is a-zA-Z0-9 or underscore
 bool isValidChar(char c);
@@ -56,11 +58,22 @@ header_t parseHeader(const std::string& line, const std::string& delimiters = DE
 record_t parseRecord(const std::string& line, const std::string& delimiters = DEFAULT_WHITESPACE);
 
 /**
+ * Gets the list of end indices of each word in the line and places it in the given vector,
+ * clearing out the vector beforehand. These indices can be used with parseRecordByColumns.
+ * Will return false if there was a problem getting the indices. headerNames
+ * must be NULL terminated.
+ */
+bool getColumnIndices(std::vector<int>& indices, const char* headerNames[], const std::string& line);
+
+/**
  * When a text-format table aligns by its vertical position, it is not possible to split them by purely delimiters.
  * This function allows to parse record by its header's column position' indices, must in ascending order.
  * At the same time, it still looks at the char at index, if it doesn't belong to delimiters, moves forward to find the delimiters.
  */
 record_t parseRecordByColumns(const std::string& line, const std::vector<int>& indices, const std::string& delimiters = DEFAULT_WHITESPACE);
+
+/** Prints record_t to stderr */
+void printRecord(const record_t& record);
 
 /**
  * When the line starts/ends with the given key, the function returns true
@@ -76,6 +89,11 @@ record_t parseRecordByColumns(const std::string& line, const std::vector<int>& i
  */
 bool stripPrefix(std::string* line, const char* key, bool endAtDelimiter = false);
 bool stripSuffix(std::string* line, const char* key, bool endAtDelimiter = false);
+
+/**
+ * behead the given line by the cut, return the head and reassign the line to be the rest.
+ */
+std::string behead(std::string* line, const char cut);
 
 /**
  * Converts string to the desired type

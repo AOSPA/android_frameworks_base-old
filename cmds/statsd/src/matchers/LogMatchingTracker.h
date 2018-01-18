@@ -33,8 +33,8 @@ namespace statsd {
 
 class LogMatchingTracker : public virtual RefBase {
 public:
-    LogMatchingTracker(const std::string& name, const int index)
-        : mName(name), mIndex(index), mInitialized(false){};
+    LogMatchingTracker(const int64_t& id, const int index)
+        : mId(id), mIndex(index), mInitialized(false){};
 
     virtual ~LogMatchingTracker(){};
 
@@ -48,7 +48,7 @@ public:
     //        circle dependency.
     virtual bool init(const std::vector<AtomMatcher>& allLogMatchers,
                       const std::vector<sp<LogMatchingTracker>>& allTrackers,
-                      const std::unordered_map<std::string, int>& matcherMap,
+                      const std::unordered_map<int64_t, int>& matcherMap,
                       std::vector<bool>& stack) = 0;
 
     // Called when a log event comes.
@@ -65,17 +65,17 @@ public:
     // Get the tagIds that this matcher cares about. The combined collection is stored
     // in MetricMananger, so that we can pass any LogEvents that are not interest of us. It uses
     // some memory but hopefully it can save us much CPU time when there is flood of events.
-    virtual const std::set<int>& getTagIds() const {
-        return mTagIds;
+    virtual const std::set<int>& getAtomIds() const {
+        return mAtomIds;
     }
 
-    const std::string& getName() const {
-        return mName;
+    const int64_t& getId() const {
+        return mId;
     }
 
 protected:
     // Name of this matching. We don't really need the name, but it makes log message easy to debug.
-    const std::string mName;
+    const int64_t mId;
 
     // Index of this LogMatchingTracker in MetricsManager's container.
     const int mIndex;
@@ -88,7 +88,7 @@ protected:
     // useful when we have a complex CombinationLogMatcherTracker.
     // TODO: Consider use an array instead of stl set. In reality, the number of the tag ids a
     // LogMatchingTracker cares is only a few.
-    std::set<int> mTagIds;
+    std::set<int> mAtomIds;
 };
 
 }  // namespace statsd

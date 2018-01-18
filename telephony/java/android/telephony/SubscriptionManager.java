@@ -17,12 +17,16 @@
 package android.telephony;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
-import android.annotation.SystemApi;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.app.BroadcastOptions;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.net.INetworkPolicyManager;
@@ -32,15 +36,20 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.ServiceManager.ServiceNotFoundException;
 import android.util.DisplayMetrics;
+import android.util.Log;
+
 import com.android.internal.telephony.IOnSubscriptionsChangedListener;
 import com.android.internal.telephony.ISub;
 import com.android.internal.telephony.ITelephonyRegistry;
 import com.android.internal.telephony.PhoneConstants;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * SubscriptionManager is the application interface to SubscriptionController
@@ -430,6 +439,59 @@ public class SubscriptionManager {
             = "android.telephony.action.DEFAULT_SMS_SUBSCRIPTION_CHANGED";
 
     /**
+     * Activity Action: Display UI for managing the billing relationship plans
+     * between a carrier and a specific subscriber.
+     * <p>
+     * Carrier apps are encouraged to implement this activity, and the OS will
+     * provide an affordance to quickly enter this activity, typically via
+     * Settings. This affordance will only be shown when the carrier app is
+     * actively providing subscription plan information via
+     * {@link #setSubscriptionPlans(int, List)}.
+     * <p>
+     * Contains {@link #EXTRA_SUBSCRIPTION_INDEX} to indicate which subscription
+     * the user is interested in.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @SystemApi
+    public static final String ACTION_MANAGE_SUBSCRIPTION_PLANS
+            = "android.telephony.action.MANAGE_SUBSCRIPTION_PLANS";
+
+    /**
+     * Broadcast Action: Request a refresh of the billing relationship plans
+     * between a carrier and a specific subscriber.
+     * <p>
+     * Carrier apps are encouraged to implement this receiver, and the OS will
+     * provide an affordance to request a refresh. This affordance will only be
+     * shown when the carrier app is actively providing subscription plan
+     * information via {@link #setSubscriptionPlans(int, List)}.
+     * <p>
+     * Contains {@link #EXTRA_SUBSCRIPTION_INDEX} to indicate which subscription
+     * the user is interested in.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @SystemApi
+    public static final String ACTION_REFRESH_SUBSCRIPTION_PLANS
+            = "android.telephony.action.REFRESH_SUBSCRIPTION_PLANS";
+
+    /**
+     * Broadcast Action: The billing relationship plans between a carrier and a
+     * specific subscriber has changed.
+     * <p>
+     * Contains {@link #EXTRA_SUBSCRIPTION_INDEX} to indicate which subscription
+     * changed.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @RequiresPermission(android.Manifest.permission.MANAGE_SUBSCRIPTION_PLANS)
+    public static final String ACTION_SUBSCRIPTION_PLANS_CHANGED
+            = "android.telephony.action.SUBSCRIPTION_PLANS_CHANGED";
+
+    /**
      * Integer extra used with {@link #ACTION_DEFAULT_SUBSCRIPTION_CHANGED} and
      * {@link #ACTION_DEFAULT_SMS_SUBSCRIPTION_CHANGED} to indicate the subscription
      * which has changed.
@@ -437,6 +499,7 @@ public class SubscriptionManager {
     public static final String EXTRA_SUBSCRIPTION_INDEX = "android.telephony.extra.SUBSCRIPTION_INDEX";
 
     private final Context mContext;
+    private final INetworkPolicyManager mNetworkPolicy;
 
     /**
      * A listener class for monitoring changes to {@link SubscriptionInfo} records.
@@ -509,22 +572,21 @@ public class SubscriptionManager {
     }
 
     /** @hide */
-    public SubscriptionManager(Context context) {
+    public SubscriptionManager(Context context) throws ServiceNotFoundException {
         if (DBG) logd("SubscriptionManager created");
         mContext = context;
+        mNetworkPolicy = INetworkPolicyManager.Stub
+                .asInterface(ServiceManager.getServiceOrThrow(Context.NETWORK_POLICY_SERVICE));
     }
 
     /**
-     * Get an instance of the SubscriptionManager from the Context.
-     * This invokes {@link android.content.Context#getSystemService
-     * Context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE)}.
-     *
-     * @param context to use.
-     * @return SubscriptionManager instance
+     * @deprecated developers should always obtain references directly from
+     *             {@link Context#getSystemService(Class)}.
      */
+    @Deprecated
     public static SubscriptionManager from(Context context) {
-        return (SubscriptionManager) context.getSystemService(
-                Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+        return (SubscriptionManager) context
+                .getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE);
     }
 
     /**
@@ -1612,7 +1674,7 @@ public class SubscriptionManager {
      * This method is only accessible to the following narrow set of apps:
      * <ul>
      * <li>The carrier app for this subscriberId, as determined by
-     * {@link TelephonyManager#hasCarrierPrivileges(int)}.
+     * {@link TelephonyManager#hasCarrierPrivileges()}.
      * <li>The carrier app explicitly delegated access through
      * {@link CarrierConfigManager#KEY_CONFIG_PLANS_PACKAGE_OVERRIDE_STRING}.
      * </ul>
@@ -1622,11 +1684,9 @@ public class SubscriptionManager {
      */
     @SystemApi
     public @NonNull List<SubscriptionPlan> getSubscriptionPlans(int subId) {
-        final INetworkPolicyManager npm = INetworkPolicyManager.Stub
-                .asInterface(ServiceManager.getService(Context.NETWORK_POLICY_SERVICE));
         try {
             SubscriptionPlan[] subscriptionPlans =
-                    npm.getSubscriptionPlans(subId, mContext.getOpPackageName());
+                    mNetworkPolicy.getSubscriptionPlans(subId, mContext.getOpPackageName());
             return subscriptionPlans == null
                     ? Collections.emptyList() : Arrays.asList(subscriptionPlans);
         } catch (RemoteException e) {
@@ -1641,7 +1701,7 @@ public class SubscriptionManager {
      * This method is only accessible to the following narrow set of apps:
      * <ul>
      * <li>The carrier app for this subscriberId, as determined by
-     * {@link TelephonyManager#hasCarrierPrivileges(int)}.
+     * {@link TelephonyManager#hasCarrierPrivileges()}.
      * <li>The carrier app explicitly delegated access through
      * {@link CarrierConfigManager#KEY_CONFIG_PLANS_PACKAGE_OVERRIDE_STRING}.
      * </ul>
@@ -1654,13 +1714,103 @@ public class SubscriptionManager {
      */
     @SystemApi
     public void setSubscriptionPlans(int subId, @NonNull List<SubscriptionPlan> plans) {
-        final INetworkPolicyManager npm = INetworkPolicyManager.Stub
-                .asInterface(ServiceManager.getService(Context.NETWORK_POLICY_SERVICE));
         try {
-            npm.setSubscriptionPlans(subId, plans.toArray(new SubscriptionPlan[plans.size()]),
-                    mContext.getOpPackageName());
+            mNetworkPolicy.setSubscriptionPlans(subId,
+                    plans.toArray(new SubscriptionPlan[plans.size()]), mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /** @hide */
+    private String getSubscriptionPlansOwner(int subId) {
+        try {
+            return mNetworkPolicy.getSubscriptionPlansOwner(subId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Create an {@link Intent} that can be launched towards the carrier app
+     * that is currently defining the billing relationship plan through
+     * {@link #setSubscriptionPlans(int, List)}.
+     *
+     * @return ready to launch Intent targeted towards the carrier app, or
+     *         {@code null} if no carrier app is defined, or if the defined
+     *         carrier app provides no management activity.
+     * @hide
+     */
+    public @Nullable Intent createManageSubscriptionIntent(int subId) {
+        // Bail if no owner
+        final String owner = getSubscriptionPlansOwner(subId);
+        if (owner == null) return null;
+
+        // Bail if no plans
+        final List<SubscriptionPlan> plans = getSubscriptionPlans(subId);
+        if (plans.isEmpty()) return null;
+
+        final Intent intent = new Intent(ACTION_MANAGE_SUBSCRIPTION_PLANS);
+        intent.setPackage(owner);
+        intent.putExtra(EXTRA_SUBSCRIPTION_INDEX, subId);
+
+        // Bail if not implemented
+        if (mContext.getPackageManager().queryIntentActivities(intent,
+                PackageManager.MATCH_DEFAULT_ONLY).isEmpty()) {
+            return null;
+        }
+
+        return intent;
+    }
+
+    /** @hide */
+    private @Nullable Intent createRefreshSubscriptionIntent(int subId) {
+        // Bail if no owner
+        final String owner = getSubscriptionPlansOwner(subId);
+        if (owner == null) return null;
+
+        // Bail if no plans
+        final List<SubscriptionPlan> plans = getSubscriptionPlans(subId);
+        if (plans.isEmpty()) return null;
+
+        final Intent intent = new Intent(ACTION_REFRESH_SUBSCRIPTION_PLANS);
+        intent.addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
+        intent.setPackage(owner);
+        intent.putExtra(EXTRA_SUBSCRIPTION_INDEX, subId);
+
+        // Bail if not implemented
+        if (mContext.getPackageManager().queryBroadcastReceivers(intent, 0).isEmpty()) {
+            return null;
+        }
+
+        return intent;
+    }
+
+    /**
+     * Check if there is a carrier app that is currently defining the billing
+     * relationship plan through {@link #setSubscriptionPlans(int, List)} that
+     * supports refreshing of subscription plans.
+     *
+     * @hide
+     */
+    public boolean isSubscriptionPlansRefreshSupported(int subId) {
+        return createRefreshSubscriptionIntent(subId) != null;
+    }
+
+    /**
+     * Request that the carrier app that is currently defining the billing
+     * relationship plan through {@link #setSubscriptionPlans(int, List)}
+     * refresh its subscription plans.
+     * <p>
+     * If the app is able to successfully update the plans, you'll expect to
+     * receive the {@link #ACTION_SUBSCRIPTION_PLANS_CHANGED} broadcast.
+     *
+     * @hide
+     */
+    public void requestSubscriptionPlansRefresh(int subId) {
+        final Intent intent = createRefreshSubscriptionIntent(subId);
+        final BroadcastOptions options = BroadcastOptions.makeBasic();
+        options.setTemporaryAppWhitelistDuration(TimeUnit.MINUTES.toMillis(1));
+        mContext.sendBroadcast(intent, null, options.toBundle());
     }
 }

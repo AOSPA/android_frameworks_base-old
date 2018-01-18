@@ -28,24 +28,14 @@ void MetricProducer::onMatchedLogEventLocked(const size_t matcherIndex, const Lo
         return;
     }
 
-    HashableDimensionKey eventKey;
-
-    if (mDimension.size() > 0) {
-        vector<KeyValuePair> key = getDimensionKey(event, mDimension);
-        eventKey = HashableDimensionKey(key);
-    } else {
-        eventKey = DEFAULT_DIMENSION_KEY;
-    }
-
     bool condition;
-
-    map<string, HashableDimensionKey> conditionKeys;
+    ConditionKey conditionKey;
     if (mConditionSliced) {
         for (const auto& link : mConditionLinks) {
-            HashableDimensionKey conditionKey = getDimensionKeyForCondition(event, link);
-            conditionKeys[link.condition()] = conditionKey;
+            conditionKey.insert(std::make_pair(link.condition(),
+                                               getDimensionKeysForCondition(event, link)));
         }
-        if (mWizard->query(mConditionTrackerIndex, conditionKeys) != ConditionState::kTrue) {
+        if (mWizard->query(mConditionTrackerIndex, conditionKey) != ConditionState::kTrue) {
             condition = false;
         } else {
             condition = true;
@@ -53,7 +43,17 @@ void MetricProducer::onMatchedLogEventLocked(const size_t matcherIndex, const Lo
     } else {
         condition = mCondition;
     }
-    onMatchedLogEventInternalLocked(matcherIndex, eventKey, conditionKeys, condition, event);
+
+    if (mDimensions.child_size() > 0) {
+        vector<DimensionsValue> dimensionValues = getDimensionKeys(event, mDimensions);
+        for (const DimensionsValue& dimensionValue : dimensionValues) {
+            onMatchedLogEventInternalLocked(
+                matcherIndex, HashableDimensionKey(dimensionValue), conditionKey, condition, event);
+        }
+    } else {
+        onMatchedLogEventInternalLocked(
+            matcherIndex, DEFAULT_DIMENSION_KEY, conditionKey, condition, event);
+    }
 }
 
 }  // namespace statsd

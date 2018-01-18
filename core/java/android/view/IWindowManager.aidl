@@ -147,7 +147,7 @@ interface IWindowManager
     void exitKeyguardSecurely(IOnKeyguardExitResult callback);
     boolean isKeyguardLocked();
     boolean isKeyguardSecure();
-    void dismissKeyguard(IKeyguardDismissCallback callback);
+    void dismissKeyguard(IKeyguardDismissCallback callback, CharSequence message);
 
     // Requires INTERACT_ACROSS_USERS_FULL permission
     void setSwitchingUser(boolean switching);
@@ -396,4 +396,19 @@ interface IWindowManager
      * Return the touch region for the current IME window, or an empty region if there is none.
      */
     Region getCurrentImeTouchRegion();
+
+    /**
+     * Starts a window trace.
+     */
+    void startWindowTrace();
+
+    /**
+     * Stops a window trace.
+     */
+    void stopWindowTrace();
+
+    /**
+     * Returns true if window trace is enabled.
+     */
+    boolean isWindowTraceEnabled();
 }

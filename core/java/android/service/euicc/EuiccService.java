@@ -23,6 +23,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.telephony.euicc.DownloadableSubscription;
 import android.telephony.euicc.EuiccInfo;
+import android.telephony.euicc.EuiccManager.OtaStatus;
 import android.util.ArraySet;
 
 import java.util.concurrent.LinkedBlockingQueue;
@@ -192,6 +193,18 @@ public abstract class EuiccService extends Service {
     }
 
     /**
+     * Callback class for {@link #onStartOtaIfNecessary(int, OtaStatusChangedCallback)}
+     *
+     * The status of OTA which can be {@code android.telephony.euicc.EuiccManager#EUICC_OTA_}
+     *
+     * @see IEuiccService#startOtaIfNecessary
+     */
+    public interface OtaStatusChangedCallback {
+        /** Called when OTA status is changed. */
+        void onOtaStatusChanged(int status);
+    }
+
+    /**
      * Return the EID of the eUICC.
      *
      * @param slotId ID of the SIM slot being queried. This is currently not populated but is here
@@ -201,6 +214,26 @@ public abstract class EuiccService extends Service {
      */
     // TODO(b/36260308): Update doc when we have multi-SIM support.
     public abstract String onGetEid(int slotId);
+
+    /**
+     * Return the status of OTA update.
+     *
+     * @param slotId ID of the SIM slot to use for the operation. This is currently not populated
+     *     but is here to future-proof the APIs.
+     * @return The status of Euicc OTA update.
+     * @see android.telephony.euicc.EuiccManager#getOtaStatus
+     */
+    public abstract @OtaStatus int onGetOtaStatus(int slotId);
+
+    /**
+     * Perform OTA if current OS is not the latest one.
+     *
+     * @param slotId ID of the SIM slot to use for the operation. This is currently not populated
+     *     but is here to future-proof the APIs.
+     * @param statusChangedCallback Function called when OTA status changed.
+     */
+    public abstract void onStartOtaIfNecessary(
+            int slotId, OtaStatusChangedCallback statusChangedCallback);
 
     /**
      * Populate {@link DownloadableSubscription} metadata for the given downloadable subscription.
@@ -377,6 +410,41 @@ public abstract class EuiccService extends Service {
                     String eid = EuiccService.this.onGetEid(slotId);
                     try {
                         callback.onSuccess(eid);
+                    } catch (RemoteException e) {
+                        // Can't communicate with the phone process; ignore.
+                    }
+                }
+            });
+        }
+
+        @Override
+        public void startOtaIfNecessary(
+                int slotId, IOtaStatusChangedCallback statusChangedCallback) {
+            mExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    EuiccService.this.onStartOtaIfNecessary(slotId, new OtaStatusChangedCallback() {
+                        @Override
+                        public void onOtaStatusChanged(int status) {
+                            try {
+                                statusChangedCallback.onOtaStatusChanged(status);
+                            } catch (RemoteException e) {
+                                // Can't communicate with the phone process; ignore.
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        @Override
+        public void getOtaStatus(int slotId, IGetOtaStatusCallback callback) {
+            mExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    int status = EuiccService.this.onGetOtaStatus(slotId);
+                    try {
+                        callback.onSuccess(status);
                     } catch (RemoteException e) {
                         // Can't communicate with the phone process; ignore.
                     }

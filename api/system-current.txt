@@ -137,6 +137,7 @@ package android {
     field public static final java.lang.String RECEIVE_EMERGENCY_BROADCAST = "android.permission.RECEIVE_EMERGENCY_BROADCAST";
     field public static final java.lang.String RECEIVE_WIFI_CREDENTIAL_CHANGE = "android.permission.RECEIVE_WIFI_CREDENTIAL_CHANGE";
     field public static final java.lang.String RECOVERY = "android.permission.RECOVERY";
+    field public static final java.lang.String RECOVER_KEYSTORE = "android.permission.RECOVER_KEYSTORE";
     field public static final java.lang.String REGISTER_CALL_PROVIDER = "android.permission.REGISTER_CALL_PROVIDER";
     field public static final java.lang.String REGISTER_CONNECTION_MANAGER = "android.permission.REGISTER_CONNECTION_MANAGER";
     field public static final java.lang.String REGISTER_SIM_SUBSCRIPTION = "android.permission.REGISTER_SIM_SUBSCRIPTION";
@@ -152,6 +153,7 @@ package android {
     field public static final java.lang.String SET_ALWAYS_FINISH = "android.permission.SET_ALWAYS_FINISH";
     field public static final java.lang.String SET_ANIMATION_SCALE = "android.permission.SET_ANIMATION_SCALE";
     field public static final java.lang.String SET_DEBUG_APP = "android.permission.SET_DEBUG_APP";
+    field public static final java.lang.String SET_HARMFUL_APP_WARNINGS = "android.permission.SET_HARMFUL_APP_WARNINGS";
     field public static final java.lang.String SET_MEDIA_KEY_LISTENER = "android.permission.SET_MEDIA_KEY_LISTENER";
     field public static final java.lang.String SET_ORIENTATION = "android.permission.SET_ORIENTATION";
     field public static final java.lang.String SET_POINTER_SPEED = "android.permission.SET_POINTER_SPEED";
@@ -160,6 +162,7 @@ package android {
     field public static final java.lang.String SET_TIME = "android.permission.SET_TIME";
     field public static final java.lang.String SET_VOLUME_KEY_LONG_PRESS_LISTENER = "android.permission.SET_VOLUME_KEY_LONG_PRESS_LISTENER";
     field public static final java.lang.String SET_WALLPAPER_COMPONENT = "android.permission.SET_WALLPAPER_COMPONENT";
+    field public static final java.lang.String SHOW_KEYGUARD_MESSAGE = "android.permission.SHOW_KEYGUARD_MESSAGE";
     field public static final java.lang.String SHUTDOWN = "android.permission.SHUTDOWN";
     field public static final java.lang.String SIGNAL_PERSISTENT_PROCESSES = "android.permission.SIGNAL_PERSISTENT_PROCESSES";
     field public static final java.lang.String STATUS_BAR = "android.permission.STATUS_BAR";
@@ -173,6 +176,7 @@ package android {
     field public static final java.lang.String UPDATE_LOCK = "android.permission.UPDATE_LOCK";
     field public static final java.lang.String UPDATE_TIME_ZONE_RULES = "android.permission.UPDATE_TIME_ZONE_RULES";
     field public static final java.lang.String USER_ACTIVITY = "android.permission.USER_ACTIVITY";
+    field public static final java.lang.String USE_RESERVED_DISK = "android.permission.USE_RESERVED_DISK";
     field public static final java.lang.String WRITE_APN_SETTINGS = "android.permission.WRITE_APN_SETTINGS";
     field public static final java.lang.String WRITE_DREAM_STATE = "android.permission.WRITE_DREAM_STATE";
     field public static final java.lang.String WRITE_GSERVICES = "android.permission.WRITE_GSERVICES";
@@ -188,10 +192,6 @@ package android {
     field public static final int isVrOnly = 16844152; // 0x1010578
     field public static final int requiredSystemPropertyName = 16844133; // 0x1010565
     field public static final int requiredSystemPropertyValue = 16844134; // 0x1010566
-    field public static final int searchKeyphrase = 16843871; // 0x101045f
-    field public static final int searchKeyphraseId = 16843870; // 0x101045e
-    field public static final int searchKeyphraseRecognitionFlags = 16843942; // 0x10104a6
-    field public static final int searchKeyphraseSupportedLocales = 16843872; // 0x1010460
   }
 
   public static final class R.raw {
@@ -247,8 +247,48 @@ package android.app {
   }
 
   public class AppOpsManager {
+    method public static java.lang.String[] getOpStrs();
     method public void setUidMode(java.lang.String, int, int);
+    field public static final java.lang.String OPSTR_ACCESS_NOTIFICATIONS = "android:access_notifications";
     field public static final java.lang.String OPSTR_ACTIVATE_VPN = "android:activate_vpn";
+    field public static final java.lang.String OPSTR_ASSIST_SCREENSHOT = "android:assist_screenshot";
+    field public static final java.lang.String OPSTR_ASSIST_STRUCTURE = "android:assist_structure";
+    field public static final java.lang.String OPSTR_AUDIO_ACCESSIBILITY_VOLUME = "android:audio_accessibility_volume";
+    field public static final java.lang.String OPSTR_AUDIO_ALARM_VOLUME = "android:audio_alarm_volume";
+    field public static final java.lang.String OPSTR_AUDIO_BLUETOOTH_VOLUME = "android:audio_bluetooth_volume";
+    field public static final java.lang.String OPSTR_AUDIO_MASTER_VOLUME = "android:audio_master_volume";
+    field public static final java.lang.String OPSTR_AUDIO_MEDIA_VOLUME = "android:audio_media_volume";
+    field public static final java.lang.String OPSTR_AUDIO_NOTIFICATION_VOLUME = "android:audio_notification_volume";
+    field public static final java.lang.String OPSTR_AUDIO_RING_VOLUME = "android:audio_ring_volume";
+    field public static final java.lang.String OPSTR_AUDIO_VOICE_VOLUME = "android:audio_voice_volume";
+    field public static final java.lang.String OPSTR_BIND_ACCESSIBILITY_SERVICE = "bind_accessibility_service";
+    field public static final java.lang.String OPSTR_CHANGE_WIFI_STATE = "change_wifi_state";
+    field public static final java.lang.String OPSTR_GET_ACCOUNTS = "android:get_accounts";
+    field public static final java.lang.String OPSTR_GPS = "android:gps";
+    field public static final java.lang.String OPSTR_INSTANT_APP_START_FOREGROUND = "android:instant_app_start_foreground";
+    field public static final java.lang.String OPSTR_MUTE_MICROPHONE = "android:mute_microphone";
+    field public static final java.lang.String OPSTR_NEIGHBORING_CELLS = "android:neighboring_cells";
+    field public static final java.lang.String OPSTR_PLAY_AUDIO = "android:play_audio";
+    field public static final java.lang.String OPSTR_POST_NOTIFICATION = "android:post_notification";
+    field public static final java.lang.String OPSTR_PROJECT_MEDIA = "android:project_media";
+    field public static final java.lang.String OPSTR_READ_CLIPBOARD = "android:read_clipboard";
+    field public static final java.lang.String OPSTR_READ_ICC_SMS = "android:read_icc_sms";
+    field public static final java.lang.String OPSTR_RECEIVE_EMERGENCY_BROADCAST = "android:receive_emergency_broadcast";
+    field public static final java.lang.String OPSTR_REQUEST_DELETE_PACKAGES = "request_delete_packages";
+    field public static final java.lang.String OPSTR_REQUEST_INSTALL_PACKAGES = "android:request_install_packages";
+    field public static final java.lang.String OPSTR_RUN_ANY_IN_BACKGROUND = "android:run_any_in_background";
+    field public static final java.lang.String OPSTR_RUN_IN_BACKGROUND = "android:run_in_background";
+    field public static final java.lang.String OPSTR_TAKE_AUDIO_FOCUS = "android:take_audio_focus";
+    field public static final java.lang.String OPSTR_TAKE_MEDIA_BUTTONS = "android:take_media_buttons";
+    field public static final java.lang.String OPSTR_TOAST_WINDOW = "android:toast_window";
+    field public static final java.lang.String OPSTR_TURN_SCREEN_ON = "android:turn_screen_on";
+    field public static final java.lang.String OPSTR_VIBRATE = "android:vibrate";
+    field public static final java.lang.String OPSTR_WAKE_LOCK = "android:wake_lock";
+    field public static final java.lang.String OPSTR_WIFI_SCAN = "android:wifi_scan";
+    field public static final java.lang.String OPSTR_WRITE_CLIPBOARD = "android:write_clipboard";
+    field public static final java.lang.String OPSTR_WRITE_ICC_SMS = "android:write_icc_sms";
+    field public static final java.lang.String OPSTR_WRITE_SMS = "android:write_sms";
+    field public static final java.lang.String OPSTR_WRITE_WALLPAPER = "android:write_wallpaper";
   }
 
   public class BroadcastOptions {
@@ -271,6 +311,11 @@ package android.app {
 
   public static final class InstantAppResolverService.InstantAppResolutionCallback {
     method public void onInstantAppResolveInfo(java.util.List<android.content.pm.InstantAppResolveInfo>);
+  }
+
+  public class KeyguardManager {
+    method public android.content.Intent createConfirmFactoryResetCredentialIntent(java.lang.CharSequence, java.lang.CharSequence, java.lang.CharSequence);
+    method public void requestDismissKeyguard(android.app.Activity, java.lang.CharSequence, android.app.KeyguardManager.KeyguardDismissCallback);
   }
 
   public class Notification implements android.os.Parcelable {
@@ -642,12 +687,20 @@ package android.bluetooth {
     method public boolean isEncrypted();
     method public boolean removeBond();
     method public boolean setPhonebookAccessPermission(int);
+    field public static final int ACCESS_ALLOWED = 1; // 0x1
+    field public static final int ACCESS_REJECTED = 2; // 0x2
+    field public static final int ACCESS_UNKNOWN = 0; // 0x0
   }
 
   public final class BluetoothHeadset implements android.bluetooth.BluetoothProfile {
     method public boolean connect(android.bluetooth.BluetoothDevice);
     method public boolean disconnect(android.bluetooth.BluetoothDevice);
     method public boolean setPriority(android.bluetooth.BluetoothDevice, int);
+  }
+
+  public abstract interface BluetoothProfile {
+    field public static final int PRIORITY_OFF = 0; // 0x0
+    field public static final int PRIORITY_ON = 100; // 0x64
   }
 
 }
@@ -854,6 +907,7 @@ package android.content.pm {
     method public abstract java.util.List<android.content.IntentFilter> getAllIntentFilters(java.lang.String);
     method public android.content.pm.dex.ArtManager getArtManager();
     method public abstract java.lang.String getDefaultBrowserPackageNameAsUser(int);
+    method public java.lang.CharSequence getHarmfulAppWarning(java.lang.String);
     method public abstract java.util.List<android.content.pm.PackageInfo> getInstalledPackagesAsUser(int, int);
     method public abstract android.graphics.drawable.Drawable getInstantAppIcon(java.lang.String);
     method public abstract android.content.ComponentName getInstantAppInstallerComponent();
@@ -870,6 +924,7 @@ package android.content.pm {
     method public abstract void removeOnPermissionsChangeListener(android.content.pm.PackageManager.OnPermissionsChangedListener);
     method public abstract void revokeRuntimePermission(java.lang.String, java.lang.String, android.os.UserHandle);
     method public abstract boolean setDefaultBrowserPackageNameAsUser(java.lang.String, int);
+    method public void setHarmfulAppWarning(java.lang.String, java.lang.CharSequence);
     method public abstract void setUpdateAvailable(java.lang.String, boolean);
     method public abstract boolean updateIntentVerificationStatusAsUser(java.lang.String, int, int);
     method public abstract void updatePermissionFlags(java.lang.String, java.lang.String, int, int, android.os.UserHandle);
@@ -1340,9 +1395,30 @@ package android.hardware.hdmi {
 
 package android.hardware.location {
 
+  public class ContextHubClient implements java.io.Closeable {
+    method public void close();
+    method public android.hardware.location.ContextHubInfo getAttachedHub();
+    method public int sendMessageToNanoApp(android.hardware.location.NanoAppMessage);
+  }
+
+  public class ContextHubClientCallback {
+    ctor public ContextHubClientCallback();
+    method public void onHubReset(android.hardware.location.ContextHubClient);
+    method public void onMessageFromNanoApp(android.hardware.location.ContextHubClient, android.hardware.location.NanoAppMessage);
+    method public void onNanoAppAborted(android.hardware.location.ContextHubClient, long, int);
+    method public void onNanoAppDisabled(android.hardware.location.ContextHubClient, long);
+    method public void onNanoAppEnabled(android.hardware.location.ContextHubClient, long);
+    method public void onNanoAppLoaded(android.hardware.location.ContextHubClient, long);
+    method public void onNanoAppUnloaded(android.hardware.location.ContextHubClient, long);
+  }
+
   public class ContextHubInfo implements android.os.Parcelable {
     ctor public ContextHubInfo();
     method public int describeContents();
+    method public byte getChreApiMajorVersion();
+    method public byte getChreApiMinorVersion();
+    method public short getChrePatchVersion();
+    method public long getChrePlatformId();
     method public int getId();
     method public int getMaxPacketLengthBytes();
     method public android.hardware.location.MemoryRegion[] getMemoryRegions();
@@ -1362,24 +1438,32 @@ package android.hardware.location {
   }
 
   public final class ContextHubManager {
-    method public int[] findNanoAppOnHub(int, android.hardware.location.NanoAppFilter);
-    method public int[] getContextHubHandles();
-    method public android.hardware.location.ContextHubInfo getContextHubInfo(int);
-    method public android.hardware.location.NanoAppInstanceInfo getNanoAppInstanceInfo(int);
-    method public int loadNanoApp(int, android.hardware.location.NanoApp);
-    method public int registerCallback(android.hardware.location.ContextHubManager.Callback);
-    method public int registerCallback(android.hardware.location.ContextHubManager.Callback, android.os.Handler);
-    method public int sendMessage(int, int, android.hardware.location.ContextHubMessage);
-    method public int unloadNanoApp(int);
-    method public int unregisterCallback(android.hardware.location.ContextHubManager.Callback);
+    method public android.hardware.location.ContextHubClient createClient(android.hardware.location.ContextHubInfo, android.hardware.location.ContextHubClientCallback, java.util.concurrent.Executor);
+    method public android.hardware.location.ContextHubClient createClient(android.hardware.location.ContextHubInfo, android.hardware.location.ContextHubClientCallback);
+    method public android.hardware.location.ContextHubTransaction<java.lang.Void> disableNanoApp(android.hardware.location.ContextHubInfo, long);
+    method public android.hardware.location.ContextHubTransaction<java.lang.Void> enableNanoApp(android.hardware.location.ContextHubInfo, long);
+    method public deprecated int[] findNanoAppOnHub(int, android.hardware.location.NanoAppFilter);
+    method public deprecated int[] getContextHubHandles();
+    method public deprecated android.hardware.location.ContextHubInfo getContextHubInfo(int);
+    method public java.util.List<android.hardware.location.ContextHubInfo> getContextHubs();
+    method public deprecated android.hardware.location.NanoAppInstanceInfo getNanoAppInstanceInfo(int);
+    method public deprecated int loadNanoApp(int, android.hardware.location.NanoApp);
+    method public android.hardware.location.ContextHubTransaction<java.lang.Void> loadNanoApp(android.hardware.location.ContextHubInfo, android.hardware.location.NanoAppBinary);
+    method public android.hardware.location.ContextHubTransaction<java.util.List<android.hardware.location.NanoAppState>> queryNanoApps(android.hardware.location.ContextHubInfo);
+    method public deprecated int registerCallback(android.hardware.location.ContextHubManager.Callback);
+    method public deprecated int registerCallback(android.hardware.location.ContextHubManager.Callback, android.os.Handler);
+    method public deprecated int sendMessage(int, int, android.hardware.location.ContextHubMessage);
+    method public deprecated int unloadNanoApp(int);
+    method public android.hardware.location.ContextHubTransaction<java.lang.Void> unloadNanoApp(android.hardware.location.ContextHubInfo, long);
+    method public deprecated int unregisterCallback(android.hardware.location.ContextHubManager.Callback);
   }
 
-  public static abstract class ContextHubManager.Callback {
+  public static abstract deprecated class ContextHubManager.Callback {
     ctor protected ContextHubManager.Callback();
     method public abstract void onMessageReceipt(int, int, android.hardware.location.ContextHubMessage);
   }
 
-  public class ContextHubMessage {
+  public deprecated class ContextHubMessage {
     ctor public ContextHubMessage(int, int, byte[]);
     method public int describeContents();
     method public byte[] getData();
@@ -1390,6 +1474,37 @@ package android.hardware.location {
     method public void setVersion(int);
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.hardware.location.ContextHubMessage> CREATOR;
+  }
+
+  public class ContextHubTransaction<T> {
+    method public int getType();
+    method public void setOnCompleteListener(android.hardware.location.ContextHubTransaction.OnCompleteListener<T>, java.util.concurrent.Executor);
+    method public void setOnCompleteListener(android.hardware.location.ContextHubTransaction.OnCompleteListener<T>);
+    method public static java.lang.String typeToString(int, boolean);
+    method public android.hardware.location.ContextHubTransaction.Response<T> waitForResponse(long, java.util.concurrent.TimeUnit) throws java.lang.InterruptedException, java.util.concurrent.TimeoutException;
+    field public static final int RESULT_FAILED_AT_HUB = 5; // 0x5
+    field public static final int RESULT_FAILED_BAD_PARAMS = 2; // 0x2
+    field public static final int RESULT_FAILED_BUSY = 4; // 0x4
+    field public static final int RESULT_FAILED_HAL_UNAVAILABLE = 8; // 0x8
+    field public static final int RESULT_FAILED_SERVICE_INTERNAL_FAILURE = 7; // 0x7
+    field public static final int RESULT_FAILED_TIMEOUT = 6; // 0x6
+    field public static final int RESULT_FAILED_UNINITIALIZED = 3; // 0x3
+    field public static final int RESULT_FAILED_UNKNOWN = 1; // 0x1
+    field public static final int RESULT_SUCCESS = 0; // 0x0
+    field public static final int TYPE_DISABLE_NANOAPP = 3; // 0x3
+    field public static final int TYPE_ENABLE_NANOAPP = 2; // 0x2
+    field public static final int TYPE_LOAD_NANOAPP = 0; // 0x0
+    field public static final int TYPE_QUERY_NANOAPPS = 4; // 0x4
+    field public static final int TYPE_UNLOAD_NANOAPP = 1; // 0x1
+  }
+
+  public static abstract interface ContextHubTransaction.OnCompleteListener<L> {
+    method public abstract void onComplete(android.hardware.location.ContextHubTransaction<L>, android.hardware.location.ContextHubTransaction.Response<L>);
+  }
+
+  public static class ContextHubTransaction.Response<R> {
+    method public R getContents();
+    method public int getResult();
   }
 
   public final class GeofenceHardware {
@@ -1479,7 +1594,7 @@ package android.hardware.location {
     field public static final android.os.Parcelable.Creator<android.hardware.location.MemoryRegion> CREATOR;
   }
 
-  public class NanoApp {
+  public deprecated class NanoApp {
     ctor public NanoApp();
     ctor public deprecated NanoApp(int, byte[]);
     ctor public NanoApp(long, byte[]);
@@ -1508,7 +1623,26 @@ package android.hardware.location {
     field public static final android.os.Parcelable.Creator<android.hardware.location.NanoApp> CREATOR;
   }
 
-  public class NanoAppFilter {
+  public final class NanoAppBinary implements android.os.Parcelable {
+    ctor public NanoAppBinary(byte[]);
+    method public int describeContents();
+    method public byte[] getBinary();
+    method public byte[] getBinaryNoHeader();
+    method public int getFlags();
+    method public int getHeaderVersion();
+    method public long getHwHubType();
+    method public long getNanoAppId();
+    method public int getNanoAppVersion();
+    method public byte getTargetChreApiMajorVersion();
+    method public byte getTargetChreApiMinorVersion();
+    method public boolean hasValidHeader();
+    method public boolean isEncrypted();
+    method public boolean isSigned();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.hardware.location.NanoAppBinary> CREATOR;
+  }
+
+  public deprecated class NanoAppFilter {
     ctor public NanoAppFilter(long, int, int, long);
     method public int describeContents();
     method public boolean testMatch(android.hardware.location.NanoAppInstanceInfo);
@@ -1523,7 +1657,7 @@ package android.hardware.location {
     field public static final int VENDOR_ANY = -1; // 0xffffffff
   }
 
-  public class NanoAppInstanceInfo {
+  public deprecated class NanoAppInstanceInfo {
     ctor public NanoAppInstanceInfo();
     method public int describeContents();
     method public long getAppId();
@@ -1539,6 +1673,28 @@ package android.hardware.location {
     method public java.lang.String getPublisher();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.hardware.location.NanoAppInstanceInfo> CREATOR;
+  }
+
+  public final class NanoAppMessage implements android.os.Parcelable {
+    method public static android.hardware.location.NanoAppMessage createMessageFromNanoApp(long, int, byte[], boolean);
+    method public static android.hardware.location.NanoAppMessage createMessageToNanoApp(long, int, byte[]);
+    method public int describeContents();
+    method public byte[] getMessageBody();
+    method public int getMessageType();
+    method public long getNanoAppId();
+    method public boolean isBroadcastMessage();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.hardware.location.NanoAppMessage> CREATOR;
+  }
+
+  public final class NanoAppState implements android.os.Parcelable {
+    ctor public NanoAppState(long, int, boolean);
+    method public int describeContents();
+    method public long getNanoAppId();
+    method public long getNanoAppVersion();
+    method public boolean isEnabled();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.hardware.location.NanoAppState> CREATOR;
   }
 
 }
@@ -1610,6 +1766,15 @@ package android.hardware.radio {
     field public static final int CLASS_AM_FM = 0; // 0x0
     field public static final int CLASS_DT = 2; // 0x2
     field public static final int CLASS_SAT = 1; // 0x1
+    field public static final int CONFIG_DAB_DAB_LINKING = 6; // 0x6
+    field public static final int CONFIG_DAB_DAB_SOFT_LINKING = 8; // 0x8
+    field public static final int CONFIG_DAB_FM_LINKING = 7; // 0x7
+    field public static final int CONFIG_DAB_FM_SOFT_LINKING = 9; // 0x9
+    field public static final int CONFIG_FORCE_ANALOG = 2; // 0x2
+    field public static final int CONFIG_FORCE_DIGITAL = 3; // 0x3
+    field public static final int CONFIG_FORCE_MONO = 1; // 0x1
+    field public static final int CONFIG_RDS_AF = 4; // 0x4
+    field public static final int CONFIG_RDS_REG = 5; // 0x5
     field public static final int REGION_ITU_1 = 0; // 0x0
     field public static final int REGION_ITU_2 = 1; // 0x1
     field public static final int REGION_JAPAN = 3; // 0x3
@@ -1789,15 +1954,20 @@ package android.hardware.radio {
     method public abstract void close();
     method public abstract int getConfiguration(android.hardware.radio.RadioManager.BandConfig[]);
     method public abstract boolean getMute();
+    method public java.util.Map<java.lang.String, java.lang.String> getParameters(java.util.List<java.lang.String>);
     method public abstract int getProgramInformation(android.hardware.radio.RadioManager.ProgramInfo[]);
     method public abstract java.util.List<android.hardware.radio.RadioManager.ProgramInfo> getProgramList(java.util.Map<java.lang.String, java.lang.String>);
     method public abstract boolean hasControl();
-    method public abstract boolean isAnalogForced();
+    method public abstract deprecated boolean isAnalogForced();
     method public abstract boolean isAntennaConnected();
+    method public boolean isConfigFlagSet(int);
+    method public boolean isConfigFlagSupported(int);
     method public abstract int scan(int, boolean);
-    method public abstract void setAnalogForced(boolean);
+    method public abstract deprecated void setAnalogForced(boolean);
+    method public void setConfigFlag(int, boolean);
     method public abstract int setConfiguration(android.hardware.radio.RadioManager.BandConfig);
     method public abstract int setMute(boolean);
+    method public java.util.Map<java.lang.String, java.lang.String> setParameters(java.util.Map<java.lang.String, java.lang.String>);
     method public abstract boolean startBackgroundScan();
     method public abstract int step(int, boolean);
     method public abstract deprecated int tune(int, int);
@@ -1823,6 +1993,7 @@ package android.hardware.radio {
     method public void onEmergencyAnnouncement(boolean);
     method public void onError(int);
     method public deprecated void onMetadataChanged(android.hardware.radio.RadioMetadata);
+    method public void onParametersUpdated(java.util.Map<java.lang.String, java.lang.String>);
     method public void onProgramInfoChanged(android.hardware.radio.RadioManager.ProgramInfo);
     method public void onProgramListChanged();
     method public void onTrafficAnnouncement(boolean);
@@ -3115,6 +3286,52 @@ package android.net.wifi.aware {
 
 }
 
+package android.net.wifi.rtt {
+
+  public static final class RangingRequest.Builder {
+    method public android.net.wifi.rtt.RangingRequest.Builder addResponder(android.net.wifi.rtt.ResponderConfig);
+  }
+
+  public final class ResponderConfig implements android.os.Parcelable {
+    ctor public ResponderConfig(android.net.MacAddress, int, boolean, int, int, int, int, int);
+    ctor public ResponderConfig(android.net.wifi.aware.PeerHandle, int, boolean, int, int, int, int, int);
+    method public int describeContents();
+    method public static android.net.wifi.rtt.ResponderConfig fromScanResult(android.net.wifi.ScanResult);
+    method public static android.net.wifi.rtt.ResponderConfig fromWifiAwarePeerHandleWithDefaults(android.net.wifi.aware.PeerHandle);
+    method public static android.net.wifi.rtt.ResponderConfig fromWifiAwarePeerMacAddressWithDefaults(android.net.MacAddress);
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final int CHANNEL_WIDTH_160MHZ = 3; // 0x3
+    field public static final int CHANNEL_WIDTH_20MHZ = 0; // 0x0
+    field public static final int CHANNEL_WIDTH_40MHZ = 1; // 0x1
+    field public static final int CHANNEL_WIDTH_80MHZ = 2; // 0x2
+    field public static final int CHANNEL_WIDTH_80MHZ_PLUS_MHZ = 4; // 0x4
+    field public static final android.os.Parcelable.Creator<android.net.wifi.rtt.ResponderConfig> CREATOR;
+    field public static final int PREAMBLE_HT = 1; // 0x1
+    field public static final int PREAMBLE_LEGACY = 0; // 0x0
+    field public static final int PREAMBLE_VHT = 2; // 0x2
+    field public static final int RESPONDER_AP = 0; // 0x0
+    field public static final int RESPONDER_AWARE = 4; // 0x4
+    field public static final int RESPONDER_P2P_CLIENT = 3; // 0x3
+    field public static final int RESPONDER_P2P_GO = 2; // 0x2
+    field public static final int RESPONDER_STA = 1; // 0x1
+    field public final int centerFreq0;
+    field public final int centerFreq1;
+    field public final int channelWidth;
+    field public final int frequency;
+    field public final android.net.MacAddress macAddress;
+    field public final android.net.wifi.aware.PeerHandle peerHandle;
+    field public final int preamble;
+    field public final int responderType;
+    field public final boolean supports80211mc;
+  }
+
+  public class WifiRttManager {
+    method public void cancelRanging(android.os.WorkSource);
+    method public void startRanging(android.os.WorkSource, android.net.wifi.rtt.RangingRequest, android.net.wifi.rtt.RangingResultCallback, android.os.Handler);
+  }
+
+}
+
 package android.nfc {
 
   public final class NfcAdapter {
@@ -3787,6 +4004,7 @@ package android.service.trust {
     method public final void removeEscrowToken(long, android.os.UserHandle);
     method public final void revokeTrust();
     method public final void setManagingTrust(boolean);
+    method public final void showKeyguardErrorMessage(java.lang.CharSequence);
     method public final void unlockUserWithToken(long, byte[], android.os.UserHandle);
     field public static final int FLAG_GRANT_TRUST_DISMISS_KEYGUARD = 2; // 0x2
     field public static final int FLAG_GRANT_TRUST_INITIATED_BY_USER = 1; // 0x1
@@ -4070,6 +4288,8 @@ package android.telephony {
   public class SubscriptionManager {
     method public java.util.List<android.telephony.SubscriptionPlan> getSubscriptionPlans(int);
     method public void setSubscriptionPlans(int, java.util.List<android.telephony.SubscriptionPlan>);
+    field public static final java.lang.String ACTION_MANAGE_SUBSCRIPTION_PLANS = "android.telephony.action.MANAGE_SUBSCRIPTION_PLANS";
+    field public static final java.lang.String ACTION_REFRESH_SUBSCRIPTION_PLANS = "android.telephony.action.REFRESH_SUBSCRIPTION_PLANS";
   }
 
   public final class SubscriptionPlan implements android.os.Parcelable {
@@ -4175,6 +4395,8 @@ package android.telephony {
     method public int[] supplyPukReportResult(java.lang.String, java.lang.String);
     method public void toggleRadioOnOff();
     method public void updateServiceLocation();
+    method public void setSimPowerState(int);
+    method public void setSimPowerStateForSlot(int, int);
     field public static final int CARRIER_PRIVILEGE_STATUS_ERROR_LOADING_RULES = -2; // 0xfffffffe
     field public static final int CARRIER_PRIVILEGE_STATUS_HAS_ACCESS = 1; // 0x1
     field public static final int CARRIER_PRIVILEGE_STATUS_NO_ACCESS = 0; // 0x0
@@ -4198,11 +4420,11 @@ package android.telephony {
 package android.telephony.data {
 
   public final class DataCallResponse implements android.os.Parcelable {
-    ctor public DataCallResponse(int, int, int, int, java.lang.String, java.lang.String, java.util.List<android.telephony.data.InterfaceAddress>, java.util.List<java.net.InetAddress>, java.util.List<java.net.InetAddress>, java.util.List<java.lang.String>, int);
+    ctor public DataCallResponse(int, int, int, int, java.lang.String, java.lang.String, java.util.List<android.net.LinkAddress>, java.util.List<java.net.InetAddress>, java.util.List<java.net.InetAddress>, java.util.List<java.lang.String>, int);
     ctor public DataCallResponse(android.os.Parcel);
     method public int describeContents();
     method public int getActive();
-    method public java.util.List<android.telephony.data.InterfaceAddress> getAddresses();
+    method public java.util.List<android.net.LinkAddress> getAddresses();
     method public int getCallId();
     method public java.util.List<java.net.InetAddress> getDnses();
     method public java.util.List<java.net.InetAddress> getGateways();
@@ -4243,17 +4465,6 @@ package android.telephony.data {
     field public static final int TYPE_3GPP = 1; // 0x1
     field public static final int TYPE_3GPP2 = 2; // 0x2
     field public static final int TYPE_COMMON = 0; // 0x0
-  }
-
-  public final class InterfaceAddress implements android.os.Parcelable {
-    ctor public InterfaceAddress(java.net.InetAddress, int);
-    ctor public InterfaceAddress(java.lang.String, int) throws java.net.UnknownHostException;
-    ctor public InterfaceAddress(android.os.Parcel);
-    method public int describeContents();
-    method public java.net.InetAddress getAddress();
-    method public int getNetworkPrefixLength();
-    method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.telephony.data.InterfaceAddress> CREATOR;
   }
 
 }
@@ -4368,10 +4579,10 @@ package android.util {
   }
 
   public final class StatsManager {
-    method public boolean addConfiguration(java.lang.String, byte[], java.lang.String, java.lang.String);
-    method public byte[] getData(java.lang.String);
+    method public boolean addConfiguration(long, byte[], java.lang.String, java.lang.String);
+    method public byte[] getData(long);
     method public byte[] getMetadata();
-    method public boolean removeConfiguration(java.lang.String);
+    method public boolean removeConfiguration(long);
   }
 
 }

@@ -57,6 +57,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.WorkSource;
+import android.os.WorkSource.WorkChain;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.service.dreams.DreamManagerInternal;
@@ -1976,6 +1977,16 @@ public final class PowerManagerService extends SystemService
                     return true;
                 }
             }
+
+            final ArrayList<WorkChain> workChains = wakeLock.mWorkSource.getWorkChains();
+            if (workChains != null) {
+                for (int k = 0; k < workChains.size(); k++) {
+                    final int uid = workChains.get(k).getAttributionUid();
+                    if (userId == UserHandle.getUserId(uid)) {
+                        return true;
+                    }
+                }
+            }
         }
         return userId == UserHandle.getUserId(wakeLock.mOwnerUid);
     }
@@ -2441,6 +2452,7 @@ public final class PowerManagerService extends SystemService
             float screenAutoBrightnessAdjustment = 0.0f;
             boolean autoBrightness = (mScreenBrightnessModeSetting ==
                     Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC);
+            boolean brightnessIsTemporary = false;
             if (!mBootCompleted) {
                 // Keep the brightness steady during boot. This requires the
                 // bootloader brightness and the default brightness to be identical.
@@ -2455,6 +2467,7 @@ public final class PowerManagerService extends SystemService
                 brightnessSetByUser = false;
             } else if (isValidBrightness(mTemporaryScreenBrightnessSettingOverride)) {
                 screenBrightness = mTemporaryScreenBrightnessSettingOverride;
+                brightnessIsTemporary = true;
             } else if (isValidBrightness(mScreenBrightnessSetting)) {
                 screenBrightness = mScreenBrightnessSetting;
             }
@@ -2464,6 +2477,7 @@ public final class PowerManagerService extends SystemService
                         mTemporaryScreenAutoBrightnessAdjustmentSettingOverride)) {
                     screenAutoBrightnessAdjustment =
                             mTemporaryScreenAutoBrightnessAdjustmentSettingOverride;
+                    brightnessIsTemporary = true;
                 } else if (isValidAutoBrightnessAdjustment(
                         mScreenAutoBrightnessAdjustmentSetting)) {
                     screenAutoBrightnessAdjustment = mScreenAutoBrightnessAdjustmentSetting;
@@ -2479,6 +2493,7 @@ public final class PowerManagerService extends SystemService
             mDisplayPowerRequest.screenAutoBrightnessAdjustment =
                     screenAutoBrightnessAdjustment;
             mDisplayPowerRequest.brightnessSetByUser = brightnessSetByUser;
+            mDisplayPowerRequest.brightnessIsTemporary = brightnessIsTemporary;
             mDisplayPowerRequest.useAutoBrightness = autoBrightness;
             mDisplayPowerRequest.useProximitySensor = shouldUseProximitySensorLocked();
             mDisplayPowerRequest.boostScreenBrightness = shouldBoostScreenBrightness();
@@ -3125,7 +3140,8 @@ public final class PowerManagerService extends SystemService
                     if (Arrays.binarySearch(mDeviceIdleWhitelist, appid) < 0 &&
                             Arrays.binarySearch(mDeviceIdleTempWhitelist, appid) < 0 &&
                             state.mProcState != ActivityManager.PROCESS_STATE_NONEXISTENT &&
-                            state.mProcState > ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE) {
+                            state.mProcState >
+                                    ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE) {
                         disabled = true;
                     }
                 }

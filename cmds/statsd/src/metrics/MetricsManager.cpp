@@ -49,11 +49,11 @@ MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
                                const long timeBaseSec, sp<UidMap> uidMap)
     : mConfigKey(key), mUidMap(uidMap) {
     mConfigValid =
-            initStatsdConfig(key, config, timeBaseSec, mTagIds, mAllAtomMatchers, mAllConditionTrackers,
+            initStatsdConfig(key, config, *uidMap, timeBaseSec, mTagIds, mAllAtomMatchers, mAllConditionTrackers,
                              mAllMetricProducers, mAllAnomalyTrackers, mConditionToMetricMap,
-                             mTrackerToMetricMap, mTrackerToConditionMap);
+                             mTrackerToMetricMap, mTrackerToConditionMap, mNoReportMetricIds);
 
-    if (!config.has_log_source()) {
+    if (config.allowed_log_source_size() == 0) {
         // TODO(b/70794411): uncomment the following line and remove the hard coded log source
         // after all configs have the log source added.
         // mConfigValid = false;
@@ -63,10 +63,14 @@ MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
         mAllowedUid.push_back(0);
         mAllowedLogSources.insert(mAllowedUid.begin(), mAllowedUid.end());
     } else {
-        mAllowedUid.insert(mAllowedUid.begin(), config.log_source().uid().begin(),
-                           config.log_source().uid().end());
-        mAllowedPkg.insert(mAllowedPkg.begin(), config.log_source().package().begin(),
-                           config.log_source().package().end());
+        for (const auto& source : config.allowed_log_source()) {
+            auto it = UidMap::sAidToUidMapping.find(source);
+            if (it != UidMap::sAidToUidMapping.end()) {
+                mAllowedUid.push_back(it->second);
+            } else {
+                mAllowedPkg.push_back(source);
+            }
+        }
 
         if (mAllowedUid.size() + mAllowedPkg.size() > StatsdStats::kMaxLogSourceCount) {
             ALOGE("Too many log sources. This is likely to be an error in the config.");
@@ -142,15 +146,25 @@ void MetricsManager::onUidMapReceived() {
     initLogSourceWhiteList();
 }
 
+void MetricsManager::onDumpReport(const uint64_t& dumpTimeStampNs, ConfigMetricsReport* report) {
+    for (const auto& producer : mAllMetricProducers) {
+        if (mNoReportMetricIds.find(producer->getMetricId()) == mNoReportMetricIds.end()) {
+            producer->onDumpReport(dumpTimeStampNs, report->add_metrics());
+        }
+    }
+}
+
 void MetricsManager::onDumpReport(ProtoOutputStream* protoOutput) {
     VLOG("=========================Metric Reports Start==========================");
     uint64_t dumpTimeStampNs = time(nullptr) * NS_PER_SEC;
     // one StatsLogReport per MetricProduer
-    for (auto& metric : mAllMetricProducers) {
-        long long token =
-                protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_METRICS);
-        metric->onDumpReport(dumpTimeStampNs, protoOutput);
-        protoOutput->end(token);
+    for (const auto& producer : mAllMetricProducers) {
+        if (mNoReportMetricIds.find(producer->getMetricId()) == mNoReportMetricIds.end()) {
+            long long token =
+                    protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_METRICS);
+            producer->onDumpReport(dumpTimeStampNs, protoOutput);
+            protoOutput->end(token);
+        }
     }
     VLOG("=========================Metric Reports End==========================");
 }
@@ -165,6 +179,22 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
         std::lock_guard<std::mutex> lock(mAllowedLogSourcesMutex);
         if (mAllowedLogSources.find(event.GetUid()) == mAllowedLogSources.end()) {
             VLOG("log source %d not on the whitelist", event.GetUid());
+            return;
+        }
+    } else { // Check that app hook fields are valid.
+        // TODO: Find a way to make these checks easier to maintain if the app hooks get changed.
+
+        // Label is 2nd from last field and must be from [0, 15].
+        status_t err = NO_ERROR;
+        long label = event.GetLong(event.size()-1, &err);
+        if (err != NO_ERROR || label < 0 || label > 15) {
+            VLOG("App hook does not have valid label %ld", label);
+            return;
+        }
+        // The state must be from 0,3. This part of code must be manually updated.
+        long apphookState = event.GetLong(event.size(), &err);
+        if (err != NO_ERROR || apphookState < 0 || apphookState > 3) {
+            VLOG("App hook does not have valid state %ld", apphookState);
             return;
         }
     }
@@ -234,7 +264,7 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
     for (size_t i = 0; i < mAllAtomMatchers.size(); i++) {
         if (matcherCache[i] == MatchingState::kMatched) {
             StatsdStats::getInstance().noteMatcherMatched(mConfigKey,
-                                                          mAllAtomMatchers[i]->getName());
+                                                          mAllAtomMatchers[i]->getId());
             auto pair = mTrackerToMetricMap.find(i);
             if (pair != mTrackerToMetricMap.end()) {
                 auto& metricList = pair->second;

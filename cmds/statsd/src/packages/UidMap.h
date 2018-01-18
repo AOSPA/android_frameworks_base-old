@@ -51,7 +51,7 @@ class UidMap : public virtual android::RefBase {
 public:
     UidMap();
     ~UidMap();
-
+    static const std::map<std::string, uint32_t> sAidToUidMapping;
     /*
      * All three inputs must be the same size, and the jth element in each array refers to the same
      * tuple, ie. uid[j] corresponds to packageName[j] with versionCode[j].
@@ -90,8 +90,8 @@ public:
     void assignIsolatedUid(int isolatedUid, int parentUid);
     void removeIsolatedUid(int isolatedUid, int parentUid);
 
-    // Returns the parent uid if it exists. Otherwise, returns the same uid that was passed-in.
-    int getParentUidOrSelf(int uid);
+    // Returns the host uid if it exists. Otherwise, returns the same uid that was passed-in.
+    int getHostUidOrSelf(int uid) const;
 
     // Gets the output. If every config key has received the output, then the output is cleared.
     UidMapping getOutput(const ConfigKey& key);
@@ -168,4 +168,3 @@ private:
 }  // namespace statsd
 }  // namespace os
 }  // namespace android
-

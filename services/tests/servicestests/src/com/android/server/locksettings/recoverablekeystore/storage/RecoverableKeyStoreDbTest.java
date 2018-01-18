@@ -29,7 +29,7 @@ import org.junit.runner.RunWith;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.security.recoverablekeystore.RecoverableKeyStoreLoader;
+import android.security.keystore.RecoveryManager;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -40,6 +40,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.KeyPairGenerator;
 import java.security.PublicKey;
 import java.security.spec.ECGenParameterSpec;
+import java.util.List;
 import java.util.Map;
 
 @SmallTest
@@ -49,6 +50,12 @@ public class RecoverableKeyStoreDbTest {
 
     private RecoverableKeyStoreDb mRecoverableKeyStoreDb;
     private File mDatabaseFile;
+
+    private static final byte[] SERVER_PARAMS =
+            new byte[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2};
+
+    private static final byte[] SERVER_PARAMS2 =
+            new byte[]{1, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4};
 
     @Before
     public void setUp() {
@@ -113,6 +120,22 @@ public class RecoverableKeyStoreDbTest {
     }
 
     @Test
+    public void removeKey_removesAKey() {
+        int userId = 6;
+        int uid = 60001;
+        String alias = "rupertbates";
+        WrappedKey key = new WrappedKey(
+                getUtf8Bytes("nonce1"),
+                getUtf8Bytes("key1"),
+                /*platformKeyGenerationId=*/ 1);
+        mRecoverableKeyStoreDb.insertKey(userId, uid, alias, key);
+
+        assertTrue(mRecoverableKeyStoreDb.removeKey(uid, alias));
+
+        assertNull(mRecoverableKeyStoreDb.getKey(uid, alias));
+    }
+
+    @Test
     public void getKey_returnsNullIfNoKey() {
         WrappedKey key = mRecoverableKeyStoreDb.getKey(
                 /*userId=*/ 1, /*alias=*/ "hello");
@@ -151,7 +174,7 @@ public class RecoverableKeyStoreDbTest {
         WrappedKey wrappedKey = new WrappedKey(nonce, keyMaterial, generationId);
         mRecoverableKeyStoreDb.insertKey(userId, uid, alias, wrappedKey);
 
-        Map<String, WrappedKey> keys = mRecoverableKeyStoreDb.getAllKeys(userId, generationId);
+        Map<String, WrappedKey> keys = mRecoverableKeyStoreDb.getAllKeys(userId, uid, generationId);
 
         assertEquals(1, keys.size());
         assertTrue(keys.containsKey(alias));
@@ -173,7 +196,7 @@ public class RecoverableKeyStoreDbTest {
                 userId, uid, /*alias=*/ "test", wrappedKey);
 
         Map<String, WrappedKey> keys = mRecoverableKeyStoreDb.getAllKeys(
-                userId, /*generationId=*/ 7);
+                userId, uid, /*generationId=*/ 7);
 
         assertTrue(keys.isEmpty());
     }
@@ -188,7 +211,7 @@ public class RecoverableKeyStoreDbTest {
                 /*userId=*/ 1, uid, /*alias=*/ "test", wrappedKey);
 
         Map<String, WrappedKey> keys = mRecoverableKeyStoreDb.getAllKeys(
-                /*userId=*/ 2, generationId);
+                /*userId=*/ 2, uid, generationId);
 
         assertTrue(keys.isEmpty());
     }
@@ -260,8 +283,7 @@ public class RecoverableKeyStoreDbTest {
 
         Map<String, Integer> statuses = mRecoverableKeyStoreDb.getStatusForAllKeys(uid);
         assertThat(statuses).hasSize(3);
-        assertThat(statuses).containsEntry(alias,
-                RecoverableKeyStoreLoader.RECOVERY_STATUS_SYNC_IN_PROGRESS);
+        assertThat(statuses).containsEntry(alias, RecoveryManager.RECOVERY_STATUS_SYNC_IN_PROGRESS);
         assertThat(statuses).containsEntry(alias2, status);
         assertThat(statuses).containsEntry(alias3, status);
 
@@ -312,8 +334,7 @@ public class RecoverableKeyStoreDbTest {
         int uid = 10009;
         assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isNull();
 
-        long serverParams = 123456L;
-        mRecoverableKeyStoreDb.setServerParameters(userId, uid, serverParams);
+        mRecoverableKeyStoreDb.setServerParams(userId, uid, SERVER_PARAMS);
         assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isNull();
     }
 
@@ -328,18 +349,33 @@ public class RecoverableKeyStoreDbTest {
     }
 
     @Test
-
-    public void getRecoveryAgentUid_returnsUidIfSet() throws Exception {
+    public void getRecoveryAgents_returnsUidIfSet() throws Exception {
         int userId = 12;
         int uid = 190992;
         mRecoverableKeyStoreDb.setRecoveryServicePublicKey(userId, uid, genRandomPublicKey());
 
-        assertThat(mRecoverableKeyStoreDb.getRecoveryAgentUid(userId)).isEqualTo(uid);
+        assertThat(mRecoverableKeyStoreDb.getRecoveryAgents(userId)).contains(uid);
     }
 
     @Test
-    public void getRecoveryAgentUid_returnsMinusOneForNonexistentAgent() throws Exception {
-        assertThat(mRecoverableKeyStoreDb.getRecoveryAgentUid(12)).isEqualTo(-1);
+    public void getRecoveryAgents_returnsEmptyListIfThereAreNoAgents() throws Exception {
+        int userId = 12;
+        assertThat(mRecoverableKeyStoreDb.getRecoveryAgents(userId)).isEmpty();
+        assertThat(mRecoverableKeyStoreDb.getRecoveryAgents(userId)).isNotNull();
+    }
+
+    @Test
+    public void getRecoveryAgents_withTwoAgents() throws Exception {
+        int userId = 12;
+        int uid1 = 190992;
+        int uid2 = 190993;
+        mRecoverableKeyStoreDb.setRecoveryServicePublicKey(userId, uid1, genRandomPublicKey());
+        mRecoverableKeyStoreDb.setRecoveryServicePublicKey(userId, uid2, genRandomPublicKey());
+        List<Integer> agents = mRecoverableKeyStoreDb.getRecoveryAgents(userId);
+
+        assertThat(agents).hasSize(2);
+        assertThat(agents).contains(uid1);
+        assertThat(agents).contains(uid2);
     }
 
     public void setRecoverySecretTypes_emptyDefaultValue() throws Exception {
@@ -406,66 +442,119 @@ public class RecoverableKeyStoreDbTest {
 
         PublicKey pubkey1 = genRandomPublicKey();
         int[] types1 = new int[]{1};
-        long serverParams1 = 111L;
 
         PublicKey pubkey2 = genRandomPublicKey();
         int[] types2 = new int[]{2};
-        long serverParams2 = 222L;
 
         mRecoverableKeyStoreDb.setRecoveryServicePublicKey(userId, uid, pubkey1);
         mRecoverableKeyStoreDb.setRecoverySecretTypes(userId, uid, types1);
-        mRecoverableKeyStoreDb.setServerParameters(userId, uid, serverParams1);
+        mRecoverableKeyStoreDb.setServerParams(userId, uid, SERVER_PARAMS);
 
         assertThat(mRecoverableKeyStoreDb.getRecoverySecretTypes(userId, uid)).isEqualTo(
                 types1);
-        assertThat(mRecoverableKeyStoreDb.getServerParameters(userId, uid)).isEqualTo(
-                serverParams1);
+        assertThat(mRecoverableKeyStoreDb.getServerParams(userId, uid)).isEqualTo(
+                SERVER_PARAMS);
         assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isEqualTo(
                 pubkey1);
 
         // Check that the methods don't interfere with each other.
         mRecoverableKeyStoreDb.setRecoveryServicePublicKey(userId, uid, pubkey2);
         mRecoverableKeyStoreDb.setRecoverySecretTypes(userId, uid, types2);
-        mRecoverableKeyStoreDb.setServerParameters(userId, uid, serverParams2);
+        mRecoverableKeyStoreDb.setServerParams(userId, uid, SERVER_PARAMS2);
 
         assertThat(mRecoverableKeyStoreDb.getRecoverySecretTypes(userId, uid)).isEqualTo(
                 types2);
-        assertThat(mRecoverableKeyStoreDb.getServerParameters(userId, uid)).isEqualTo(
-                serverParams2);
+        assertThat(mRecoverableKeyStoreDb.getServerParams(userId, uid)).isEqualTo(
+                SERVER_PARAMS2);
         assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isEqualTo(
                 pubkey2);
     }
 
     @Test
-    public void setServerParameters_replaceOldValue() throws Exception {
-        int userId = 12;
-        int uid = 10009;
-        long serverParams1 = 111L;
-        long serverParams2 = 222L;
-        mRecoverableKeyStoreDb.setServerParameters(userId, uid, serverParams1);
-        mRecoverableKeyStoreDb.setServerParameters(userId, uid, serverParams2);
-        assertThat(mRecoverableKeyStoreDb.getServerParameters(userId, uid)).isEqualTo(
-                serverParams2);
+    public void getRecoveryServicePublicKey_returnsFirstKey() throws Exception {
+        int userId = 68;
+        int uid = 12904;
+        PublicKey publicKey = genRandomPublicKey();
+
+        mRecoverableKeyStoreDb.setRecoveryServicePublicKey(userId, uid, publicKey);
+
+        assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId)).isEqualTo(publicKey);
     }
 
     @Test
-    public void getServerParameters_returnsNullIfNoValue() throws Exception {
+    public void setServerParams_replaceOldValue() throws Exception {
         int userId = 12;
         int uid = 10009;
-        assertThat(mRecoverableKeyStoreDb.getServerParameters(userId, uid)).isNull();
+
+        mRecoverableKeyStoreDb.setServerParams(userId, uid, SERVER_PARAMS);
+        mRecoverableKeyStoreDb.setServerParams(userId, uid, SERVER_PARAMS2);
+        assertThat(mRecoverableKeyStoreDb.getServerParams(userId, uid)).isEqualTo(
+                SERVER_PARAMS2);
+    }
+
+    @Test
+    public void getServerParams_returnsNullIfNoValue() throws Exception {
+        int userId = 12;
+        int uid = 10009;
+        assertThat(mRecoverableKeyStoreDb.getServerParams(userId, uid)).isNull();
 
         PublicKey pubkey = genRandomPublicKey();
         mRecoverableKeyStoreDb.setRecoveryServicePublicKey(userId, uid, pubkey);
-        assertThat(mRecoverableKeyStoreDb.getServerParameters(userId, uid)).isNull();
+        assertThat(mRecoverableKeyStoreDb.getServerParams(userId, uid)).isNull();
     }
 
     @Test
-    public void getServerParameters_returnsInsertedValue() throws Exception {
+    public void getServerParams_returnsInsertedValue() throws Exception {
         int userId = 12;
         int uid = 10009;
-        long serverParams = 123456L;
-        mRecoverableKeyStoreDb.setServerParameters(userId, uid, serverParams);
-        assertThat(mRecoverableKeyStoreDb.getServerParameters(userId, uid)).isEqualTo(serverParams);
+        mRecoverableKeyStoreDb.setServerParams(userId, uid, SERVER_PARAMS);
+        assertThat(mRecoverableKeyStoreDb.getServerParams(userId, uid)).isEqualTo(SERVER_PARAMS);
+    }
+
+    @Test
+    public void setCounterId_defaultValueAndTwoUpdates() throws Exception {
+        int userId = 12;
+        int uid = 10009;
+        long value1 = 111L;
+        long value2 = 222L;
+        assertThat(mRecoverableKeyStoreDb.getCounterId(userId, uid)).isNull();
+
+        mRecoverableKeyStoreDb.setCounterId(userId, uid, value1);
+        assertThat(mRecoverableKeyStoreDb.getCounterId(userId, uid)).isEqualTo(
+                value1);
+
+        mRecoverableKeyStoreDb.setCounterId(userId, uid, value2);
+        assertThat(mRecoverableKeyStoreDb.getCounterId(userId, uid)).isEqualTo(
+                value2);
+    }
+
+    @Test
+    public void setSnapshotVersion_defaultValueAndTwoUpdates() throws Exception {
+        int userId = 12;
+        int uid = 10009;
+        long value1 = 111L;
+        long value2 = 222L;
+        assertThat(mRecoverableKeyStoreDb.getSnapshotVersion(userId, uid)).isNull();
+        mRecoverableKeyStoreDb.setSnapshotVersion(userId, uid, value1);
+        assertThat(mRecoverableKeyStoreDb.getSnapshotVersion(userId, uid)).isEqualTo(
+                value1);
+        mRecoverableKeyStoreDb.setSnapshotVersion(userId, uid, value2);
+        assertThat(mRecoverableKeyStoreDb.getSnapshotVersion(userId, uid)).isEqualTo(
+                value2);
+    }
+
+    @Test
+    public void setShouldCreateSnapshot_defaultValueAndTwoUpdates() throws Exception {
+        int userId = 12;
+        int uid = 10009;
+        boolean value1 = true;
+        boolean value2 = false;
+        assertThat(mRecoverableKeyStoreDb.getShouldCreateSnapshot(userId, uid)).isEqualTo(false);
+        mRecoverableKeyStoreDb.setShouldCreateSnapshot(userId, uid, value1);
+        assertThat(mRecoverableKeyStoreDb.getShouldCreateSnapshot(userId, uid)).isEqualTo(value1);
+        mRecoverableKeyStoreDb.setShouldCreateSnapshot(userId, uid, value2);
+        assertThat(mRecoverableKeyStoreDb.getShouldCreateSnapshot(userId, uid)).isEqualTo(
+                value2);
     }
 
     @Test
@@ -502,22 +591,21 @@ public class RecoverableKeyStoreDbTest {
         int uid = 10009;
         PublicKey pubkey1 = genRandomPublicKey();
         PublicKey pubkey2 = genRandomPublicKey();
-        long serverParams = 123456L;
 
         mRecoverableKeyStoreDb.setRecoveryServicePublicKey(userId, uid, pubkey1);
         assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isEqualTo(
                 pubkey1);
-        assertThat(mRecoverableKeyStoreDb.getServerParameters(userId, uid)).isNull();
+        assertThat(mRecoverableKeyStoreDb.getServerParams(userId, uid)).isNull();
 
-        mRecoverableKeyStoreDb.setServerParameters(userId, uid, serverParams);
+        mRecoverableKeyStoreDb.setServerParams(userId, uid, SERVER_PARAMS);
         assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isEqualTo(
                 pubkey1);
-        assertThat(mRecoverableKeyStoreDb.getServerParameters(userId, uid)).isEqualTo(serverParams);
+        assertThat(mRecoverableKeyStoreDb.getServerParams(userId, uid)).isEqualTo(SERVER_PARAMS);
 
         mRecoverableKeyStoreDb.setRecoveryServicePublicKey(userId, uid, pubkey2);
         assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isEqualTo(
                 pubkey2);
-        assertThat(mRecoverableKeyStoreDb.getServerParameters(userId, uid)).isEqualTo(serverParams);
+        assertThat(mRecoverableKeyStoreDb.getServerParams(userId, uid)).isEqualTo(SERVER_PARAMS);
     }
 
     private static byte[] getUtf8Bytes(String s) {

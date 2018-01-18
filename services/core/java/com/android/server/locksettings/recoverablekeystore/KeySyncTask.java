@@ -16,17 +16,19 @@
 
 package com.android.server.locksettings.recoverablekeystore;
 
-import static android.security.recoverablekeystore.KeyStoreRecoveryMetadata.TYPE_LOCKSCREEN;
+import static android.security.keystore.RecoveryMetadata.TYPE_LOCKSCREEN;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.Context;
-import android.security.recoverablekeystore.KeyDerivationParameters;
-import android.security.recoverablekeystore.KeyEntryRecoveryData;
-import android.security.recoverablekeystore.KeyStoreRecoveryData;
-import android.security.recoverablekeystore.KeyStoreRecoveryMetadata;
+import android.security.keystore.KeyDerivationParams;
+import android.security.keystore.EntryRecoveryData;
+import android.security.keystore.RecoveryData;
+import android.security.keystore.RecoveryMetadata;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.server.locksettings.recoverablekeystore.storage.RecoverableKeyStoreDb;
 import com.android.server.locksettings.recoverablekeystore.storage.RecoverySnapshotStorage;
@@ -63,13 +65,14 @@ public class KeySyncTask implements Runnable {
     private static final int SALT_LENGTH_BYTES = 16;
     private static final int LENGTH_PREFIX_BYTES = Integer.BYTES;
     private static final String LOCK_SCREEN_HASH_ALGORITHM = "SHA-256";
+    private static final int TRUSTED_HARDWARE_MAX_ATTEMPTS = 10;
 
     private final RecoverableKeyStoreDb mRecoverableKeyStoreDb;
     private final int mUserId;
     private final int mCredentialType;
     private final String mCredential;
+    private final boolean mCredentialUpdated;
     private final PlatformKeyManager.Factory mPlatformKeyManagerFactory;
-    private final VaultKeySupplier mVaultKeySupplier;
     private final RecoverySnapshotStorage mRecoverySnapshotStorage;
     private final RecoverySnapshotListenersStorage mSnapshotListenersStorage;
 
@@ -80,7 +83,8 @@ public class KeySyncTask implements Runnable {
             RecoverySnapshotListenersStorage recoverySnapshotListenersStorage,
             int userId,
             int credentialType,
-            String credential
+            String credential,
+            boolean credentialUpdated
     ) throws NoSuchAlgorithmException, KeyStoreException, InsecureUserException {
         return new KeySyncTask(
                 recoverableKeyStoreDb,
@@ -89,10 +93,8 @@ public class KeySyncTask implements Runnable {
                 userId,
                 credentialType,
                 credential,
-                () -> PlatformKeyManager.getInstance(context, recoverableKeyStoreDb, userId),
-                () -> {
-                    throw new UnsupportedOperationException("Not implemented vault key.");
-                });
+                credentialUpdated,
+                () -> PlatformKeyManager.getInstance(context, recoverableKeyStoreDb));
     }
 
     /**
@@ -100,8 +102,9 @@ public class KeySyncTask implements Runnable {
      *
      * @param recoverableKeyStoreDb Database where the keys are stored.
      * @param userId The uid of the user whose profile has been unlocked.
-     * @param credentialType The type of credential - i.e., pattern or password.
+     * @param credentialType The type of credential as defined in {@code LockPatternUtils}
      * @param credential The credential, encoded as a {@link String}.
+     * @param credentialUpdated signals weather credentials were updated.
      * @param platformKeyManagerFactory Instantiates a {@link PlatformKeyManager} for the user.
      *     This is a factory to enable unit testing, as otherwise it would be impossible to test
      *     without a screen unlock occurring!
@@ -114,37 +117,49 @@ public class KeySyncTask implements Runnable {
             int userId,
             int credentialType,
             String credential,
-            PlatformKeyManager.Factory platformKeyManagerFactory,
-            VaultKeySupplier vaultKeySupplier) {
+            boolean credentialUpdated,
+            PlatformKeyManager.Factory platformKeyManagerFactory) {
         mSnapshotListenersStorage = recoverySnapshotListenersStorage;
         mRecoverableKeyStoreDb = recoverableKeyStoreDb;
         mUserId = userId;
         mCredentialType = credentialType;
         mCredential = credential;
+        mCredentialUpdated = credentialUpdated;
         mPlatformKeyManagerFactory = platformKeyManagerFactory;
-        mVaultKeySupplier = vaultKeySupplier;
         mRecoverySnapshotStorage = snapshotStorage;
     }
 
     @Override
     public void run() {
         try {
-            syncKeys();
+            // Only one task is active If user unlocks phone many times in a short time interval.
+            synchronized(KeySyncTask.class) {
+                syncKeys();
+            }
         } catch (Exception e) {
             Log.e(TAG, "Unexpected exception thrown during KeySyncTask", e);
         }
     }
 
     private void syncKeys() {
-        if (!isSyncPending()) {
-            Log.d(TAG, "Key sync not needed.");
+        if (mCredentialType == LockPatternUtils.CREDENTIAL_TYPE_NONE) {
+            // Application keys for the user will not be available for sync.
+            Log.w(TAG, "Credentials are not set for user " + mUserId);
             return;
         }
 
-        int recoveryAgentUid = mRecoverableKeyStoreDb.getRecoveryAgentUid(mUserId);
-
-        if (recoveryAgentUid == -1) {
+        List<Integer> recoveryAgents = mRecoverableKeyStoreDb.getRecoveryAgents(mUserId);
+        for (int uid : recoveryAgents) {
+            syncKeysForAgent(uid);
+        }
+        if (recoveryAgents.isEmpty()) {
             Log.w(TAG, "No recovery agent initialized for user " + mUserId);
+        }
+    }
+
+    private void syncKeysForAgent(int recoveryAgentUid) {
+        if (!shoudCreateSnapshot(recoveryAgentUid)) {
+            Log.d(TAG, "Key sync not needed.");
             return;
         }
 
@@ -153,12 +168,25 @@ public class KeySyncTask implements Runnable {
             return;
         }
 
+        PublicKey publicKey = mRecoverableKeyStoreDb.getRecoveryServicePublicKey(mUserId,
+                recoveryAgentUid);
+        if (publicKey == null) {
+            Log.w(TAG, "Not initialized for KeySync: no public key set. Cancelling task.");
+            return;
+        }
+
+        byte[] deviceId = mRecoverableKeyStoreDb.getServerParams(mUserId, recoveryAgentUid);
+        if (deviceId == null) {
+            Log.w(TAG, "No device ID set for user " + mUserId);
+            return;
+        }
+
         byte[] salt = generateSalt();
         byte[] localLskfHash = hashCredentials(salt, mCredential);
 
         Map<String, SecretKey> rawKeys;
         try {
-            rawKeys = getKeysToSync();
+            rawKeys = getKeysToSync(recoveryAgentUid);
         } catch (GeneralSecurityException e) {
             Log.e(TAG, "Failed to load recoverable keys for sync", e);
             return;
@@ -191,13 +219,26 @@ public class KeySyncTask implements Runnable {
             return;
         }
 
-        // TODO: construct vault params and vault metadata
-        byte[] vaultParams = {};
+        Long counterId;
+        // counter id is generated exactly once for each credentials value.
+        if (mCredentialUpdated) {
+            counterId = generateAndStoreCounterId(recoveryAgentUid);
+        } else {
+            counterId = mRecoverableKeyStoreDb.getCounterId(mUserId, recoveryAgentUid);
+            if (counterId == null) {
+                counterId = generateAndStoreCounterId(recoveryAgentUid);
+            }
+        }
+        byte[] vaultParams = KeySyncUtils.packVaultParams(
+                publicKey,
+                counterId,
+                deviceId,
+                TRUSTED_HARDWARE_MAX_ATTEMPTS);
 
         byte[] encryptedRecoveryKey;
         try {
             encryptedRecoveryKey = KeySyncUtils.thmEncryptRecoveryKey(
-                    mVaultKeySupplier.get(),
+                    publicKey,
                     localLskfHash,
                     vaultParams,
                     recoveryKey);
@@ -208,50 +249,79 @@ public class KeySyncTask implements Runnable {
             Log.e(TAG,"Could not encrypt with recovery key", e);
             return;
         }
-
-        KeyStoreRecoveryMetadata metadata = new KeyStoreRecoveryMetadata(
+        // TODO: store raw data in RecoveryServiceMetadataEntry and generate Parcelables later
+        // TODO: use Builder.
+        RecoveryMetadata metadata = new RecoveryMetadata(
                 /*userSecretType=*/ TYPE_LOCKSCREEN,
-                /*lockScreenUiFormat=*/ mCredentialType,
-                /*keyDerivationParameters=*/ KeyDerivationParameters.createSHA256Parameters(salt),
+                /*lockScreenUiFormat=*/ getUiFormat(mCredentialType, mCredential),
+                /*keyDerivationParams=*/ KeyDerivationParams.createSha256Params(salt),
                 /*secret=*/ new byte[0]);
-        ArrayList<KeyStoreRecoveryMetadata> metadataList = new ArrayList<>();
+        ArrayList<RecoveryMetadata> metadataList = new ArrayList<>();
         metadataList.add(metadata);
 
-        // TODO: implement snapshot version
-        mRecoverySnapshotStorage.put(mUserId, new KeyStoreRecoveryData(
-                /*snapshotVersion=*/ 1,
+        int snapshotVersion = incrementSnapshotVersion(recoveryAgentUid);
+
+        // If application keys are not updated, snapshot will not be created on next unlock.
+        mRecoverableKeyStoreDb.setShouldCreateSnapshot(mUserId, recoveryAgentUid, false);
+
+        // TODO: use Builder.
+        mRecoverySnapshotStorage.put(recoveryAgentUid, new RecoveryData(
+                snapshotVersion,
                 /*recoveryMetadata=*/ metadataList,
                 /*applicationKeyBlobs=*/ createApplicationKeyEntries(encryptedApplicationKeys),
                 /*encryptedRecoveryKeyblob=*/ encryptedRecoveryKey));
+
         mSnapshotListenersStorage.recoverySnapshotAvailable(recoveryAgentUid);
     }
 
-    private PublicKey getVaultPublicKey() {
-        // TODO: fill this in
-        throw new UnsupportedOperationException("TODO: get vault public key.");
+    @VisibleForTesting
+    int incrementSnapshotVersion(int recoveryAgentUid) {
+        Long snapshotVersion = mRecoverableKeyStoreDb.getSnapshotVersion(mUserId, recoveryAgentUid);
+        snapshotVersion = snapshotVersion == null ? 1 : snapshotVersion + 1;
+        mRecoverableKeyStoreDb.setSnapshotVersion(mUserId, recoveryAgentUid, snapshotVersion);
+
+        return snapshotVersion.intValue();
+    }
+
+    private long generateAndStoreCounterId(int recoveryAgentUid) {
+        long counter = new SecureRandom().nextLong();
+        mRecoverableKeyStoreDb.setCounterId(mUserId, recoveryAgentUid, counter);
+        return counter;
     }
 
     /**
      * Returns all of the recoverable keys for the user.
      */
-    private Map<String, SecretKey> getKeysToSync()
+    private Map<String, SecretKey> getKeysToSync(int recoveryAgentUid)
             throws InsecureUserException, KeyStoreException, UnrecoverableKeyException,
             NoSuchAlgorithmException, NoSuchPaddingException, BadPlatformKeyException {
         PlatformKeyManager platformKeyManager = mPlatformKeyManagerFactory.newInstance();
-        PlatformDecryptionKey decryptKey = platformKeyManager.getDecryptKey();
+        PlatformDecryptionKey decryptKey = platformKeyManager.getDecryptKey(mUserId);
         Map<String, WrappedKey> wrappedKeys = mRecoverableKeyStoreDb.getAllKeys(
-                mUserId, decryptKey.getGenerationId());
+                mUserId, recoveryAgentUid, decryptKey.getGenerationId());
         return WrappedKey.unwrapKeys(decryptKey, wrappedKeys);
     }
 
     /**
      * Returns {@code true} if a sync is pending.
+     * @param recoveryAgentUid uid of the recovery agent.
      */
-    private boolean isSyncPending() {
-        // TODO: implement properly. For now just always syncing if the user has any recoverable
-        // keys. We need to keep track of when the store's state actually changes.
-        return !mRecoverableKeyStoreDb.getAllKeys(
-                mUserId, mRecoverableKeyStoreDb.getPlatformKeyGenerationId(mUserId)).isEmpty();
+    private boolean shoudCreateSnapshot(int recoveryAgentUid) {
+        int[] types = mRecoverableKeyStoreDb.getRecoverySecretTypes(mUserId, recoveryAgentUid);
+        if (!ArrayUtils.contains(types, RecoveryMetadata.TYPE_LOCKSCREEN)) {
+            // Only lockscreen type is supported.
+            // We will need to pass extra argument to KeySyncTask to support custom pass phrase.
+            return false;
+        }
+        if (mCredentialUpdated) {
+            // Sync credential if at least one snapshot was created.
+            if (mRecoverableKeyStoreDb.getSnapshotVersion(mUserId, recoveryAgentUid) != null) {
+                mRecoverableKeyStoreDb.setShouldCreateSnapshot(mUserId, recoveryAgentUid, true);
+                return true;
+            }
+        }
+
+        return mRecoverableKeyStoreDb.getShouldCreateSnapshot(mUserId, recoveryAgentUid);
     }
 
     /**
@@ -261,14 +331,14 @@ public class KeySyncTask implements Runnable {
      * @return The format - either pattern, pin, or password.
      */
     @VisibleForTesting
-    @KeyStoreRecoveryMetadata.LockScreenUiFormat static int getUiFormat(
+    @RecoveryMetadata.LockScreenUiFormat static int getUiFormat(
             int credentialType, String credential) {
         if (credentialType == LockPatternUtils.CREDENTIAL_TYPE_PATTERN) {
-            return KeyStoreRecoveryMetadata.TYPE_PATTERN;
+            return RecoveryMetadata.TYPE_PATTERN;
         } else if (isPin(credential)) {
-            return KeyStoreRecoveryMetadata.TYPE_PIN;
+            return RecoveryMetadata.TYPE_PIN;
         } else {
-            return KeyStoreRecoveryMetadata.TYPE_PASSWORD;
+            return RecoveryMetadata.TYPE_PASSWORD;
         }
     }
 
@@ -287,7 +357,10 @@ public class KeySyncTask implements Runnable {
      * Returns {@code true} if {@code credential} looks like a pin.
      */
     @VisibleForTesting
-    static boolean isPin(@NonNull String credential) {
+    static boolean isPin(@Nullable String credential) {
+        if (credential == null) {
+            return false;
+        }
         int length = credential.length();
         for (int i = 0; i < length; i++) {
             if (!Character.isDigit(credential.charAt(i))) {
@@ -328,22 +401,15 @@ public class KeySyncTask implements Runnable {
         return keyGenerator.generateKey();
     }
 
-    private static List<KeyEntryRecoveryData> createApplicationKeyEntries(
+    private static List<EntryRecoveryData> createApplicationKeyEntries(
             Map<String, byte[]> encryptedApplicationKeys) {
-        ArrayList<KeyEntryRecoveryData> keyEntries = new ArrayList<>();
+        ArrayList<EntryRecoveryData> keyEntries = new ArrayList<>();
         for (String alias : encryptedApplicationKeys.keySet()) {
             keyEntries.add(
-                    new KeyEntryRecoveryData(
-                            alias.getBytes(StandardCharsets.UTF_8),
+                    new EntryRecoveryData(
+                            alias,
                             encryptedApplicationKeys.get(alias)));
         }
         return keyEntries;
-    }
-
-    /**
-     * TODO: until this is in the database, so we can test.
-     */
-    public interface VaultKeySupplier {
-        PublicKey get();
     }
 }

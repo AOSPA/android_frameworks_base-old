@@ -18,6 +18,8 @@ package com.android.server.locksettings.recoverablekeystore;
 
 import com.android.internal.annotations.VisibleForTesting;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
@@ -35,8 +37,7 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 
 /**
- * Utility functions for the flow where the RecoverableKeyStoreLoader syncs keys with remote
- * storage.
+ * Utility functions for the flow where the RecoveryManager syncs keys with remote storage.
  *
  * @hide
  */
@@ -60,6 +61,7 @@ public class KeySyncUtils {
     private static final byte[] THM_KF_HASH_PREFIX = "THM_KF_hash".getBytes(StandardCharsets.UTF_8);
 
     private static final int KEY_CLAIMANT_LENGTH_BYTES = 16;
+    private static final int VAULT_PARAMS_LENGTH_BYTES = 85;
 
     /**
      * Encrypts the recovery key using both the lock screen hash and the remote storage's public
@@ -278,6 +280,26 @@ public class KeySyncUtils {
         KeyFactory keyFactory = KeyFactory.getInstance(PUBLIC_KEY_FACTORY_ALGORITHM);
         X509EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(key);
         return keyFactory.generatePublic(publicKeySpec);
+    }
+
+    /**
+     * Packs vault params into a binary format.
+     *
+     * @param thmPublicKey Public key of the trusted hardware module.
+     * @param counterId ID referring to the specific counter in the hardware module.
+     * @param deviceId ID of the device.
+     * @param maxAttempts Maximum allowed guesses before trusted hardware wipes key.
+     * @return The binary vault params, ready for sync.
+     */
+    public static byte[] packVaultParams(
+            PublicKey thmPublicKey, long counterId, byte[] deviceId, int maxAttempts) {
+        return ByteBuffer.allocate(VAULT_PARAMS_LENGTH_BYTES)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .put(SecureBox.encodePublicKey(thmPublicKey))
+                .putLong(counterId)
+                .putLong(0L) // TODO: replace with device Id.
+                .putInt(maxAttempts)
+                .array();
     }
 
     /**

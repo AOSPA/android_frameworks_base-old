@@ -135,6 +135,7 @@ import android.app.ResultInfo;
 import android.app.servertransaction.MoveToDisplayItem;
 import android.app.servertransaction.MultiWindowModeChangeItem;
 import android.app.servertransaction.NewIntentItem;
+import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.PipModeChangeItem;
 import android.app.servertransaction.WindowVisibilityItem;
 import android.app.servertransaction.ActivityConfigurationChangeItem;
@@ -1607,6 +1608,17 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             // The activity may be waiting for stop, but that is no longer appropriate for it.
             mStackSupervisor.mStoppingActivities.remove(this);
             mStackSupervisor.mGoingToSleepActivities.remove(this);
+
+            // If an activity is not in the paused state when becoming visible, cycle to the paused
+            // state.
+            if (state != PAUSED) {
+                // An activity must be in the {@link PAUSING} state for the system to validate
+                // the move to {@link PAUSED}.
+                state = PAUSING;
+                service.mLifecycleManager.scheduleTransaction(app.thread, appToken,
+                        PauseActivityItem.obtain(finishing, false /* userLeaving */,
+                                configChangeFlags, false /* dontReport */));
+            }
         } catch (Exception e) {
             // Just skip on any failure; we'll make it visible when it next restarts.
             Slog.w(TAG, "Exception thrown making visibile: " + intent.getComponent(), e);
@@ -2730,12 +2742,14 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     /**
-     * @return true if the activity contains windows that have
-     *         {@link LayoutParams#FLAG_SHOW_WHEN_LOCKED} set or if the activity has set
-     *         {@link #mShowWhenLocked}.
+     * @return true if the activity windowing mode is not
+     *         {@link android.app.WindowConfiguration#WINDOWING_MODE_PINNED} and activity contains
+     *         windows that have {@link LayoutParams#FLAG_SHOW_WHEN_LOCKED} set or if the activity
+     *         has set {@link #mShowWhenLocked}.
+     *         Multi-windowing mode will be exited if true is returned.
      */
     boolean canShowWhenLocked() {
-        return !inMultiWindowMode() && (mShowWhenLocked
+        return !inPinnedWindowingMode() && (mShowWhenLocked
                 || service.mWindowManager.containsShowWhenLockedWindow(appToken));
     }
 

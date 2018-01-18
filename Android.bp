@@ -256,6 +256,8 @@ java_library {
         "core/java/android/service/euicc/IGetEidCallback.aidl",
         "core/java/android/service/euicc/IGetEuiccInfoCallback.aidl",
         "core/java/android/service/euicc/IGetEuiccProfileInfoListCallback.aidl",
+        "core/java/android/service/euicc/IGetOtaStatusCallback.aidl",
+        "core/java/android/service/euicc/IOtaStatusChangedCallback.aidl",
         "core/java/android/service/euicc/IRetainSubscriptionsForFactoryResetCallback.aidl",
         "core/java/android/service/euicc/ISwitchToSubscriptionCallback.aidl",
         "core/java/android/service/euicc/IUpdateSubscriptionNicknameCallback.aidl",
@@ -517,7 +519,9 @@ java_library {
         "telephony/java/com/android/internal/telephony/ITelephony.aidl",
         "telephony/java/com/android/internal/telephony/ITelephonyRegistry.aidl",
         "telephony/java/com/android/internal/telephony/IWapPushManager.aidl",
+        "telephony/java/com/android/internal/telephony/euicc/IEuiccCardController.aidl",
         "telephony/java/com/android/internal/telephony/euicc/IEuiccController.aidl",
+        "telephony/java/com/android/internal/telephony/euicc/IGetAllProfilesCallback.aidl",
         "wifi/java/android/net/wifi/IWifiManager.aidl",
         "wifi/java/android/net/wifi/aware/IWifiAwareDiscoverySessionCallback.aidl",
         "wifi/java/android/net/wifi/aware/IWifiAwareEventCallback.aidl",
@@ -616,6 +620,7 @@ java_library {
         "android.hardware.vibrator-V1.0-java-constants",
         "android.hardware.vibrator-V1.1-java-constants",
         "android.hardware.wifi-V1.0-java-constants",
+        "android.hardware.radio-V1.0-java",
     ],
 
     // Loaded with System.loadLibrary by android.view.textclassifier
@@ -721,16 +726,26 @@ gensrcs {
     ],
 
     srcs: [
+        "core/proto/android/os/batterytype.proto",
         "core/proto/android/os/cpufreq.proto",
         "core/proto/android/os/cpuinfo.proto",
         "core/proto/android/os/kernelwake.proto",
         "core/proto/android/os/pagetypeinfo.proto",
         "core/proto/android/os/procrank.proto",
+        "core/proto/android/os/ps.proto",
         "core/proto/android/os/system_properties.proto",
+        "core/proto/android/util/event_log_tags.proto",
     ],
 
     // Append protoc-gen-cppstream tool's PATH otherwise aprotoc can't find the plugin tool
-    cmd: "PATH=$$PATH:$$(dirname $(location protoc-gen-cppstream)) $(location aprotoc) --plugin=protoc-gen-cpp-stream=$(location protoc-gen-cppstream) --dependency_out=$(depfile) --cppstream_out=$(genDir)/ -Iexternal/protobuf/src -I . $(in)",
+    cmd: "mkdir -p $(genDir) " +
+        "&& $(location aprotoc) " +
+        "  --plugin=$(location protoc-gen-cppstream) " +
+        "  --dependency_out=$(depfile) " +
+        "  --cppstream_out=$(genDir) " +
+        "  -Iexternal/protobuf/src " +
+        "  -I . " +
+        "  $(in)",
 
     output_extension = "proto.h",
 }

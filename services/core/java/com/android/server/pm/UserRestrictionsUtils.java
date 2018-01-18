@@ -116,7 +116,9 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_USER_SWITCH,
             UserManager.DISALLOW_UNIFIED_PASSWORD,
             UserManager.DISALLOW_CONFIG_LOCATION_MODE,
-            UserManager.DISALLOW_AIRPLANE_MODE
+            UserManager.DISALLOW_AIRPLANE_MODE,
+            UserManager.DISALLOW_CONFIG_BRIGHTNESS,
+            UserManager.DISALLOW_SHARE_INTO_MANAGED_PROFILE,
     });
 
     /**
@@ -460,7 +462,8 @@ public class UserRestrictionsUtils {
                         // DISALLOW_DATA_ROAMING user restriction is set.
 
                         // Multi sim device.
-                        SubscriptionManager subscriptionManager = new SubscriptionManager(context);
+                        SubscriptionManager subscriptionManager = context
+                                .getSystemService(SubscriptionManager.class);
                         final List<SubscriptionInfo> subscriptionInfoList =
                             subscriptionManager.getActiveSubscriptionInfoList();
                         if (subscriptionInfoList != null) {

@@ -45,8 +45,9 @@ public:
 
     void onLogEvent(const LogEvent& event);
 
-    void onAnomalyAlarmFired(const uint64_t timestampNs,
-                         unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>>& anomalySet);
+    void onAnomalyAlarmFired(
+        const uint64_t timestampNs,
+        unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>>& anomalySet);
 
     void setAnomalyMonitor(const sp<AnomalyMonitor>& anomalyMonitor);
 
@@ -56,8 +57,13 @@ public:
 
     void onUidMapReceived() override;
 
+    bool shouldAddUidMapListener() const {
+        return !mAllowedPkg.empty();
+    }
+
     // Config source owner can call onDumpReport() to get all the metrics collected.
     virtual void onDumpReport(android::util::ProtoOutputStream* protoOutput);
+    virtual void onDumpReport(const uint64_t& dumpTimeStampNs, ConfigMetricsReport* report);
 
     // Computes the total byte size of all metrics managed by a single config source.
     // Does not change the state.
@@ -128,6 +134,13 @@ private:
     std::unordered_map<int, std::vector<int>> mConditionToMetricMap;
 
     void initLogSourceWhiteList();
+
+    // The metrics that don't need to be uploaded or even reported.
+    std::set<int64_t> mNoReportMetricIds;
+
+    FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensions);
+    FRIEND_TEST(MetricConditionLinkE2eTest, TestMultiplePredicatesAndLinks);
+    FRIEND_TEST(AttributionE2eTest, TestAttributionMatchAndSlice);
 };
 
 }  // namespace statsd

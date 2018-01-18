@@ -60,6 +60,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.os.WorkSource;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.DisplayMetrics;
@@ -484,11 +485,11 @@ public class ActivityManager {
      * all activities that are visible to the user. */
     public static final int PROCESS_STATE_TOP = 2;
 
-    /** @hide Process is hosting a foreground service due to a system binding. */
-    public static final int PROCESS_STATE_BOUND_FOREGROUND_SERVICE = 3;
-
     /** @hide Process is hosting a foreground service. */
-    public static final int PROCESS_STATE_FOREGROUND_SERVICE = 4;
+    public static final int PROCESS_STATE_FOREGROUND_SERVICE = 3;
+
+    /** @hide Process is hosting a foreground service due to a system binding. */
+    public static final int PROCESS_STATE_BOUND_FOREGROUND_SERVICE = 4;
 
     /** @hide Process is important to the user, and something they are aware of. */
     public static final int PROCESS_STATE_IMPORTANT_FOREGROUND = 5;
@@ -3085,11 +3086,11 @@ public class ActivityManager {
             } else if (importance >= IMPORTANCE_VISIBLE) {
                 return PROCESS_STATE_IMPORTANT_FOREGROUND;
             } else if (importance >= IMPORTANCE_TOP_SLEEPING_PRE_28) {
-                return PROCESS_STATE_FOREGROUND_SERVICE;
+                return PROCESS_STATE_IMPORTANT_FOREGROUND;
             } else if (importance >= IMPORTANCE_FOREGROUND_SERVICE) {
                 return PROCESS_STATE_FOREGROUND_SERVICE;
             } else {
-                return PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
+                return PROCESS_STATE_TOP;
             }
         }
 
@@ -3911,10 +3912,10 @@ public class ActivityManager {
     /**
      * @hide
      */
-    public static void noteWakeupAlarm(PendingIntent ps, int sourceUid, String sourcePkg,
-            String tag) {
+    public static void noteWakeupAlarm(PendingIntent ps, WorkSource workSource, int sourceUid,
+            String sourcePkg, String tag) {
         try {
-            getService().noteWakeupAlarm((ps != null) ? ps.getTarget() : null,
+            getService().noteWakeupAlarm((ps != null) ? ps.getTarget() : null, workSource,
                     sourceUid, sourcePkg, tag);
         } catch (RemoteException ex) {
         }
@@ -3923,19 +3924,24 @@ public class ActivityManager {
     /**
      * @hide
      */
-    public static void noteAlarmStart(PendingIntent ps, int sourceUid, String tag) {
+    public static void noteAlarmStart(PendingIntent ps, WorkSource workSource, int sourceUid,
+            String tag) {
         try {
-            getService().noteAlarmStart((ps != null) ? ps.getTarget() : null, sourceUid, tag);
+            getService().noteAlarmStart((ps != null) ? ps.getTarget() : null, workSource,
+                    sourceUid, tag);
         } catch (RemoteException ex) {
         }
     }
 
+
     /**
      * @hide
      */
-    public static void noteAlarmFinish(PendingIntent ps, int sourceUid, String tag) {
+    public static void noteAlarmFinish(PendingIntent ps, WorkSource workSource, int sourceUid,
+            String tag) {
         try {
-            getService().noteAlarmFinish((ps != null) ? ps.getTarget() : null, sourceUid, tag);
+            getService().noteAlarmFinish((ps != null) ? ps.getTarget() : null, workSource,
+                    sourceUid, tag);
         } catch (RemoteException ex) {
         }
     }

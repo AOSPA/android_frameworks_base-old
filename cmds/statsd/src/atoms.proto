@@ -81,47 +81,43 @@ message Atom {
         DropboxErrorChanged dropbox_error_changed = 45;
         AnomalyDetected anomaly_detected = 46;
         AppHook app_hook = 47;
+        AppStartChanged app_start_changed = 48;
+        AppStartCancelChanged app_start_cancel_changed = 49;
+        AppStartFullyDrawnChanged app_start_fully_drawn_changed = 50;
         // TODO: Reorder the numbering so that the most frequent occur events occur in the first 15.
     }
 
-    // Pulled events will start at field 1000.
+    // Pulled events will start at field 10000.
     oneof pulled {
-        WifiBytesTransfer wifi_bytes_transfer = 1000;
-        WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 1001;
-        MobileBytesTransfer mobile_bytes_transfer = 1002;
-        MobileBytesTransferByFgBg mobile_bytes_transfer_by_fg_bg = 1003;
-        KernelWakelock kernel_wakelock = 1004;
-        PlatformSleepState platform_sleep_state = 1005;
-        SleepStateVoter sleep_state_voter = 1006;
-        SubsystemSleepState subsystem_sleep_state = 1007;
-        CpuTimePerFreq cpu_time_per_freq = 1008;
-        CpuTimePerUid cpu_time_per_uid = 1009;
-        CpuTimePerUidFreq cpu_time_per_uid_freq = 1010;
-        WifiActivityEnergyInfo wifi_activity_energy_info = 1011;
-        ModemActivityInfo modem_activity_info = 1012;
-        AttributionChainDummyAtom attribution_chain_dummy_atom = 10000;
+        WifiBytesTransfer wifi_bytes_transfer = 10000;
+        WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
+        MobileBytesTransfer mobile_bytes_transfer = 10002;
+        MobileBytesTransferByFgBg mobile_bytes_transfer_by_fg_bg = 10003;
+        KernelWakelock kernel_wakelock = 10004;
+        PlatformSleepState platform_sleep_state = 10005;
+        SleepStateVoter sleep_state_voter = 10006;
+        SubsystemSleepState subsystem_sleep_state = 10007;
+        CpuTimePerFreq cpu_time_per_freq = 10008;
+        CpuTimePerUid cpu_time_per_uid = 10009;
+        CpuTimePerUidFreq cpu_time_per_uid_freq = 10010;
+        WifiActivityEnergyInfo wifi_activity_energy_info = 10011;
+        ModemActivityInfo modem_activity_info = 10012;
     }
 }
 
 /**
- * An attribution represents an application or module that is part of process where a particular bit
- * of work is done.
+ * This proto represents a node of an attribution chain.
+ * Note: All attribution chains are represented as a repeated field of type
+ * AttributionNode. It is understood that in such arrays, the order is that
+ * of calls, that is [A, B, C] if A calls B that calls C.
  */
-message Attribution {
-    // The uid for an application or module.
+message AttributionNode {
+    // The uid for a given element in the attribution chain.
     optional int32 uid = 1;
-    // The string tag for the attribution node.
-    optional string tag = 2;
-}
 
-/**
- * An attribution chain represents the chained attributions of applications or modules that
- * resulted in a particular bit of work being done.
- * The ordering of the attributions is that of calls, that is uid = [A, B, C] if A calls B that
- * calls C.
- */
-message AttributionChain {
-    repeated Attribution attribution = 1;
+    // The (optional) string tag for an element in the attribution chain. If the
+    // element has no tag, it is encoded as an empty string.
+    optional string tag = 2;
 }
 
 /*
@@ -149,11 +145,6 @@ message AttributionChain {
  *   - If there is a UID, it goes first. Think in an object-oriented fashion.
  * *****************************************************************************
  */
-
-message AttributionChainDummyAtom {
-    optional AttributionChain attribution_chain = 1;
-    optional int32 value = 2;
-}
 
 /**
  * Logs when the screen state changes.
@@ -221,8 +212,7 @@ message ProcessLifeCycleStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message BleScanStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     enum State {
         OFF = 0;
@@ -239,8 +229,7 @@ message BleScanStateChanged {
  */
 // TODO: Consider changing to tracking per-scanner-id (log from AppScanStats).
 message BleUnoptimizedScanStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     enum State {
         OFF = 0;
@@ -257,8 +246,7 @@ message BleUnoptimizedScanStateChanged {
  */
 // TODO: Consider changing to tracking per-scanner-id (log from AppScanStats).
 message BleScanResultReceived {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     // Number of ble scan results returned.
     optional int32 num_of_results = 2;
@@ -271,8 +259,7 @@ message BleScanResultReceived {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message SensorStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     // TODO: Is there a way to get the actual name of the sensor?
     // The id (int) of the sensor.
@@ -293,8 +280,7 @@ message SensorStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message GpsScanStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     enum State {
         OFF = 0;
@@ -311,8 +297,7 @@ message GpsScanStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message SyncStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     // Name of the sync (as named in the app)
     optional string name = 2;
@@ -331,8 +316,7 @@ message SyncStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message ScheduledJobStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     // Name of the job (as named in the app)
     optional string name = 2;
@@ -353,8 +337,7 @@ message ScheduledJobStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message AudioStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     enum State {
         OFF = 0;
@@ -370,8 +353,7 @@ message AudioStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message MediaCodecActivityChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     enum State {
         OFF = 0;
@@ -387,8 +369,7 @@ message MediaCodecActivityChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message FlashlightStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     enum State {
         OFF = 0;
@@ -404,8 +385,7 @@ message FlashlightStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message CameraStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     enum State {
         OFF = 0;
@@ -421,8 +401,7 @@ message CameraStateChanged {
  *   TODO
  */
 message WakelockStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     // Type of wakelock.
     enum Type {
@@ -451,8 +430,7 @@ message WakelockStateChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message LongPartialWakelockStateChanged {
-    // TODO: Add attribution instead of uid?
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     // The wakelock tag (Called tag in the Java API, sometimes name elsewhere).
     optional string tag = 2;
@@ -609,8 +587,7 @@ message DeviceOnStatusChanged {
  *   frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
  */
 message WakeupAlarmOccurred {
-    // TODO: Add attribution instead of uid?
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     // Name of the wakeup alarm.
     optional string tag = 2;
@@ -677,8 +654,7 @@ message KernelWakeupReported {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message WifiLockStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     enum State {
         OFF = 0;
@@ -712,8 +688,7 @@ message WifiSignalStrengthChanged {
  *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message WifiScanStateChanged {
-    // TODO: Add attribution instead of uid.
-    optional int32 uid = 1;
+    repeated AttributionNode attribution_node = 1;
 
     enum State {
         OFF = 0;
@@ -780,13 +755,14 @@ message SettingChanged {
   *   frameworks/base/services/core/java/com/android/server/am/ActivityRecord.java
  */
 message ActivityForegroundStateChanged {
+    optional int32 uid = 1;
+    optional string pkg_name = 2;
+    optional string class_name = 3;
+
     enum Activity {
         MOVE_TO_BACKGROUND = 0;
         MOVE_TO_FOREGROUND = 1;
     }
-    optional int32 uid = 1;
-    optional string pkg_name = 2;
-    optional string class_name = 3;
     optional Activity activity = 4;
 }
 
@@ -806,16 +782,19 @@ message DropboxErrorChanged {
     optional string process_name = 3;
 
     // The pid if available. -1 means not available.
-    optional int32 pid = 4;
+    optional sint32 pid = 4;
 
     // 1 indicates is instant app. -1 indicates Not applicable.
-    optional int32 is_instant_app = 5;
+    optional sint32 is_instant_app = 5;
 
     // The activity name if available.
     optional string activity_name = 6;
 
+    // The package name if available.
+    optional string package_name = 7;
+
     // 1 indicates in foreground. -1 indicates not available.
-    optional int32 is_foreground = 7;
+    optional sint32 is_foreground = 8;
 }
 
 /*
@@ -851,11 +830,105 @@ message AnomalyDetected {
     // Uid that owns the config whose anomaly detection alert fired.
     optional int32 config_uid = 1;
 
-    // Name of the config whose anomaly detection alert fired.
-    optional string config_name = 2;
+    // Id of the config whose anomaly detection alert fired.
+    optional int64 config_id = 2;
 
-    // Name of the alert (i.e. name of the anomaly that was detected).
-    optional string alert_name = 3;
+    // Id of the alert (i.e. name of the anomaly that was detected).
+    optional int64 alert_id = 3;
+}
+
+message AppStartChanged {
+    // The uid if available. -1 means not available.
+    optional int32 uid = 1;
+
+    // The app package name.
+    optional string pkg_name = 2;
+
+    enum TransitionType {
+        APP_START_TRANSITION_TYPE_UNKNOWN = 0;
+        WARM = 1;
+        HOT = 2;
+        COLD = 3;
+    }
+    // The transition type.
+    optional TransitionType type = 3;
+
+    // The activity name.
+    optional string activity_name = 4;
+
+    // The name of the calling app. Empty if not set.
+    optional string calling_pkg_name = 5;
+
+    // Whether the app is an instant app.
+    optional bool is_instant_app = 6;
+
+    // Device uptime when activity started.
+    optional int64 activity_start_msec = 7;
+
+    // TODO: Update android/app/ActivityManagerInternal.java constants to depend on our proto enum.
+    enum TransitionReason {
+        APP_START_TRANSITION_REASON_UNKNOWN = 0;
+        SPLASH_SCREEN = 1;
+        WINDOWS_DRAWN = 2;
+        TIMEOUT = 3;
+        SNAPSHOT = 4;
+    }
+    optional TransitionReason reason = 8;
+
+    optional int32 transition_delay_msec = 9;
+    // -1 if not set.
+    optional int32 starting_window_delay_msec = 10;
+    // -1 if not set.
+    optional int32 bind_application_delay_msec = 11;
+    optional int32 windows_drawn_delay_msec = 12;
+
+    // Empty if not set.
+    optional string launch_token = 13;
+
+}
+
+message AppStartCancelChanged {
+    // The uid if available. -1 means not available.
+    optional int32 uid = 1;
+
+    // The app package name.
+    optional string pkg_name = 2;
+
+    enum TransitionType {
+        APP_START_TRANSITION_TYPE_UNKNOWN = 0;
+        WARM = 1;
+        HOT = 2;
+        COLD = 3;
+    }
+    // The transition type.
+    optional TransitionType type = 3;
+
+    // The activity name.
+    optional string activity_name = 4;
+}
+
+message AppStartFullyDrawnChanged {
+    // The uid if available. -1 means not available.
+    optional int32 uid = 1;
+
+    // The app package name.
+    optional string pkg_name = 2;
+
+    enum TransitionType {
+        APP_START_TRANSITION_TYPE_UNKNOWN = 0;
+        WITH_BUNDLE = 1;
+        WITHOUT_BUNDLE = 2;
+    }
+    // The transition type.
+    optional TransitionType type = 3;
+
+    // The activity name.
+    optional string activity_name = 4;
+
+    optional bool transition_process_running = 5;
+
+    // App startup time (until call to Activity#reportFullyDrawn()).
+    optional int64 app_startup_time_ms = 6;
 }
 
 /**
@@ -1015,14 +1088,10 @@ message IsolatedUidChanged {
 
 /**
  * Pulls Cpu time per frequency.
- * Note: this should be pulled for gauge metric only, without condition.
- * The puller keeps internal state of last values. It should not be pulled by
- * different metrics.
- * The pulled data is delta of cpu time from last pull, calculated as
- * following:
- * if current time is larger than last value, take delta between the two.
- * if current time is smaller than last value, there must be a cpu
- * hotplug event, and the current time is taken as delta.
+ * Pulls the time the cpu spend on the frequency index. Frequency index
+ * starts from highest to lowest. The value should be monotonically
+ * increasing since boot. However, if there is a cpu
+ * hotplug event, the value would be reset as well.
  */
 message CpuTimePerFreq {
     optional uint32 cluster = 1;

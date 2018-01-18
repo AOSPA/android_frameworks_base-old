@@ -64,7 +64,6 @@ import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -1683,22 +1682,6 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public void installPackage(Uri packageURI,
-            PackageInstallObserver observer, int flags, String installerPackageName) {
-        if (!"file".equals(packageURI.getScheme())) {
-            throw new UnsupportedOperationException("Only file:// URIs are supported");
-        }
-
-        final String originPath = packageURI.getPath();
-        try {
-            mPM.installPackageAsUser(originPath, observer.getBinder(), flags, installerPackageName,
-                    mContext.getUserId());
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    @Override
     public int installExistingPackage(String packageName) throws NameNotFoundException {
         return installExistingPackage(packageName, PackageManager.INSTALL_REASON_UNKNOWN);
     }
@@ -2749,6 +2732,24 @@ public class ApplicationPackageManager extends PackageManager {
         try {
             mPM.registerDexModule(mContext.getPackageName(), dexModule,
                     isSharedModule, callbackDelegate);
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public CharSequence getHarmfulAppWarning(String packageName) {
+        try {
+            return mPM.getHarmfulAppWarning(packageName, mContext.getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        }
+    }
+
+    @Override
+    public void setHarmfulAppWarning(String packageName, CharSequence warning) {
+        try {
+            mPM.setHarmfulAppWarning(packageName, warning, mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowAsRuntimeException();
         }

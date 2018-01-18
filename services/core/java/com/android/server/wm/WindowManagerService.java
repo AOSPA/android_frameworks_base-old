@@ -928,7 +928,6 @@ public class WindowManagerService extends IWindowManager.Stub
             boolean haveInputMethods, boolean showBootMsgs, boolean onlyCore,
             WindowManagerPolicy policy) {
         installLock(this, INDEX_WINDOW);
-        mRoot = new RootWindowContainer(this);
         mContext = context;
         mHaveInputMethods = haveInputMethods;
         mAllowBootMessages = showBootMsgs;
@@ -952,8 +951,11 @@ public class WindowManagerService extends IWindowManager.Stub
         mDisplaySettings = new DisplaySettings();
         mDisplaySettings.readSettingsLocked();
 
-        mWindowPlacerLocked = new WindowSurfacePlacer(this);
         mPolicy = policy;
+        mAnimator = new WindowAnimator(this);
+        mRoot = new RootWindowContainer(this);
+
+        mWindowPlacerLocked = new WindowSurfacePlacer(this);
         mTaskSnapshotController = new TaskSnapshotController(this);
 
         mWindowTracing = WindowTracing.createDefaultAndStartLooper(context);
@@ -1051,7 +1053,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, TAG_WM);
         mHoldingScreenWakeLock.setReferenceCounted(false);
 
-        mAnimator = new WindowAnimator(this);
         mSurfaceAnimationRunner = new SurfaceAnimationRunner();
 
         mAllowTheaterModeWakeFromLayout = context.getResources().getBoolean(
@@ -2940,10 +2941,10 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void dismissKeyguard(IKeyguardDismissCallback callback) {
+    public void dismissKeyguard(IKeyguardDismissCallback callback, CharSequence message) {
         checkCallingPermission(permission.CONTROL_KEYGUARD, "dismissKeyguard");
         synchronized(mWindowMap) {
-            mPolicy.dismissKeyguardLw(callback);
+            mPolicy.dismissKeyguardLw(callback, message);
         }
     }
 
@@ -5326,6 +5327,25 @@ public class WindowManagerService extends IWindowManager.Stub
         reconfigureDisplayLocked(displayContent);
     }
 
+    @Override
+    public void startWindowTrace(){
+        try {
+            mWindowTracing.startTrace(null /* printwriter */);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void stopWindowTrace(){
+        mWindowTracing.stopTrace(null /* printwriter */);
+    }
+
+    @Override
+    public boolean isWindowTraceEnabled() {
+        return mWindowTracing.isEnabled();
+    }
+
     // -------------------------------------------------------------
     // Internals
     // -------------------------------------------------------------
@@ -5874,6 +5894,7 @@ public class WindowManagerService extends IWindowManager.Stub
      * the screen is.
      * @see WindowManagerPolicy#getNavBarPosition()
      */
+    @WindowManagerPolicy.NavigationBarPosition
     public int getNavBarPosition() {
         synchronized (mWindowMap) {
             // Perform layout if it was scheduled before to make sure that we get correct nav bar

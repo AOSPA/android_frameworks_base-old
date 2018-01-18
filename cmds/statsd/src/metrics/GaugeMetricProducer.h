@@ -35,9 +35,12 @@ namespace statsd {
 struct GaugeBucket {
     int64_t mBucketStartNs;
     int64_t mBucketEndNs;
-    std::shared_ptr<EventKV> mEvent;
+    std::shared_ptr<FieldValueMap> mGaugeFields;
     uint64_t mBucketNum;
 };
+
+typedef std::unordered_map<HashableDimensionKey, std::shared_ptr<FieldValueMap>>
+    DimToGaugeFieldsMap;
 
 // This gauge metric producer first register the puller to automatically pull the gauge at the
 // beginning of each bucket. If the condition is met, insert it to the bucket info. Otherwise
@@ -47,7 +50,7 @@ class GaugeMetricProducer : public virtual MetricProducer, public virtual PullDa
 public:
     GaugeMetricProducer(const ConfigKey& key, const GaugeMetric& countMetric,
                         const int conditionIndex, const sp<ConditionWizard>& wizard,
-                        const int pullTagId, const int atomTagId, const int64_t startTimeNs);
+                        const int pullTagId, const int64_t startTimeNs);
 
     virtual ~GaugeMetricProducer();
 
@@ -57,17 +60,18 @@ public:
 protected:
     void onMatchedLogEventInternalLocked(
             const size_t matcherIndex, const HashableDimensionKey& eventKey,
-            const std::map<std::string, HashableDimensionKey>& conditionKey, bool condition,
+            const ConditionKey& conditionKey, bool condition,
             const LogEvent& event) override;
 
 private:
     void onDumpReportLocked(const uint64_t dumpTimeNs,
                             android::util::ProtoOutputStream* protoOutput) override;
+    void onDumpReportLocked(const uint64_t dumpTimeNs, StatsLogReport* report) override;
 
     // for testing
     GaugeMetricProducer(const ConfigKey& key, const GaugeMetric& gaugeMetric,
                         const int conditionIndex, const sp<ConditionWizard>& wizard,
-                        const int pullTagId, const int atomTagId, const uint64_t startTimeNs,
+                        const int pullTagId, const uint64_t startTimeNs,
                         std::shared_ptr<StatsPullerManager> statsPullerManager);
 
     // Internal interface to handle condition change.
@@ -82,9 +86,6 @@ private:
     // Util function to flush the old packet.
     void flushIfNeededLocked(const uint64_t& eventTime);
 
-    // The default bucket size for gauge metric is 1 hr.
-    static const uint64_t kDefaultGaugemBucketSizeNs = 60ULL * 60 * 1000 * 1000 * 1000;
-
     std::shared_ptr<StatsPullerManager> mStatsPullerManager;
     // tagId for pulled data. -1 if this is not pulled
     const int mPullTagId;
@@ -94,21 +95,19 @@ private:
     std::unordered_map<HashableDimensionKey, std::vector<GaugeBucket>> mPastBuckets;
 
     // The current bucket.
-    std::shared_ptr<DimToEventKVMap> mCurrentSlicedBucket = std::make_shared<DimToEventKVMap>();
+    std::shared_ptr<DimToGaugeFieldsMap> mCurrentSlicedBucket;
 
     // The current bucket for anomaly detection.
-    std::shared_ptr<DimToValMap> mCurrentSlicedBucketForAnomaly = std::make_shared<DimToValMap>();
+    std::shared_ptr<DimToValMap> mCurrentSlicedBucketForAnomaly;
 
     // Translate Atom based bucket to single numeric value bucket for anomaly
     void updateCurrentSlicedBucketForAnomaly();
 
-    int mAtomTagId;
-
     // Whitelist of fields to report. Empty means all are reported.
-    std::vector<int> mGaugeFields;
+    FieldFilter mFieldFilter;
 
     // apply a whitelist on the original input
-    std::shared_ptr<EventKV> getGauge(const LogEvent& event);
+    std::shared_ptr<FieldValueMap> getGaugeFields(const LogEvent& event);
 
     // Util function to check whether the specified dimension hits the guardrail.
     bool hitGuardRailLocked(const HashableDimensionKey& newKey);

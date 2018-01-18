@@ -128,6 +128,23 @@ public class WorkSourceTest extends TestCase {
         assertFalse(ws3.equals(ws1));
     }
 
+    public void testEquals_workChains_nullEmptyAreEquivalent() {
+        // Construct a WorkSource that has no WorkChains, but whose workChains list
+        // is non-null.
+        WorkSource ws1 = new WorkSource();
+        ws1.add(100);
+        ws1.createWorkChain().addNode(100, null);
+        ws1.getWorkChains().clear();
+
+        WorkSource ws2 = new WorkSource();
+        ws2.add(100);
+
+        assertEquals(ws1, ws2);
+
+        ws2.createWorkChain().addNode(100, null);
+        assertFalse(ws1.equals(ws2));
+    }
+
     public void testWorkSourceParcelling() {
         WorkSource ws = new WorkSource();
 
@@ -321,5 +338,34 @@ public class WorkSourceTest extends TestCase {
         assertEquals(new WorkChain().addNode(2, "tag2_changed"), diffs[0].get(1));
         assertEquals(new WorkChain().addNode(0, "tag0"), diffs[1].get(0));
         assertEquals(new WorkChain().addNode(2, "tag2"), diffs[1].get(1));
+    }
+
+    public void testGetAttributionId() {
+        WorkSource ws1 = new WorkSource();
+        WorkChain wc = ws1.createWorkChain();
+        wc.addNode(100, "tag");
+        assertEquals(100, wc.getAttributionUid());
+        wc.addNode(200, "tag2");
+        assertEquals(100, wc.getAttributionUid());
+    }
+
+    public void testRemove_fromChainedWorkSource() {
+        WorkSource ws1 = new WorkSource();
+        ws1.createWorkChain().addNode(50, "foo");
+        ws1.createWorkChain().addNode(75, "bar");
+        ws1.add(100);
+
+        WorkSource ws2 = new WorkSource();
+        ws2.add(100);
+
+        assertTrue(ws1.remove(ws2));
+        assertEquals(2, ws1.getWorkChains().size());
+        assertEquals(50, ws1.getWorkChains().get(0).getAttributionUid());
+        assertEquals(75, ws1.getWorkChains().get(1).getAttributionUid());
+
+        ws2.createWorkChain().addNode(50, "foo");
+        assertTrue(ws1.remove(ws2));
+        assertEquals(1, ws1.getWorkChains().size());
+        assertEquals(75, ws1.getWorkChains().get(0).getAttributionUid());
     }
 }

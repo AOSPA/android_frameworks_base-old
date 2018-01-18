@@ -34,6 +34,7 @@ import static com.android.statsd.dogfood.DisplayProtoUtils.displayLogReport;
 
 public class MainActivity extends Activity {
     private final static String TAG = "StatsdDogfood";
+    private final static long CONFIG_ID = 987654321;
 
     final int[] mUids = {11111111, 2222222};
     StatsManager mStatsManager;
@@ -163,7 +164,7 @@ public class MainActivity extends Activity {
                     return;
                 }
                 if (mStatsManager != null) {
-                    byte[] data = mStatsManager.getData("fake");
+                    byte[] data = mStatsManager.getData(CONFIG_ID);
                     if (data != null) {
                         displayData(data);
                     } else {
@@ -186,7 +187,7 @@ public class MainActivity extends Activity {
                     byte[] config = new byte[inputStream.available()];
                     inputStream.read(config);
                     if (mStatsManager != null) {
-                        if (mStatsManager.addConfiguration("fake",
+                        if (mStatsManager.addConfiguration(CONFIG_ID,
                                 config, getPackageName(), MainActivity.this.getClass().getName())) {
                             Toast.makeText(
                                     MainActivity.this, "Config pushed", Toast.LENGTH_LONG).show();
@@ -252,7 +253,9 @@ public class MainActivity extends Activity {
             Log.d(TAG, "invalid pkg id");
             return;
         }
-        StatsLog.write(StatsLog.WAKELOCK_STATE_CHANGED, mUids[id], 0, name, 1);
+        int[] uids = new int[] {mUids[id]};
+        String[] tags  = new String[] {"acquire"};
+        StatsLog.write(StatsLog.WAKELOCK_STATE_CHANGED, uids, tags, 0, name, 1);
         StringBuilder sb = new StringBuilder();
         sb.append("StagsLog.write(10, ").append(mUids[id]).append(", ").append(0)
                 .append(", ").append(name).append(", 1);");
@@ -264,7 +267,9 @@ public class MainActivity extends Activity {
             Log.d(TAG, "invalid pkg id");
             return;
         }
-        StatsLog.write(10, mUids[id], 0, name, 0);
+        int[] uids = new int[] {mUids[id]};
+        String[] tags  = new String[] {"release"};
+        StatsLog.write(10, uids, tags, 0, name, 0);
         StringBuilder sb = new StringBuilder();
         sb.append("StagsLog.write(10, ").append(mUids[id]).append(", ").append(0)
                 .append(", ").append(name).append(", 0);");

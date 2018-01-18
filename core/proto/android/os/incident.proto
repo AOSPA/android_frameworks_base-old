@@ -18,17 +18,20 @@ syntax = "proto2";
 option java_multiple_files = true;
 option java_outer_classname = "IncidentProtoMetadata";
 
+import "frameworks/base/core/proto/android/os/batterytype.proto";
 import "frameworks/base/core/proto/android/os/cpufreq.proto";
 import "frameworks/base/core/proto/android/os/cpuinfo.proto";
 import "frameworks/base/core/proto/android/os/incidentheader.proto";
 import "frameworks/base/core/proto/android/os/kernelwake.proto";
 import "frameworks/base/core/proto/android/os/pagetypeinfo.proto";
 import "frameworks/base/core/proto/android/os/procrank.proto";
+import "frameworks/base/core/proto/android/os/ps.proto";
 import "frameworks/base/core/proto/android/os/system_properties.proto";
 import "frameworks/base/core/proto/android/providers/settings.proto";
 import "frameworks/base/core/proto/android/server/activitymanagerservice.proto";
 import "frameworks/base/core/proto/android/server/alarmmanagerservice.proto";
 import "frameworks/base/core/proto/android/server/fingerprint.proto";
+import "frameworks/base/core/proto/android/server/jobscheduler.proto";
 import "frameworks/base/core/proto/android/server/powermanagerservice.proto";
 import "frameworks/base/core/proto/android/server/windowmanagerservice.proto";
 import "frameworks/base/core/proto/android/service/appwidget.proto";
@@ -41,6 +44,8 @@ import "frameworks/base/core/proto/android/service/notification.proto";
 import "frameworks/base/core/proto/android/service/package.proto";
 import "frameworks/base/core/proto/android/service/print.proto";
 import "frameworks/base/core/proto/android/service/procstats.proto";
+import "frameworks/base/core/proto/android/util/event_log_tags.proto";
+import "frameworks/base/core/proto/android/util/log.proto";
 import "frameworks/base/libs/incident/proto/android/privacy.proto";
 import "frameworks/base/libs/incident/proto/android/section.proto";
 
@@ -57,6 +62,8 @@ message IncidentMetadata {
 // the sections are able to be controlled and configured by section ids.
 // Instead privacy field options need to be configured in each section proto message.
 message IncidentProto {
+    reserved 1001;
+
     // Incident header from callers
     repeated IncidentHeaderProto header = 1;
     // Internal metadata of incidentd
@@ -65,7 +72,53 @@ message IncidentProto {
     // Device information
     optional SystemPropertiesProto system_properties = 1000 [
         (section).type = SECTION_COMMAND,
-        (section).args = "/system/bin/getprop"
+        (section).args = "getprop"
+    ];
+
+    // Device Logs
+    optional android.util.EventLogTagMapProto event_log_tag_map = 1100 [
+        (section).type = SECTION_FILE,
+        (section).args = "/system/etc/event-log-tags"
+    ];
+
+    optional android.util.LogProto main_logs = 1101 [
+        (section).type = SECTION_LOG,
+        (section).args = "LOG_ID_MAIN"
+    ];
+
+    optional android.util.LogProto radio_logs = 1102 [
+        (section).type = SECTION_LOG,
+        (section).args = "LOG_ID_RADIO"
+    ];
+
+    optional android.util.LogProto events_logs = 1103 [
+        (section).type = SECTION_LOG,
+        (section).args = "LOG_ID_EVENTS"
+    ];
+
+    optional android.util.LogProto system_logs = 1104 [
+        (section).type = SECTION_LOG,
+        (section).args = "LOG_ID_SYSTEM"
+    ];
+
+    optional android.util.LogProto crash_logs = 1105 [
+        (section).type = SECTION_LOG,
+        (section).args = "LOG_ID_CRASH"
+    ];
+
+    optional android.util.LogProto stats_logs = 1106 [
+        (section).type = SECTION_LOG,
+        (section).args = "LOG_ID_STATS"
+    ];
+
+    optional android.util.LogProto security_logs = 1107 [
+        (section).type = SECTION_LOG,
+        (section).args = "LOG_ID_SECURITY"
+    ];
+
+    optional android.util.LogProto kernel_logs = 1108 [
+        (section).type = SECTION_LOG,
+        (section).args = "LOG_ID_KERNEL"
     ];
 
     // Linux services
@@ -86,12 +139,22 @@ message IncidentProto {
 
     optional CpuInfo cpu_info = 2003 [
         (section).type = SECTION_COMMAND,
-        (section).args = "/system/bin/top -b -n 1 -H -s 6 -o pid,tid,user,pr,ni,%cpu,s,virt,res,pcy,cmd,name"
+        (section).args = "top -b -n 1 -H -s 6 -o pid,tid,user,pr,ni,%cpu,s,virt,res,pcy,cmd,name"
     ];
 
     optional CpuFreq cpu_freq = 2004 [
         (section).type = SECTION_FILE,
         (section).args = "/sys/devices/system/cpu/cpufreq/all_time_in_state"
+    ];
+
+    optional PsDumpProto processes_and_threads = 2005 [
+        (section).type = SECTION_COMMAND,
+        (section).args = "ps -A -T -Z -O pri,nice,rtprio,sched,pcy,time"
+    ];
+
+    optional BatteryTypeProto battery_type = 2006 [
+        (section).type = SECTION_FILE,
+        (section).args = "/sys/class/power_supply/bms/battery_type"
     ];
 
     // System Services
@@ -183,5 +246,10 @@ message IncidentProto {
     optional android.service.GraphicsStatsServiceDumpProto graphicsstats = 3019 [
         (section).type = SECTION_DUMPSYS,
         (section).args = "graphicsstats --proto"
+    ];
+
+    optional com.android.server.job.JobSchedulerServiceDumpProto jobscheduler = 3020 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "jobscheduler --proto"
     ];
 }

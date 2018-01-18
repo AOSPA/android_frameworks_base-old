@@ -44,6 +44,7 @@ import android.content.UndoManager;
 import android.content.res.ColorStateList;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
+import android.content.res.ResourceId;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
@@ -295,6 +296,7 @@ import java.util.Locale;
  * @attr ref android.R.styleable#TextView_imeActionId
  * @attr ref android.R.styleable#TextView_editorExtras
  * @attr ref android.R.styleable#TextView_elegantTextHeight
+ * @attr ref android.R.styleable#TextView_fallbackLineSpacing
  * @attr ref android.R.styleable#TextView_letterSpacing
  * @attr ref android.R.styleable#TextView_fontFeatureSettings
  * @attr ref android.R.styleable#TextView_breakStrategy
@@ -309,7 +311,6 @@ import java.util.Locale;
 public class TextView extends View implements ViewTreeObserver.OnPreDrawListener {
     static final String LOG_TAG = "TextView";
     static final boolean DEBUG_EXTRACT = false;
-    static final boolean DEBUG_AUTOFILL = false;
     private static final float[] TEMP_POSITION = new float[2];
 
     // Enum for the "typeface" XML parameter.
@@ -654,7 +655,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     // True if internationalized input should be used for numbers and date and time.
     private final boolean mUseInternationalizedInput;
     // True if fallback fonts that end up getting used should be allowed to affect line spacing.
-    /* package */ final boolean mUseFallbackLineSpacing;
+    /* package */ boolean mUseFallbackLineSpacing;
 
     @ViewDebug.ExportedProperty(category = "text")
     private int mGravity = Gravity.TOP | Gravity.START;
@@ -785,9 +786,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     // mAutoSizeStepGranularityInPx.
     private boolean mHasPresetAutoSizeValues = false;
 
-    // Indicates whether the text was set from resources or dynamically, so it can be used to
+    // Indicates whether the text was set statically or dynamically, so it can be used to
     // sanitize autofill requests.
-    private boolean mTextFromResource = false;
+    private boolean mTextSetFromXmlOrResourceId = false;
+    // Resource id used to set the text - used for autofill purposes.
+    private @StringRes int mTextId = ResourceId.ID_NULL;
 
     /**
      * Kick-start the font cache for the zygote process (to pay the cost of
@@ -926,7 +929,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         int n = a.getIndexCount();
 
-        boolean fromResourceId = false;
+        // Must set id in a temporary variable because it will be reset by setText()
+        boolean textIsSetFromXml = false;
         for (int i = 0; i < n; i++) {
             int attr = a.getIndex(i);
 
@@ -1068,7 +1072,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     break;
 
                 case com.android.internal.R.styleable.TextView_text:
-                    fromResourceId = true;
+                    textIsSetFromXml = true;
+                    mTextId = a.getResourceId(attr, ResourceId.ID_NULL);
                     text = a.getText(attr);
                     break;
 
@@ -1460,8 +1465,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
 
         setText(text, bufferType);
-        if (fromResourceId) {
-            mTextFromResource = true;
+        if (textIsSetFromXml) {
+            mTextSetFromXmlOrResourceId = true;
         }
 
         if (hint != null) setHint(hint);
@@ -2360,7 +2365,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         setText(mText);
 
         if (hasPasswordTransformationMethod()) {
-            notifyViewAccessibilityStateChangedIfNeeded(
+            notifyAccessibilityStateChanged(
                     AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
         }
 
@@ -3250,6 +3255,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         float mShadowDx = 0, mShadowDy = 0, mShadowRadius = 0;
         boolean mHasElegant = false;
         boolean mElegant = false;
+        boolean mHasFallbackLineSpacing = false;
+        boolean mFallbackLineSpacing = false;
         boolean mHasLetterSpacing = false;
         float mLetterSpacing = 0;
         String mFontFeatureSettings = null;
@@ -3274,6 +3281,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     + "    mShadowRadius:" + mShadowRadius + "\n"
                     + "    mHasElegant:" + mHasElegant + "\n"
                     + "    mElegant:" + mElegant + "\n"
+                    + "    mHasFallbackLineSpacing:" + mHasFallbackLineSpacing + "\n"
+                    + "    mFallbackLineSpacing:" + mFallbackLineSpacing + "\n"
                     + "    mHasLetterSpacing:" + mHasLetterSpacing + "\n"
                     + "    mLetterSpacing:" + mLetterSpacing + "\n"
                     + "    mFontFeatureSettings:" + mFontFeatureSettings + "\n"
@@ -3312,6 +3321,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 com.android.internal.R.styleable.TextAppearance_shadowRadius);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_elegantTextHeight,
                 com.android.internal.R.styleable.TextAppearance_elegantTextHeight);
+        sAppearanceValues.put(com.android.internal.R.styleable.TextView_fallbackLineSpacing,
+                com.android.internal.R.styleable.TextAppearance_fallbackLineSpacing);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_letterSpacing,
                 com.android.internal.R.styleable.TextAppearance_letterSpacing);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_fontFeatureSettings,
@@ -3402,6 +3413,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     attributes.mHasElegant = true;
                     attributes.mElegant = appearance.getBoolean(attr, attributes.mElegant);
                     break;
+                case com.android.internal.R.styleable.TextAppearance_fallbackLineSpacing:
+                    attributes.mHasFallbackLineSpacing = true;
+                    attributes.mFallbackLineSpacing = appearance.getBoolean(attr,
+                            attributes.mFallbackLineSpacing);
+                    break;
                 case com.android.internal.R.styleable.TextAppearance_letterSpacing:
                     attributes.mHasLetterSpacing = true;
                     attributes.mLetterSpacing =
@@ -3453,6 +3469,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if (attributes.mHasElegant) {
             setElegantTextHeight(attributes.mElegant);
+        }
+
+        if (attributes.mHasFallbackLineSpacing) {
+            setFallbackLineSpacing(attributes.mFallbackLineSpacing);
         }
 
         if (attributes.mHasLetterSpacing) {
@@ -3736,7 +3756,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *
      * @param elegant set the paint's elegant metrics flag.
      *
-     * @see Paint#isElegantTextHeight(boolean)
+     * @see Paint#isElegantTextHeight()
      *
      * @attr ref android.R.styleable#TextView_elegantTextHeight
      */
@@ -3749,6 +3769,43 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 invalidate();
             }
         }
+    }
+
+    /**
+     * Set whether to respect the ascent and descent of the fallback fonts that are used in
+     * displaying the text (which is needed to avoid text from consecutive lines running into
+     * each other). If set, fallback fonts that end up getting used can increase the ascent
+     * and descent of the lines that they are used on.
+     * <p/>
+     * It is required to be true if text could be in languages like Burmese or Tibetan where text
+     * is typically much taller or deeper than Latin text.
+     *
+     * @param enabled whether to expand linespacing based on fallback fonts, {@code true} by default
+     *
+     * @see StaticLayout.Builder#setUseLineSpacingFromFallbacks(boolean)
+     *
+     * @attr ref android.R.styleable#TextView_fallbackLineSpacing
+     */
+    public void setFallbackLineSpacing(boolean enabled) {
+        if (mUseFallbackLineSpacing != enabled) {
+            mUseFallbackLineSpacing = enabled;
+            if (mLayout != null) {
+                nullLayouts();
+                requestLayout();
+                invalidate();
+            }
+        }
+    }
+
+    /**
+     * @return whether fallback line spacing is enabled, {@code true} by default
+     *
+     * @see #setFallbackLineSpacing(boolean)
+     *
+     * @attr ref android.R.styleable#TextView_fallbackLineSpacing
+     */
+    public boolean isFallbackLineSpacing() {
+        return mUseFallbackLineSpacing;
     }
 
     /**
@@ -5278,7 +5335,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     private void setText(CharSequence text, BufferType type,
                          boolean notifyBefore, int oldlen) {
-        mTextFromResource = false;
+        mTextSetFromXmlOrResourceId = false;
         if (text == null) {
             text = "";
         }
@@ -5419,7 +5476,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         sendOnTextChanged(text, 0, oldlen, textLength);
         onTextChanged(text, 0, oldlen, textLength);
 
-        notifyViewAccessibilityStateChangedIfNeeded(AccessibilityEvent.CONTENT_CHANGE_TYPE_TEXT);
+        notifyAccessibilityStateChanged(AccessibilityEvent.CONTENT_CHANGE_TYPE_TEXT);
 
         if (needEditableForNotification) {
             sendAfterTextChanged((Editable) text);
@@ -5516,7 +5573,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     @android.view.RemotableViewMethod
     public final void setText(@StringRes int resid) {
         setText(getContext().getResources().getText(resid));
-        mTextFromResource = true;
+        mTextSetFromXmlOrResourceId = true;
+        mTextId = resid;
     }
 
     /**
@@ -5543,7 +5601,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     public final void setText(@StringRes int resid, BufferType type) {
         setText(getContext().getResources().getText(resid), type);
-        mTextFromResource = true;
+        mTextSetFromXmlOrResourceId = true;
+        mTextId = resid;
     }
 
     /**
@@ -6151,7 +6210,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public void setError(CharSequence error, Drawable icon) {
         createEditorIfNeeded();
         mEditor.setError(error, icon);
-        notifyViewAccessibilityStateChangedIfNeeded(
+        notifyAccessibilityStateChanged(
                 AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
     }
 
@@ -9456,7 +9515,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
         final AutofillManager afm = mContext.getSystemService(AutofillManager.class);
         if (afm != null) {
-            if (DEBUG_AUTOFILL) {
+            if (android.view.autofill.Helper.sVerbose) {
                 Log.v(LOG_TAG, "sendAfterTextChanged(): notify AFM for text=" + mText);
             }
             afm.notifyValueChanged(TextView.this);
@@ -10234,7 +10293,17 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         final boolean isPassword = hasPasswordTransformationMethod()
                 || isPasswordInputType(getInputType());
         if (forAutofill) {
-            structure.setDataIsSensitive(!mTextFromResource);
+            structure.setDataIsSensitive(!mTextSetFromXmlOrResourceId);
+            if (mTextId != ResourceId.ID_NULL) {
+                try {
+                    structure.setTextIdEntry(getResources().getResourceEntryName(mTextId));
+                } catch (Resources.NotFoundException e) {
+                    if (android.view.autofill.Helper.sVerbose) {
+                        Log.v(LOG_TAG, "onProvideAutofillStructure(): cannot set name for text id "
+                                + mTextId + ": " + e.getMessage());
+                    }
+                }
+            }
         }
 
         if (!isPassword || forAutofill) {
@@ -10942,6 +11011,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 return true;
 
             case ID_COPY:
+                // For link action mode in a non-selectable/non-focusable TextView,
+                // make sure that we set the appropriate min/max.
+                final int selStart = getSelectionStart();
+                final int selEnd = getSelectionEnd();
+                min = Math.max(0, Math.min(selStart, selEnd));
+                max = Math.max(0, Math.max(selStart, selEnd));
                 final ClipData copyData = ClipData.newPlainText(null, getTransformedText(min, max));
                 if (setPrimaryClip(copyData)) {
                     stopTextActionMode();
@@ -11164,11 +11239,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     public boolean requestActionMode(@NonNull TextLinks.TextLink link) {
         Preconditions.checkNotNull(link);
-        if (mEditor != null) {
-            mEditor.startLinkActionModeAsync(link);
-            return true;
-        }
-        return false;
+        createEditorIfNeeded();
+        mEditor.startLinkActionModeAsync(link);
+        return true;
     }
     /**
      * @hide
@@ -11883,7 +11956,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         private final Choreographer mChoreographer;
 
         private byte mStatus = MARQUEE_STOPPED;
-        private final float mPixelsPerSecond;
+        private final float mPixelsPerMs;
         private float mMaxScroll;
         private float mMaxFadeScroll;
         private float mGhostStart;
@@ -11896,7 +11969,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         Marquee(TextView v) {
             final float density = v.getContext().getResources().getDisplayMetrics().density;
-            mPixelsPerSecond = MARQUEE_DP_PER_SECOND * density;
+            mPixelsPerMs = MARQUEE_DP_PER_SECOND * density / 1000f;
             mView = new WeakReference<TextView>(v);
             mChoreographer = Choreographer.getInstance();
         }
@@ -11941,7 +12014,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 long currentMs = mChoreographer.getFrameTime();
                 long deltaMs = currentMs - mLastAnimationMs;
                 mLastAnimationMs = currentMs;
-                float deltaPx = deltaMs / 1000f * mPixelsPerSecond;
+                float deltaPx = deltaMs * mPixelsPerMs;
                 mScroll += deltaPx;
                 if (mScroll > mMaxScroll) {
                     mScroll = mMaxScroll;

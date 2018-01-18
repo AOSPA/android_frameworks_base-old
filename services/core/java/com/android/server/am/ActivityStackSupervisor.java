@@ -300,7 +300,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     WindowManagerService mWindowManager;
     DisplayManager mDisplayManager;
 
-    private LaunchingBoundsController mLaunchingBoundsController;
+    private LaunchParamsController mLaunchParamsController;
 
     /**
      * Maps the task identifier that activities are currently being started in to the userId of the
@@ -593,8 +593,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 mHandler.getLooper());
         mKeyguardController = new KeyguardController(mService, this);
 
-        mLaunchingBoundsController = new LaunchingBoundsController();
-        mLaunchingBoundsController.registerDefaultPositioners(this);
+        mLaunchParamsController = new LaunchParamsController(mService);
+        mLaunchParamsController.registerDefaultModifiers(this);
     }
 
 
@@ -2220,8 +2220,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 || mService.mSupportsFreeformWindowManagement;
     }
 
-    LaunchingBoundsController getLaunchingBoundsController() {
-        return mLaunchingBoundsController;
+    LaunchParamsController getLaunchParamsController() {
+        return mLaunchParamsController;
     }
 
     protected <T extends ActivityStack> T getStack(int stackId) {
@@ -3116,6 +3116,10 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         // Need to make sure the pinned stack exist so we can resize it below...
         stack = display.getOrCreateStack(WINDOWING_MODE_PINNED, r.getActivityType(), ON_TOP);
 
+        // Calculate the target bounds here before the task is reparented back into pinned windowing
+        // mode (which will reset the saved bounds)
+        final Rect destBounds = stack.getDefaultPictureInPictureBounds(aspectRatio);
+
         try {
             final TaskRecord task = r.getTask();
             // Resize the pinned stack to match the current size of the task the activity we are
@@ -3153,11 +3157,6 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         } finally {
             mWindowManager.continueSurfaceLayout();
         }
-
-        // Calculate the default bounds (don't use existing stack bounds as we may have just created
-        // the stack, and schedule the start of the animation into PiP (the bounds animator that
-        // is triggered by this is posted on another thread)
-        final Rect destBounds = stack.getDefaultPictureInPictureBounds(aspectRatio);
 
         stack.animateResizePinnedStack(sourceHintBounds, destBounds, -1 /* animationDuration */,
                 true /* fromFullscreen */);

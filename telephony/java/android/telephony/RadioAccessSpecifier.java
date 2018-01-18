@@ -33,7 +33,7 @@ public final class RadioAccessSpecifier implements Parcelable {
      *
      * This parameter must be provided or else the scan will be rejected.
      *
-     * See {@link RadioNetworkConstants.RadioAccessNetworks} for details.
+     * See {@link AccessNetworkConstants.AccessNetworkType} for details.
      */
     private int mRadioAccessNetwork;
 
@@ -43,7 +43,7 @@ public final class RadioAccessSpecifier implements Parcelable {
      * When no specific bands are specified (empty array or null), all the frequency bands
      * supported by the modem will be scanned.
      *
-     * See {@link RadioNetworkConstants} for details.
+     * See {@link AccessNetworkConstants} for details.
      */
     private int[] mBands;
 
@@ -56,7 +56,7 @@ public final class RadioAccessSpecifier implements Parcelable {
      * When no specific channels are specified (empty array or null), all the frequency channels
      * supported by the modem will be scanned.
      *
-     * See {@link RadioNetworkConstants} for details.
+     * See {@link AccessNetworkConstants} for details.
      */
     private int[] mChannels;
 
@@ -72,14 +72,22 @@ public final class RadioAccessSpecifier implements Parcelable {
     */
     public RadioAccessSpecifier(int ran, int[] bands, int[] channels) {
         this.mRadioAccessNetwork = ran;
-        this.mBands = bands.clone();
-        this.mChannels = channels.clone();
+        if (bands != null) {
+            this.mBands = bands.clone();
+        } else {
+            this.mBands = null;
+        }
+        if (channels != null) {
+            this.mChannels = channels.clone();
+        } else {
+            this.mChannels = null;
+        }
     }
 
     /**
      * Returns the radio access network that needs to be scanned.
      *
-     * The returned value is define in {@link RadioNetworkConstants.RadioAccessNetworks};
+     * The returned value is define in {@link AccessNetworkConstants.AccessNetworkType};
      */
     public int getRadioAccessNetwork() {
         return mRadioAccessNetwork;
@@ -88,17 +96,17 @@ public final class RadioAccessSpecifier implements Parcelable {
     /**
      * Returns the frequency bands that need to be scanned.
      *
-     * The returned value is defined in either of {@link RadioNetworkConstants.GeranBands},
-     * {@link RadioNetworkConstants.UtranBands} and {@link RadioNetworkConstants.EutranBands}, and
+     * The returned value is defined in either of {@link AccessNetworkConstants.GeranBand},
+     * {@link AccessNetworkConstants.UtranBand} and {@link AccessNetworkConstants.EutranBand}, and
      * it depends on the returned value of {@link #getRadioAccessNetwork()}.
      */
     public int[] getBands() {
-        return mBands.clone();
+        return mBands == null ? null : mBands.clone();
     }
 
     /** Returns the frequency channels that need to be scanned. */
     public int[] getChannels() {
-        return mChannels.clone();
+        return mChannels == null ? null : mChannels.clone();
     }
 
     public static final Parcelable.Creator<RadioAccessSpecifier> CREATOR =

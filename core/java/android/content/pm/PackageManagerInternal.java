@@ -53,6 +53,14 @@ public abstract class PackageManagerInternal {
     @Retention(RetentionPolicy.SOURCE)
     public @interface KnownPackage {}
 
+    /** Observer called whenever the list of packages changes */
+    public interface PackageListObserver {
+        /** A package was added to the system. */
+        void onPackageAdded(@NonNull String packageName);
+        /** A package was removed from the system. */
+        void onPackageRemoved(@NonNull String packageName);
+    }
+
     /**
      * Provider for package names.
      */
@@ -111,6 +119,12 @@ public abstract class PackageManagerInternal {
     public abstract void setSimCallManagerPackagesProvider(PackagesProvider provider);
 
     /**
+     * Sets the Use Open Wifi packages provider.
+     * @param provider The packages provider.
+     */
+    public abstract void setUseOpenWifiAppPackagesProvider(PackagesProvider provider);
+
+    /**
      * Sets the sync adapter packages provider.
      * @param provider The provider.
      */
@@ -136,6 +150,14 @@ public abstract class PackageManagerInternal {
      * @param userId The user for which to grant the permissions.
      */
     public abstract void grantDefaultPermissionsToDefaultSimCallManager(String packageName,
+            int userId);
+
+    /**
+     * Requests granting of the default permissions to the current default Use Open Wifi app.
+     * @param packageName The default use open wifi package name.
+     * @param userId The user for which to grant the permissions.
+     */
+    public abstract void grantDefaultPermissionsToDefaultUseOpenWifiApp(String packageName,
             int userId);
 
     /**
@@ -433,6 +455,35 @@ public abstract class PackageManagerInternal {
      * Returns a package object for the given package name.
      */
     public abstract @Nullable PackageParser.Package getPackage(@NonNull String packageName);
+
+    /**
+     * Returns a list without a change observer.
+     *
+     * {@see #getPackageList(PackageListObserver)}
+     */
+    public @NonNull PackageList getPackageList() {
+        return getPackageList(null);
+    }
+
+    /**
+     * Returns the list of packages installed at the time of the method call.
+     * <p>The given observer is notified when the list of installed packages
+     * changes [eg. a package was installed or uninstalled]. It will not be
+     * notified if a package is updated.
+     * <p>The package list will not be updated automatically as packages are
+     * installed / uninstalled. Any changes must be handled within the observer.
+     */
+    public abstract @NonNull PackageList getPackageList(@Nullable PackageListObserver observer);
+
+    /**
+     * Removes the observer.
+     * <p>Generally not needed. {@link #getPackageList(PackageListObserver)} will automatically
+     * remove the observer.
+     * <p>Does nothing if the observer isn't currently registered.
+     * <p>Observers are notified asynchronously and it's possible for an observer to be
+     * invoked after its been removed.
+     */
+    public abstract void removePackageListObserver(@NonNull PackageListObserver observer);
 
     /**
      * Returns a package object for the disabled system package name.

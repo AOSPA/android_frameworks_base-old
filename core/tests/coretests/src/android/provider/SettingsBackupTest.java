@@ -112,6 +112,7 @@ public class SettingsBackupTest {
                     Settings.Global.BATTERY_DISCHARGE_DURATION_THRESHOLD,
                     Settings.Global.BATTERY_DISCHARGE_THRESHOLD,
                     Settings.Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS,
+                    Settings.Global.BATTERY_STATS_CONSTANTS,
                     Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE,
                     Settings.Global.BLUETOOTH_A2DP_SINK_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX,
@@ -210,6 +211,7 @@ public class SettingsBackupTest {
                     Settings.Global.EUICC_FACTORY_RESET_TIMEOUT_MILLIS,
                     Settings.Global.FANCY_IME_ANIMATIONS,
                     Settings.Global.FORCE_ALLOW_ON_EXTERNAL,
+                    Settings.Global.FORCED_APP_STANDBY_ENABLED,
                     Settings.Global.FSTRIM_MANDATORY_INTERVAL,
                     Settings.Global.GLOBAL_HTTP_PROXY_EXCLUSION_LIST,
                     Settings.Global.GLOBAL_HTTP_PROXY_HOST,
@@ -281,6 +283,7 @@ public class SettingsBackupTest {
                     Settings.Global.NETWORK_SCORING_UI_ENABLED,
                     Settings.Global.NETWORK_SWITCH_NOTIFICATION_DAILY_LIMIT,
                     Settings.Global.NETWORK_SWITCH_NOTIFICATION_RATE_LIMIT_MILLIS,
+                    Settings.Global.NETWORK_WATCHLIST_ENABLED,
                     Settings.Global.NEW_CONTACT_AGGREGATOR,
                     Settings.Global.NITZ_UPDATE_DIFF,
                     Settings.Global.NITZ_UPDATE_SPACING,
@@ -347,6 +350,7 @@ public class SettingsBackupTest {
                     Settings.Global.SYS_STORAGE_FULL_THRESHOLD_BYTES,
                     Settings.Global.SYS_STORAGE_THRESHOLD_MAX_BYTES,
                     Settings.Global.SYS_STORAGE_THRESHOLD_PERCENTAGE,
+                    Settings.Global.SYS_VDSO,
                     Settings.Global.TCP_DEFAULT_INIT_RWND,
                     Settings.Global.TETHER_DUN_APN,
                     Settings.Global.TETHER_DUN_REQUIRED,
@@ -418,7 +422,8 @@ public class SettingsBackupTest {
                     Settings.Global.WTF_IS_FATAL,
                     Settings.Global.ZEN_MODE,
                     Settings.Global.ZEN_MODE_CONFIG_ETAG,
-                    Settings.Global.ZEN_MODE_RINGER_LEVEL);
+                    Settings.Global.ZEN_MODE_RINGER_LEVEL,
+                    Settings.Global.ZRAM_ENABLED);
 
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(
@@ -452,7 +457,6 @@ public class SettingsBackupTest {
                  Settings.Secure.COMPLETED_CATEGORY_PREFIX,
                  Settings.Secure.CONNECTIVITY_RELEASE_PENDING_INTENT_DELAY_MS,
                  Settings.Secure.DEFAULT_INPUT_METHOD,
-                 Settings.Secure.DEMO_USER_SETUP_COMPLETE,
                  Settings.Secure.DEVICE_PAIRED,
                  Settings.Secure.DIALER_DEFAULT_APPLICATION,
                  Settings.Secure.DISABLED_PRINT_SERVICES,
@@ -511,6 +515,7 @@ public class SettingsBackupTest {
                  Settings.Secure.SELECTED_INPUT_METHOD_SUBTYPE,
                  Settings.Secure.SETTINGS_CLASSNAME,
                  Settings.Secure.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING, // candidate?
+                 Settings.Secure.SHOW_ROTATION_SUGGESTIONS,
                  Settings.Secure.SKIP_FIRST_USE_HINTS, // candidate?
                  Settings.Secure.SMS_DEFAULT_APPLICATION,
                  Settings.Secure.TRUST_AGENTS_INITIALIZED,
@@ -525,7 +530,8 @@ public class SettingsBackupTest {
                  Settings.Secure.VOICE_INTERACTION_SERVICE,
                  Settings.Secure.VOICE_RECOGNITION_SERVICE,
                  Settings.Secure.INSTANT_APPS_ENABLED,
-                 Settings.Secure.BACKUP_MANAGER_CONSTANTS);
+                 Settings.Secure.BACKUP_MANAGER_CONSTANTS,
+                 Settings.Secure.KEYGUARD_SLICE_URI);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {

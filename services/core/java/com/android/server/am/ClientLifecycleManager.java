@@ -43,8 +43,9 @@ class ClientLifecycleManager {
      * @see ClientTransaction
      */
     void scheduleTransaction(ClientTransaction transaction) throws RemoteException {
+        final IApplicationThread client = transaction.getClient();
         transaction.schedule();
-        if (!(transaction.getClient() instanceof Binder)) {
+        if (!(client instanceof Binder)) {
             // If client is not an instance of Binder - it's a remote call and at this point it is
             // safe to recycle the object. All objects used for local calls will be recycled after
             // the transaction is executed on client in ActivityThread.

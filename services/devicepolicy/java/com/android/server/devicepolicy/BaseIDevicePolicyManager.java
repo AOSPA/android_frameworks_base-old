@@ -38,6 +38,12 @@ import java.util.List;
  */
 abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     /**
+     * To be called by {@link DevicePolicyManagerService#Lifecycle} when the service is started.
+     *
+     * @see {@link SystemService#onStart}.
+     */
+    abstract void handleStart();
+    /**
      * To be called by {@link DevicePolicyManagerService#Lifecycle} during the various boot phases.
      *
      * @see {@link SystemService#onBootPhase}.
@@ -64,10 +70,11 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
 
     public void setSystemSetting(ComponentName who, String setting, String value){}
 
-    public void transferOwner(ComponentName admin, ComponentName target, PersistableBundle bundle) {}
+    public void transferOwnership(ComponentName admin, ComponentName target, PersistableBundle bundle) {}
 
     public boolean generateKeyPair(ComponentName who, String callerPackage, String algorithm,
-            ParcelableKeyGenParameterSpec keySpec, KeymasterCertificateChain attestationChain) {
+            ParcelableKeyGenParameterSpec keySpec, int idAttestationFlags,
+            KeymasterCertificateChain attestationChain) {
         return false;
     }
 

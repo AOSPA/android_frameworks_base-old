@@ -19,9 +19,9 @@ package com.android.internal.widget;
 import android.app.PendingIntent;
 import android.app.trust.IStrongAuthTracker;
 import android.os.Bundle;
-import android.security.recoverablekeystore.KeyEntryRecoveryData;
-import android.security.recoverablekeystore.KeyStoreRecoveryData;
-import android.security.recoverablekeystore.KeyStoreRecoveryMetadata;
+import android.security.keystore.EntryRecoveryData;
+import android.security.keystore.RecoveryData;
+import android.security.keystore.RecoveryMetadata;
 import com.android.internal.widget.ICheckCredentialProgressCallback;
 import com.android.internal.widget.VerifyCredentialResponse;
 
@@ -60,25 +60,25 @@ interface ILockSettings {
             in byte[] token, int requestedQuality, int userId);
     void unlockUserWithToken(long tokenHandle, in byte[] token, int userId);
 
-    // RecoverableKeyStoreLoader methods.
+    // Keystore RecoveryManager methods.
     // {@code ServiceSpecificException} may be thrown to signal an error, which caller can
-    // convert to  {@code RecoverableKeyStoreLoader}.
-    void initRecoveryService(in String rootCertificateAlias, in byte[] signedPublicKeyList,
-            int userId);
-    KeyStoreRecoveryData getRecoveryData(in byte[] account, int userId);
+    // convert to  {@code RecoveryManagerException}.
+    void initRecoveryService(in String rootCertificateAlias, in byte[] signedPublicKeyList);
+    RecoveryData getRecoveryData(in byte[] account);
     byte[] generateAndStoreKey(String alias);
-    void setSnapshotCreatedPendingIntent(in PendingIntent intent, int userId);
-    Map getRecoverySnapshotVersions(int userId);
-    void setServerParameters(long serverParameters, int userId);
-    void setRecoveryStatus(in String packageName, in String[] aliases, int status, int userId);
-    Map getRecoveryStatus(in String packageName, int userId);
-    void setRecoverySecretTypes(in int[] secretTypes, int userId);
-    int[] getRecoverySecretTypes(int userId);
-    int[] getPendingRecoverySecretTypes(int userId);
-    void recoverySecretAvailable(in KeyStoreRecoveryMetadata recoverySecret, int userId);
+    void removeKey(String alias);
+    void setSnapshotCreatedPendingIntent(in PendingIntent intent);
+    Map getRecoverySnapshotVersions();
+    void setServerParams(in byte[] serverParams);
+    void setRecoveryStatus(in String packageName, in String[] aliases, int status);
+    Map getRecoveryStatus(in String packageName);
+    void setRecoverySecretTypes(in int[] secretTypes);
+    int[] getRecoverySecretTypes();
+    int[] getPendingRecoverySecretTypes();
+    void recoverySecretAvailable(in RecoveryMetadata recoverySecret);
     byte[] startRecoverySession(in String sessionId,
             in byte[] verifierPublicKey, in byte[] vaultParams, in byte[] vaultChallenge,
-            in List<KeyStoreRecoveryMetadata> secrets, int userId);
+            in List<RecoveryMetadata> secrets);
     Map/*<String, byte[]>*/ recoverKeys(in String sessionId, in byte[] recoveryKeyBlob,
-            in List<KeyEntryRecoveryData> applicationKeys, int userId);
+            in List<EntryRecoveryData> applicationKeys);
 }

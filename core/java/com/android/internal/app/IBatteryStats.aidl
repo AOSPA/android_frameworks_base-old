@@ -81,7 +81,11 @@ interface IBatteryStats {
     void noteStopWakelockFromSource(in WorkSource ws, int pid, String name, String historyName,
             int type);
     void noteLongPartialWakelockStart(String name, String historyName, int uid);
+    void noteLongPartialWakelockStartFromSource(String name, String historyName,
+            in WorkSource workSource);
     void noteLongPartialWakelockFinish(String name, String historyName, int uid);
+    void noteLongPartialWakelockFinishFromSource(String name, String historyName,
+            in WorkSource workSource);
 
     void noteVibratorOn(int uid, long durationMillis);
     void noteVibratorOff(int uid);
@@ -119,8 +123,6 @@ interface IBatteryStats {
     void noteWifiScanStoppedFromSource(in WorkSource ws);
     void noteWifiBatchedScanStartedFromSource(in WorkSource ws, int csph);
     void noteWifiBatchedScanStoppedFromSource(in WorkSource ws);
-    void noteWifiMulticastEnabledFromSource(in WorkSource ws);
-    void noteWifiMulticastDisabledFromSource(in WorkSource ws);
     void noteWifiRadioPowerState(int powerState, long timestampNs, int uid);
     void noteNetworkInterfaceType(String iface, int type);
     void noteNetworkStatsEnabled();

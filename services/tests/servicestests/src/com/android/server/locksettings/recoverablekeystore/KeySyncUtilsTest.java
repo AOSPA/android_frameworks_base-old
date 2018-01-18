@@ -30,9 +30,12 @@ import com.google.common.collect.ImmutableMap;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.MessageDigest;
+import java.security.PublicKey;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Random;
@@ -47,6 +50,8 @@ public class KeySyncUtilsTest {
     private static final int RECOVERY_KEY_LENGTH_BITS = 256;
     private static final int THM_KF_HASH_SIZE = 256;
     private static final int KEY_CLAIMANT_LENGTH_BYTES = 16;
+    private static final byte[] TEST_DEVICE_ID =
+            new byte[]{1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2};
     private static final String SHA_256_ALGORITHM = "SHA-256";
     private static final String APPLICATION_KEY_ALGORITHM = "AES";
     private static final byte[] LOCK_SCREEN_HASH_1 =
@@ -57,6 +62,8 @@ public class KeySyncUtilsTest {
             "V1 KF_claim".getBytes(StandardCharsets.UTF_8);
     private static final byte[] RECOVERY_RESPONSE_HEADER =
             "V1 reencrypted_recovery_key".getBytes(StandardCharsets.UTF_8);
+    private static final int PUBLIC_KEY_LENGTH_BYTES = 65;
+    private static final int VAULT_PARAMS_LENGTH_BYTES = 85;
 
     @Test
     public void calculateThmKfHash_isShaOfLockScreenHashWithPrefix() throws Exception {
@@ -335,6 +342,83 @@ public class KeySyncUtilsTest {
             // expected
         }
     }
+
+    @Test
+    public void packVaultParams_returns85Bytes() throws Exception {
+        PublicKey thmPublicKey = SecureBox.genKeyPair().getPublic();
+
+        byte[] packedForm = KeySyncUtils.packVaultParams(
+                thmPublicKey,
+                /*counterId=*/ 1001L,
+                TEST_DEVICE_ID,
+                /*maxAttempts=*/ 10);
+
+        assertEquals(VAULT_PARAMS_LENGTH_BYTES, packedForm.length);
+    }
+
+    @Test
+    public void packVaultParams_encodesPublicKeyInFirst65Bytes() throws Exception {
+        PublicKey thmPublicKey = SecureBox.genKeyPair().getPublic();
+
+        byte[] packedForm = KeySyncUtils.packVaultParams(
+                thmPublicKey,
+                /*counterId=*/ 1001L,
+                TEST_DEVICE_ID,
+                /*maxAttempts=*/ 10);
+
+        assertArrayEquals(
+                SecureBox.encodePublicKey(thmPublicKey),
+                Arrays.copyOf(packedForm, PUBLIC_KEY_LENGTH_BYTES));
+    }
+
+    @Test
+    public void packVaultParams_encodesCounterIdAsSecondParam() throws Exception {
+        long counterId = 103502L;
+
+        byte[] packedForm = KeySyncUtils.packVaultParams(
+                SecureBox.genKeyPair().getPublic(),
+                counterId,
+                TEST_DEVICE_ID,
+                /*maxAttempts=*/ 10);
+
+        ByteBuffer byteBuffer = ByteBuffer.wrap(packedForm)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        byteBuffer.position(PUBLIC_KEY_LENGTH_BYTES);
+        assertEquals(counterId, byteBuffer.getLong());
+    }
+
+    @Test
+    public void packVaultParams_encodesDeviceIdAsThirdParam() throws Exception {
+
+        byte[] packedForm = KeySyncUtils.packVaultParams(
+                SecureBox.genKeyPair().getPublic(),
+                /*counterId=*/ 10021L,
+                TEST_DEVICE_ID,
+                /*maxAttempts=*/ 10);
+
+        ByteBuffer byteBuffer = ByteBuffer.wrap(packedForm)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        byteBuffer.position(PUBLIC_KEY_LENGTH_BYTES + Long.BYTES);
+        assertEquals(/* default value*/0, byteBuffer.getLong());
+    }
+
+    @Test
+    public void packVaultParams_encodesMaxAttemptsAsLastParam() throws Exception {
+        int maxAttempts = 10;
+
+        byte[] packedForm = KeySyncUtils.packVaultParams(
+                SecureBox.genKeyPair().getPublic(),
+                /*counterId=*/ 1001L,
+                TEST_DEVICE_ID,
+                maxAttempts);
+
+        ByteBuffer byteBuffer = ByteBuffer.wrap(packedForm)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        // TODO: update position.
+        byteBuffer.position(PUBLIC_KEY_LENGTH_BYTES + 2 * Long.BYTES);
+        assertEquals(maxAttempts, byteBuffer.getInt());
+    }
+
 
     private static byte[] randomBytes(int n) {
         byte[] bytes = new byte[n];

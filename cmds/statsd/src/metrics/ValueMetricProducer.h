@@ -50,12 +50,13 @@ public:
 protected:
     void onMatchedLogEventInternalLocked(
             const size_t matcherIndex, const HashableDimensionKey& eventKey,
-            const std::map<std::string, HashableDimensionKey>& conditionKey, bool condition,
+            const ConditionKey& conditionKey, bool condition,
             const LogEvent& event) override;
 
 private:
     void onDumpReportLocked(const uint64_t dumpTimeNs,
                             android::util::ProtoOutputStream* protoOutput) override;
+    void onDumpReportLocked(const uint64_t dumpTimeNs, StatsLogReport* report) override;
 
     // Internal interface to handle condition change.
     void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
@@ -69,7 +70,7 @@ private:
     // Util function to flush the old packet.
     void flushIfNeededLocked(const uint64_t& eventTime);
 
-    const int32_t mValueField;
+    const FieldMatcher mValueField;
 
     std::shared_ptr<StatsPullerManager> mStatsPullerManager;
 
@@ -102,7 +103,7 @@ private:
     // TODO: Add a lock to mPastBuckets.
     std::unordered_map<HashableDimensionKey, std::vector<ValueBucket>> mPastBuckets;
 
-    long get_value(const LogEvent& event);
+    std::shared_ptr<FieldValueMap> getValueFields(const LogEvent& event);
 
     // Util function to check whether the specified dimension hits the guardrail.
     bool hitGuardRailLocked(const HashableDimensionKey& newKey);

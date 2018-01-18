@@ -35,6 +35,7 @@ import com.android.server.AnimationThread;
 import com.android.server.policy.WindowManagerPolicy;
 
 import java.io.PrintWriter;
+import java.util.ArrayList;
 
 /**
  * Singleton class that carries out the animations and Surface operations in a separate task
@@ -46,7 +47,6 @@ public class WindowAnimator {
     final WindowManagerService mService;
     final Context mContext;
     final WindowManagerPolicy mPolicy;
-    private final WindowSurfacePlacer mWindowPlacerLocked;
 
     /** Is any window animating? */
     private boolean mAnimating;
@@ -73,7 +73,7 @@ public class WindowAnimator {
 
     SparseArray<DisplayContentsAnimator> mDisplayContentsAnimators = new SparseArray<>(2);
 
-    boolean mInitialized = false;
+    private boolean mInitialized = false;
 
     // When set to true the animator will go over all windows after an animation frame is posted and
     // check if some got replaced and can be removed.
@@ -87,11 +87,16 @@ public class WindowAnimator {
      */
     private boolean mAnimationFrameCallbackScheduled;
 
+    /**
+     * A list of runnable that need to be run after {@link WindowContainer#prepareSurfaces} is
+     * executed and the corresponding transaction is closed and applied.
+     */
+    private final ArrayList<Runnable> mAfterPrepareSurfacesRunnables = new ArrayList<>();
+
     WindowAnimator(final WindowManagerService service) {
         mService = service;
         mContext = service.mContext;
         mPolicy = service.mPolicy;
-        mWindowPlacerLocked = service.mWindowPlacerLocked;
         AnimationThread.getHandler().runWithScissors(
                 () -> mChoreographer = Choreographer.getSfInstance(), 0 /* timeout */);
 
@@ -234,7 +239,7 @@ public class WindowAnimator {
             }
 
             if (hasPendingLayoutChanges || doRequest) {
-                mWindowPlacerLocked.requestTraversal();
+                mService.mWindowPlacerLocked.requestTraversal();
             }
 
             final boolean rootAnimating = mService.mRoot.isSelfOrChildAnimating();
@@ -247,7 +252,7 @@ public class WindowAnimator {
                 Trace.asyncTraceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "animating", 0);
             }
             if (!rootAnimating && mLastRootAnimating) {
-                mWindowPlacerLocked.requestTraversal();
+                mService.mWindowPlacerLocked.requestTraversal();
                 mService.mTaskSnapshotController.setPersisterPaused(false);
                 Trace.asyncTraceEnd(Trace.TRACE_TAG_WINDOW_MANAGER, "animating", 0);
             }
@@ -262,6 +267,7 @@ public class WindowAnimator {
             mService.destroyPreservedSurfaceLocked();
             mService.mWindowPlacerLocked.destroyPendingSurfaces();
 
+            executeAfterPrepareSurfacesRunnables();
 
             if (DEBUG_WINDOW_TRACE) {
                 Slog.i(TAG, "!!! animate: exit mAnimating=" + mAnimating
@@ -285,9 +291,6 @@ public class WindowAnimator {
         }
         if ((bulkUpdateParams & WindowSurfacePlacer.SET_ORIENTATION_CHANGE_COMPLETE) != 0) {
             builder.append(" ORIENTATION_CHANGE_COMPLETE");
-        }
-        if ((bulkUpdateParams & WindowSurfacePlacer.SET_TURN_ON_SCREEN) != 0) {
-            builder.append(" TURN_ON_SCREEN");
         }
         return builder.toString();
     }
@@ -424,5 +427,24 @@ public class WindowAnimator {
 
     void orAnimating(boolean animating) {
         mAnimating |= animating;
+    }
+
+    /**
+     * Adds a runnable to be executed after {@link WindowContainer#prepareSurfaces} is called and
+     * the corresponding transaction is closed and applied.
+     */
+    void addAfterPrepareSurfacesRunnable(Runnable r) {
+        mAfterPrepareSurfacesRunnables.add(r);
+        scheduleAnimation();
+    }
+
+    private void executeAfterPrepareSurfacesRunnables() {
+
+        // Traverse in order they were added.
+        final int size = mAfterPrepareSurfacesRunnables.size();
+        for (int i = 0; i < size; i++) {
+            mAfterPrepareSurfacesRunnables.get(i).run();
+        }
+        mAfterPrepareSurfacesRunnables.clear();
     }
 }

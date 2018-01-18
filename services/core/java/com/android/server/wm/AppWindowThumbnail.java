@@ -20,12 +20,16 @@ import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.MAX_ANIMATION_DURATION;
+import static com.android.server.wm.proto.AppWindowThumbnailProto.HEIGHT;
+import static com.android.server.wm.proto.AppWindowThumbnailProto.SURFACE_ANIMATOR;
+import static com.android.server.wm.proto.AppWindowThumbnailProto.WIDTH;
 
 import android.graphics.GraphicBuffer;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.os.Binder;
 import android.util.Slog;
+import android.util.proto.ProtoOutputStream;
 import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Builder;
@@ -49,7 +53,8 @@ class AppWindowThumbnail implements Animatable {
 
     AppWindowThumbnail(Transaction t, AppWindowToken appToken, GraphicBuffer thumbnailHeader) {
         mAppToken = appToken;
-        mSurfaceAnimator = new SurfaceAnimator(this, this::onAnimationFinished, appToken.mService);
+        mSurfaceAnimator = new SurfaceAnimator(this, this::onAnimationFinished,
+                appToken.mService.mAnimator::addAfterPrepareSurfacesRunnable, appToken.mService);
         mWidth = thumbnailHeader.getWidth();
         mHeight = thumbnailHeader.getHeight();
 
@@ -84,10 +89,14 @@ class AppWindowThumbnail implements Animatable {
     }
 
     void startAnimation(Transaction t, Animation anim) {
+        startAnimation(t, anim, null /* position */);
+    }
+
+    void startAnimation(Transaction t, Animation anim, Point position) {
         anim.restrictDuration(MAX_ANIMATION_DURATION);
         anim.scaleCurrentDuration(mAppToken.mService.getTransitionAnimationScaleLocked());
         mSurfaceAnimator.startAnimation(t, new LocalAnimationAdapter(
-                new WindowAnimationSpec(anim, null /* position */,
+                new WindowAnimationSpec(anim, position,
                         mAppToken.mService.mAppTransition.canSkipFirstFrame()),
                 mAppToken.mService.mSurfaceAnimationRunner), false /* hidden */);
     }
@@ -107,6 +116,22 @@ class AppWindowThumbnail implements Animatable {
     void destroy() {
         mSurfaceAnimator.cancelAnimation();
         mSurfaceControl.destroy();
+    }
+
+    /**
+     * Write to a protocol buffer output stream. Protocol buffer message definition is at {@link
+     * com.android.server.wm.proto.AppWindowThumbnailProto}.
+     *
+     * @param proto Stream to write the AppWindowThumbnail object to.
+     * @param fieldId Field Id of the AppWindowThumbnail as defined in the parent message.
+     * @hide
+     */
+    void writeToProto(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        proto.write(WIDTH, mWidth);
+        proto.write(HEIGHT, mHeight);
+        mSurfaceAnimator.writeToProto(proto, SURFACE_ANIMATOR);
+        proto.end(token);
     }
 
     @Override
@@ -139,12 +164,17 @@ class AppWindowThumbnail implements Animatable {
 
     @Override
     public Builder makeAnimationLeash() {
-        return mAppToken.makeSurface().setParent(mAppToken.getAppAnimationLayer());
+        return mAppToken.makeSurface();
     }
 
     @Override
     public SurfaceControl getSurfaceControl() {
         return mSurfaceControl;
+    }
+
+    @Override
+    public SurfaceControl getAnimationLeashParent() {
+        return mAppToken.getAppAnimationLayer();
     }
 
     @Override

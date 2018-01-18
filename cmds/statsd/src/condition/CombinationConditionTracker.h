@@ -26,13 +26,13 @@ namespace statsd {
 
 class CombinationConditionTracker : public virtual ConditionTracker {
 public:
-    CombinationConditionTracker(const std::string& name, const int index);
+    CombinationConditionTracker(const int64_t& id, const int index);
 
     ~CombinationConditionTracker();
 
     bool init(const std::vector<Predicate>& allConditionConfig,
               const std::vector<sp<ConditionTracker>>& allConditionTrackers,
-              const std::unordered_map<std::string, int>& conditionNameIndexMap,
+              const std::unordered_map<int64_t, int>& conditionIdIndexMap,
               std::vector<bool>& stack) override;
 
     void evaluateCondition(const LogEvent& event,
@@ -41,7 +41,7 @@ public:
                            std::vector<ConditionState>& conditionCache,
                            std::vector<bool>& changedCache) override;
 
-    void isConditionMet(const std::map<std::string, HashableDimensionKey>& conditionParameters,
+    void isConditionMet(const ConditionKey& conditionParameters,
                         const std::vector<sp<ConditionTracker>>& allConditions,
                         std::vector<ConditionState>& conditionCache) const override;
 

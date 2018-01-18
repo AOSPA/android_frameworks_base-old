@@ -17,7 +17,7 @@
 #ifndef DURATION_TRACKER_H
 #define DURATION_TRACKER_H
 
-#include "anomaly/AnomalyTracker.h"
+#include "anomaly/DurationAnomalyTracker.h"
 #include "condition/ConditionWizard.h"
 #include "config/ConfigKey.h"
 #include "stats_util.h"
@@ -60,12 +60,12 @@ struct DurationBucket {
 
 class DurationTracker {
 public:
-    DurationTracker(const ConfigKey& key, const string& name, const HashableDimensionKey& eventKey,
+    DurationTracker(const ConfigKey& key, const int64_t& id, const HashableDimensionKey& eventKey,
                     sp<ConditionWizard> wizard, int conditionIndex, bool nesting,
-                    uint64_t currentBucketStartNs, uint64_t bucketSizeNs,
-                    const std::vector<sp<AnomalyTracker>>& anomalyTrackers)
+                    uint64_t currentBucketStartNs, uint64_t bucketSizeNs, bool conditionSliced,
+                    const std::vector<sp<DurationAnomalyTracker>>& anomalyTrackers)
         : mConfigKey(key),
-          mName(name),
+          mTrackerId(id),
           mEventKey(eventKey),
           mWizard(wizard),
           mConditionTrackerIndex(conditionIndex),
@@ -74,6 +74,7 @@ public:
           mCurrentBucketStartTimeNs(currentBucketStartNs),
           mDuration(0),
           mCurrentBucketNum(0),
+          mConditionSliced(conditionSliced),
           mAnomalyTrackers(anomalyTrackers){};
 
     virtual ~DurationTracker(){};
@@ -94,7 +95,7 @@ public:
             std::unordered_map<HashableDimensionKey, std::vector<DurationBucket>>* output) = 0;
 
     // Predict the anomaly timestamp given the current status.
-    virtual int64_t predictAnomalyTimestampNs(const AnomalyTracker& anomalyTracker,
+    virtual int64_t predictAnomalyTimestampNs(const DurationAnomalyTracker& anomalyTracker,
                                               const uint64_t currentTimestamp) const = 0;
 
 protected:
@@ -145,7 +146,7 @@ protected:
     // A reference to the DurationMetricProducer's config key.
     const ConfigKey& mConfigKey;
 
-    const std::string mName;
+    const int64_t mTrackerId;
 
     HashableDimensionKey mEventKey;
 
@@ -163,10 +164,13 @@ protected:
 
     uint64_t mCurrentBucketNum;
 
-    std::vector<sp<AnomalyTracker>> mAnomalyTrackers;
+    const bool mConditionSliced;
+
+    std::vector<sp<DurationAnomalyTracker>> mAnomalyTrackers;
 
     FRIEND_TEST(OringDurationTrackerTest, TestPredictAnomalyTimestamp);
-    FRIEND_TEST(OringDurationTrackerTest, TestAnomalyDetection);
+    FRIEND_TEST(OringDurationTrackerTest, TestAnomalyDetectionExpiredAlarm);
+    FRIEND_TEST(OringDurationTrackerTest, TestAnomalyDetectionFiredAlarm);
 };
 
 }  // namespace statsd

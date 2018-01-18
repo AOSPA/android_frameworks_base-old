@@ -1090,15 +1090,6 @@ public class MockPackageManager extends PackageManager {
      * @hide
      */
     @Override
-    public void installPackage(Uri packageURI, PackageInstallObserver observer,
-            int flags, String installerPackageName) {
-        throw new UnsupportedOperationException();
-    }
-
-    /**
-     * @hide
-     */
-    @Override
     public void addCrossProfileIntentFilter(IntentFilter filter, int sourceUserId, int targetUserId,
             int flags) {
         throw new UnsupportedOperationException();
@@ -1181,6 +1172,22 @@ public class MockPackageManager extends PackageManager {
      */
     @Override
     public ArtManager getArtManager() {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public void setHarmfulAppWarning(String packageName, CharSequence warning) {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public CharSequence getHarmfulAppWarning(String packageName) {
         throw new UnsupportedOperationException();
     }
 }

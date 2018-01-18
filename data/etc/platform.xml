@@ -112,6 +112,10 @@
         <group gid="media" />
     </permission>
 
+    <permission name="android.permission.USE_RESERVED_DISK">
+        <group gid="reserved_disk" />
+    </permission>
+
     <!-- These are permissions that were mapped to gids but we need
          to keep them here until an upgrade from L to the current
          version is to be supported. These permissions are built-in
@@ -163,6 +167,8 @@
 
     <assign-permission name="android.permission.ACCESS_LOWPAN_STATE" uid="lowpan" />
     <assign-permission name="android.permission.MANAGE_LOWPAN_INTERFACES" uid="lowpan" />
+
+    <assign-permission name="android.permission.STATSCOMPANION" uid="statsd" />
 
     <!-- This is a list of all the libraries available for application
          code to link against. -->

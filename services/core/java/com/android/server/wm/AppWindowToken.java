@@ -16,6 +16,8 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
@@ -28,6 +30,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.AppTransition.TRANSIT_UNSET;
@@ -48,7 +51,28 @@ import static com.android.server.wm.WindowManagerService.H.NOTIFY_ACTIVITY_DRAWN
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
 import static com.android.server.wm.WindowManagerService.logWithStack;
+import static com.android.server.wm.proto.AppWindowTokenProto.ALL_DRAWN;
+import static com.android.server.wm.proto.AppWindowTokenProto.APP_STOPPED;
+import static com.android.server.wm.proto.AppWindowTokenProto.CLIENT_HIDDEN;
+import static com.android.server.wm.proto.AppWindowTokenProto.DEFER_HIDING_CLIENT;
+import static com.android.server.wm.proto.AppWindowTokenProto.FILLS_PARENT;
+import static com.android.server.wm.proto.AppWindowTokenProto.FROZEN_BOUNDS;
+import static com.android.server.wm.proto.AppWindowTokenProto.HIDDEN_REQUESTED;
+import static com.android.server.wm.proto.AppWindowTokenProto.HIDDEN_SET_FROM_TRANSFERRED_STARTING_WINDOW;
+import static com.android.server.wm.proto.AppWindowTokenProto.IS_REALLY_ANIMATING;
+import static com.android.server.wm.proto.AppWindowTokenProto.IS_WAITING_FOR_TRANSITION_START;
+import static com.android.server.wm.proto.AppWindowTokenProto.LAST_ALL_DRAWN;
+import static com.android.server.wm.proto.AppWindowTokenProto.LAST_SURFACE_SHOWING;
 import static com.android.server.wm.proto.AppWindowTokenProto.NAME;
+import static com.android.server.wm.proto.AppWindowTokenProto.NUM_DRAWN_WINDOWS;
+import static com.android.server.wm.proto.AppWindowTokenProto.NUM_INTERESTING_WINDOWS;
+import static com.android.server.wm.proto.AppWindowTokenProto.REMOVED;
+import static com.android.server.wm.proto.AppWindowTokenProto.REPORTED_DRAWN;
+import static com.android.server.wm.proto.AppWindowTokenProto.REPORTED_VISIBLE;
+import static com.android.server.wm.proto.AppWindowTokenProto.STARTING_DISPLAYED;
+import static com.android.server.wm.proto.AppWindowTokenProto.STARTING_MOVED;
+import static com.android.server.wm.proto.AppWindowTokenProto.STARTING_WINDOW;
+import static com.android.server.wm.proto.AppWindowTokenProto.THUMBNAIL;
 import static com.android.server.wm.proto.AppWindowTokenProto.WINDOW_TOKEN;
 
 import android.annotation.CallSuper;
@@ -65,13 +89,14 @@ import android.os.Trace;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.DisplayInfo;
-import android.view.SurfaceControl.Transaction;
-import android.view.animation.Animation;
 import android.view.IApplicationToken;
 import android.view.SurfaceControl;
+import android.view.SurfaceControl.Transaction;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
+import android.view.animation.Animation;
 
+import com.android.internal.R;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.server.input.InputApplicationHandle;
 import com.android.server.policy.WindowManagerPolicy.StartingSurface;
@@ -211,7 +236,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     private int mTransitFlags;
 
     /** Whether our surface was set to be showing in the last call to {@link #prepareSurfaces} */
-    private boolean mLastSurfaceShowing;
+    private boolean mLastSurfaceShowing = true;
 
     private AppWindowThumbnail mThumbnail;
 
@@ -645,8 +670,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         boolean destroyedSomething = false;
 
         // Copying to a different list as multiple children can be removed.
-        // TODO: Not sure why this is needed.
-        final LinkedList<WindowState> children = new LinkedList<>(mChildren);
+        final ArrayList<WindowState> children = new ArrayList<>(mChildren);
         for (int i = children.size() - 1; i >= 0; i--) {
             final WindowState win = children.get(i);
             destroyedSomething |= win.destroySurface(cleanupOnResume, mAppStopped);
@@ -1211,6 +1235,30 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     @Override
+    public void onConfigurationChanged(Configuration newParentConfig) {
+        final int prevWinMode = getWindowingMode();
+        super.onConfigurationChanged(newParentConfig);
+        final int winMode = getWindowingMode();
+
+        if (prevWinMode == winMode) {
+            return;
+        }
+
+        if (prevWinMode != WINDOWING_MODE_UNDEFINED && winMode == WINDOWING_MODE_PINNED) {
+            // Entering PiP from fullscreen, reset the snap fraction
+            mDisplayContent.mPinnedStackControllerLocked.resetReentrySnapFraction(this);
+        } else if (prevWinMode == WINDOWING_MODE_PINNED && winMode != WINDOWING_MODE_UNDEFINED) {
+            // Leaving PiP to fullscreen, save the snap fraction based on the pre-animation bounds
+            // for the next re-entry into PiP (assuming the activity is not hidden or destroyed)
+            final TaskStack pinnedStack = mDisplayContent.getPinnedStack();
+            if (pinnedStack != null) {
+                mDisplayContent.mPinnedStackControllerLocked.saveReentrySnapFraction(this,
+                        pinnedStack.mPreAnimationBounds);
+            }
+        }
+    }
+
+    @Override
     void checkAppWindowsReadyToShow() {
         if (allDrawn == mLastAllDrawn) {
             return;
@@ -1512,9 +1560,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     @Override
-    public SurfaceControl.Builder makeAnimationLeash() {
-        return super.makeAnimationLeash()
-                .setParent(getAppAnimationLayer());
+    public SurfaceControl getAnimationLeashParent() {
+        return getAppAnimationLayer();
     }
 
     boolean applyAnimationLocked(WindowManager.LayoutParams lp, int transit, boolean enter,
@@ -1541,6 +1588,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 if (stack != null) {
                     stack.getRelativePosition(mTmpPoint);
                     stack.getBounds(mTmpRect);
+                    mTmpRect.offsetTo(0, 0);
                 }
                 final AnimationAdapter adapter = new LocalAnimationAdapter(
                         new WindowAnimationSpec(a, mTmpPoint, mTmpRect,
@@ -1748,6 +1796,37 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         mThumbnail.startAnimation(getPendingTransaction(), loadThumbnailAnimation(thumbnailHeader));
     }
 
+    /**
+     * Attaches a surface with a thumbnail for the
+     * {@link android.app.ActivityOptions#ANIM_OPEN_CROSS_PROFILE_APPS} animation.
+     */
+    void attachCrossProfileAppsThumbnailAnimation() {
+        if (!isReallyAnimating()) {
+            return;
+        }
+        clearThumbnail();
+
+        final WindowState win = findMainWindow();
+        if (win == null) {
+            return;
+        }
+        final Rect frame = win.mFrame;
+        final int thumbnailDrawableRes = getTask().mUserId == mService.mCurrentUserId
+                ? R.drawable.ic_account_circle
+                : R.drawable.ic_corp_badge_no_background;
+        final GraphicBuffer thumbnail =
+                mService.mAppTransition
+                        .createCrossProfileAppsThumbnail(thumbnailDrawableRes, frame);
+        if (thumbnail == null) {
+            return;
+        }
+        mThumbnail = new AppWindowThumbnail(getPendingTransaction(), this, thumbnail);
+        final Animation animation =
+                mService.mAppTransition.createCrossProfileAppsThumbnailAnimationLocked(win.mFrame);
+        mThumbnail.startAnimation(getPendingTransaction(), animation, new Point(frame.left,
+                frame.top));
+    }
+
     private Animation loadThumbnailAnimation(GraphicBuffer thumbnailHeader) {
         final DisplayInfo displayInfo = mDisplayContent.getDisplayInfo();
 
@@ -1837,6 +1916,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     @Override
     void setHidden(boolean hidden) {
         super.setHidden(hidden);
+
+        if (hidden) {
+            // Once the app window is hidden, reset the last saved PiP snap fraction
+            mDisplayContent.mPinnedStackControllerLocked.resetReentrySnapFraction(this);
+        }
         scheduleAnimation();
     }
 
@@ -1873,6 +1957,34 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         final long token = proto.start(fieldId);
         writeNameToProto(proto, NAME);
         super.writeToProto(proto, WINDOW_TOKEN, trim);
+        proto.write(LAST_SURFACE_SHOWING, mLastSurfaceShowing);
+        proto.write(IS_WAITING_FOR_TRANSITION_START, isWaitingForTransitionStart());
+        proto.write(IS_REALLY_ANIMATING, isReallyAnimating());
+        if (mThumbnail != null){
+            mThumbnail.writeToProto(proto, THUMBNAIL);
+        }
+        proto.write(FILLS_PARENT, mFillsParent);
+        proto.write(APP_STOPPED, mAppStopped);
+        proto.write(HIDDEN_REQUESTED, hiddenRequested);
+        proto.write(CLIENT_HIDDEN, mClientHidden);
+        proto.write(DEFER_HIDING_CLIENT, mDeferHidingClient);
+        proto.write(REPORTED_DRAWN, reportedDrawn);
+        proto.write(REPORTED_VISIBLE, reportedVisible);
+        proto.write(NUM_INTERESTING_WINDOWS, mNumInterestingWindows);
+        proto.write(NUM_DRAWN_WINDOWS, mNumDrawnWindows);
+        proto.write(ALL_DRAWN, allDrawn);
+        proto.write(LAST_ALL_DRAWN, mLastAllDrawn);
+        proto.write(REMOVED, removed);
+        if (startingWindow != null){
+            startingWindow.writeIdentifierToProto(proto, STARTING_WINDOW);
+        }
+        proto.write(STARTING_DISPLAYED, startingDisplayed);
+        proto.write(STARTING_MOVED, startingMoved);
+        proto.write(HIDDEN_SET_FROM_TRANSFERRED_STARTING_WINDOW,
+                mHiddenSetFromTransferredStartingWindow);
+        for (Rect bounds : mFrozenBounds) {
+            bounds.writeToProto(proto, FROZEN_BOUNDS);
+        }
         proto.end(token);
     }
 

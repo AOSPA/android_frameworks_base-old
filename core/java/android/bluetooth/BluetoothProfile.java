@@ -19,6 +19,7 @@ package android.bluetooth;
 
 import android.Manifest;
 import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 
 import java.util.List;
 
@@ -157,12 +158,19 @@ public interface BluetoothProfile {
     public static final int HID_DEVICE = 19;
 
     /**
+     * Object Push Profile (OPP)
+     *
+     * @hide
+     */
+    public static final int OPP = 20;
+
+    /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
      * the largest value assigned to a profile.
      *
      * @hide
      */
-    public static final int MAX_PROFILE_ID = 19;
+    public static final int MAX_PROFILE_ID = 20;
 
     /**
      * Default priority for devices that we try to auto-connect to and
@@ -178,6 +186,7 @@ public interface BluetoothProfile {
      *
      * @hide
      **/
+    @SystemApi
     public static final int PRIORITY_ON = 100;
 
     /**
@@ -186,6 +195,7 @@ public interface BluetoothProfile {
      *
      * @hide
      **/
+    @SystemApi
     public static final int PRIORITY_OFF = 0;
 
     /**

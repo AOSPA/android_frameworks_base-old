@@ -60,6 +60,9 @@ TEST(IhUtilTest, ParseRecord) {
     result = parseRecord("123,456,78_9", ",");
     expected = { "123", "456", "78_9" };
     EXPECT_EQ(expected, result);
+
+    result = parseRecord("", " ");
+    EXPECT_TRUE(result.empty());
 }
 
 TEST(IhUtilTest, ParseRecordByColumns) {
@@ -71,11 +74,29 @@ TEST(IhUtilTest, ParseRecordByColumns) {
     EXPECT_EQ(expected, result);
 
     result = parseRecordByColumns("abc \t2345  6789 ", indices);
-    expected = { "abc", "2345", "6789" };
+    expected = { "abc", "2345  6789" };
     EXPECT_EQ(expected, result);
 
-    result = parseRecordByColumns("abc \t23456789 bob", indices);
-    expected = { "abc", "23456789", "bob" };
+    std::string extraColumn1 = "abc \t23456789 bob";
+    std::string emptyMidColm = "abc \t         bob";
+    std::string longFirstClm = "abcdefgt\t6789 bob";
+    std::string lngFrstEmpty = "abcdefgt\t     bob";
+
+    result = parseRecordByColumns(extraColumn1, indices);
+    expected = { "abc", "23456789 bob" };
+    EXPECT_EQ(expected, result);
+
+    // 2nd column should be treated as an empty entry.
+    result = parseRecordByColumns(emptyMidColm, indices);
+    expected = { "abc", "bob" };
+    EXPECT_EQ(expected, result);
+
+    result = parseRecordByColumns(longFirstClm, indices);
+    expected = { "abcdefgt", "6789 bob" };
+    EXPECT_EQ(expected, result);
+
+    result = parseRecordByColumns(lngFrstEmpty, indices);
+    expected = { "abcdefgt", "bob" };
     EXPECT_EQ(expected, result);
 }
 
@@ -113,6 +134,22 @@ TEST(IhUtilTest, stripSuffix) {
     string data4 = " 243%abc";
     EXPECT_FALSE(stripSuffix(&data4, "bc", true));
     EXPECT_THAT(data4, StrEq(" 243%abc"));
+}
+
+TEST(IhUtilTest, behead) {
+    string testcase1 = "81002 dropbox_file_copy (a)(b)";
+    EXPECT_THAT(behead(&testcase1, ' '), StrEq("81002"));
+    EXPECT_THAT(behead(&testcase1, ' '), StrEq("dropbox_file_copy"));
+    EXPECT_THAT(testcase1, "(a)(b)");
+
+    string testcase2 = "adbce,erwqr";
+    EXPECT_THAT(behead(&testcase2, ' '), StrEq("adbce,erwqr"));
+    EXPECT_THAT(testcase2, "");
+
+    string testcase3 = "first second";
+    EXPECT_THAT(behead(&testcase3, ' '), StrEq("first"));
+    EXPECT_THAT(behead(&testcase3, ' '), StrEq("second"));
+    EXPECT_THAT(testcase3, "");
 }
 
 TEST(IhUtilTest, Reader) {

@@ -18,16 +18,19 @@ package android.app;
 
 import static com.android.internal.util.NotificationColorUtil.satisfiesTextContrast;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import android.annotation.Nullable;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.Icon;
 import android.media.session.MediaSession;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.support.test.InstrumentationRegistry;
@@ -38,6 +41,8 @@ import android.widget.RemoteViews;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
+import java.util.function.Consumer;
 
 @RunWith(AndroidJUnit4.class)
 @SmallTest
@@ -215,9 +220,11 @@ public class NotificationTest {
     }
 
     @Test
-    public void testMessagingStyle_isGroupConversation() {
+    public void messagingStyle_isGroupConversation() {
+        mContext.getApplicationInfo().targetSdkVersion = Build.VERSION_CODES.P;
         Notification.MessagingStyle messagingStyle = new Notification.MessagingStyle("self name")
-                .setGroupConversation(true);
+                .setGroupConversation(true)
+                .setConversationTitle("test conversation title");
         Notification notification = new Notification.Builder(mContext, "test id")
                 .setSmallIcon(1)
                 .setContentTitle("test title")
@@ -226,6 +233,90 @@ public class NotificationTest {
 
         assertTrue(messagingStyle.isGroupConversation());
         assertTrue(notification.extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION));
+    }
+
+    @Test
+    public void messagingStyle_isGroupConversation_noConversationTitle() {
+        mContext.getApplicationInfo().targetSdkVersion = Build.VERSION_CODES.P;
+        Notification.MessagingStyle messagingStyle = new Notification.MessagingStyle("self name")
+                .setGroupConversation(true)
+                .setConversationTitle(null);
+        Notification notification = new Notification.Builder(mContext, "test id")
+                .setSmallIcon(1)
+                .setContentTitle("test title")
+                .setStyle(messagingStyle)
+                .build();
+
+        assertTrue(messagingStyle.isGroupConversation());
+        assertTrue(notification.extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION));
+    }
+
+    @Test
+    public void messagingStyle_isGroupConversation_withConversationTitle_legacy() {
+        // In legacy (version < P), isGroupConversation is controlled by conversationTitle.
+        mContext.getApplicationInfo().targetSdkVersion = Build.VERSION_CODES.O;
+        Notification.MessagingStyle messagingStyle = new Notification.MessagingStyle("self name")
+                .setGroupConversation(false)
+                .setConversationTitle("test conversation title");
+        Notification notification = new Notification.Builder(mContext, "test id")
+                .setSmallIcon(1)
+                .setContentTitle("test title")
+                .setStyle(messagingStyle)
+                .build();
+
+        assertTrue(messagingStyle.isGroupConversation());
+        assertFalse(notification.extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION));
+    }
+
+    @Test
+    public void messagingStyle_isGroupConversation_withoutConversationTitle_legacy() {
+        // In legacy (version < P), isGroupConversation is controlled by conversationTitle.
+        mContext.getApplicationInfo().targetSdkVersion = Build.VERSION_CODES.O;
+        Notification.MessagingStyle messagingStyle = new Notification.MessagingStyle("self name")
+                .setGroupConversation(true)
+                .setConversationTitle(null);
+        Notification notification = new Notification.Builder(mContext, "test id")
+                .setSmallIcon(1)
+                .setContentTitle("test title")
+                .setStyle(messagingStyle)
+                .build();
+
+        assertFalse(messagingStyle.isGroupConversation());
+        assertTrue(notification.extras.getBoolean(Notification.EXTRA_IS_GROUP_CONVERSATION));
+    }
+
+    @Test
+    public void action_builder_hasDefault() {
+        Notification.Action action = makeNotificationAction(null);
+        assertEquals(Notification.Action.SEMANTIC_ACTION_NONE, action.getSemanticAction());
+    }
+
+    @Test
+    public void action_builder_setSemanticAction() {
+        Notification.Action action = makeNotificationAction(
+                builder -> builder.setSemanticAction(Notification.Action.SEMANTIC_ACTION_REPLY));
+        assertEquals(Notification.Action.SEMANTIC_ACTION_REPLY, action.getSemanticAction());
+    }
+
+    @Test
+    public void action_parcel() {
+        Notification.Action action = writeAndReadParcelable(
+                makeNotificationAction(builder -> {
+                    builder.setSemanticAction(Notification.Action.SEMANTIC_ACTION_ARCHIVE);
+                    builder.setAllowGeneratedReplies(true);
+                }));
+
+        assertEquals(Notification.Action.SEMANTIC_ACTION_ARCHIVE, action.getSemanticAction());
+        assertTrue(action.getAllowGeneratedReplies());
+    }
+
+    @Test
+    public void action_clone() {
+        Notification.Action action = makeNotificationAction(
+                builder -> builder.setSemanticAction(Notification.Action.SEMANTIC_ACTION_DELETE));
+        assertEquals(
+                Notification.Action.SEMANTIC_ACTION_DELETE,
+                action.clone().getSemanticAction());
     }
 
     private Notification.Builder getMediaNotification() {
@@ -246,5 +337,19 @@ public class NotificationTest {
         p.writeParcelable(original, /* flags */ 0);
         p.setDataPosition(0);
         return p.readParcelable(/* classLoader */ null);
+    }
+
+    /**
+     * Creates a Notification.Action by mocking initial dependencies and then applying
+     * transformations if they're defined.
+     */
+    private Notification.Action makeNotificationAction(
+            @Nullable Consumer<Notification.Action.Builder> transformation) {
+        Notification.Action.Builder actionBuilder =
+                new Notification.Action.Builder(null, "Test Title", null);
+        if (transformation != null) {
+            transformation.accept(actionBuilder);
+        }
+        return actionBuilder.build();
     }
 }

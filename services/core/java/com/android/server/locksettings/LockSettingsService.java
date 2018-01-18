@@ -79,10 +79,10 @@ import android.security.keystore.AndroidKeyStoreProvider;
 import android.security.keystore.KeyProperties;
 import android.security.keystore.KeyProtection;
 import android.security.keystore.UserNotAuthenticatedException;
-import android.security.recoverablekeystore.KeyEntryRecoveryData;
-import android.security.recoverablekeystore.KeyStoreRecoveryData;
-import android.security.recoverablekeystore.KeyStoreRecoveryMetadata;
-import android.security.recoverablekeystore.RecoverableKeyStoreLoader.RecoverableKeyStoreLoaderException;
+import android.security.keystore.EntryRecoveryData;
+import android.security.keystore.RecoveryData;
+import android.security.keystore.RecoveryMetadata;
+import android.security.keystore.RecoveryManagerException;
 import android.service.gatekeeper.GateKeeperResponse;
 import android.service.gatekeeper.IGateKeeperService;
 import android.text.TextUtils;
@@ -912,8 +912,11 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     private void notifySeparateProfileChallengeChanged(int userId) {
-        LocalServices.getService(DevicePolicyManagerInternal.class)
-                .reportSeparateProfileChallengeChanged(userId);
+        final DevicePolicyManagerInternal dpmi = LocalServices.getService(
+                DevicePolicyManagerInternal.class);
+        if (dpmi != null) {
+            dpmi.reportSeparateProfileChallengeChanged(userId);
+        }
     }
 
     @Override
@@ -1284,6 +1287,7 @@ public class LockSettingsService extends ILockSettings.Stub {
             fixateNewestUserKeyAuth(userId);
             synchronizeUnifiedWorkChallengeForProfiles(userId, null);
             notifyActivePasswordMetricsAvailable(null, userId);
+            mRecoverableKeyStoreManager.lockScreenSecretChanged(credentialType, credential, userId);
             return;
         }
         if (credential == null) {
@@ -1333,6 +1337,8 @@ public class LockSettingsService extends ILockSettings.Stub {
                     .verifyChallenge(userId, 0, willStore.hash, credential.getBytes());
             setUserKeyProtection(userId, credential, convertResponse(gkResponse));
             fixateNewestUserKeyAuth(userId);
+            mRecoverableKeyStoreManager.lockScreenSecretChanged(credentialType, credential,
+                userId);
             // Refresh the auth token
             doVerifyCredential(credential, credentialType, true, 0, userId, null /* progressCallback */);
             synchronizeUnifiedWorkChallengeForProfiles(userId, null);
@@ -1581,6 +1587,8 @@ public class LockSettingsService extends ILockSettings.Stub {
                 userId, progressCallback);
         // The user employs synthetic password based credential.
         if (response != null) {
+            mRecoverableKeyStoreManager.lockScreenSecretAvailable(credentialType, credential,
+                    userId);
             return response;
         }
 
@@ -1705,6 +1713,9 @@ public class LockSettingsService extends ILockSettings.Stub {
                                 /* TODO(roosa): keep the same password quality */, userId);
                 if (!hasChallenge) {
                     notifyActivePasswordMetricsAvailable(credential, userId);
+                    // Use credentials to create recoverable keystore snapshot.
+                    mRecoverableKeyStoreManager.lockScreenSecretAvailable(
+                            storedHash.type, credential, userId);
                     return VerifyCredentialResponse.OK;
                 }
                 // Fall through to get the auth token. Technically this should never happen,
@@ -1951,81 +1962,83 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     @Override
     public void initRecoveryService(@NonNull String rootCertificateAlias,
-            @NonNull byte[] signedPublicKeyList, @UserIdInt int userId)
-            throws RemoteException {
+            @NonNull byte[] signedPublicKeyList) throws RemoteException {
         mRecoverableKeyStoreManager.initRecoveryService(rootCertificateAlias,
-                signedPublicKeyList, userId);
+                signedPublicKeyList);
     }
 
     @Override
-    public KeyStoreRecoveryData getRecoveryData(@NonNull byte[] account, @UserIdInt int userId)
-            throws RemoteException {
-        return mRecoverableKeyStoreManager.getRecoveryData(account, userId);
+    public RecoveryData getRecoveryData(@NonNull byte[] account) throws RemoteException {
+        return mRecoverableKeyStoreManager.getRecoveryData(account);
     }
 
-    public void setSnapshotCreatedPendingIntent(@Nullable PendingIntent intent, int userId)
+    public void setSnapshotCreatedPendingIntent(@Nullable PendingIntent intent)
             throws RemoteException {
-        mRecoverableKeyStoreManager.setSnapshotCreatedPendingIntent(intent, userId);
+        mRecoverableKeyStoreManager.setSnapshotCreatedPendingIntent(intent);
     }
 
-    public Map getRecoverySnapshotVersions(int userId) throws RemoteException {
-        return mRecoverableKeyStoreManager.getRecoverySnapshotVersions(userId);
+    public Map getRecoverySnapshotVersions() throws RemoteException {
+        return mRecoverableKeyStoreManager.getRecoverySnapshotVersions();
     }
 
     @Override
-    public void setServerParameters(long serverParameters, @UserIdInt int userId)
-            throws RemoteException {
-        mRecoverableKeyStoreManager.setServerParameters(serverParameters, userId);
+    public void setServerParams(byte[] serverParams) throws RemoteException {
+        mRecoverableKeyStoreManager.setServerParams(serverParams);
     }
 
     @Override
     public void setRecoveryStatus(@NonNull String packageName, @Nullable String[] aliases,
-            int status, @UserIdInt int userId) throws RemoteException {
-        mRecoverableKeyStoreManager.setRecoveryStatus(packageName, aliases, status, userId);
+            int status) throws RemoteException {
+        mRecoverableKeyStoreManager.setRecoveryStatus(packageName, aliases, status);
     }
 
-    public Map getRecoveryStatus(@Nullable String packageName, int userId) throws RemoteException {
-        return mRecoverableKeyStoreManager.getRecoveryStatus(packageName, userId);
-    }
-
-    @Override
-    public void setRecoverySecretTypes(@NonNull @KeyStoreRecoveryMetadata.UserSecretType
-            int[] secretTypes, @UserIdInt int userId) throws RemoteException {
-        mRecoverableKeyStoreManager.setRecoverySecretTypes(secretTypes, userId);
+    public Map getRecoveryStatus(@Nullable String packageName) throws RemoteException {
+        return mRecoverableKeyStoreManager.getRecoveryStatus(packageName);
     }
 
     @Override
-    public int[] getRecoverySecretTypes(@UserIdInt int userId) throws RemoteException {
-        return mRecoverableKeyStoreManager.getRecoverySecretTypes(userId);
+    public void setRecoverySecretTypes(@NonNull @RecoveryMetadata.UserSecretType
+            int[] secretTypes) throws RemoteException {
+        mRecoverableKeyStoreManager.setRecoverySecretTypes(secretTypes);
+    }
+
+    @Override
+    public int[] getRecoverySecretTypes() throws RemoteException {
+        return mRecoverableKeyStoreManager.getRecoverySecretTypes();
 
     }
 
     @Override
-    public int[] getPendingRecoverySecretTypes(@UserIdInt int userId) throws RemoteException {
+    public int[] getPendingRecoverySecretTypes() throws RemoteException {
         throw new SecurityException("Not implemented");
     }
 
     @Override
-    public void recoverySecretAvailable(@NonNull KeyStoreRecoveryMetadata recoverySecret,
-            @UserIdInt int userId) throws RemoteException {
-        mRecoverableKeyStoreManager.recoverySecretAvailable(recoverySecret, userId);
+    public void recoverySecretAvailable(@NonNull RecoveryMetadata recoverySecret)
+            throws RemoteException {
+        mRecoverableKeyStoreManager.recoverySecretAvailable(recoverySecret);
     }
 
     @Override
     public byte[] startRecoverySession(@NonNull String sessionId,
             @NonNull byte[] verifierPublicKey, @NonNull byte[] vaultParams,
-            @NonNull byte[] vaultChallenge, @NonNull List<KeyStoreRecoveryMetadata> secrets,
-            @UserIdInt int userId) throws RemoteException {
+            @NonNull byte[] vaultChallenge, @NonNull List<RecoveryMetadata> secrets)
+            throws RemoteException {
         return mRecoverableKeyStoreManager.startRecoverySession(sessionId, verifierPublicKey,
-                vaultParams, vaultChallenge, secrets, userId);
+                vaultParams, vaultChallenge, secrets);
     }
 
     @Override
-    public Map<String, byte[]> recoverKeys(@NonNull String sessionId, @NonNull byte[] recoveryKeyBlob,
-            @NonNull List<KeyEntryRecoveryData> applicationKeys, @UserIdInt int userId)
+    public Map<String, byte[]> recoverKeys(@NonNull String sessionId,
+            @NonNull byte[] recoveryKeyBlob, @NonNull List<EntryRecoveryData> applicationKeys)
             throws RemoteException {
         return mRecoverableKeyStoreManager.recoverKeys(
-                sessionId, recoveryKeyBlob, applicationKeys, userId);
+                sessionId, recoveryKeyBlob, applicationKeys);
+    }
+
+    @Override
+    public void removeKey(@NonNull String alias) throws RemoteException {
+        mRecoverableKeyStoreManager.removeKey(alias);
     }
 
     @Override

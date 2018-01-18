@@ -24,7 +24,7 @@ using std::string;
 using std::vector;
 
 ConditionState ConditionWizard::query(const int index,
-                                      const map<string, HashableDimensionKey>& parameters) {
+                                      const ConditionKey& parameters) {
     vector<ConditionState> cache(mAllConditions.size(), ConditionState::kNotEvaluated);
 
     mAllConditions[index]->isConditionMet(parameters, mAllConditions, cache);

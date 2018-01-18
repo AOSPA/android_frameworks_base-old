@@ -5778,6 +5778,14 @@ public final class Settings {
             "touch_exploration_granted_accessibility_services";
 
         /**
+         * Uri of the slice that's presented on the keyguard.
+         * Defaults to a slice with the date and next alarm.
+         *
+         * @hide
+         */
+        public static final String KEYGUARD_SLICE_URI = "keyguard_slice_uri";
+
+        /**
          * Whether to speak passwords while in accessibility mode.
          *
          * @deprecated The speaking of passwords is controlled by individual accessibility services.
@@ -6794,6 +6802,37 @@ public final class Settings {
         public static final String ASSIST_DISCLOSURE_ENABLED = "assist_disclosure_enabled";
 
         /**
+         * Control if rotation suggestions are sent to System UI when in rotation locked mode.
+         * Done to enable screen rotation while the the screen rotation is locked. Enabling will
+         * poll the accelerometer in rotation locked mode.
+         *
+         * If 0, then rotation suggestions are not sent to System UI. If 1, suggestions are sent.
+         *
+         * @hide
+         */
+
+        public static final String SHOW_ROTATION_SUGGESTIONS = "show_rotation_suggestions";
+
+        /**
+         * The disabled state of SHOW_ROTATION_SUGGESTIONS.
+         * @hide
+         */
+        public static final int SHOW_ROTATION_SUGGESTIONS_DISABLED = 0x0;
+
+        /**
+         * The enabled state of SHOW_ROTATION_SUGGESTIONS.
+         * @hide
+         */
+        public static final int SHOW_ROTATION_SUGGESTIONS_ENABLED = 0x1;
+
+        /**
+         * The default state of SHOW_ROTATION_SUGGESTIONS.
+         * @hide
+         */
+        public static final int SHOW_ROTATION_SUGGESTIONS_DEFAULT =
+                SHOW_ROTATION_SUGGESTIONS_DISABLED;
+
+        /**
          * Read only list of the service components that the current user has explicitly allowed to
          * see and assist with all of the user's notifications.
          *
@@ -7183,13 +7222,6 @@ public final class Settings {
         public static final String QS_TILES = "sysui_qs_tiles";
 
         /**
-         * Whether preloaded APKs have been installed for the user.
-         * @hide
-         */
-        public static final String DEMO_USER_SETUP_COMPLETE
-                = "demo_user_setup_complete";
-
-        /**
          * Specifies whether the web action API is enabled.
          *
          * @hide
@@ -7252,7 +7284,10 @@ public final class Settings {
          * full_backup_interval_milliseconds       (long)
          * full_backup_require_charging            (boolean)
          * full_backup_required_network_type       (int)
+         * backup_finished_notification_receivers  (String[])
          * </pre>
+         *
+         * backup_finished_notification_receivers uses ":" as delimeter for values.
          *
          * <p>
          * Type: string
@@ -8700,6 +8735,8 @@ public final class Settings {
 
         /**
          * Whether soft AP will shut down after a timeout period when no devices are connected.
+         *
+         * Type: int (0 for false, 1 for true)
          * @hide
          */
         public static final String SOFT_AP_TIMEOUT_ENABLED = "soft_ap_timeout_enabled";
@@ -8779,6 +8816,7 @@ public final class Settings {
          * Type: string package name or null if the feature is either not provided or disabled.
          * @hide
          */
+        @TestApi
         public static final String USE_OPEN_WIFI_PACKAGE = "use_open_wifi_package";
 
         /**
@@ -9615,6 +9653,17 @@ public final class Settings {
         public static final String ALWAYS_ON_DISPLAY_CONSTANTS = "always_on_display_constants";
 
         /**
+        * System VDSO global setting. This links to the "sys.vdso" system property.
+        * The following values are supported:
+        * false  -> both 32 and 64 bit vdso disabled
+        * 32     -> 32 bit vdso enabled
+        * 64     -> 64 bit vdso enabled
+        * Any other value defaults to both 32 bit and 64 bit true.
+        * @hide
+        */
+        public static final String SYS_VDSO = "sys_vdso";
+
+        /**
          * App standby (app idle) specific settings.
          * This is encoded as a key=value list, separated by commas. Ex:
          * <p>
@@ -9770,6 +9819,22 @@ public final class Settings {
         public static final String TEXT_CLASSIFIER_CONSTANTS = "text_classifier_constants";
 
         /**
+         * BatteryStats specific settings.
+         * This is encoded as a key=value list, separated by commas. Ex: "foo=1,bar=true"
+         *
+         * The following keys are supported:
+         * <pre>
+         * track_cpu_times_by_proc_state (boolean)
+         * </pre>
+         *
+         * <p>
+         * Type: string
+         * @hide
+         * see also com.android.internal.os.BatteryStatsImpl.Constants
+         */
+        public static final String BATTERY_STATS_CONSTANTS = "battery_stats_constants";
+
+        /**
          * Whether or not App Standby feature is enabled. This controls throttling of apps
          * based on usage patterns and predictions.
          * Type: int (0 for false, 1 for true)
@@ -9777,6 +9842,22 @@ public final class Settings {
          * @hide
          */
         public static final java.lang.String APP_STANDBY_ENABLED = "app_standby_enabled";
+
+        /**
+         * Feature flag to enable or disable the Forced App Standby feature.
+         * Type: int (0 for false, 1 for true)
+         * Default: 1
+         * @hide
+         */
+        public static final String FORCED_APP_STANDBY_ENABLED = "forced_app_standby_enabled";
+
+        /**
+         * Whether or not Network Watchlist feature is enabled.
+         * Type: int (0 for false, 1 for true)
+         * Default: 0
+         * @hide
+         */
+        public static final String NETWORK_WATCHLIST_ENABLED = "network_watchlist_enabled";
 
         /**
          * Get the key that retrieves a bluetooth headset's priority.
@@ -9988,6 +10069,7 @@ public final class Settings {
          * If 1 low power mode is enabled.
          * @hide
          */
+        @TestApi
         public static final String LOW_POWER_MODE = "low_power";
 
         /**
@@ -11209,6 +11291,15 @@ public final class Settings {
          */
         public static final String ENABLE_GNSS_RAW_MEAS_FULL_TRACKING =
                 "enable_gnss_raw_meas_full_tracking";
+
+        /**
+         * Whether we've enabled zram on this device. Takes effect on
+         * reboot. The value "1" enables zram; "0" disables it, and
+         * everything else is unspecified.
+         * @hide
+         */
+        public static final String ZRAM_ENABLED =
+                "zram_enabled";
     }
 
     /**

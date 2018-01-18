@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "src/metrics/DurationMetricProducer.h"
+#include "src/stats_log_util.h"
 #include "metrics_test_helper.h"
 #include "src/condition/ConditionWizard.h"
 
@@ -36,25 +37,26 @@ namespace android {
 namespace os {
 namespace statsd {
 
-const ConfigKey kConfigKey(0, "test");
+const ConfigKey kConfigKey(0, 12345);
 
 TEST(DurationMetricTrackerTest, TestNoCondition) {
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     uint64_t bucketStartTimeNs = 10000000000;
-    uint64_t bucketSizeNs = 30 * 1000 * 1000 * 1000LL;
+    int64_t bucketSizeNs = TimeUnitToBucketSizeInMillis(ONE_MINUTE) * 1000000LL;
 
     DurationMetric metric;
-    metric.set_name("1");
-    metric.mutable_bucket()->set_bucket_size_millis(bucketSizeNs / 1000000);
+    metric.set_id(1);
+    metric.set_bucket(ONE_MINUTE);
     metric.set_aggregation_type(DurationMetric_AggregationType_SUM);
 
     int tagId = 1;
     LogEvent event1(tagId, bucketStartTimeNs + 1);
     LogEvent event2(tagId, bucketStartTimeNs + bucketSizeNs + 2);
 
+    FieldMatcher dimensions;
     DurationMetricProducer durationProducer(
             kConfigKey, metric, -1 /*no condition*/, 1 /* start index */, 2 /* stop index */,
-            3 /* stop_all index */, false /*nesting*/, wizard, {}, bucketStartTimeNs);
+            3 /* stop_all index */, false /*nesting*/, wizard, dimensions, bucketStartTimeNs);
 
     durationProducer.onMatchedLogEvent(1 /* start index*/, event1);
     durationProducer.onMatchedLogEvent(2 /* stop index*/, event2);
@@ -75,11 +77,11 @@ TEST(DurationMetricTrackerTest, TestNoCondition) {
 TEST(DurationMetricTrackerTest, TestNonSlicedCondition) {
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     uint64_t bucketStartTimeNs = 10000000000;
-    uint64_t bucketSizeNs = 30 * 1000 * 1000 * 1000LL;
+    int64_t bucketSizeNs = TimeUnitToBucketSizeInMillis(ONE_MINUTE) * 1000000LL;
 
     DurationMetric metric;
-    metric.set_name("1");
-    metric.mutable_bucket()->set_bucket_size_millis(bucketSizeNs / 1000000);
+    metric.set_id(1);
+    metric.set_bucket(ONE_MINUTE);
     metric.set_aggregation_type(DurationMetric_AggregationType_SUM);
 
     int tagId = 1;
@@ -88,9 +90,10 @@ TEST(DurationMetricTrackerTest, TestNonSlicedCondition) {
     LogEvent event3(tagId, bucketStartTimeNs + bucketSizeNs + 1);
     LogEvent event4(tagId, bucketStartTimeNs + bucketSizeNs + 3);
 
+    FieldMatcher dimensions;
     DurationMetricProducer durationProducer(
             kConfigKey, metric, 0 /* condition index */, 1 /* start index */, 2 /* stop index */,
-            3 /* stop_all index */, false /*nesting*/, wizard, {}, bucketStartTimeNs);
+            3 /* stop_all index */, false /*nesting*/, wizard, dimensions, bucketStartTimeNs);
     EXPECT_FALSE(durationProducer.mCondition);
     EXPECT_FALSE(durationProducer.isConditionSliced());
 

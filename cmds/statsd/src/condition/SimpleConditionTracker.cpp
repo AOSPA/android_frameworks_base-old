@@ -33,17 +33,17 @@ using std::unordered_map;
 using std::vector;
 
 SimpleConditionTracker::SimpleConditionTracker(
-        const ConfigKey& key, const string& name, const int index,
+        const ConfigKey& key, const int64_t& id, const int index,
         const SimplePredicate& simplePredicate,
-        const unordered_map<string, int>& trackerNameIndexMap)
-    : ConditionTracker(name, index), mConfigKey(key) {
-    VLOG("creating SimpleConditionTracker %s", mName.c_str());
+        const unordered_map<int64_t, int>& trackerNameIndexMap)
+    : ConditionTracker(id, index), mConfigKey(key) {
+    VLOG("creating SimpleConditionTracker %lld", (long long)mConditionId);
     mCountNesting = simplePredicate.count_nesting();
 
     if (simplePredicate.has_start()) {
         auto pair = trackerNameIndexMap.find(simplePredicate.start());
         if (pair == trackerNameIndexMap.end()) {
-            ALOGW("Start matcher %s not found in the config", simplePredicate.start().c_str());
+            ALOGW("Start matcher %lld not found in the config", (long long)simplePredicate.start());
             return;
         }
         mStartLogMatcherIndex = pair->second;
@@ -55,7 +55,7 @@ SimpleConditionTracker::SimpleConditionTracker(
     if (simplePredicate.has_stop()) {
         auto pair = trackerNameIndexMap.find(simplePredicate.stop());
         if (pair == trackerNameIndexMap.end()) {
-            ALOGW("Stop matcher %s not found in the config", simplePredicate.stop().c_str());
+            ALOGW("Stop matcher %lld not found in the config", (long long)simplePredicate.stop());
             return;
         }
         mStopLogMatcherIndex = pair->second;
@@ -67,7 +67,7 @@ SimpleConditionTracker::SimpleConditionTracker(
     if (simplePredicate.has_stop_all()) {
         auto pair = trackerNameIndexMap.find(simplePredicate.stop_all());
         if (pair == trackerNameIndexMap.end()) {
-            ALOGW("Stop all matcher %s not found in the config", simplePredicate.stop().c_str());
+            ALOGW("Stop all matcher %lld found in the config", (long long)simplePredicate.stop_all());
             return;
         }
         mStopAllLogMatcherIndex = pair->second;
@@ -76,10 +76,9 @@ SimpleConditionTracker::SimpleConditionTracker(
         mStopAllLogMatcherIndex = -1;
     }
 
-    mOutputDimension.insert(mOutputDimension.begin(), simplePredicate.dimension().begin(),
-                            simplePredicate.dimension().end());
+    mOutputDimensions = simplePredicate.dimensions();
 
-    if (mOutputDimension.size() > 0) {
+    if (mOutputDimensions.child_size() > 0) {
         mSliced = true;
     }
 
@@ -100,15 +99,15 @@ SimpleConditionTracker::~SimpleConditionTracker() {
 
 bool SimpleConditionTracker::init(const vector<Predicate>& allConditionConfig,
                                   const vector<sp<ConditionTracker>>& allConditionTrackers,
-                                  const unordered_map<string, int>& conditionNameIndexMap,
+                                  const unordered_map<int64_t, int>& conditionIdIndexMap,
                                   vector<bool>& stack) {
     // SimpleConditionTracker does not have dependency on other conditions, thus we just return
     // if the initialization was successful.
     return mInitialized;
 }
 
-void print(map<HashableDimensionKey, int>& conditions, const string& name) {
-    VLOG("%s DUMP:", name.c_str());
+void print(map<HashableDimensionKey, int>& conditions, const int64_t& id) {
+    VLOG("%lld DUMP:", (long long)id);
     for (const auto& pair : conditions) {
         VLOG("\t%s : %d", pair.first.c_str(), pair.second);
     }
@@ -136,10 +135,11 @@ bool SimpleConditionTracker::hitGuardRail(const HashableDimensionKey& newKey) {
     // 1. Report the tuple count if the tuple count > soft limit
     if (mSlicedConditionState.size() > StatsdStats::kDimensionKeySizeSoftLimit - 1) {
         size_t newTupleCount = mSlicedConditionState.size() + 1;
-        StatsdStats::getInstance().noteConditionDimensionSize(mConfigKey, mName, newTupleCount);
+        StatsdStats::getInstance().noteConditionDimensionSize(mConfigKey, mConditionId, newTupleCount);
         // 2. Don't add more tuples, we are above the allowed threshold. Drop the data.
         if (newTupleCount > StatsdStats::kDimensionKeySizeHardLimit) {
-            ALOGE("Predicate %s dropping data for dimension key %s", mName.c_str(), newKey.c_str());
+            ALOGE("Predicate %lld dropping data for dimension key %s",
+                (long long)mConditionId, newKey.c_str());
             return true;
         }
     }
@@ -150,6 +150,14 @@ void SimpleConditionTracker::handleConditionEvent(const HashableDimensionKey& ou
                                                   bool matchStart,
                                                   std::vector<ConditionState>& conditionCache,
                                                   std::vector<bool>& conditionChangedCache) {
+    if ((int)conditionChangedCache.size() <= mIndex) {
+        ALOGE("handleConditionEvent: param conditionChangedCache not initialized.");
+        return;
+    }
+    if ((int)conditionCache.size() <= mIndex) {
+        ALOGE("handleConditionEvent: param conditionCache not initialized.");
+        return;
+    }
     bool changed = false;
     auto outputIt = mSlicedConditionState.find(outputKey);
     ConditionState newCondition;
@@ -215,13 +223,13 @@ void SimpleConditionTracker::handleConditionEvent(const HashableDimensionKey& ou
 
     // dump all dimensions for debugging
     if (DEBUG) {
-        print(mSlicedConditionState, mName);
+        print(mSlicedConditionState, mConditionId);
     }
 
     conditionChangedCache[mIndex] = changed;
     conditionCache[mIndex] = newCondition;
 
-    VLOG("SimplePredicate %s nonSlicedChange? %d", mName.c_str(),
+    VLOG("SimplePredicate %lld nonSlicedChange? %d", (long long)mConditionId,
          conditionChangedCache[mIndex] == true);
 }
 
@@ -232,7 +240,8 @@ void SimpleConditionTracker::evaluateCondition(const LogEvent& event,
                                                vector<bool>& conditionChangedCache) {
     if (conditionCache[mIndex] != ConditionState::kNotEvaluated) {
         // it has been evaluated.
-        VLOG("Yes, already evaluated, %s %d", mName.c_str(), conditionCache[mIndex]);
+        VLOG("Yes, already evaluated, %lld %d",
+            (long long)mConditionId, conditionCache[mIndex]);
         return;
     }
 
@@ -278,37 +287,65 @@ void SimpleConditionTracker::evaluateCondition(const LogEvent& event,
         return;
     }
 
-    // outputKey is the output key values. e.g, uid:1234
-    const HashableDimensionKey outputKey(getDimensionKey(event, mOutputDimension));
-    handleConditionEvent(outputKey, matchedState == 1, conditionCache, conditionChangedCache);
+    // outputKey is the output values. e.g, uid:1234
+    const std::vector<DimensionsValue> outputValues = getDimensionKeys(event, mOutputDimensions);
+    if (outputValues.size() == 0) {
+        // The original implementation would generate an empty string dimension hash when condition
+        // is not sliced.
+        handleConditionEvent(
+            DEFAULT_DIMENSION_KEY, matchedState == 1, conditionCache, conditionChangedCache);
+    } else if (outputValues.size() == 1) {
+        handleConditionEvent(HashableDimensionKey(outputValues[0]), matchedState == 1,
+            conditionCache, conditionChangedCache);
+    } else {
+        // If this event has multiple nodes in the attribution chain,  this log event probably will
+        // generate multiple dimensions. If so, we will find if the condition changes for any
+        // dimension and ask the corresponding metric producer to verify whether the actual sliced
+        // condition has changed or not.
+        // A high level assumption is that a predicate is either sliced or unsliced. We will never
+        // have both sliced and unsliced version of a predicate.
+        for (const DimensionsValue& outputValue : outputValues) {
+            vector<ConditionState> dimensionalConditionCache(conditionCache.size(),
+                                                             ConditionState::kNotEvaluated);
+            vector<bool> dimensionalConditionChangedCache(conditionChangedCache.size(), false);
+
+            handleConditionEvent(HashableDimensionKey(outputValue), matchedState == 1,
+                dimensionalConditionCache, dimensionalConditionChangedCache);
+
+            OrConditionState(dimensionalConditionCache, &conditionCache);
+            OrBooleanVector(dimensionalConditionChangedCache, &conditionChangedCache);
+        }
+    }
 }
 
 void SimpleConditionTracker::isConditionMet(
-        const map<string, HashableDimensionKey>& conditionParameters,
+        const ConditionKey& conditionParameters,
         const vector<sp<ConditionTracker>>& allConditions,
         vector<ConditionState>& conditionCache) const {
-    const auto pair = conditionParameters.find(mName);
-    HashableDimensionKey key =
-            (pair == conditionParameters.end()) ? DEFAULT_DIMENSION_KEY : pair->second;
+    const auto pair = conditionParameters.find(mConditionId);
 
-    if (pair == conditionParameters.end() && mOutputDimension.size() > 0) {
-        ALOGE("Predicate %s output has dimension, but it's not specified in the query!",
-              mName.c_str());
+    if (pair == conditionParameters.end() && mOutputDimensions.child_size() > 0) {
+        ALOGE("Predicate %lld output has dimension, but it's not specified in the query!",
+              (long long)mConditionId);
         conditionCache[mIndex] = mInitialValue;
         return;
     }
+    std::vector<HashableDimensionKey> defaultKeys = {DEFAULT_DIMENSION_KEY};
+    const std::vector<HashableDimensionKey> &keys =
+            (pair == conditionParameters.end()) ? defaultKeys : pair->second;
 
-    VLOG("simplePredicate %s query key: %s", mName.c_str(), key.c_str());
-
-    auto startedCountIt = mSlicedConditionState.find(key);
-    if (startedCountIt == mSlicedConditionState.end()) {
-        conditionCache[mIndex] = mInitialValue;
-    } else {
-        conditionCache[mIndex] =
-                startedCountIt->second > 0 ? ConditionState::kTrue : ConditionState::kFalse;
+    ConditionState conditionState = ConditionState::kNotEvaluated;
+    for (const auto& key : keys) {
+        auto startedCountIt = mSlicedConditionState.find(key);
+        if (startedCountIt != mSlicedConditionState.end()) {
+            conditionState = conditionState |
+                    (startedCountIt->second > 0 ? ConditionState::kTrue : ConditionState::kFalse);
+        } else {
+            conditionState = conditionState | mInitialValue;
+        }
     }
-
-    VLOG("Predicate %s return %d", mName.c_str(), conditionCache[mIndex]);
+    conditionCache[mIndex] = conditionState;
+    VLOG("Predicate %lld return %d", (long long)mConditionId, conditionCache[mIndex]);
 }
 
 }  // namespace statsd

@@ -64,8 +64,8 @@ public class PipManager implements BasePipManager {
     private InputConsumerController mInputConsumerController;
     private PipMenuActivityController mMenuController;
     private PipMediaController mMediaController;
-    private PipNotificationController mNotificationController;
     private PipTouchHandler mTouchHandler;
+    private PipAppOpsListener mAppOpsListener;
 
     /**
      * Handler for system task stack changes.
@@ -76,8 +76,7 @@ public class PipManager implements BasePipManager {
             mTouchHandler.onActivityPinned();
             mMediaController.onActivityPinned();
             mMenuController.onActivityPinned();
-            mNotificationController.onActivityPinned(packageName, userId,
-                    true /* deferUntilAnimationEnds */);
+            mAppOpsListener.onActivityPinned(packageName);
 
             SystemServicesProxy.getInstance(mContext).setPipVisibility(true);
         }
@@ -90,7 +89,7 @@ public class PipManager implements BasePipManager {
             final int userId = topActivity != null ? topPipActivityInfo.second : 0;
             mMenuController.onActivityUnpinned();
             mTouchHandler.onActivityUnpinned(topActivity);
-            mNotificationController.onActivityUnpinned(topActivity, userId);
+            mAppOpsListener.onActivityUnpinned();
 
             SystemServicesProxy.getInstance(mContext).setPipVisibility(topActivity != null);
         }
@@ -107,7 +106,6 @@ public class PipManager implements BasePipManager {
             mTouchHandler.setTouchEnabled(true);
             mTouchHandler.onPinnedStackAnimationEnded();
             mMenuController.onPinnedStackAnimationEnded();
-            mNotificationController.onPinnedStackAnimationEnded();
         }
 
         @Override
@@ -182,7 +180,7 @@ public class PipManager implements BasePipManager {
                 mInputConsumerController);
         mTouchHandler = new PipTouchHandler(context, mActivityManager, mMenuController,
                 mInputConsumerController);
-        mNotificationController = new PipNotificationController(context, mActivityManager,
+        mAppOpsListener = new PipAppOpsListener(context, mActivityManager,
                 mTouchHandler.getMotionHelper());
         EventBus.getDefault().register(this);
     }

@@ -18,6 +18,7 @@
 #include "guardrail/StatsdStats.h"
 #include "logd/LogEvent.h"
 #include "statslog.h"
+#include "statsd_test_util.h"
 
 #include <gtest/gtest.h>
 
@@ -37,25 +38,25 @@ TEST(UidMapTest, TestIsolatedUID) {
     sp<UidMap> m = new UidMap();
     sp<AnomalyMonitor> anomalyMonitor;
     // Construct the processor with a dummy sendBroadcast function that does nothing.
-    StatsLogProcessor p(m, anomalyMonitor, [](const ConfigKey& key) {});
+    StatsLogProcessor p(m, anomalyMonitor, 0, [](const ConfigKey& key) {});
     LogEvent addEvent(android::util::ISOLATED_UID_CHANGED, 1);
     addEvent.write(100);  // parent UID
     addEvent.write(101);  // isolated UID
     addEvent.write(1);    // Indicates creation.
     addEvent.init();
 
-    EXPECT_EQ(101, m->getParentUidOrSelf(101));
+    EXPECT_EQ(101, m->getHostUidOrSelf(101));
 
-    p.OnLogEvent(addEvent);
-    EXPECT_EQ(100, m->getParentUidOrSelf(101));
+    p.OnLogEvent(&addEvent);
+    EXPECT_EQ(100, m->getHostUidOrSelf(101));
 
     LogEvent removeEvent(android::util::ISOLATED_UID_CHANGED, 1);
     removeEvent.write(100);  // parent UID
     removeEvent.write(101);  // isolated UID
     removeEvent.write(0);    // Indicates removal.
     removeEvent.init();
-    p.OnLogEvent(removeEvent);
-    EXPECT_EQ(101, m->getParentUidOrSelf(101));
+    p.OnLogEvent(&removeEvent);
+    EXPECT_EQ(101, m->getHostUidOrSelf(101));
 }
 
 TEST(UidMapTest, TestMatching) {
@@ -156,8 +157,8 @@ TEST(UidMapTest, TestUpdateApp) {
 TEST(UidMapTest, TestClearingOutput) {
     UidMap m;
 
-    ConfigKey config1(1, "config1");
-    ConfigKey config2(1, "config2");
+    ConfigKey config1(1, StringToId("config1"));
+    ConfigKey config2(1, StringToId("config2"));
 
     m.OnConfigUpdated(config1);
 
@@ -211,7 +212,7 @@ TEST(UidMapTest, TestClearingOutput) {
 TEST(UidMapTest, TestMemoryComputed) {
     UidMap m;
 
-    ConfigKey config1(1, "config1");
+    ConfigKey config1(1, StringToId("config1"));
     m.OnConfigUpdated(config1);
 
     size_t startBytes = m.mBytesUsed;
@@ -241,7 +242,7 @@ TEST(UidMapTest, TestMemoryGuardrail) {
     UidMap m;
     string buf;
 
-    ConfigKey config1(1, "config1");
+    ConfigKey config1(1, StringToId("config1"));
     m.OnConfigUpdated(config1);
 
     size_t startBytes = m.mBytesUsed;

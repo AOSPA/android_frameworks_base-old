@@ -28,9 +28,12 @@ import libcore.util.EmptyArray;
  *
  * TODO(b/69270990) Remove this class once the old API is deprecated.
  *
+ * @deprecated Use {@link android.hardware.location.NanoAppState} instead.
+ *
  * @hide
  */
 @SystemApi
+@Deprecated
 public class NanoAppInstanceInfo {
     private String mPublisher = "Unknown";
     private String mName = "Unknown";
@@ -89,11 +92,6 @@ public class NanoAppInstanceInfo {
 
     /**
      * Get the application version
-     *
-     * NOTE: There is a race condition where shortly after loading, this
-     * may return -1 instead of the correct version.
-     *
-     * TODO(b/30970527): Fix this race condition.
      *
      * @return int - version of the app
      */

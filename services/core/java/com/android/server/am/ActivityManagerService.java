@@ -2521,13 +2521,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                         }
                     }
                     if (proc != null) {
+                        long startTime = SystemClock.currentThreadTimeMillis();
                         long pss = Debug.getPss(pid, tmp, null);
+                        long endTime = SystemClock.currentThreadTimeMillis();
                         synchronized (ActivityManagerService.this) {
                             if (pss != 0 && proc.thread != null && proc.setProcState == procState
                                     && proc.pid == pid && proc.lastPssTime == lastPssTime) {
                                 num++;
                                 recordPssSampleLocked(proc, procState, pss, tmp[0], tmp[1],
-                                        SystemClock.uptimeMillis());
+                                        endTime-startTime, SystemClock.uptimeMillis());
                             }
                         }
                     }
@@ -2692,6 +2694,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public void onStart() {
             mService.start();
+        }
+
+        @Override
+        public void onBootPhase(int phase) {
+            if (phase == PHASE_SYSTEM_SERVICES_READY) {
+                mService.mBatteryStatsService.systemServicesReady();
+            }
         }
 
         @Override
@@ -6539,13 +6548,17 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             infos[i] = new Debug.MemoryInfo();
+            long startTime = SystemClock.currentThreadTimeMillis();
             Debug.getMemoryInfo(pids[i], infos[i]);
+            long endTime = SystemClock.currentThreadTimeMillis();
             if (proc != null) {
                 synchronized (this) {
                     if (proc.thread != null && proc.setAdj == oomAdj) {
                         // Record this for posterity if the process has been stable.
                         proc.baseProcessTracker.addPss(infos[i].getTotalPss(),
-                                infos[i].getTotalUss(), false, proc.pkgList);
+                                infos[i].getTotalUss(), false,
+                                ProcessStats.ADD_PSS_EXTERNAL_SLOW, endTime-startTime,
+                                proc.pkgList);
                     }
                 }
             }
@@ -6567,12 +6580,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             long[] tmpUss = new long[1];
+            long startTime = SystemClock.currentThreadTimeMillis();
             pss[i] = Debug.getPss(pids[i], tmpUss, null);
+            long endTime = SystemClock.currentThreadTimeMillis();
             if (proc != null) {
                 synchronized (this) {
                     if (proc.thread != null && proc.setAdj == oomAdj) {
                         // Record this for posterity if the process has been stable.
-                        proc.baseProcessTracker.addPss(pss[i], tmpUss[0], false, proc.pkgList);
+                        proc.baseProcessTracker.addPss(pss[i], tmpUss[0], false,
+                                ProcessStats.ADD_PSS_EXTERNAL, endTime-startTime, proc.pkgList);
                     }
                 }
             }
@@ -8385,7 +8401,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             public void onDismissCancelled() throws RemoteException {
                                 // Do nothing
                             }
-                        });
+                        }, null /* message */);
                     } catch (RemoteException e) {
                         // Local call
                     }
@@ -12245,6 +12261,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mConstants.start(mContext.getContentResolver());
         mCoreSettingsObserver = new CoreSettingsObserver(this);
         mFontScaleSettingObserver = new FontScaleSettingObserver();
+        GlobalSettingsToPropertiesMapper.start(mContext.getContentResolver());
 
         // Now that the settings provider is published we can consider sending
         // in a rescue party.
@@ -13858,68 +13875,100 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Context.WINDOW_SERVICE)).addView(v, lp);
     }
 
-    public void noteWakeupAlarm(IIntentSender sender, int sourceUid, String sourcePkg, String tag) {
-        if (sender != null && !(sender instanceof PendingIntentRecord)) {
-            return;
+    @Override
+    public void noteWakeupAlarm(IIntentSender sender, WorkSource workSource, int sourceUid,
+            String sourcePkg, String tag) {
+        if (workSource != null && workSource.isEmpty()) {
+            workSource = null;
         }
-        final PendingIntentRecord rec = (PendingIntentRecord)sender;
-        final BatteryStatsImpl stats = mBatteryStatsService.getActiveStatistics();
-        synchronized (stats) {
-            if (mBatteryStatsService.isOnBattery()) {
-                mBatteryStatsService.enforceCallingPermission();
-                int MY_UID = Binder.getCallingUid();
-                final int uid;
-                if (sender == null) {
-                    uid = sourceUid;
-                } else {
-                    uid = rec.uid == MY_UID ? SYSTEM_UID : rec.uid;
+
+        if (sourceUid <= 0 && workSource == null) {
+            // Try and derive a UID to attribute things to based on the caller.
+            if (sender != null) {
+                if (!(sender instanceof PendingIntentRecord)) {
+                    return;
                 }
-                BatteryStatsImpl.Uid.Pkg pkg =
-                    stats.getPackageStatsLocked(sourceUid >= 0 ? sourceUid : uid,
-                            sourcePkg != null ? sourcePkg : rec.key.packageName);
-                pkg.noteWakeupAlarmLocked(tag);
-                StatsLog.write(StatsLog.WAKEUP_ALARM_OCCURRED, sourceUid >= 0 ? sourceUid : uid,
-                        tag);
+
+                final PendingIntentRecord rec = (PendingIntentRecord) sender;
+                final int callerUid = Binder.getCallingUid();
+                sourceUid = rec.uid == callerUid ? SYSTEM_UID : rec.uid;
+            } else {
+                // TODO(narayan): Should we throw an exception in this case ? It means that we
+                // haven't been able to derive a UID to attribute things to.
+                return;
             }
         }
+
+        if (DEBUG_POWER) {
+            Slog.w(TAG, "noteWakupAlarm[ sourcePkg=" + sourcePkg + ", sourceUid=" + sourceUid
+                    + ", workSource=" + workSource + ", tag=" + tag + "]");
+        }
+
+        mBatteryStatsService.noteWakupAlarm(sourcePkg, sourceUid, workSource, tag);
     }
 
-    public void noteAlarmStart(IIntentSender sender, int sourceUid, String tag) {
-        if (sender != null && !(sender instanceof PendingIntentRecord)) {
-            return;
+    @Override
+    public void noteAlarmStart(IIntentSender sender, WorkSource workSource, int sourceUid,
+            String tag) {
+        if (workSource != null && workSource.isEmpty()) {
+            workSource = null;
         }
-        final PendingIntentRecord rec = (PendingIntentRecord)sender;
-        final BatteryStatsImpl stats = mBatteryStatsService.getActiveStatistics();
-        synchronized (stats) {
-            mBatteryStatsService.enforceCallingPermission();
-            int MY_UID = Binder.getCallingUid();
-            final int uid;
-            if (sender == null) {
-                uid = sourceUid;
+
+        if (sourceUid <= 0 && workSource == null) {
+            // Try and derive a UID to attribute things to based on the caller.
+            if (sender != null) {
+                if (!(sender instanceof PendingIntentRecord)) {
+                    return;
+                }
+
+                final PendingIntentRecord rec = (PendingIntentRecord) sender;
+                final int callerUid = Binder.getCallingUid();
+                sourceUid = rec.uid == callerUid ? SYSTEM_UID : rec.uid;
             } else {
-                uid = rec.uid == MY_UID ? SYSTEM_UID : rec.uid;
+                // TODO(narayan): Should we throw an exception in this case ? It means that we
+                // haven't been able to derive a UID to attribute things to.
+                return;
             }
-            mBatteryStatsService.noteAlarmStart(tag, sourceUid >= 0 ? sourceUid : uid);
         }
+
+        if (DEBUG_POWER) {
+            Slog.w(TAG, "noteAlarmStart[sourceUid=" + sourceUid + ", workSource=" + workSource +
+                    ", tag=" + tag + "]");
+        }
+
+        mBatteryStatsService.noteAlarmStart(tag, workSource, sourceUid);
     }
 
-    public void noteAlarmFinish(IIntentSender sender, int sourceUid, String tag) {
-        if (sender != null && !(sender instanceof PendingIntentRecord)) {
-            return;
+    @Override
+    public void noteAlarmFinish(IIntentSender sender, WorkSource workSource, int sourceUid,
+            String tag) {
+        if (workSource != null && workSource.isEmpty()) {
+            workSource = null;
         }
-        final PendingIntentRecord rec = (PendingIntentRecord)sender;
-        final BatteryStatsImpl stats = mBatteryStatsService.getActiveStatistics();
-        synchronized (stats) {
-            mBatteryStatsService.enforceCallingPermission();
-            int MY_UID = Binder.getCallingUid();
-            final int uid;
-            if (sender == null) {
-                uid = sourceUid;
+
+        if (sourceUid <= 0 && workSource == null) {
+            // Try and derive a UID to attribute things to based on the caller.
+            if (sender != null) {
+                if (!(sender instanceof PendingIntentRecord)) {
+                    return;
+                }
+
+                final PendingIntentRecord rec = (PendingIntentRecord) sender;
+                final int callerUid = Binder.getCallingUid();
+                sourceUid = rec.uid == callerUid ? SYSTEM_UID : rec.uid;
             } else {
-                uid = rec.uid == MY_UID ? SYSTEM_UID : rec.uid;
+                // TODO(narayan): Should we throw an exception in this case ? It means that we
+                // haven't been able to derive a UID to attribute things to.
+                return;
             }
-            mBatteryStatsService.noteAlarmFinish(tag, sourceUid >= 0 ? sourceUid : uid);
         }
+
+        if (DEBUG_POWER) {
+            Slog.w(TAG, "noteAlarmFinish[sourceUid=" + sourceUid + ", workSource=" + workSource +
+                    ", tag=" + tag + "]");
+        }
+
+        mBatteryStatsService.noteAlarmFinish(tag, workSource, sourceUid);
     }
 
     public boolean killPids(int[] pids, String pReason, boolean secure) {
@@ -14126,7 +14175,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             for (int i = mLruProcesses.size() - 1 ; i >= 0 ; i--) {
                 ProcessRecord proc = mLruProcesses.get(i);
                 if (proc.notCachedSinceIdle) {
-                    if (proc.setProcState >= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE
+                    if (proc.setProcState >= ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
                             && proc.setProcState <= ActivityManager.PROCESS_STATE_SERVICE) {
                         if (doKilling && proc.initialIdlePss != 0
                                 && proc.lastPss > ((proc.initialIdlePss*3)/2)) {
@@ -14843,6 +14892,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 (process != null && process.info != null) ?
                         (process.info.isInstantApp() ? 1 : 0) : -1,
                 activity != null ? activity.shortComponentName : null,
+                activity != null ? activity.packageName : null,
                 process != null ? (process.isInterestingToUserLocked() ? 1 : 0) : -1);
 
         // Rate-limit how often we're willing to do the heavy lifting below to
@@ -17627,11 +17677,20 @@ public class ActivityManagerService extends IActivityManager.Stub
                 if (mi == null) {
                     mi = new Debug.MemoryInfo();
                 }
+                final int reportType;
+                final long startTime;
+                final long endTime;
                 if (opts.dumpDetails || (!brief && !opts.oomOnly)) {
+                    reportType = ProcessStats.ADD_PSS_EXTERNAL_SLOW;
+                    startTime = SystemClock.currentThreadTimeMillis();
                     Debug.getMemoryInfo(pid, mi);
+                    endTime = SystemClock.currentThreadTimeMillis();
                     hasSwapPss = mi.hasSwappedOutPss;
                 } else {
+                    reportType = ProcessStats.ADD_PSS_EXTERNAL;
+                    startTime = SystemClock.currentThreadTimeMillis();
                     mi.dalvikPss = (int)Debug.getPss(pid, tmpLong, null);
+                    endTime = SystemClock.currentThreadTimeMillis();
                     mi.dalvikPrivateDirty = (int)tmpLong[0];
                 }
                 if (opts.dumpDetails) {
@@ -17674,7 +17733,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 synchronized (this) {
                     if (r.thread != null && oomAdj == r.getSetAdjWithServices()) {
                         // Record this for posterity if the process has been stable.
-                        r.baseProcessTracker.addPss(myTotalPss, myTotalUss, true, r.pkgList);
+                        r.baseProcessTracker.addPss(myTotalPss, myTotalUss, true,
+                                reportType, endTime-startTime, r.pkgList);
                     }
                 }
 
@@ -18117,11 +18177,20 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (mi == null) {
                 mi = new Debug.MemoryInfo();
             }
+            final int reportType;
+            final long startTime;
+            final long endTime;
             if (opts.dumpDetails || (!brief && !opts.oomOnly)) {
+                reportType = ProcessStats.ADD_PSS_EXTERNAL_SLOW;
+                startTime = SystemClock.currentThreadTimeMillis();
                 Debug.getMemoryInfo(pid, mi);
+                endTime = SystemClock.currentThreadTimeMillis();
                 hasSwapPss = mi.hasSwappedOutPss;
             } else {
+                reportType = ProcessStats.ADD_PSS_EXTERNAL;
+                startTime = SystemClock.currentThreadTimeMillis();
                 mi.dalvikPss = (int) Debug.getPss(pid, tmpLong, null);
+                endTime = SystemClock.currentThreadTimeMillis();
                 mi.dalvikPrivateDirty = (int) tmpLong[0];
             }
             if (opts.dumpDetails) {
@@ -18160,7 +18229,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             synchronized (this) {
                 if (r.thread != null && oomAdj == r.getSetAdjWithServices()) {
                     // Record this for posterity if the process has been stable.
-                    r.baseProcessTracker.addPss(myTotalPss, myTotalUss, true, r.pkgList);
+                    r.baseProcessTracker.addPss(myTotalPss, myTotalUss, true,
+                            reportType, endTime-startTime, r.pkgList);
                 }
             }
 
@@ -21350,7 +21420,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mAppWarnings.onDensityChanged();
 
                 killAllBackgroundProcessesExcept(N,
-                        ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE);
+                        ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE);
             }
         }
 
@@ -22324,6 +22394,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             // to the top state.
             switch (procState) {
                 case ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
+                case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
                     // Something else is keeping it at this level, just leave it.
                     break;
                 case ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND:
@@ -22422,11 +22493,12 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Record new PSS sample for a process.
      */
     void recordPssSampleLocked(ProcessRecord proc, int procState, long pss, long uss, long swapPss,
-            long now) {
+            long pssDuration, long now) {
         EventLogTags.writeAmPss(proc.pid, proc.uid, proc.processName, pss * 1024, uss * 1024,
                 swapPss * 1024);
         proc.lastPssTime = now;
-        proc.baseProcessTracker.addPss(pss, uss, true, proc.pkgList);
+        proc.baseProcessTracker.addPss(pss, uss, true, ProcessStats.ADD_PSS_INTERNAL,
+                pssDuration, proc.pkgList);
         if (DEBUG_PSS) Slog.d(TAG_PSS,
                 "PSS of " + proc.toShortString() + ": " + pss + " lastPss=" + proc.lastPss
                 + " state=" + ProcessList.makeProcStateString(procState));
@@ -22921,8 +22993,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // the data right when a process is transitioning between process
                 // states, which well tend to give noisy data.
                 long start = SystemClock.uptimeMillis();
+                long startTime = SystemClock.currentThreadTimeMillis();
                 long pss = Debug.getPss(app.pid, mTmpLong, null);
-                recordPssSampleLocked(app, app.curProcState, pss, mTmpLong[0], mTmpLong[1], now);
+                long endTime = SystemClock.currentThreadTimeMillis();
+                recordPssSampleLocked(app, app.curProcState, pss, endTime-startTime,
+                        mTmpLong[0], mTmpLong[1], now);
                 mPendingPssProcesses.remove(app);
                 Slog.i(TAG, "Recorded pss for " + app + " state " + app.setProcState
                         + " to " + app.curProcState + ": "
@@ -23157,7 +23232,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // To avoid some abuse patterns, we are going to be careful about what we consider
         // to be an app interaction.  Being the top activity doesn't count while the display
         // is sleeping, nor do short foreground services.
-        if (app.curProcState <= ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE) {
+        if (app.curProcState <= ActivityManager.PROCESS_STATE_TOP) {
             isInteraction = true;
             app.fgInteractionTime = 0;
         } else if (app.curProcState <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE) {
@@ -24674,6 +24749,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 ActivityManagerService.this.onUserStoppedLocked(userId);
             }
             mBatteryStatsService.onUserRemoved(userId);
+            mUserController.onUserRemoved(userId);
         }
 
         @Override
@@ -25201,11 +25277,15 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public void dismissKeyguard(IBinder token, IKeyguardDismissCallback callback)
-            throws RemoteException {
+    public void dismissKeyguard(IBinder token, IKeyguardDismissCallback callback,
+            CharSequence message) throws RemoteException {
+        if (message != null) {
+            enforceCallingPermission(permission.SHOW_KEYGUARD_MESSAGE,
+                    "dismissKeyguard()");
+        }
         final long callingId = Binder.clearCallingIdentity();
         try {
-            mKeyguardController.dismissKeyguard(token, callback);
+            mKeyguardController.dismissKeyguard(token, callback, message);
         } finally {
             Binder.restoreCallingIdentity(callingId);
         }

@@ -38,6 +38,7 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManagerInternal;
 import android.os.WorkSource;
+import android.os.WorkSource.WorkChain;
 import android.os.connectivity.CellularBatteryStats;
 import android.os.health.HealthStatsParceler;
 import android.os.health.HealthStatsWriter;
@@ -66,6 +67,7 @@ import java.nio.CharBuffer;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
@@ -181,6 +183,10 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     public void publish() {
         LocalServices.addService(BatteryStatsInternal.class, new LocalService());
         ServiceManager.addService(BatteryStats.SERVICE_NAME, asBinder());
+    }
+
+    public void systemServicesReady() {
+        mStats.systemServicesReady(mContext);
     }
 
     private final class LocalService extends BatteryStatsInternal {
@@ -446,17 +452,24 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
     }
 
-    public void noteAlarmStart(String name, int uid) {
+    public void noteWakupAlarm(String name, int uid, WorkSource workSource, String tag) {
         enforceCallingPermission();
         synchronized (mStats) {
-            mStats.noteAlarmStartLocked(name, uid);
+            mStats.noteWakupAlarmLocked(name, uid, workSource, tag);
         }
     }
 
-    public void noteAlarmFinish(String name, int uid) {
+    public void noteAlarmStart(String name, WorkSource workSource, int uid) {
         enforceCallingPermission();
         synchronized (mStats) {
-            mStats.noteAlarmFinishLocked(name, uid);
+            mStats.noteAlarmStartLocked(name, workSource, uid);
+        }
+    }
+
+    public void noteAlarmFinish(String name, WorkSource workSource, int uid) {
+        enforceCallingPermission();
+        synchronized (mStats) {
+            mStats.noteAlarmFinishLocked(name, workSource, uid);
         }
     }
 
@@ -505,6 +518,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
     }
 
+    @Override
     public void noteLongPartialWakelockStart(String name, String historyName, int uid) {
         enforceCallingPermission();
         synchronized (mStats) {
@@ -512,10 +526,29 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
     }
 
+    @Override
+    public void noteLongPartialWakelockStartFromSource(String name, String historyName,
+            WorkSource workSource) {
+        enforceCallingPermission();
+        synchronized (mStats) {
+            mStats.noteLongPartialWakelockStartFromSource(name, historyName, workSource);
+        }
+    }
+
+    @Override
     public void noteLongPartialWakelockFinish(String name, String historyName, int uid) {
         enforceCallingPermission();
         synchronized (mStats) {
             mStats.noteLongPartialWakelockFinish(name, historyName, uid);
+        }
+    }
+
+    @Override
+    public void noteLongPartialWakelockFinishFromSource(String name, String historyName,
+            WorkSource workSource) {
+        enforceCallingPermission();
+        synchronized (mStats) {
+            mStats.noteLongPartialWakelockFinishFromSource(name, historyName, workSource);
         }
     }
 
@@ -900,21 +933,6 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
     }
 
-    public void noteWifiMulticastEnabledFromSource(WorkSource ws) {
-        enforceCallingPermission();
-        synchronized (mStats) {
-            mStats.noteWifiMulticastEnabledFromSourceLocked(ws);
-        }
-    }
-
-    @Override
-    public void noteWifiMulticastDisabledFromSource(WorkSource ws) {
-        enforceCallingPermission();
-        synchronized (mStats) {
-            mStats.noteWifiMulticastDisabledFromSourceLocked(ws);
-        }
-    }
-
     @Override
     public void noteNetworkInterfaceType(String iface, int networkType) {
         enforceCallingPermission();
@@ -1156,6 +1174,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         pw.println("  --write: force write current collected stats to disk.");
         pw.println("  --new-daily: immediately create and write new daily stats record.");
         pw.println("  --read-daily: read-load last written daily stats.");
+        pw.println("  --settings: dump the settings key/values related to batterystats");
         pw.println("  <package.name>: optional name of package to filter output by.");
         pw.println("  -h: print this help text.");
         pw.println("Battery stats (batterystats) commands:");
@@ -1166,6 +1185,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         pw.println("          wake_lock_in, alarms and proc events");
         pw.println("      no-auto-reset: don't automatically reset stats when unplugged");
         pw.println("      pretend-screen-off: pretend the screen is off, even if screen state changes");
+    }
+
+    private void dumpSettings(PrintWriter pw) {
+        synchronized (mStats) {
+            mStats.dumpConstantsLocked(pw);
+        }
     }
 
     private int doEnableOrDisable(PrintWriter pw, int i, String[] args, boolean enable) {
@@ -1277,6 +1302,9 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                     return;
                 } else if ("-h".equals(arg)) {
                     dumpHelp(pw);
+                    return;
+                } else if ("--settings".equals(arg)) {
+                    dumpSettings(pw);
                     return;
                 } else if ("-a".equals(arg)) {
                     flags |= BatteryStats.DUMP_VERBOSE;

@@ -47,7 +47,6 @@ import android.content.res.Resources;
 import android.content.res.XmlResourceParser;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -788,7 +787,8 @@ public abstract class PackageManager {
 
     /**
      * Flag parameter for {@link #installPackage} to indicate that this package is an
-     * upgrade to a package that refers to the SDK via release letter.
+     * upgrade to a package that refers to the SDK via release letter or is targeting an SDK via
+     * release letter that the current build does not support.
      *
      * @hide
      */
@@ -2328,8 +2328,6 @@ public abstract class PackageManager {
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports Wi-Fi RTT (IEEE 802.11mc).
-     *
-     * @hide RTT_API
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_WIFI_RTT = "android.hardware.wifi.rtt";
@@ -2480,9 +2478,16 @@ public abstract class PackageManager {
             = "android.software.securely_removes_users";
 
     /** {@hide} */
+    @TestApi
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_FILE_BASED_ENCRYPTION
             = "android.software.file_based_encryption";
+
+    /** {@hide} */
+    @TestApi
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_ADOPTABLE_STORAGE
+            = "android.software.adoptable_storage";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
@@ -4718,17 +4723,6 @@ public abstract class PackageManager {
     }
 
     /**
-     * @deprecated replaced by {@link PackageInstaller}
-     * @hide
-     */
-    @Deprecated
-    public abstract void installPackage(
-            Uri packageURI,
-            PackageInstallObserver observer,
-            @InstallFlags int flags,
-            String installerPackageName);
-
-    /**
      * If there is already an application with the given package name installed
      * on the system for other users, also install it for the calling user.
      * @hide
@@ -5868,5 +5862,38 @@ public abstract class PackageManager {
     @SystemApi
     public @NonNull ArtManager getArtManager() {
         throw new UnsupportedOperationException("getArtManager not implemented in subclass");
+    }
+
+    /**
+     * Sets or clears the harmful app warning details for the given app.
+     *
+     * When set, any attempt to launch an activity in this package will be intercepted and a
+     * warning dialog will be shown to the user instead, with the given warning. The user
+     * will have the option to proceed with the activity launch, or to uninstall the application.
+     *
+     * @param packageName The full name of the package to warn on.
+     * @param warning A warning string to display to the user describing the threat posed by the
+     *                application, or null to clear the warning.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.SET_HARMFUL_APP_WARNINGS)
+    @SystemApi
+    public void setHarmfulAppWarning(@NonNull String packageName, @Nullable CharSequence warning) {
+        throw new UnsupportedOperationException("setHarmfulAppWarning not implemented in subclass");
+    }
+
+    /**
+     * Returns the harmful app warning string for the given app, or null if there is none set.
+     *
+     * @param packageName The full name of the desired package.
+     *
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.SET_HARMFUL_APP_WARNINGS)
+    @Nullable
+    @SystemApi
+    public CharSequence getHarmfulAppWarning(@NonNull String packageName) {
+        throw new UnsupportedOperationException("getHarmfulAppWarning not implemented in subclass");
     }
 }

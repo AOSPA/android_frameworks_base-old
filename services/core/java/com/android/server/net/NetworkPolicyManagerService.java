@@ -2793,8 +2793,24 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     handleNetworkPoliciesUpdateAL(true);
                 }
             }
+
+            final Intent intent = new Intent(SubscriptionManager.ACTION_SUBSCRIPTION_PLANS_CHANGED);
+            intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
+            intent.putExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX, subId);
+            mContext.sendBroadcast(intent, android.Manifest.permission.MANAGE_SUBSCRIPTION_PLANS);
         } finally {
             Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    @Override
+    public String getSubscriptionPlansOwner(int subId) {
+        if (UserHandle.getCallingAppId() != android.os.Process.SYSTEM_UID) {
+            throw new SecurityException();
+        }
+
+        synchronized (mNetworkPoliciesSecondLock) {
+            return mSubscriptionPlansOwner.get(subId);
         }
     }
 
@@ -2938,7 +2954,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     if (state <= ActivityManager.PROCESS_STATE_TOP) {
                         fout.print(" (fg)");
                     } else {
-                        fout.print(state <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE
+                        fout.print(state <= ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
                                 ? " (fg svc)" : " (bg)");
                     }
 

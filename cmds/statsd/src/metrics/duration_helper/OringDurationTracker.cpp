@@ -24,14 +24,13 @@ namespace statsd {
 
 using std::pair;
 
-OringDurationTracker::OringDurationTracker(const ConfigKey& key, const string& name,
-                                           const HashableDimensionKey& eventKey,
-                                           sp<ConditionWizard> wizard, int conditionIndex,
-                                           bool nesting, uint64_t currentBucketStartNs,
-                                           uint64_t bucketSizeNs,
-                                           const std::vector<sp<AnomalyTracker>>& anomalyTrackers)
-    : DurationTracker(key, name, eventKey, wizard, conditionIndex, nesting, currentBucketStartNs,
-                      bucketSizeNs, anomalyTrackers),
+OringDurationTracker::OringDurationTracker(
+        const ConfigKey& key, const int64_t& id, const HashableDimensionKey& eventKey,
+        sp<ConditionWizard> wizard, int conditionIndex, bool nesting, uint64_t currentBucketStartNs,
+        uint64_t bucketSizeNs, bool conditionSliced,
+        const vector<sp<DurationAnomalyTracker>>& anomalyTrackers)
+    : DurationTracker(key, id, eventKey, wizard, conditionIndex, nesting, currentBucketStartNs,
+                      bucketSizeNs, conditionSliced, anomalyTrackers),
       mStarted(),
       mPaused() {
     mLastStartTime = 0;
@@ -45,12 +44,13 @@ bool OringDurationTracker::hitGuardRail(const HashableDimensionKey& newKey) {
     }
     if (mConditionKeyMap.size() > StatsdStats::kDimensionKeySizeSoftLimit - 1) {
         size_t newTupleCount = mConditionKeyMap.size() + 1;
-        StatsdStats::getInstance().noteMetricDimensionSize(mConfigKey, mName + mEventKey.toString(),
-                                                           newTupleCount);
+        StatsdStats::getInstance().noteMetricDimensionSize(
+            mConfigKey, hashDimensionsValue(mTrackerId, mEventKey.getDimensionsValue()),
+            newTupleCount);
         // 2. Don't add more tuples, we are above the allowed threshold. Drop the data.
         if (newTupleCount > StatsdStats::kDimensionKeySizeHardLimit) {
-            ALOGE("OringDurTracker %s dropping data for dimension key %s", mName.c_str(),
-                  newKey.c_str());
+            ALOGE("OringDurTracker %lld dropping data for dimension key %s",
+                (long long)mTrackerId, newKey.c_str());
             return true;
         }
     }
@@ -73,7 +73,7 @@ void OringDurationTracker::noteStart(const HashableDimensionKey& key, bool condi
         mPaused[key]++;
     }
 
-    if (mConditionKeyMap.find(key) == mConditionKeyMap.end()) {
+    if (mConditionSliced && mConditionKeyMap.find(key) == mConditionKeyMap.end()) {
         mConditionKeyMap[key] = conditionKey;
     }
 
@@ -264,8 +264,8 @@ void OringDurationTracker::onConditionChanged(bool condition, const uint64_t tim
     }
 }
 
-int64_t OringDurationTracker::predictAnomalyTimestampNs(const AnomalyTracker& anomalyTracker,
-                                                        const uint64_t eventTimestampNs) const {
+int64_t OringDurationTracker::predictAnomalyTimestampNs(
+        const DurationAnomalyTracker& anomalyTracker, const uint64_t eventTimestampNs) const {
     // TODO: Unit-test this and see if it can be done more efficiently (e.g. use int32).
     // All variables below represent durations (not timestamps).
 

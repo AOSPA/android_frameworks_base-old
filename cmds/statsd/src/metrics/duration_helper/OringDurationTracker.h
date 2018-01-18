@@ -27,11 +27,11 @@ namespace statsd {
 // Tracks the "Or'd" duration -- if 2 durations are overlapping, they won't be double counted.
 class OringDurationTracker : public DurationTracker {
 public:
-    OringDurationTracker(const ConfigKey& key, const string& name,
+    OringDurationTracker(const ConfigKey& key, const int64_t& id,
                          const HashableDimensionKey& eventKey, sp<ConditionWizard> wizard,
                          int conditionIndex, bool nesting, uint64_t currentBucketStartNs,
-                         uint64_t bucketSizeNs,
-                         const std::vector<sp<AnomalyTracker>>& anomalyTrackers);
+                         uint64_t bucketSizeNs, bool conditionSliced,
+                         const std::vector<sp<DurationAnomalyTracker>>& anomalyTrackers);
 
     void noteStart(const HashableDimensionKey& key, bool condition, const uint64_t eventTime,
                    const ConditionKey& conditionKey) override;
@@ -46,7 +46,7 @@ public:
             uint64_t timestampNs,
             std::unordered_map<HashableDimensionKey, std::vector<DurationBucket>>* output) override;
 
-    int64_t predictAnomalyTimestampNs(const AnomalyTracker& anomalyTracker,
+    int64_t predictAnomalyTimestampNs(const DurationAnomalyTracker& anomalyTracker,
                                       const uint64_t currentTimestamp) const override;
 
 private:
@@ -67,7 +67,8 @@ private:
     FRIEND_TEST(OringDurationTrackerTest, TestCrossBucketBoundary);
     FRIEND_TEST(OringDurationTrackerTest, TestDurationConditionChange);
     FRIEND_TEST(OringDurationTrackerTest, TestPredictAnomalyTimestamp);
-    FRIEND_TEST(OringDurationTrackerTest, TestAnomalyDetection);
+    FRIEND_TEST(OringDurationTrackerTest, TestAnomalyDetectionExpiredAlarm);
+    FRIEND_TEST(OringDurationTrackerTest, TestAnomalyDetectionFiredAlarm);
 };
 
 }  // namespace statsd

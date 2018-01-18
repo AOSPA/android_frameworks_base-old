@@ -1770,7 +1770,12 @@ public final class ActivityThread extends ClientTransactionHandler {
                 case EXECUTE_TRANSACTION:
                     final ClientTransaction transaction = (ClientTransaction) msg.obj;
                     mTransactionExecutor.execute(transaction);
-                    transaction.recycle();
+                    if (isSystem()) {
+                        // Client transactions inside system process are recycled on the client side
+                        // instead of ClientLifecycleManager to avoid being cleared before this
+                        // message is handled.
+                        transaction.recycle();
+                    }
                     break;
             }
             Object obj = msg.obj;

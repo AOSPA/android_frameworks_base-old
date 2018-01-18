@@ -21,10 +21,13 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.bluetooth.BluetoothActivityEnergyInfo;
 import android.bluetooth.UidTraffic;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.database.ContentObserver;
 import android.net.ConnectivityManager;
 import android.net.NetworkStats;
+import android.net.Uri;
 import android.net.wifi.WifiActivityEnergyInfo;
 import android.net.wifi.WifiManager;
 import android.os.BatteryManager;
@@ -46,6 +49,7 @@ import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.WorkSource;
 import android.os.WorkSource.WorkChain;
+import android.provider.Settings;
 import android.telephony.DataConnectionRealTimeInfo;
 import android.telephony.ModemActivityInfo;
 import android.telephony.ServiceState;
@@ -54,6 +58,7 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.IntArray;
+import android.util.KeyValueListParser;
 import android.util.Log;
 import android.util.LogWriter;
 import android.util.LongSparseArray;
@@ -124,7 +129,7 @@ public class BatteryStatsImpl extends BatteryStats {
     private static final int MAGIC = 0xBA757475; // 'BATSTATS'
 
     // Current on-disk Parcel version
-    private static final int VERSION = 172 + (USE_OLD_HISTORY ? 1000 : 0);
+    private static final int VERSION = 173 + (USE_OLD_HISTORY ? 1000 : 0);
 
     // Maximum number of items we will record in the history.
     private static final int MAX_HISTORY_ITEMS;
@@ -289,10 +294,19 @@ public class BatteryStatsImpl extends BatteryStats {
     /**
      * Update per-freq cpu times for all the uids in {@link #mPendingUids}.
      */
-    public void updateProcStateCpuTimes() {
+    public void updateProcStateCpuTimes(boolean onBattery, boolean onBatteryScreenOff) {
         final SparseIntArray uidStates;
         synchronized (BatteryStatsImpl.this) {
+            if (!mConstants.TRACK_CPU_TIMES_BY_PROC_STATE) {
+                return;
+            }
             if(!initKernelSingleUidTimeReaderLocked()) {
+                return;
+            }
+            // If the KernelSingleUidTimeReader has stale cpu times, then we shouldn't try to
+            // compute deltas since it might result in mis-attributing cpu times to wrong states.
+            if (mKernelSingleUidTimeReader.hasStaleData()) {
+                mPendingUids.clear();
                 return;
             }
 
@@ -307,7 +321,6 @@ public class BatteryStatsImpl extends BatteryStats {
             final int procState = uidStates.valueAt(i);
             final int[] isolatedUids;
             final Uid u;
-            final boolean onBattery;
             synchronized (BatteryStatsImpl.this) {
                 // It's possible that uid no longer exists and any internal references have
                 // already been deleted, so using {@link #getAvailableUidStatsLocked} to avoid
@@ -324,7 +337,6 @@ public class BatteryStatsImpl extends BatteryStats {
                         isolatedUids[j] = u.mChildUids.get(j);
                     }
                 }
-                onBattery = mOnBatteryInternal;
             }
             long[] cpuTimesMs = mKernelSingleUidTimeReader.readDeltaMs(uid);
             if (isolatedUids != null) {
@@ -335,10 +347,17 @@ public class BatteryStatsImpl extends BatteryStats {
             }
             if (onBattery && cpuTimesMs != null) {
                 synchronized (BatteryStatsImpl.this) {
-                    u.addProcStateTimesMs(procState, cpuTimesMs);
-                    u.addProcStateScreenOffTimesMs(procState, cpuTimesMs);
+                    u.addProcStateTimesMs(procState, cpuTimesMs, onBattery);
+                    u.addProcStateScreenOffTimesMs(procState, cpuTimesMs, onBatteryScreenOff);
                 }
             }
+        }
+    }
+
+    public void copyFromAllUidsCpuTimes() {
+        synchronized (BatteryStatsImpl.this) {
+            copyFromAllUidsCpuTimes(
+                    mOnBatteryTimeBase.isRunning(), mOnBatteryScreenOffTimeBase.isRunning());
         }
     }
 
@@ -348,14 +367,25 @@ public class BatteryStatsImpl extends BatteryStats {
      * already read this data for updating per-freq cpu times, we can use the same data for
      * per-procstate cpu times.
      */
-    public void copyFromAllUidsCpuTimes() {
+    public void copyFromAllUidsCpuTimes(boolean onBattery, boolean onBatteryScreenOff) {
         synchronized (BatteryStatsImpl.this) {
+            if (!mConstants.TRACK_CPU_TIMES_BY_PROC_STATE) {
+                return;
+            }
             if(!initKernelSingleUidTimeReaderLocked()) {
                 return;
             }
 
             final SparseArray<long[]> allUidCpuFreqTimesMs =
                     mKernelUidCpuFreqTimeReader.getAllUidCpuFreqTimeMs();
+            // If the KernelSingleUidTimeReader has stale cpu times, then we shouldn't try to
+            // compute deltas since it might result in mis-attributing cpu times to wrong states.
+            if (mKernelSingleUidTimeReader.hasStaleData()) {
+                mKernelSingleUidTimeReader.setAllUidsCpuTimesMs(allUidCpuFreqTimesMs);
+                mKernelSingleUidTimeReader.markDataAsStale(false);
+                mPendingUids.clear();
+                return;
+            }
             for (int i = allUidCpuFreqTimesMs.size() - 1; i >= 0; --i) {
                 final int uid = allUidCpuFreqTimesMs.keyAt(i);
                 final Uid u = getAvailableUidStatsLocked(mapUid(uid));
@@ -368,7 +398,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 }
                 final long[] deltaTimesMs = mKernelSingleUidTimeReader.computeDelta(
                         uid, cpuTimesMs.clone());
-                if (mOnBatteryInternal && deltaTimesMs != null) {
+                if (onBattery && deltaTimesMs != null) {
                     final int procState;
                     final int idx = mPendingUids.indexOfKey(uid);
                     if (idx >= 0) {
@@ -378,8 +408,8 @@ public class BatteryStatsImpl extends BatteryStats {
                         procState = u.mProcessState;
                     }
                     if (procState >= 0 && procState < Uid.NUM_PROCESS_STATE) {
-                        u.addProcStateTimesMs(procState, deltaTimesMs);
-                        u.addProcStateScreenOffTimesMs(procState, deltaTimesMs);
+                        u.addProcStateTimesMs(procState, deltaTimesMs, onBattery);
+                        u.addProcStateScreenOffTimesMs(procState, deltaTimesMs, onBatteryScreenOff);
                     }
                 }
             }
@@ -443,8 +473,9 @@ public class BatteryStatsImpl extends BatteryStats {
 
         Future<?> scheduleSync(String reason, int flags);
         Future<?> scheduleCpuSyncDueToRemovedUid(int uid);
-        Future<?> scheduleReadProcStateCpuTimes();
-        Future<?> scheduleCopyFromAllUidsCpuTimes();
+        Future<?> scheduleReadProcStateCpuTimes(boolean onBattery, boolean onBatteryScreenOff);
+        Future<?> scheduleCopyFromAllUidsCpuTimes(boolean onBattery, boolean onBatteryScreenOff);
+        Future<?> scheduleCpuSyncDueToSettingChange();
     }
 
     public Handler mHandler;
@@ -506,8 +537,8 @@ public class BatteryStatsImpl extends BatteryStats {
     final HistoryEventTracker mActiveEvents = new HistoryEventTracker();
 
     long mHistoryBaseTime;
-    boolean mHaveBatteryLevel = false;
-    boolean mRecordingHistory = false;
+    protected boolean mHaveBatteryLevel = false;
+    protected boolean mRecordingHistory = false;
     int mNumHistoryItems;
 
     final Parcel mHistoryBuffer = Parcel.obtain();
@@ -650,6 +681,14 @@ public class BatteryStatsImpl extends BatteryStats {
             new LongSamplingCounter[NUM_NETWORK_ACTIVITY_TYPES];
     final LongSamplingCounter[] mNetworkPacketActivityCounters =
             new LongSamplingCounter[NUM_NETWORK_ACTIVITY_TYPES];
+
+    /**
+     * The WiFi Overall wakelock timer
+     * This timer tracks the actual aggregate time for which MC wakelocks are enabled
+     * since addition of per UID timers would not result in an accurate value due to overlapp of
+     * per uid wakelock timers
+     */
+    StopwatchTimer mWifiMulticastWakelockTimer;
 
     /**
      * The WiFi controller activity (time in tx, rx, idle, and power consumed) for the device.
@@ -799,6 +838,9 @@ public class BatteryStatsImpl extends BatteryStats {
     @VisibleForTesting
     protected PowerProfile mPowerProfile;
 
+    @GuardedBy("this")
+    private final Constants mConstants;
+
     /*
      * Holds a SamplingTimer associated with each Resource Power Manager state and voter,
      * recording their times when on-battery (regardless of screen state).
@@ -887,6 +929,7 @@ public class BatteryStatsImpl extends BatteryStats {
         mHandler = null;
         mPlatformIdleStateCallback = null;
         mUserInfoProvider = null;
+        mConstants = new Constants(mHandler);
         clearHistoryLocked();
     }
 
@@ -1223,12 +1266,10 @@ public class BatteryStatsImpl extends BatteryStats {
         public long[] mCounts;
         public long[] mLoadedCounts;
         public long[] mUnpluggedCounts;
-        public long[] mPluggedCounts;
 
         private LongSamplingCounterArray(TimeBase timeBase, Parcel in) {
             mTimeBase = timeBase;
-            mPluggedCounts = in.createLongArray();
-            mCounts = copyArray(mPluggedCounts, mCounts);
+            mCounts = in.createLongArray();
             mLoadedCounts = in.createLongArray();
             mUnpluggedCounts = in.createLongArray();
             timeBase.add(this);
@@ -1247,17 +1288,16 @@ public class BatteryStatsImpl extends BatteryStats {
 
         @Override
         public void onTimeStarted(long elapsedRealTime, long baseUptime, long baseRealtime) {
-            mUnpluggedCounts = copyArray(mPluggedCounts, mUnpluggedCounts);
+            mUnpluggedCounts = copyArray(mCounts, mUnpluggedCounts);
         }
 
         @Override
         public void onTimeStopped(long elapsedRealtime, long baseUptime, long baseRealtime) {
-            mPluggedCounts = copyArray(mCounts, mPluggedCounts);
         }
 
         @Override
         public long[] getCountsLocked(int which) {
-            long[] val = copyArray(mTimeBase.isRunning() ? mCounts : mPluggedCounts, null);
+            long[] val = copyArray(mCounts, null);
             if (which == STATS_SINCE_UNPLUGGED) {
                 subtract(val, mUnpluggedCounts);
             } else if (which != STATS_SINCE_CHARGED) {
@@ -1270,15 +1310,18 @@ public class BatteryStatsImpl extends BatteryStats {
         public void logState(Printer pw, String prefix) {
             pw.println(prefix + "mCounts=" + Arrays.toString(mCounts)
                     + " mLoadedCounts=" + Arrays.toString(mLoadedCounts)
-                    + " mUnpluggedCounts=" + Arrays.toString(mUnpluggedCounts)
-                    + " mPluggedCounts=" + Arrays.toString(mPluggedCounts));
+                    + " mUnpluggedCounts=" + Arrays.toString(mUnpluggedCounts));
         }
 
         public void addCountLocked(long[] counts) {
+            addCountLocked(counts, mTimeBase.isRunning());
+        }
+
+        public void addCountLocked(long[] counts, boolean isRunning) {
             if (counts == null) {
                 return;
             }
-            if (mTimeBase.isRunning()) {
+            if (isRunning) {
                 if (mCounts == null) {
                     mCounts = new long[counts.length];
                 }
@@ -1298,7 +1341,6 @@ public class BatteryStatsImpl extends BatteryStats {
         public void reset(boolean detachIfReset) {
             fillArray(mCounts, 0);
             fillArray(mLoadedCounts, 0);
-            fillArray(mPluggedCounts, 0);
             fillArray(mUnpluggedCounts, 0);
             if (detachIfReset) {
                 detach();
@@ -1317,7 +1359,6 @@ public class BatteryStatsImpl extends BatteryStats {
             mCounts = in.createLongArray();
             mLoadedCounts = copyArray(mCounts, mLoadedCounts);
             mUnpluggedCounts = copyArray(mCounts, mUnpluggedCounts);
-            mPluggedCounts = copyArray(mCounts, mPluggedCounts);
         }
 
         public static void writeToParcel(Parcel out, LongSamplingCounterArray counterArray) {
@@ -3775,7 +3816,8 @@ public class BatteryStatsImpl extends BatteryStats {
                         + " and battery is " + (unplugged ? "on" : "off"));
             }
             updateCpuTimeLocked();
-            mExternalSync.scheduleCopyFromAllUidsCpuTimes();
+            mExternalSync.scheduleCopyFromAllUidsCpuTimes(mOnBatteryTimeBase.isRunning(),
+                    mOnBatteryScreenOffTimeBase.isRunning());
 
             mOnBatteryTimeBase.setRunning(unplugged, uptime, realtime);
             if (updateOnBatteryTimeBase) {
@@ -3975,30 +4017,90 @@ public class BatteryStatsImpl extends BatteryStats {
         addHistoryEventLocked(elapsedRealtime, uptime, HistoryItem.EVENT_JOB_FINISH, name, uid);
     }
 
-    public void noteAlarmStartLocked(String name, int uid) {
-        if (!mRecordAllHistory) {
-            return;
-        }
-        uid = mapUid(uid);
-        final long elapsedRealtime = mClocks.elapsedRealtime();
-        final long uptime = mClocks.uptimeMillis();
-        if (!mActiveEvents.updateState(HistoryItem.EVENT_ALARM_START, name, uid, 0)) {
-            return;
-        }
-        addHistoryEventLocked(elapsedRealtime, uptime, HistoryItem.EVENT_ALARM_START, name, uid);
+    public void noteAlarmStartLocked(String name, WorkSource workSource, int uid) {
+        noteAlarmStartOrFinishLocked(HistoryItem.EVENT_ALARM_START, name, workSource, uid);
     }
 
-    public void noteAlarmFinishLocked(String name, int uid) {
+    public void noteAlarmFinishLocked(String name, WorkSource workSource, int uid) {
+        noteAlarmStartOrFinishLocked(HistoryItem.EVENT_ALARM_FINISH, name, workSource, uid);
+    }
+
+    private void noteAlarmStartOrFinishLocked(int historyItem, String name, WorkSource workSource,
+            int uid) {
         if (!mRecordAllHistory) {
             return;
         }
-        uid = mapUid(uid);
+
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
-        if (!mActiveEvents.updateState(HistoryItem.EVENT_ALARM_FINISH, name, uid, 0)) {
-            return;
+
+        if (workSource != null) {
+            for (int i = 0; i < workSource.size(); ++i) {
+                uid = mapUid(workSource.get(i));
+                if (mActiveEvents.updateState(historyItem, name, uid, 0)) {
+                    addHistoryEventLocked(elapsedRealtime, uptime, historyItem, name, uid);
+                }
+            }
+
+            List<WorkChain> workChains = workSource.getWorkChains();
+            if (workChains != null) {
+                for (int i = 0; i < workChains.size(); ++i) {
+                    uid = mapUid(workChains.get(i).getAttributionUid());
+                    if (mActiveEvents.updateState(historyItem, name, uid, 0)) {
+                        addHistoryEventLocked(elapsedRealtime, uptime, historyItem, name, uid);
+                    }
+                }
+            }
+        } else {
+            uid = mapUid(uid);
+
+            if (mActiveEvents.updateState(historyItem, name, uid, 0)) {
+                addHistoryEventLocked(elapsedRealtime, uptime, historyItem, name, uid);
+            }
         }
-        addHistoryEventLocked(elapsedRealtime, uptime, HistoryItem.EVENT_ALARM_FINISH, name, uid);
+    }
+
+    public void noteWakupAlarmLocked(String packageName, int uid, WorkSource workSource,
+            String tag) {
+        final int[] uids = new int[1];
+        final String[] tags = new String[1];
+        if (workSource != null) {
+            for (int i = 0; i < workSource.size(); ++i) {
+                uid = workSource.get(i);
+                final String workSourceName = workSource.getName(i);
+
+                if (isOnBattery()) {
+                    BatteryStatsImpl.Uid.Pkg pkg = getPackageStatsLocked(uid,
+                            workSourceName != null ? workSourceName : packageName);
+                    pkg.noteWakeupAlarmLocked(tag);
+                }
+                uids[0] = workSource.get(i);
+                tags[0] = workSource.getName(i);
+                StatsLog.write(StatsLog.WAKEUP_ALARM_OCCURRED, uids, tags, tag);
+            }
+
+            ArrayList<WorkChain> workChains = workSource.getWorkChains();
+            if (workChains != null) {
+                for (int i = 0; i < workChains.size(); ++i) {
+                    final WorkChain wc = workChains.get(i);
+                    uid = wc.getAttributionUid();
+
+                    if (isOnBattery()) {
+                        BatteryStatsImpl.Uid.Pkg pkg = getPackageStatsLocked(uid, packageName);
+                        pkg.noteWakeupAlarmLocked(tag);
+                    }
+                    StatsLog.write(StatsLog.WAKEUP_ALARM_OCCURRED, wc.getUids(), wc.getTags(), tag);
+                }
+            }
+        } else {
+            if (isOnBattery()) {
+                BatteryStatsImpl.Uid.Pkg pkg = getPackageStatsLocked(uid, packageName);
+                pkg.noteWakeupAlarmLocked(tag);
+            }
+            uids[0] = uid;
+            tags[0] = null;
+            StatsLog.write(StatsLog.WAKEUP_ALARM_OCCURRED, uids, tags, tag);
+        }
     }
 
     private void requestWakelockCpuUpdate() {
@@ -4118,13 +4220,14 @@ public class BatteryStatsImpl extends BatteryStats {
 
             getUidStatsLocked(uid).noteStartWakeLocked(pid, name, type, elapsedRealtime);
 
-            // TODO(statsd): Use the attribution chain specified in WorkChain instead of uid.
-            // The debug logging here can be deleted once statsd is wired up.
-            if (DEBUG) {
-                Slog.w(TAG, "StatsLog [start]: uid=" + uid + ", type=" + type + ", name=" + name
-                + ", wc=" + wc);
+            if (wc != null) {
+                StatsLog.write(
+                        StatsLog.WAKELOCK_STATE_CHANGED, wc.getUids(), wc.getTags(), type, name, 1);
+            } else {
+                final int[] uids = new int[] { uid };
+                final String[] tags = new String[] { null };
+                StatsLog.write(StatsLog.WAKELOCK_STATE_CHANGED, uids, tags, type, name, 1);
             }
-            StatsLog.write(StatsLog.WAKELOCK_STATE_CHANGED, uid, type, name, 1);
         }
     }
 
@@ -4161,14 +4264,14 @@ public class BatteryStatsImpl extends BatteryStats {
             }
 
             getUidStatsLocked(uid).noteStopWakeLocked(pid, name, type, elapsedRealtime);
-
-            // TODO(statsd): Use the attribution chain specified in WorkChain instead of uid.
-            // The debug logging here can be deleted once statsd is wired up.
-            if (DEBUG) {
-                Slog.w(TAG, "StatsLog [stop]: uid=" + uid + ", type=" + type + ", name=" + name
-                    + ", wc=" + wc);
+            if (wc != null) {
+                StatsLog.write(
+                        StatsLog.WAKELOCK_STATE_CHANGED, wc.getUids(), wc.getTags(), type, name, 0);
+            } else {
+                final int[] uids = new int[] { uid };
+                final String[] tags = new String[] { null };
+                StatsLog.write(StatsLog.WAKELOCK_STATE_CHANGED, uids, tags, type, name, 0);
             }
-            StatsLog.write(StatsLog.WAKELOCK_STATE_CHANGED, uid, type, name, 0);
         }
     }
 
@@ -4261,7 +4364,43 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     public void noteLongPartialWakelockStart(String name, String historyName, int uid) {
+        final int[] uids = new int[] { uid };
+        final String[] tags = new String[] { null };
+        StatsLog.write(StatsLog.LONG_PARTIAL_WAKELOCK_STATE_CHANGED,
+                uids, tags, name, historyName, 1);
+
         uid = mapUid(uid);
+        noteLongPartialWakeLockStartInternal(name, historyName, uid);
+    }
+
+    public void noteLongPartialWakelockStartFromSource(String name, String historyName,
+            WorkSource workSource) {
+        final int N = workSource.size();
+        final int[] uids = new int[1];
+        final String[] tags = new String[1];
+        for (int i = 0; i < N; ++i) {
+            final int uid = mapUid(workSource.get(i));
+            noteLongPartialWakeLockStartInternal(name, historyName, uid);
+            uids[0] = workSource.get(i);
+            tags[0] = workSource.getName(i);
+            StatsLog.write(StatsLog.LONG_PARTIAL_WAKELOCK_STATE_CHANGED, uids, tags, name,
+                    historyName, 1);
+        }
+
+        final ArrayList<WorkChain> workChains = workSource.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                final WorkChain workChain = workChains.get(i);
+                final int uid = workChain.getAttributionUid();
+                noteLongPartialWakeLockStartInternal(name, historyName, uid);
+
+                StatsLog.write(StatsLog.LONG_PARTIAL_WAKELOCK_STATE_CHANGED,
+                        workChain.getUids(), workChain.getTags(), name, historyName, 1);
+            }
+        }
+    }
+
+    private void noteLongPartialWakeLockStartInternal(String name, String historyName, int uid) {
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
         if (historyName == null) {
@@ -4273,11 +4412,45 @@ public class BatteryStatsImpl extends BatteryStats {
         }
         addHistoryEventLocked(elapsedRealtime, uptime, HistoryItem.EVENT_LONG_WAKE_LOCK_START,
                 historyName, uid);
-        StatsLog.write(StatsLog.LONG_PARTIAL_WAKELOCK_STATE_CHANGED, uid, name, historyName, 1);
     }
 
     public void noteLongPartialWakelockFinish(String name, String historyName, int uid) {
+        int[] uids = new int[] { uid };
+        String[] tags = new String[] { null };
+        StatsLog.write(StatsLog.LONG_PARTIAL_WAKELOCK_STATE_CHANGED,
+                uids, tags, name, historyName, 0);
+
         uid = mapUid(uid);
+        noteLongPartialWakeLockFinishInternal(name, historyName, uid);
+    }
+
+    public void noteLongPartialWakelockFinishFromSource(String name, String historyName,
+            WorkSource workSource) {
+        final int N = workSource.size();
+        final int[] uids = new int[1];
+        final String[] tags = new String[1];
+        for (int i = 0; i < N; ++i) {
+            final int uid = mapUid(workSource.get(i));
+            noteLongPartialWakeLockFinishInternal(name, historyName, uid);
+            uids[0] = workSource.get(i);
+            tags[0] = workSource.getName(i);
+            StatsLog.write(StatsLog.LONG_PARTIAL_WAKELOCK_STATE_CHANGED,
+                    uids, tags, name, historyName, 0);
+        }
+
+        final ArrayList<WorkChain> workChains = workSource.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                final WorkChain workChain = workChains.get(i);
+                final int uid = workChain.getAttributionUid();
+                noteLongPartialWakeLockFinishInternal(name, historyName, uid);
+                StatsLog.write(StatsLog.LONG_PARTIAL_WAKELOCK_STATE_CHANGED,
+                        workChain.getUids(), workChain.getTags(), name, historyName, 0);
+            }
+        }
+    }
+
+    private void noteLongPartialWakeLockFinishInternal(String name, String historyName, int uid) {
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
         if (historyName == null) {
@@ -4289,7 +4462,6 @@ public class BatteryStatsImpl extends BatteryStats {
         }
         addHistoryEventLocked(elapsedRealtime, uptime, HistoryItem.EVENT_LONG_WAKE_LOCK_FINISH,
                 historyName, uid);
-        StatsLog.write(StatsLog.LONG_PARTIAL_WAKELOCK_STATE_CHANGED, uid, name, historyName, 0);
     }
 
     void aggregateLastWakeupUptimeLocked(long uptimeMs) {
@@ -5226,8 +5398,9 @@ public class BatteryStatsImpl extends BatteryStats {
         }
     }
 
-    private void noteBluetoothScanStartedLocked(int uid, boolean isUnoptimized) {
-        uid = mapUid(uid);
+    private void noteBluetoothScanStartedLocked(WorkChain workChain, int uid,
+            boolean isUnoptimized) {
+        uid = getAttributionUid(uid, workChain);
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
         if (mBluetoothScanNesting == 0) {
@@ -5238,18 +5411,46 @@ public class BatteryStatsImpl extends BatteryStats {
             mBluetoothScanTimer.startRunningLocked(elapsedRealtime);
         }
         mBluetoothScanNesting++;
+
+        if (workChain != null) {
+            StatsLog.write(StatsLog.BLE_SCAN_STATE_CHANGED,
+                    workChain.getUids(), workChain.getTags(), 1);
+            if (isUnoptimized) {
+                StatsLog.write(StatsLog.BLE_UNOPTIMIZED_SCAN_STATE_CHANGED,
+                        workChain.getUids(), workChain.getTags(), 1);
+            }
+        } else {
+            final int[] uids = new int[] {uid};
+            final String[] tags = new String[] {null};
+            StatsLog.write(StatsLog.BLE_SCAN_STATE_CHANGED, uids, tags, 1);
+            if (isUnoptimized) {
+                StatsLog.write(StatsLog.BLE_UNOPTIMIZED_SCAN_STATE_CHANGED, uids, tags, 1);
+            }
+        }
+
         getUidStatsLocked(uid).noteBluetoothScanStartedLocked(elapsedRealtime, isUnoptimized);
+        if (workChain != null) {
+            getUidStatsLocked(uid).addBluetoothWorkChain(workChain, isUnoptimized);
+        }
     }
 
     public void noteBluetoothScanStartedFromSourceLocked(WorkSource ws, boolean isUnoptimized) {
         final int N = ws.size();
         for (int i = 0; i < N; i++) {
-            noteBluetoothScanStartedLocked(ws.get(i), isUnoptimized);
+            noteBluetoothScanStartedLocked(null, ws.get(i), isUnoptimized);
+        }
+
+        final List<WorkChain> workChains = ws.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                noteBluetoothScanStartedLocked(workChains.get(i), -1, isUnoptimized);
+            }
         }
     }
 
-    private void noteBluetoothScanStoppedLocked(int uid, boolean isUnoptimized) {
-        uid = mapUid(uid);
+    private void noteBluetoothScanStoppedLocked(WorkChain workChain, int uid,
+            boolean isUnoptimized) {
+        uid = getAttributionUid(uid, workChain);
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
         mBluetoothScanNesting--;
@@ -5260,13 +5461,48 @@ public class BatteryStatsImpl extends BatteryStats {
             addHistoryRecordLocked(elapsedRealtime, uptime);
             mBluetoothScanTimer.stopRunningLocked(elapsedRealtime);
         }
+
+        if (workChain != null) {
+            StatsLog.write(
+                    StatsLog.BLE_SCAN_STATE_CHANGED, workChain.getUids(), workChain.getTags(), 0);
+            if (isUnoptimized) {
+                StatsLog.write(StatsLog.BLE_UNOPTIMIZED_SCAN_STATE_CHANGED,
+                        workChain.getUids(), workChain.getTags(), 0);
+            }
+        } else {
+            final int[] uids = new int[] { uid };
+            final String[] tags = new String[] {null};
+            StatsLog.write(StatsLog.BLE_SCAN_STATE_CHANGED, uids, tags, 0);
+            if (isUnoptimized) {
+                StatsLog.write(StatsLog.BLE_UNOPTIMIZED_SCAN_STATE_CHANGED, uids, tags, 0);
+            }
+        }
+
         getUidStatsLocked(uid).noteBluetoothScanStoppedLocked(elapsedRealtime, isUnoptimized);
+        if (workChain != null) {
+            getUidStatsLocked(uid).removeBluetoothWorkChain(workChain, isUnoptimized);
+        }
+    }
+
+    private int getAttributionUid(int uid, WorkChain workChain) {
+        if (workChain != null) {
+            return mapUid(workChain.getAttributionUid());
+        }
+
+        return mapUid(uid);
     }
 
     public void noteBluetoothScanStoppedFromSourceLocked(WorkSource ws, boolean isUnoptimized) {
         final int N = ws.size();
         for (int i = 0; i < N; i++) {
-            noteBluetoothScanStoppedLocked(ws.get(i), isUnoptimized);
+            noteBluetoothScanStoppedLocked(null, ws.get(i), isUnoptimized);
+        }
+
+        final List<WorkChain> workChains = ws.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                noteBluetoothScanStoppedLocked(workChains.get(i), -1, isUnoptimized);
+            }
         }
     }
 
@@ -5280,18 +5516,56 @@ public class BatteryStatsImpl extends BatteryStats {
                     + Integer.toHexString(mHistoryCur.states2));
             addHistoryRecordLocked(elapsedRealtime, uptime);
             mBluetoothScanTimer.stopAllRunningLocked(elapsedRealtime);
+
+
             for (int i=0; i<mUidStats.size(); i++) {
                 BatteryStatsImpl.Uid uid = mUidStats.valueAt(i);
                 uid.noteResetBluetoothScanLocked(elapsedRealtime);
+
+                List<WorkChain> allWorkChains = uid.getAllBluetoothWorkChains();
+                if (allWorkChains != null) {
+                    for (int j = 0; j < allWorkChains.size(); ++j) {
+                        StatsLog.write(StatsLog.BLE_SCAN_STATE_CHANGED,
+                                allWorkChains.get(j).getUids(),
+                                allWorkChains.get(j).getTags(), 0);
+                    }
+                    allWorkChains.clear();
+                }
+
+                List<WorkChain> unoptimizedWorkChains = uid.getUnoptimizedBluetoothWorkChains();
+                if (unoptimizedWorkChains != null) {
+                    for (int j = 0; j < unoptimizedWorkChains.size(); ++j) {
+                        StatsLog.write(StatsLog.BLE_UNOPTIMIZED_SCAN_STATE_CHANGED,
+                                unoptimizedWorkChains.get(j).getUids(),
+                                unoptimizedWorkChains.get(j).getTags(), 0);
+                    }
+                    unoptimizedWorkChains.clear();
+                }
             }
         }
     }
 
     public void noteBluetoothScanResultsFromSourceLocked(WorkSource ws, int numNewResults) {
         final int N = ws.size();
+        final int[] uids = new int[1];
+        final String[] tags = new String[1];
         for (int i = 0; i < N; i++) {
             int uid = mapUid(ws.get(i));
             getUidStatsLocked(uid).noteBluetoothScanResultsLocked(numNewResults);
+            uids[0] = ws.get(i);
+            tags[0] = ws.getName(i);
+            StatsLog.write(StatsLog.BLE_SCAN_RESULT_RECEIVED, uids, tags, numNewResults);
+        }
+
+        final List<WorkChain> workChains = ws.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                final WorkChain wc = workChains.get(i);
+                int uid = mapUid(wc.getAttributionUid());
+                getUidStatsLocked(uid).noteBluetoothScanResultsLocked(numNewResults);
+                StatsLog.write(StatsLog.BLE_SCAN_RESULT_RECEIVED,
+                        wc.getUids(), wc.getTags(), numNewResults);
+            }
         }
     }
 
@@ -5341,6 +5615,15 @@ public class BatteryStatsImpl extends BatteryStats {
                 int uid = mapUid(ws.get(i));
                 getUidStatsLocked(uid).noteWifiRunningLocked(elapsedRealtime);
             }
+
+            List<WorkChain> workChains = ws.getWorkChains();
+            if (workChains != null) {
+                for (int i = 0; i < workChains.size(); ++i) {
+                    int uid = mapUid(workChains.get(i).getAttributionUid());
+                    getUidStatsLocked(uid).noteWifiRunningLocked(elapsedRealtime);
+                }
+            }
+
             scheduleSyncExternalStatsLocked("wifi-running", ExternalStatsSync.UPDATE_WIFI);
         } else {
             Log.w(TAG, "noteWifiRunningLocked -- called while WIFI running");
@@ -5355,10 +5638,27 @@ public class BatteryStatsImpl extends BatteryStats {
                 int uid = mapUid(oldWs.get(i));
                 getUidStatsLocked(uid).noteWifiStoppedLocked(elapsedRealtime);
             }
+
+            List<WorkChain> workChains = oldWs.getWorkChains();
+            if (workChains != null) {
+                for (int i = 0; i < workChains.size(); ++i) {
+                    int uid = mapUid(workChains.get(i).getAttributionUid());
+                    getUidStatsLocked(uid).noteWifiStoppedLocked(elapsedRealtime);
+                }
+            }
+
             N = newWs.size();
             for (int i=0; i<N; i++) {
                 int uid = mapUid(newWs.get(i));
                 getUidStatsLocked(uid).noteWifiRunningLocked(elapsedRealtime);
+            }
+
+            workChains = newWs.getWorkChains();
+            if (workChains != null) {
+                for (int i = 0; i < workChains.size(); ++i) {
+                    int uid = mapUid(workChains.get(i).getAttributionUid());
+                    getUidStatsLocked(uid).noteWifiRunningLocked(elapsedRealtime);
+                }
             }
         } else {
             Log.w(TAG, "noteWifiRunningChangedLocked -- called while WIFI not running");
@@ -5380,6 +5680,15 @@ public class BatteryStatsImpl extends BatteryStats {
                 int uid = mapUid(ws.get(i));
                 getUidStatsLocked(uid).noteWifiStoppedLocked(elapsedRealtime);
             }
+
+            List<WorkChain> workChains = ws.getWorkChains();
+            if (workChains != null) {
+                for (int i = 0; i < workChains.size(); ++i) {
+                    int uid = mapUid(workChains.get(i).getAttributionUid());
+                    getUidStatsLocked(uid).noteWifiStoppedLocked(elapsedRealtime);
+                }
+            }
+
             scheduleSyncExternalStatsLocked("wifi-stopped", ExternalStatsSync.UPDATE_WIFI);
         } else {
             Log.w(TAG, "noteWifiStoppedLocked -- called while WIFI not running");
@@ -5461,7 +5770,6 @@ public class BatteryStatsImpl extends BatteryStats {
     int mWifiFullLockNesting = 0;
 
     public void noteFullWifiLockAcquiredLocked(int uid) {
-        uid = mapUid(uid);
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
         if (mWifiFullLockNesting == 0) {
@@ -5475,7 +5783,6 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     public void noteFullWifiLockReleasedLocked(int uid) {
-        uid = mapUid(uid);
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
         mWifiFullLockNesting--;
@@ -5491,7 +5798,6 @@ public class BatteryStatsImpl extends BatteryStats {
     int mWifiScanNesting = 0;
 
     public void noteWifiScanStartedLocked(int uid) {
-        uid = mapUid(uid);
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
         if (mWifiScanNesting == 0) {
@@ -5505,7 +5811,6 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     public void noteWifiScanStoppedLocked(int uid) {
-        uid = mapUid(uid);
         final long elapsedRealtime = mClocks.elapsedRealtime();
         final long uptime = mClocks.uptimeMillis();
         mWifiScanNesting--;
@@ -5541,6 +5846,12 @@ public class BatteryStatsImpl extends BatteryStats {
             if (DEBUG_HISTORY) Slog.v(TAG, "WIFI multicast on to: "
                     + Integer.toHexString(mHistoryCur.states));
             addHistoryRecordLocked(elapsedRealtime, uptime);
+
+            // Start Wifi Multicast overall timer
+            if (!mWifiMulticastWakelockTimer.isRunningLocked()) {
+                if (DEBUG_HISTORY) Slog.v(TAG, "WiFi Multicast Overall Timer Started");
+                mWifiMulticastWakelockTimer.startRunningLocked(elapsedRealtime);
+            }
         }
         mWifiMulticastNesting++;
         getUidStatsLocked(uid).noteWifiMulticastEnabledLocked(elapsedRealtime);
@@ -5556,35 +5867,109 @@ public class BatteryStatsImpl extends BatteryStats {
             if (DEBUG_HISTORY) Slog.v(TAG, "WIFI multicast off to: "
                     + Integer.toHexString(mHistoryCur.states));
             addHistoryRecordLocked(elapsedRealtime, uptime);
+
+            // Stop Wifi Multicast overall timer
+            if (mWifiMulticastWakelockTimer.isRunningLocked()) {
+                if (DEBUG_HISTORY) Slog.v(TAG, "Multicast Overall Timer Stopped");
+                mWifiMulticastWakelockTimer.stopRunningLocked(elapsedRealtime);
+            }
         }
         getUidStatsLocked(uid).noteWifiMulticastDisabledLocked(elapsedRealtime);
     }
 
     public void noteFullWifiLockAcquiredFromSourceLocked(WorkSource ws) {
         int N = ws.size();
+        final int[] uids = new int[1];
+        final String[] tags = new String[1];
         for (int i=0; i<N; i++) {
-            noteFullWifiLockAcquiredLocked(ws.get(i));
+            final int uid = mapUid(ws.get(i));
+            noteFullWifiLockAcquiredLocked(uid);
+            uids[0] = ws.get(i);
+            tags[0] = ws.getName(i);
+            StatsLog.write(StatsLog.WIFI_LOCK_STATE_CHANGED, uids, tags, 1);
+        }
+
+        final List<WorkChain> workChains = ws.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                final WorkChain workChain = workChains.get(i);
+                final int uid = mapUid(workChain.getAttributionUid());
+                noteFullWifiLockAcquiredLocked(uid);
+                StatsLog.write(StatsLog.WIFI_LOCK_STATE_CHANGED,
+                        workChain.getUids(), workChain.getTags(), 1);
+            }
         }
     }
 
     public void noteFullWifiLockReleasedFromSourceLocked(WorkSource ws) {
         int N = ws.size();
+        final int[] uids = new int[1];
+        final String[] tags = new String[1];
         for (int i=0; i<N; i++) {
-            noteFullWifiLockReleasedLocked(ws.get(i));
+            final int uid = mapUid(ws.get(i));
+            noteFullWifiLockReleasedLocked(uid);
+            uids[0] = ws.get(i);
+            tags[0] = ws.getName(i);
+            StatsLog.write(StatsLog.WIFI_LOCK_STATE_CHANGED, uids, tags, 0);
+        }
+
+        final List<WorkChain> workChains = ws.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                final WorkChain workChain = workChains.get(i);
+                final int uid = mapUid(workChain.getAttributionUid());
+                noteFullWifiLockReleasedLocked(uid);
+                StatsLog.write(StatsLog.WIFI_LOCK_STATE_CHANGED,
+                        workChain.getUids(), workChain.getTags(), 0);
+            }
         }
     }
 
     public void noteWifiScanStartedFromSourceLocked(WorkSource ws) {
         int N = ws.size();
+        final int[] uids = new int[1];
+        final String[] tags = new String[1];
         for (int i=0; i<N; i++) {
-            noteWifiScanStartedLocked(ws.get(i));
+            final int uid = mapUid(ws.get(i));
+            noteWifiScanStartedLocked(uid);
+            uids[0] = ws.get(i);
+            tags[0] = ws.getName(i);
+            StatsLog.write(StatsLog.WIFI_SCAN_STATE_CHANGED, uids, tags, 1);
+        }
+
+        final List<WorkChain> workChains = ws.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                final WorkChain workChain = workChains.get(i);
+                final int uid = mapUid(workChain.getAttributionUid());
+                noteWifiScanStartedLocked(uid);
+                StatsLog.write(StatsLog.WIFI_SCAN_STATE_CHANGED, workChain.getUids(),
+                        workChain.getTags(), 1);
+            }
         }
     }
 
     public void noteWifiScanStoppedFromSourceLocked(WorkSource ws) {
         int N = ws.size();
+        final int[] uids = new int[1];
+        final String[] tags = new String[1];
         for (int i=0; i<N; i++) {
-            noteWifiScanStoppedLocked(ws.get(i));
+            final int uid = mapUid(ws.get(i));
+            noteWifiScanStoppedLocked(uid);
+            uids[0] = ws.get(i);
+            tags[0] = ws.getName(i);
+            StatsLog.write(StatsLog.WIFI_SCAN_STATE_CHANGED, uids, tags, 0);
+        }
+
+        final List<WorkChain> workChains = ws.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                final WorkChain workChain = workChains.get(i);
+                final int uid = mapUid(workChain.getAttributionUid());
+                noteWifiScanStoppedLocked(uid);
+                StatsLog.write(StatsLog.WIFI_SCAN_STATE_CHANGED,
+                        workChain.getUids(), workChain.getTags(), 0);
+            }
         }
     }
 
@@ -5593,6 +5978,13 @@ public class BatteryStatsImpl extends BatteryStats {
         for (int i=0; i<N; i++) {
             noteWifiBatchedScanStartedLocked(ws.get(i), csph);
         }
+
+        final List<WorkChain> workChains = ws.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                noteWifiBatchedScanStartedLocked(workChains.get(i).getAttributionUid(), csph);
+            }
+        }
     }
 
     public void noteWifiBatchedScanStoppedFromSourceLocked(WorkSource ws) {
@@ -5600,19 +5992,12 @@ public class BatteryStatsImpl extends BatteryStats {
         for (int i=0; i<N; i++) {
             noteWifiBatchedScanStoppedLocked(ws.get(i));
         }
-    }
 
-    public void noteWifiMulticastEnabledFromSourceLocked(WorkSource ws) {
-        int N = ws.size();
-        for (int i=0; i<N; i++) {
-            noteWifiMulticastEnabledLocked(ws.get(i));
-        }
-    }
-
-    public void noteWifiMulticastDisabledFromSourceLocked(WorkSource ws) {
-        int N = ws.size();
-        for (int i=0; i<N; i++) {
-            noteWifiMulticastDisabledLocked(ws.get(i));
+        final List<WorkChain> workChains = ws.getWorkChains();
+        if (workChains != null) {
+            for (int i = 0; i < workChains.size(); ++i) {
+                noteWifiBatchedScanStoppedLocked(workChains.get(i).getAttributionUid());
+            }
         }
     }
 
@@ -5840,6 +6225,16 @@ public class BatteryStatsImpl extends BatteryStats {
 
     @Override public int getMobileRadioActiveUnknownCount(int which) {
         return (int)mMobileRadioActiveUnknownCount.getCountLocked(which);
+    }
+
+    @Override public long getWifiMulticastWakelockTime(
+            long elapsedRealtimeUs, int which) {
+        return mWifiMulticastWakelockTimer.getTotalTimeLocked(
+                elapsedRealtimeUs, which);
+    }
+
+    @Override public int getWifiMulticastWakelockCount(int which) {
+        return mWifiMulticastWakelockTimer.getCountLocked(which);
     }
 
     @Override public long getWifiOnTime(long elapsedRealtimeUs, int which) {
@@ -6171,6 +6566,15 @@ public class BatteryStatsImpl extends BatteryStats {
          */
         final SparseArray<Pid> mPids = new SparseArray<>();
 
+        /**
+         * The list of WorkChains associated with active bluetooth scans.
+         *
+         * NOTE: This is a hack and it only needs to exist because there's a "reset" API that is
+         * supposed to stop and log all WorkChains that were currently active.
+         */
+        ArrayList<WorkChain> mAllBluetoothChains = null;
+        ArrayList<WorkChain> mUnoptimizedBluetoothChains = null;
+
         public Uid(BatteryStatsImpl bsi, int uid) {
             mBsi = bsi;
             mUid = uid;
@@ -6295,7 +6699,7 @@ public class BatteryStatsImpl extends BatteryStats {
             return null;
         }
 
-        private void addProcStateTimesMs(int procState, long[] cpuTimesMs) {
+        private void addProcStateTimesMs(int procState, long[] cpuTimesMs, boolean onBattery) {
             if (mProcStateTimeMs == null) {
                 mProcStateTimeMs = new LongSamplingCounterArray[NUM_PROCESS_STATE];
             }
@@ -6304,10 +6708,11 @@ public class BatteryStatsImpl extends BatteryStats {
                 mProcStateTimeMs[procState] = new LongSamplingCounterArray(
                         mBsi.mOnBatteryTimeBase);
             }
-            mProcStateTimeMs[procState].addCountLocked(cpuTimesMs);
+            mProcStateTimeMs[procState].addCountLocked(cpuTimesMs, onBattery);
         }
 
-        private void addProcStateScreenOffTimesMs(int procState, long[] cpuTimesMs) {
+        private void addProcStateScreenOffTimesMs(int procState, long[] cpuTimesMs,
+                boolean onBatteryScreenOff) {
             if (mProcStateScreenOffTimeMs == null) {
                 mProcStateScreenOffTimeMs = new LongSamplingCounterArray[NUM_PROCESS_STATE];
             }
@@ -6316,7 +6721,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 mProcStateScreenOffTimeMs[procState] = new LongSamplingCounterArray(
                         mBsi.mOnBatteryScreenOffTimeBase);
             }
-            mProcStateScreenOffTimeMs[procState].addCountLocked(cpuTimesMs);
+            mProcStateScreenOffTimeMs[procState].addCountLocked(cpuTimesMs, onBatteryScreenOff);
         }
 
         @Override
@@ -6398,8 +6803,6 @@ public class BatteryStatsImpl extends BatteryStats {
                             mBsi.mFullWifiLockTimers, mBsi.mOnBatteryTimeBase);
                 }
                 mFullWifiLockTimer.startRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.WIFI_LOCK_STATE_CHANGED, getUid(), 1);
             }
         }
 
@@ -6408,10 +6811,6 @@ public class BatteryStatsImpl extends BatteryStats {
             if (mFullWifiLockOut) {
                 mFullWifiLockOut = false;
                 mFullWifiLockTimer.stopRunningLocked(elapsedRealtimeMs);
-                if (!mFullWifiLockTimer.isRunningLocked()) { // only tell statsd if truly stopped
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.WIFI_LOCK_STATE_CHANGED, getUid(), 0);
-                }
             }
         }
 
@@ -6425,8 +6824,6 @@ public class BatteryStatsImpl extends BatteryStats {
                             mOnBatteryBackgroundTimeBase);
                 }
                 mWifiScanTimer.startRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.WIFI_SCAN_STATE_CHANGED, getUid(), 1);
             }
         }
 
@@ -6435,10 +6832,6 @@ public class BatteryStatsImpl extends BatteryStats {
             if (mWifiScanStarted) {
                 mWifiScanStarted = false;
                 mWifiScanTimer.stopRunningLocked(elapsedRealtimeMs);
-                if (!mWifiScanTimer.isRunningLocked()) { // only tell statsd if truly stopped
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.WIFI_SCAN_STATE_CHANGED, getUid(), 0);
-                }
             }
         }
 
@@ -6541,16 +6934,18 @@ public class BatteryStatsImpl extends BatteryStats {
 
         public void noteAudioTurnedOnLocked(long elapsedRealtimeMs) {
             createAudioTurnedOnTimerLocked().startRunningLocked(elapsedRealtimeMs);
-            // TODO(statsd): Possibly use a worksource instead of a uid.
-            StatsLog.write(StatsLog.AUDIO_STATE_CHANGED, getUid(), 1);
+            final int[] uids = new int[] { getUid() };
+            final String[] tags = new String[] { null };
+            StatsLog.write(StatsLog.AUDIO_STATE_CHANGED, uids, tags, 1);
         }
 
         public void noteAudioTurnedOffLocked(long elapsedRealtimeMs) {
             if (mAudioTurnedOnTimer != null) {
                 mAudioTurnedOnTimer.stopRunningLocked(elapsedRealtimeMs);
                 if (!mAudioTurnedOnTimer.isRunningLocked()) { // only tell statsd if truly stopped
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.AUDIO_STATE_CHANGED, getUid(), 0);
+                    final int[] uids = new int[] { getUid() };
+                    final String[] tags = new String[] { null };
+                    StatsLog.write(StatsLog.AUDIO_STATE_CHANGED, uids, tags, 0);
                 }
             }
         }
@@ -6558,8 +6953,9 @@ public class BatteryStatsImpl extends BatteryStats {
         public void noteResetAudioLocked(long elapsedRealtimeMs) {
             if (mAudioTurnedOnTimer != null) {
                 mAudioTurnedOnTimer.stopAllRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.AUDIO_STATE_CHANGED, getUid(), 0);
+                final int[] uids = new int[] { getUid() };
+                final String[] tags = new String[] { null };
+                StatsLog.write(StatsLog.AUDIO_STATE_CHANGED, uids, tags, 0);
             }
         }
 
@@ -6573,16 +6969,18 @@ public class BatteryStatsImpl extends BatteryStats {
 
         public void noteVideoTurnedOnLocked(long elapsedRealtimeMs) {
             createVideoTurnedOnTimerLocked().startRunningLocked(elapsedRealtimeMs);
-            // TODO(statsd): Possibly use a worksource instead of a uid.
-            StatsLog.write(StatsLog.MEDIA_CODEC_ACTIVITY_CHANGED, getUid(), 1);
+            final int[] uids = new int[] { getUid() };
+            final String[] tags = new String[] { null };
+            StatsLog.write(StatsLog.MEDIA_CODEC_ACTIVITY_CHANGED, uids, tags, 1);
         }
 
         public void noteVideoTurnedOffLocked(long elapsedRealtimeMs) {
             if (mVideoTurnedOnTimer != null) {
                 mVideoTurnedOnTimer.stopRunningLocked(elapsedRealtimeMs);
                 if (!mVideoTurnedOnTimer.isRunningLocked()) { // only tell statsd if truly stopped
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.MEDIA_CODEC_ACTIVITY_CHANGED, getUid(), 0);
+                    final int[] uids = new int[] { getUid() };
+                    final String[] tags = new String[] { null };
+                    StatsLog.write(StatsLog.MEDIA_CODEC_ACTIVITY_CHANGED, uids, tags, 0);
                 }
             }
         }
@@ -6590,8 +6988,9 @@ public class BatteryStatsImpl extends BatteryStats {
         public void noteResetVideoLocked(long elapsedRealtimeMs) {
             if (mVideoTurnedOnTimer != null) {
                 mVideoTurnedOnTimer.stopAllRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.MEDIA_CODEC_ACTIVITY_CHANGED, getUid(), 0);
+                final int[] uids = new int[] { getUid() };
+                final String[] tags = new String[] { null };
+                StatsLog.write(StatsLog.MEDIA_CODEC_ACTIVITY_CHANGED, uids, tags, 0);
             }
         }
 
@@ -6605,16 +7004,18 @@ public class BatteryStatsImpl extends BatteryStats {
 
         public void noteFlashlightTurnedOnLocked(long elapsedRealtimeMs) {
             createFlashlightTurnedOnTimerLocked().startRunningLocked(elapsedRealtimeMs);
-            // TODO(statsd): Possibly use a worksource instead of a uid.
-            StatsLog.write(StatsLog.FLASHLIGHT_STATE_CHANGED, getUid(), 1);
+            final int[] uids = new int[] { getUid() };
+            final String[] tags = new String[] { null };
+            StatsLog.write(StatsLog.FLASHLIGHT_STATE_CHANGED, uids, tags, 1);
         }
 
         public void noteFlashlightTurnedOffLocked(long elapsedRealtimeMs) {
             if (mFlashlightTurnedOnTimer != null) {
                 mFlashlightTurnedOnTimer.stopRunningLocked(elapsedRealtimeMs);
                 if (!mFlashlightTurnedOnTimer.isRunningLocked()) {
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.FLASHLIGHT_STATE_CHANGED, getUid(), 0);
+                    final int[] uids = new int[] { getUid() };
+                    final String[] tags = new String[] { null };
+                    StatsLog.write(StatsLog.FLASHLIGHT_STATE_CHANGED, uids, tags, 0);
                 }
             }
         }
@@ -6622,8 +7023,9 @@ public class BatteryStatsImpl extends BatteryStats {
         public void noteResetFlashlightLocked(long elapsedRealtimeMs) {
             if (mFlashlightTurnedOnTimer != null) {
                 mFlashlightTurnedOnTimer.stopAllRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.FLASHLIGHT_STATE_CHANGED, getUid(), 0);
+                final int[] uids = new int[] { getUid() };
+                final String[] tags = new String[] { null };
+                StatsLog.write(StatsLog.FLASHLIGHT_STATE_CHANGED, uids, tags, 0);
             }
         }
 
@@ -6637,16 +7039,18 @@ public class BatteryStatsImpl extends BatteryStats {
 
         public void noteCameraTurnedOnLocked(long elapsedRealtimeMs) {
             createCameraTurnedOnTimerLocked().startRunningLocked(elapsedRealtimeMs);
-            // TODO(statsd): Possibly use a worksource instead of a uid.
-            StatsLog.write(StatsLog.CAMERA_STATE_CHANGED, getUid(), 1);
+            final int[] uids = new int[] { getUid() };
+            final String[] tags = new String[] { null };
+            StatsLog.write(StatsLog.CAMERA_STATE_CHANGED, uids, tags, 1);
         }
 
         public void noteCameraTurnedOffLocked(long elapsedRealtimeMs) {
             if (mCameraTurnedOnTimer != null) {
                 mCameraTurnedOnTimer.stopRunningLocked(elapsedRealtimeMs);
                 if (!mCameraTurnedOnTimer.isRunningLocked()) { // only tell statsd if truly stopped
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.CAMERA_STATE_CHANGED, getUid(), 0);
+                    final int[] uids = new int[] { getUid() };
+                    final String[] tags = new String[] { null };
+                    StatsLog.write(StatsLog.CAMERA_STATE_CHANGED, uids, tags, 0);
                 }
             }
         }
@@ -6654,8 +7058,9 @@ public class BatteryStatsImpl extends BatteryStats {
         public void noteResetCameraLocked(long elapsedRealtimeMs) {
             if (mCameraTurnedOnTimer != null) {
                 mCameraTurnedOnTimer.stopAllRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.CAMERA_STATE_CHANGED, getUid(), 0);
+                final int[] uids = new int[] { getUid() };
+                final String[] tags = new String[] { null };
+                StatsLog.write(StatsLog.CAMERA_STATE_CHANGED, uids, tags, 0);
             }
         }
 
@@ -6702,44 +7107,63 @@ public class BatteryStatsImpl extends BatteryStats {
             return mBluetoothUnoptimizedScanTimer;
         }
 
-        public void noteBluetoothScanStartedLocked(long elapsedRealtimeMs, boolean isUnoptimized) {
+        public void noteBluetoothScanStartedLocked(long elapsedRealtimeMs,
+                boolean isUnoptimized) {
             createBluetoothScanTimerLocked().startRunningLocked(elapsedRealtimeMs);
-            // TODO(statsd): Possibly use a worksource instead of a uid.
-            StatsLog.write(StatsLog.BLE_SCAN_STATE_CHANGED, getUid(), 1);
             if (isUnoptimized) {
                 createBluetoothUnoptimizedScanTimerLocked().startRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.BLE_UNOPTIMIZED_SCAN_STATE_CHANGED, getUid(), 1);
             }
         }
 
         public void noteBluetoothScanStoppedLocked(long elapsedRealtimeMs, boolean isUnoptimized) {
             if (mBluetoothScanTimer != null) {
                 mBluetoothScanTimer.stopRunningLocked(elapsedRealtimeMs);
-                if (!mBluetoothScanTimer.isRunningLocked()) { // only tell statsd if truly stopped
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.BLE_SCAN_STATE_CHANGED, getUid(), 0);
-                }
             }
             if (isUnoptimized && mBluetoothUnoptimizedScanTimer != null) {
                 mBluetoothUnoptimizedScanTimer.stopRunningLocked(elapsedRealtimeMs);
-                if (!mBluetoothUnoptimizedScanTimer.isRunningLocked()) {
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.BLE_UNOPTIMIZED_SCAN_STATE_CHANGED, getUid(), 0);
-                }
             }
         }
+
+        public void addBluetoothWorkChain(WorkChain workChain, boolean isUnoptimized) {
+            if (mAllBluetoothChains == null) {
+                mAllBluetoothChains = new ArrayList<WorkChain>(4);
+            }
+
+            if (isUnoptimized && mUnoptimizedBluetoothChains == null) {
+                mUnoptimizedBluetoothChains = new ArrayList<WorkChain>(4);
+            }
+
+            mAllBluetoothChains.add(workChain);
+            if (isUnoptimized) {
+                mUnoptimizedBluetoothChains.add(workChain);
+            }
+        }
+
+        public void removeBluetoothWorkChain(WorkChain workChain, boolean isUnoptimized) {
+            if (mAllBluetoothChains != null) {
+                mAllBluetoothChains.remove(workChain);
+            }
+
+            if (isUnoptimized && mUnoptimizedBluetoothChains != null) {
+                mUnoptimizedBluetoothChains.remove(workChain);
+            }
+        }
+
+        public List<WorkChain> getAllBluetoothWorkChains() {
+            return mAllBluetoothChains;
+        }
+
+        public List<WorkChain> getUnoptimizedBluetoothWorkChains() {
+            return mUnoptimizedBluetoothChains;
+        }
+
 
         public void noteResetBluetoothScanLocked(long elapsedRealtimeMs) {
             if (mBluetoothScanTimer != null) {
                 mBluetoothScanTimer.stopAllRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.BLE_SCAN_STATE_CHANGED, getUid(), 0);
             }
             if (mBluetoothUnoptimizedScanTimer != null) {
                 mBluetoothUnoptimizedScanTimer.stopAllRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.BLE_UNOPTIMIZED_SCAN_STATE_CHANGED, getUid(), 0);
             }
         }
 
@@ -6761,9 +7185,6 @@ public class BatteryStatsImpl extends BatteryStats {
             createBluetoothScanResultCounterLocked().addAtomic(numNewResults);
             // Uses background timebase, so the count will only be incremented if uid in background.
             createBluetoothScanResultBgCounterLocked().addAtomic(numNewResults);
-            // TODO(statsd): Possibly use a worksource instead of a uid.
-            // TODO(statsd): This could be in AppScanStats instead, if desired.
-            StatsLog.write(StatsLog.BLE_SCAN_RESULT_RECEIVED, getUid(), numNewResults);
         }
 
         @Override
@@ -9049,9 +9470,11 @@ public class BatteryStatsImpl extends BatteryStats {
                 if (mProcessState != ActivityManager.PROCESS_STATE_NONEXISTENT) {
                     mProcessStateTimer[mProcessState].stopRunningLocked(elapsedRealtimeMs);
 
-                    if (mBsi.mPerProcStateCpuTimesAvailable) {
+                    if (mBsi.trackPerProcStateCpuTimes()) {
                         if (mBsi.mPendingUids.size() == 0) {
-                            mBsi.mExternalSync.scheduleReadProcStateCpuTimes();
+                            mBsi.mExternalSync.scheduleReadProcStateCpuTimes(
+                                    mBsi.mOnBatteryTimeBase.isRunning(),
+                                    mBsi.mOnBatteryScreenOffTimeBase.isRunning());
                         }
                         if (mBsi.mPendingUids.indexOfKey(mUid) < 0
                                 || ArrayUtils.contains(CRITICAL_PROC_STATES, mProcessState)) {
@@ -9199,8 +9622,9 @@ public class BatteryStatsImpl extends BatteryStats {
             DualTimer t = mSyncStats.startObject(name);
             if (t != null) {
                 t.startRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.SYNC_STATE_CHANGED, getUid(), name, 1);
+                final int[] uids = new int[] { getUid() };
+                final String[] tags = new String[] { null };
+                StatsLog.write(StatsLog.SYNC_STATE_CHANGED, uids, tags, name, 1);
             }
         }
 
@@ -9209,8 +9633,9 @@ public class BatteryStatsImpl extends BatteryStats {
             if (t != null) {
                 t.stopRunningLocked(elapsedRealtimeMs);
                 if (!t.isRunningLocked()) { // only tell statsd if truly stopped
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.SYNC_STATE_CHANGED, getUid(), name, 0);
+                    final int[] uids = new int[] { getUid() };
+                    final String[] tags = new String[] { null };
+                    StatsLog.write(StatsLog.SYNC_STATE_CHANGED, uids, tags, name, 0);
                 }
             }
         }
@@ -9219,8 +9644,9 @@ public class BatteryStatsImpl extends BatteryStats {
             DualTimer t = mJobStats.startObject(name);
             if (t != null) {
                 t.startRunningLocked(elapsedRealtimeMs);
-                // TODO(statsd): Possibly use a worksource instead of a uid.
-                StatsLog.write(StatsLog.SCHEDULED_JOB_STATE_CHANGED, getUid(), name, 1);
+                final int[] uids = new int[] { getUid() };
+                final String[] tags = new String[] { null };
+                StatsLog.write(StatsLog.SCHEDULED_JOB_STATE_CHANGED, uids, tags, name, 1);
             }
         }
 
@@ -9229,8 +9655,9 @@ public class BatteryStatsImpl extends BatteryStats {
             if (t != null) {
                 t.stopRunningLocked(elapsedRealtimeMs);
                 if (!t.isRunningLocked()) { // only tell statsd if truly stopped
-                    // TODO(statsd): Possibly use a worksource instead of a uid.
-                    StatsLog.write(StatsLog.SCHEDULED_JOB_STATE_CHANGED, getUid(), name, 0);
+                    final int[] uids = new int[] { getUid() };
+                    final String[] tags = new String[] { null };
+                    StatsLog.write(StatsLog.SCHEDULED_JOB_STATE_CHANGED, uids, tags, name, 0);
                 }
             }
             if (mBsi.mOnBatteryTimeBase.isRunning()) {
@@ -9341,11 +9768,12 @@ public class BatteryStatsImpl extends BatteryStats {
         public void noteStartSensor(int sensor, long elapsedRealtimeMs) {
             DualTimer t = getSensorTimerLocked(sensor, /* create= */ true);
             t.startRunningLocked(elapsedRealtimeMs);
-            // TODO(statsd): Possibly use a worksource instead of a uid.
+            final int[] uids = new int[] { getUid() };
+            final String[] tags = new String[] { null };
             if (sensor == Sensor.GPS) {
-                StatsLog.write(StatsLog.GPS_SCAN_STATE_CHANGED, getUid(), 1);
+                StatsLog.write(StatsLog.GPS_SCAN_STATE_CHANGED, uids, tags, 1);
             } else {
-                StatsLog.write(StatsLog.SENSOR_STATE_CHANGED, getUid(), sensor, 1);
+                StatsLog.write(StatsLog.SENSOR_STATE_CHANGED, uids, tags, sensor, 1);
             }
         }
 
@@ -9356,10 +9784,12 @@ public class BatteryStatsImpl extends BatteryStats {
                 t.stopRunningLocked(elapsedRealtimeMs);
                 if (!t.isRunningLocked()) { // only tell statsd if truly stopped
                     // TODO(statsd): Possibly use a worksource instead of a uid.
+                    final int[] uids = new int[] { getUid() };
+                    final String[] tags = new String[] { null };
                     if (sensor == Sensor.GPS) {
-                        StatsLog.write(StatsLog.GPS_SCAN_STATE_CHANGED, getUid(), 0);
+                        StatsLog.write(StatsLog.GPS_SCAN_STATE_CHANGED, uids, tags, 0);
                     } else {
-                        StatsLog.write(StatsLog.SENSOR_STATE_CHANGED, getUid(), sensor, 0);
+                        StatsLog.write(StatsLog.SENSOR_STATE_CHANGED, uids, tags, sensor, 0);
                     }
                 }
             }
@@ -9401,6 +9831,7 @@ public class BatteryStatsImpl extends BatteryStats {
         mCheckinFile = new AtomicFile(new File(systemDir, "batterystats-checkin.bin"));
         mDailyFile = new AtomicFile(new File(systemDir, "batterystats-daily.xml"));
         mHandler = new MyHandler(handler.getLooper());
+        mConstants = new Constants(mHandler);
         mStartCount++;
         mScreenOnTimer = new StopwatchTimer(mClocks, null, -1, null, mOnBatteryTimeBase);
         mScreenDozeTimer = new StopwatchTimer(mClocks, null, -1, null, mOnBatteryTimeBase);
@@ -9442,6 +9873,8 @@ public class BatteryStatsImpl extends BatteryStats {
         mMobileRadioActiveAdjustedTime = new LongSamplingCounter(mOnBatteryTimeBase);
         mMobileRadioActiveUnknownTime = new LongSamplingCounter(mOnBatteryTimeBase);
         mMobileRadioActiveUnknownCount = new LongSamplingCounter(mOnBatteryTimeBase);
+        mWifiMulticastWakelockTimer = new StopwatchTimer(mClocks, null,
+                WIFI_AGGREGATE_MULTICAST_ENABLED, null, mOnBatteryTimeBase);
         mWifiOnTimer = new StopwatchTimer(mClocks, null, -4, null, mOnBatteryTimeBase);
         mGlobalWifiRunningTimer = new StopwatchTimer(mClocks, null, -5, null, mOnBatteryTimeBase);
         for (int i=0; i<NUM_WIFI_STATES; i++) {
@@ -9494,6 +9927,7 @@ public class BatteryStatsImpl extends BatteryStats {
         mDailyFile = null;
         mHandler = null;
         mExternalSync = null;
+        mConstants = new Constants(mHandler);
         clearHistoryLocked();
         readFromParcel(p);
         mPlatformIdleStateCallback = null;
@@ -10143,6 +10577,7 @@ public class BatteryStatsImpl extends BatteryStats {
         for (int i=0; i<NUM_WIFI_SIGNAL_STRENGTH_BINS; i++) {
             mWifiSignalStrengthsTimer[i].reset(false);
         }
+        mWifiMulticastWakelockTimer.reset(false);
         mWifiActivity.reset(false);
         mBluetoothActivity.reset(false);
         mModemActivity.reset(false);
@@ -12246,6 +12681,78 @@ public class BatteryStatsImpl extends BatteryStats {
         mShuttingDown = true;
     }
 
+    public boolean trackPerProcStateCpuTimes() {
+        return mConstants.TRACK_CPU_TIMES_BY_PROC_STATE && mPerProcStateCpuTimesAvailable;
+    }
+
+    public void systemServicesReady(Context context) {
+        mConstants.startObserving(context.getContentResolver());
+    }
+
+    @VisibleForTesting
+    public final class Constants extends ContentObserver {
+        public static final String KEY_TRACK_CPU_TIMES_BY_PROC_STATE
+                = "track_cpu_times_by_proc_state";
+
+        private static final boolean DEFAULT_TRACK_CPU_TIMES_BY_PROC_STATE = true;
+
+        public boolean TRACK_CPU_TIMES_BY_PROC_STATE = DEFAULT_TRACK_CPU_TIMES_BY_PROC_STATE;
+
+        private ContentResolver mResolver;
+        private final KeyValueListParser mParser = new KeyValueListParser(',');
+
+        public Constants(Handler handler) {
+            super(handler);
+        }
+
+        public void startObserving(ContentResolver resolver) {
+            mResolver = resolver;
+            mResolver.registerContentObserver(
+                    Settings.Global.getUriFor(Settings.Global.BATTERY_STATS_CONSTANTS),
+                    false /* notifyForDescendants */, this);
+            updateConstants();
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri) {
+            updateConstants();
+        }
+
+        private void updateConstants() {
+            synchronized (BatteryStatsImpl.this) {
+                try {
+                    mParser.setString(Settings.Global.getString(mResolver,
+                            Settings.Global.BATTERY_STATS_CONSTANTS));
+                } catch (IllegalArgumentException e) {
+                    // Failed to parse the settings string, log this and move on
+                    // with defaults.
+                    Slog.e(TAG, "Bad batterystats settings", e);
+                }
+
+                updateTrackCpuTimesByProcStateLocked(TRACK_CPU_TIMES_BY_PROC_STATE,
+                        mParser.getBoolean(KEY_TRACK_CPU_TIMES_BY_PROC_STATE,
+                                DEFAULT_TRACK_CPU_TIMES_BY_PROC_STATE));
+            }
+        }
+
+        private void updateTrackCpuTimesByProcStateLocked(boolean wasEnabled, boolean isEnabled) {
+            TRACK_CPU_TIMES_BY_PROC_STATE = isEnabled;
+            if (isEnabled && !wasEnabled) {
+                mKernelSingleUidTimeReader.markDataAsStale(true);
+                mExternalSync.scheduleCpuSyncDueToSettingChange();
+            }
+        }
+
+        public void dumpLocked(PrintWriter pw) {
+            pw.print(KEY_TRACK_CPU_TIMES_BY_PROC_STATE); pw.print("=");
+            pw.println(TRACK_CPU_TIMES_BY_PROC_STATE);
+        }
+    }
+
+    public void dumpConstantsLocked(PrintWriter pw) {
+        mConstants.dumpLocked(pw);
+    }
+
     Parcel mPendingWrite = null;
     final ReentrantLock mWriteLock = new ReentrantLock();
 
@@ -12589,6 +13096,7 @@ public class BatteryStatsImpl extends BatteryStats {
         mMobileRadioActiveAdjustedTime.readSummaryFromParcelLocked(in);
         mMobileRadioActiveUnknownTime.readSummaryFromParcelLocked(in);
         mMobileRadioActiveUnknownCount.readSummaryFromParcelLocked(in);
+        mWifiMulticastWakelockTimer.readSummaryFromParcelLocked(in);
         mWifiRadioPowerState = DataConnectionRealTimeInfo.DC_POWER_STATE_LOW;
         mWifiOn = false;
         mWifiOnTimer.readSummaryFromParcelLocked(in);
@@ -13029,6 +13537,7 @@ public class BatteryStatsImpl extends BatteryStats {
         mMobileRadioActiveAdjustedTime.writeSummaryFromParcelLocked(out);
         mMobileRadioActiveUnknownTime.writeSummaryFromParcelLocked(out);
         mMobileRadioActiveUnknownCount.writeSummaryFromParcelLocked(out);
+        mWifiMulticastWakelockTimer.writeSummaryFromParcelLocked(out, NOWREAL_SYS);
         mWifiOnTimer.writeSummaryFromParcelLocked(out, NOWREAL_SYS);
         mGlobalWifiRunningTimer.writeSummaryFromParcelLocked(out, NOWREAL_SYS);
         for (int i=0; i<NUM_WIFI_STATES; i++) {
@@ -13492,6 +14001,8 @@ public class BatteryStatsImpl extends BatteryStats {
         mMobileRadioActiveAdjustedTime = new LongSamplingCounter(mOnBatteryTimeBase, in);
         mMobileRadioActiveUnknownTime = new LongSamplingCounter(mOnBatteryTimeBase, in);
         mMobileRadioActiveUnknownCount = new LongSamplingCounter(mOnBatteryTimeBase, in);
+        mWifiMulticastWakelockTimer = new StopwatchTimer(mClocks, null, -4, null,
+                mOnBatteryTimeBase, in);
         mWifiRadioPowerState = DataConnectionRealTimeInfo.DC_POWER_STATE_LOW;
         mWifiOn = false;
         mWifiOnTimer = new StopwatchTimer(mClocks, null, -4, null, mOnBatteryTimeBase, in);
@@ -13698,6 +14209,7 @@ public class BatteryStatsImpl extends BatteryStats {
         mMobileRadioActiveAdjustedTime.writeToParcel(out);
         mMobileRadioActiveUnknownTime.writeToParcel(out);
         mMobileRadioActiveUnknownCount.writeToParcel(out);
+        mWifiMulticastWakelockTimer.writeToParcel(out, uSecRealtime);
         mWifiOnTimer.writeToParcel(out, uSecRealtime);
         mGlobalWifiRunningTimer.writeToParcel(out, uSecRealtime);
         for (int i=0; i<NUM_WIFI_STATES; i++) {
@@ -13884,6 +14396,8 @@ public class BatteryStatsImpl extends BatteryStats {
             mMobileRadioActiveTimer.logState(pr, "  ");
             pr.println("*** Mobile network active adjusted timer:");
             mMobileRadioActiveAdjustedTime.logState(pr, "  ");
+            pr.println("*** Wifi Multicast WakeLock Timer:");
+            mWifiMulticastWakelockTimer.logState(pr, "  ");
             pr.println("*** mWifiRadioPowerState=" + mWifiRadioPowerState);
             pr.println("*** Wifi timer:");
             mWifiOnTimer.logState(pr, "  ");

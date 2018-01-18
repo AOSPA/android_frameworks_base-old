@@ -19,6 +19,7 @@ package com.android.server;
 import static android.Manifest.permission.DUMP;
 import static android.net.IpSecManager.INVALID_RESOURCE_ID;
 import static android.system.OsConstants.AF_INET;
+import static android.system.OsConstants.EINVAL;
 import static android.system.OsConstants.IPPROTO_UDP;
 import static android.system.OsConstants.SOCK_DGRAM;
 import static com.android.internal.util.Preconditions.checkNotNull;
@@ -51,6 +52,7 @@ import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.Preconditions;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -101,8 +103,14 @@ public class IpSecService extends IIpSecService.Stub {
     /* Binder context for this service */
     private final Context mContext;
 
-    /** Should be a never-repeating global ID for resources */
-    private static AtomicInteger mNextResourceId = new AtomicInteger(0x00FADED0);
+    /**
+     * The next non-repeating global ID for tracking resources between users, this service,
+     * and kernel data structures. Accessing this variable is not thread safe, so it is
+     * only read or modified within blocks synchronized on IpSecService.this. We want to
+     * avoid -1 (INVALID_RESOURCE_ID) and 0 (we probably forgot to initialize it).
+     */
+    @GuardedBy("IpSecService.this")
+    private int mNextResourceId = 1;
 
     interface IpSecServiceConfiguration {
         INetd getNetdInstance() throws RemoteException;
@@ -855,7 +863,7 @@ public class IpSecService extends IIpSecService.Stub {
         checkNotNull(binder, "Null Binder passed to allocateSecurityParameterIndex");
 
         UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
-        int resourceId = mNextResourceId.getAndIncrement();
+        final int resourceId = mNextResourceId++;
 
         int spi = IpSecManager.INVALID_SECURITY_PARAMETER_INDEX;
         String localAddress = "";
@@ -978,7 +986,7 @@ public class IpSecService extends IIpSecService.Stub {
 
         int callingUid = Binder.getCallingUid();
         UserRecord userRecord = mUserResourceTracker.getUserRecord(callingUid);
-        int resourceId = mNextResourceId.getAndIncrement();
+        final int resourceId = mNextResourceId++;
         FileDescriptor sockFd = null;
         try {
             if (!userRecord.mSocketQuotaTracker.isAvailable()) {
@@ -1021,6 +1029,30 @@ public class IpSecService extends IIpSecService.Stub {
     public synchronized void closeUdpEncapsulationSocket(int resourceId) throws RemoteException {
         UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
         releaseResource(userRecord.mEncapSocketRecords, resourceId);
+    }
+
+    @VisibleForTesting
+    void validateAlgorithms(IpSecConfig config, int direction) throws IllegalArgumentException {
+            IpSecAlgorithm auth = config.getAuthentication(direction);
+            IpSecAlgorithm crypt = config.getEncryption(direction);
+            IpSecAlgorithm aead = config.getAuthenticatedEncryption(direction);
+
+            // Validate the algorithm set
+            Preconditions.checkArgument(
+                    aead != null || crypt != null || auth != null,
+                    "No Encryption or Authentication algorithms specified");
+            Preconditions.checkArgument(
+                    auth == null || auth.isAuthentication(),
+                    "Unsupported algorithm for Authentication");
+            Preconditions.checkArgument(
+                crypt == null || crypt.isEncryption(), "Unsupported algorithm for Encryption");
+            Preconditions.checkArgument(
+                    aead == null || aead.isAead(),
+                    "Unsupported algorithm for Authenticated Encryption");
+            Preconditions.checkArgument(
+                    aead == null || (auth == null && crypt == null),
+                    "Authenticated Encryption is mutually exclusive with other Authentication "
+                                    + "or Encryption algorithms");
     }
 
     /**
@@ -1072,17 +1104,7 @@ public class IpSecService extends IIpSecService.Stub {
         }
 
         for (int direction : DIRECTIONS) {
-            IpSecAlgorithm crypt = config.getEncryption(direction);
-            IpSecAlgorithm auth = config.getAuthentication(direction);
-            IpSecAlgorithm authenticatedEncryption = config.getAuthenticatedEncryption(direction);
-            if (authenticatedEncryption == null && crypt == null && auth == null) {
-                throw new IllegalArgumentException(
-                        "No Encryption or Authentication algorithms specified");
-            } else if (authenticatedEncryption != null && (auth != null || crypt != null)) {
-                throw new IllegalArgumentException(
-                        "Authenticated Encryption is mutually"
-                                + " exclusive with other Authentication or Encryption algorithms");
-            }
+            validateAlgorithms(config, direction);
 
             // Retrieve SPI record; will throw IllegalArgumentException if not found
             userRecord.mSpiRecords.getResourceOrThrow(config.getSpiResourceId(direction));
@@ -1101,7 +1123,7 @@ public class IpSecService extends IIpSecService.Stub {
             IpSecConfig c, IBinder binder) throws RemoteException {
         checkIpSecConfig(c);
         checkNotNull(binder, "Null Binder passed to createTransportModeTransform");
-        int resourceId = mNextResourceId.getAndIncrement();
+        final int resourceId = mNextResourceId++;
 
         UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
 
@@ -1220,7 +1242,11 @@ public class IpSecService extends IIpSecService.Stub {
                                 info.getSpiRecord(direction).getSpi());
             }
         } catch (ServiceSpecificException e) {
-            // FIXME: get the error code and throw is at an IOException from Errno Exception
+            if (e.errorCode == EINVAL) {
+                throw new IllegalArgumentException(e.toString());
+            } else {
+                throw e;
+            }
         }
     }
 

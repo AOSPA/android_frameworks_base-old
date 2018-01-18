@@ -20,6 +20,7 @@
 #include <unordered_map>
 
 #include <android/util/ProtoOutputStream.h>
+#include "../anomaly/DurationAnomalyTracker.h"
 #include "../condition/ConditionTracker.h"
 #include "../matchers/matcher_util.h"
 #include "MetricProducer.h"
@@ -41,21 +42,22 @@ public:
                            const int conditionIndex, const size_t startIndex,
                            const size_t stopIndex, const size_t stopAllIndex, const bool nesting,
                            const sp<ConditionWizard>& wizard,
-                           const vector<KeyMatcher>& internalDimension, const uint64_t startTimeNs);
+                           const FieldMatcher& internalDimensions, const uint64_t startTimeNs);
 
     virtual ~DurationMetricProducer();
 
-    virtual sp<AnomalyTracker> createAnomalyTracker(const Alert &alert) override;
+    sp<AnomalyTracker> addAnomalyTracker(const Alert &alert) override;
 
 protected:
     void onMatchedLogEventInternalLocked(
             const size_t matcherIndex, const HashableDimensionKey& eventKey,
-            const std::map<std::string, HashableDimensionKey>& conditionKeys, bool condition,
+            const ConditionKey& conditionKeys, bool condition,
             const LogEvent& event) override;
 
 private:
     void onDumpReportLocked(const uint64_t dumpTimeNs,
                             android::util::ProtoOutputStream* protoOutput) override;
+    void onDumpReportLocked(const uint64_t dumpTimeNs, StatsLogReport* report) override;
 
     // Internal interface to handle condition change.
     void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
@@ -84,7 +86,7 @@ private:
     const bool mNested;
 
     // The dimension from the atom predicate. e.g., uid, wakelock name.
-    const vector<KeyMatcher> mInternalDimension;
+    const FieldMatcher mInternalDimensions;
 
     // Save the past buckets and we can clear when the StatsLogReport is dumped.
     // TODO: Add a lock to mPastBuckets.
@@ -98,6 +100,9 @@ private:
     std::unique_ptr<DurationTracker> createDurationTracker(
             const HashableDimensionKey& eventKey) const;
 
+    // This hides the base class's std::vector<sp<AnomalyTracker>> mAnomalyTrackers
+    std::vector<sp<DurationAnomalyTracker>> mAnomalyTrackers;
+
     // Util function to check whether the specified dimension hits the guardrail.
     bool hitGuardRailLocked(const HashableDimensionKey& newKey);
 
@@ -105,6 +110,7 @@ private:
 
     FRIEND_TEST(DurationMetricTrackerTest, TestNoCondition);
     FRIEND_TEST(DurationMetricTrackerTest, TestNonSlicedCondition);
+    FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicates);
 };
 
 }  // namespace statsd

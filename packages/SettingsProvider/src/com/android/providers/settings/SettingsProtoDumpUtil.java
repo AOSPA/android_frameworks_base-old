@@ -1119,6 +1119,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.NOTIFICATION_SNOOZE_OPTIONS,
                 GlobalSettingsProto.NOTIFICATION_SNOOZE_OPTIONS);
+        dumpSetting(s, p,
+                    Settings.Global.ZRAM_ENABLED,
+                    GlobalSettingsProto.ZRAM_ENABLED);
     }
 
     /** Dump a single {@link SettingsState.Setting} to a proto buf */
@@ -1719,9 +1722,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.QS_TILES,
                 SecureSettingsProto.QS_TILES);
-        dumpSetting(s, p,
-                Settings.Secure.DEMO_USER_SETUP_COMPLETE,
-                SecureSettingsProto.DEMO_USER_SETUP_COMPLETE);
         dumpSetting(s, p,
                 Settings.Secure.INSTANT_APPS_ENABLED,
                 SecureSettingsProto.INSTANT_APPS_ENABLED);

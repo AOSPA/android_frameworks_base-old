@@ -1124,6 +1124,7 @@ public class DevicePolicyManager {
      *
      * This broadcast is sent only to the primary user.
      * @see #ACTION_PROVISION_MANAGED_DEVICE
+     * @see DevicePolicyManager#transferOwnership(ComponentName, ComponentName, PersistableBundle)
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_DEVICE_OWNER_CHANGED
@@ -1251,6 +1252,26 @@ public class DevicePolicyManager {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_SYSTEM_UPDATE_POLICY_CHANGED
             = "android.app.action.SYSTEM_UPDATE_POLICY_CHANGED";
+
+    /**
+     * Broadcast action to notify ManagedProvisioning that
+     * {@link UserManager#DISALLOW_SHARE_INTO_MANAGED_PROFILE} restriction has changed.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_DATA_SHARING_RESTRICTION_CHANGED =
+            "android.app.action.DATA_SHARING_RESTRICTION_CHANGED";
+
+    /**
+     * Broadcast action from ManagedProvisioning to notify that the latest change to
+     * {@link UserManager#DISALLOW_SHARE_INTO_MANAGED_PROFILE} restriction has been successfully
+     * applied (cross profile intent filters updated). Only usesd for CTS tests.
+     * @hide
+     */
+    @TestApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_DATA_SHARING_RESTRICTION_APPLIED =
+            "android.app.action.DATA_SHARING_RESTRICTION_APPLIED";
 
     /**
      * Permission policy to prompt user for new permission requests for runtime permissions.
@@ -1667,6 +1688,56 @@ public class DevicePolicyManager {
     @SdkConstant(SdkConstantType.SERVICE_ACTION)
     public static final String ACTION_DEVICE_ADMIN_SERVICE
             = "android.app.action.DEVICE_ADMIN_SERVICE";
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, prefix = {"ID_TYPE_"}, value = {
+        ID_TYPE_BASE_INFO,
+        ID_TYPE_SERIAL,
+        ID_TYPE_IMEI,
+        ID_TYPE_MEID
+    })
+    public @interface AttestationIdType {}
+
+    /**
+     * Specifies that the device should attest its manufacturer details. For use with
+     * {@link #generateKeyPair}.
+     *
+     * @see #generateKeyPair
+     */
+    public static final int ID_TYPE_BASE_INFO = 1;
+
+    /**
+     * Specifies that the device should attest its serial number. For use with
+     * {@link #generateKeyPair}.
+     *
+     * @see #generateKeyPair
+     */
+    public static final int ID_TYPE_SERIAL = 2;
+
+    /**
+     * Specifies that the device should attest its IMEI. For use with {@link #generateKeyPair}.
+     *
+     * @see #generateKeyPair
+     */
+    public static final int ID_TYPE_IMEI = 4;
+
+    /**
+     * Specifies that the device should attest its MEID. For use with {@link #generateKeyPair}.
+     *
+     * @see #generateKeyPair
+     */
+    public static final int ID_TYPE_MEID = 8;
+
+    /**
+     * Broadcast action: sent when the profile owner is set, changed or cleared.
+     *
+     * This broadcast is sent only to the user managed by the new profile owner.
+     * @see DevicePolicyManager#transferOwnership(ComponentName, ComponentName, PersistableBundle)
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PROFILE_OWNER_CHANGED =
+            "android.app.action.PROFILE_OWNER_CHANGED";
 
     /**
      * Return true if the given administrator component is currently active (enabled) in the system.
@@ -4106,22 +4177,46 @@ public class DevicePolicyManager {
      * @param algorithm The key generation algorithm, see {@link java.security.KeyPairGenerator}.
      * @param keySpec Specification of the key to generate, see
      * {@link java.security.KeyPairGenerator}.
+     * @param idAttestationFlags A bitmask of all the identifiers that should be included in the
+     *        attestation record ({@code ID_TYPE_BASE_INFO}, {@code ID_TYPE_SERIAL},
+     *        {@code ID_TYPE_IMEI} and {@code ID_TYPE_MEID}), or {@code 0} if no device
+     *        identification is required in the attestation record.
+     *        Device owner, profile owner and their delegated certificate installer can use
+     *        {@link #ID_TYPE_BASE_INFO} to request inclusion of the general device information
+     *        including manufacturer, model, brand, device and product in the attestation record.
+     *        Only device owner and their delegated certificate installer can use
+     *        {@link #ID_TYPE_SERIAL}, {@link #ID_TYPE_IMEI} and {@link #ID_TYPE_MEID} to request
+     *        unique device identifiers to be attested.
+     *        <p>
+     *        If any of {@link #ID_TYPE_SERIAL}, {@link #ID_TYPE_IMEI} and {@link #ID_TYPE_MEID}
+     *        is set, it is implicitly assumed that {@link #ID_TYPE_BASE_INFO} is also set.
+     *        <p>
+     *        If any flag is specified, then an attestation challenge must be included in the
+     *        {@code keySpec}.
      * @return A non-null {@code AttestedKeyPair} if the key generation succeeded, null otherwise.
      * @throws SecurityException if {@code admin} is not {@code null} and not a device or profile
-     *         owner.
-     * @throws IllegalArgumentException if the alias in {@code keySpec} is empty, or if the
+     *         owner. If Device ID attestation is requested (using {@link #ID_TYPE_SERIAL},
+     *         {@link #ID_TYPE_IMEI} or {@link #ID_TYPE_MEID}), the caller must be the Device Owner
+     *         or the Certificate Installer delegate.
+     * @throws IllegalArgumentException if the alias in {@code keySpec} is empty, if the
      *         algorithm specification in {@code keySpec} is not {@code RSAKeyGenParameterSpec}
-     *         or {@code ECGenParameterSpec}.
+     *         or {@code ECGenParameterSpec}, or if Device ID attestation was requested but the
+     *         {@code keySpec} does not contain an attestation challenge.
+     * @see KeyGenParameterSpec.Builder#setAttestationChallenge(byte[])
      */
     public AttestedKeyPair generateKeyPair(@Nullable ComponentName admin,
-            @NonNull String algorithm, @NonNull KeyGenParameterSpec keySpec) {
+            @NonNull String algorithm, @NonNull KeyGenParameterSpec keySpec,
+            @AttestationIdType int idAttestationFlags) {
         throwIfParentInstance("generateKeyPair");
         try {
             final ParcelableKeyGenParameterSpec parcelableSpec =
                     new ParcelableKeyGenParameterSpec(keySpec);
             KeymasterCertificateChain attestationChain = new KeymasterCertificateChain();
+
+            // Translate ID attestation flags to values used by AttestationUtils
             final boolean success = mService.generateKeyPair(
-                    admin, mContext.getPackageName(), algorithm, parcelableSpec, attestationChain);
+                    admin, mContext.getPackageName(), algorithm, parcelableSpec,
+                    idAttestationFlags, attestationChain);
             if (!success) {
                 Log.e(TAG, "Error generating key via DevicePolicyManagerService.");
                 return null;
@@ -5982,6 +6077,13 @@ public class DevicePolicyManager {
      * Called by a profile owner of a managed profile to remove the cross-profile intent filters
      * that go from the managed profile to the parent, or from the parent to the managed profile.
      * Only removes those that have been set by the profile owner.
+     * <p>
+     * <em>Note</em>: A list of default cross profile intent filters are set up by the system when
+     * the profile is created, some of them ensure the proper functioning of the profile, while
+     * others enable sharing of data from the parent to the managed profile for user convenience.
+     * These default intent filters are not cleared when this API is called. If the default cross
+     * profile data sharing is not desired, they can be disabled with
+     * {@link UserManager#DISALLOW_SHARE_INTO_MANAGED_PROFILE}.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
@@ -7454,7 +7556,8 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by a device owner to disable the keyguard altogether.
+     * Called by a device owner or profile owner of secondary users that is affiliated with the
+     * device to disable the keyguard altogether.
      * <p>
      * Setting the keyguard to disabled has the same effect as choosing "None" as the screen lock
      * type. However, this call has no effect if a password, pin or pattern is currently set. If a
@@ -7469,7 +7572,10 @@ public class DevicePolicyManager {
      * @param disabled {@code true} disables the keyguard, {@code false} reenables it.
      * @return {@code false} if attempting to disable the keyguard while a lock password was in
      *         place. {@code true} otherwise.
-     * @throws SecurityException if {@code admin} is not a device owner.
+     * @throws SecurityException if {@code admin} is not the device owner, or a profile owner of
+     * secondary user that is affiliated with the device.
+     * @see #isAffiliatedUser
+     * @see #getSecondaryUsers
      */
     public boolean setKeyguardDisabled(@NonNull ComponentName admin, boolean disabled) {
         throwIfParentInstance("setKeyguardDisabled");
@@ -7481,9 +7587,9 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owner to disable the status bar. Disabling the status bar blocks
-     * notifications, quick settings and other screen overlays that allow escaping from a single use
-     * device.
+     * Called by device owner or profile owner of secondary users  that is affiliated with the
+     * device to disable the status bar. Disabling the status bar blocks notifications, quick
+     * settings and other screen overlays that allow escaping from a single use device.
      * <p>
      * <strong>Note:</strong> This method has no effect for LockTask mode. The behavior of the
      * status bar in LockTask mode can be configured with
@@ -7494,7 +7600,10 @@ public class DevicePolicyManager {
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param disabled {@code true} disables the status bar, {@code false} reenables it.
      * @return {@code false} if attempting to disable the status bar failed. {@code true} otherwise.
-     * @throws SecurityException if {@code admin} is not a device owner.
+     * @throws SecurityException if {@code admin} is not the device owner, or a profile owner of
+     * secondary user that is affiliated with the device.
+     * @see #isAffiliatedUser
+     * @see #getSecondaryUsers
      */
     public boolean setStatusBarDisabled(@NonNull ComponentName admin, boolean disabled) {
         throwIfParentInstance("setStatusBarDisabled");
@@ -8926,41 +9035,34 @@ public class DevicePolicyManager {
         }
     }
 
-    //TODO STOPSHIP Add link to onTransferComplete callback when implemented.
     /**
-     * Transfers the current administrator. All policies from the current administrator are
-     * migrated to the new administrator. The whole operation is atomic - the transfer is either
-     * complete or not done at all.
+     * Changes the current administrator to another one. All policies from the current
+     * administrator are migrated to the new administrator. The whole operation is atomic -
+     * the transfer is either complete or not done at all.
      *
-     * Depending on the current administrator (device owner, profile owner, corporate owned
-     * profile owner), you have the following expected behaviour:
+     * <p>Depending on the current administrator (device owner, profile owner), you have the
+     * following expected behaviour:
      * <ul>
      *     <li>A device owner can only be transferred to a new device owner</li>
      *     <li>A profile owner can only be transferred to a new profile owner</li>
-     *     <li>A corporate owned managed profile can have two cases:
-     *          <ul>
-     *              <li>If the device owner and profile owner are the same package,
-     *              both will be transferred.</li>
-     *              <li>If the device owner and profile owner are different packages,
-     *              and if this method is called from the profile owner, only the profile owner
-     *              is transferred. Similarly, if it is called from the device owner, only
-     *              the device owner is transferred.</li>
-     *          </ul>
-     *     </li>
      * </ul>
      *
-     * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
-     * @param target Which {@link DeviceAdminReceiver} we want the new administrator to be.
-     * @param bundle Parameters - This bundle allows the current administrator to pass data to the
-     *               new administrator. The parameters will be received in the
-     *               onTransferComplete callback.
-     * @hide
+     * <p>Use the {@code bundle} parameter to pass data to the new administrator. The parameters
+     * will be received in the
+     * {@link DeviceAdminReceiver#onTransferOwnershipComplete(Context, PersistableBundle)} callback.
+     *
+     * @param admin which {@link DeviceAdminReceiver} this request is associated with
+     * @param target which {@link DeviceAdminReceiver} we want the new administrator to be
+     * @param bundle data to be sent to the new administrator
+     * @throws SecurityException if {@code admin} is not a device owner nor a profile owner
+     * @throws IllegalArgumentException if {@code admin} or {@code target} is {@code null},
+     * both are components in the same package or {@code target} is not an active admin
      */
-    public void transferOwner(@NonNull ComponentName admin, @NonNull ComponentName target,
+    public void transferOwnership(@NonNull ComponentName admin, @NonNull ComponentName target,
             PersistableBundle bundle) {
-        throwIfParentInstance("transferOwner");
+        throwIfParentInstance("transferOwnership");
         try {
-            mService.transferOwner(admin, target, bundle);
+            mService.transferOwnership(admin, target, bundle);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }

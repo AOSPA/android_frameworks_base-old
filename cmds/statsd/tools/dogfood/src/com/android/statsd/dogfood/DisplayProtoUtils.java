@@ -26,7 +26,7 @@ public class DisplayProtoUtils {
         sb.append("ConfigKey: ");
         if (reports.hasConfigKey()) {
             com.android.os.StatsLog.ConfigMetricsReportList.ConfigKey key = reports.getConfigKey();
-            sb.append("\tuid: ").append(key.getUid()).append(" name: ").append(key.getName())
+            sb.append("\tuid: ").append(key.getUid()).append(" name: ").append(key.getId())
                     .append("\n");
         }
 
@@ -34,7 +34,7 @@ public class DisplayProtoUtils {
             sb.append("StatsLogReport size: ").append(report.getMetricsCount()).append("\n");
             for (StatsLog.StatsLogReport log : report.getMetricsList()) {
                 sb.append("\n\n");
-                sb.append("metric id: ").append(log.getMetricName()).append("\n");
+                sb.append("metric id: ").append(log.getMetricId()).append("\n");
                 sb.append("start time:").append(getDateStr(log.getStartReportNanos())).append("\n");
                 sb.append("end time:").append(getDateStr(log.getEndReportNanos())).append("\n");
 
@@ -71,20 +71,25 @@ public class DisplayProtoUtils {
         return DateFormat.format("dd/MM hh:mm:ss", nanoSec/1000000).toString();
     }
 
-    private static void displayDimension(StringBuilder sb, List<StatsLog.KeyValuePair> pairs) {
-        for (com.android.os.StatsLog.KeyValuePair kv : pairs) {
-            sb.append(kv.getKey()).append(":");
-            if (kv.hasValueBool()) {
-                sb.append(kv.getValueBool());
-            } else if (kv.hasValueFloat()) {
-                sb.append(kv.getValueFloat());
-            } else if (kv.hasValueInt()) {
-                sb.append(kv.getValueInt());
-            } else if (kv.hasValueStr()) {
-                sb.append(kv.getValueStr());
+    private static void displayDimension(StringBuilder sb, StatsLog.DimensionsValue dimensionValue) {
+        sb.append(dimensionValue.getField()).append(":");
+        if (dimensionValue.hasValueBool()) {
+            sb.append(dimensionValue.getValueBool());
+        } else if (dimensionValue.hasValueFloat()) {
+            sb.append(dimensionValue.getValueFloat());
+        } else if (dimensionValue.hasValueInt()) {
+            sb.append(dimensionValue.getValueInt());
+        } else if (dimensionValue.hasValueStr()) {
+            sb.append(dimensionValue.getValueStr());
+        } else if (dimensionValue.hasValueTuple()) {
+            sb.append("{");
+            for (StatsLog.DimensionsValue child :
+                    dimensionValue.getValueTuple().getDimensionsValueList()) {
+                displayDimension(sb, child);
             }
-            sb.append(" ");
+            sb.append("}");
         }
+        sb.append(" ");
     }
 
     public static void displayDurationMetricData(StringBuilder sb, StatsLog.StatsLogReport log) {
@@ -93,7 +98,7 @@ public class DisplayProtoUtils {
         sb.append("Dimension size: ").append(durationMetricDataWrapper.getDataCount()).append("\n");
         for (StatsLog.DurationMetricData duration : durationMetricDataWrapper.getDataList()) {
             sb.append("dimension: ");
-            displayDimension(sb, duration.getDimensionList());
+            displayDimension(sb, duration.getDimension());
             sb.append("\n");
 
             for (StatsLog.DurationBucketInfo info : duration.getBucketInfoList())  {
@@ -120,7 +125,7 @@ public class DisplayProtoUtils {
         sb.append("Dimension size: ").append(countMetricDataWrapper.getDataCount()).append("\n");
         for (StatsLog.CountMetricData count : countMetricDataWrapper.getDataList()) {
             sb.append("dimension: ");
-            displayDimension(sb, count.getDimensionList());
+            displayDimension(sb, count.getDimension());
             sb.append("\n");
 
             for (StatsLog.CountBucketInfo info : count.getBucketInfoList())  {

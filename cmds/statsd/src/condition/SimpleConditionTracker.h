@@ -29,15 +29,15 @@ namespace statsd {
 
 class SimpleConditionTracker : public virtual ConditionTracker {
 public:
-    SimpleConditionTracker(const ConfigKey& key, const std::string& name, const int index,
+    SimpleConditionTracker(const ConfigKey& key, const int64_t& id, const int index,
                            const SimplePredicate& simplePredicate,
-                           const std::unordered_map<std::string, int>& trackerNameIndexMap);
+                           const std::unordered_map<int64_t, int>& trackerNameIndexMap);
 
     ~SimpleConditionTracker();
 
     bool init(const std::vector<Predicate>& allConditionConfig,
               const std::vector<sp<ConditionTracker>>& allConditionTrackers,
-              const std::unordered_map<std::string, int>& conditionNameIndexMap,
+              const std::unordered_map<int64_t, int>& conditionIdIndexMap,
               std::vector<bool>& stack) override;
 
     void evaluateCondition(const LogEvent& event,
@@ -46,7 +46,7 @@ public:
                            std::vector<ConditionState>& conditionCache,
                            std::vector<bool>& changedCache) override;
 
-    void isConditionMet(const std::map<std::string, HashableDimensionKey>& conditionParameters,
+    void isConditionMet(const ConditionKey& conditionParameters,
                         const std::vector<sp<ConditionTracker>>& allConditions,
                         std::vector<ConditionState>& conditionCache) const override;
 
@@ -66,7 +66,7 @@ private:
 
     ConditionState mInitialValue;
 
-    std::vector<KeyMatcher> mOutputDimension;
+    FieldMatcher mOutputDimensions;
 
     std::map<HashableDimensionKey, int> mSlicedConditionState;
 

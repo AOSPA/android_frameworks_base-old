@@ -7,7 +7,6 @@ import android.util.proto.ProtoOutputStream;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Objects;
 
 /**
  * Describes the source of some work that may be done by someone else.
@@ -162,9 +161,21 @@ public class WorkSource implements Parcelable {
 
     @Override
     public boolean equals(Object o) {
-        return o instanceof WorkSource
-            && !diff((WorkSource) o)
-            && Objects.equals(mChains, ((WorkSource) o).mChains);
+        if (o instanceof WorkSource) {
+            WorkSource other = (WorkSource) o;
+
+            if (diff(other)) {
+                return false;
+            }
+
+            if (mChains != null && !mChains.isEmpty()) {
+                return mChains.equals(other.mChains);
+            } else {
+                return other.mChains == null || other.mChains.isEmpty();
+            }
+        }
+
+        return false;
     }
 
     @Override
@@ -407,11 +418,11 @@ public class WorkSource implements Parcelable {
     }
 
     public boolean remove(WorkSource other) {
-        if (mNum <= 0 || other.mNum <= 0) {
+        if (isEmpty() || other.isEmpty()) {
             return false;
         }
 
-        boolean uidRemoved = false;
+        boolean uidRemoved;
         if (mNames == null && other.mNames == null) {
             uidRemoved = removeUids(other);
         } else {
@@ -427,13 +438,8 @@ public class WorkSource implements Parcelable {
         }
 
         boolean chainRemoved = false;
-        if (other.mChains != null) {
-            if (mChains != null) {
-                chainRemoved = mChains.removeAll(other.mChains);
-            }
-        } else if (mChains != null) {
-            mChains.clear();
-            chainRemoved = true;
+        if (other.mChains != null && mChains != null) {
+            chainRemoved = mChains.removeAll(other.mChains);
         }
 
         return uidRemoved || chainRemoved;
@@ -853,11 +859,11 @@ public class WorkSource implements Parcelable {
         }
 
         /**
-         * Return the UID to which this WorkChain should be attributed to, i.e, the UID performing
-         * the actual work.
+         * Return the UID to which this WorkChain should be attributed to, i.e, the UID that
+         * initiated the work and not the UID performing it.
          */
         public int getAttributionUid() {
-            return mUids[mSize - 1];
+            return mUids[0];
         }
 
         // TODO: The following three trivial getters are purely for testing and will be removed
@@ -1058,6 +1064,25 @@ public class WorkSource implements Parcelable {
             }
             proto.end(contentProto);
         }
+
+        if (mChains != null) {
+            for (int i = 0; i < mChains.size(); i++) {
+                final WorkChain wc = mChains.get(i);
+                final long workChain = proto.start(WorkSourceProto.WORK_CHAINS);
+
+                final String[] tags = wc.getTags();
+                final int[] uids = wc.getUids();
+                for (int j = 0; j < tags.length; j++) {
+                    final long contentProto = proto.start(WorkSourceProto.WORK_SOURCE_CONTENTS);
+                    proto.write(WorkSourceProto.WorkSourceContentProto.UID, uids[j]);
+                    proto.write(WorkSourceProto.WorkSourceContentProto.NAME, tags[j]);
+                    proto.end(contentProto);
+                }
+
+                proto.end(workChain);
+            }
+        }
+
         proto.end(workSourceToken);
     }
 

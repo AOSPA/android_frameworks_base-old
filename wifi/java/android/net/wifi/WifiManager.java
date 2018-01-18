@@ -557,14 +557,9 @@ public class WifiManager {
     public static final String EXTRA_SUPPLICANT_CONNECTED = "connected";
     /**
      * Broadcast intent action indicating that the state of Wi-Fi connectivity
-     * has changed. One extra provides the new state
-     * in the form of a {@link android.net.NetworkInfo} object. If the new
-     * state is CONNECTED, additional extras may provide the BSSID and WifiInfo of
-     * the access point.
-     * as a {@code String}.
+     * has changed. An extra provides the new state
+     * in the form of a {@link android.net.NetworkInfo} object.
      * @see #EXTRA_NETWORK_INFO
-     * @see #EXTRA_BSSID
-     * @see #EXTRA_WIFI_INFO
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String NETWORK_STATE_CHANGED_ACTION = "android.net.wifi.STATE_CHANGE";
@@ -576,17 +571,16 @@ public class WifiManager {
     public static final String EXTRA_NETWORK_INFO = "networkInfo";
     /**
      * The lookup key for a String giving the BSSID of the access point to which
-     * we are connected. Only present when the new state is CONNECTED.
-     * Retrieve with
-     * {@link android.content.Intent#getStringExtra(String)}.
+     * we are connected. No longer used.
      */
+    @Deprecated
     public static final String EXTRA_BSSID = "bssid";
     /**
      * The lookup key for a {@link android.net.wifi.WifiInfo} object giving the
-     * information about the access point to which we are connected. Only present
-     * when the new state is CONNECTED.  Retrieve with
-     * {@link android.content.Intent#getParcelableExtra(String)}.
+     * information about the access point to which we are connected.
+     * No longer used.
      */
+    @Deprecated
     public static final String EXTRA_WIFI_INFO = "wifiInfo";
     /**
      * Broadcast intent action indicating that the state of establishing a connection to
@@ -695,11 +689,11 @@ public class WifiManager {
      * representing if the scan was successful or not.
      * Scans may fail for multiple reasons, these may include:
      * <ol>
-     * <li>A non-privileged app requested too many scans in a certain period of time.
-     * This may lead to additional scan request rejections via "scan throttling".
-     * See
-     * <a href="https://developer.android.com/preview/features/background-location-limits.html">
-     * here</a> for details.
+     * <li>An app requested too many scans in a certain period of time.
+     * This may lead to additional scan request rejections via "scan throttling" for both
+     * foreground and background apps.
+     * Note: Apps holding android.Manifest.permission.NETWORK_SETTINGS permission are
+     * exempted from scan throttling.
      * </li>
      * <li>The device is idle and scanning is disabled.</li>
      * <li>Wifi hardware reported a scan failure.</li>
@@ -999,20 +993,6 @@ public class WifiManager {
                 return Collections.emptyList();
             }
             return parceledList.getList();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * @hide
-     * @removed
-     */
-    @SystemApi
-    @RequiresPermission(android.Manifest.permission.READ_WIFI_CREDENTIAL)
-    public WifiConnectionStatistics getConnectionStatistics() {
-        try {
-            return mService.getConnectionStatistics();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1596,7 +1576,10 @@ public class WifiManager {
      * {@code ((WifiManager) getSystemService(WIFI_SERVICE)).getScanResults()}</li>
      * </ol>
      * @return {@code true} if the operation succeeded, i.e., the scan was initiated.
+     * @deprecated The ability for apps to trigger scan requests will be removed in a future
+     * release.
      */
+    @Deprecated
     public boolean startScan() {
         return startScan(null);
     }
@@ -1612,53 +1595,6 @@ public class WifiManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-    }
-
-    /**
-     * startLocationRestrictedScan()
-     * Trigger a scan which will not make use of DFS channels and is thus not suitable for
-     * establishing wifi connection.
-     * @deprecated This API is nolonger supported.
-     * Use {@link android.net.wifi.WifiScanner} API
-     * @hide
-     * @removed
-     */
-    @Deprecated
-    @SystemApi
-    @SuppressLint("Doclava125")
-    public boolean startLocationRestrictedScan(WorkSource workSource) {
-        return false;
-    }
-
-    /**
-     * Check if the Batched Scan feature is supported.
-     *
-     * @return false if not supported.
-     * @deprecated This API is nolonger supported.
-     * Use {@link android.net.wifi.WifiScanner} API
-     * @hide
-     * @removed
-     */
-    @Deprecated
-    @SystemApi
-    @SuppressLint("Doclava125")
-    public boolean isBatchedScanSupported() {
-        return false;
-    }
-
-    /**
-     * Retrieve the latest batched scan result.  This should be called immediately after
-     * {@link BATCHED_SCAN_RESULTS_AVAILABLE_ACTION} is received.
-     * @deprecated This API is nolonger supported.
-     * Use {@link android.net.wifi.WifiScanner} API
-     * @hide
-     * @removed
-     */
-    @Deprecated
-    @SystemApi
-    @SuppressLint("Doclava125")
-    public List<BatchedScanResult> getBatchedScanResults() {
-        return null;
     }
 
     /**
@@ -3123,7 +3059,7 @@ public class WifiManager {
 
         public void setWorkSource(WorkSource ws) {
             synchronized (mBinder) {
-                if (ws != null && ws.size() == 0) {
+                if (ws != null && ws.isEmpty()) {
                     ws = null;
                 }
                 boolean changed = true;
@@ -3135,7 +3071,7 @@ public class WifiManager {
                         changed = mWorkSource != null;
                         mWorkSource = new WorkSource(ws);
                     } else {
-                        changed = mWorkSource.diff(ws);
+                        changed = !mWorkSource.equals(ws);
                         if (changed) {
                             mWorkSource.set(ws);
                         }

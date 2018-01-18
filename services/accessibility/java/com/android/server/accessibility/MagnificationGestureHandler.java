@@ -17,6 +17,7 @@
 package com.android.server.accessibility;
 
 import static android.view.InputDevice.SOURCE_TOUCHSCREEN;
+import static android.view.MotionEvent.ACTION_CANCEL;
 import static android.view.MotionEvent.ACTION_DOWN;
 import static android.view.MotionEvent.ACTION_MOVE;
 import static android.view.MotionEvent.ACTION_POINTER_DOWN;
@@ -229,7 +230,7 @@ class MagnificationGestureHandler extends BaseEventStreamTransformation {
     }
 
     void clearAndTransitionToStateDetecting() {
-        mCurrentState = mDelegatingState;
+        mCurrentState = mDetectingState;
         mDetectingState.clear();
         mViewportDraggingState.clear();
         mPanningScalingState.clear();
@@ -364,7 +365,7 @@ class MagnificationGestureHandler extends BaseEventStreamTransformation {
 
                 persistScaleAndTransitionTo(mViewportDraggingState);
 
-            } else if (action == ACTION_UP) {
+            } else if (action == ACTION_UP || action == ACTION_CANCEL) {
 
                 persistScaleAndTransitionTo(mDetectingState);
 
@@ -496,7 +497,9 @@ class MagnificationGestureHandler extends BaseEventStreamTransformation {
                     }
                 }
                 break;
-                case ACTION_UP: {
+
+                case ACTION_UP:
+                case ACTION_CANCEL: {
                     if (!mZoomedInBeforeDrag) zoomOff();
                     clear();
                     transitionTo(mDetectingState);
@@ -533,12 +536,15 @@ class MagnificationGestureHandler extends BaseEventStreamTransformation {
 
         @Override
         public void onMotionEvent(MotionEvent event, MotionEvent rawEvent, int policyFlags) {
-            if (event.getActionMasked() == ACTION_UP) {
-                transitionTo(mDetectingState);
-            }
+            switch (event.getActionMasked()) {
+                case ACTION_UP:
+                case ACTION_CANCEL: {
+                    transitionTo(mDetectingState);
+                } break;
 
-            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
-                mLastDelegatedDownEventTime = event.getDownTime();
+                case ACTION_DOWN: {
+                    mLastDelegatedDownEventTime = event.getDownTime();
+                } break;
             }
             if (getNext() != null) {
                 // We cache some events to see if the user wants to trigger magnification.
@@ -649,14 +655,19 @@ class MagnificationGestureHandler extends BaseEventStreamTransformation {
                 break;
                 case ACTION_MOVE: {
                     if (isFingerDown()
-                            && distance(mLastDown, /* move */ event) > mSwipeMinDistance
-                            // For convenience, viewport dragging on 3tap&hold takes precedence
-                            // over insta-delegating on 3tap&swipe
-                            // (which is a rare combo to be used aside from magnification)
-                            && !isMultiTapTriggered(2 /* taps */)) {
+                            && distance(mLastDown, /* move */ event) > mSwipeMinDistance) {
 
-                        // Swipe detected - delegate skipping timeout
-                        transitionToDelegatingStateAndClear();
+                        // Swipe detected - transition immediately
+
+                        // For convenience, viewport dragging takes precedence
+                        // over insta-delegating on 3tap&swipe
+                        // (which is a rare combo to be used aside from magnification)
+                        if (isMultiTapTriggered(2 /* taps */)) {
+                            transitionTo(mViewportDraggingState);
+                            clear();
+                        } else {
+                            transitionToDelegatingStateAndClear();
+                        }
                     }
                 }
                 break;
@@ -755,10 +766,10 @@ class MagnificationGestureHandler extends BaseEventStreamTransformation {
                 int policyFlags) {
             if (event.getActionMasked() == ACTION_DOWN) {
                 mPreLastDown = mLastDown;
-                mLastDown = event;
+                mLastDown = MotionEvent.obtain(event);
             } else if (event.getActionMasked() == ACTION_UP) {
                 mPreLastUp = mLastUp;
-                mLastUp = event;
+                mLastUp = MotionEvent.obtain(event);
             }
 
             MotionEventInfo info = MotionEventInfo.obtain(event, rawEvent,

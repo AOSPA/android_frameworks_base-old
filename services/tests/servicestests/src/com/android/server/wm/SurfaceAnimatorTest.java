@@ -27,6 +27,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 
 import android.platform.test.annotations.Presubmit;
+import android.support.test.filters.FlakyTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 import android.view.SurfaceControl;
@@ -38,6 +39,7 @@ import com.android.server.wm.SurfaceAnimator.Animatable;
 import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -45,6 +47,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
 
 /**
  * Test class for {@link SurfaceAnimatorTest}.
@@ -195,7 +198,7 @@ public class SurfaceAnimatorTest extends WindowTestsBase {
                     .build();
             mFinishedCallbackCalled = false;
             mLeash = null;
-            mSurfaceAnimator = new SurfaceAnimator(this, mFinishedCallback, sWm);
+            mSurfaceAnimator = new SurfaceAnimator(this, mFinishedCallback, Runnable::run, sWm);
         }
 
         @Override
@@ -230,6 +233,11 @@ public class SurfaceAnimatorTest extends WindowTestsBase {
                     return mLeash;
                 }
             }.setParent(mParent);
+        }
+
+        @Override
+        public SurfaceControl getAnimationLeashParent() {
+            return mParent;
         }
 
         @Override

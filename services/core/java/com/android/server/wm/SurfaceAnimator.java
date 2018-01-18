@@ -19,17 +19,21 @@ package com.android.server.wm;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+import static com.android.server.wm.proto.SurfaceAnimatorProto.ANIMATION_ADAPTER;
+import static com.android.server.wm.proto.SurfaceAnimatorProto.ANIMATION_START_DELAYED;
+import static com.android.server.wm.proto.SurfaceAnimatorProto.LEASH;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.util.ArrayMap;
 import android.util.Slog;
+import android.util.proto.ProtoOutputStream;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.PrintWriter;
+import java.util.function.Consumer;
 
 /**
  * A class that can run animations on objects that have a set of child surfaces. We do this by
@@ -55,16 +59,20 @@ class SurfaceAnimator {
     /**
      * @param animatable The object to animate.
      * @param animationFinishedCallback Callback to invoke when an animation has finished running.
+     * @param addAfterPrepareSurfaces Consumer that takes a runnable and executes it after preparing
+     *                                surfaces in WM. Can be implemented differently during testing.
      */
     SurfaceAnimator(Animatable animatable, Runnable animationFinishedCallback,
-            WindowManagerService service) {
+            Consumer<Runnable> addAfterPrepareSurfaces, WindowManagerService service) {
         mAnimatable = animatable;
         mService = service;
         mAnimationFinishedCallback = animationFinishedCallback;
-        mInnerAnimationFinishedCallback = getFinishedCallback(animationFinishedCallback);
+        mInnerAnimationFinishedCallback = getFinishedCallback(animationFinishedCallback,
+                addAfterPrepareSurfaces);
     }
 
-    private OnAnimationFinishedCallback getFinishedCallback(Runnable animationFinishedCallback) {
+    private OnAnimationFinishedCallback getFinishedCallback(Runnable animationFinishedCallback,
+            Consumer<Runnable> addAfterPrepareSurfaces) {
         return anim -> {
             synchronized (mService.mWindowMap) {
                 final SurfaceAnimator target = mService.mAnimationTransferMap.remove(anim);
@@ -72,23 +80,29 @@ class SurfaceAnimator {
                     target.mInnerAnimationFinishedCallback.onAnimationFinished(anim);
                     return;
                 }
-                if (anim != mAnimation) {
-                    // Callback was from another animation - ignore.
-                    return;
-                }
 
-                final Transaction t = new Transaction();
-                SurfaceControl.openTransaction();
-                try {
-                    reset(t, true /* destroyLeash */);
-                    animationFinishedCallback.run();
-                } finally {
-                    // TODO: This should use pendingTransaction eventually, but right now things
-                    // happening on the animation finished callback are happening on the global
-                    // transaction.
-                    SurfaceControl.mergeToGlobalTransaction(t);
-                    SurfaceControl.closeTransaction();
-                }
+                // TODO: This should use pendingTransaction eventually, but right now things
+                // happening on the animation finished callback are happening on the global
+                // transaction.
+                // For now we need to run this after it's guaranteed that the transaction that
+                // reparents the surface onto the leash is executed already. Otherwise this may be
+                // executed first, leading to surface loss, as the reparent operations wouldn't
+                // be in order.
+                addAfterPrepareSurfaces.accept(() -> {
+                    if (anim != mAnimation) {
+                        // Callback was from another animation - ignore.
+                        return;
+                    }
+                    final Transaction t = new Transaction();
+                    SurfaceControl.openTransaction();
+                    try {
+                        reset(t, true /* destroyLeash */);
+                        animationFinishedCallback.run();
+                    } finally {
+                        SurfaceControl.mergeToGlobalTransaction(t);
+                        SurfaceControl.closeTransaction();
+                    }
+                });
             }
         };
     }
@@ -213,7 +227,7 @@ class SurfaceAnimator {
             return;
         }
         final SurfaceControl surface = mAnimatable.getSurfaceControl();
-        final SurfaceControl parent = mAnimatable.getParentSurfaceControl();
+        final SurfaceControl parent = mAnimatable.getAnimationLeashParent();
         if (surface == null || parent == null) {
             Slog.w(TAG, "Unable to transfer animation, surface or parent is null");
             cancelAnimation();
@@ -287,6 +301,7 @@ class SurfaceAnimator {
             int height, boolean hidden) {
         if (DEBUG_ANIM) Slog.i(TAG, "Reparenting to leash");
         final SurfaceControl.Builder builder = mAnimatable.makeAnimationLeash()
+                .setParent(mAnimatable.getAnimationLeashParent())
                 .setName(surface + " - animation-leash")
                 .setSize(width, height);
         final SurfaceControl leash = builder.build();
@@ -295,6 +310,24 @@ class SurfaceAnimator {
         }
         t.reparent(surface, leash.getHandle());
         return leash;
+    }
+
+    /**
+     * Write to a protocol buffer output stream. Protocol buffer message definition is at {@link
+     * com.android.server.wm.proto.SurfaceAnimatorProto}.
+     *
+     * @param proto Stream to write the SurfaceAnimator object to.
+     * @param fieldId Field Id of the SurfaceAnimator as defined in the parent message.
+     * @hide
+     */
+    void writeToProto(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        proto.write(ANIMATION_ADAPTER, mAnimation != null ? mAnimation.toString() : "null");
+        if (mLeash != null){
+            mLeash.writeToProto(proto, LEASH);
+        }
+        proto.write(ANIMATION_START_DELAYED, mAnimationStartDelayed);
+        proto.end(token);
     }
 
     void dump(PrintWriter pw, String prefix) {
@@ -353,6 +386,11 @@ class SurfaceAnimator {
          *         position in the hierarchy.
          */
         SurfaceControl.Builder makeAnimationLeash();
+
+        /**
+         * @return The parent that should be used for the animation leash.
+         */
+        @Nullable SurfaceControl getAnimationLeashParent();
 
         /**
          * @return The surface of the object to be animated.
