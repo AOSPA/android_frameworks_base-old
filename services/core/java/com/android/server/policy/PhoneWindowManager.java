@@ -148,6 +148,7 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.database.ContentObserver;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
@@ -6168,7 +6169,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
                 if (down) {
-                    sendSystemKeyToStatusBarAsync(event.getKeyCode());
+                    if (!doScroll(event.getKeyCode())) {
+                        sendSystemKeyToStatusBarAsync(event.getKeyCode());
+                    }
 
                     TelecomManager telecomManager = getTelecommService();
                     if (telecomManager != null) {
@@ -6439,6 +6442,51 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         Message message = mHandler.obtainMessage(MSG_SYSTEM_KEY_PRESS, keyCode, 0);
         message.setAsynchronous(true);
         mHandler.sendMessage(message);
+    }
+
+    private boolean doScroll(int keyCode) {
+        boolean allowed = mDisplay != null
+            && (keyCode == KeyEvent.KEYCODE_SYSTEM_NAVIGATION_DOWN
+            || keyCode == KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP);
+android.util.Log.e("ANAS", "ANAS: doScroll with keyCode "+keyCode + " allowed? "+allowed);
+        if (!allowed) return false;
+
+        InputManager im = InputManager.getInstance();
+
+        Point p = new Point();
+        mDisplay.getSize(p);
+
+        float x = (float) p.x / 2;
+        float y = (float) p.y / 2;
+
+        MotionEvent down = MotionEvent.obtain(SystemClock.uptimeMillis(),
+                SystemClock.uptimeMillis(), MotionEvent.ACTION_DOWN, x, y, 0);
+        down.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+
+        im.injectInputEvent(down, InputManager.INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH);
+
+        boolean up = keyCode == KeyEvent.KEYCODE_SYSTEM_NAVIGATION_UP;
+
+        float change = startY / 4;
+        float moveY = up ? (startY + change) : (startY - change);
+
+        if (moveY > 0) {
+            y = moveY;
+        } else {
+            moveY = y;
+        }
+
+        MotionEvent move = MotionEvent.obtain(SystemClock.uptimeMillis(),
+                SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, startX, moveY, 0);
+        move.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+        im.injectInputEvent(move, InputManager.INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH);
+
+        MotionEvent up = MotionEvent.obtain(SystemClock.uptimeMillis(),
+                SystemClock.uptimeMillis(), MotionEvent.ACTION_UP, startX, moveY, 0);
+        up.setSource(InputDevice.SOURCE_TOUCHSCREEN);
+        im.injectInputEvent(up, InputManager.INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH);
+
+        return true;
     }
 
     /**
