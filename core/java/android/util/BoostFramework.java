@@ -113,7 +113,7 @@ public class BoostFramework {
                     mIsLoaded = true;
                 }
                 catch(Exception e) {
-                    Log.e(TAG,"BoostFramework() : Exception_1 = " + e);
+                    // Log.e(TAG,"BoostFramework() : Exception_1 = " + e);
                 }
             }
         }
@@ -124,7 +124,7 @@ public class BoostFramework {
             }
         }
         catch(Exception e) {
-            Log.e(TAG,"BoostFramework() : Exception_2 = " + e);
+            // Log.e(TAG,"BoostFramework() : Exception_2 = " + e);
         }
     }
 
@@ -135,7 +135,7 @@ public class BoostFramework {
             Object retVal = mAcquireFunc.invoke(mPerf, duration, list);
             ret = (int)retVal;
         } catch(Exception e) {
-            Log.e(TAG,"Exception " + e);
+            // Log.e(TAG,"Exception " + e);
         }
         return ret;
     }
@@ -147,7 +147,7 @@ public class BoostFramework {
             Object retVal = mReleaseFunc.invoke(mPerf);
             ret = (int)retVal;
         } catch(Exception e) {
-            Log.e(TAG,"Exception " + e);
+            // Log.e(TAG,"Exception " + e);
         }
         return ret;
     }
@@ -159,7 +159,7 @@ public class BoostFramework {
             Object retVal = mReleaseHandlerFunc.invoke(mPerf, handle);
             ret = (int)retVal;
         } catch(Exception e) {
-            Log.e(TAG,"Exception " + e);
+            // Log.e(TAG,"Exception " + e);
         }
         return ret;
     }
@@ -181,7 +181,7 @@ public class BoostFramework {
             Object retVal = mPerfHintFunc.invoke(mPerf, hint, userDataStr, userData1, userData2);
             ret = (int)retVal;
         } catch(Exception e) {
-            Log.e(TAG,"Exception " + e);
+            // Log.e(TAG,"Exception " + e);
         }
         return ret;
     }
