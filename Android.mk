@@ -103,6 +103,7 @@ LOCAL_SRC_FILES += \
 	core/java/android/app/IWallpaperManagerCallback.aidl \
 	core/java/android/app/admin/IDeviceAdminService.aidl \
 	core/java/android/app/admin/IDevicePolicyManager.aidl \
+	core/java/android/app/theme/IThemeService.aidl \
 	core/java/android/app/trust/IStrongAuthTracker.aidl \
 	core/java/android/app/trust/ITrustManager.aidl \
 	core/java/android/app/trust/ITrustListener.aidl \
