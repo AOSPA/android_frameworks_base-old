@@ -4031,6 +4031,16 @@ public abstract class Context {
     public static final String OVERLAY_SERVICE = "overlay";
 
     /**
+     * Use with {@link #getSystemService} to retrieve a {@link
+     * android.app.theme.ThemeManager} for theming overlays.
+     *
+     * @see #getSystemService
+     * @see android.app.theme.ThemeManager
+     * @hide
+     */
+    public static final String THEME_SERVICE = "theme";
+
+    /**
      * Use with {@link #getSystemService} to retrieve a
      * {@link VrManager} for accessing the VR service.
      *

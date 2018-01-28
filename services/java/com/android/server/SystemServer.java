@@ -110,6 +110,7 @@ import com.android.server.soundtrigger.SoundTriggerService;
 import com.android.server.statusbar.StatusBarManagerService;
 import com.android.server.storage.DeviceStorageMonitorService;
 import com.android.server.telecom.TelecomLoaderService;
+import com.android.server.theme.ThemeService;
 import com.android.server.trust.TrustManagerService;
 import com.android.server.tv.TvInputManagerService;
 import com.android.server.tv.TvRemoteService;
@@ -643,6 +644,11 @@ public final class SystemServer {
         // Manages Overlay packages
         traceBeginAndSlog("StartOverlayManagerService");
         mSystemServiceManager.startService(new OverlayManagerService(mSystemContext, installer));
+        traceEnd();
+
+        // Manages themes
+        traceBeginAndSlog("StartThemeService");
+        mSystemServiceManager.startService(new ThemeService(mSystemContext, installer));
         traceEnd();
 
         // The sensor service needs access to package manager service, app ops
