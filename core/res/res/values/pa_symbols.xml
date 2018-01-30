@@ -30,4 +30,7 @@
     <java-symbol type="array" name="config_deviceKeyHandlerLibs" />
     <java-symbol type="array" name="config_deviceKeyHandlerClasses" />
 
+    <!-- Whether auto face unlock is enabled by default -->
+    <java-symbol type="bool" name="config_autoFaceUnlockEnabledByDefault" />
+
 </resources>
