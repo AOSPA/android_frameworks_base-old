@@ -4090,6 +4090,16 @@ public final class Settings {
         private static final Validator SHOW_BATTERY_PERCENT_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
+         * Face auto unlock
+         * @hide
+         */
+        public static final String FACE_AUTO_UNLOCK = "face_auto_unlock";
+
+         /** @hide */
+        public static final Validator FACE_AUTO_UNLOCK_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
          * IMPORTANT: If you add a new public settings you also have to add it to
          * PUBLIC_SETTINGS below. If the new setting is hidden you have to add
          * it to PRIVATE_SETTINGS below. Also add a validator that can validate
@@ -4282,6 +4292,7 @@ public final class Settings {
 
             // Pocket mode handler.
             PRIVATE_SETTINGS.add(POCKET_JUDGE);
+            PRIVATE_SETTINGS.add(FACE_AUTO_UNLOCK);
         }
 
         /**
@@ -4371,6 +4382,7 @@ public final class Settings {
             VALIDATORS.put(WIFI_STATIC_DNS2, WIFI_STATIC_DNS2_VALIDATOR);
             VALIDATORS.put(SHOW_BATTERY_PERCENT, SHOW_BATTERY_PERCENT_VALIDATOR);
             VALIDATORS.put(NOTIFICATION_LIGHT_PULSE, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(FACE_AUTO_UNLOCK, FACE_AUTO_UNLOCK_VALIDATOR);
         }
 
         /**

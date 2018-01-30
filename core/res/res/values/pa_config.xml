@@ -23,4 +23,7 @@
     <string-array name="config_forceEnabledComponents" translatable="false">
     </string-array>
 
+    <!-- Whether auto face unlock is enabled by default -->
+    <bool name="config_autoFaceUnlockEnabledByDefault">false</bool>
+
 </resources>
