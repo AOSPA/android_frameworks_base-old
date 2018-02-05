@@ -588,6 +588,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mTranslucentDecorEnabled = true;
     boolean mUseTvRouting;
 
+    boolean mHomeWakeup;
+    int mHomeWakeupIgnoreKeyCode;
+
     private boolean mHandleVolumeKeysInWM;
 
     int mPointerLocationMode = 0; // guarded by mLock
@@ -1895,6 +1898,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mHasFeatureLeanback = mContext.getPackageManager().hasSystemFeature(FEATURE_LEANBACK);
         mAccessibilityShortcutController =
                 new AccessibilityShortcutController(mContext, new Handler(), mCurrentUserId);
+
+        mHomeWakeup = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_homeWakeup);
+        mHomeWakeupIgnoreKeyCode = mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_homeWakeupIgnoreKeyCode);
+
         // Init display burn-in protection
         boolean burnInProtectionEnabled = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_enableBurnInProtection);
@@ -6139,6 +6148,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 }
                 break;
             }
+
+            case KeyEvent.KEYCODE_HOME:
+                if (mHomeWakeup && event.getScanCode() != mHomeWakeupIgnoreKeyCode) {
+                    if (down && !interactive) {
+                        isWakeKey = true;
+                    }
+                }
+                break;
 
             case KeyEvent.KEYCODE_ENDCALL: {
                 result &= ~ACTION_PASS_TO_USER;
