@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-** Copyright (C) 2014-2017 Paranoid Android
+** Copyright (C) 2014-2018 Paranoid Android
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -22,5 +22,9 @@
 
     <!-- Wether device has dash charging support -->
     <java-symbol type="bool" name="config_hasDashCharger" />
+
+    <!-- Whether device wakes up with home -->
+    <java-symbol type="bool" name="config_homeWakeup" />
+    <java-symbol type="integer" name="config_homeWakeupIgnoreKeyCode" />
 
 </resources>

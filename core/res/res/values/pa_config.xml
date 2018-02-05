@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-** Copyright (C) 2014-2017 Paranoid Android
+** Copyright (C) 2014-2018 Paranoid Android
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -26,5 +26,9 @@
 
     <!-- Whether device has dash charging support -->
     <bool name="config_hasDashCharger">false</bool>
+
+    <!-- Whether device wakes up with home -->
+    <bool name="config_homeWakeup">false</bool>
+    <integer name="config_homeWakeupIgnoreKeyCode">0</integer>
 
 </resources>
