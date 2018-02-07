@@ -240,6 +240,9 @@ public class PackageParser {
     }
 
     /** @hide */
+    public static final String APK_FILE_EXTENSION = ".apk";
+
+    /** @hide */
     public static class NewPermissionInfo {
         public final String name;
         public final int sdkVersion;
@@ -613,7 +616,7 @@ public class PackageParser {
     }
 
     public static boolean isApkPath(String path) {
-        return path.endsWith(".apk");
+        return path.endsWith(APK_FILE_EXTENSION);
     }
 
     /**
@@ -676,15 +679,7 @@ public class PackageParser {
         pi.requiredAccountType = p.mRequiredAccountType;
         pi.overlayTarget = p.mOverlayTarget;
         pi.overlayPriority = p.mOverlayPriority;
-
-        if (p.mIsStaticOverlay) {
-            pi.mOverlayFlags |= PackageInfo.FLAG_OVERLAY_STATIC;
-        }
-
-        if (p.mTrustedOverlay) {
-            pi.mOverlayFlags |= PackageInfo.FLAG_OVERLAY_TRUSTED;
-        }
-
+        pi.mOverlayIsStatic = p.mOverlayIsStatic;
         pi.compileSdkVersion = p.mCompileSdkVersion;
         pi.compileSdkVersionCodename = p.mCompileSdkVersionCodename;
         pi.firstInstallTime = firstInstallTime;
@@ -798,11 +793,38 @@ public class PackageParser {
                 }
             }
         }
+        // deprecated method of getting signing certificates
         if ((flags&PackageManager.GET_SIGNATURES) != 0) {
-            if (p.mSigningDetails.hasSignatures()) {
+            if (p.mSigningDetails.hasPastSigningCertificates()) {
+                // Package has included signing certificate rotation information.  Return the oldest
+                // cert so that programmatic checks keep working even if unaware of key rotation.
+                pi.signatures = new Signature[1];
+                pi.signatures[0] = p.mSigningDetails.pastSigningCertificates[0];
+            } else if (p.mSigningDetails.hasSignatures()) {
+                // otherwise keep old behavior
                 int numberOfSigs = p.mSigningDetails.signatures.length;
                 pi.signatures = new Signature[numberOfSigs];
                 System.arraycopy(p.mSigningDetails.signatures, 0, pi.signatures, 0, numberOfSigs);
+            }
+        }
+
+        // replacement for GET_SIGNATURES
+        if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
+            if (p.mSigningDetails.hasPastSigningCertificates()) {
+                // Package has included signing certificate rotation information.  Convert each
+                // entry to an array
+                int numberOfSigs = p.mSigningDetails.pastSigningCertificates.length;
+                pi.signingCertificateHistory = new Signature[numberOfSigs][];
+                for (int i = 0; i < numberOfSigs; i++) {
+                    pi.signingCertificateHistory[i] =
+                            new Signature[] { p.mSigningDetails.pastSigningCertificates[i] };
+                }
+            } else if (p.mSigningDetails.hasSignatures()) {
+                // otherwise keep old behavior
+                int numberOfSigs = p.mSigningDetails.signatures.length;
+                pi.signingCertificateHistory = new Signature[1][numberOfSigs];
+                System.arraycopy(p.mSigningDetails.signatures, 0,
+                        pi.signingCertificateHistory[0], 0, numberOfSigs);
             }
         }
         return pi;
@@ -1474,9 +1496,9 @@ public class PackageParser {
      * populating {@link Package#mSigningDetails}. Also asserts that all APK
      * contents are signed correctly and consistently.
      */
-    public static void collectCertificates(Package pkg, @ParseFlags int parseFlags)
+    public static void collectCertificates(Package pkg, boolean skipVerify)
             throws PackageParserException {
-        collectCertificatesInternal(pkg, parseFlags);
+        collectCertificatesInternal(pkg, skipVerify);
         final int childCount = (pkg.childPackages != null) ? pkg.childPackages.size() : 0;
         for (int i = 0; i < childCount; i++) {
             Package childPkg = pkg.childPackages.get(i);
@@ -1484,17 +1506,17 @@ public class PackageParser {
         }
     }
 
-    private static void collectCertificatesInternal(Package pkg, @ParseFlags int parseFlags)
+    private static void collectCertificatesInternal(Package pkg, boolean skipVerify)
             throws PackageParserException {
         pkg.mSigningDetails = SigningDetails.UNKNOWN;
 
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "collectCertificates");
         try {
-            collectCertificates(pkg, new File(pkg.baseCodePath), parseFlags);
+            collectCertificates(pkg, new File(pkg.baseCodePath), skipVerify);
 
             if (!ArrayUtils.isEmpty(pkg.splitCodePaths)) {
                 for (int i = 0; i < pkg.splitCodePaths.length; i++) {
-                    collectCertificates(pkg, new File(pkg.splitCodePaths[i]), parseFlags);
+                    collectCertificates(pkg, new File(pkg.splitCodePaths[i]), skipVerify);
                 }
             }
         } finally {
@@ -1502,7 +1524,7 @@ public class PackageParser {
         }
     }
 
-    private static void collectCertificates(Package pkg, File apkFile, @ParseFlags int parseFlags)
+    private static void collectCertificates(Package pkg, File apkFile, boolean skipVerify)
             throws PackageParserException {
         final String apkPath = apkFile.getAbsolutePath();
 
@@ -1512,7 +1534,7 @@ public class PackageParser {
             minSignatureScheme = SigningDetails.SignatureSchemeVersion.SIGNING_BLOCK_V2;
         }
         SigningDetails verified;
-        if ((parseFlags & PARSE_IS_SYSTEM_DIR) != 0) {
+        if (skipVerify) {
             // systemDir APKs are already trusted, save time by not verifying
             verified = ApkSignatureVerifier.plsCertsNoVerifyOnlyCerts(
                         apkPath, minSignatureScheme);
@@ -1592,9 +1614,10 @@ public class PackageParser {
             if ((flags & PARSE_COLLECT_CERTIFICATES) != 0) {
                 // TODO: factor signature related items out of Package object
                 final Package tempPkg = new Package((String) null);
+                final boolean skipVerify = (flags & PARSE_IS_SYSTEM_DIR) != 0;
                 Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "collectCertificates");
                 try {
-                    collectCertificates(tempPkg, apkFile, flags);
+                    collectCertificates(tempPkg, apkFile, skipVerify);
                 } finally {
                     Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
                 }
@@ -2055,7 +2078,7 @@ public class PackageParser {
                 pkg.mOverlayPriority = sa.getInt(
                         com.android.internal.R.styleable.AndroidManifestResourceOverlay_priority,
                         0);
-                pkg.mIsStaticOverlay = sa.getBoolean(
+                pkg.mOverlayIsStatic = sa.getBoolean(
                         com.android.internal.R.styleable.AndroidManifestResourceOverlay_isStatic,
                         false);
                 final String propName = sa.getString(
@@ -5681,28 +5704,84 @@ public class PackageParser {
         @Nullable
         public final ArraySet<PublicKey> publicKeys;
 
+        /**
+         * Collection of {@code Signature} objects, each of which is formed from a former signing
+         * certificate of this APK before it was changed by signing certificate rotation.
+         */
+        @Nullable
+        public final Signature[] pastSigningCertificates;
+
+        /**
+         * Flags for the {@code pastSigningCertificates} collection, which indicate the capabilities
+         * the including APK wishes to grant to its past signing certificates.
+         */
+        @Nullable
+        public final int[] pastSigningCertificatesFlags;
+
         /** A representation of unknown signing details. Use instead of null. */
         public static final SigningDetails UNKNOWN =
-                new SigningDetails(null, SignatureSchemeVersion.UNKNOWN, null);
+                new SigningDetails(null, SignatureSchemeVersion.UNKNOWN, null, null, null);
 
         @VisibleForTesting
         public SigningDetails(Signature[] signatures,
                 @SignatureSchemeVersion int signatureSchemeVersion,
-                ArraySet<PublicKey> keys) {
+                ArraySet<PublicKey> keys, Signature[] pastSigningCertificates,
+                int[] pastSigningCertificatesFlags) {
             this.signatures = signatures;
             this.signatureSchemeVersion = signatureSchemeVersion;
             this.publicKeys = keys;
+            this.pastSigningCertificates = pastSigningCertificates;
+            this.pastSigningCertificatesFlags = pastSigningCertificatesFlags;
+        }
+
+        public SigningDetails(Signature[] signatures,
+                @SignatureSchemeVersion int signatureSchemeVersion,
+                Signature[] pastSigningCertificates, int[] pastSigningCertificatesFlags)
+                throws CertificateException {
+            this(signatures, signatureSchemeVersion, toSigningKeys(signatures),
+                    pastSigningCertificates, pastSigningCertificatesFlags);
         }
 
         public SigningDetails(Signature[] signatures,
                 @SignatureSchemeVersion int signatureSchemeVersion)
                 throws CertificateException {
-            this(signatures, signatureSchemeVersion, toSigningKeys(signatures));
+            this(signatures, signatureSchemeVersion,
+                    null, null);
+        }
+
+        public SigningDetails(SigningDetails orig) {
+            if (orig != null) {
+                if (orig.signatures != null) {
+                    this.signatures = orig.signatures.clone();
+                } else {
+                    this.signatures = null;
+                }
+                this.signatureSchemeVersion = orig.signatureSchemeVersion;
+                this.publicKeys = new ArraySet<>(orig.publicKeys);
+                if (orig.pastSigningCertificates != null) {
+                    this.pastSigningCertificates = orig.pastSigningCertificates.clone();
+                    this.pastSigningCertificatesFlags = orig.pastSigningCertificatesFlags.clone();
+                } else {
+                    this.pastSigningCertificates = null;
+                    this.pastSigningCertificatesFlags = null;
+                }
+            } else {
+                this.signatures = null;
+                this.signatureSchemeVersion = SignatureSchemeVersion.UNKNOWN;
+                this.publicKeys = null;
+                this.pastSigningCertificates = null;
+                this.pastSigningCertificatesFlags = null;
+            }
         }
 
         /** Returns true if the signing details have one or more signatures. */
         public boolean hasSignatures() {
             return signatures != null && signatures.length > 0;
+        }
+
+        /** Returns true if the signing details have past signing certificates. */
+        public boolean hasPastSigningCertificates() {
+            return pastSigningCertificates != null && pastSigningCertificates.length > 0;
         }
 
         /** Returns true if the signatures in this and other match exactly. */
@@ -5725,6 +5804,8 @@ public class PackageParser {
             dest.writeTypedArray(this.signatures, flags);
             dest.writeInt(this.signatureSchemeVersion);
             dest.writeArraySet(this.publicKeys);
+            dest.writeTypedArray(this.pastSigningCertificates, flags);
+            dest.writeIntArray(this.pastSigningCertificatesFlags);
         }
 
         protected SigningDetails(Parcel in) {
@@ -5732,6 +5813,8 @@ public class PackageParser {
             this.signatures = in.createTypedArray(Signature.CREATOR);
             this.signatureSchemeVersion = in.readInt();
             this.publicKeys = (ArraySet<PublicKey>) in.readArraySet(boot);
+            this.pastSigningCertificates = in.createTypedArray(Signature.CREATOR);
+            this.pastSigningCertificatesFlags = in.createIntArray();
         }
 
         public static final Creator<SigningDetails> CREATOR = new Creator<SigningDetails>() {
@@ -5758,8 +5841,23 @@ public class PackageParser {
 
             if (signatureSchemeVersion != that.signatureSchemeVersion) return false;
             if (!Signature.areExactMatch(signatures, that.signatures)) return false;
-            return publicKeys != null ? publicKeys.equals(that.publicKeys)
-                    : that.publicKeys == null;
+            if (publicKeys != null) {
+                if (!publicKeys.equals((that.publicKeys))) {
+                    return false;
+                }
+            } else if (that.publicKeys != null) {
+                return false;
+            }
+
+            // can't use Signature.areExactMatch() because order matters with the past signing certs
+            if (!Arrays.equals(pastSigningCertificates, that.pastSigningCertificates)) {
+                return false;
+            }
+            if (!Arrays.equals(pastSigningCertificatesFlags, that.pastSigningCertificatesFlags)) {
+                return false;
+            }
+
+            return true;
         }
 
         @Override
@@ -5767,7 +5865,76 @@ public class PackageParser {
             int result = +Arrays.hashCode(signatures);
             result = 31 * result + signatureSchemeVersion;
             result = 31 * result + (publicKeys != null ? publicKeys.hashCode() : 0);
+            result = 31 * result + Arrays.hashCode(pastSigningCertificates);
+            result = 31 * result + Arrays.hashCode(pastSigningCertificatesFlags);
             return result;
+        }
+
+        /**
+         * Builder of {@code SigningDetails} instances.
+         */
+        public static class Builder {
+            private Signature[] mSignatures;
+            private int mSignatureSchemeVersion = SignatureSchemeVersion.UNKNOWN;
+            private Signature[] mPastSigningCertificates;
+            private int[] mPastSigningCertificatesFlags;
+
+            public Builder() {
+            }
+
+            /** get signing certificates used to sign the current APK */
+            public Builder setSignatures(Signature[] signatures) {
+                mSignatures = signatures;
+                return this;
+            }
+
+            /** set the signature scheme version used to sign the APK */
+            public Builder setSignatureSchemeVersion(int signatureSchemeVersion) {
+                mSignatureSchemeVersion = signatureSchemeVersion;
+                return this;
+            }
+
+            /** set the signing certificates by which the APK proved it can be authenticated */
+            public Builder setPastSigningCertificates(Signature[] pastSigningCertificates) {
+                mPastSigningCertificates = pastSigningCertificates;
+                return this;
+            }
+
+            /** set the flags for the {@code pastSigningCertificates} */
+            public Builder setPastSigningCertificatesFlags(int[] pastSigningCertificatesFlags) {
+                mPastSigningCertificatesFlags = pastSigningCertificatesFlags;
+                return this;
+            }
+
+            private void checkInvariants() {
+                // must have signatures and scheme version set
+                if (mSignatures == null) {
+                    throw new IllegalStateException("SigningDetails requires the current signing"
+                            + " certificates.");
+                }
+
+                // pastSigningCerts and flags must match up
+                boolean pastMismatch = false;
+                if (mPastSigningCertificates != null && mPastSigningCertificatesFlags != null) {
+                    if (mPastSigningCertificates.length != mPastSigningCertificatesFlags.length) {
+                        pastMismatch = true;
+                    }
+                } else if (!(mPastSigningCertificates == null
+                        && mPastSigningCertificatesFlags == null)) {
+                    pastMismatch = true;
+                }
+                if (pastMismatch) {
+                    throw new IllegalStateException("SigningDetails must have a one to one mapping "
+                            + "between pastSigningCertificates and pastSigningCertificatesFlags");
+                }
+            }
+            /** build a {@code SigningDetails} object */
+            public SigningDetails build()
+                    throws CertificateException {
+                checkInvariants();
+                return new SigningDetails(mSignatures, mSignatureSchemeVersion,
+                        mPastSigningCertificates, mPastSigningCertificatesFlags);
+            }
         }
     }
 
@@ -5920,8 +6087,7 @@ public class PackageParser {
 
         public String mOverlayTarget;
         public int mOverlayPriority;
-        public boolean mIsStaticOverlay;
-        public boolean mTrustedOverlay;
+        public boolean mOverlayIsStatic;
 
         public int mCompileSdkVersion;
         public String mCompileSdkVersionCodename;
@@ -6228,6 +6394,11 @@ public class PackageParser {
         }
 
         /** @hide */
+        public boolean isProduct() {
+            return applicationInfo.isProduct();
+        }
+
+        /** @hide */
         public boolean isPrivileged() {
             return applicationInfo.isPrivilegedApp();
         }
@@ -6283,6 +6454,31 @@ public class PackageParser {
             return "Package{"
                 + Integer.toHexString(System.identityHashCode(this))
                 + " " + packageName + "}";
+        }
+
+        public String dumpState_temp() {
+            String flags = "";
+            flags += ((applicationInfo.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0 ? "U" : "");
+            flags += ((applicationInfo.flags & ApplicationInfo.FLAG_SYSTEM) != 0 ? "S" : "");
+            if ("".equals(flags)) {
+                flags = "-";
+            }
+            String privFlags = "";
+            privFlags += ((applicationInfo.privateFlags & ApplicationInfo.PRIVATE_FLAG_PRIVILEGED) != 0 ? "P" : "");
+            privFlags += ((applicationInfo.privateFlags & ApplicationInfo.PRIVATE_FLAG_OEM) != 0 ? "O" : "");
+            privFlags += ((applicationInfo.privateFlags & ApplicationInfo.PRIVATE_FLAG_VENDOR) != 0 ? "V" : "");
+            if ("".equals(privFlags)) {
+                privFlags = "-";
+            }
+            return "Package{"
+            + Integer.toHexString(System.identityHashCode(this))
+            + " " + packageName
+            + ", ver:" + getLongVersionCode()
+            + ", path: " + codePath
+            + ", flags: " + flags
+            + ", privFlags: " + privFlags
+            + ", extra: " + (mExtras == null ? "<<NULL>>" : Integer.toHexString(System.identityHashCode(mExtras)) + "}")
+            + "}";
         }
 
         @Override
@@ -6426,8 +6622,7 @@ public class PackageParser {
             mRequiredAccountType = dest.readString();
             mOverlayTarget = dest.readString();
             mOverlayPriority = dest.readInt();
-            mIsStaticOverlay = (dest.readInt() == 1);
-            mTrustedOverlay = (dest.readInt() == 1);
+            mOverlayIsStatic = (dest.readInt() == 1);
             mCompileSdkVersion = dest.readInt();
             mCompileSdkVersionCodename = dest.readString();
             mUpgradeKeySets = (ArraySet<String>) dest.readArraySet(boot);
@@ -6550,8 +6745,7 @@ public class PackageParser {
             dest.writeString(mRequiredAccountType);
             dest.writeString(mOverlayTarget);
             dest.writeInt(mOverlayPriority);
-            dest.writeInt(mIsStaticOverlay ? 1 : 0);
-            dest.writeInt(mTrustedOverlay ? 1 : 0);
+            dest.writeInt(mOverlayIsStatic ? 1 : 0);
             dest.writeInt(mCompileSdkVersion);
             dest.writeString(mCompileSdkVersionCodename);
             dest.writeArraySet(mUpgradeKeySets);

@@ -200,6 +200,16 @@ public class Notification implements Parcelable
      */
     private static final int MAX_REPLY_HISTORY = 5;
 
+
+    /**
+     * If the notification contained an unsent draft for a RemoteInput when the user clicked on it,
+     * we're adding the draft as a String extra to the {@link #contentIntent} using this key.
+     *
+     * <p>Apps may use this extra to prepopulate text fields in the app, where the user usually
+     * sends messages.</p>
+     */
+    public static final String EXTRA_REMOTE_INPUT_DRAFT = "android.remoteInputDraft";
+
     /**
      * A timestamp related to this notification, in milliseconds since the epoch.
      *
@@ -483,7 +493,7 @@ public class Notification implements Parcelable
      * </ul>
      * <p>
      * Since hardware varies, you are not guaranteed that any of the values
-     * you pass are honored exactly.  Use the system defaults (TODO) if possible
+     * you pass are honored exactly.  Use the system defaults if possible
      * because they will be set to values that work on any given hardware.
      * <p>
      * The alpha channel must be set for forward compatibility.
@@ -4130,7 +4140,7 @@ public class Notification implements Parcelable
             final Bundle ex = mN.extras;
             updateBackgroundColor(contentView);
             bindNotificationHeader(contentView, p.ambient, p.headerTextSecondary);
-            bindLargeIcon(contentView, p.hideLargeIcon, p.alwaysShowReply);
+            bindLargeIcon(contentView, p.hideLargeIcon || p.ambient, p.alwaysShowReply);
             boolean showProgress = handleProgressBar(p.hasProgress, contentView, ex);
             if (p.title != null) {
                 contentView.setViewVisibility(R.id.title, View.VISIBLE);
@@ -6469,8 +6479,11 @@ public class Notification implements Parcelable
                     ? super.mBigContentTitle
                     : mConversationTitle;
             boolean isOneToOne = TextUtils.isEmpty(conversationTitle);
+            CharSequence nameReplacement = null;
             if (hasOnlyWhiteSpaceSenders()) {
                 isOneToOne = true;
+                nameReplacement = conversationTitle;
+                conversationTitle = null;
             }
             RemoteViews contentView = mBuilder.applyStandardTemplateWithActions(
                     mBuilder.getMessagingLayoutResource(),
@@ -6489,6 +6502,8 @@ public class Notification implements Parcelable
                     mBuilder.resolveContrastColor());
             contentView.setIcon(R.id.status_bar_latest_event_content, "setLargeIcon",
                     mBuilder.mN.mLargeIcon);
+            contentView.setCharSequence(R.id.status_bar_latest_event_content, "setNameReplacement",
+                    nameReplacement);
             contentView.setBoolean(R.id.status_bar_latest_event_content, "setIsOneToOne",
                     isOneToOne);
             contentView.setBundle(R.id.status_bar_latest_event_content, "setData",

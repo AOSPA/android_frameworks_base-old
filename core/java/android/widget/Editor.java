@@ -3673,6 +3673,8 @@ public class Editor {
                 mIsShowingUp = true;
                 super.show();
             }
+
+            mSuggestionListView.setVisibility(mNumberOfSuggestions == 0 ? View.GONE : View.VISIBLE);
         }
 
         @Override
@@ -4006,7 +4008,6 @@ public class Editor {
             if (isValidAssistMenuItem(
                     textClassification.getIcon(),
                     textClassification.getLabel(),
-                    textClassification.getOnClickListener(),
                     textClassification.getIntent())) {
                 final MenuItem item = menu.add(
                         TextView.ID_ASSIST, TextView.ID_ASSIST, MENU_ITEM_ORDER_ASSIST,
@@ -4014,14 +4015,15 @@ public class Editor {
                         .setIcon(textClassification.getIcon())
                         .setIntent(textClassification.getIntent());
                 item.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
-                mAssistClickHandlers.put(item, textClassification.getOnClickListener());
+                mAssistClickHandlers.put(
+                        item, TextClassification.createStartActivityOnClickListener(
+                                mTextView.getContext(), textClassification.getIntent()));
             }
             final int count = textClassification.getSecondaryActionsCount();
             for (int i = 0; i < count; i++) {
                 if (!isValidAssistMenuItem(
                         textClassification.getSecondaryIcon(i),
                         textClassification.getSecondaryLabel(i),
-                        textClassification.getSecondaryOnClickListener(i),
                         textClassification.getSecondaryIntent(i))) {
                     continue;
                 }
@@ -4032,7 +4034,9 @@ public class Editor {
                         .setIcon(textClassification.getSecondaryIcon(i))
                         .setIntent(textClassification.getSecondaryIntent(i));
                 item.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
-                mAssistClickHandlers.put(item, textClassification.getSecondaryOnClickListener(i));
+                mAssistClickHandlers.put(item,
+                        TextClassification.createStartActivityOnClickListener(
+                                mTextView.getContext(), textClassification.getSecondaryIntent(i)));
             }
         }
 
@@ -4048,10 +4052,9 @@ public class Editor {
             }
         }
 
-        private boolean isValidAssistMenuItem(
-                Drawable icon, CharSequence label, OnClickListener onClick, Intent intent) {
+        private boolean isValidAssistMenuItem(Drawable icon, CharSequence label, Intent intent) {
             final boolean hasUi = icon != null || !TextUtils.isEmpty(label);
-            final boolean hasAction = onClick != null || isSupportedIntent(intent);
+            final boolean hasAction = isSupportedIntent(intent);
             return hasUi && hasAction;
         }
 
@@ -4626,7 +4629,7 @@ public class Editor {
             return 0;
         }
 
-        protected final void showMagnifier() {
+        protected final void showMagnifier(@NonNull final MotionEvent event) {
             if (mMagnifier == null) {
                 return;
             }
@@ -4652,9 +4655,10 @@ public class Editor {
 
             final Layout layout = mTextView.getLayout();
             final int lineNumber = layout.getLineForOffset(offset);
-            // Horizontally snap to character offset.
-            final float xPosInView = getHorizontal(mTextView.getLayout(), offset)
-                    + mTextView.getTotalPaddingLeft() - mTextView.getScrollX();
+            // Horizontally move the magnifier smoothly.
+            final int[] textViewLocationOnScreen = new int[2];
+            mTextView.getLocationOnScreen(textViewLocationOnScreen);
+            final float xPosInView = event.getRawX() - textViewLocationOnScreen[0];
             // Vertically snap to middle of current line.
             final float yPosInView = (mTextView.getLayout().getLineTop(lineNumber)
                     + mTextView.getLayout().getLineBottom(lineNumber)) / 2.0f
@@ -4849,11 +4853,11 @@ public class Editor {
                 case MotionEvent.ACTION_DOWN:
                     mDownPositionX = ev.getRawX();
                     mDownPositionY = ev.getRawY();
-                    showMagnifier();
+                    showMagnifier(ev);
                     break;
 
                 case MotionEvent.ACTION_MOVE:
-                    showMagnifier();
+                    showMagnifier(ev);
                     break;
 
                 case MotionEvent.ACTION_UP:
@@ -5207,11 +5211,11 @@ public class Editor {
                     // re-engages the handle.
                     mTouchWordDelta = 0.0f;
                     mPrevX = UNSET_X_VALUE;
-                    showMagnifier();
+                    showMagnifier(event);
                     break;
 
                 case MotionEvent.ACTION_MOVE:
-                    showMagnifier();
+                    showMagnifier(event);
                     break;
 
                 case MotionEvent.ACTION_UP:

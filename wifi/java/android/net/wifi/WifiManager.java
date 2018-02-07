@@ -16,6 +16,7 @@
 
 package android.net.wifi;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -55,6 +56,8 @@ import com.android.server.net.NetworkPinner;
 
 import dalvik.system.CloseGuard;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
 import java.net.InetAddress;
 import java.util.Collections;
@@ -432,6 +435,17 @@ public class WifiManager {
      */
     public static final String EXTRA_WIFI_AP_MODE = "wifi_ap_mode";
 
+    /** @hide */
+    @IntDef(flag = false, prefix = { "WIFI_AP_STATE_" }, value = {
+        WIFI_AP_STATE_DISABLING,
+        WIFI_AP_STATE_DISABLED,
+        WIFI_AP_STATE_ENABLING,
+        WIFI_AP_STATE_ENABLED,
+        WIFI_AP_STATE_FAILED,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface WifiApState {}
+
     /**
      * Wi-Fi AP is currently being disabled. The state will change to
      * {@link #WIFI_AP_STATE_DISABLED} if it finishes successfully.
@@ -485,6 +499,14 @@ public class WifiManager {
      */
     @SystemApi
     public static final int WIFI_AP_STATE_FAILED = 14;
+
+    /** @hide */
+    @IntDef(flag = false, prefix = { "SAP_START_FAILURE_" }, value = {
+        SAP_START_FAILURE_GENERAL,
+        SAP_START_FAILURE_NO_CHANNEL,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SapStartFailure {}
 
     /**
      *  If WIFI AP start failed, this reason code means there is no legal channel exists on
@@ -1110,7 +1132,7 @@ public class WifiManager {
      */
     private int addOrUpdateNetwork(WifiConfiguration config) {
         try {
-            return mService.addOrUpdateNetwork(config);
+            return mService.addOrUpdateNetwork(config, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1131,7 +1153,7 @@ public class WifiManager {
      */
     public void addOrUpdatePasspointConfiguration(PasspointConfiguration config) {
         try {
-            if (!mService.addOrUpdatePasspointConfiguration(config)) {
+            if (!mService.addOrUpdatePasspointConfiguration(config, mContext.getOpPackageName())) {
                 throw new IllegalArgumentException();
             }
         } catch (RemoteException e) {
@@ -1148,7 +1170,7 @@ public class WifiManager {
      */
     public void removePasspointConfiguration(String fqdn) {
         try {
-            if (!mService.removePasspointConfiguration(fqdn)) {
+            if (!mService.removePasspointConfiguration(fqdn, mContext.getOpPackageName())) {
                 throw new IllegalArgumentException();
             }
         } catch (RemoteException e) {
@@ -1234,7 +1256,7 @@ public class WifiManager {
      */
     public boolean removeNetwork(int netId) {
         try {
-            return mService.removeNetwork(netId);
+            return mService.removeNetwork(netId, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1280,7 +1302,7 @@ public class WifiManager {
 
         boolean success;
         try {
-            success = mService.enableNetwork(netId, attemptConnect);
+            success = mService.enableNetwork(netId, attemptConnect, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1306,7 +1328,7 @@ public class WifiManager {
      */
     public boolean disableNetwork(int netId) {
         try {
-            return mService.disableNetwork(netId);
+            return mService.disableNetwork(netId, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1319,7 +1341,7 @@ public class WifiManager {
      */
     public boolean disconnect() {
         try {
-            mService.disconnect();
+            mService.disconnect(mContext.getOpPackageName());
             return true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -1334,7 +1356,7 @@ public class WifiManager {
      */
     public boolean reconnect() {
         try {
-            mService.reconnect();
+            mService.reconnect(mContext.getOpPackageName());
             return true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -1349,7 +1371,7 @@ public class WifiManager {
      */
     public boolean reassociate() {
         try {
-            mService.reassociate();
+            mService.reassociate(mContext.getOpPackageName());
             return true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -1598,18 +1620,14 @@ public class WifiManager {
     }
 
     /**
-     * Creates a configuration token describing the current network of MIME type
-     * application/vnd.wfa.wsc. Can be used to configure WiFi networks via NFC.
+     * WPS has been deprecated from Client mode operation.
      *
-     * @return hex-string encoded configuration token or null if there is no current network
+     * @return null
      * @hide
+     * @deprecated This API is deprecated
      */
     public String getCurrentNetworkWpsNfcConfigurationToken() {
-        try {
-            return mService.getCurrentNetworkWpsNfcConfigurationToken();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return null;
     }
 
     /**
@@ -1670,18 +1688,14 @@ public class WifiManager {
      * existing networks. You should assume the network IDs can be different
      * after calling this method.
      *
-     * @return {@code true} if the operation succeeded
+     * @return {@code false} Will always return true.
      * @deprecated There is no need to call this method -
      * {@link #addNetwork(WifiConfiguration)}, {@link #updateNetwork(WifiConfiguration)}
      * and {@link #removeNetwork(int)} already persist the configurations automatically.
      */
     @Deprecated
     public boolean saveConfiguration() {
-        try {
-            return mService.saveConfiguration();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
+        return true;
     }
 
     /**
@@ -2113,7 +2127,7 @@ public class WifiManager {
     @RequiresPermission(android.Manifest.permission.CHANGE_WIFI_STATE)
     public boolean setWifiApConfiguration(WifiConfiguration wifiConfig) {
         try {
-            mService.setWifiApConfiguration(wifiConfig);
+            mService.setWifiApConfiguration(wifiConfig, mContext.getOpPackageName());
             return true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -2188,20 +2202,34 @@ public class WifiManager {
     /** @hide */
     public static final int SAVE_NETWORK_SUCCEEDED          = BASE + 9;
 
-    /** @hide */
+    /** @hide
+     * @deprecated This is deprecated
+     */
     public static final int START_WPS                       = BASE + 10;
-    /** @hide */
+    /** @hide
+     * @deprecated This is deprecated
+     */
     public static final int START_WPS_SUCCEEDED             = BASE + 11;
-    /** @hide */
+    /** @hide
+     * @deprecated This is deprecated
+     */
     public static final int WPS_FAILED                      = BASE + 12;
-    /** @hide */
+    /** @hide
+     * @deprecated This is deprecated
+     */
     public static final int WPS_COMPLETED                   = BASE + 13;
 
-    /** @hide */
+    /** @hide
+     * @deprecated This is deprecated
+     */
     public static final int CANCEL_WPS                      = BASE + 14;
-    /** @hide */
+    /** @hide
+     * @deprecated This is deprecated
+     */
     public static final int CANCEL_WPS_FAILED               = BASE + 15;
-    /** @hide */
+    /** @hide
+     * @deprecated This is deprecated
+     */
     public static final int CANCEL_WPS_SUCCEDED             = BASE + 16;
 
     /** @hide */
@@ -2241,15 +2269,25 @@ public class WifiManager {
     public static final int BUSY                        = 2;
 
     /* WPS specific errors */
-    /** WPS overlap detected */
+    /** WPS overlap detected
+     * @deprecated This is deprecated
+     */
     public static final int WPS_OVERLAP_ERROR           = 3;
-    /** WEP on WPS is prohibited */
+    /** WEP on WPS is prohibited
+     * @deprecated This is deprecated
+     */
     public static final int WPS_WEP_PROHIBITED          = 4;
-    /** TKIP only prohibited */
+    /** TKIP only prohibited
+     * @deprecated This is deprecated
+     */
     public static final int WPS_TKIP_ONLY_PROHIBITED    = 5;
-    /** Authentication failure on WPS */
+    /** Authentication failure on WPS
+     * @deprecated This is deprecated
+     */
     public static final int WPS_AUTH_FAILURE            = 6;
-    /** WPS timed out */
+    /** WPS timed out
+     * @deprecated This is deprecated
+     */
     public static final int WPS_TIMED_OUT               = 7;
 
     /**
@@ -2290,12 +2328,19 @@ public class WifiManager {
         public void onFailure(int reason);
     }
 
-    /** Interface for callback invocation on a start WPS action */
+    /** Interface for callback invocation on a start WPS action
+     * @deprecated This is deprecated
+     */
     public static abstract class WpsCallback {
-        /** WPS start succeeded */
+
+        /** WPS start succeeded
+         * @deprecated This API is deprecated
+         */
         public abstract void onStarted(String pin);
 
-        /** WPS operation completed successfully */
+        /** WPS operation completed successfully
+         * @deprecated This API is deprecated
+         */
         public abstract void onSucceeded();
 
         /**
@@ -2304,6 +2349,7 @@ public class WifiManager {
          * {@link #WPS_TKIP_ONLY_PROHIBITED}, {@link #WPS_OVERLAP_ERROR},
          * {@link #WPS_WEP_PROHIBITED}, {@link #WPS_TIMED_OUT} or {@link #WPS_AUTH_FAILURE}
          * and some generic errors.
+         * @deprecated This API is deprecated
          */
         public abstract void onFailed(int reason);
     }
@@ -2321,6 +2367,119 @@ public class WifiManager {
          * {@link #ERROR}, {@link #IN_PROGRESS} or {@link #BUSY}
          */
         public void onFailure(int reason);
+    }
+
+    /**
+     * Base class for soft AP callback. Should be extended by applications and set when calling
+     * {@link WifiManager#registerSoftApCallback(SoftApCallback, Handler)}.
+     *
+     * @hide
+     */
+    public interface SoftApCallback {
+        /**
+         * Called when soft AP state changes.
+         *
+         * @param state new new AP state. One of {@link #WIFI_AP_STATE_DISABLED},
+         *        {@link #WIFI_AP_STATE_DISABLING}, {@link #WIFI_AP_STATE_ENABLED},
+         *        {@link #WIFI_AP_STATE_ENABLING}, {@link #WIFI_AP_STATE_FAILED}
+         * @param failureReason reason when in failed state. One of
+         *        {@link #SAP_START_FAILURE_GENERAL}, {@link #SAP_START_FAILURE_NO_CHANNEL}
+         */
+        public abstract void onStateChanged(@WifiApState int state,
+                @SapStartFailure int failureReason);
+
+        /**
+         * Called when number of connected clients to soft AP changes.
+         *
+         * @param numClients number of connected clients
+         */
+        public abstract void onNumClientsChanged(int numClients);
+    }
+
+    /**
+     * Callback proxy for SoftApCallback objects.
+     *
+     * @hide
+     */
+    private static class SoftApCallbackProxy extends ISoftApCallback.Stub {
+        private final Handler mHandler;
+        private final SoftApCallback mCallback;
+
+        SoftApCallbackProxy(Looper looper, SoftApCallback callback) {
+            mHandler = new Handler(looper);
+            mCallback = callback;
+        }
+
+        @Override
+        public void onStateChanged(int state, int failureReason) throws RemoteException {
+            Log.v(TAG, "SoftApCallbackProxy: onStateChanged: state=" + state + ", failureReason=" +
+                    failureReason);
+            mHandler.post(() -> {
+                mCallback.onStateChanged(state, failureReason);
+            });
+        }
+
+        @Override
+        public void onNumClientsChanged(int numClients) throws RemoteException {
+            Log.v(TAG, "SoftApCallbackProxy: onNumClientsChanged: numClients=" + numClients);
+            mHandler.post(() -> {
+                mCallback.onNumClientsChanged(numClients);
+            });
+        }
+    }
+
+    /**
+     * Registers a callback for Soft AP. See {@link SoftApCallback}. Caller will receive the current
+     * soft AP state and number of connected devices immediately after a successful call to this API
+     * via callback. Note that receiving an immediate WIFI_AP_STATE_FAILED value for soft AP state
+     * indicates that the latest attempt to start soft AP has failed. Caller can unregister a
+     * previously registered callback using {@link unregisterSoftApCallback}
+     * <p>
+     * Applications should have the
+     * {@link android.Manifest.permission#NETWORK_SETTINGS NETWORK_SETTINGS} permission. Callers
+     * without the permission will trigger a {@link java.lang.SecurityException}.
+     * <p>
+     *
+     * @param callback Callback for soft AP events
+     * @param handler  The Handler on whose thread to execute the callbacks of the {@code callback}
+     *                 object. If null, then the application's main thread will be used.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void registerSoftApCallback(@NonNull SoftApCallback callback,
+                                       @Nullable Handler handler) {
+        if (callback == null) throw new IllegalArgumentException("callback cannot be null");
+        Log.v(TAG, "registerSoftApCallback: callback=" + callback + ", handler=" + handler);
+
+        Looper looper = (handler == null) ? mContext.getMainLooper() : handler.getLooper();
+        Binder binder = new Binder();
+        try {
+            mService.registerSoftApCallback(binder, new SoftApCallbackProxy(looper, callback),
+                    callback.hashCode());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Allow callers to unregister a previously registered callback. After calling this method,
+     * applications will no longer receive soft AP events.
+     *
+     * @param callback Callback to unregister for soft AP events
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void unregisterSoftApCallback(@NonNull SoftApCallback callback) {
+        if (callback == null) throw new IllegalArgumentException("callback cannot be null");
+        Log.v(TAG, "unregisterSoftApCallback: callback=" + callback);
+
+        try {
+            mService.unregisterSoftApCallback(callback.hashCode());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
@@ -2683,36 +2842,6 @@ public class WifiManager {
                         ((ActionListener) listener).onSuccess();
                     }
                     break;
-                case WifiManager.START_WPS_SUCCEEDED:
-                    if (listener != null) {
-                        WpsResult result = (WpsResult) message.obj;
-                        ((WpsCallback) listener).onStarted(result.pin);
-                        //Listener needs to stay until completion or failure
-                        synchronized (mListenerMapLock) {
-                            mListenerMap.put(message.arg2, listener);
-                        }
-                    }
-                    break;
-                case WifiManager.WPS_COMPLETED:
-                    if (listener != null) {
-                        ((WpsCallback) listener).onSucceeded();
-                    }
-                    break;
-                case WifiManager.WPS_FAILED:
-                    if (listener != null) {
-                        ((WpsCallback) listener).onFailed(message.arg1);
-                    }
-                    break;
-                case WifiManager.CANCEL_WPS_SUCCEDED:
-                    if (listener != null) {
-                        ((WpsCallback) listener).onSucceeded();
-                    }
-                    break;
-                case WifiManager.CANCEL_WPS_FAILED:
-                    if (listener != null) {
-                        ((WpsCallback) listener).onFailed(message.arg1);
-                    }
-                    break;
                 case WifiManager.RSSI_PKTCNT_FETCH_SUCCEEDED:
                     if (listener != null) {
                         RssiPacketCountInfo info = (RssiPacketCountInfo) message.obj;
@@ -2884,34 +3013,39 @@ public class WifiManager {
     public void disableEphemeralNetwork(String SSID) {
         if (SSID == null) throw new IllegalArgumentException("SSID cannot be null");
         try {
-            mService.disableEphemeralNetwork(SSID);
+            mService.disableEphemeralNetwork(SSID, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     /**
-     * Start Wi-fi Protected Setup
+     * WPS suport has been deprecated from Client mode and this method will immediately trigger
+     * {@link WpsCallback#onFailed(int)} with a generic error.
      *
      * @param config WPS configuration (does not support {@link WpsInfo#LABEL})
      * @param listener for callbacks on success or failure. Can be null.
-     * @throws IllegalStateException if the WifiManager instance needs to be
-     * initialized again
+     * @throws IllegalStateException if the WifiManager instance needs to be initialized again
+     * @deprecated This API is deprecated
      */
     public void startWps(WpsInfo config, WpsCallback listener) {
-        if (config == null) throw new IllegalArgumentException("config cannot be null");
-        getChannel().sendMessage(START_WPS, 0, putListener(listener), config);
+        if (listener != null ) {
+            listener.onFailed(ERROR);
+        }
     }
 
     /**
-     * Cancel any ongoing Wi-fi Protected Setup
+     * WPS support has been deprecated from Client mode and this method will immediately trigger
+     * {@link WpsCallback#onFailed(int)} with a generic error.
      *
      * @param listener for callbacks on success or failure. Can be null.
-     * @throws IllegalStateException if the WifiManager instance needs to be
-     * initialized again
+     * @throws IllegalStateException if the WifiManager instance needs to be initialized again
+     * @deprecated This API is deprecated
      */
     public void cancelWps(WpsCallback listener) {
-        getChannel().sendMessage(CANCEL_WPS, 0, putListener(listener));
+        if (listener != null) {
+            listener.onFailed(ERROR);
+        }
     }
 
     /**
@@ -2923,7 +3057,7 @@ public class WifiManager {
      */
     public Messenger getWifiServiceMessenger() {
         try {
-            return mService.getWifiServiceMessenger();
+            return mService.getWifiServiceMessenger(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3398,58 +3532,13 @@ public class WifiManager {
     }
 
     /**
-     * Set wifi Aggressive Handover. Called from developer settings.
-     * @hide
-     */
-    public void enableAggressiveHandover(int enabled) {
-        try {
-            mService.enableAggressiveHandover(enabled);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Get the WiFi Handover aggressiveness.This is used by settings
-     * to decide what to show within the picker.
-     * @hide
-     */
-    public int getAggressiveHandover() {
-        try {
-            return mService.getAggressiveHandover();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Deprecated
-     * Does nothing
-     * @hide
-     * @deprecated
-     */
-    public void setAllowScansWithTraffic(int enabled) {
-        return;
-    }
-
-    /**
-     * Deprecated
-     * returns value for 'disabled'
-     * @hide
-     * @deprecated
-     */
-    public int getAllowScansWithTraffic() {
-        return 0;
-    }
-
-    /**
-     * Resets all wifi manager settings back to factory defaults.
+     * Removes all saved wifi networks.
      *
      * @hide
      */
     public void factoryReset() {
         try {
-            mService.factoryReset();
+            mService.factoryReset(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

@@ -23,6 +23,7 @@
 #include "hwui/MinikinUtils.h"
 #include "pipeline/skia/AnimatedDrawables.h"
 
+#include <SkAnimatedImage.h>
 #include <SkCanvasStateUtils.h>
 #include <SkColorFilter.h>
 #include <SkColorSpaceXformCanvas.h>
@@ -32,6 +33,7 @@
 #include <SkGraphics.h>
 #include <SkImage.h>
 #include <SkImagePriv.h>
+#include <SkPicture.h>
 #include <SkRSXform.h>
 #include <SkShader.h>
 #include <SkTemplates.h>
@@ -721,6 +723,10 @@ void SkiaCanvas::drawNinePatch(Bitmap& bitmap, const Res_png_9patch& chunk, floa
     sk_sp<SkColorFilter> colorFilter;
     sk_sp<SkImage> image = bitmap.makeImage(&colorFilter);
     mCanvas->drawImageLattice(image.get(), lattice, dst, addFilter(paint, &tmpPaint, colorFilter));
+}
+
+double SkiaCanvas::drawAnimatedImage(AnimatedImageDrawable* imgDrawable) {
+    return imgDrawable->drawStaging(mCanvas);
 }
 
 void SkiaCanvas::drawVectorDrawable(VectorDrawableRoot* vectorDrawable) {

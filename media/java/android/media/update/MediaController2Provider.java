@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright 2018 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,39 +17,52 @@
 package android.media.update;
 
 import android.annotation.SystemApi;
-import android.media.session.MediaController;
-import android.view.View;
-import android.view.View.OnClickListener;
+import android.app.PendingIntent;
+import android.media.MediaController2.PlaybackInfo;
+import android.media.MediaItem2;
+import android.media.MediaSession2.Command;
+import android.media.MediaSession2.PlaylistParams;
+import android.media.PlaybackState2;
+import android.media.Rating2;
+import android.media.SessionToken2;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.ResultReceiver;
+
+import java.util.List;
 
 /**
- * Interface for connecting the public API to an updatable implementation.
- *
- * Each instance object is connected to one corresponding updatable object which implements the
- * runtime behavior of that class. There should a corresponding provider method for all public
- * methods.
- *
- * All methods behave as per their namesake in the public API.
- *
- * @see android.widget.MediaController2
- *
  * @hide
  */
-// TODO @SystemApi
-public interface MediaController2Provider extends ViewProvider {
-    void setController_impl(MediaController controller);
-    void setAnchorView_impl(View view);
-    void show_impl();
-    void show_impl(int timeout);
-    boolean isShowing_impl();
-    void hide_impl();
-    void setPrevNextListeners_impl(OnClickListener next, OnClickListener prev);
-    void showCCButton_impl();
-    boolean isPlaying_impl();
-    int getCurrentPosition_impl();
-    int getBufferPercentage_impl();
-    boolean canPause_impl();
-    boolean canSeekBackward_impl();
-    boolean canSeekForward_impl();
-    void showSubtitle_impl();
-    void hideSubtitle_impl();
+public interface MediaController2Provider extends TransportControlProvider {
+    void initialize();
+
+    void close_impl();
+    SessionToken2 getSessionToken_impl();
+    boolean isConnected_impl();
+
+    PendingIntent getSessionActivity_impl();
+    int getRatingType_impl();
+
+    void setVolumeTo_impl(int value, int flags);
+    void adjustVolume_impl(int direction, int flags);
+    PlaybackInfo getPlaybackInfo_impl();
+
+    void prepareFromUri_impl(Uri uri, Bundle extras);
+    void prepareFromSearch_impl(String query, Bundle extras);
+    void prepareMediaId_impl(String mediaId, Bundle extras);
+    void playFromSearch_impl(String query, Bundle extras);
+    void playFromUri_impl(String uri, Bundle extras);
+    void playFromMediaId_impl(String mediaId, Bundle extras);
+
+    void setRating_impl(Rating2 rating);
+    void sendCustomCommand_impl(Command command, Bundle args, ResultReceiver cb);
+    List<MediaItem2> getPlaylist_impl();
+
+    void removePlaylistItem_impl(MediaItem2 index);
+    void addPlaylistItem_impl(int index, MediaItem2 item);
+
+    PlaylistParams getPlaylistParams_impl();
+    void setPlaylistParams_impl(PlaylistParams params);
+    PlaybackState2 getPlaybackState_impl();
 }

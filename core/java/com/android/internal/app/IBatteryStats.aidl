@@ -23,6 +23,8 @@ import android.net.wifi.WifiActivityEnergyInfo;
 import android.os.ParcelFileDescriptor;
 import android.os.WorkSource;
 import android.os.connectivity.CellularBatteryStats;
+import android.os.connectivity.WifiBatteryStats;
+import android.os.connectivity.GpsBatteryStats;
 import android.os.health.HealthStatsParceler;
 import android.telephony.DataConnectionRealTimeInfo;
 import android.telephony.ModemActivityInfo;
@@ -89,8 +91,8 @@ interface IBatteryStats {
 
     void noteVibratorOn(int uid, long durationMillis);
     void noteVibratorOff(int uid);
-    void noteStartGps(int uid);
-    void noteStopGps(int uid);
+    void noteGpsChanged(in WorkSource oldSource, in WorkSource newSource);
+    void noteGpsSignalQuality(int signalLevel);
     void noteScreenState(int state);
     void noteScreenBrightness(int brightness);
     void noteUserActivity(int uid, int event);
@@ -139,6 +141,12 @@ interface IBatteryStats {
 
     /** {@hide} */
     CellularBatteryStats getCellularBatteryStats();
+
+    /** {@hide} */
+    WifiBatteryStats getWifiBatteryStats();
+
+    /** {@hide} */
+    GpsBatteryStats getGpsBatteryStats();
 
     HealthStatsParceler takeUidSnapshot(int uid);
     HealthStatsParceler[] takeUidSnapshots(in int[] uid);

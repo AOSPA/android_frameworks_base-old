@@ -30,7 +30,6 @@ import android.os.IInstalld;
 import android.os.Environment;
 import android.os.Process;
 import android.os.RemoteException;
-import android.os.Seccomp;
 import android.os.ServiceManager;
 import android.os.ServiceSpecificException;
 import android.os.SystemClock;
@@ -98,6 +97,10 @@ public class ZygoteInit {
     private static final String ABI_LIST_ARG = "--abi-list=";
 
     private static final String SOCKET_NAME_ARG = "--socket-name=";
+
+    /* Dexopt flag to disable hidden API access checks when dexopting SystemServer.
+     * Must be kept in sync with com.android.server.pm.Installer. */
+    private static final int DEXOPT_DISABLE_HIDDEN_API_CHECKS = 1 << 10;
 
     /**
      * Used to pre-load resources.
@@ -566,16 +569,21 @@ public class ZygoteInit {
             if (dexoptNeeded != DexFile.NO_DEXOPT_NEEDED) {
                 final String packageName = "*";
                 final String outputPath = null;
-                final int dexFlags = 0;
+                // Dexopt with a flag which lifts restrictions on hidden API usage.
+                // Offending methods would otherwise be re-verified at runtime and
+                // we want to avoid the performance overhead of that.
+                final int dexFlags = DEXOPT_DISABLE_HIDDEN_API_CHECKS;
                 final String compilerFilter = systemServerFilter;
                 final String uuid = StorageManager.UUID_PRIVATE_INTERNAL;
                 final String seInfo = null;
                 final String classLoaderContext =
                         getSystemServerClassLoaderContext(classPathForElement);
+                final int targetSdkVersion = 0;  // SystemServer targets the system's SDK version
                 try {
                     installd.dexopt(classPathElement, Process.SYSTEM_UID, packageName,
                             instructionSet, dexoptNeeded, outputPath, dexFlags, compilerFilter,
-                            uuid, classLoaderContext, seInfo, false /* downgrade */);
+                            uuid, classLoaderContext, seInfo, false /* downgrade */,
+                            targetSdkVersion, /*profileName*/ null);
                 } catch (RemoteException | ServiceSpecificException e) {
                     // Ignore (but log), we need this on the classpath for fallback mode.
                     Log.w(TAG, "Failed compiling classpath element for system server: "
@@ -779,11 +787,10 @@ public class ZygoteInit {
             // Zygote.
             Trace.setTracingEnabled(false, 0);
 
+            Zygote.nativeSecurityInit();
+
             // Zygote process unmounts root storage spaces.
             Zygote.nativeUnmountStorageOnInit();
-
-            // Set seccomp policy
-            Seccomp.setPolicy();
 
             ZygoteHooks.stopZygoteNoThreadCreation();
 

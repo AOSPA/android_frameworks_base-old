@@ -17,19 +17,33 @@ package android.util;
 
 import android.Manifest;
 import android.annotation.RequiresPermission;
-import android.annotation.SystemApi;
 import android.os.IBinder;
 import android.os.IStatsManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+
+
+/*
+ *
+ *
+ *
+ *
+ * THIS ENTIRE FILE IS ONLY TEMPORARY TO PREVENT BREAKAGES OF DEPENDENCIES ON OLD APIS.
+ * The new StatsManager is to be found in android.app.StatsManager.
+ * TODO: Delete this file!
+ *
+ *
+ *
+ *
+ */
+
 
 /**
  * API for StatsD clients to send configurations and retrieve data.
  *
  * @hide
  */
-@SystemApi
-public final class StatsManager {
+public class StatsManager {
     IStatsManager mService;
     private static final String TAG = "StatsManager";
 
@@ -42,10 +56,20 @@ public final class StatsManager {
     }
 
     /**
+     * Temporary to prevent build failures. Will be deleted.
+     */
+    @RequiresPermission(Manifest.permission.DUMP)
+    public boolean addConfiguration(String configKey, byte[] config, String pkg, String cls) {
+        // To prevent breakages of dependencies on old API.
+
+        return false;
+    }
+
+    /**
      * Clients can send a configuration and simultaneously registers the name of a broadcast
      * receiver that listens for when it should request data.
      *
-     * @param configKey An arbitrary string that allows clients to track the configuration.
+     * @param configKey An arbitrary integer that allows clients to track the configuration.
      * @param config    Wire-encoded StatsDConfig proto that specifies metrics (and all
      *                  dependencies eg, conditions and matchers).
      * @param pkg       The package name to receive the broadcast.
@@ -70,6 +94,15 @@ public final class StatsManager {
     }
 
     /**
+     * Temporary to prevent build failures. Will be deleted.
+     */
+    @RequiresPermission(Manifest.permission.DUMP)
+    public boolean removeConfiguration(String configKey) {
+        // To prevent breakages of old dependencies.
+        return false;
+    }
+
+    /**
      * Remove a configuration from logging.
      *
      * @param configKey Configuration key to remove.
@@ -90,6 +123,16 @@ public final class StatsManager {
                 return false;
             }
         }
+    }
+
+    /**
+     * Temporary to prevent build failures. Will be deleted.
+     */
+    @RequiresPermission(Manifest.permission.DUMP)
+    public byte[] getData(String configKey) {
+        // TODO: remove this and all other methods with String-based config keys.
+        // To prevent build breakages of dependencies.
+        return null;
     }
 
     /**

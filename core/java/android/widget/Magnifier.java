@@ -18,7 +18,6 @@ package android.widget;
 
 import android.annotation.FloatRange;
 import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.annotation.UiThread;
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -30,8 +29,11 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.PixelCopy;
 import android.view.Surface;
+import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.view.ViewParent;
+import android.view.ViewRootImpl;
 
 import com.android.internal.util.Preconditions;
 
@@ -44,6 +46,8 @@ public final class Magnifier {
     private static final int NONEXISTENT_PREVIOUS_CONFIG_VALUE = -1;
     // The view to which this magnifier is attached.
     private final View mView;
+    // The coordinates of the view in the surface.
+    private final int[] mViewCoordinatesInSurface;
     // The window containing the magnifier.
     private final PopupWindow mWindow;
     // The center coordinates of the window containing the magnifier.
@@ -87,6 +91,8 @@ public final class Magnifier {
                 com.android.internal.R.dimen.magnifier_height);
         mZoomScale = context.getResources().getFloat(
                 com.android.internal.R.dimen.magnifier_zoom_scale);
+        // The view's surface coordinates will not be updated until the magnifier is first shown.
+        mViewCoordinatesInSurface = new int[2];
 
         mWindow = new PopupWindow(context);
         mWindow.setContentView(content);
@@ -119,10 +125,36 @@ public final class Magnifier {
 
         configureCoordinates(xPosInView, yPosInView);
 
-        // Clamp startX value to avoid distorting the rendering of the magnifier content.
-        final int startX = Math.max(0, Math.min(
+        // Clamp the startX value to avoid magnifying content which does not belong to the magnified
+        // view. This will not take into account overlapping views.
+        // For this, we compute:
+        // - zeroScrollXInSurface: this is the start x of mView, where this is not masked by a
+        //                         potential scrolling container. For example, if mView is a
+        //                         TextView contained in a HorizontalScrollView,
+        //                         mViewCoordinatesInSurface will reflect the surface position of
+        //                         the first text character, rather than the position of the first
+        //                         visible one. Therefore, we need to add back the amount of
+        //                         scrolling from the parent containers.
+        // - actualWidth: similarly, the width of a View will be larger than its actually visible
+        //                width when it is contained in a scrolling container. We need to use
+        //                the minimum width of a scrolling container which contains this view.
+        int zeroScrollXInSurface = mViewCoordinatesInSurface[0];
+        int actualWidth = mView.getWidth();
+        ViewParent viewParent = mView.getParent();
+        while (viewParent instanceof View) {
+            final View container = (View) viewParent;
+            if (container.canScrollHorizontally(-1 /* left scroll */)
+                    || container.canScrollHorizontally(1 /* right scroll */)) {
+                zeroScrollXInSurface += container.getScrollX();
+                actualWidth = Math.min(actualWidth, container.getWidth()
+                        - container.getPaddingLeft() - container.getPaddingRight());
+            }
+            viewParent = viewParent.getParent();
+        }
+
+        final int startX = Math.max(zeroScrollXInSurface, Math.min(
                 mCenterZoomCoords.x - mBitmap.getWidth() / 2,
-                mView.getWidth() - mBitmap.getWidth()));
+                zeroScrollXInSurface + actualWidth - mBitmap.getWidth()));
         final int startY = mCenterZoomCoords.y - mBitmap.getHeight() / 2;
 
         if (xPosInView != mPrevPosInView.x || yPosInView != mPrevPosInView.y) {
@@ -160,58 +192,79 @@ public final class Magnifier {
         }
     }
 
-    private void configureCoordinates(float xPosInView, float yPosInView) {
-        final float posX;
-        final float posY;
-
+    private void configureCoordinates(final float xPosInView, final float yPosInView) {
+        // Compute the coordinates of the center of the content going to be displayed in the
+        // magnifier. These are relative to the surface the content is copied from.
+        final float contentPosX;
+        final float contentPosY;
         if (mView instanceof SurfaceView) {
             // No offset required if the backing Surface matches the size of the SurfaceView.
-            posX = xPosInView;
-            posY = yPosInView;
+            contentPosX = xPosInView;
+            contentPosY = yPosInView;
         } else {
-            final int[] coordinatesInSurface = new int[2];
-            mView.getLocationInSurface(coordinatesInSurface);
-            posX = xPosInView + coordinatesInSurface[0];
-            posY = yPosInView + coordinatesInSurface[1];
+            mView.getLocationInSurface(mViewCoordinatesInSurface);
+            contentPosX = xPosInView + mViewCoordinatesInSurface[0];
+            contentPosY = yPosInView + mViewCoordinatesInSurface[1];
         }
+        mCenterZoomCoords.x = Math.round(contentPosX);
+        mCenterZoomCoords.y = Math.round(contentPosY);
 
-        mCenterZoomCoords.x = Math.round(posX);
-        mCenterZoomCoords.y = Math.round(posY);
-
-        final int verticalMagnifierOffset = mView.getContext().getResources().getDimensionPixelSize(
+        // Compute the position of the magnifier window. These have to be relative to the window
+        // of the view the magnifier is attached to, as the magnifier popup is a panel window
+        // attached to that window.
+        final int[] viewCoordinatesInWindow = new int[2];
+        mView.getLocationInWindow(viewCoordinatesInWindow);
+        final int verticalOffset = mView.getContext().getResources().getDimensionPixelSize(
                 com.android.internal.R.dimen.magnifier_offset);
-        mWindowCoords.x = mCenterZoomCoords.x - mWindowWidth / 2;
-        mWindowCoords.y = mCenterZoomCoords.y - mWindowHeight / 2 - verticalMagnifierOffset;
+        final float magnifierPosX = xPosInView + viewCoordinatesInWindow[0];
+        final float magnifierPosY = yPosInView + viewCoordinatesInWindow[1] - verticalOffset;
+        mWindowCoords.x = Math.round(magnifierPosX - mWindowWidth / 2);
+        mWindowCoords.y = Math.round(magnifierPosY - mWindowHeight / 2);
     }
 
     private void performPixelCopy(final int startXInSurface, final int startYInSurface) {
-        final Surface surface = getValidViewSurface();
-        if (surface != null) {
-            mPixelCopyRequestRect.set(startXInSurface, startYInSurface,
-                    startXInSurface + mBitmap.getWidth(), startYInSurface + mBitmap.getHeight());
-
-            PixelCopy.request(surface, mPixelCopyRequestRect, mBitmap,
-                    result -> {
-                        getImageView().invalidate();
-                        mPrevStartCoordsInSurface.x = startXInSurface;
-                        mPrevStartCoordsInSurface.y = startYInSurface;
-                    },
-                    mPixelCopyHandler);
-        }
-    }
-
-    @Nullable
-    private Surface getValidViewSurface() {
+        // Get the view surface where the content will be copied from.
         final Surface surface;
+        final int surfaceWidth;
+        final int surfaceHeight;
         if (mView instanceof SurfaceView) {
-            surface = ((SurfaceView) mView).getHolder().getSurface();
+            final SurfaceHolder surfaceHolder = ((SurfaceView) mView).getHolder();
+            surface = surfaceHolder.getSurface();
+            surfaceWidth = surfaceHolder.getSurfaceFrame().right;
+            surfaceHeight = surfaceHolder.getSurfaceFrame().bottom;
         } else if (mView.getViewRootImpl() != null) {
-            surface = mView.getViewRootImpl().mSurface;
+            final ViewRootImpl viewRootImpl = mView.getViewRootImpl();
+            surface = viewRootImpl.mSurface;
+            surfaceWidth = viewRootImpl.getWidth();
+            surfaceHeight = viewRootImpl.getHeight();
         } else {
             surface = null;
+            surfaceWidth = NONEXISTENT_PREVIOUS_CONFIG_VALUE;
+            surfaceHeight = NONEXISTENT_PREVIOUS_CONFIG_VALUE;
         }
 
-        return (surface != null && surface.isValid()) ? surface : null;
+        if (surface == null || !surface.isValid()) {
+            return;
+        }
+
+        // Clamp copy coordinates inside the surface to avoid displaying distorted content.
+        final int clampedStartXInSurface = Math.max(0,
+                Math.min(startXInSurface, surfaceWidth - mWindowWidth));
+        final int clampedStartYInSurface = Math.max(0,
+                Math.min(startYInSurface, surfaceHeight - mWindowHeight));
+
+        // Perform the pixel copy.
+        mPixelCopyRequestRect.set(clampedStartXInSurface,
+                clampedStartYInSurface,
+                clampedStartXInSurface + mBitmap.getWidth(),
+                clampedStartYInSurface + mBitmap.getHeight());
+        PixelCopy.request(surface, mPixelCopyRequestRect, mBitmap,
+                result -> {
+                    getImageView().invalidate();
+                    mPrevStartCoordsInSurface.x = startXInSurface;
+                    mPrevStartCoordsInSurface.y = startYInSurface;
+                },
+                mPixelCopyHandler);
     }
 
     private ImageView getImageView() {

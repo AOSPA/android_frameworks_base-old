@@ -35,7 +35,6 @@ import android.util.ArrayMap;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.view.RemotableViewMethod;
-import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.animation.Interpolator;
 import android.view.animation.PathInterpolator;
@@ -81,6 +80,7 @@ public class MessagingLayout extends FrameLayout {
     private boolean mIsOneToOne;
     private ArrayList<MessagingGroup> mAddedGroups = new ArrayList<>();
     private Notification.Person mUser;
+    private CharSequence mNameReplacement;
 
     public MessagingLayout(@NonNull Context context) {
         super(context);
@@ -122,6 +122,11 @@ public class MessagingLayout extends FrameLayout {
     }
 
     @RemotableViewMethod
+    public void setNameReplacement(CharSequence nameReplacement) {
+        mNameReplacement = nameReplacement;
+    }
+
+    @RemotableViewMethod
     public void setData(Bundle extras) {
         Parcelable[] messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES);
         List<Notification.MessagingStyle.Message> newMessages
@@ -135,7 +140,22 @@ public class MessagingLayout extends FrameLayout {
         if (headerText != null) {
             mConversationTitle = headerText.getText();
         }
+        addRemoteInputHistoryToMessages(newMessages,
+                extras.getCharSequenceArray(Notification.EXTRA_REMOTE_INPUT_HISTORY));
         bind(newMessages, newHistoricMessages);
+    }
+
+    private void addRemoteInputHistoryToMessages(
+            List<Notification.MessagingStyle.Message> newMessages,
+            CharSequence[] remoteInputHistory) {
+        if (remoteInputHistory == null || remoteInputHistory.length == 0) {
+            return;
+        }
+        for (int i = remoteInputHistory.length - 1; i >= 0; i--) {
+            CharSequence message = remoteInputHistory[i];
+            newMessages.add(new Notification.MessagingStyle.Message(
+                    message, 0, (Notification.Person) null));
+        }
     }
 
     private void bind(List<Notification.MessagingStyle.Message> newMessages,
@@ -189,9 +209,10 @@ public class MessagingLayout extends FrameLayout {
         for (int i = 0; i < mGroups.size(); i++) {
             // Let's now set the avatars
             MessagingGroup group = mGroups.get(i);
+            boolean isOwnMessage = group.getSender() == mUser;
             CharSequence senderName = group.getSenderName();
             if (!group.needsGeneratedAvatar() || TextUtils.isEmpty(senderName)
-                    || (mIsOneToOne && mLargeIcon != null)) {
+                    || (mIsOneToOne && mLargeIcon != null && !isOwnMessage)) {
                 continue;
             }
             String symbol = uniqueNames.get(senderName);
@@ -209,7 +230,7 @@ public class MessagingLayout extends FrameLayout {
             if (!group.needsGeneratedAvatar() || TextUtils.isEmpty(senderName)) {
                 continue;
             }
-            if (mIsOneToOne && mLargeIcon != null) {
+            if (mIsOneToOne && mLargeIcon != null && group.getSender() != mUser) {
                 group.setAvatar(mLargeIcon);
             } else {
                 Icon cachedIcon = cachedAvatars.get(senderName);
@@ -271,6 +292,12 @@ public class MessagingLayout extends FrameLayout {
 
     public void setUser(Notification.Person user) {
         mUser = user;
+        if (mUser.getIcon() == null) {
+            Icon userIcon = Icon.createWithResource(getContext(),
+                    com.android.internal.R.drawable.messaging_user);
+            userIcon.setTint(mLayoutColor);
+            mUser.setIcon(userIcon);
+        }
     }
 
     private void addMessagesToGroups(List<MessagingMessage> historicMessages,
@@ -305,7 +332,12 @@ public class MessagingLayout extends FrameLayout {
                 mAddedGroups.add(newGroup);
             }
             newGroup.setLayoutColor(mLayoutColor);
-            newGroup.setSender(senders.get(groupIndex));
+            Notification.Person sender = senders.get(groupIndex);
+            CharSequence nameOverride = null;
+            if (sender != mUser && mNameReplacement != null) {
+                nameOverride = mNameReplacement;
+            }
+            newGroup.setSender(sender, nameOverride);
             mGroups.add(newGroup);
 
             if (mMessagingLinearLayout.indexOfChild(newGroup) != groupIndex) {
@@ -410,7 +442,7 @@ public class MessagingLayout extends FrameLayout {
                             continue;
                         }
                         MessagingPropertyAnimator.fadeIn(group.getAvatar());
-                        MessagingPropertyAnimator.fadeIn(group.getSender());
+                        MessagingPropertyAnimator.fadeIn(group.getSenderView());
                         MessagingPropertyAnimator.startLocalTranslationFrom(group,
                                 group.getHeight(), LINEAR_OUT_SLOW_IN);
                     }

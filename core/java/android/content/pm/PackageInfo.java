@@ -16,13 +16,9 @@
 
 package android.content.pm;
 
-import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.os.Parcel;
 import android.os.Parcelable;
-
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 
 /**
  * Overall information about the contents of a package.  This corresponds
@@ -246,9 +242,44 @@ public class PackageInfo implements Parcelable {
      * equivalent to being signed with certificates B and A. This means that
      * in case multiple signatures are reported you cannot assume the one at
      * the first position to be the same across updates.
+     *
+     * <strong>Deprecated</strong> This has been replaced by the
+     * {@link PackageInfo#signingCertificateHistory} field, which takes into
+     * account signing certificate rotation.  For backwards compatibility in
+     * the event of signing certificate rotation, this will return the oldest
+     * reported signing certificate, so that an application will appear to
+     * callers as though no rotation occurred.
+     *
+     * @deprecated use {@code signingCertificateHistory} instead
      */
+    @Deprecated
     public Signature[] signatures;
-    
+
+    /**
+     * Array of all signatures arrays read from the package file, potentially
+     * including past signing certificates no longer used after signing
+     * certificate rotation.  Though signing certificate rotation is only
+     * available for apps with a single signing certificate, this provides an
+     * array of arrays so that packages signed with multiple signing
+     * certificates can still return all signers.  This is only filled in if
+     * the flag {@link PackageManager#GET_SIGNING_CERTIFICATES} was set.
+     *
+     * A package must be singed with at least one certificate, which is at
+     * position zero in the array.  An application may be signed by multiple
+     * certificates, which would be in the array at position zero in an
+     * indeterminate order.  A package may also have a history of certificates
+     * due to signing certificate rotation.  In this case, the array will be
+     * populated by a series of single-entry arrays corresponding to a signing
+     * certificate of the package.
+     *
+     * <strong>Note:</strong> Signature ordering is not guaranteed to be
+     * stable which means that a package signed with certificates A and B is
+     * equivalent to being signed with certificates B and A. This means that
+     * in case multiple signatures are reported you cannot assume the one at
+     * the first position will be the same across updates.
+     */
+    public Signature[][] signingCertificateHistory;
+
     /**
      * Application specified preferred configuration
      * {@link android.R.styleable#AndroidManifestUsesConfiguration
@@ -335,28 +366,9 @@ public class PackageInfo implements Parcelable {
     public int overlayPriority;
 
     /**
-     * Flag for use with {@link #mOverlayFlags}. Marks the overlay as static, meaning it cannot
-     * be enabled/disabled at runtime.
+     * Whether the overlay is static, meaning it cannot be enabled/disabled at runtime.
      */
-    static final int FLAG_OVERLAY_STATIC = 1 << 1;
-
-    /**
-     * Flag for use with {@link #mOverlayFlags}. Marks the overlay as trusted (not 3rd party).
-     */
-    static final int FLAG_OVERLAY_TRUSTED = 1 << 2;
-
-    @IntDef(flag = true, prefix = "FLAG_OVERLAY_", value = {
-            FLAG_OVERLAY_STATIC,
-            FLAG_OVERLAY_TRUSTED
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    @interface OverlayFlags {}
-
-    /**
-     * Modifiers that affect the state of this overlay. See {@link #FLAG_OVERLAY_STATIC},
-     * {@link #FLAG_OVERLAY_TRUSTED}.
-     */
-    @OverlayFlags int mOverlayFlags;
+    boolean mOverlayIsStatic;
 
     /**
      * The user-visible SDK version (ex. 26) of the framework against which the application claims
@@ -389,7 +401,7 @@ public class PackageInfo implements Parcelable {
      * @hide
      */
     public boolean isOverlayPackage() {
-        return overlayTarget != null && (mOverlayFlags & FLAG_OVERLAY_TRUSTED) != 0;
+        return overlayTarget != null;
     }
 
     /**
@@ -398,7 +410,7 @@ public class PackageInfo implements Parcelable {
      * @hide
      */
     public boolean isStaticOverlayPackage() {
-        return overlayTarget != null && (mOverlayFlags & FLAG_OVERLAY_STATIC) != 0;
+        return overlayTarget != null && mOverlayIsStatic;
     }
 
     @Override
@@ -453,7 +465,7 @@ public class PackageInfo implements Parcelable {
         dest.writeString(requiredAccountType);
         dest.writeString(overlayTarget);
         dest.writeInt(overlayPriority);
-        dest.writeInt(mOverlayFlags);
+        dest.writeBoolean(mOverlayIsStatic);
         dest.writeInt(compileSdkVersion);
         dest.writeString(compileSdkVersionCodename);
     }
@@ -508,7 +520,7 @@ public class PackageInfo implements Parcelable {
         requiredAccountType = source.readString();
         overlayTarget = source.readString();
         overlayPriority = source.readInt();
-        mOverlayFlags = source.readInt();
+        mOverlayIsStatic = source.readBoolean();
         compileSdkVersion = source.readInt();
         compileSdkVersionCodename = source.readString();
 

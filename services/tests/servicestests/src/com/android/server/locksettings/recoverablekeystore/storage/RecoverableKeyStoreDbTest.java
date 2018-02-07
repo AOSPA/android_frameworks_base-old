@@ -28,8 +28,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import android.content.Context;
-import android.content.SharedPreferences;
-import android.security.keystore.RecoveryManager;
+import android.security.keystore.RecoveryController;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -283,7 +282,7 @@ public class RecoverableKeyStoreDbTest {
 
         Map<String, Integer> statuses = mRecoverableKeyStoreDb.getStatusForAllKeys(uid);
         assertThat(statuses).hasSize(3);
-        assertThat(statuses).containsEntry(alias, RecoveryManager.RECOVERY_STATUS_SYNC_IN_PROGRESS);
+        assertThat(statuses).containsEntry(alias, RecoveryController.RECOVERY_STATUS_SYNC_IN_PROGRESS);
         assertThat(statuses).containsEntry(alias2, status);
         assertThat(statuses).containsEntry(alias3, status);
 
@@ -314,6 +313,29 @@ public class RecoverableKeyStoreDbTest {
         int uid = 1009;
         Map<String, Integer> statuses = mRecoverableKeyStoreDb.getStatusForAllKeys(uid);
         assertThat(statuses).hasSize(0);
+    }
+
+    public void testInvalidateKeysWithOldGenerationId_withSingleKey() {
+        int userId = 12;
+        int uid = 1009;
+        int generationId = 6;
+        int status = 120;
+        int status2 = 121;
+        String alias = "test";
+        byte[] nonce = getUtf8Bytes("nonce");
+        byte[] keyMaterial = getUtf8Bytes("keymaterial");
+        WrappedKey wrappedKey = new WrappedKey(nonce, keyMaterial, generationId, status);
+        mRecoverableKeyStoreDb.insertKey(userId, uid, alias, wrappedKey);
+
+        WrappedKey retrievedKey = mRecoverableKeyStoreDb.getKey(uid, alias);
+        assertThat(retrievedKey.getRecoveryStatus()).isEqualTo(status);
+
+        mRecoverableKeyStoreDb.setRecoveryStatus(uid, alias, status2);
+        mRecoverableKeyStoreDb.invalidateKeysWithOldGenerationId(userId, generationId + 1);
+
+        retrievedKey = mRecoverableKeyStoreDb.getKey(uid, alias);
+        assertThat(retrievedKey.getRecoveryStatus())
+                .isEqualTo(RecoveryController.RECOVERY_STATUS_PERMANENT_FAILURE);
     }
 
     @Test

@@ -851,6 +851,8 @@ public final class Settings {
                 pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_OEM;
         pkgSetting.pkgPrivateFlags |=
                 pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_VENDOR;
+        pkgSetting.pkgPrivateFlags |=
+                pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_PRODUCT;
         pkgSetting.primaryCpuAbiString = primaryCpuAbi;
         pkgSetting.secondaryCpuAbiString = secondaryCpuAbi;
         if (childPkgNames != null) {
@@ -920,13 +922,13 @@ public final class Settings {
     // by that time.
     void insertPackageSettingLPw(PackageSetting p, PackageParser.Package pkg) {
         // Update signatures if needed.
-        if (p.signatures.mSignatures == null) {
-            p.signatures.assignSignatures(pkg.mSigningDetails);
+        if (p.signatures.mSigningDetails.signatures == null) {
+            p.signatures.mSigningDetails = pkg.mSigningDetails;
         }
         // If this app defines a shared user id initialize
         // the shared user signatures as well.
-        if (p.sharedUser != null && p.sharedUser.signatures.mSignatures == null) {
-            p.sharedUser.signatures.assignSignatures(pkg.mSigningDetails);
+        if (p.sharedUser != null && p.sharedUser.signatures.mSigningDetails.signatures == null) {
+            p.sharedUser.signatures.mSigningDetails = pkg.mSigningDetails;
         }
         addPackageSettingLPw(p, p.sharedUser);
     }
@@ -1994,6 +1996,8 @@ public final class Settings {
         if (DEBUG_MU) {
             Log.i(TAG, "Writing package restrictions for user=" + userId);
         }
+        final long startTime = SystemClock.uptimeMillis();
+
         // Keep the old stopped packages around until we know the new ones have
         // been successfully written.
         File userPackagesStateFile = getUserPackagesStateFile(userId);
@@ -2126,6 +2130,9 @@ public final class Settings {
                     FileUtils.S_IRUSR|FileUtils.S_IWUSR
                     |FileUtils.S_IRGRP|FileUtils.S_IWGRP,
                     -1, -1);
+
+            com.android.internal.logging.EventLogTags.writeCommitSysConfigFile(
+                    "package-user-" + userId, SystemClock.uptimeMillis() - startTime);
 
             // Done, all is good!
             return;
@@ -2388,6 +2395,8 @@ public final class Settings {
     void writeLPr() {
         //Debug.startMethodTracing("/data/system/packageprof", 8 * 1024 * 1024);
 
+        final long startTime = SystemClock.uptimeMillis();
+
         // Keep the old settings around until we know the new ones have
         // been successfully written.
         if (mSettingsFilename.exists()) {
@@ -2533,6 +2542,8 @@ public final class Settings {
             writePackageListLPr();
             writeAllUsersPackageRestrictionsLPr();
             writeAllRuntimePermissionsLPr();
+            com.android.internal.logging.EventLogTags.writeCommitSysConfigFile(
+                    "package", SystemClock.uptimeMillis() - startTime);
             return;
 
         } catch(java.io.IOException e) {
@@ -4397,6 +4408,7 @@ public final class Settings {
             ApplicationInfo.PRIVATE_FLAG_REQUIRED_FOR_SYSTEM_USER, "REQUIRED_FOR_SYSTEM_USER",
             ApplicationInfo.PRIVATE_FLAG_STATIC_SHARED_LIBRARY, "STATIC_SHARED_LIBRARY",
             ApplicationInfo.PRIVATE_FLAG_VENDOR, "VENDOR",
+            ApplicationInfo.PRIVATE_FLAG_PRODUCT, "PRODUCT",
             ApplicationInfo.PRIVATE_FLAG_VIRTUAL_PRELOAD, "VIRTUAL_PRELOAD",
     };
 
@@ -5131,7 +5143,8 @@ public final class Settings {
         }
 
         private void writePermissionsSync(int userId) {
-            AtomicFile destination = new AtomicFile(getUserRuntimePermissionsFile(userId));
+            AtomicFile destination = new AtomicFile(getUserRuntimePermissionsFile(userId),
+                    "package-perms-" + userId);
 
             ArrayMap<String, List<PermissionState>> permissionsForPackage = new ArrayMap<>();
             ArrayMap<String, List<PermissionState>> permissionsForSharedUser = new ArrayMap<>();

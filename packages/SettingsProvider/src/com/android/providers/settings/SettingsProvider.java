@@ -60,6 +60,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.provider.Settings;
+import android.provider.SettingsValidators;
 import android.provider.Settings.Global;
 import android.provider.Settings.Secure;
 import android.text.TextUtils;
@@ -297,6 +298,12 @@ public class SettingsProvider extends ContentProvider {
     @Override
     public boolean onCreate() {
         Settings.setInSystemServer();
+
+        // fail to boot if there're any backed up settings that don't have a non-null validator
+        ensureAllBackedUpSystemSettingsHaveValidators();
+        ensureAllBackedUpGlobalSettingsHaveValidators();
+        ensureAllBackedUpSecureSettingsHaveValidators();
+
         synchronized (mLock) {
             mUserManager = UserManager.get(getContext());
             mPackageManager = AppGlobals.getPackageManager();
@@ -312,6 +319,57 @@ public class SettingsProvider extends ContentProvider {
         });
         ServiceManager.addService("settings", new SettingsService(this));
         return true;
+    }
+
+    private void ensureAllBackedUpSystemSettingsHaveValidators() {
+        String offenders = getOffenders(concat(Settings.System.SETTINGS_TO_BACKUP,
+                Settings.System.LEGACY_RESTORE_SETTINGS), Settings.System.VALIDATORS);
+
+        failToBootIfOffendersPresent(offenders, "Settings.System");
+    }
+
+    private void ensureAllBackedUpGlobalSettingsHaveValidators() {
+        String offenders = getOffenders(concat(Settings.Global.SETTINGS_TO_BACKUP,
+                Settings.Global.LEGACY_RESTORE_SETTINGS), Settings.Global.VALIDATORS);
+
+        failToBootIfOffendersPresent(offenders, "Settings.Global");
+    }
+
+    private void ensureAllBackedUpSecureSettingsHaveValidators() {
+        String offenders = getOffenders(concat(Settings.Secure.SETTINGS_TO_BACKUP,
+                Settings.Secure.LEGACY_RESTORE_SETTINGS), Settings.Secure.VALIDATORS);
+
+        failToBootIfOffendersPresent(offenders, "Settings.Secure");
+    }
+
+    private void failToBootIfOffendersPresent(String offenders, String settingsType) {
+        if (offenders.length() > 0) {
+            throw new RuntimeException("All " + settingsType + " settings that are backed up"
+                    + " have to have a non-null validator, but those don't: " + offenders);
+        }
+    }
+
+    private String getOffenders(String[] settingsToBackup, Map<String,
+            SettingsValidators.Validator> validators) {
+        StringBuilder offenders = new StringBuilder();
+        for (String setting : settingsToBackup) {
+            if (validators.get(setting) == null) {
+                offenders.append(setting).append(" ");
+            }
+        }
+        return offenders.toString();
+    }
+
+    private final String[] concat(String[] first, String[] second) {
+        if (second == null || second.length == 0) {
+            return first;
+        }
+        final int firstLen = first.length;
+        final int secondLen = second.length;
+        String[] both = new String[firstLen + secondLen];
+        System.arraycopy(first, 0, both, 0, firstLen);
+        System.arraycopy(second, 0, both, firstLen, secondLen);
+        return both;
     }
 
     @Override
@@ -1472,7 +1530,7 @@ public class SettingsProvider extends ContentProvider {
     }
 
     private void validateSystemSettingValue(String name, String value) {
-        Settings.System.Validator validator = Settings.System.VALIDATORS.get(name);
+        SettingsValidators.Validator validator = Settings.System.VALIDATORS.get(name);
         if (validator != null && !validator.validate(value)) {
             throw new IllegalArgumentException("Invalid value: " + value
                     + " for setting: " + name);
@@ -1582,6 +1640,20 @@ public class SettingsProvider extends ContentProvider {
             case Settings.Global.SAFE_BOOT_DISALLOWED:
                 if ("1".equals(value)) return false;
                 restriction = UserManager.DISALLOW_SAFE_BOOT;
+                break;
+
+            case Settings.Global.AIRPLANE_MODE_ON:
+                if ("0".equals(value)) return false;
+                restriction = UserManager.DISALLOW_AIRPLANE_MODE;
+                break;
+
+            case Settings.Secure.DOZE_ENABLED:
+            case Settings.Secure.DOZE_ALWAYS_ON:
+            case Settings.Secure.DOZE_PULSE_ON_PICK_UP:
+            case Settings.Secure.DOZE_PULSE_ON_LONG_PRESS:
+            case Settings.Secure.DOZE_PULSE_ON_DOUBLE_TAP:
+                if ("0".equals(value)) return false;
+                restriction = UserManager.DISALLOW_AMBIENT_DISPLAY;
                 break;
 
             default:
@@ -2829,11 +2901,14 @@ public class SettingsProvider extends ContentProvider {
             for (int i = 0; i < users.size(); i++) {
                 final int userId = users.get(i).id;
 
+                // Do we have to increment the generation for users that are not running?
+                // Yeah let's assume so...
+                final int key = makeKey(SETTINGS_TYPE_SECURE, userId);
+                mGenerationRegistry.incrementGeneration(key);
+
                 if (!mUserManager.isUserRunning(UserHandle.of(userId))) {
                     continue;
                 }
-
-                final int key = makeKey(SETTINGS_TYPE_GLOBAL, userId);
                 final Uri uri = getNotificationUriFor(key, Secure.LOCATION_PROVIDERS_ALLOWED);
 
                 mHandler.obtainMessage(MyHandler.MSG_NOTIFY_URI_CHANGED,
@@ -2940,7 +3015,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 150;
+            private static final int SETTINGS_VERSION = 152;
 
             private final int mUserId;
 
@@ -3531,6 +3606,31 @@ public class SettingsProvider extends ContentProvider {
                     }
 
                     currentVersion = 150;
+                }
+
+                if (currentVersion == 150) {
+                    // Version 151: Reset rotate locked setting for upgrading users
+                    final SettingsState systemSettings = getSystemSettingsLocked(userId);
+                    systemSettings.insertSettingLocked(
+                            Settings.System.ACCELEROMETER_ROTATION,
+                            getContext().getResources().getBoolean(
+                                    R.bool.def_accelerometer_rotation) ? "1" : "0",
+                            null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+
+                    currentVersion = 151;
+                }
+
+                if (currentVersion == 151) {
+                    // Version 152: Reset wifi wake available for upgrading users
+                    final SettingsState globalSettings = getGlobalSettingsLocked();
+                    final int defaultValue = getContext().getResources().getInteger(
+                            com.android.internal.R.integer.config_wifi_wakeup_available);
+                    globalSettings.insertSettingLocked(
+                            Settings.Global.WIFI_WAKEUP_AVAILABLE,
+                            String.valueOf(defaultValue),
+                            null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+
+                    currentVersion = 152;
                 }
 
                 // vXXX: Add new settings above this point.

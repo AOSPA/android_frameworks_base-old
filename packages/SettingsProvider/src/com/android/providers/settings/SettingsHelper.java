@@ -16,6 +16,7 @@
 
 package com.android.providers.settings;
 
+import android.os.Process;
 import com.android.internal.R;
 import com.android.internal.app.LocalePicker;
 import com.android.internal.annotations.VisibleForTesting;
@@ -29,6 +30,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
+import android.hardware.display.DisplayManager;
 import android.icu.util.ULocale;
 import android.location.LocationManager;
 import android.media.AudioManager;
@@ -288,12 +290,12 @@ public class SettingsHelper {
         }
         final String GPS = LocationManager.GPS_PROVIDER;
         boolean enabled =
-                GPS.equals(value) ||
+            GPS.equals(value) ||
                 value.startsWith(GPS + ",") ||
                 value.endsWith("," + GPS) ||
                 value.contains("," + GPS + ",");
-        Settings.Secure.setLocationProviderEnabled(
-                mContext.getContentResolver(), GPS, enabled);
+        LocationManager lm = (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
+        lm.setProviderEnabledForUser(GPS, enabled, Process.myUserHandle());
     }
 
     private void setSoundEffects(boolean enable) {
@@ -305,15 +307,7 @@ public class SettingsHelper {
     }
 
     private void setBrightness(int brightness) {
-        try {
-            IPowerManager power = IPowerManager.Stub.asInterface(
-                    ServiceManager.getService("power"));
-            if (power != null) {
-                power.setTemporaryScreenBrightnessSettingOverride(brightness);
-            }
-        } catch (RemoteException doe) {
-
-        }
+        mContext.getSystemService(DisplayManager.class).setTemporaryBrightness(brightness);
     }
 
     /* package */ byte[] getLocaleData() {

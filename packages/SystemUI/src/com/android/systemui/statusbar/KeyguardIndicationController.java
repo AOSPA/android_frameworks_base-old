@@ -52,6 +52,10 @@ import com.android.systemui.statusbar.policy.UserInfoController;
 import com.android.systemui.util.wakelock.SettableWakeLock;
 import com.android.systemui.util.wakelock.WakeLock;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+import java.text.NumberFormat;
+
 /**
  * Controls the indications and error messages shown on the Keyguard
  */
@@ -87,6 +91,7 @@ public class KeyguardIndicationController {
     private boolean mPowerCharged;
     private int mChargingSpeed;
     private int mChargingWattage;
+    private int mBatteryLevel;
     private String mMessageToShowOnScreenOn;
 
     private KeyguardUpdateMonitorCallback mUpdateMonitorCallback;
@@ -113,11 +118,9 @@ public class KeyguardIndicationController {
                 WakeLock wakeLock) {
         mContext = context;
         mIndicationArea = indicationArea;
-        mTextView = (KeyguardIndicationTextView) indicationArea.findViewById(
-                R.id.keyguard_indication_text);
+        mTextView = indicationArea.findViewById(R.id.keyguard_indication_text);
         mInitialTextColor = mTextView != null ? mTextView.getCurrentTextColor() : Color.WHITE;
-        mDisclosure = (KeyguardIndicationTextView) indicationArea.findViewById(
-                R.id.keyguard_indication_enterprise_disclosure);
+        mDisclosure = indicationArea.findViewById(R.id.keyguard_indication_enterprise_disclosure);
         mLockIcon = lockIcon;
         mWakeLock = new SettableWakeLock(wakeLock);
 
@@ -285,14 +288,18 @@ public class KeyguardIndicationController {
             // Walk down a precedence-ordered list of what indication
             // should be shown based on user or device state
             if (mDozing) {
-                // If we're dozing, never show a persistent indication.
+                mTextView.setTextColor(Color.WHITE);
                 if (!TextUtils.isEmpty(mTransientIndication)) {
                     // When dozing we ignore any text color and use white instead, because
                     // colors can be hard to read in low brightness.
-                    mTextView.setTextColor(Color.WHITE);
                     mTextView.switchIndication(mTransientIndication);
+                } else if (mPowerPluggedIn) {
+                    String indication = computePowerIndication();
+                    mTextView.switchIndication(indication);
                 } else {
-                    mTextView.switchIndication(null);
+                    String percentage = NumberFormat.getPercentInstance()
+                            .format(mBatteryLevel / 100f);
+                    mTextView.switchIndication(percentage);
                 }
                 return;
             }
@@ -409,6 +416,21 @@ public class KeyguardIndicationController {
         updateDisclosure();
     }
 
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("KeyguardIndicationController:");
+        pw.println("  mTransientTextColor: " + Integer.toHexString(mTransientTextColor));
+        pw.println("  mInitialTextColor: " + Integer.toHexString(mInitialTextColor));
+        pw.println("  mPowerPluggedIn: " + mPowerPluggedIn);
+        pw.println("  mPowerCharged: " + mPowerCharged);
+        pw.println("  mChargingSpeed: " + mChargingSpeed);
+        pw.println("  mChargingWattage: " + mChargingWattage);
+        pw.println("  mMessageToShowOnScreenOn: " + mMessageToShowOnScreenOn);
+        pw.println("  mDozing: " + mDozing);
+        pw.println("  mBatteryLevel: " + mBatteryLevel);
+        pw.println("  mTextView.getText(): " + (mTextView == null ? null : mTextView.getText()));
+        pw.println("  computePowerIndication(): " + computePowerIndication());
+    }
+
     protected class BaseKeyguardCallback extends KeyguardUpdateMonitorCallback {
         public static final int HIDE_DELAY_MS = 5000;
         private int mLastSuccessiveErrorMessage = -1;
@@ -422,6 +444,7 @@ public class KeyguardIndicationController {
             mPowerCharged = status.isCharged();
             mChargingWattage = status.maxChargingWattage;
             mChargingSpeed = status.getChargingSpeed(mSlowThreshold, mFastThreshold);
+            mBatteryLevel = status.level;
             updateIndication();
             if (mDozing) {
                 if (!wasPluggedIn && mPowerPluggedIn) {

@@ -100,8 +100,8 @@ public class Trampoline extends IBackupManager.Stub {
                 BACKUP_SUPPRESS_FILENAME);
     }
 
-    protected BackupManagerServiceInterface createRefactoredBackupManagerService() {
-        return RefactoredBackupManagerService.create(mContext, this, mHandlerThread);
+    protected BackupManagerServiceInterface createBackupManagerService() {
+        return BackupManagerService.create(mContext, this, mHandlerThread);
     }
 
     // internal control API
@@ -117,7 +117,7 @@ public class Trampoline extends IBackupManager.Stub {
 
             synchronized (this) {
                 if (!mSuppressFile.exists()) {
-                    mService = createRefactoredBackupManagerService();
+                    mService = createBackupManagerService();
                 } else {
                     Slog.i(TAG, "Backup inactive in user " + whichUser);
                 }
@@ -162,7 +162,7 @@ public class Trampoline extends IBackupManager.Stub {
                     Slog.i(TAG, "Making backup "
                             + (makeActive ? "" : "in") + "active in user " + userHandle);
                     if (makeActive) {
-                        mService = createRefactoredBackupManagerService();
+                        mService = createBackupManagerService();
                         mSuppressFile.delete();
                     } else {
                         mService = null;
@@ -177,12 +177,15 @@ public class Trampoline extends IBackupManager.Stub {
         }
     }
 
+    // IBackupManager binder API
+
     /**
      * Querying activity state of backup service. Calling this method before initialize yields
      * undefined result.
      * @param userHandle The user in which the activity state of backup service is queried.
      * @return true if the service is active.
      */
+    @Override
     public boolean isBackupServiceActive(final int userHandle) {
         // TODO: http://b/22388012
         if (userHandle == UserHandle.USER_SYSTEM) {
@@ -193,7 +196,6 @@ public class Trampoline extends IBackupManager.Stub {
         return false;
     }
 
-    // IBackupManager binder API
     @Override
     public void dataChanged(String packageName) throws RemoteException {
         BackupManagerServiceInterface svc = mService;

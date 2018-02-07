@@ -36,13 +36,14 @@ using std::string;
 using android::util::ProtoOutputStream;
 
 LogEvent::LogEvent(log_msg& msg) {
-    android_log_context context =
+    mContext =
             create_android_log_parser(msg.msg() + sizeof(uint32_t), msg.len() - sizeof(uint32_t));
     mTimestampNs = msg.entry_v1.sec * NS_PER_SEC + msg.entry_v1.nsec;
     mLogUid = msg.entry_v4.uid;
-    init(context);
-    if (context) {
-        android_log_destroy(&context);
+    init(mContext);
+    if (mContext) {
+        // android_log_destroy will set mContext to NULL
+        android_log_destroy(&mContext);
     }
 }
 
@@ -64,12 +65,17 @@ void LogEvent::init() {
         mContext = create_android_log_parser(buffer, len);
         init(mContext);
         // destroy the context to save memory.
-        android_log_destroy(&mContext);
+        if (mContext) {
+            // android_log_destroy will set mContext to NULL
+            android_log_destroy(&mContext);
+        }
     }
 }
 
 LogEvent::~LogEvent() {
     if (mContext) {
+        // This is for the case when LogEvent is created using the test interface
+        // but init() isn't called.
         android_log_destroy(&mContext);
     }
 }

@@ -72,6 +72,7 @@
     <uses-permission android:name="android.permission.PEERS_MAC_ADDRESS"/>
     <!-- Physical hardware -->
     <uses-permission android:name="android.permission.MANAGE_USB" />
+    <uses-permission android:name="android.permission.CONTROL_DISPLAY_BRIGHTNESS" />
     <uses-permission android:name="android.permission.DEVICE_POWER" />
     <uses-permission android:name="android.permission.MOUNT_UNMOUNT_FILESYSTEMS" />
     <uses-permission android:name="android.permission.MASTER_CLEAR" />
@@ -121,7 +122,7 @@
     <uses-permission android:name="android.permission.TRUST_LISTENER" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-permission android:name="android.permission.RESET_FINGERPRINT_LOCKOUT" />
-    <uses-permission android:name="android.permission.BIND_SLICE" />
+    <uses-permission android:name="android.permission.MANAGE_SLICE_PERMISSIONS" />
 
     <!-- Needed for WallpaperManager.clear in ImageWallpaper.updateWallpaperLocked -->
     <uses-permission android:name="android.permission.SET_WALLPAPER"/>
@@ -197,6 +198,9 @@
 
     <!-- to access instant apps -->
     <uses-permission android:name="android.permission.ACCESS_INSTANT_APPS" />
+
+    <!-- to control remote app transitions -->
+    <uses-permission android:name="android.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS" />
 
     <!-- to change themes - light or dark -->
     <uses-permission android:name="android.permission.CHANGE_OVERLAY_PACKAGES" />
@@ -323,7 +327,7 @@
         </activity>
 
         <!-- Springboard for launching the share activity -->
-        <receiver android:name=".screenshot.GlobalScreenshot$ShareReceiver"
+        <receiver android:name=".screenshot.GlobalScreenshot$ScreenshotActionReceiver"
             android:process=":screenshot"
             android:exported="false" />
 
@@ -434,6 +438,16 @@
             android:taskAffinity=""
             android:launchMode="singleTop"
             androidprv:alwaysFocusable="true" />
+
+        <!-- started from SliceProvider -->
+        <activity android:name=".SlicePermissionActivity"
+            android:theme="@style/Theme.SystemUI.Dialog.Alert"
+            android:finishOnCloseSystemDialogs="true"
+            android:excludeFromRecents="true">
+            <intent-filter>
+                <action android:name="android.intent.action.REQUEST_SLICE_PERMISSION" />
+            </intent-filter>
+        </activity>
 
         <!-- platform logo easter egg activity -->
         <activity
@@ -572,6 +586,7 @@
 
         <provider android:name=".keyguard.KeyguardSliceProvider"
                   android:authorities="com.android.systemui.keyguard"
+                  android:grantUriPermissions="true"
                   android:exported="true">
         </provider>
 

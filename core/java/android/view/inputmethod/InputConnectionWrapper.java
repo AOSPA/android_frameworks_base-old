@@ -1,23 +1,25 @@
 /*
- * Copyright (C) 2007-2008 The Android Open Source Project
- * 
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not
- * use this file except in compliance with the License. You may obtain a copy of
- * the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
+ * Copyright (C) 2007 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
  * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
- * License for the specific language governing permissions and limitations under
- * the License.
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package android.view.inputmethod;
 
+import android.annotation.NonNull;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.LocaleList;
 import android.view.KeyEvent;
 
 /**
@@ -74,6 +76,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public CharSequence getTextBeforeCursor(int n, int flags) {
         return mTarget.getTextBeforeCursor(n, flags);
     }
@@ -82,6 +85,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public CharSequence getTextAfterCursor(int n, int flags) {
         return mTarget.getTextAfterCursor(n, flags);
     }
@@ -90,6 +94,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public CharSequence getSelectedText(int flags) {
         return mTarget.getSelectedText(flags);
     }
@@ -98,6 +103,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public int getCursorCapsMode(int reqModes) {
         return mTarget.getCursorCapsMode(reqModes);
     }
@@ -106,6 +112,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public ExtractedText getExtractedText(ExtractedTextRequest request, int flags) {
         return mTarget.getExtractedText(request, flags);
     }
@@ -114,6 +121,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean deleteSurroundingTextInCodePoints(int beforeLength, int afterLength) {
         return mTarget.deleteSurroundingTextInCodePoints(beforeLength, afterLength);
     }
@@ -122,6 +130,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean deleteSurroundingText(int beforeLength, int afterLength) {
         return mTarget.deleteSurroundingText(beforeLength, afterLength);
     }
@@ -130,6 +139,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean setComposingText(CharSequence text, int newCursorPosition) {
         return mTarget.setComposingText(text, newCursorPosition);
     }
@@ -138,6 +148,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean setComposingRegion(int start, int end) {
         return mTarget.setComposingRegion(start, end);
     }
@@ -146,6 +157,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean finishComposingText() {
         return mTarget.finishComposingText();
     }
@@ -154,6 +166,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean commitText(CharSequence text, int newCursorPosition) {
         return mTarget.commitText(text, newCursorPosition);
     }
@@ -162,6 +175,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean commitCompletion(CompletionInfo text) {
         return mTarget.commitCompletion(text);
     }
@@ -170,6 +184,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean commitCorrection(CorrectionInfo correctionInfo) {
         return mTarget.commitCorrection(correctionInfo);
     }
@@ -178,6 +193,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean setSelection(int start, int end) {
         return mTarget.setSelection(start, end);
     }
@@ -186,6 +202,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean performEditorAction(int editorAction) {
         return mTarget.performEditorAction(editorAction);
     }
@@ -194,6 +211,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean performContextMenuAction(int id) {
         return mTarget.performContextMenuAction(id);
     }
@@ -202,6 +220,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean beginBatchEdit() {
         return mTarget.beginBatchEdit();
     }
@@ -210,6 +229,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean endBatchEdit() {
         return mTarget.endBatchEdit();
     }
@@ -218,6 +238,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean sendKeyEvent(KeyEvent event) {
         return mTarget.sendKeyEvent(event);
     }
@@ -226,6 +247,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean clearMetaKeyStates(int states) {
         return mTarget.clearMetaKeyStates(states);
     }
@@ -234,6 +256,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean reportFullscreenMode(boolean enabled) {
         return mTarget.reportFullscreenMode(enabled);
     }
@@ -242,6 +265,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean performPrivateCommand(String action, Bundle data) {
         return mTarget.performPrivateCommand(action, data);
     }
@@ -250,6 +274,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean requestCursorUpdates(int cursorUpdateMode) {
         return mTarget.requestCursorUpdates(cursorUpdateMode);
     }
@@ -258,6 +283,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public Handler getHandler() {
         return mTarget.getHandler();
     }
@@ -266,6 +292,7 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public void closeConnection() {
         mTarget.closeConnection();
     }
@@ -274,7 +301,17 @@ public class InputConnectionWrapper implements InputConnection {
      * {@inheritDoc}
      * @throws NullPointerException if the target is {@code null}.
      */
+    @Override
     public boolean commitContent(InputContentInfo inputContentInfo, int flags, Bundle opts) {
         return mTarget.commitContent(inputContentInfo, flags, opts);
+    }
+
+    /**
+     * {@inheritDoc}
+     * @throws NullPointerException if the target is {@code null}.
+     */
+    @Override
+    public void reportLanguageHint(@NonNull LocaleList languageHint) {
+        mTarget.reportLanguageHint(languageHint);
     }
 }

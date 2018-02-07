@@ -15,8 +15,9 @@
  */
 package com.android.systemui.statusbar;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
+import static android.service.notification.NotificationListenerService.Ranking
+        .USER_SENTIMENT_NEGATIVE;
+
 import android.app.INotificationManager;
 import android.app.NotificationChannel;
 import android.content.Context;
@@ -32,21 +33,17 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
-import android.view.ViewAnimationUtils;
 import android.view.accessibility.AccessibilityManager;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
-import com.android.systemui.Interpolators;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.stack.StackStateAnimator;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -112,6 +109,11 @@ public class NotificationGutsManager implements Dumpable {
         mKeyToRemoveOnGutsClosed = keyToRemoveOnGutsClosed;
     }
 
+    public void onDensityOrFontScaleChanged(ExpandableNotificationRow row) {
+        setExposedGuts(row.getGuts());
+        bindGuts(row);
+    }
+
     private void saveAndCloseNotificationMenu(
             ExpandableNotificationRow row, NotificationGuts guts, View done) {
         guts.resetFalsingCheck();
@@ -133,14 +135,14 @@ public class NotificationGutsManager implements Dumpable {
      * channel.
      */
     private void startAppNotificationSettingsActivity(String packageName, final int appUid,
-            final NotificationChannel channel) {
+            final NotificationChannel channel, ExpandableNotificationRow row) {
         final Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
         intent.putExtra(Settings.EXTRA_APP_PACKAGE, packageName);
         intent.putExtra(Settings.EXTRA_APP_UID, appUid);
         if (channel != null) {
             intent.putExtra(EXTRA_FRAGMENT_ARG_KEY, channel.getId());
         }
-        mPresenter.startNotificationGutsIntent(intent, appUid);
+        mPresenter.startNotificationGutsIntent(intent, appUid, row);
     }
 
     public void bindGuts(final ExpandableNotificationRow row) {
@@ -198,14 +200,14 @@ public class NotificationGutsManager implements Dumpable {
                     mMetricsLogger.action(MetricsProto.MetricsEvent.ACTION_NOTE_INFO);
                     guts.resetFalsingCheck();
                     mOnSettingsClickListener.onClick(sbn.getKey());
-                    startAppNotificationSettingsActivity(pkg, appUid, channel);
+                    startAppNotificationSettingsActivity(pkg, appUid, channel, row);
                 };
             }
             final NotificationInfo.OnAppSettingsClickListener onAppSettingsClick = (View v,
                     Intent intent) -> {
                 mMetricsLogger.action(MetricsProto.MetricsEvent.ACTION_APP_NOTE_SETTINGS);
                 guts.resetFalsingCheck();
-                mPresenter.startNotificationGutsIntent(intent, sbn.getUid());
+                mPresenter.startNotificationGutsIntent(intent, sbn.getUid(), row);
             };
             final View.OnClickListener onDoneClick = (View v) -> {
                 saveAndCloseNotificationMenu(row, guts, v);
@@ -231,7 +233,8 @@ public class NotificationGutsManager implements Dumpable {
             try {
                 info.bindNotification(pmUser, iNotificationManager, pkg, row.getEntry().channel,
                         channels.size(), sbn, mCheckSaveListener, onSettingsClick,
-                        onAppSettingsClick, mNonBlockablePkgs);
+                        onAppSettingsClick, mNonBlockablePkgs,
+                        row.getEntry().userSentiment == USER_SENTIMENT_NEGATIVE);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -270,7 +273,7 @@ public class NotificationGutsManager implements Dumpable {
     }
 
     /**
-     *  Opens guts on the given ExpandableNotificationRow |v|.
+     * Opens guts on the given ExpandableNotificationRow |v|.
      *
      * @param v ExpandableNotificationRow to open guts on
      * @param x x coordinate of origin of circular reveal
@@ -326,26 +329,15 @@ public class NotificationGutsManager implements Dumpable {
                         true /* removeControls */, -1 /* x */, -1 /* y */,
                         false /* resetMenu */);
                 guts.setVisibility(View.VISIBLE);
-                final double horz = Math.max(guts.getWidth() - x, x);
-                final double vert = Math.max(guts.getHeight() - y, y);
-                final float r = (float) Math.hypot(horz, vert);
-                final Animator a
-                        = ViewAnimationUtils.createCircularReveal(guts, x, y, 0, r);
-                a.setDuration(StackStateAnimator.ANIMATION_DURATION_STANDARD);
-                a.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN);
-                a.addListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        super.onAnimationEnd(animation);
-                        // Move the notification view back over the menu
-                        row.resetTranslation();
-                    }
-                });
-                a.start();
+
                 final boolean needsFalsingProtection =
                         (mPresenter.isPresenterLocked() &&
                                 !mAccessibilityManager.isTouchExplorationEnabled());
-                guts.setExposed(true /* exposed */, needsFalsingProtection);
+                guts.openControls(x, y, needsFalsingProtection, () -> {
+                    // Move the notification view back over the menu
+                    row.resetTranslation();
+                });
+
                 row.closeRemoteInput();
                 mListContainer.onHeightChanged(row, true /* needsAnimation */);
                 mNotificationGutsExposed = guts;

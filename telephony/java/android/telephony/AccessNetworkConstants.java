@@ -16,17 +16,32 @@
 
 package android.telephony;
 
+import android.annotation.SystemApi;
+
 /**
  * Contains access network related constants.
  */
 public final class AccessNetworkConstants {
 
     public static final class AccessNetworkType {
+        public static final int UNKNOWN = 0;
         public static final int GERAN = 1;
         public static final int UTRAN = 2;
         public static final int EUTRAN = 3;
         public static final int CDMA2000 = 4;
         public static final int IWLAN = 5;
+    }
+
+    /**
+     * Wireless transportation type
+     * @hide
+     */
+    @SystemApi
+    public static final class TransportType {
+        /** Wireless Wide Area Networks (i.e. Cellular) */
+        public static final int WWAN = 1;
+        /** Wireless Local Area Networks (i.e. Wifi) */
+        public static final int WLAN = 2;
     }
 
     /**

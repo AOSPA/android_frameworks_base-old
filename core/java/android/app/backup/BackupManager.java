@@ -27,6 +27,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.UserHandle;
 import android.util.Log;
 import android.util.Pair;
 
@@ -251,6 +252,8 @@ public class BackupManager {
     }
 
     /**
+     * @deprecated Since Android P app can no longer request restoring of its backup.
+     *
      * Restore the calling application from backup.  The data will be restored from the
      * current backup dataset if the application has stored data there, or from
      * the dataset used during the last full device setup operation if the current
@@ -268,6 +271,7 @@ public class BackupManager {
      *
      * @return Zero on success; nonzero on error.
      */
+    @Deprecated
     public int requestRestore(RestoreObserver observer) {
         return requestRestore(observer, null);
     }
@@ -275,6 +279,8 @@ public class BackupManager {
     // system APIs start here
 
     /**
+     * @deprecated Since Android P app can no longer request restoring of its backup.
+     *
      * Restore the calling application from backup.  The data will be restored from the
      * current backup dataset if the application has stored data there, or from
      * the dataset used during the last full device setup operation if the current
@@ -297,28 +303,12 @@ public class BackupManager {
      *
      * @hide
      */
+    @Deprecated
     @SystemApi
     public int requestRestore(RestoreObserver observer, BackupManagerMonitor monitor) {
-        int result = -1;
-        checkServiceBinder();
-        if (sService != null) {
-            RestoreSession session = null;
-            try {
-                IRestoreSession binder = sService.beginRestoreSession(mContext.getPackageName(),
-                    null);
-                if (binder != null) {
-                    session = new RestoreSession(mContext, binder);
-                    result = session.restorePackage(mContext.getPackageName(), observer, monitor);
-                }
-            } catch (RemoteException e) {
-                Log.e(TAG, "restoreSelf() unable to contact service");
-            } finally {
-                if (session != null) {
-                    session.endRestoreSession();
-                }
-            }
-        }
-        return result;
+        Log.w(TAG, "requestRestore(): Since Android P app can no longer request restoring"
+                + " of its backup.");
+        return -1;
     }
 
     /**
@@ -379,6 +369,29 @@ public class BackupManager {
         if (sService != null) {
             try {
                 return sService.isBackupEnabled();
+            } catch (RemoteException e) {
+                Log.e(TAG, "isBackupEnabled() couldn't connect");
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Report whether the backup mechanism is currently active.
+     * When it is inactive, the device will not perform any backup operations, nor will it
+     * deliver data for restore, although clients can still safely call BackupManager methods.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.BACKUP)
+    public boolean isBackupServiceActive(UserHandle user) {
+        mContext.enforceCallingPermission(android.Manifest.permission.BACKUP,
+                "isBackupServiceActive");
+        checkServiceBinder();
+        if (sService != null) {
+            try {
+                return sService.isBackupServiceActive(user.getIdentifier());
             } catch (RemoteException e) {
                 Log.e(TAG, "isBackupEnabled() couldn't connect");
             }

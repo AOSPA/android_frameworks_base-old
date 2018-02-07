@@ -31,6 +31,7 @@ import android.os.Handler;
 import android.view.Surface;
 
 import java.util.List;
+import java.util.Set;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
@@ -183,7 +184,9 @@ public abstract class CameraDevice implements AutoCloseable {
           TEMPLATE_RECORD,
           TEMPLATE_VIDEO_SNAPSHOT,
           TEMPLATE_ZERO_SHUTTER_LAG,
-          TEMPLATE_MANUAL })
+          TEMPLATE_MANUAL,
+          TEMPLATE_MOTION_TRACKING_PREVIEW,
+          TEMPLATE_MOTION_TRACKING_BEST})
      public @interface RequestTemplate {};
 
     /**
@@ -424,14 +427,17 @@ public abstract class CameraDevice implements AutoCloseable {
      * {@link CameraMetadata#INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED LIMITED} devices. The
      * {@code FULL FOV 640} entry means that the device will support a resolution that's 640 pixels
      * wide, with the height set so that the resolution aspect ratio matches the MAXIMUM output
-     * aspect ratio.  So for a device with a 4:3 image sensor, this will be 640x480, and for a
-     * device with a 16:9 sensor, this will be 640x360, and so on.
+     * aspect ratio, rounded down.  So for a device with a 4:3 image sensor, this will be 640x480,
+     * and for a device with a 16:9 sensor, this will be 640x360, and so on. And the
+     * {@code MAX 30FPS} entry means the largest JPEG resolution on the device for which
+     * {@link android.hardware.camera2.params.StreamConfigurationMap#getOutputMinFrameDuration}
+     * returns a value less than or equal to 1/30s.
      *
      * <table>
      * <tr><th colspan="7">MOTION_TRACKING-capability additional guaranteed configurations</th></tr>
      * <tr><th colspan="2" id="rb">Target 1</th><th colspan="2" id="rb">Target 2</th><th colspan="2" id="rb">Target 3</th><th rowspan="2">Sample use case(s)</th> </tr>
      * <tr><th>Type</th><th id="rb">Max size</th><th>Type</th><th id="rb">Max size</th><th>Type</th><th id="rb">Max size</th></tr>
-     * <tr> <td>{@code PRIV}</td><td id="rb">{@code PREVIEW}</td> <td>{@code YUV }</td><td id="rb">{@code FULL FOV 640}</td> <td>{@code YUV }</td><td id="rb">{@code MAXIMUM}</td> <td>Live preview with a tracking YUV output and a maximum-resolution YUV for still captures.</td> </tr>
+     * <tr> <td>{@code YUV}</td><td id="rb">{@code PREVIEW}</td> <td>{@code YUV }</td><td id="rb">{@code FULL FOV 640}</td> <td>{@code JPEG}</td><td id="rb">{@code MAX 30FPS}</td> <td>Preview with a tracking YUV output and a as-large-as-possible JPEG for still captures.</td> </tr>
      * </table><br>
      * </p>
      *
@@ -899,16 +905,51 @@ public abstract class CameraDevice implements AutoCloseable {
      * @throws CameraAccessException if the camera device is no longer connected or has
      *                               encountered a fatal error
      * @throws IllegalStateException if the camera device has been closed
+     */
+    @NonNull
+    public abstract CaptureRequest.Builder createCaptureRequest(@RequestTemplate int templateType)
+            throws CameraAccessException;
+
+    /**
+     * <p>Create a {@link CaptureRequest.Builder} for new capture requests,
+     * initialized with template for a target use case. This methods allows
+     * clients to pass physical camera ids which can be used to customize the
+     * request for a specific physical camera. The settings are chosen
+     * to be the best options for the specific logical camera device. If
+     * additional physical camera ids are passed, then they will also use the
+     * same settings template. Requests containing individual physical camera
+     * settings can be passed only to {@link CameraCaptureSession#capture} or
+     * {@link CameraCaptureSession#captureBurst} and not to
+     * {@link CameraCaptureSession#setRepeatingRequest} or
+     * {@link CameraCaptureSession#setRepeatingBurst}</p>
+     *
+     * @param templateType An enumeration selecting the use case for this request. Not all template
+     * types are supported on every device. See the documentation for each template type for
+     * details.
+     * @param physicalCameraIdSet A set of physical camera ids that can be used to customize
+     *                            the request for a specific physical camera.
+     * @return a builder for a capture request, initialized with default
+     * settings for that template, and no output streams
+     *
+     * @throws IllegalArgumentException if the templateType is not supported by
+     * this device, or one of the physical id arguments matches with logical camera id.
+     * @throws CameraAccessException if the camera device is no longer connected or has
+     *                               encountered a fatal error
+     * @throws IllegalStateException if the camera device has been closed
      *
      * @see #TEMPLATE_PREVIEW
      * @see #TEMPLATE_RECORD
      * @see #TEMPLATE_STILL_CAPTURE
      * @see #TEMPLATE_VIDEO_SNAPSHOT
      * @see #TEMPLATE_MANUAL
+     * @see CaptureRequest.Builder#setKey
+     * @see CaptureRequest.Builder#getKey
      */
     @NonNull
-    public abstract CaptureRequest.Builder createCaptureRequest(@RequestTemplate int templateType)
-            throws CameraAccessException;
+    public CaptureRequest.Builder createCaptureRequest(@RequestTemplate int templateType,
+            Set<String> physicalCameraIdSet) throws CameraAccessException {
+        throw new UnsupportedOperationException("Subclasses must override this method");
+    }
 
     /**
      * <p>Create a {@link CaptureRequest.Builder} for a new reprocess {@link CaptureRequest} from a

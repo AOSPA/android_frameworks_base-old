@@ -24,11 +24,20 @@ import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.ERROR_INCOMP
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.ERROR_NO_CHANNEL;
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.ERROR_TETHERING_DISALLOWED;
 import static android.net.wifi.WifiManager.LocalOnlyHotspotCallback.REQUEST_REGISTERED;
+import static android.net.wifi.WifiManager.SAP_START_FAILURE_GENERAL;
+import static android.net.wifi.WifiManager.SAP_START_FAILURE_NO_CHANNEL;
+import static android.net.wifi.WifiManager.WIFI_AP_STATE_DISABLED;
+import static android.net.wifi.WifiManager.WIFI_AP_STATE_DISABLING;
+import static android.net.wifi.WifiManager.WIFI_AP_STATE_ENABLED;
+import static android.net.wifi.WifiManager.WIFI_AP_STATE_ENABLING;
+import static android.net.wifi.WifiManager.WIFI_AP_STATE_FAILED;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.*;
 
 import android.content.Context;
@@ -37,12 +46,13 @@ import android.net.wifi.WifiManager.LocalOnlyHotspotCallback;
 import android.net.wifi.WifiManager.LocalOnlyHotspotObserver;
 import android.net.wifi.WifiManager.LocalOnlyHotspotReservation;
 import android.net.wifi.WifiManager.LocalOnlyHotspotSubscription;
+import android.net.wifi.WifiManager.SoftApCallback;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
 import android.os.Messenger;
 import android.os.test.TestLooper;
-import android.test.suitebuilder.annotation.SmallTest;
+import android.support.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -66,6 +76,7 @@ public class WifiManagerTest {
     @Mock ApplicationInfo mApplicationInfo;
     @Mock WifiConfiguration mApConfig;
     @Mock IBinder mAppBinder;
+    @Mock SoftApCallback mSoftApCallback;
 
     private Handler mHandler;
     private TestLooper mLooper;
@@ -632,6 +643,149 @@ public class WifiManagerTest {
     }
 
     /**
+     * Verify an IllegalArgumentException is thrown if callback is not provided.
+     */
+    @Test
+    public void registerSoftApCallbackThrowsIllegalArgumentExceptionOnNullArgumentForCallback() {
+        try {
+            mWifiManager.registerSoftApCallback(null, mHandler);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    /**
+     * Verify an IllegalArgumentException is thrown if callback is not provided.
+     */
+    @Test
+    public void unregisterSoftApCallbackThrowsIllegalArgumentExceptionOnNullArgumentForCallback() {
+        try {
+            mWifiManager.unregisterSoftApCallback(null);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+        }
+    }
+
+    /**
+     * Verify main looper is used when handler is not provided.
+     */
+    @Test
+    public void registerSoftApCallbackUsesMainLooperOnNullArgumentForHandler() {
+        when(mContext.getMainLooper()).thenReturn(mLooper.getLooper());
+        mWifiManager.registerSoftApCallback(mSoftApCallback, null);
+        verify(mContext).getMainLooper();
+    }
+
+    /**
+     * Verify the call to registerSoftApCallback goes to WifiServiceImpl.
+     */
+    @Test
+    public void registerSoftApCallbackCallGoesToWifiServiceImpl() throws Exception {
+        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        verify(mWifiService).registerSoftApCallback(any(IBinder.class),
+                any(ISoftApCallback.Stub.class), anyInt());
+    }
+
+    /**
+     * Verify the call to unregisterSoftApCallback goes to WifiServiceImpl.
+     */
+    @Test
+    public void unregisterSoftApCallbackCallGoesToWifiServiceImpl() throws Exception {
+        ArgumentCaptor<Integer> callbackIdentifier = ArgumentCaptor.forClass(Integer.class);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        verify(mWifiService).registerSoftApCallback(any(IBinder.class),
+                any(ISoftApCallback.Stub.class), callbackIdentifier.capture());
+
+        mWifiManager.unregisterSoftApCallback(mSoftApCallback);
+        verify(mWifiService).unregisterSoftApCallback(eq((int) callbackIdentifier.getValue()));
+    }
+
+    /*
+     * Verify client provided callback is being called through callback proxy
+     */
+    @Test
+    public void softApCallbackProxyCallsOnStateChanged() throws Exception {
+        ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
+                anyInt());
+
+        callbackCaptor.getValue().onStateChanged(WIFI_AP_STATE_ENABLED, 0);
+        mLooper.dispatchAll();
+        verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_ENABLED, 0);
+    }
+
+    /*
+     * Verify client provided callback is being called through callback proxy
+     */
+    @Test
+    public void softApCallbackProxyCallsOnNumClientsChanged() throws Exception {
+        ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
+                anyInt());
+
+        final int testNumClients = 3;
+        callbackCaptor.getValue().onNumClientsChanged(testNumClients);
+        mLooper.dispatchAll();
+        verify(mSoftApCallback).onNumClientsChanged(testNumClients);
+    }
+
+    /*
+     * Verify client provided callback is being called through callback proxy on multiple events
+     */
+    @Test
+    public void softApCallbackProxyCallsOnMultipleUpdates() throws Exception {
+        ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
+        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
+                anyInt());
+
+        final int testNumClients = 5;
+        callbackCaptor.getValue().onStateChanged(WIFI_AP_STATE_ENABLING, 0);
+        callbackCaptor.getValue().onNumClientsChanged(testNumClients);
+        callbackCaptor.getValue().onStateChanged(WIFI_AP_STATE_FAILED, SAP_START_FAILURE_GENERAL);
+
+        mLooper.dispatchAll();
+        verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_ENABLING, 0);
+        verify(mSoftApCallback).onNumClientsChanged(testNumClients);
+        verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_FAILED, SAP_START_FAILURE_GENERAL);
+    }
+
+    /*
+     * Verify client provided callback is being called on the correct thread
+     */
+    @Test
+    public void softApCallbackIsCalledOnCorrectThread() throws Exception {
+        ArgumentCaptor<ISoftApCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(ISoftApCallback.Stub.class);
+        TestLooper altLooper = new TestLooper();
+        Handler altHandler = new Handler(altLooper.getLooper());
+        mWifiManager.registerSoftApCallback(mSoftApCallback, altHandler);
+        verify(mWifiService).registerSoftApCallback(any(IBinder.class), callbackCaptor.capture(),
+                anyInt());
+
+        callbackCaptor.getValue().onStateChanged(WIFI_AP_STATE_ENABLED, 0);
+        altLooper.dispatchAll();
+        verify(mSoftApCallback).onStateChanged(WIFI_AP_STATE_ENABLED, 0);
+    }
+
+    /**
+     * Verify that the handler provided by the caller is used for registering soft AP callback.
+     */
+    @Test
+    public void testCorrectLooperIsUsedForSoftApCallbackHandler() throws Exception {
+        mWifiManager.registerSoftApCallback(mSoftApCallback, mHandler);
+        mLooper.dispatchAll();
+        verify(mWifiService).registerSoftApCallback(any(IBinder.class),
+                any(ISoftApCallback.Stub.class), anyInt());
+        verify(mContext, never()).getMainLooper();
+    }
+
+    /**
      * Verify that the handler provided by the caller is used for the observer.
      */
     @Test
@@ -797,4 +951,86 @@ public class WifiManagerTest {
         doThrow(new SecurityException()).when(mWifiService).setCountryCode(anyString());
         mWifiManager.setCountryCode(TEST_COUNTRY_CODE);
     }
+
+    /**
+     * Test that calls to get the current WPS config token return null and do not have any
+     * interactions with WifiServiceImpl.
+     */
+    @Test
+    public void testGetCurrentNetworkWpsNfcConfigurationTokenReturnsNull() {
+        assertNull(mWifiManager.getCurrentNetworkWpsNfcConfigurationToken());
+        verifyNoMoreInteractions(mWifiService);
+    }
+
+
+    class WpsCallbackTester extends WifiManager.WpsCallback {
+        public boolean mStarted = false;
+        public boolean mSucceeded = false;
+        public boolean mFailed = false;
+        public int mFailureCode = -1;
+
+        @Override
+        public void onStarted(String pin) {
+            mStarted = true;
+        }
+
+        @Override
+        public void onSucceeded() {
+            mSucceeded = true;
+        }
+
+        @Override
+        public void onFailed(int reason) {
+            mFailed = true;
+            mFailureCode = reason;
+        }
+
+    }
+
+    /**
+     * Verify that a call to start WPS immediately returns a failure.
+     */
+    @Test
+    public void testStartWpsImmediatelyFailsWithCallback() {
+        WpsCallbackTester wpsCallback = new WpsCallbackTester();
+        mWifiManager.startWps(null, wpsCallback);
+        assertTrue(wpsCallback.mFailed);
+        assertEquals(WifiManager.ERROR, wpsCallback.mFailureCode);
+        assertFalse(wpsCallback.mStarted);
+        assertFalse(wpsCallback.mSucceeded);
+        verifyNoMoreInteractions(mWifiService);
+    }
+
+    /**
+     * Verify that a call to start WPS does not go to WifiServiceImpl if we do not have a callback.
+     */
+    @Test
+    public void testStartWpsDoesNotCallWifiServiceImpl() {
+        mWifiManager.startWps(null, null);
+        verifyNoMoreInteractions(mWifiService);
+    }
+
+   /**
+i     * Verify that a call to cancel WPS immediately returns a failure.
+     */
+    @Test
+    public void testCancelWpsImmediatelyFailsWithCallback() {
+        WpsCallbackTester wpsCallback = new WpsCallbackTester();
+        mWifiManager.cancelWps(wpsCallback);
+        assertTrue(wpsCallback.mFailed);
+        assertEquals(WifiManager.ERROR, wpsCallback.mFailureCode);
+        assertFalse(wpsCallback.mStarted);
+        assertFalse(wpsCallback.mSucceeded);
+        verifyNoMoreInteractions(mWifiService);
+    }
+
+    /**
+     * Verify that a call to cancel WPS does not go to WifiServiceImpl if we do not have a callback.
+     */
+    @Test
+    public void testCancelWpsDoesNotCallWifiServiceImpl() {
+        mWifiManager.cancelWps(null);
+        verifyNoMoreInteractions(mWifiService);
+    }
+
 }

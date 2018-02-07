@@ -1897,6 +1897,7 @@
         <enum name="KEYCODE_SYSTEM_NAVIGATION_LEFT" value="282" />
         <enum name="KEYCODE_SYSTEM_NAVIGATION_RIGHT" value="283" />
         <enum name="KEYCODE_ALL_APPS" value="284" />
+        <enum name="KEYCODE_REFRESH" value="285" />
     </attr>
 
     <!-- ***************************************************************** -->
@@ -2066,7 +2067,8 @@
              <p>For this to take effect, the window must be drawing the system bar backgrounds with
              {@link android.R.attr#windowDrawsSystemBarBackgrounds} and the navigation bar must not
              have been requested to be translucent with
-             {@link android.R.attr#windowTranslucentNavigation}. -->
+             {@link android.R.attr#windowTranslucentNavigation}.
+             Corresponds to {@link android.view.Window#setNavigationBarDividerColor(int)}. -->
         <attr name="navigationBarDividerColor" format="color" />
 
         <!-- The duration, in milliseconds, of the window background fade duration
@@ -4739,6 +4741,15 @@
         <!-- Extra spacing between lines of text, as a multiplier. The value will not be applied
              for the last line of text.-->
         <attr name="lineSpacingMultiplier" format="float" />
+        <!-- Explicit height between lines of text. If set, this will override the values set
+             for lineSpacingExtra and lineSpacingMultiplier. -->
+        <attr name="lineHeight" format="dimension" />
+        <!-- Distance from the top of the TextView to the first text baseline. If set, this
+             overrides the value set for paddingTop. -->
+        <attr name="firstBaselineToTopHeight" format="dimension" />
+        <!-- Distance from the bottom of the TextView to the last text baseline. If set, this
+             overrides the value set for paddingBottom. -->
+        <attr name="lastBaselineToBottomHeight" format="dimension" />
         <!-- The number of times to repeat the marquee animation. Only applied if the
              TextView has marquee enabled. -->
         <attr name="marqueeRepeatLimit" format="integer">
@@ -4867,6 +4878,8 @@
             <!-- Justification by stretching word spacing. -->
             <enum name="inter_word" value = "1" />
         </attr>
+        <!-- Whether or not this view is a heading for accessibility purposes. -->
+        <attr name="accessibilityHeading" format="boolean"/>
     </declare-styleable>
     <declare-styleable name="TextViewAppearance">
         <!-- Base text color, typeface, size, and style. -->
@@ -5865,6 +5878,13 @@
         <attr name="insetBottom" format="fraction|dimension" />
     </declare-styleable>
 
+    <!-- Drawable used to draw animated images (gif) -->
+    <declare-styleable name="AnimatedImageDrawable">
+        <!-- Identifier of the image file. This attribute is mandatory.
+             It must be an image file with multiple frames, e.g. gif or webp -->
+        <attr name="src" />
+    </declare-styleable>
+
     <!-- Drawable used to draw bitmaps. -->
     <declare-styleable name="BitmapDrawable">
         <!-- Identifier of the bitmap file. This attribute is mandatory. -->
@@ -6323,6 +6343,17 @@
     <declare-styleable name="AlphaAnimation">
         <attr name="fromAlpha" format="float" />
         <attr name="toAlpha" format="float" />
+    </declare-styleable>
+
+    <declare-styleable name="ClipRectAnimation">
+        <attr name="fromLeft" format="fraction" />
+        <attr name="fromTop" format="fraction" />
+        <attr name="fromRight" format="fraction" />
+        <attr name="fromBottom" format="fraction" />
+        <attr name="toLeft" format="fraction" />
+        <attr name="toTop" format="fraction" />
+        <attr name="toRight" format="fraction" />
+        <attr name="toBottom" format="fraction" />
     </declare-styleable>
 
     <declare-styleable name="LayoutAnimation">

@@ -6,12 +6,17 @@ import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import android.app.job.JobInfo;
 import android.app.job.JobInfo.Builder;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.PackageManagerInternal;
 import android.net.NetworkRequest;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PersistableBundle;
@@ -24,6 +29,7 @@ import android.util.Pair;
 
 import com.android.internal.util.HexDump;
 import com.android.server.IoThread;
+import com.android.server.LocalServices;
 import com.android.server.job.JobStore.JobSet;
 import com.android.server.job.controllers.JobStatus;
 
@@ -41,6 +47,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Test reading and writing correctly from file.
+ *
+ * atest $ANDROID_BUILD_TOP/frameworks/base/services/tests/servicestests/src/com/android/server/job/JobStoreTest.java
  */
 @RunWith(AndroidJUnit4.class)
 public class JobStoreTest {
@@ -64,6 +72,13 @@ public class JobStoreTest {
         mTaskStoreUnderTest =
                 JobStore.initAndGetForTesting(mTestContext, mTestContext.getFilesDir());
         mComponent = new ComponentName(getContext().getPackageName(), StubClass.class.getName());
+
+        // Assume all packages are current SDK
+        final PackageManagerInternal pm = mock(PackageManagerInternal.class);
+        when(pm.getPackageTargetSdkVersion(anyString()))
+                .thenReturn(Build.VERSION_CODES.CUR_DEVELOPMENT);
+        LocalServices.removeServiceForTest(PackageManagerInternal.class);
+        LocalServices.addService(PackageManagerInternal.class, pm);
 
         // Freeze the clocks at this moment in time
         JobSchedulerService.sSystemClock =
@@ -103,6 +118,7 @@ public class JobStoreTest {
                 .setPersisted(true)
                 .build();
         final JobStatus ts = JobStatus.createFromJobInfo(task, SOME_UID, null, -1, null);
+        ts.addInternalFlags(JobStatus.INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION);
         mTaskStoreUnderTest.add(ts);
         waitForPendingIo();
 
@@ -115,6 +131,8 @@ public class JobStoreTest {
         assertTasksEqual(task, loadedTaskStatus.getJob());
         assertTrue("JobStore#contains invalid.", mTaskStoreUnderTest.containsJob(ts));
         assertEquals("Different uids.", SOME_UID, loadedTaskStatus.getUid());
+        assertEquals(JobStatus.INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION,
+                loadedTaskStatus.getInternalFlags());
         compareTimestampsSubjectToIoLatency("Early run-times not the same after read.",
                 ts.getEarliestRunTime(), loadedTaskStatus.getEarliestRunTime());
         compareTimestampsSubjectToIoLatency("Late run-times not the same after read.",
@@ -259,7 +277,7 @@ public class JobStoreTest {
                 0 /* sourceUserId */, 0, 0, "someTag",
                 invalidEarlyRuntimeElapsedMillis, invalidLateRuntimeElapsedMillis,
                 0 /* lastSuccessfulRunTime */, 0 /* lastFailedRunTime */,
-                persistedExecutionTimesUTC);
+                persistedExecutionTimesUTC, 0 /* innerFlagg */);
 
         mTaskStoreUnderTest.add(js);
         waitForPendingIo();

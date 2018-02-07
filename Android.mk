@@ -72,12 +72,6 @@ non_base_dirs := \
   ../opt/net/voip/src/java/android/net/rtp \
   ../opt/net/voip/src/java/android/net/sip \
 
-framework_base_android_test_base_src_files := \
-  $(call all-java-files-under, test-base/src/junit)
-
-framework_base_android_test_runner_src_files := \
-  $(call all-java-files-under, test-runner/src/junit)
-
 # Find all files in specific directories (relative to frameworks/base)
 # to document and check apis
 files_to_check_apis := \
@@ -126,8 +120,6 @@ framework_docs_LOCAL_SRC_FILES := \
 
 # These are relative to frameworks/base
 framework_docs_LOCAL_API_CHECK_SRC_FILES := \
-  $(framework_base_android_test_base_src_files) \
-  $(framework_base_android_test_runner_src_files) \
   $(files_to_check_apis) \
   $(common_src_files) \
 
@@ -339,6 +331,8 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
 		-referenceonly \
 		-api $(INTERNAL_PLATFORM_API_FILE) \
+		-privateApi $(INTERNAL_PLATFORM_PRIVATE_API_FILE) \
+		-privateDexApi $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE) \
 		-removedApi $(INTERNAL_PLATFORM_REMOVED_API_FILE) \
 		-nodocs
 
@@ -348,7 +342,9 @@ LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_DROIDDOC)
 
-$(INTERNAL_PLATFORM_API_FILE): $(full_target)
+$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_API_FILE) \
+                                          $(INTERNAL_PLATFORM_PRIVATE_API_FILE) \
+                                          $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE)
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_API_FILE))
 
 # ====  the system api stubs ===================================
@@ -373,6 +369,8 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-referenceonly \
 		-showAnnotation android.annotation.SystemApi \
 		-api $(INTERNAL_PLATFORM_SYSTEM_API_FILE) \
+		-privateApi $(INTERNAL_PLATFORM_SYSTEM_PRIVATE_API_FILE) \
+		-privateDexApi $(INTERNAL_PLATFORM_SYSTEM_PRIVATE_DEX_API_FILE) \
 		-removedApi $(INTERNAL_PLATFORM_SYSTEM_REMOVED_API_FILE) \
 		-exactApi $(INTERNAL_PLATFORM_SYSTEM_EXACT_API_FILE) \
 		-nodocs
@@ -383,7 +381,9 @@ LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_DROIDDOC)
 
-$(INTERNAL_PLATFORM_SYSTEM_API_FILE): $(full_target)
+$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_SYSTEM_API_FILE) \
+                                          $(INTERNAL_PLATFORM_SYSTEM_PRIVATE_API_FILE) \
+                                          $(INTERNAL_PLATFORM_SYSTEM_PRIVATE_DEX_API_FILE)
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_SYSTEM_API_FILE))
 
 # ====  the test api stubs ===================================
@@ -789,6 +789,7 @@ LOCAL_PROTOC_FLAGS := \
 LOCAL_SOURCE_FILES_ALL_GENERATED := true
 LOCAL_SRC_FILES := \
     cmds/am/proto/instrumentation_data.proto \
+    cmds/statsd/src/perfetto/perfetto_config.proto \
     $(call all-proto-files-under, core/proto) \
     $(call all-proto-files-under, libs/incident/proto) \
     $(call all-proto-files-under, cmds/statsd/src)
@@ -805,7 +806,8 @@ LOCAL_PROTO_JAVA_OUTPUT_PARAMS := \
     store_unknown_fields = true
 LOCAL_JAVA_LIBRARIES := core-oj core-libart
 LOCAL_SRC_FILES := \
-    $(call all-proto-files-under, core/proto)
+    $(call all-proto-files-under, core/proto) \
+    $(call all-proto-files-under, libs/incident/proto/android/os)
 include $(BUILD_STATIC_JAVA_LIBRARY)
 
 
@@ -817,8 +819,41 @@ LOCAL_PROTOC_OPTIMIZE_TYPE := lite
 LOCAL_PROTOC_FLAGS := \
     -Iexternal/protobuf/src
 LOCAL_SRC_FILES := \
-    $(call all-proto-files-under, core/proto)
+    $(call all-proto-files-under, core/proto) \
+    $(call all-proto-files-under, libs/incident/proto/android/os)
 include $(BUILD_STATIC_JAVA_LIBRARY)
+
+# ==== hiddenapi lists =======================================
+
+# Copy blacklist and dark greylist over into the build folder.
+# This is for ART buildbots which need to mock these lists and have alternative
+# rules for building them. Other rules in the build system should depend on the
+# files in the build folder.
+
+$(eval $(call copy-one-file,frameworks/base/config/hiddenapi-blacklist.txt,\
+                            $(INTERNAL_PLATFORM_HIDDENAPI_BLACKLIST)))
+$(eval $(call copy-one-file,frameworks/base/config/hiddenapi-dark-greylist.txt,\
+                            $(INTERNAL_PLATFORM_HIDDENAPI_DARK_GREYLIST)))
+
+# Generate light greylist as private API minus (blacklist plus dark greylist).
+
+$(INTERNAL_PLATFORM_HIDDENAPI_LIGHT_GREYLIST): PRIVATE_API := $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE)
+$(INTERNAL_PLATFORM_HIDDENAPI_LIGHT_GREYLIST): BLACKLIST := $(INTERNAL_PLATFORM_HIDDENAPI_BLACKLIST)
+$(INTERNAL_PLATFORM_HIDDENAPI_LIGHT_GREYLIST): DARK_GREYLIST := $(INTERNAL_PLATFORM_HIDDENAPI_DARK_GREYLIST)
+$(INTERNAL_PLATFORM_HIDDENAPI_LIGHT_GREYLIST): $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE) \
+                                               $(INTERNAL_PLATFORM_HIDDENAPI_BLACKLIST) \
+                                               $(INTERNAL_PLATFORM_HIDDENAPI_DARK_GREYLIST)
+	if [ ! -z "`comm -12 <(sort $(BLACKLIST)) <(sort $(DARK_GREYLIST))`" ]; then \
+		echo "There should be no overlap between $(BLACKLIST) and $(DARK_GREYLIST)" 1>&2; \
+		exit 1; \
+	elif [ ! -z "`comm -13 <(sort $(PRIVATE_API)) <(sort $(BLACKLIST))`" ]; then \
+		echo "$(BLACKLIST) must be a subset of $(PRIVATE_API)" 1>&2; \
+		exit 2; \
+	elif [ ! -z "`comm -13 <(sort $(PRIVATE_API)) <(sort $(DARK_GREYLIST))`" ]; then \
+		echo "$(DARK_GREYLIST) must be a subset of $(PRIVATE_API)" 1>&2; \
+		exit 3; \
+	fi
+	comm -23 <(sort $(PRIVATE_API)) <(sort $(BLACKLIST) $(DARK_GREYLIST)) > $@
 
 # Include subdirectory makefiles
 # ============================================================
@@ -830,3 +865,4 @@ include $(call first-makefiles-under,$(LOCAL_PATH))
 endif
 
 endif # ANDROID_BUILD_EMBEDDED
+

@@ -16,6 +16,7 @@
 
 package com.android.server.notification;
 
+import static android.app.NotificationManager.ACTION_APP_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_CHANNEL_GROUP_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.IMPORTANCE_LOW;
@@ -137,6 +138,7 @@ import android.service.notification.NotificationRankingUpdate;
 import android.service.notification.NotificationRecordProto;
 import android.service.notification.NotificationServiceDumpProto;
 import android.service.notification.NotificationStats;
+import android.service.notification.NotifyingApp;
 import android.service.notification.SnoozeCriterion;
 import android.service.notification.StatusBarNotification;
 import android.service.notification.ZenModeConfig;
@@ -329,6 +331,7 @@ public class NotificationManagerService extends SystemService {
     final ArrayMap<Integer, ArrayMap<String, String>> mAutobundledSummaries = new ArrayMap<>();
     final ArrayList<ToastRecord> mToastQueue = new ArrayList<>();
     final ArrayMap<String, NotificationRecord> mSummaryByGroupKey = new ArrayMap<>();
+    final ArrayMap<Integer, ArrayList<NotifyingApp>> mRecentApps = new ArrayMap<>();
 
     // The last key in this list owns the hardware.
     ArrayList<String> mLights = new ArrayList<>();
@@ -434,6 +437,7 @@ public class NotificationManagerService extends SystemService {
                 }
             }
         }
+
         String defaultDndAccess = getContext().getResources().getString(
                 com.android.internal.R.string.config_defaultDndAccessPackages);
         if (defaultListenerAccess != null) {
@@ -441,6 +445,29 @@ public class NotificationManagerService extends SystemService {
                     defaultDndAccess.split(ManagedServices.ENABLED_SERVICES_SEPARATOR)) {
                 try {
                     getBinderService().setNotificationPolicyAccessGranted(whitelisted, true);
+                } catch (RemoteException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        readDefaultAssistant(userId);
+    }
+
+    protected void readDefaultAssistant(int userId) {
+        String defaultAssistantAccess = getContext().getResources().getString(
+                com.android.internal.R.string.config_defaultAssistantAccessPackage);
+        if (defaultAssistantAccess != null) {
+            // Gather all notification assistant components for candidate pkg. There should
+            // only be one
+            Set<ComponentName> approvedAssistants =
+                    mAssistants.queryPackageForServices(defaultAssistantAccess,
+                            PackageManager.MATCH_DIRECT_BOOT_AWARE
+                                    | PackageManager.MATCH_DIRECT_BOOT_UNAWARE, userId);
+            for (ComponentName cn : approvedAssistants) {
+                try {
+                    getBinderService().setNotificationAssistantAccessGrantedForUser(cn,
+                            userId, true);
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }
@@ -1155,6 +1182,7 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
+    @VisibleForTesting
     void clearNotifications() {
         mEnqueuedNotifications.clear();
         mNotificationList.clear();
@@ -1374,10 +1402,11 @@ public class NotificationManagerService extends SystemService {
                 AppGlobals.getPackageManager(), getContext().getPackageManager(),
                 getLocalService(LightsManager.class),
                 new NotificationListeners(AppGlobals.getPackageManager()),
-                new NotificationAssistants(AppGlobals.getPackageManager()),
+                new NotificationAssistants(getContext(), mNotificationLock, mUserProfiles,
+                        AppGlobals.getPackageManager()),
                 new ConditionProviders(getContext(), mUserProfiles, AppGlobals.getPackageManager()),
                 null, snoozeHelper, new NotificationUsageStats(getContext()),
-                new AtomicFile(new File(systemDir, "notification_policy.xml")),
+                new AtomicFile(new File(systemDir, "notification_policy.xml"), "notification-policy"),
                 (ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE),
                 getGroupHelper());
 
@@ -1853,6 +1882,18 @@ public class NotificationManagerService extends SystemService {
                 cancelAllNotificationsInt(MY_UID, MY_PID, pkg, null, 0, 0, true,
                         UserHandle.getUserId(uid), REASON_PACKAGE_BANNED, null);
             }
+
+            try {
+                getContext().sendBroadcastAsUser(
+                        new Intent(ACTION_APP_BLOCK_STATE_CHANGED)
+                                .putExtra(NotificationManager.EXTRA_BLOCKED_STATE, !enabled)
+                                .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                                .setPackage(pkg),
+                        UserHandle.of(UserHandle.getUserId(uid)), null);
+            } catch (SecurityException e) {
+                Slog.w(TAG, "Can't notify app about app block change", e);
+            }
+
             savePolicyFile();
         }
 
@@ -2081,6 +2122,16 @@ public class NotificationManagerService extends SystemService {
             checkCallerIsSystemOrSameApp(pkg);
             return mRankingHelper.getNotificationChannels(
                     pkg, Binder.getCallingUid(), false /* includeDeleted */);
+        }
+
+        @Override
+        public ParceledListSlice<NotifyingApp> getRecentNotifyingAppsForUser(int userId) {
+            checkCallerIsSystem();
+            synchronized (mNotificationLock) {
+                List<NotifyingApp> apps = new ArrayList<>(
+                        mRecentApps.getOrDefault(userId, new ArrayList<>()));
+                return new ParceledListSlice<>(apps);
+            }
         }
 
         @Override
@@ -2917,12 +2968,34 @@ public class NotificationManagerService extends SystemService {
             }
         }
 
+        /**
+         * Sets the notification policy.  Apps that target API levels below
+         * {@link android.os.Build.VERSION_CODES#P} cannot make DND silence
+         * {@link Policy#PRIORITY_CATEGORY_ALARMS} or
+         * {@link Policy#PRIORITY_CATEGORY_MEDIA_SYSTEM_OTHER}
+         */
         @Override
         public void setNotificationPolicy(String pkg, Policy policy) {
             enforcePolicyAccess(pkg, "setNotificationPolicy");
             final long identity = Binder.clearCallingIdentity();
             try {
+                final ApplicationInfo applicationInfo = mPackageManager.getApplicationInfo(pkg,
+                        0, UserHandle.getUserId(MY_UID));
+
+                if (applicationInfo.targetSdkVersion <= Build.VERSION_CODES.O_MR1) {
+                    Policy currPolicy = mZenModeHelper.getNotificationPolicy();
+
+                    int priorityCategories = policy.priorityCategories
+                            | (currPolicy.priorityCategories & Policy.PRIORITY_CATEGORY_ALARMS)
+                            | (currPolicy.priorityCategories &
+                            Policy.PRIORITY_CATEGORY_MEDIA_SYSTEM_OTHER);
+                    policy = new Policy(priorityCategories,
+                            policy.priorityCallSenders, policy.priorityMessageSenders,
+                            policy.suppressedVisualEffects);
+                }
+
                 mZenModeHelper.setNotificationPolicy(policy);
+            } catch (RemoteException e) {
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -3322,41 +3395,33 @@ public class NotificationManagerService extends SystemService {
     private void dumpProto(FileDescriptor fd, @NonNull DumpFilter filter) {
         final ProtoOutputStream proto = new ProtoOutputStream(fd);
         synchronized (mNotificationLock) {
-            long records = proto.start(NotificationServiceDumpProto.RECORDS);
             int N = mNotificationList.size();
-            if (N > 0) {
-                for (int i = 0; i < N; i++) {
-                    final NotificationRecord nr = mNotificationList.get(i);
-                    if (filter.filtered && !filter.matches(nr.sbn)) continue;
-                    nr.dump(proto, filter.redact);
-                    proto.write(NotificationRecordProto.STATE, NotificationRecordProto.POSTED);
-                }
+            for (int i = 0; i < N; i++) {
+                final NotificationRecord nr = mNotificationList.get(i);
+                if (filter.filtered && !filter.matches(nr.sbn)) continue;
+                nr.dump(proto, NotificationServiceDumpProto.RECORDS, filter.redact,
+                        NotificationRecordProto.POSTED);
             }
             N = mEnqueuedNotifications.size();
-            if (N > 0) {
-                for (int i = 0; i < N; i++) {
-                    final NotificationRecord nr = mEnqueuedNotifications.get(i);
-                    if (filter.filtered && !filter.matches(nr.sbn)) continue;
-                    nr.dump(proto, filter.redact);
-                    proto.write(NotificationRecordProto.STATE, NotificationRecordProto.ENQUEUED);
-                }
+            for (int i = 0; i < N; i++) {
+                final NotificationRecord nr = mEnqueuedNotifications.get(i);
+                if (filter.filtered && !filter.matches(nr.sbn)) continue;
+                nr.dump(proto, NotificationServiceDumpProto.RECORDS, filter.redact,
+                        NotificationRecordProto.ENQUEUED);
             }
             List<NotificationRecord> snoozed = mSnoozeHelper.getSnoozed();
             N = snoozed.size();
-            if (N > 0) {
-                for (int i = 0; i < N; i++) {
-                    final NotificationRecord nr = snoozed.get(i);
-                    if (filter.filtered && !filter.matches(nr.sbn)) continue;
-                    nr.dump(proto, filter.redact);
-                    proto.write(NotificationRecordProto.STATE, NotificationRecordProto.SNOOZED);
-                }
+            for (int i = 0; i < N; i++) {
+                final NotificationRecord nr = snoozed.get(i);
+                if (filter.filtered && !filter.matches(nr.sbn)) continue;
+                nr.dump(proto, NotificationServiceDumpProto.RECORDS, filter.redact,
+                        NotificationRecordProto.SNOOZED);
             }
-            proto.end(records);
 
             long zenLog = proto.start(NotificationServiceDumpProto.ZEN);
             mZenModeHelper.dump(proto);
             for (ComponentName suppressor : mEffectsSuppressors) {
-                proto.write(ZenModeProto.SUPPRESSORS, suppressor.toString());
+                suppressor.writeToProto(proto, ZenModeProto.SUPPRESSORS);
             }
             proto.end(zenLog);
 
@@ -4048,6 +4113,10 @@ public class NotificationManagerService extends SystemService {
 
                     mNotificationsByKey.put(n.getKey(), r);
 
+                    if (!r.isUpdate) {
+                        logRecentLocked(r);
+                    }
+
                     // Ensure if this is a foreground service that the proper additional
                     // flags are set.
                     if ((notification.flags & Notification.FLAG_FOREGROUND_SERVICE) != 0) {
@@ -4102,6 +4171,38 @@ public class NotificationManagerService extends SystemService {
                 }
             }
         }
+    }
+
+    /**
+     * Keeps the last 5 packages that have notified, by user.
+     */
+    @GuardedBy("mNotificationLock")
+    @VisibleForTesting
+    protected void logRecentLocked(NotificationRecord r) {
+        if (r.isUpdate) {
+            return;
+        }
+        ArrayList<NotifyingApp> recentAppsForUser =
+                mRecentApps.getOrDefault(r.getUser().getIdentifier(), new ArrayList<>(6));
+        NotifyingApp na = new NotifyingApp()
+                .setPackage(r.sbn.getPackageName())
+                .setUid(r.sbn.getUid())
+                .setLastNotified(r.sbn.getPostTime());
+        // A new notification gets an app moved to the front of the list
+        for (int i = recentAppsForUser.size() - 1; i >= 0; i--) {
+            NotifyingApp naExisting = recentAppsForUser.get(i);
+            if (na.getPackage().equals(naExisting.getPackage())
+                    && na.getUid() == naExisting.getUid()) {
+                recentAppsForUser.remove(i);
+                break;
+            }
+        }
+        // time is always increasing, so always add to the front of the list
+        recentAppsForUser.add(0, na);
+        if (recentAppsForUser.size() > 5) {
+            recentAppsForUser.remove(recentAppsForUser.size() -1);
+        }
+        mRecentApps.put(r.getUser().getIdentifier(), recentAppsForUser);
     }
 
     /**
@@ -5531,8 +5632,9 @@ public class NotificationManagerService extends SystemService {
     public class NotificationAssistants extends ManagedServices {
         static final String TAG_ENABLED_NOTIFICATION_ASSISTANTS = "enabled_assistants";
 
-        public NotificationAssistants(IPackageManager pm) {
-            super(getContext(), mNotificationLock, mUserProfiles, pm);
+        public NotificationAssistants(Context context, Object lock, UserProfiles up,
+                IPackageManager pm) {
+            super(context, lock, up, pm);
         }
 
         @Override
@@ -5636,6 +5738,14 @@ public class NotificationManagerService extends SystemService {
 
         public boolean isEnabled() {
             return !getServices().isEmpty();
+        }
+
+        protected void upgradeXml(final int xmlVersion, final int userId) {
+            if (xmlVersion == 0) {
+                // one time approval of the OOB assistant
+                Slog.d(TAG, "Approving default notification assistant for user " + userId);
+                readDefaultAssistant(userId);
+            }
         }
     }
 
@@ -6050,7 +6160,7 @@ public class NotificationManagerService extends SystemService {
         public static final String USAGE = "help\n"
                 + "allow_listener COMPONENT [user_id]\n"
                 + "disallow_listener COMPONENT [user_id]\n"
-                + "set_assistant COMPONENT\n"
+                + "allow_assistant COMPONENT\n"
                 + "remove_assistant COMPONENT\n"
                 + "allow_dnd PACKAGE\n"
                 + "disallow_dnd PACKAGE";

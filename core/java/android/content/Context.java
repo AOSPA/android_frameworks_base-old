@@ -32,6 +32,7 @@ import android.annotation.StyleableRes;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.annotation.UserIdInt;
+import android.app.ActivityManager;
 import android.app.IApplicationThread;
 import android.app.IServiceConnection;
 import android.app.VrManager;
@@ -1834,13 +1835,17 @@ public abstract class Context {
      * See {@link android.content.Context#startActivity(Intent, Bundle)}
      * Context.startActivity(Intent, Bundle)} for more details.
      *
+     * @return The corresponding flag {@link ActivityManager#START_CANCELED},
+     *         {@link ActivityManager#START_SUCCESS} etc. indicating whether the launch was
+     *         successful.
+     *
      * @throws ActivityNotFoundException &nbsp;
      *
      * @see #startActivities(Intent[])
      * @see PackageManager#resolveActivity
      */
     @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
-    public void startActivitiesAsUser(Intent[] intents, Bundle options, UserHandle userHandle) {
+    public int startActivitiesAsUser(Intent[] intents, Bundle options, UserHandle userHandle) {
         throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
 
@@ -3024,7 +3029,8 @@ public abstract class Context {
             //@hide: INCIDENT_SERVICE,
             //@hide: STATS_COMPANION_SERVICE,
             COMPANION_DEVICE_SERVICE,
-            CROSS_PROFILE_APPS_SERVICE
+            CROSS_PROFILE_APPS_SERVICE,
+            //@hide: SYSTEM_UPDATE_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -3239,6 +3245,17 @@ public abstract class Context {
      * @hide
      */
     public static final String RECOVERY_SERVICE = "recovery";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.os.SystemUpdateManager} for accessing the system update
+     * manager service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    @SystemApi
+    public static final String SYSTEM_UPDATE_SERVICE = "system_update";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -4109,7 +4126,7 @@ public abstract class Context {
     public static final String STATS_COMPANION_SERVICE = "statscompanion";
 
     /**
-     * Use with {@link #getSystemService(String)} to retrieve an {@link android.stats.StatsManager}.
+     * Use with {@link #getSystemService(String)} to retrieve an {@link android.app.StatsManager}.
      * @hide
      */
     @SystemApi
@@ -4146,11 +4163,21 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * {@link android.content.pm.crossprofile.CrossProfileApps} for cross profile operations.
+     * {@link android.content.pm.CrossProfileApps} for cross profile operations.
      *
      * @see #getSystemService(String)
      */
     public static final String CROSS_PROFILE_APPS_SERVICE = "crossprofileapps";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link android.se.omapi.ISecureElementService}
+     * for accessing the SecureElementService.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String SECURE_ELEMENT_SERVICE = "secure_element";
 
     /**
      * Determine whether the given permission is allowed for a particular

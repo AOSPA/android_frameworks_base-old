@@ -16,6 +16,7 @@ java_library_static {
         ":installd_aidl",
         ":storaged_aidl",
         ":vold_aidl",
+        ":mediaupdateservice_aidl",
         "java/com/android/server/EventLogTags.logtags",
         "java/com/android/server/am/EventLogTags.logtags",
     ],
@@ -31,6 +32,7 @@ java_library_static {
     static_libs: [
         "time_zone_distro",
         "time_zone_distro_installer",
+        "android.hardware.authsecret-V1.0-java",
         "android.hardware.broadcastradio-V2.0-java",
         "android.hardware.health-V1.0-java",
         "android.hardware.health-V2.0-java",

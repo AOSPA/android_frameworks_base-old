@@ -16,6 +16,11 @@
 
 package com.android.server.net;
 
+import android.net.Network;
+import android.telephony.SubscriptionPlan;
+
+import java.util.Set;
+
 /**
  * Network Policy Manager local system service interface.
  *
@@ -47,4 +52,42 @@ public abstract class NetworkPolicyManagerInternal {
      * @param added Denotes whether the {@param appId} has been added or removed from the whitelist.
      */
     public abstract void onTempPowerSaveWhitelistChange(int appId, boolean added);
+
+    /**
+     * Return the active {@link SubscriptionPlan} for the given network.
+     */
+    public abstract SubscriptionPlan getSubscriptionPlan(Network network);
+
+    public static final int QUOTA_TYPE_JOBS = 1;
+    public static final int QUOTA_TYPE_MULTIPATH = 2;
+
+    /**
+     * Return the daily quota (in bytes) that can be opportunistically used on
+     * the given network to improve the end user experience. It's called
+     * "opportunistic" because it's traffic that would typically not use the
+     * given network.
+     */
+    public abstract long getSubscriptionOpportunisticQuota(Network network, int quotaType);
+
+    /**
+     * Informs that admin data is loaded and available.
+     */
+    public abstract void onAdminDataAvailable();
+
+    /**
+     * Sets a list of packages which are restricted by admin from accessing metered data.
+     *
+     * @param packageNames the list of restricted packages.
+     * @param userId the userId in which {@param packagesNames} are restricted.
+     */
+    public abstract void setMeteredRestrictedPackages(
+            Set<String> packageNames, int userId);
+
+
+    /**
+     * Similar to {@link #setMeteredRestrictedPackages(Set, int)} but updates the restricted
+     * packages list asynchronously.
+     */
+    public abstract void setMeteredRestrictedPackagesAsync(
+            Set<String> packageNames, int userId);
 }

@@ -101,8 +101,8 @@ void ConfigManager::RemoveConfig(const ConfigKey& key) {
 }
 
 void ConfigManager::remove_saved_configs(const ConfigKey& key) {
-    string prefix = StringPrintf("%d-%lld", key.GetUid(), (long long)key.GetId());
-    StorageManager::deletePrefixedFiles(STATS_SERVICE_DIR, prefix.c_str());
+    string suffix = StringPrintf("%d-%lld", key.GetUid(), (long long)key.GetId());
+    StorageManager::deleteSuffixedFiles(STATS_SERVICE_DIR, suffix.c_str());
 }
 
 void ConfigManager::RemoveConfigs(int uid) {
@@ -111,6 +111,7 @@ void ConfigManager::RemoveConfigs(int uid) {
     for (auto it = mConfigs.begin(); it != mConfigs.end();) {
         // Remove from map
         if (it->GetUid() == uid) {
+            remove_saved_configs(*it);
             removed.push_back(*it);
             mConfigReceivers.erase(*it);
             it = mConfigs.erase(it);
@@ -185,8 +186,8 @@ void ConfigManager::update_saved_configs(const ConfigKey& key, const StatsdConfi
     remove_saved_configs(key);
 
     // Then we save the latest config.
-    string file_name = StringPrintf("%s/%d-%lld-%ld", STATS_SERVICE_DIR, key.GetUid(),
-                                    (long long)key.GetId(), time(nullptr));
+    string file_name = StringPrintf("%s/%ld_%d_%lld", STATS_SERVICE_DIR, time(nullptr),
+                                    key.GetUid(), (long long)key.GetId());
     const int numBytes = config.ByteSize();
     vector<uint8_t> buffer(numBytes);
     config.SerializeToArray(&buffer[0], numBytes);
@@ -255,7 +256,7 @@ StatsdConfig build_fake_config() {
     metric->set_id(2);  // "METRIC_2"
     metric->set_what(104);
     metric->set_bucket(ONE_MINUTE);
-    FieldMatcher* dimensions = metric->mutable_dimensions();
+    FieldMatcher* dimensions = metric->mutable_dimensions_in_what();
     dimensions->set_field(UID_PROCESS_STATE_TAG_ID);
     dimensions->add_child()->set_field(UID_PROCESS_STATE_UID_KEY);
 
@@ -278,7 +279,7 @@ StatsdConfig build_fake_config() {
     metric->set_what(104);
     metric->set_bucket(ONE_MINUTE);
 
-    dimensions = metric->mutable_dimensions();
+    dimensions = metric->mutable_dimensions_in_what();
     dimensions->set_field(UID_PROCESS_STATE_TAG_ID);
     dimensions->add_child()->set_field(UID_PROCESS_STATE_UID_KEY);
     metric->set_condition(202);
@@ -288,7 +289,7 @@ StatsdConfig build_fake_config() {
     metric->set_id(4);
     metric->set_what(107);
     metric->set_bucket(ONE_MINUTE);
-    dimensions = metric->mutable_dimensions();
+    dimensions = metric->mutable_dimensions_in_what();
     dimensions->set_field(WAKE_LOCK_TAG_ID);
     dimensions->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
 
@@ -296,44 +297,44 @@ StatsdConfig build_fake_config() {
     metric->set_condition(204);
     MetricConditionLink* link = metric->add_links();
     link->set_condition(203);
-    link->mutable_dimensions_in_what()->set_field(WAKE_LOCK_TAG_ID);
-    link->mutable_dimensions_in_what()->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
-    link->mutable_dimensions_in_condition()->set_field(APP_USAGE_TAG_ID);
-    link->mutable_dimensions_in_condition()->add_child()->set_field(APP_USAGE_UID_KEY_ID);
+    link->mutable_fields_in_what()->set_field(WAKE_LOCK_TAG_ID);
+    link->mutable_fields_in_what()->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
+    link->mutable_fields_in_condition()->set_field(APP_USAGE_TAG_ID);
+    link->mutable_fields_in_condition()->add_child()->set_field(APP_USAGE_UID_KEY_ID);
 
     // Duration of an app holding any wl, while screen on and app in background, slice by uid
     DurationMetric* durationMetric = config.add_duration_metric();
     durationMetric->set_id(5);
     durationMetric->set_bucket(ONE_MINUTE);
     durationMetric->set_aggregation_type(DurationMetric_AggregationType_SUM);
-    dimensions = durationMetric->mutable_dimensions();
+    dimensions = durationMetric->mutable_dimensions_in_what();
     dimensions->set_field(WAKE_LOCK_TAG_ID);
     dimensions->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
     durationMetric->set_what(205);
     durationMetric->set_condition(204);
     link = durationMetric->add_links();
     link->set_condition(203);
-    link->mutable_dimensions_in_what()->set_field(WAKE_LOCK_TAG_ID);
-    link->mutable_dimensions_in_what()->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
-    link->mutable_dimensions_in_condition()->set_field(APP_USAGE_TAG_ID);
-    link->mutable_dimensions_in_condition()->add_child()->set_field(APP_USAGE_UID_KEY_ID);
+    link->mutable_fields_in_what()->set_field(WAKE_LOCK_TAG_ID);
+    link->mutable_fields_in_what()->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
+    link->mutable_fields_in_condition()->set_field(APP_USAGE_TAG_ID);
+    link->mutable_fields_in_condition()->add_child()->set_field(APP_USAGE_UID_KEY_ID);
 
     // max Duration of an app holding any wl, while screen on and app in background, slice by uid
     durationMetric = config.add_duration_metric();
     durationMetric->set_id(6);
     durationMetric->set_bucket(ONE_MINUTE);
     durationMetric->set_aggregation_type(DurationMetric_AggregationType_MAX_SPARSE);
-    dimensions = durationMetric->mutable_dimensions();
+    dimensions = durationMetric->mutable_dimensions_in_what();
     dimensions->set_field(WAKE_LOCK_TAG_ID);
     dimensions->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
     durationMetric->set_what(205);
     durationMetric->set_condition(204);
     link = durationMetric->add_links();
     link->set_condition(203);
-    link->mutable_dimensions_in_what()->set_field(WAKE_LOCK_TAG_ID);
-    link->mutable_dimensions_in_what()->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
-    link->mutable_dimensions_in_condition()->set_field(APP_USAGE_TAG_ID);
-    link->mutable_dimensions_in_condition()->add_child()->set_field(APP_USAGE_UID_KEY_ID);
+    link->mutable_fields_in_what()->set_field(WAKE_LOCK_TAG_ID);
+    link->mutable_fields_in_what()->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
+    link->mutable_fields_in_condition()->set_field(APP_USAGE_TAG_ID);
+    link->mutable_fields_in_condition()->add_child()->set_field(APP_USAGE_UID_KEY_ID);
 
     // Duration of an app holding any wl, while screen on and app in background
     durationMetric = config.add_duration_metric();
@@ -344,10 +345,10 @@ StatsdConfig build_fake_config() {
     durationMetric->set_condition(204);
     link = durationMetric->add_links();
     link->set_condition(203);
-    link->mutable_dimensions_in_what()->set_field(WAKE_LOCK_TAG_ID);
-    link->mutable_dimensions_in_what()->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
-    link->mutable_dimensions_in_condition()->set_field(APP_USAGE_TAG_ID);
-    link->mutable_dimensions_in_condition()->add_child()->set_field(APP_USAGE_UID_KEY_ID);
+    link->mutable_fields_in_what()->set_field(WAKE_LOCK_TAG_ID);
+    link->mutable_fields_in_what()->add_child()->set_field(WAKE_LOCK_UID_KEY_ID);
+    link->mutable_fields_in_condition()->set_field(APP_USAGE_TAG_ID);
+    link->mutable_fields_in_condition()->add_child()->set_field(APP_USAGE_UID_KEY_ID);
 
 
     // Duration of screen on time.
@@ -376,7 +377,7 @@ StatsdConfig build_fake_config() {
     valueMetric->mutable_value_field()->set_field(KERNEL_WAKELOCK_TAG_ID);
     valueMetric->mutable_value_field()->add_child()->set_field(KERNEL_WAKELOCK_COUNT_KEY);
     valueMetric->set_condition(201);
-    dimensions = valueMetric->mutable_dimensions();
+    dimensions = valueMetric->mutable_dimensions_in_what();
     dimensions->set_field(KERNEL_WAKELOCK_TAG_ID);
     dimensions->add_child()->set_field(KERNEL_WAKELOCK_NAME_KEY);
     // This is for testing easier. We should never set bucket size this small.

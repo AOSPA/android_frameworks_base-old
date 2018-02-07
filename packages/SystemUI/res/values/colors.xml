@@ -143,6 +143,9 @@
 
     <color name="remote_input_accent">#eeeeee</color>
 
+    <color name="quick_step_track_background_dark">#61000000</color>
+    <color name="quick_step_track_background_light">#4DFFFFFF</color>
+
     <!-- Keyboard shortcuts colors -->
     <color name="ksh_application_group_color">#fff44336</color>
     <color name="ksh_keyword_color">#d9000000</color>
@@ -152,5 +155,15 @@
     <color name="instant_apps_color">#ff4d5a64</color>
 
     <color name="zen_introduction">#ffffffff</color>
+
+
+    <color name="smart_reply_button_text">#ff4285f4</color><!-- blue 500 -->
+    <color name="smart_reply_button_background">#fff7f7f7</color>
+
+    <!-- Fingerprint dialog colors -->
+    <color name="fingerprint_dialog_bg_color">#f4ffffff</color> <!-- 96% white -->
+    <color name="fingerprint_dialog_text_color">#ff424242</color> <!-- gray 800-->
+    <color name="fingerprint_dialog_dim_color">#80000000</color> <!-- 50% black -->
+    <color name="fingerprint_error_message_color">#ff5722</color>
 
 </resources>

@@ -28,11 +28,13 @@
 #include <SkCanvas.h>
 #include <SkMatrix.h>
 
+class SkAnimatedImage;
 class SkCanvasState;
 class SkVertices;
 
 namespace minikin {
 class Layout;
+class MeasuredText;
 enum class Bidi : uint8_t;
 }
 
@@ -72,6 +74,7 @@ typedef uirenderer::VectorDrawable::Tree VectorDrawableRoot;
 
 typedef std::function<void(uint16_t* text, float* positions)> ReadGlyphFunc;
 
+class AnimatedImageDrawable;
 class Bitmap;
 class Paint;
 struct Typeface;
@@ -237,6 +240,8 @@ public:
                                float dstTop, float dstRight, float dstBottom,
                                const SkPaint* paint) = 0;
 
+    virtual double drawAnimatedImage(AnimatedImageDrawable* imgDrawable) = 0;
+
     /**
      * Specifies if the positions passed to ::drawText are absolute or relative
      * to the (x,y) value provided.
@@ -256,7 +261,8 @@ public:
      * and delegating the final draw to virtual drawGlyphs method.
      */
     void drawText(const uint16_t* text, int start, int count, int contextCount, float x, float y,
-                  minikin::Bidi bidiFlags, const Paint& origPaint, const Typeface* typeface);
+                  minikin::Bidi bidiFlags, const Paint& origPaint, const Typeface* typeface,
+                  minikin::MeasuredText* mt, int mtOffset);
 
     void drawTextOnPath(const uint16_t* text, int count, minikin::Bidi bidiFlags,
                         const SkPath& path, float hOffset, float vOffset, const Paint& paint,

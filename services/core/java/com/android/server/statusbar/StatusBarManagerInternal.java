@@ -30,12 +30,14 @@ public interface StatusBarManagerInternal {
 
     void cancelPreloadRecentApps();
 
-    void showRecentApps(boolean triggeredFromAltTab, boolean fromHome);
+    void showRecentApps(boolean triggeredFromAltTab);
 
     void hideRecentApps(boolean triggeredFromAltTab, boolean triggeredFromHomeKey);
 
     void dismissKeyboardShortcutsMenu();
     void toggleKeyboardShortcutsMenu(int deviceId);
+
+    void showChargingAnimation(int batteryLevel);
 
     /**
      * Show picture-in-picture menu.
@@ -95,7 +97,7 @@ public interface StatusBarManagerInternal {
      *
      * @param rotation rotation suggestion
      */
-    void onProposedRotationChanged(int rotation);
+    void onProposedRotationChanged(int rotation, boolean isValid);
 
     public interface GlobalActionsListener {
         /**

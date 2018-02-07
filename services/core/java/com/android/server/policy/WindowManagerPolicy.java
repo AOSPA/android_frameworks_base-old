@@ -138,11 +138,6 @@ import java.lang.annotation.RetentionPolicy;
  * </dl>
  */
 public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
-    // Navigation bar position values
-    int NAV_BAR_LEFT = 1 << 0;
-    int NAV_BAR_RIGHT = 1 << 1;
-    int NAV_BAR_BOTTOM = 1 << 2;
-
     @Retention(SOURCE)
     @IntDef({NAV_BAR_LEFT, NAV_BAR_RIGHT, NAV_BAR_BOTTOM})
     @interface NavigationBarPosition {}
@@ -174,6 +169,11 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * @param occluded Whether Keyguard is currently occluded or not.
      */
     void onKeyguardOccludedChangedLw(boolean occluded);
+
+    /**
+     * Called when the resource overlays change.
+     */
+    default void onOverlayChangedLw() {}
 
     /**
      * Interface to the Window Manager state associated with a particular
@@ -445,6 +445,13 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
          * Check whether the window is currently dimming.
          */
         public boolean isDimming();
+
+        /**
+         * Returns true if the window is letterboxed for the display cutout.
+         */
+        default boolean isLetterboxedForDisplayCutoutLw() {
+            return false;
+        }
 
         /** @return the current windowing mode of this window. */
         int getWindowingMode();
@@ -1199,12 +1206,11 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
 
     /**
      * Return true if it is okay to perform animations for an app transition
-     * that is about to occur.  You may return false for this if, for example,
-     * the lock screen is currently displayed so the switch should happen
+     * that is about to occur. You may return false for this if, for example,
+     * the dream window is currently displayed so the switch should happen
      * immediately.
      */
     public boolean allowAppAnimationsLw();
-
 
     /**
      * A new window has been focused.
@@ -1565,7 +1571,7 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * Show the recents task list app.
      * @hide
      */
-    public void showRecentApps(boolean fromHome);
+    public void showRecentApps();
 
     /**
      * Show the global actions dialog.

@@ -35,6 +35,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
+import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.ArraySet;
@@ -401,7 +402,6 @@ public abstract class Connection extends Conferenceable {
 
     /**
      * Set by the framework to indicate that a connection is using assisted dialing.
-     * @hide
      */
     public static final int PROPERTY_ASSISTED_DIALING_USED = 1 << 9;
 
@@ -2538,6 +2538,19 @@ public abstract class Connection extends Conferenceable {
     }
 
     /**
+     * Adds a parcelable extra to this {@code Connection}.
+     *
+     * @param key The extra key.
+     * @param value The value.
+     * @hide
+     */
+    public final void putExtra(@NonNull String key, @NonNull Parcelable value) {
+        Bundle newExtras = new Bundle();
+        newExtras.putParcelable(key, value);
+        putExtras(newExtras);
+    }
+
+    /**
      * Removes extras from this {@code Connection}.
      *
      * @param keys The keys of the extras to remove.
@@ -2786,6 +2799,15 @@ public abstract class Connection extends Conferenceable {
      * @param extras Extras associated with the call event.
      */
     public void onCallEvent(String event, Bundle extras) {}
+
+    /**
+     * Notifies this {@link Connection} that a handover has completed.
+     * <p>
+     * A handover is initiated with {@link android.telecom.Call#handoverTo(PhoneAccountHandle, int,
+     * Bundle)} on the initiating side of the handover, and
+     * {@link TelecomManager#acceptHandover(Uri, int, PhoneAccountHandle)}.
+     */
+    public void onHandoverComplete() {}
 
     /**
      * Notifies this {@link Connection} of a change to the extras made outside the

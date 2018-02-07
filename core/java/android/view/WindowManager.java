@@ -21,7 +21,6 @@ import static android.view.WindowLayoutParamsProto.ALPHA;
 import static android.view.WindowLayoutParamsProto.BUTTON_BRIGHTNESS;
 import static android.view.WindowLayoutParamsProto.COLOR_MODE;
 import static android.view.WindowLayoutParamsProto.FLAGS;
-import static android.view.WindowLayoutParamsProto.FLAGS_EXTRA;
 import static android.view.WindowLayoutParamsProto.FORMAT;
 import static android.view.WindowLayoutParamsProto.GRAVITY;
 import static android.view.WindowLayoutParamsProto.HAS_SYSTEM_UI_LISTENERS;
@@ -46,7 +45,6 @@ import static android.view.WindowLayoutParamsProto.Y;
 
 import android.Manifest.permission;
 import android.annotation.IntDef;
-import android.annotation.LongDef;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
@@ -100,11 +98,198 @@ public interface WindowManager extends ViewManager {
     int DOCKED_BOTTOM = 4;
 
     /** @hide */
-    final static String INPUT_CONSUMER_PIP = "pip_input_consumer";
+    String INPUT_CONSUMER_PIP = "pip_input_consumer";
     /** @hide */
-    final static String INPUT_CONSUMER_NAVIGATION = "nav_input_consumer";
+    String INPUT_CONSUMER_NAVIGATION = "nav_input_consumer";
     /** @hide */
-    final static String INPUT_CONSUMER_WALLPAPER = "wallpaper_input_consumer";
+    String INPUT_CONSUMER_WALLPAPER = "wallpaper_input_consumer";
+    /** @hide */
+    String INPUT_CONSUMER_RECENTS_ANIMATION = "recents_animation_input_consumer";
+
+    /**
+     * Not set up for a transition.
+     * @hide
+     */
+    int TRANSIT_UNSET = -1;
+
+    /**
+     * No animation for transition.
+     * @hide
+     */
+    int TRANSIT_NONE = 0;
+
+    /**
+     * A window in a new activity is being opened on top of an existing one in the same task.
+     * @hide
+     */
+    int TRANSIT_ACTIVITY_OPEN = 6;
+
+    /**
+     * The window in the top-most activity is being closed to reveal the previous activity in the
+     * same task.
+     * @hide
+     */
+    int TRANSIT_ACTIVITY_CLOSE = 7;
+
+    /**
+     * A window in a new task is being opened on top of an existing one in another activity's task.
+     * @hide
+     */
+    int TRANSIT_TASK_OPEN = 8;
+
+    /**
+     * A window in the top-most activity is being closed to reveal the previous activity in a
+     * different task.
+     * @hide
+     */
+    int TRANSIT_TASK_CLOSE = 9;
+
+    /**
+     * A window in an existing task is being displayed on top of an existing one in another
+     * activity's task.
+     * @hide
+     */
+    int TRANSIT_TASK_TO_FRONT = 10;
+
+    /**
+     * A window in an existing task is being put below all other tasks.
+     * @hide
+     */
+    int TRANSIT_TASK_TO_BACK = 11;
+
+    /**
+     * A window in a new activity that doesn't have a wallpaper is being opened on top of one that
+     * does, effectively closing the wallpaper.
+     * @hide
+     */
+    int TRANSIT_WALLPAPER_CLOSE = 12;
+
+    /**
+     * A window in a new activity that does have a wallpaper is being opened on one that didn't,
+     * effectively opening the wallpaper.
+     * @hide
+     */
+    int TRANSIT_WALLPAPER_OPEN = 13;
+
+    /**
+     * A window in a new activity is being opened on top of an existing one, and both are on top
+     * of the wallpaper.
+     * @hide
+     */
+    int TRANSIT_WALLPAPER_INTRA_OPEN = 14;
+
+    /**
+     * The window in the top-most activity is being closed to reveal the previous activity, and
+     * both are on top of the wallpaper.
+     * @hide
+     */
+    int TRANSIT_WALLPAPER_INTRA_CLOSE = 15;
+
+    /**
+     * A window in a new task is being opened behind an existing one in another activity's task.
+     * The new window will show briefly and then be gone.
+     * @hide
+     */
+    int TRANSIT_TASK_OPEN_BEHIND = 16;
+
+    /**
+     * A window in a task is being animated in-place.
+     * @hide
+     */
+    int TRANSIT_TASK_IN_PLACE = 17;
+
+    /**
+     * An activity is being relaunched (e.g. due to configuration change).
+     * @hide
+     */
+    int TRANSIT_ACTIVITY_RELAUNCH = 18;
+
+    /**
+     * A task is being docked from recents.
+     * @hide
+     */
+    int TRANSIT_DOCK_TASK_FROM_RECENTS = 19;
+
+    /**
+     * Keyguard is going away.
+     * @hide
+     */
+    int TRANSIT_KEYGUARD_GOING_AWAY = 20;
+
+    /**
+     * Keyguard is going away with showing an activity behind that requests wallpaper.
+     * @hide
+     */
+    int TRANSIT_KEYGUARD_GOING_AWAY_ON_WALLPAPER = 21;
+
+    /**
+     * Keyguard is being occluded.
+     * @hide
+     */
+    int TRANSIT_KEYGUARD_OCCLUDE = 22;
+
+    /**
+     * Keyguard is being unoccluded.
+     * @hide
+     */
+    int TRANSIT_KEYGUARD_UNOCCLUDE = 23;
+
+    /**
+     * @hide
+     */
+    @IntDef(prefix = { "TRANSIT_" }, value = {
+            TRANSIT_UNSET,
+            TRANSIT_NONE,
+            TRANSIT_ACTIVITY_OPEN,
+            TRANSIT_ACTIVITY_CLOSE,
+            TRANSIT_TASK_OPEN,
+            TRANSIT_TASK_CLOSE,
+            TRANSIT_TASK_TO_FRONT,
+            TRANSIT_TASK_TO_BACK,
+            TRANSIT_WALLPAPER_CLOSE,
+            TRANSIT_WALLPAPER_OPEN,
+            TRANSIT_WALLPAPER_INTRA_OPEN,
+            TRANSIT_WALLPAPER_INTRA_CLOSE,
+            TRANSIT_TASK_OPEN_BEHIND,
+            TRANSIT_TASK_IN_PLACE,
+            TRANSIT_ACTIVITY_RELAUNCH,
+            TRANSIT_DOCK_TASK_FROM_RECENTS,
+            TRANSIT_KEYGUARD_GOING_AWAY,
+            TRANSIT_KEYGUARD_GOING_AWAY_ON_WALLPAPER,
+            TRANSIT_KEYGUARD_OCCLUDE,
+            TRANSIT_KEYGUARD_UNOCCLUDE
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface TransitionType {}
+
+    /**
+     * Transition flag: Keyguard is going away, but keeping the notification shade open
+     * @hide
+     */
+    int TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE = 0x1;
+
+    /**
+     * Transition flag: Keyguard is going away, but doesn't want an animation for it
+     * @hide
+     */
+    int TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION = 0x2;
+
+    /**
+     * Transition flag: Keyguard is going away while it was showing the system wallpaper.
+     * @hide
+     */
+    int TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER = 0x4;
+
+    /**
+     * @hide
+     */
+    @IntDef(flag = true, prefix = { "TRANSIT_FLAG_" }, value = {
+            TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE,
+            TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION,
+            TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface TransitionFlags {}
 
     /**
      * Exception that is thrown when trying to add view whose
@@ -889,7 +1074,12 @@ public interface WindowManager extends ViewManager {
          *  decorations around the border (such as the status bar).  The
          *  window must correctly position its contents to take the screen
          *  decoration into account.  This flag is normally set for you
-         *  by Window as described in {@link Window#setFlags}. */
+         *  by Window as described in {@link Window#setFlags}.
+         *
+         *  <p>Note: on displays that have a {@link DisplayCutout}, the window may be placed
+         *  such that it avoids the {@link DisplayCutout} area if necessary according to the
+         *  {@link #layoutInDisplayCutoutMode}.
+         */
         public static final int FLAG_LAYOUT_IN_SCREEN   = 0x00000100;
 
         /** Window flag: allow window to extend outside of the screen. */
@@ -1294,33 +1484,6 @@ public interface WindowManager extends ViewManager {
                     name = "DRAWS_SYSTEM_BAR_BACKGROUNDS")
         }, formatToHexString = true)
         public int flags;
-
-        /** @hide */
-        @Retention(RetentionPolicy.SOURCE)
-        @LongDef(
-            flag = true,
-            value = {
-                    LayoutParams.FLAG2_LAYOUT_IN_DISPLAY_CUTOUT_AREA,
-            })
-        @interface Flags2 {}
-
-        /**
-         * Window flag: allow placing the window within the area that overlaps with the
-         * display cutout.
-         *
-         * <p>
-         * The window must correctly position its contents to take the display cutout into account.
-         *
-         * @see DisplayCutout
-         */
-        public static final long FLAG2_LAYOUT_IN_DISPLAY_CUTOUT_AREA = 0x00000001;
-
-        /**
-         * Various behavioral options/flags.  Default is none.
-         *
-         * @see #FLAG2_LAYOUT_IN_DISPLAY_CUTOUT_AREA
-         */
-        @Flags2 public long flags2;
 
         /**
          * If the window has requested hardware acceleration, but this is not
@@ -2050,6 +2213,77 @@ public interface WindowManager extends ViewManager {
          */
         public boolean hasSystemUiListeners;
 
+
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef(
+                flag = true,
+                value = {LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT,
+                        LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS,
+                        LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER})
+        @interface LayoutInDisplayCutoutMode {}
+
+        /**
+         * Controls how the window is laid out if there is a {@link DisplayCutout}.
+         *
+         * <p>
+         * Defaults to {@link #LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT}.
+         *
+         * @see #LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+         * @see #LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+         * @see #LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
+         * @see DisplayCutout
+         */
+        @LayoutInDisplayCutoutMode
+        public int layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+
+        /**
+         * The window is allowed to extend into the {@link DisplayCutout} area, only if the
+         * {@link DisplayCutout} is fully contained within the status bar. Otherwise, the window is
+         * laid out such that it does not overlap with the {@link DisplayCutout} area.
+         *
+         * <p>
+         * In practice, this means that if the window did not set FLAG_FULLSCREEN or
+         * SYSTEM_UI_FLAG_FULLSCREEN, it can extend into the cutout area in portrait.
+         * Otherwise (i.e. fullscreen or landscape) it is laid out such that it does overlap the
+         * cutout area.
+         *
+         * <p>
+         * The usual precautions for not overlapping with the status bar are sufficient for ensuring
+         * that no important content overlaps with the DisplayCutout.
+         *
+         * @see DisplayCutout
+         * @see WindowInsets
+         */
+        public static final int LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT = 0;
+
+        /**
+         * The window is always allowed to extend into the {@link DisplayCutout} area,
+         * even if fullscreen or in landscape.
+         *
+         * <p>
+         * The window must make sure that no important content overlaps with the
+         * {@link DisplayCutout}.
+         *
+         * @see DisplayCutout
+         * @see WindowInsets#getDisplayCutout()
+         */
+        public static final int LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS = 1;
+
+        /**
+         * The window is never allowed to overlap with the DisplayCutout area.
+         *
+         * <p>
+         * This should be used with windows that transiently set SYSTEM_UI_FLAG_FULLSCREEN to
+         * avoid a relayout of the window when the flag is set or cleared.
+         *
+         * @see DisplayCutout
+         * @see View#SYSTEM_UI_FLAG_FULLSCREEN SYSTEM_UI_FLAG_FULLSCREEN
+         * @see View#SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+         */
+        public static final int LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER = 2;
+
+
         /**
          * When this window has focus, disable touch pad pointer gesture processing.
          * The window will receive raw position updates from the touch pad instead
@@ -2273,9 +2507,9 @@ public interface WindowManager extends ViewManager {
             out.writeInt(y);
             out.writeInt(type);
             out.writeInt(flags);
-            out.writeLong(flags2);
             out.writeInt(privateFlags);
             out.writeInt(softInputMode);
+            out.writeInt(layoutInDisplayCutoutMode);
             out.writeInt(gravity);
             out.writeFloat(horizontalMargin);
             out.writeFloat(verticalMargin);
@@ -2329,9 +2563,9 @@ public interface WindowManager extends ViewManager {
             y = in.readInt();
             type = in.readInt();
             flags = in.readInt();
-            flags2 = in.readLong();
             privateFlags = in.readInt();
             softInputMode = in.readInt();
+            layoutInDisplayCutoutMode = in.readInt();
             gravity = in.readInt();
             horizontalMargin = in.readFloat();
             verticalMargin = in.readFloat();
@@ -2462,10 +2696,6 @@ public interface WindowManager extends ViewManager {
                 flags = o.flags;
                 changes |= FLAGS_CHANGED;
             }
-            if (flags2 != o.flags2) {
-                flags2 = o.flags2;
-                changes |= FLAGS_CHANGED;
-            }
             if (privateFlags != o.privateFlags) {
                 privateFlags = o.privateFlags;
                 changes |= PRIVATE_FLAGS_CHANGED;
@@ -2473,6 +2703,10 @@ public interface WindowManager extends ViewManager {
             if (softInputMode != o.softInputMode) {
                 softInputMode = o.softInputMode;
                 changes |= SOFT_INPUT_MODE_CHANGED;
+            }
+            if (layoutInDisplayCutoutMode != o.layoutInDisplayCutoutMode) {
+                layoutInDisplayCutoutMode = o.layoutInDisplayCutoutMode;
+                changes |= LAYOUT_CHANGED;
             }
             if (gravity != o.gravity) {
                 gravity = o.gravity;
@@ -2651,6 +2885,10 @@ public interface WindowManager extends ViewManager {
                 sb.append(softInputModeToString(softInputMode));
                 sb.append('}');
             }
+            if (layoutInDisplayCutoutMode != 0) {
+                sb.append(" layoutInDisplayCutoutMode=");
+                sb.append(layoutInDisplayCutoutModeToString(layoutInDisplayCutoutMode));
+            }
             sb.append(" ty=");
             sb.append(ViewDebug.intToString(LayoutParams.class, "type", type));
             if (format != PixelFormat.OPAQUE) {
@@ -2719,11 +2957,6 @@ public interface WindowManager extends ViewManager {
             sb.append(System.lineSeparator());
             sb.append(prefix).append("  fl=").append(
                     ViewDebug.flagsToString(LayoutParams.class, "flags", flags));
-            if (flags2 != 0) {
-                sb.append(System.lineSeparator());
-                // TODO(roosa): add a long overload for ViewDebug.flagsToString.
-                sb.append(prefix).append("  fl2=0x").append(Long.toHexString(flags2));
-            }
             if (privateFlags != 0) {
                 sb.append(System.lineSeparator());
                 sb.append(prefix).append("  pfl=").append(ViewDebug.flagsToString(
@@ -2771,7 +3004,6 @@ public interface WindowManager extends ViewManager {
             proto.write(NEEDS_MENU_KEY, needsMenuKey);
             proto.write(COLOR_MODE, mColorMode);
             proto.write(FLAGS, flags);
-            proto.write(FLAGS_EXTRA, flags2);
             proto.write(PRIVATE_FLAGS, privateFlags);
             proto.write(SYSTEM_UI_VISIBILITY_FLAGS, systemUiVisibility);
             proto.write(SUBTREE_SYSTEM_UI_VISIBILITY_FLAGS, subtreeSystemUiVisibility);
@@ -2847,6 +3079,20 @@ public interface WindowManager extends ViewManager {
             return x == 0 && y == 0
                     && width == WindowManager.LayoutParams.MATCH_PARENT
                     && height == WindowManager.LayoutParams.MATCH_PARENT;
+        }
+
+        private static String layoutInDisplayCutoutModeToString(
+                @LayoutInDisplayCutoutMode int mode) {
+            switch (mode) {
+                case LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT:
+                    return "default";
+                case LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS:
+                    return "always";
+                case LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER:
+                    return "never";
+                default:
+                    return "unknown(" + mode + ")";
+            }
         }
 
         private static String softInputModeToString(@SoftInputModeFlags int softInputMode) {

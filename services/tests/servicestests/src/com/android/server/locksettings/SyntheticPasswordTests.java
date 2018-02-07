@@ -24,6 +24,10 @@ import static com.android.internal.widget.LockPatternUtils.CREDENTIAL_TYPE_PASSW
 import static com.android.internal.widget.LockPatternUtils.SYNTHETIC_PASSWORD_ENABLED_KEY;
 import static com.android.internal.widget.LockPatternUtils.SYNTHETIC_PASSWORD_HANDLE_KEY;
 
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 
 import android.app.admin.PasswordMetrics;
@@ -35,6 +39,10 @@ import com.android.internal.widget.VerifyCredentialResponse;
 import com.android.server.locksettings.SyntheticPasswordManager.AuthenticationResult;
 import com.android.server.locksettings.SyntheticPasswordManager.AuthenticationToken;
 import com.android.server.locksettings.SyntheticPasswordManager.PasswordData;
+
+import java.util.ArrayList;
+
+import org.mockito.ArgumentCaptor;
 
 
 /**
@@ -112,7 +120,7 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
                 mStorageManager.getUserUnlockToken(PRIMARY_USER_ID));
     }
 
-    private void initializeCredentialUnderSP(String password, int userId) throws RemoteException {
+    protected void initializeCredentialUnderSP(String password, int userId) throws RemoteException {
         enableSyntheticPassword();
         int quality = password != null ? PASSWORD_QUALITY_ALPHABETIC
                 : PASSWORD_QUALITY_UNSPECIFIED;
@@ -129,7 +137,6 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
         long sid = mGateKeeperService.getSecureUserId(PRIMARY_USER_ID);
         mService.setLockCredential(NEWPASSWORD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, PASSWORD,
                 PASSWORD_QUALITY_ALPHABETIC, PRIMARY_USER_ID);
-        mGateKeeperService.clearSecureUserId(PRIMARY_USER_ID);
         assertEquals(VerifyCredentialResponse.RESPONSE_OK, mService.verifyCredential(
                 NEWPASSWORD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, 0, PRIMARY_USER_ID)
                         .getResponseCode());
@@ -170,42 +177,44 @@ public class SyntheticPasswordTests extends BaseLockSettingsServiceTests {
         assertNotEquals(sid, mGateKeeperService.getSecureUserId(PRIMARY_USER_ID));
     }
 
-    public void testSyntheticPasswordClearCredentialUntrusted() throws RemoteException {
-        final String PASSWORD = "testSyntheticPasswordClearCredential-password";
-        final String NEWPASSWORD = "testSyntheticPasswordClearCredential-newpassword";
+    public void testSyntheticPasswordChangeCredentialKeepsAuthSecret() throws RemoteException {
+        final String PASSWORD = "testSyntheticPasswordChangeCredentialKeepsAuthSecret-password";
+        final String NEWPASSWORD = "testSyntheticPasswordChangeCredentialKeepsAuthSecret-new";
 
         initializeCredentialUnderSP(PASSWORD, PRIMARY_USER_ID);
-        long sid = mGateKeeperService.getSecureUserId(PRIMARY_USER_ID);
-        // clear password
-        mService.setLockCredential(null, LockPatternUtils.CREDENTIAL_TYPE_NONE, null,
-                PASSWORD_QUALITY_UNSPECIFIED, PRIMARY_USER_ID);
-        assertEquals(0 ,mGateKeeperService.getSecureUserId(PRIMARY_USER_ID));
-
-        // set a new password
-        mService.setLockCredential(NEWPASSWORD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, null,
+        mService.setLockCredential(NEWPASSWORD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, PASSWORD,
                 PASSWORD_QUALITY_ALPHABETIC, PRIMARY_USER_ID);
         assertEquals(VerifyCredentialResponse.RESPONSE_OK, mService.verifyCredential(
                 NEWPASSWORD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, 0, PRIMARY_USER_ID)
-                    .getResponseCode());
-        assertNotEquals(sid, mGateKeeperService.getSecureUserId(PRIMARY_USER_ID));
+                        .getResponseCode());
+
+        // Check the same secret was passed each time
+        ArgumentCaptor<ArrayList<Byte>> secret = ArgumentCaptor.forClass(ArrayList.class);
+        verify(mAuthSecretService, atLeastOnce()).primaryUserCredential(secret.capture());
+        assertEquals(1, secret.getAllValues().stream().distinct().count());
     }
 
-    public void testSyntheticPasswordChangeCredentialUntrusted() throws RemoteException {
-        final String PASSWORD = "testSyntheticPasswordClearCredential-password";
-        final String NEWPASSWORD = "testSyntheticPasswordClearCredential-newpassword";
+    public void testSyntheticPasswordVerifyPassesPrimaryUserAuthSecret() throws RemoteException {
+        final String PASSWORD = "testSyntheticPasswordVerifyPassesPrimaryUserAuthSecret-password";
+        final String NEWPASSWORD = "testSyntheticPasswordVerifyPassesPrimaryUserAuthSecret-new";
 
         initializeCredentialUnderSP(PASSWORD, PRIMARY_USER_ID);
-        long sid = mGateKeeperService.getSecureUserId(PRIMARY_USER_ID);
-        // Untrusted change password
-        mService.setLockCredential(NEWPASSWORD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, null,
-                PASSWORD_QUALITY_ALPHABETIC, PRIMARY_USER_ID);
-        assertNotEquals(0, mGateKeeperService.getSecureUserId(PRIMARY_USER_ID));
-        assertNotEquals(sid, mGateKeeperService.getSecureUserId(PRIMARY_USER_ID));
-
-        // Verify the password
+        reset(mAuthSecretService);
         assertEquals(VerifyCredentialResponse.RESPONSE_OK, mService.verifyCredential(
-                NEWPASSWORD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, 0, PRIMARY_USER_ID)
-                    .getResponseCode());
+                PASSWORD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, 0, PRIMARY_USER_ID)
+                        .getResponseCode());
+        verify(mAuthSecretService).primaryUserCredential(any(ArrayList.class));
+    }
+
+    public void testSecondaryUserDoesNotPassAuthSecret() throws RemoteException {
+        final String PASSWORD = "testSecondaryUserDoesNotPassAuthSecret-password";
+        final String NEWPASSWORD = "testSecondaryUserDoesNotPassAuthSecret-new";
+
+        initializeCredentialUnderSP(PASSWORD, SECONDARY_USER_ID);
+        assertEquals(VerifyCredentialResponse.RESPONSE_OK, mService.verifyCredential(
+                PASSWORD, LockPatternUtils.CREDENTIAL_TYPE_PASSWORD, 0, SECONDARY_USER_ID)
+                        .getResponseCode());
+        verify(mAuthSecretService, never()).primaryUserCredential(any(ArrayList.class));
     }
 
     public void testManagedProfileUnifiedChallengeMigration() throws RemoteException {

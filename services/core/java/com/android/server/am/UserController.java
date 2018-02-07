@@ -83,6 +83,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.util.TimingsTraceLog;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
@@ -94,6 +95,7 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemServiceManager;
+import com.android.server.am.proto.UserControllerProto;
 import com.android.server.pm.UserManagerService;
 import com.android.server.wm.WindowManagerService;
 
@@ -101,6 +103,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -216,6 +219,18 @@ class UserController implements Handler.Callback {
     private volatile ArraySet<String> mCurWaitingUserSwitchCallbacks;
 
     /**
+     * Messages for for switching from {@link android.os.UserHandle#SYSTEM}.
+     */
+    @GuardedBy("mLock")
+    private String mSwitchingFromSystemUserMessage;
+
+    /**
+     * Messages for for switching to {@link android.os.UserHandle#SYSTEM}.
+     */
+    @GuardedBy("mLock")
+    private String mSwitchingToSystemUserMessage;
+
+    /**
      * Callbacks that are still active after {@link #USER_SWITCH_TIMEOUT_MS}
      */
     @GuardedBy("mLock")
@@ -249,39 +264,51 @@ class UserController implements Handler.Callback {
         }
     }
 
-    void stopRunningUsersLU(int maxRunningUsers) {
-        int currentlyRunning = mUserLru.size();
-        int i = 0;
-        while (currentlyRunning > maxRunningUsers && i < mUserLru.size()) {
-            Integer oldUserId = mUserLru.get(i);
-            UserState oldUss = mStartedUsers.get(oldUserId);
-            if (oldUss == null) {
+    List<Integer> getRunningUsersLU() {
+        ArrayList<Integer> runningUsers = new ArrayList<>();
+        for (Integer userId : mUserLru) {
+            UserState uss = mStartedUsers.get(userId);
+            if (uss == null) {
                 // Shouldn't happen, but be sane if it does.
-                mUserLru.remove(i);
-                currentlyRunning--;
                 continue;
             }
-            if (oldUss.state == UserState.STATE_STOPPING
-                    || oldUss.state == UserState.STATE_SHUTDOWN) {
+            if (uss.state == UserState.STATE_STOPPING
+                    || uss.state == UserState.STATE_SHUTDOWN) {
                 // This user is already stopping, doesn't count.
-                currentlyRunning--;
-                i++;
                 continue;
             }
-            if (oldUserId == UserHandle.USER_SYSTEM || oldUserId == mCurrentUserId) {
-                // Owner/System user and current user can't be stopped. We count it as running
-                // when it is not a pure system user.
-                if (UserInfo.isSystemOnly(oldUserId)) {
-                    currentlyRunning--;
+            if (userId == UserHandle.USER_SYSTEM) {
+                // We only count system user as running when it is not a pure system user.
+                if (UserInfo.isSystemOnly(userId)) {
+                    continue;
                 }
-                i++;
+            }
+            runningUsers.add(userId);
+        }
+        return runningUsers;
+    }
+
+    void stopRunningUsersLU(int maxRunningUsers) {
+        List<Integer> currentlyRunning = getRunningUsersLU();
+        Iterator<Integer> iterator = currentlyRunning.iterator();
+        while (currentlyRunning.size() > maxRunningUsers && iterator.hasNext()) {
+            Integer userId = iterator.next();
+            if (userId == UserHandle.USER_SYSTEM || userId == mCurrentUserId) {
+                // Owner/System user and current user can't be stopped
                 continue;
             }
-            // This is a user to be stopped.
-            if (stopUsersLU(oldUserId, false, null) == USER_OP_SUCCESS) {
-                currentlyRunning--;
+            if (stopUsersLU(userId, false, null) == USER_OP_SUCCESS) {
+                iterator.remove();
             }
-            i++;
+        }
+    }
+
+    /**
+     * Returns if more users can be started without stopping currently running users.
+     */
+    boolean canStartMoreUsers() {
+        synchronized (mLock) {
+            return getRunningUsersLU().size() < mMaxRunningUsers;
         }
     }
 
@@ -768,34 +795,25 @@ class UserController implements Handler.Callback {
     /**
      * Stops the guest or ephemeral user if it has gone to the background.
      */
-    private void stopGuestOrEphemeralUserIfBackground() {
-        IntArray userIds = new IntArray();
-        synchronized (mLock) {
-            final int num = mUserLru.size();
-            for (int i = 0; i < num; i++) {
-                Integer oldUserId = mUserLru.get(i);
-                UserState oldUss = mStartedUsers.get(oldUserId);
-                if (oldUserId == UserHandle.USER_SYSTEM || oldUserId == mCurrentUserId
-                        || oldUss.state == UserState.STATE_STOPPING
-                        || oldUss.state == UserState.STATE_SHUTDOWN) {
-                    continue;
-                }
-                userIds.add(oldUserId);
+    private void stopGuestOrEphemeralUserIfBackground(int oldUserId) {
+        if (DEBUG_MU) Slog.i(TAG, "Stop guest or ephemeral user if background: " + oldUserId);
+        synchronized(mLock) {
+            UserState oldUss = mStartedUsers.get(oldUserId);
+            if (oldUserId == UserHandle.USER_SYSTEM || oldUserId == mCurrentUserId || oldUss == null
+                    || oldUss.state == UserState.STATE_STOPPING
+                    || oldUss.state == UserState.STATE_SHUTDOWN) {
+                return;
             }
         }
-        final int userIdsSize = userIds.size();
-        for (int i = 0; i < userIdsSize; i++) {
-            int oldUserId = userIds.get(i);
-            UserInfo userInfo = getUserInfo(oldUserId);
-            if (userInfo.isEphemeral()) {
-                LocalServices.getService(UserManagerInternal.class).onEphemeralUserStop(oldUserId);
-            }
-            if (userInfo.isGuest() || userInfo.isEphemeral()) {
-                // This is a user to be stopped.
-                synchronized (mLock) {
-                    stopUsersLU(oldUserId, true, null);
-                }
-                break;
+
+        UserInfo userInfo = getUserInfo(oldUserId);
+        if (userInfo.isEphemeral()) {
+            LocalServices.getService(UserManagerInternal.class).onEphemeralUserStop(oldUserId);
+        }
+        if (userInfo.isGuest() || userInfo.isEphemeral()) {
+            // This is a user to be stopped.
+            synchronized (mLock) {
+                stopUsersLU(oldUserId, true, null);
             }
         }
     }
@@ -1187,7 +1205,8 @@ class UserController implements Handler.Callback {
 
     private void showUserSwitchDialog(Pair<UserInfo, UserInfo> fromToUserPair) {
         // The dialog will show and then initiate the user switch by calling startUserInForeground
-        mInjector.showUserSwitchingDialog(fromToUserPair.first, fromToUserPair.second);
+        mInjector.showUserSwitchingDialog(fromToUserPair.first, fromToUserPair.second,
+                getSwitchingFromSystemUserMessage(), getSwitchingToSystemUserMessage());
     }
 
     private void dispatchForegroundProfileChanged(int userId) {
@@ -1333,7 +1352,7 @@ class UserController implements Handler.Callback {
         mHandler.removeMessages(REPORT_USER_SWITCH_COMPLETE_MSG);
         mHandler.sendMessage(mHandler.obtainMessage(REPORT_USER_SWITCH_COMPLETE_MSG,
                 newUserId, 0));
-        stopGuestOrEphemeralUserIfBackground();
+        stopGuestOrEphemeralUserIfBackground(oldUserId);
         stopBackgroundUsersIfEnforced(oldUserId);
     }
 
@@ -1414,7 +1433,13 @@ class UserController implements Handler.Callback {
 
         if (callingUid != 0 && callingUid != SYSTEM_UID) {
             final boolean allow;
-            if (mInjector.checkComponentPermission(INTERACT_ACROSS_USERS_FULL, callingPid,
+            if (mInjector.isCallerRecents(callingUid)
+                    && callingUserId == getCurrentUserId()
+                    && isSameProfileGroup(callingUserId, targetUserId)) {
+                // If the caller is Recents and it is running in the current user, we then allow it
+                // to access its profiles.
+                allow = true;
+            } else if (mInjector.checkComponentPermission(INTERACT_ACROSS_USERS_FULL, callingPid,
                     callingUid, -1, true) == PackageManager.PERMISSION_GRANTED) {
                 // If the caller has this permission, they always pass go.  And collect $200.
                 allow = true;
@@ -1797,6 +1822,60 @@ class UserController implements Handler.Callback {
         return mLockPatternUtils.isLockScreenDisabled(userId);
     }
 
+    void setSwitchingFromSystemUserMessage(String switchingFromSystemUserMessage) {
+        synchronized (mLock) {
+            mSwitchingFromSystemUserMessage = switchingFromSystemUserMessage;
+        }
+    }
+
+    void setSwitchingToSystemUserMessage(String switchingToSystemUserMessage) {
+        synchronized (mLock) {
+            mSwitchingToSystemUserMessage = switchingToSystemUserMessage;
+        }
+    }
+
+    private String getSwitchingFromSystemUserMessage() {
+        synchronized (mLock) {
+            return mSwitchingFromSystemUserMessage;
+        }
+    }
+
+    private String getSwitchingToSystemUserMessage() {
+        synchronized (mLock) {
+            return mSwitchingToSystemUserMessage;
+        }
+    }
+
+    void writeToProto(ProtoOutputStream proto, long fieldId) {
+        synchronized (mLock) {
+            long token = proto.start(fieldId);
+            for (int i = 0; i < mStartedUsers.size(); i++) {
+                UserState uss = mStartedUsers.valueAt(i);
+                final long uToken = proto.start(UserControllerProto.STARTED_USERS);
+                proto.write(UserControllerProto.User.ID, uss.mHandle.getIdentifier());
+                uss.writeToProto(proto, UserControllerProto.User.STATE);
+                proto.end(uToken);
+            }
+            for (int i = 0; i < mStartedUserArray.length; i++) {
+                proto.write(UserControllerProto.STARTED_USER_ARRAY, mStartedUserArray[i]);
+            }
+            for (int i = 0; i < mUserLru.size(); i++) {
+                proto.write(UserControllerProto.USER_LRU, mUserLru.get(i));
+            }
+            if (mUserProfileGroupIds.size() > 0) {
+                for (int i = 0; i < mUserProfileGroupIds.size(); i++) {
+                    final long uToken = proto.start(UserControllerProto.USER_PROFILE_GROUP_IDS);
+                    proto.write(UserControllerProto.UserProfile.USER,
+                            mUserProfileGroupIds.keyAt(i));
+                    proto.write(UserControllerProto.UserProfile.PROFILE,
+                            mUserProfileGroupIds.valueAt(i));
+                    proto.end(uToken);
+                }
+            }
+            proto.end(token);
+        }
+    }
+
     void dump(PrintWriter pw, boolean dumpAll) {
         synchronized (mLock) {
             pw.println("  mStartedUsers:");
@@ -1821,10 +1900,6 @@ class UserController implements Handler.Callback {
                 pw.print(mUserLru.get(i));
             }
             pw.println("]");
-            if (dumpAll) {
-                pw.print("  mStartedUserArray: ");
-                pw.println(Arrays.toString(mStartedUserArray));
-            }
             if (mUserProfileGroupIds.size() > 0) {
                 pw.println("  mUserProfileGroupIds:");
                 for (int i=0; i< mUserProfileGroupIds.size(); i++) {
@@ -2077,9 +2152,11 @@ class UserController implements Handler.Callback {
             mService.installEncryptionUnawareProviders(userId);
         }
 
-        void showUserSwitchingDialog(UserInfo fromUser, UserInfo toUser) {
+        void showUserSwitchingDialog(UserInfo fromUser, UserInfo toUser,
+                String switchingFromSystemUserMessage, String switchingToSystemUserMessage) {
             Dialog d = new UserSwitchingDialog(mService, mService.mContext, fromUser, toUser,
-                    true /* above system */);
+                    true /* above system */, switchingFromSystemUserMessage,
+                    switchingToSystemUserMessage);
             d.show();
         }
 
@@ -2105,6 +2182,10 @@ class UserController implements Handler.Callback {
             synchronized (mService) {
                 mService.mLockTaskController.clearLockedTasks(reason);
             }
+        }
+
+        protected boolean isCallerRecents(int callingUid) {
+            return mService.getRecentTasks().isCallerRecents(callingUid);
         }
     }
 }

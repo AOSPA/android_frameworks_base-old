@@ -61,6 +61,8 @@ public:
         return mUidMap;
     }
 
+    void dumpStates(FILE* out, bool verbose);
+
 private:
     mutable mutex mMetricsMutex;
 
@@ -74,6 +76,8 @@ private:
     sp<UidMap> mUidMap;  // Reference to the UidMap to lookup app name and version for each uid.
 
     sp<AnomalyMonitor> mAnomalyMonitor;
+
+    void onDumpReportLocked(const ConfigKey& key, vector<uint8_t>* outData);
 
     /* Check if we should send a broadcast if approaching memory limits and if we're over, we
      * actually delete the data. */
@@ -99,6 +103,7 @@ private:
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensions);
     FRIEND_TEST(MetricConditionLinkE2eTest, TestMultiplePredicatesAndLinks);
     FRIEND_TEST(AttributionE2eTest, TestAttributionMatchAndSlice);
+    FRIEND_TEST(GaugeMetricE2eTest, TestMultipleFieldsForPushedEvent);
 
 };
 

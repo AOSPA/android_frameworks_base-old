@@ -1102,6 +1102,16 @@ public final class Telephony {
                 "android.provider.Telephony.MMS_DOWNLOADED";
 
             /**
+             * Broadcast Action: A debug code has been entered in the dialer. These "secret codes"
+             * are used to activate developer menus by dialing certain codes. And they are of the
+             * form {@code *#*#&lt;code&gt;#*#*}. The intent will have the data URI:
+             * {@code android_secret_code://&lt;code&gt;}.
+             */
+            @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+            public static final String SECRET_CODE_ACTION =
+                    "android.provider.Telephony.SECRET_CODE";
+
+            /**
              * Broadcast action: When the default SMS package changes,
              * the previous default SMS package and the new default SMS
              * package are sent this broadcast to notify them of the change.
@@ -2562,6 +2572,35 @@ public final class Telephony {
          * The {@code content://} style URL for this table.
          */
         public static final Uri CONTENT_URI = Uri.parse("content://telephony/carriers");
+
+        /**
+         * The {@code content://} style URL to be called from DevicePolicyManagerService,
+         * can manage DPC-owned APNs.
+         * @hide
+         */
+        public static final Uri DPC_URI = Uri.parse("content://telephony/carriers/dpc");
+
+        /**
+         * The {@code content://} style URL to be called from Telephony to query APNs.
+         * When DPC-owned APNs are enforced, only DPC-owned APNs are returned, otherwise only
+         * non-DPC-owned APNs are returned.
+         * @hide
+         */
+        public static final Uri FILTERED_URI = Uri.parse("content://telephony/carriers/filtered");
+
+        /**
+         * The {@code content://} style URL to be called from DevicePolicyManagerService
+         * or Telephony to manage whether DPC-owned APNs are enforced.
+         * @hide
+         */
+        public static final Uri ENFORCE_MANAGED_URI = Uri.parse(
+                "content://telephony/carriers/enforce_managed");
+
+        /**
+         * The column name for ENFORCE_MANAGED_URI, indicates whether DPC-owned APNs are enforced.
+         * @hide
+         */
+        public static final String ENFORCE_KEY = "enforced";
 
         /**
          * The default sort order for this table.

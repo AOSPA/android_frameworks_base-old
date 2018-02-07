@@ -180,6 +180,7 @@ public final class AudioAttributes implements Parcelable {
     /**
      * IMPORTANT: when adding new usage types, add them to SDK_USAGES and update SUPPRESSIBLE_USAGES
      *            if applicable, as well as audioattributes.proto.
+     *            Also consider adding them to <aaudio/AAudio.h> for the NDK.
      */
 
     /**
@@ -879,7 +880,9 @@ public final class AudioAttributes implements Parcelable {
     }
 
     /** @hide */
-    public void toProto(ProtoOutputStream proto) {
+    public void writeToProto(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+
         proto.write(AudioAttributesProto.USAGE, mUsage);
         proto.write(AudioAttributesProto.CONTENT_TYPE, mContentType);
         proto.write(AudioAttributesProto.FLAGS, mFlags);
@@ -891,6 +894,8 @@ public final class AudioAttributes implements Parcelable {
             }
         }
         // TODO: is the data in mBundle useful for debugging?
+
+        proto.end(token);
     }
 
     /** @hide */

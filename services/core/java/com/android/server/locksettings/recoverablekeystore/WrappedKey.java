@@ -16,8 +16,8 @@
 
 package com.android.server.locksettings.recoverablekeystore;
 
+import android.security.keystore.RecoveryController;
 import android.util.Log;
-import android.security.keystore.RecoveryManager;
 
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
@@ -97,7 +97,7 @@ public class WrappedKey {
                 /*nonce=*/ cipher.getIV(),
                 /*keyMaterial=*/ encryptedKeyMaterial,
                 /*platformKeyGenerationId=*/ wrappingKey.getGenerationId(),
-                RecoveryManager.RECOVERY_STATUS_SYNC_IN_PROGRESS);
+                RecoveryController.RECOVERY_STATUS_SYNC_IN_PROGRESS);
     }
 
     /**
@@ -107,14 +107,14 @@ public class WrappedKey {
      * @param keyMaterial The encrypted bytes of the key material.
      * @param platformKeyGenerationId The generation ID of the key used to wrap this key.
      *
-     * @see RecoveryManager.RECOVERY_STATUS_SYNC_IN_PROGRESS
+     * @see RecoveryController.RECOVERY_STATUS_SYNC_IN_PROGRESS
      * @hide
      */
     public WrappedKey(byte[] nonce, byte[] keyMaterial, int platformKeyGenerationId) {
         mNonce = nonce;
         mKeyMaterial = keyMaterial;
         mPlatformKeyGenerationId = platformKeyGenerationId;
-        mRecoveryStatus = RecoveryManager.RECOVERY_STATUS_SYNC_IN_PROGRESS;
+        mRecoveryStatus = RecoveryController.RECOVERY_STATUS_SYNC_IN_PROGRESS;
     }
 
     /**
@@ -184,7 +184,8 @@ public class WrappedKey {
     public static Map<String, SecretKey> unwrapKeys(
             PlatformDecryptionKey platformKey,
             Map<String, WrappedKey> wrappedKeys)
-            throws NoSuchAlgorithmException, NoSuchPaddingException, BadPlatformKeyException {
+            throws NoSuchAlgorithmException, NoSuchPaddingException, BadPlatformKeyException,
+            InvalidKeyException, InvalidAlgorithmParameterException {
         HashMap<String, SecretKey> unwrappedKeys = new HashMap<>();
         Cipher cipher = Cipher.getInstance(KEY_WRAP_CIPHER_ALGORITHM);
         int platformKeyGenerationId = platformKey.getGenerationId();
@@ -201,20 +202,10 @@ public class WrappedKey {
                         platformKey.getGenerationId()));
             }
 
-            try {
-                cipher.init(
-                        Cipher.UNWRAP_MODE,
-                        platformKey.getKey(),
-                        new GCMParameterSpec(GCM_TAG_LENGTH_BITS, wrappedKey.getNonce()));
-            } catch (InvalidKeyException | InvalidAlgorithmParameterException e) {
-                Log.e(TAG,
-                        String.format(
-                                Locale.US,
-                                "Could not init Cipher to unwrap recoverable key with alias '%s'",
-                                alias),
-                        e);
-                continue;
-            }
+            cipher.init(
+                    Cipher.UNWRAP_MODE,
+                    platformKey.getKey(),
+                    new GCMParameterSpec(GCM_TAG_LENGTH_BITS, wrappedKey.getNonce()));
             SecretKey key;
             try {
                 key = (SecretKey) cipher.unwrap(

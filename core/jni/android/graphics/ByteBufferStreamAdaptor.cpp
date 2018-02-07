@@ -1,5 +1,6 @@
 #include "ByteBufferStreamAdaptor.h"
 #include "core_jni_helpers.h"
+#include "Utils.h"
 
 #include <SkStream.h>
 
@@ -7,14 +8,6 @@ using namespace android;
 
 static jmethodID gByteBuffer_getMethodID;
 static jmethodID gByteBuffer_setPositionMethodID;
-
-static JNIEnv* get_env_or_die(JavaVM* jvm) {
-    JNIEnv* env;
-    if (jvm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
-        LOG_ALWAYS_FATAL("Failed to get JNIEnv for JavaVM: %p", jvm);
-    }
-    return env;
-}
 
 class ByteBufferStream : public SkStreamAsset {
 private:
@@ -67,7 +60,7 @@ public:
         }
 
         if (!buffer) {
-            return this->setPosition(mPosition + size);
+            return this->setPosition(mPosition + size) ? size : 0;
         }
 
         auto* env = get_env_or_die(mJvm);

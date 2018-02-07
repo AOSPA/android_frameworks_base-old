@@ -17,15 +17,21 @@ package com.android.server;
 
 import android.annotation.NonNull;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
 import android.app.AppOpsManager.PackageOps;
 import android.app.IActivityManager;
 import android.app.IUidObserver;
+import android.app.usage.UsageStatsManager;
+import android.app.usage.UsageStatsManagerInternal;
+import android.app.usage.UsageStatsManagerInternal.AppIdleStateChangeListener;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.ContentObserver;
+import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -39,6 +45,7 @@ import android.util.ArraySet;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseBooleanArray;
+import android.util.SparseSetArray;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
@@ -47,6 +54,7 @@ import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsService;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
+import com.android.server.ForceAppStandbyTrackerProto.ExemptedPackage;
 import com.android.server.ForceAppStandbyTrackerProto.RunAnyInBackgroundRestrictedPackages;
 
 import java.io.PrintWriter;
@@ -71,7 +79,7 @@ import java.util.List;
  */
 public class ForceAppStandbyTracker {
     private static final String TAG = "ForceAppStandbyTracker";
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG = true;
 
     @GuardedBy("ForceAppStandbyTracker.class")
     private static ForceAppStandbyTracker sInstance;
@@ -86,8 +94,13 @@ public class ForceAppStandbyTracker {
     AppOpsManager mAppOpsManager;
     IAppOpsService mAppOpsService;
     PowerManagerInternal mPowerManagerInternal;
+    StandbyTracker mStandbyTracker;
+    UsageStatsManagerInternal mUsageStatsManagerInternal;
 
     private final MyHandler mHandler;
+
+    @VisibleForTesting
+    FeatureFlagsObserver mFlagsObserver;
 
     /**
      * Pair of (uid (not user-id), packageName) with OP_RUN_ANY_IN_BACKGROUND *not* allowed.
@@ -98,11 +111,20 @@ public class ForceAppStandbyTracker {
     @GuardedBy("mLock")
     final SparseBooleanArray mForegroundUids = new SparseBooleanArray();
 
+    /**
+     * System except-idle + user whitelist in the device idle controller.
+     */
     @GuardedBy("mLock")
     private int[] mPowerWhitelistedAllAppIds = new int[0];
 
     @GuardedBy("mLock")
     private int[] mTempWhitelistedAppIds = mPowerWhitelistedAllAppIds;
+
+    /**
+     * Per-user packages that are in the EXEMPT bucket.
+     */
+    @GuardedBy("mLock")
+    private final SparseSetArray<String> mExemptedPackages = new SparseSetArray<>();
 
     @GuardedBy("mLock")
     final ArraySet<Listener> mListeners = new ArraySet<>();
@@ -110,14 +132,58 @@ public class ForceAppStandbyTracker {
     @GuardedBy("mLock")
     boolean mStarted;
 
+    /**
+     * Only used for small battery use-case.
+     */
     @GuardedBy("mLock")
-    boolean mForceAllAppsStandby;   // True if device is in extreme battery saver mode
+    boolean mIsPluggedIn;
 
     @GuardedBy("mLock")
-    boolean mForcedAppStandbyEnabled;   // True if the forced app standby feature is enabled
+    boolean mBatterySaverEnabled;
 
-    private class FeatureFlagObserver extends ContentObserver {
-        FeatureFlagObserver() {
+    /**
+     * True if the forced app standby is currently enabled
+     */
+    @GuardedBy("mLock")
+    boolean mForceAllAppsStandby;
+
+    /**
+     * True if the forced app standby for small battery devices feature is enabled in settings
+     */
+    @GuardedBy("mLock")
+    boolean mForceAllAppStandbyForSmallBattery;
+
+    /**
+     * True if the forced app standby feature is enabled in settings
+     */
+    @GuardedBy("mLock")
+    boolean mForcedAppStandbyEnabled;
+
+    interface Stats {
+        int UID_STATE_CHANGED = 0;
+        int RUN_ANY_CHANGED = 1;
+        int ALL_UNWHITELISTED = 2;
+        int ALL_WHITELIST_CHANGED = 3;
+        int TEMP_WHITELIST_CHANGED = 4;
+        int EXEMPT_CHANGED = 5;
+        int FORCE_ALL_CHANGED = 6;
+        int FORCE_APP_STANDBY_FEATURE_FLAG_CHANGED = 7;
+    }
+
+    private final StatLogger mStatLogger = new StatLogger(new String[] {
+            "UID_STATE_CHANGED",
+            "RUN_ANY_CHANGED",
+            "ALL_UNWHITELISTED",
+            "ALL_WHITELIST_CHANGED",
+            "TEMP_WHITELIST_CHANGED",
+            "EXEMPT_CHANGED",
+            "FORCE_ALL_CHANGED",
+            "FORCE_APP_STANDBY_FEATURE_FLAG_CHANGED",
+    });
+
+    @VisibleForTesting
+    class FeatureFlagsObserver extends ContentObserver {
+        FeatureFlagsObserver() {
             super(null);
         }
 
@@ -125,27 +191,52 @@ public class ForceAppStandbyTracker {
             mContext.getContentResolver().registerContentObserver(
                     Settings.Global.getUriFor(Settings.Global.FORCED_APP_STANDBY_ENABLED),
                     false, this);
+
+            mContext.getContentResolver().registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED), false, this);
         }
 
         boolean isForcedAppStandbyEnabled() {
-            return Settings.Global.getInt(mContext.getContentResolver(),
-                    Settings.Global.FORCED_APP_STANDBY_ENABLED, 1) == 1;
+            return injectGetGlobalSettingInt(Settings.Global.FORCED_APP_STANDBY_ENABLED, 1) == 1;
+        }
+
+        boolean isForcedAppStandbyForSmallBatteryEnabled() {
+            return injectGetGlobalSettingInt(
+                    Settings.Global.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED, 0) == 1;
         }
 
         @Override
-        public void onChange(boolean selfChange) {
-            final boolean enabled = isForcedAppStandbyEnabled();
-            synchronized (mLock) {
-                if (mForcedAppStandbyEnabled == enabled) {
-                    return;
+        public void onChange(boolean selfChange, Uri uri) {
+            if (Settings.Global.getUriFor(Settings.Global.FORCED_APP_STANDBY_ENABLED).equals(uri)) {
+                final boolean enabled = isForcedAppStandbyEnabled();
+                synchronized (mLock) {
+                    if (mForcedAppStandbyEnabled == enabled) {
+                        return;
+                    }
+                    mForcedAppStandbyEnabled = enabled;
+                    if (DEBUG) {
+                        Slog.d(TAG,"Forced app standby feature flag changed: "
+                                + mForcedAppStandbyEnabled);
+                    }
                 }
-                mForcedAppStandbyEnabled = enabled;
-                if (DEBUG) {
-                    Slog.d(TAG,
-                            "Forced app standby feature flag changed: " + mForcedAppStandbyEnabled);
+                mHandler.notifyForcedAppStandbyFeatureFlagChanged();
+            } else if (Settings.Global.getUriFor(
+                    Settings.Global.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED).equals(uri)) {
+                final boolean enabled = isForcedAppStandbyForSmallBatteryEnabled();
+                synchronized (mLock) {
+                    if (mForceAllAppStandbyForSmallBattery == enabled) {
+                        return;
+                    }
+                    mForceAllAppStandbyForSmallBattery = enabled;
+                    if (DEBUG) {
+                        Slog.d(TAG, "Forced app standby for small battery feature flag changed: "
+                                + mForceAllAppStandbyForSmallBattery);
+                    }
+                    updateForceAllAppStandbyState();
                 }
+            } else {
+                Slog.w(TAG, "Unexpected feature flag uri encountered: " + uri);
             }
-            mHandler.notifyFeatureFlagChanged();
         }
     }
 
@@ -157,8 +248,11 @@ public class ForceAppStandbyTracker {
                 int uid, @NonNull String packageName) {
             updateJobsForUidPackage(uid, packageName);
 
-            if (!sender.areAlarmsRestricted(uid, packageName)) {
+            if (!sender.areAlarmsRestricted(uid, packageName, /*allowWhileIdle=*/ false)) {
                 unblockAlarmsForUidPackage(uid, packageName);
+            } else if (!sender.areAlarmsRestricted(uid, packageName, /*allowWhileIdle=*/ true)){
+                // we need to deliver the allow-while-idle alarms for this uid, package
+                unblockAllUnrestrictedAlarms();
             }
         }
 
@@ -198,6 +292,17 @@ public class ForceAppStandbyTracker {
             // only for affected app-ids.
 
             updateAllJobs();
+
+            // Note when an app is just put in the temp whitelist, we do *not* drain pending alarms.
+        }
+
+        /**
+         * This is called when the EXEMPT bucket is updated.
+         */
+        private void onExemptChanged(ForceAppStandbyTracker sender) {
+            // This doesn't happen very often, so just re-evaluate all jobs / alarms.
+            updateAllJobs();
+            unblockAllUnrestrictedAlarms();
         }
 
         /**
@@ -286,9 +391,16 @@ public class ForceAppStandbyTracker {
             mAppOpsManager = Preconditions.checkNotNull(injectAppOpsManager());
             mAppOpsService = Preconditions.checkNotNull(injectIAppOpsService());
             mPowerManagerInternal = Preconditions.checkNotNull(injectPowerManagerInternal());
-            final FeatureFlagObserver flagObserver = new FeatureFlagObserver();
-            flagObserver.register();
-            mForcedAppStandbyEnabled = flagObserver.isForcedAppStandbyEnabled();
+            mUsageStatsManagerInternal = Preconditions.checkNotNull(
+                    injectUsageStatsManagerInternal());
+
+            mFlagsObserver = new FeatureFlagsObserver();
+            mFlagsObserver.register();
+            mForcedAppStandbyEnabled = mFlagsObserver.isForcedAppStandbyEnabled();
+            mForceAllAppStandbyForSmallBattery =
+                    mFlagsObserver.isForcedAppStandbyForSmallBatteryEnabled();
+            mStandbyTracker = new StandbyTracker();
+            mUsageStatsManagerInternal.addAppIdleStateChangeListener(mStandbyTracker);
 
             try {
                 mIActivityManager.registerUidObserver(new UidObserver(),
@@ -303,16 +415,24 @@ public class ForceAppStandbyTracker {
 
             IntentFilter filter = new IntentFilter();
             filter.addAction(Intent.ACTION_USER_REMOVED);
+            filter.addAction(Intent.ACTION_BATTERY_CHANGED);
             mContext.registerReceiver(new MyReceiver(), filter);
 
             refreshForcedAppStandbyUidPackagesLocked();
 
             mPowerManagerInternal.registerLowPowerModeObserver(
                     ServiceType.FORCE_ALL_APPS_STANDBY,
-                    (state) -> updateForceAllAppsStandby(state.batterySaverEnabled));
+                    (state) -> {
+                        synchronized (mLock) {
+                            mBatterySaverEnabled = state.batterySaverEnabled;
+                            updateForceAllAppStandbyState();
+                        }
+                    });
 
-            updateForceAllAppsStandby(mPowerManagerInternal.getLowPowerState(
-                    ServiceType.FORCE_ALL_APPS_STANDBY).batterySaverEnabled);
+            mBatterySaverEnabled = mPowerManagerInternal.getLowPowerState(
+                    ServiceType.FORCE_ALL_APPS_STANDBY).batterySaverEnabled;
+
+            updateForceAllAppStandbyState();
         }
     }
 
@@ -335,6 +455,21 @@ public class ForceAppStandbyTracker {
     @VisibleForTesting
     PowerManagerInternal injectPowerManagerInternal() {
         return LocalServices.getService(PowerManagerInternal.class);
+    }
+
+    @VisibleForTesting
+    UsageStatsManagerInternal injectUsageStatsManagerInternal() {
+        return LocalServices.getService(UsageStatsManagerInternal.class);
+    }
+
+    @VisibleForTesting
+    boolean isSmallBatteryDevice() {
+        return ActivityManager.isSmallBatteryDevice();
+    }
+
+    @VisibleForTesting
+    int injectGetGlobalSettingInt(String key, int def) {
+        return Settings.Global.getInt(mContext.getContentResolver(), key, def);
     }
 
     /**
@@ -366,18 +501,26 @@ public class ForceAppStandbyTracker {
         }
     }
 
+    private void updateForceAllAppStandbyState() {
+        synchronized (mLock) {
+            if (mForceAllAppStandbyForSmallBattery && isSmallBatteryDevice()) {
+                toggleForceAllAppsStandbyLocked(!mIsPluggedIn);
+            } else {
+                toggleForceAllAppsStandbyLocked(mBatterySaverEnabled);
+            }
+        }
+    }
+
     /**
      * Update {@link #mForceAllAppsStandby} and notifies the listeners.
      */
-    void updateForceAllAppsStandby(boolean enable) {
-        synchronized (mLock) {
-            if (enable == mForceAllAppsStandby) {
-                return;
-            }
-            mForceAllAppsStandby = enable;
-
-            mHandler.notifyForceAllAppsStandbyChanged();
+    private void toggleForceAllAppsStandbyLocked(boolean enable) {
+        if (enable == mForceAllAppsStandby) {
+            return;
         }
+        mForceAllAppsStandby = enable;
+
+        mHandler.notifyForceAllAppsStandbyChanged();
     }
 
     private int findForcedAppStandbyUidPackageIndexLocked(int uid, @NonNull String packageName) {
@@ -425,7 +568,7 @@ public class ForceAppStandbyTracker {
      */
     void uidToForeground(int uid) {
         synchronized (mLock) {
-            if (!UserHandle.isApp(uid)) {
+            if (UserHandle.isCore(uid)) {
                 return;
             }
             // TODO This can be optimized by calling indexOfKey and sharing the index for get and
@@ -443,7 +586,7 @@ public class ForceAppStandbyTracker {
      */
     void uidToBackground(int uid, boolean remove) {
         synchronized (mLock) {
-            if (!UserHandle.isApp(uid)) {
+            if (UserHandle.isCore(uid)) {
                 return;
             }
             // TODO This can be optimized by calling indexOfKey and sharing the index for get and
@@ -512,7 +655,36 @@ public class ForceAppStandbyTracker {
                 if (userId > 0) {
                     mHandler.doUserRemoved(userId);
                 }
+            } else if (Intent.ACTION_BATTERY_CHANGED.equals(intent.getAction())) {
+                synchronized (mLock) {
+                    mIsPluggedIn = (intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0);
+                }
+                updateForceAllAppStandbyState();
             }
+        }
+    }
+
+    final class StandbyTracker extends AppIdleStateChangeListener {
+        @Override
+        public void onAppIdleStateChanged(String packageName, int userId, boolean idle,
+                int bucket) {
+            if (DEBUG) {
+                Slog.d(TAG,"onAppIdleStateChanged: " + packageName + " u" + userId
+                        + (idle ? " idle" : " active") + " " + bucket);
+            }
+            final boolean changed;
+            if (bucket == UsageStatsManager.STANDBY_BUCKET_EXEMPTED) {
+                changed = mExemptedPackages.add(userId, packageName);
+            } else {
+                changed = mExemptedPackages.remove(userId, packageName);
+            }
+            if (changed) {
+                mHandler.notifyExemptChanged();
+            }
+        }
+
+        @Override
+        public void onParoleStateChanged(boolean isParoleOn) {
         }
     }
 
@@ -530,7 +702,8 @@ public class ForceAppStandbyTracker {
         private static final int MSG_TEMP_WHITELIST_CHANGED = 5;
         private static final int MSG_FORCE_ALL_CHANGED = 6;
         private static final int MSG_USER_REMOVED = 7;
-        private static final int MSG_FEATURE_FLAG_CHANGED = 8;
+        private static final int MSG_FORCE_APP_STANDBY_FEATURE_FLAG_CHANGED = 8;
+        private static final int MSG_EXEMPT_CHANGED = 9;
 
         public MyHandler(Looper looper) {
             super(looper);
@@ -560,8 +733,12 @@ public class ForceAppStandbyTracker {
             obtainMessage(MSG_FORCE_ALL_CHANGED).sendToTarget();
         }
 
-        public void notifyFeatureFlagChanged() {
-            obtainMessage(MSG_FEATURE_FLAG_CHANGED).sendToTarget();
+        public void notifyForcedAppStandbyFeatureFlagChanged() {
+            obtainMessage(MSG_FORCE_APP_STANDBY_FEATURE_FLAG_CHANGED).sendToTarget();
+        }
+
+        public void notifyExemptChanged() {
+            obtainMessage(MSG_EXEMPT_CHANGED).sendToTarget();
         }
 
         public void doUserRemoved(int userId) {
@@ -584,50 +761,73 @@ public class ForceAppStandbyTracker {
             }
             final ForceAppStandbyTracker sender = ForceAppStandbyTracker.this;
 
+            long start = mStatLogger.getTime();
             switch (msg.what) {
                 case MSG_UID_STATE_CHANGED:
                     for (Listener l : cloneListeners()) {
                         l.onUidForegroundStateChanged(sender, msg.arg1);
                     }
+                    mStatLogger.logDurationStat(Stats.UID_STATE_CHANGED, start);
                     return;
+
                 case MSG_RUN_ANY_CHANGED:
                     for (Listener l : cloneListeners()) {
                         l.onRunAnyAppOpsChanged(sender, msg.arg1, (String) msg.obj);
                     }
+                    mStatLogger.logDurationStat(Stats.RUN_ANY_CHANGED, start);
                     return;
+
                 case MSG_ALL_UNWHITELISTED:
                     for (Listener l : cloneListeners()) {
                         l.onPowerSaveUnwhitelisted(sender);
                     }
+                    mStatLogger.logDurationStat(Stats.ALL_UNWHITELISTED, start);
                     return;
+
                 case MSG_ALL_WHITELIST_CHANGED:
                     for (Listener l : cloneListeners()) {
                         l.onPowerSaveWhitelistedChanged(sender);
                     }
+                    mStatLogger.logDurationStat(Stats.ALL_WHITELIST_CHANGED, start);
                     return;
+
                 case MSG_TEMP_WHITELIST_CHANGED:
                     for (Listener l : cloneListeners()) {
                         l.onTempPowerSaveWhitelistChanged(sender);
                     }
+                    mStatLogger.logDurationStat(Stats.TEMP_WHITELIST_CHANGED, start);
                     return;
+
+                case MSG_EXEMPT_CHANGED:
+                    for (Listener l : cloneListeners()) {
+                        l.onExemptChanged(sender);
+                    }
+                    mStatLogger.logDurationStat(Stats.EXEMPT_CHANGED, start);
+                    return;
+
                 case MSG_FORCE_ALL_CHANGED:
                     for (Listener l : cloneListeners()) {
                         l.onForceAllAppsStandbyChanged(sender);
                     }
+                    mStatLogger.logDurationStat(Stats.FORCE_ALL_CHANGED, start);
                     return;
-                case MSG_FEATURE_FLAG_CHANGED:
+
+                case MSG_FORCE_APP_STANDBY_FEATURE_FLAG_CHANGED:
                     // Feature flag for forced app standby changed.
                     final boolean unblockAlarms;
                     synchronized (mLock) {
                         unblockAlarms = !mForcedAppStandbyEnabled && !mForceAllAppsStandby;
                     }
-                    for (Listener l: cloneListeners()) {
+                    for (Listener l : cloneListeners()) {
                         l.updateAllJobs();
                         if (unblockAlarms) {
                             l.unblockAllUnrestrictedAlarms();
                         }
                     }
+                    mStatLogger.logDurationStat(
+                            Stats.FORCE_APP_STANDBY_FEATURE_FLAG_CHANGED, start);
                     return;
+
                 case MSG_USER_REMOVED:
                     handleUserRemoved(msg.arg1);
                     return;
@@ -654,6 +854,7 @@ public class ForceAppStandbyTracker {
                     mForegroundUids.removeAt(i);
                 }
             }
+            mExemptedPackages.remove(removedUserId);
         }
     }
 
@@ -733,22 +934,26 @@ public class ForceAppStandbyTracker {
     /**
      * @return whether alarms should be restricted for a UID package-name.
      */
-    public boolean areAlarmsRestricted(int uid, @NonNull String packageName) {
-        return isRestricted(uid, packageName, /*useTempWhitelistToo=*/ false);
+    public boolean areAlarmsRestricted(int uid, @NonNull String packageName,
+            boolean allowWhileIdle) {
+        return isRestricted(uid, packageName, /*useTempWhitelistToo=*/ false,
+                /* exemptOnBatterySaver =*/ allowWhileIdle);
     }
 
     /**
      * @return whether jobs should be restricted for a UID package-name.
      */
-    public boolean areJobsRestricted(int uid, @NonNull String packageName) {
-        return isRestricted(uid, packageName, /*useTempWhitelistToo=*/ true);
+    public boolean areJobsRestricted(int uid, @NonNull String packageName,
+            boolean hasForegroundExemption) {
+        return isRestricted(uid, packageName, /*useTempWhitelistToo=*/ true,
+                hasForegroundExemption);
     }
 
     /**
      * @return whether force-app-standby is effective for a UID package-name.
      */
     private boolean isRestricted(int uid, @NonNull String packageName,
-            boolean useTempWhitelistToo) {
+            boolean useTempWhitelistToo, boolean exemptOnBatterySaver) {
         if (isInForeground(uid)) {
             return false;
         }
@@ -762,22 +967,29 @@ public class ForceAppStandbyTracker {
                     ArrayUtils.contains(mTempWhitelistedAppIds, appId)) {
                 return false;
             }
-
-            if (mForceAllAppsStandby) {
+            if (mForcedAppStandbyEnabled && isRunAnyRestrictedLocked(uid, packageName)) {
                 return true;
             }
-
-            return mForcedAppStandbyEnabled && isRunAnyRestrictedLocked(uid, packageName);
+            if (exemptOnBatterySaver) {
+                return false;
+            }
+            final int userId = UserHandle.getUserId(uid);
+            if (mExemptedPackages.contains(userId, packageName)) {
+                return false;
+            }
+            return mForceAllAppsStandby;
         }
     }
 
     /**
      * @return whether a UID is in the foreground or not.
      *
-     * Note clients normally shouldn't need to access it. It's only for dumpsys.
+     * Note this information is based on the UID proc state callback, meaning it's updated
+     * asynchronously and may subtly be stale. If the fresh data is needed, use
+     * {@link ActivityManagerInternal#getUidProcessState} instead.
      */
     public boolean isInForeground(int uid) {
-        if (!UserHandle.isApp(uid)) {
+        if (UserHandle.isCore(uid)) {
             return true;
         }
         synchronized (mLock) {
@@ -788,7 +1000,6 @@ public class ForceAppStandbyTracker {
     /**
      * @return whether force all apps standby is enabled or not.
      *
-     * Note clients normally shouldn't need to access it.
      */
     boolean isForceAllAppsStandbyEnabled() {
         synchronized (mLock) {
@@ -839,6 +1050,18 @@ public class ForceAppStandbyTracker {
             pw.println(isForceAllAppsStandbyEnabled());
 
             pw.print(indent);
+            pw.print("Small Battery Device: ");
+            pw.println(isSmallBatteryDevice());
+
+            pw.print(indent);
+            pw.print("Force all apps standby for small battery device: ");
+            pw.println(mForceAllAppStandbyForSmallBattery);
+
+            pw.print(indent);
+            pw.print("Plugged In: ");
+            pw.println(mIsPluggedIn);
+
+            pw.print(indent);
             pw.print("Foreground uids: [");
 
             String sep = "";
@@ -860,6 +1083,23 @@ public class ForceAppStandbyTracker {
             pw.println(Arrays.toString(mTempWhitelistedAppIds));
 
             pw.print(indent);
+            pw.println("Exempted packages:");
+            for (int i = 0; i < mExemptedPackages.size(); i++) {
+                pw.print(indent);
+                pw.print("  User ");
+                pw.print(mExemptedPackages.keyAt(i));
+                pw.println();
+
+                for (int j = 0; j < mExemptedPackages.sizeAt(i); j++) {
+                    pw.print(indent);
+                    pw.print("    ");
+                    pw.print(mExemptedPackages.valueAt(i, j));
+                    pw.println();
+                }
+            }
+            pw.println();
+
+            pw.print(indent);
             pw.println("Restricted packages:");
             for (Pair<Integer, String> uidAndPackage : mRunAnyRestrictedPackages) {
                 pw.print(indent);
@@ -869,6 +1109,8 @@ public class ForceAppStandbyTracker {
                 pw.print(uidAndPackage.second);
                 pw.println();
             }
+
+            mStatLogger.dump(pw, indent);
         }
     }
 
@@ -877,6 +1119,11 @@ public class ForceAppStandbyTracker {
             final long token = proto.start(fieldId);
 
             proto.write(ForceAppStandbyTrackerProto.FORCE_ALL_APPS_STANDBY, mForceAllAppsStandby);
+            proto.write(ForceAppStandbyTrackerProto.IS_SMALL_BATTERY_DEVICE,
+                    isSmallBatteryDevice());
+            proto.write(ForceAppStandbyTrackerProto.FORCE_ALL_APPS_STANDBY_FOR_SMALL_BATTERY,
+                    mForceAllAppStandbyForSmallBattery);
+            proto.write(ForceAppStandbyTrackerProto.IS_PLUGGED_IN, mIsPluggedIn);
 
             for (int i = 0; i < mForegroundUids.size(); i++) {
                 if (mForegroundUids.valueAt(i)) {
@@ -893,6 +1140,18 @@ public class ForceAppStandbyTracker {
                 proto.write(ForceAppStandbyTrackerProto.TEMP_POWER_SAVE_WHITELIST_APP_IDS, appId);
             }
 
+            for (int i = 0; i < mExemptedPackages.size(); i++) {
+                for (int j = 0; j < mExemptedPackages.sizeAt(i); j++) {
+                    final long token2 = proto.start(
+                            ForceAppStandbyTrackerProto.EXEMPTED_PACKAGES);
+
+                    proto.write(ExemptedPackage.USER_ID, mExemptedPackages.keyAt(i));
+                    proto.write(ExemptedPackage.PACKAGE_NAME, mExemptedPackages.valueAt(i, j));
+
+                    proto.end(token2);
+                }
+            }
+
             for (Pair<Integer, String> uidAndPackage : mRunAnyRestrictedPackages) {
                 final long token2 = proto.start(
                         ForceAppStandbyTrackerProto.RUN_ANY_IN_BACKGROUND_RESTRICTED_PACKAGES);
@@ -901,6 +1160,9 @@ public class ForceAppStandbyTracker {
                         uidAndPackage.second);
                 proto.end(token2);
             }
+
+            mStatLogger.dumpProto(proto, ForceAppStandbyTrackerProto.STATS);
+
             proto.end(token);
         }
     }

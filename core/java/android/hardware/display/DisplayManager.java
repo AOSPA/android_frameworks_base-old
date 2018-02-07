@@ -22,6 +22,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.app.KeyguardManager;
 import android.content.Context;
 import android.graphics.Point;
@@ -622,6 +623,8 @@ public final class DisplayManager {
      * Fetch {@link BrightnessChangeEvent}s.
      * @hide until we make it a system api.
      */
+    @SystemApi
+    @TestApi
     @RequiresPermission(Manifest.permission.BRIGHTNESS_SLIDER_USAGE)
     public List<BrightnessChangeEvent> getBrightnessEvents() {
         return mGlobal.getBrightnessEvents(mContext.getOpPackageName());
@@ -632,8 +635,11 @@ public final class DisplayManager {
      *
      * @hide
      */
+    @SystemApi
+    @TestApi
+    @RequiresPermission(Manifest.permission.CONFIGURE_DISPLAY_BRIGHTNESS)
     public void setBrightnessConfiguration(BrightnessConfiguration c) {
-        setBrightnessConfigurationForUser(c, UserHandle.myUserId());
+        setBrightnessConfigurationForUser(c, UserHandle.myUserId(), mContext.getPackageName());
     }
 
     /**
@@ -644,8 +650,37 @@ public final class DisplayManager {
      *
      * @hide
      */
-    public void setBrightnessConfigurationForUser(BrightnessConfiguration c, int userId) {
-        mGlobal.setBrightnessConfigurationForUser(c, userId);
+    public void setBrightnessConfigurationForUser(BrightnessConfiguration c, int userId,
+            String packageName) {
+        mGlobal.setBrightnessConfigurationForUser(c, userId, packageName);
+    }
+
+    /**
+     * Temporarily sets the brightness of the display.
+     * <p>
+     * Requires the {@link android.Manifest.permission#CONTROL_DISPLAY_BRIGHTNESS} permission.
+     * </p>
+     *
+     * @param brightness The brightness value from 0 to 255.
+     *
+     * @hide Requires signature permission.
+     */
+    public void setTemporaryBrightness(int brightness) {
+        mGlobal.setTemporaryBrightness(brightness);
+    }
+
+    /**
+     * Temporarily sets the auto brightness adjustment factor.
+     * <p>
+     * Requires the {@link android.Manifest.permission#CONTROL_DISPLAY_BRIGHTNESS} permission.
+     * </p>
+     *
+     * @param adjustment The adjustment factor from -1.0 to 1.0.
+     *
+     * @hide Requires signature permission.
+     */
+    public void setTemporaryAutoBrightnessAdjustment(float adjustment) {
+        mGlobal.setTemporaryAutoBrightnessAdjustment(adjustment);
     }
 
     /**

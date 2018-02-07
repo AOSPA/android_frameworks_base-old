@@ -24,6 +24,7 @@
 #include "core_jni_helpers.h"
 #include <nativehelper/ScopedStringChars.h>
 #include <nativehelper/ScopedUtfChars.h>
+#include <nativehelper/ScopedPrimitiveArray.h>
 
 #include "SkBlurDrawLooper.h"
 #include "SkColorFilter.h"
@@ -307,7 +308,8 @@ namespace PaintGlue {
     static void getTextPath(JNIEnv* env, Paint* paint, const Typeface* typeface, const jchar* text,
             jint count, jint bidiFlags, jfloat x, jfloat y, SkPath* path) {
         minikin::Layout layout = MinikinUtils::doLayout(
-                paint, static_cast<minikin::Bidi>(bidiFlags), typeface, text, 0, count, count);
+                paint, static_cast<minikin::Bidi>(bidiFlags), typeface, text, 0, count, count,
+                nullptr, 0);
         size_t nGlyphs = layout.nGlyphs();
         uint16_t* glyphs = new uint16_t[nGlyphs];
         SkPoint* pos = new SkPoint[nGlyphs];
@@ -349,7 +351,8 @@ namespace PaintGlue {
         SkIRect ir;
 
         minikin::Layout layout = MinikinUtils::doLayout(&paint,
-                static_cast<minikin::Bidi>(bidiFlags), typeface, text, 0, count, count);
+                static_cast<minikin::Bidi>(bidiFlags), typeface, text, 0, count, count, nullptr,
+                0);
         minikin::MinikinRect rect;
         layout.getBounds(&rect);
         r.fLeft = rect.mLeft;
@@ -465,7 +468,7 @@ namespace PaintGlue {
         }
         minikin::Layout layout = MinikinUtils::doLayout(paint,
                 static_cast<minikin::Bidi>(bidiFlags), typeface, str.get(), 0, str.size(),
-                str.size());
+                str.size(), nullptr, 0);
         size_t nGlyphs = countNonSpaceGlyphs(layout);
         if (nGlyphs != 1 && nChars > 1) {
             // multiple-character input, and was not a ligature
@@ -485,7 +488,8 @@ namespace PaintGlue {
             // U+1F1FF (REGIONAL INDICATOR SYMBOL LETTER Z) is \uD83C\uDDFF in UTF16.
             static const jchar ZZ_FLAG_STR[] = { 0xD83C, 0xDDFF, 0xD83C, 0xDDFF };
             minikin::Layout zzLayout = MinikinUtils::doLayout(paint,
-                    static_cast<minikin::Bidi>(bidiFlags), typeface, ZZ_FLAG_STR, 0, 4, 4);
+                    static_cast<minikin::Bidi>(bidiFlags), typeface, ZZ_FLAG_STR, 0, 4, 4,
+                    nullptr, 0);
             if (zzLayout.nGlyphs() != 1 || layoutContainsNotdef(zzLayout)) {
                 // The font collection doesn't have a glyph for unknown flag. Just return true.
                 return true;
@@ -512,11 +516,10 @@ namespace PaintGlue {
             jint start, jint end, jint contextStart, jint contextEnd, jboolean isRtl, jint offset) {
         const Paint* paint = reinterpret_cast<Paint*>(paintHandle);
         const Typeface* typeface = paint->getAndroidTypeface();
-        jchar* textArray = (jchar*) env->GetPrimitiveArrayCritical(text, nullptr);
-        jfloat result = doRunAdvance(paint, typeface, textArray + contextStart,
+        ScopedCharArrayRO textArray(env, text);
+        jfloat result = doRunAdvance(paint, typeface, textArray.get() + contextStart,
                 start - contextStart, end - start, contextEnd - contextStart, isRtl,
                 offset - contextStart);
-        env->ReleasePrimitiveArrayCritical(text, textArray, JNI_ABORT);
         return result;
     }
 
@@ -534,11 +537,10 @@ namespace PaintGlue {
             jboolean isRtl, jfloat advance) {
         const Paint* paint = reinterpret_cast<Paint*>(paintHandle);
         const Typeface* typeface = paint->getAndroidTypeface();
-        jchar* textArray = (jchar*) env->GetPrimitiveArrayCritical(text, nullptr);
-        jint result = doOffsetForAdvance(paint, typeface, textArray + contextStart,
+        ScopedCharArrayRO textArray(env, text);
+        jint result = doOffsetForAdvance(paint, typeface, textArray.get() + contextStart,
                 start - contextStart, end - start, contextEnd - contextStart, isRtl, advance);
         result += contextStart;
-        env->ReleasePrimitiveArrayCritical(text, textArray, JNI_ABORT);
         return result;
     }
 

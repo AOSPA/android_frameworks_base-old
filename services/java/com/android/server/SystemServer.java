@@ -46,10 +46,10 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.storage.IStorageManager;
-import android.util.TimingsTraceLog;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Slog;
+import android.util.TimingsTraceLog;
 import android.view.WindowManager;
 
 import com.android.internal.R;
@@ -57,20 +57,21 @@ import com.android.internal.app.ColorDisplayController;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
-import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.util.ConcurrentUtils;
+import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.widget.ILockSettings;
 import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.audio.AudioService;
+import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
 import com.android.server.car.CarServiceHelperService;
 import com.android.server.clipboard.ClipboardService;
 import com.android.server.connectivity.IpConnectivityMetrics;
 import com.android.server.coverage.CoverageService;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
-import com.android.server.display.DisplayManagerService;
 import com.android.server.display.ColorDisplayService;
+import com.android.server.display.DisplayManagerService;
 import com.android.server.dreams.DreamManagerService;
 import com.android.server.emergency.EmergencyAffordanceService;
 import com.android.server.fingerprint.FingerprintService;
@@ -80,6 +81,7 @@ import com.android.server.job.JobSchedulerService;
 import com.android.server.lights.LightsService;
 import com.android.server.media.MediaResourceMonitorService;
 import com.android.server.media.MediaRouterService;
+import com.android.server.media.MediaUpdateService;
 import com.android.server.media.MediaSessionService;
 import com.android.server.media.projection.MediaProjectionManagerService;
 import com.android.server.net.NetworkPolicyManagerService;
@@ -91,17 +93,16 @@ import com.android.server.om.OverlayManagerService;
 import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
 import com.android.server.pm.BackgroundDexOptService;
+import com.android.server.pm.CrossProfileAppsService;
 import com.android.server.pm.Installer;
 import com.android.server.pm.LauncherAppsService;
 import com.android.server.pm.OtaDexoptService;
 import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.ShortcutService;
 import com.android.server.pm.UserManagerService;
-import com.android.server.pm.crossprofile.CrossProfileAppsService;
 import com.android.server.policy.PhoneWindowManager;
 import com.android.server.power.PowerManagerService;
 import com.android.server.power.ShutdownThread;
-import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.restrictions.RestrictionsManagerService;
 import com.android.server.security.KeyAttestationApplicationIdProviderService;
 import com.android.server.security.KeyChainSystemService;
@@ -159,7 +160,7 @@ public final class SystemServer {
      * them from the build system somehow.
      */
     private static final String BACKUP_MANAGER_SERVICE_CLASS =
-            "com.android.server.backup.RefactoredBackupManagerService$Lifecycle";
+            "com.android.server.backup.BackupManagerService$Lifecycle";
     private static final String APPWIDGET_SERVICE_CLASS =
             "com.android.server.appwidget.AppWidgetService";
     private static final String VOICE_RECOGNITION_MANAGER_SERVICE_CLASS =
@@ -1171,6 +1172,15 @@ public final class SystemServer {
             }
             traceEnd();
 
+            traceBeginAndSlog("StartSystemUpdateManagerService");
+            try {
+                ServiceManager.addService(Context.SYSTEM_UPDATE_SERVICE,
+                        new SystemUpdateManagerService(context));
+            } catch (Throwable e) {
+                reportWtf("starting SystemUpdateManagerService", e);
+            }
+            traceEnd();
+
             traceBeginAndSlog("StartUpdateLockService");
             try {
                 ServiceManager.addService(Context.UPDATE_LOCK_SERVICE,
@@ -1440,6 +1450,10 @@ public final class SystemServer {
 
             traceBeginAndSlog("StartMediaSessionService");
             mSystemServiceManager.startService(MediaSessionService.class);
+            traceEnd();
+
+            traceBeginAndSlog("StartMediaUpdateService");
+            mSystemServiceManager.startService(MediaUpdateService.class);
             traceEnd();
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_HDMI_CEC)) {

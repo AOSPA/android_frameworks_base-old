@@ -51,8 +51,9 @@ const int FIELD_ID_GAUGE_METRICS = 8;
 // for GaugeMetricDataWrapper
 const int FIELD_ID_DATA = 1;
 // for GaugeMetricData
-const int FIELD_ID_DIMENSION = 1;
-const int FIELD_ID_BUCKET_INFO = 2;
+const int FIELD_ID_DIMENSION_IN_WHAT = 1;
+const int FIELD_ID_DIMENSION_IN_CONDITION = 2;
+const int FIELD_ID_BUCKET_INFO = 3;
 // for GaugeBucketInfo
 const int FIELD_ID_START_BUCKET_NANOS = 1;
 const int FIELD_ID_END_BUCKET_NANOS = 2;
@@ -79,7 +80,7 @@ GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric
     mFieldFilter = metric.gauge_fields_filter();
 
     // TODO: use UidMap if uid->pkg_name is required
-    mDimensions = metric.dimensions();
+    mDimensions = metric.dimensions_in_what();
 
     if (metric.links().size() > 0) {
         mConditionLinks.insert(mConditionLinks.begin(), metric.links().begin(),
@@ -114,6 +115,9 @@ GaugeMetricProducer::~GaugeMetricProducer() {
 
 void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs, StatsLogReport* report) {
     flushIfNeededLocked(dumpTimeNs);
+    ProtoOutputStream pbOutput;
+    onDumpReportLocked(dumpTimeNs, &pbOutput);
+    parseProtoOutputStream(pbOutput, report);
 }
 
 void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
@@ -121,6 +125,9 @@ void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
     VLOG("gauge metric %lld report now...", (long long)mMetricId);
 
     flushIfNeededLocked(dumpTimeNs);
+    if (mPastBuckets.empty()) {
+        return;
+    }
 
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)mMetricId);
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_START_REPORT_NANOS, (long long)mStartTimeNs);
@@ -135,7 +142,7 @@ void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
 
         // First fill dimension.
         long long dimensionToken = protoOutput->start(
-                FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_DIMENSION);
+                FIELD_TYPE_MESSAGE | FIELD_ID_DIMENSION_IN_WHAT);
         writeDimensionsValueProtoToStream(hashableKey.getDimensionsValue(), protoOutput);
         protoOutput->end(dimensionToken);
 

@@ -38,6 +38,7 @@ import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.IDockedStackListener;
 import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedStackListener;
+import android.view.RemoteAnimationAdapter;
 import android.view.IRotationWatcher;
 import android.view.IWallpaperVisibilityListener;
 import android.view.IWindowSession;
@@ -124,6 +125,7 @@ interface IWindowManager
     void overridePendingAppTransitionMultiThumbFuture(
             IAppTransitionAnimationSpecsFuture specsFuture, IRemoteCallback startedCallback,
             boolean scaleUp);
+    void overridePendingAppTransitionRemote(in RemoteAnimationAdapter remoteAnimationAdapter);
     void executeAppTransition();
 
     /** Used by system ui to report that recents has shown itself. */
@@ -292,6 +294,11 @@ interface IWindowManager
      * Device has a software navigation bar (separate from the status bar).
      */
     boolean hasNavigationBar();
+
+    /**
+    * Get the position of the nav bar
+    */
+    int getNavBarPosition();
 
     /**
      * Lock the device immediately with the specified options (can be null).

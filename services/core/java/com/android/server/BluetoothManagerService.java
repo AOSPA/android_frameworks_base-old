@@ -60,6 +60,7 @@ import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
 import android.util.Slog;
 
+import com.android.internal.R;
 import com.android.internal.util.DumpUtils;
 import com.android.server.pm.UserRestrictionsUtils;
 
@@ -415,9 +416,14 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
         int systemUiUid = -1;
         try {
-            systemUiUid = mContext.getPackageManager()
-                    .getPackageUidAsUser("com.android.systemui", PackageManager.MATCH_SYSTEM_ONLY,
-                            UserHandle.USER_SYSTEM);
+            // Check if device is configured with no home screen, which implies no SystemUI.
+            boolean noHome = mContext.getResources().getBoolean(R.bool.config_noHomeScreen);
+            if (!noHome) {
+                systemUiUid = mContext.getPackageManager()
+                        .getPackageUidAsUser("com.android.systemui", PackageManager.MATCH_SYSTEM_ONLY,
+                                UserHandle.USER_SYSTEM);
+            }
+            Slog.d(TAG, "Detected SystemUiUid: " + Integer.toString(systemUiUid));
         } catch (PackageManager.NameNotFoundException e) {
             // Some platforms, such as wearables do not have a system ui.
             Slog.w(TAG, "Unable to resolve SystemUI's UID.", e);
@@ -433,10 +439,17 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 Settings.Global.AIRPLANE_MODE_ON, 0) == 1;
     }
 
+    private boolean supportBluetoothPersistedState() {
+        return mContext.getResources().getBoolean(R.bool.config_supportBluetoothPersistedState);
+    }
+
     /**
      *  Returns true if the Bluetooth saved state is "on"
      */
     private boolean isBluetoothPersistedStateOn() {
+        if (!supportBluetoothPersistedState()) {
+            return false;
+        }
         int state = Settings.Global.getInt(mContentResolver, Settings.Global.BLUETOOTH_ON, -1);
         if (DBG) {
             Slog.d(TAG, "Bluetooth persisted state: " + state);
@@ -448,6 +461,9 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
      *  Returns true if the Bluetooth saved state is BLUETOOTH_ON_BLUETOOTH
      */
     private boolean isBluetoothPersistedStateOnBluetooth() {
+        if (!supportBluetoothPersistedState()) {
+            return false;
+        }
         return Settings.Global.getInt(mContentResolver, Settings.Global.BLUETOOTH_ON,
                 BLUETOOTH_ON_BLUETOOTH) == BLUETOOTH_ON_BLUETOOTH;
     }

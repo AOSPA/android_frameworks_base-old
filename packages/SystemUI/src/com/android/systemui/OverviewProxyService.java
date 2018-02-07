@@ -37,6 +37,7 @@ import com.android.systemui.OverviewProxyService.OverviewProxyListener;
 import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.recents.ISystemUiProxy;
 import com.android.systemui.shared.system.GraphicBufferCompat;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.CallbackController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
@@ -51,7 +52,8 @@ import java.util.List;
  */
 public class OverviewProxyService implements CallbackController<OverviewProxyListener>, Dumpable {
 
-    private static final String TAG = "OverviewProxyService";
+    public static final String TAG_OPS = "OverviewProxyService";
+    public static final boolean DEBUG_OVERVIEW_PROXY = false;
     private static final long BACKOFF_MILLIS = 5000;
 
     private final Context mContext;
@@ -66,12 +68,39 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private int mConnectionBackoffAttempts;
 
     private ISystemUiProxy mSysUiProxy = new ISystemUiProxy.Stub() {
+
         public GraphicBufferCompat screenshot(Rect sourceCrop, int width, int height, int minLayer,
                 int maxLayer, boolean useIdentityTransform, int rotation) {
             long token = Binder.clearCallingIdentity();
             try {
                 return new GraphicBufferCompat(SurfaceControl.screenshotToBuffer(sourceCrop, width,
                         height, minLayer, maxLayer, useIdentityTransform, rotation));
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        public void startScreenPinning(int taskId) {
+            long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> {
+                    StatusBar statusBar = ((SystemUIApplication) mContext).getComponent(
+                            StatusBar.class);
+                    if (statusBar != null) {
+                        statusBar.showScreenPinningRequest(taskId, false /* allowCancel */);
+                    }
+                });
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        public void onRecentsAnimationStarted() {
+            long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> {
+                    notifyRecentsAnimationStarted();
+                });
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -96,12 +125,12 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 try {
                     service.linkToDeath(mOverviewServiceDeathRcpt, 0);
                 } catch (RemoteException e) {
-                    Log.e(TAG, "Lost connection to launcher service", e);
+                    Log.e(TAG_OPS, "Lost connection to launcher service", e);
                 }
                 try {
                     mOverviewProxy.onBind(mSysUiProxy);
                 } catch (RemoteException e) {
-                    Log.e(TAG, "Failed to call onBind()", e);
+                    Log.e(TAG_OPS, "Failed to call onBind()", e);
                 }
                 notifyConnectionChanged();
             }
@@ -194,6 +223,10 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         return mOverviewProxy;
     }
 
+    public ComponentName getLauncherComponent() {
+        return mLauncherComponentName;
+    }
+
     private void disconnectFromLauncherService() {
         if (mOverviewProxy != null) {
             mOverviewProxy.asBinder().unlinkToDeath(mOverviewServiceDeathRcpt, 0);
@@ -209,9 +242,15 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
     }
 
+    private void notifyRecentsAnimationStarted() {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).onRecentsAnimationStarted();
+        }
+    }
+
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.println(TAG + " state:");
+        pw.println(TAG_OPS + " state:");
         pw.print("  mConnectionBackoffAttempts="); pw.println(mConnectionBackoffAttempts);
         pw.print("  isCurrentUserSetup="); pw.println(mDeviceProvisionedController
                 .isCurrentUserSetup());
@@ -219,6 +258,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     }
 
     public interface OverviewProxyListener {
-        void onConnectionChanged(boolean isConnected);
+        default void onConnectionChanged(boolean isConnected) {}
+        default void onRecentsAnimationStarted() {}
     }
 }

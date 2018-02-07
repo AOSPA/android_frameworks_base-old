@@ -196,8 +196,7 @@
     <string name="debug_networking_category" msgid="7044075693643009662">"ජාලකරණය"</string>
     <string name="wifi_display_certification" msgid="8611569543791307533">"නොරැහැන් සංදර්ශක සහතිකය"</string>
     <string name="wifi_verbose_logging" msgid="4203729756047242344">"විස්තරාත්මක Wi‑Fi ලොග් කිරීම සබල කරන්න"</string>
-    <string name="wifi_aggressive_handover" msgid="5309131983693661320">"ආක්‍රමණික Wi‑Fi සිට ජංගම බාර දීම"</string>
-    <string name="wifi_allow_scan_with_traffic" msgid="3601853081178265786">"Wi‑Fi රෝම් පරිලෝකන වෙතට සැමවිට අවසර දෙන්න"</string>
+    <string name="wifi_connected_mac_randomization" msgid="3168165236877957767">"සම්බන්ධිත MAC සසම්භාවීකරණය"</string>
     <string name="mobile_data_always_on" msgid="8774857027458200434">"ජංගම දත්ත සැමවිට ක්‍රියාකාරීය"</string>
     <string name="tethering_hardware_offload" msgid="7470077827090325814">"ටෙදරින් දෘඪාංග ත්වරණය"</string>
     <string name="bluetooth_show_devices_without_names" msgid="4708446092962060176">"නම් නොමැති බ්ලූටූත් උපාංග පෙන්වන්න"</string>
@@ -223,8 +222,7 @@
     <string name="private_dns_mode_provider_hostname_hint" msgid="2487492386970928143">"DNS සැපයුම්කරුගේ සත්කාරක නම ඇතුළු කරන්න"</string>
     <string name="wifi_display_certification_summary" msgid="1155182309166746973">"නොරැහැන් සංදර්ශක සහතිකය සඳහා විකල්ප පෙන්වන්න"</string>
     <string name="wifi_verbose_logging_summary" msgid="6615071616111731958">"Wi‑Fi ලොග් මට්ටම වැඩි කරන්න, Wi‑Fi තෝරනයෙහි SSID RSSI අනුව පෙන්වන්න"</string>
-    <string name="wifi_aggressive_handover_summary" msgid="7266329646559808827">"සබල විට Wi‑Fi සිග්නලය අඩු විට Wi‑Fi දත්ත සම්බන්ධතාවය ජංගම වෙත භාර දීමට වඩා ආක්‍රමණික වේ"</string>
-    <string name="wifi_allow_scan_with_traffic_summary" msgid="2575101424972686310">"අතුරු මුහුණතෙහි ඇති දත්ත තදබදය අනුව Wi‑Fi රෝම් පරිලෝකන වෙත ඉඩ දෙන්න/නොදෙන්න"</string>
+    <string name="wifi_connected_mac_randomization_summary" msgid="1743059848752201485">"Wi-Fi ජාලවලට සම්බන්ධ වීමේදී MAC ලිපිනය සසම්භාවීකරණය"</string>
     <string name="select_logd_size_title" msgid="7433137108348553508">"ලෝගයේ අන්තරාවක ප්‍රමාණය"</string>
     <string name="select_logd_size_dialog_title" msgid="1206769310236476760">"ලොග අන්තරාවකට ලෝගයේ ප්‍රමාණය තෝරන්න"</string>
     <string name="dev_logpersist_clear_warning_title" msgid="684806692440237967">"ලොගකරු නොනවතින ගබඩාව හිස් කරන්නද?"</string>
@@ -277,7 +275,6 @@
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"දෘඨාංග ස්ථර යාවත්කාලීන"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"යාවත්කාලින වන විට දෘඩාංග තලය කොළ පහන් දැල්වෙන්න"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU වැඩිකොට දැක්වීම නිදොස් කරන්න"</string>
-    <string name="debug_hw_renderer" msgid="7568529019431785816">"GPU විදැහුම සකසන්න"</string>
     <string name="disable_overlays" msgid="2074488440505934665">"HW වසාලන අක්‍රිය කරන්න"</string>
     <string name="disable_overlays_summary" msgid="3578941133710758592">"තිර සංයුක්ත කිරීමට සැමවිටම GPU භාවිතා කරන්න"</string>
     <string name="simulate_color_space" msgid="6745847141353345872">"වර්ණ අවකාශය අනුකරණය කරන්න"</string>
@@ -405,4 +402,16 @@
     <string name="ims_reg_status_registered" msgid="933003316932739188">"ලියාපදිංචි වී ඇත"</string>
     <string name="ims_reg_status_not_registered" msgid="6529783773485229486">"ලියාපදිංචි වී නැත"</string>
     <string name="status_unavailable" msgid="7862009036663793314">"ලබාගත නොහැක"</string>
+    <plurals name="wifi_tether_connected_summary" formatted="false" msgid="3871603864314407780">
+      <item quantity="one">උපාංග %1$dක් සම්බන්ධ කරන ලදී</item>
+      <item quantity="other">උපාංග %1$dක් සම්බන්ධ කරන ලදී</item>
+    </plurals>
+    <string name="accessibility_manual_zen_more_time" msgid="1636187409258564291">"වේලාව වැඩියෙන්."</string>
+    <string name="accessibility_manual_zen_less_time" msgid="6590887204171164991">"වේලාව අඩුවෙන්."</string>
+    <string name="zen_mode_enable_dialog_turn_on" msgid="8287824809739581837">"ක්‍රියාත්මක කරන්න"</string>
+    <string name="cancel" msgid="6859253417269739139">"අවලංගු කරන්න"</string>
+    <string name="zen_mode_settings_turn_on_dialog_title" msgid="2297134204747331078">"බාධා නොකරන්න ක්‍රියාත්මක කරන්න"</string>
+    <string name="zen_mode_settings_summary_off" msgid="6119891445378113334">"කිසි විටක නැත"</string>
+    <string name="zen_interruption_level_priority" msgid="2078370238113347720">"ප්‍රමුඛතා පමණි"</string>
+    <string name="zen_mode_and_condition" msgid="4927230238450354412">"<xliff:g id="ZEN_MODE">%1$s</xliff:g>. <xliff:g id="EXIT_CONDITION">%2$s</xliff:g>"</string>
 </resources>

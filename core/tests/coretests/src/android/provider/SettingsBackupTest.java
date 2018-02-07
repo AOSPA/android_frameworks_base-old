@@ -44,6 +44,12 @@ import java.util.Set;
 public class SettingsBackupTest {
 
     /**
+     * see {@link com.google.android.systemui.power.EnhancedEstimatesGoogleImpl} for more details
+     */
+    public static final String HYBRID_SYSUI_BATTERY_WARNING_FLAGS =
+            "hybrid_sysui_battery_warning_flags";
+
+    /**
      * The following blacklists contain settings that should *not* be backed up and restored to
      * another device.  As a general rule, anything that is not user configurable should be
      * blacklisted (and conversely, things that *are* user configurable *should* be backed up)
@@ -114,6 +120,12 @@ public class SettingsBackupTest {
                     Settings.Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS,
                     Settings.Global.BATTERY_STATS_CONSTANTS,
                     Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE,
+                    Settings.Global.BLE_SCAN_LOW_POWER_WINDOW_MS,
+                    Settings.Global.BLE_SCAN_LOW_POWER_INTERVAL_MS,
+                    Settings.Global.BLE_SCAN_BALANCED_WINDOW_MS,
+                    Settings.Global.BLE_SCAN_BALANCED_INTERVAL_MS,
+                    Settings.Global.BLE_SCAN_LOW_LATENCY_WINDOW_MS,
+                    Settings.Global.BLE_SCAN_LOW_LATENCY_INTERVAL_MS,
                     Settings.Global.BLUETOOTH_A2DP_SINK_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_A2DP_SRC_PRIORITY_PREFIX,
                     Settings.Global.BLUETOOTH_A2DP_SUPPORTS_OPTIONAL_CODECS_PREFIX,
@@ -204,6 +216,7 @@ public class SettingsBackupTest {
                     Settings.Global.ENABLE_DELETION_HELPER_NO_THRESHOLD_TOGGLE,
                     Settings.Global.ENABLE_DISKSTATS_LOGGING,
                     Settings.Global.ENABLE_EPHEMERAL_FEATURE,
+                    Settings.Global.ENABLE_SMART_REPLIES_IN_NOTIFICATIONS,
                     Settings.Global.ENHANCED_4G_MODE_ENABLED,
                     Settings.Global.EPHEMERAL_COOKIE_MAX_SIZE_BYTES,
                     Settings.Global.ERROR_LOGCAT_PREFIX,
@@ -212,6 +225,7 @@ public class SettingsBackupTest {
                     Settings.Global.FANCY_IME_ANIMATIONS,
                     Settings.Global.FORCE_ALLOW_ON_EXTERNAL,
                     Settings.Global.FORCED_APP_STANDBY_ENABLED,
+                    Settings.Global.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED,
                     Settings.Global.FSTRIM_MANDATORY_INTERVAL,
                     Settings.Global.GLOBAL_HTTP_PROXY_EXCLUSION_LIST,
                     Settings.Global.GLOBAL_HTTP_PROXY_HOST,
@@ -224,6 +238,7 @@ public class SettingsBackupTest {
                     Settings.Global.HDMI_SYSTEM_AUDIO_CONTROL_ENABLED,
                     Settings.Global.HEADS_UP_NOTIFICATIONS_ENABLED,
                     Settings.Global.HTTP_PROXY,
+                    HYBRID_SYSUI_BATTERY_WARNING_FLAGS,
                     Settings.Global.INET_CONDITION_DEBOUNCE_DOWN_DELAY,
                     Settings.Global.INET_CONDITION_DEBOUNCE_UP_DELAY,
                     Settings.Global.INSTANT_APP_DEXOPT_ENABLED,
@@ -329,7 +344,10 @@ public class SettingsBackupTest {
                     Settings.Global.SETUP_PREPAID_DETECTION_REDIR_HOST,
                     Settings.Global.SETUP_PREPAID_DETECTION_TARGET_URL,
                     Settings.Global.SHORTCUT_MANAGER_CONSTANTS,
+                    Settings.Global.SHOW_FIRST_CRASH_DIALOG,
+                    Settings.Global.SHOW_MUTE_IN_CRASH_DIALOG,
                     Settings.Global.SHOW_NOTIFICATION_CHANNEL_WARNINGS,
+                    Settings.Global.SHOW_RESTART_IN_CRASH_DIALOG,
                     Settings.Global.SHOW_TEMPERATURE_WARNING,
                     Settings.Global.SMART_SELECTION_UPDATE_CONTENT_URL,
                     Settings.Global.SMART_SELECTION_UPDATE_METADATA_URL,
@@ -351,6 +369,7 @@ public class SettingsBackupTest {
                     Settings.Global.SYS_STORAGE_THRESHOLD_MAX_BYTES,
                     Settings.Global.SYS_STORAGE_THRESHOLD_PERCENTAGE,
                     Settings.Global.SYS_VDSO,
+                    Settings.Global.FPS_DEVISOR,
                     Settings.Global.TCP_DEFAULT_INIT_RWND,
                     Settings.Global.TETHER_DUN_APN,
                     Settings.Global.TETHER_DUN_REQUIRED,
@@ -358,6 +377,7 @@ public class SettingsBackupTest {
                     Settings.Global.TETHER_SUPPORTED,
                     Settings.Global.TEXT_CLASSIFIER_CONSTANTS,
                     Settings.Global.THEATER_MODE_ON,
+                    Settings.Global.TIME_ONLY_MODE_ENABLED,
                     Settings.Global.TRANSITION_ANIMATION_SCALE,
                     Settings.Global.TRUSTED_SOUND,
                     Settings.Global.TZINFO_UPDATE_CONTENT_URL,
@@ -387,6 +407,7 @@ public class SettingsBackupTest {
                     Settings.Global.WFC_IMS_ROAMING_MODE,
                     Settings.Global.WIFI_BADGING_THRESHOLDS,
                     Settings.Global.WIFI_BOUNCE_DELAY_OVERRIDE_MS,
+                    Settings.Global.WIFI_CONNECTED_MAC_RANDOMIZATION_ENABLED,
                     Settings.Global.WIFI_COUNTRY_CODE,
                     Settings.Global.WIFI_DEVICE_OWNER_CONFIGS_LOCKDOWN,
                     Settings.Global.WIFI_DISPLAY_CERTIFICATION_ON,
@@ -423,7 +444,9 @@ public class SettingsBackupTest {
                     Settings.Global.ZEN_MODE,
                     Settings.Global.ZEN_MODE_CONFIG_ETAG,
                     Settings.Global.ZEN_MODE_RINGER_LEVEL,
-                    Settings.Global.ZRAM_ENABLED);
+                    Settings.Global.ZRAM_ENABLED,
+                    Settings.Global.OVERRIDE_SETTINGS_PROVIDER_RESTORE_ANY_VERSION,
+                    Settings.Global.CHAINED_BATTERY_ATTRIBUTION_ENABLED);
 
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(
@@ -475,8 +498,8 @@ public class SettingsBackupTest {
                  Settings.Secure.INPUT_METHODS_SUBTYPE_HISTORY,
                  Settings.Secure.INSTALL_NON_MARKET_APPS,
                  Settings.Secure.LAST_SETUP_SHOWN,
+                 Settings.Secure.LOCATION_CHANGER,
                  Settings.Secure.LOCATION_MODE,
-                 Settings.Secure.LOCATION_PREVIOUS_MODE,
                  Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, // Candidate?
                  Settings.Secure.LOCK_SCREEN_ALLOW_REMOTE_INPUT, // Candidate?
                  Settings.Secure.LOCK_SCREEN_LOCK_AFTER_TIMEOUT,
@@ -531,7 +554,10 @@ public class SettingsBackupTest {
                  Settings.Secure.VOICE_RECOGNITION_SERVICE,
                  Settings.Secure.INSTANT_APPS_ENABLED,
                  Settings.Secure.BACKUP_MANAGER_CONSTANTS,
-                 Settings.Secure.KEYGUARD_SLICE_URI);
+                 Settings.Secure.KEYGUARD_SLICE_URI,
+                 Settings.Secure.PARENTAL_CONTROL_ENABLED,
+                 Settings.Secure.PARENTAL_CONTROL_REDIRECT_URL,
+                 Settings.Secure.BLUETOOTH_ON_WHILE_DRIVING);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {

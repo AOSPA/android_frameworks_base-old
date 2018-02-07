@@ -43,25 +43,29 @@ public abstract class ActivityManagerInternal {
      * Type for {@link #notifyAppTransitionStarting}: The transition was started because we drew
      * the splash screen.
      */
-    public static final int APP_TRANSITION_SPLASH_SCREEN = 1;
+    public static final int APP_TRANSITION_SPLASH_SCREEN =
+              AppProtoEnums.APP_TRANSITION_SPLASH_SCREEN; // 1
 
     /**
      * Type for {@link #notifyAppTransitionStarting}: The transition was started because we all
      * app windows were drawn
      */
-    public static final int APP_TRANSITION_WINDOWS_DRAWN = 2;
+    public static final int APP_TRANSITION_WINDOWS_DRAWN =
+              AppProtoEnums.APP_TRANSITION_WINDOWS_DRAWN; // 2
 
     /**
      * Type for {@link #notifyAppTransitionStarting}: The transition was started because of a
      * timeout.
      */
-    public static final int APP_TRANSITION_TIMEOUT = 3;
+    public static final int APP_TRANSITION_TIMEOUT =
+              AppProtoEnums.APP_TRANSITION_TIMEOUT; // 3
 
     /**
      * Type for {@link #notifyAppTransitionStarting}: The transition was started because of a
      * we drew a task snapshot.
      */
-    public static final int APP_TRANSITION_SNAPSHOT = 4;
+    public static final int APP_TRANSITION_SNAPSHOT =
+              AppProtoEnums.APP_TRANSITION_SNAPSHOT; // 4
 
     /**
      * The bundle key to extract the assist data.
@@ -319,4 +323,29 @@ public abstract class ActivityManagerInternal {
     }
 
     public abstract void registerScreenObserver(ScreenObserver observer);
+
+    /**
+     * Returns if more users can be started without stopping currently running users.
+     */
+    public abstract boolean canStartMoreUsers();
+
+    /**
+     * Sets the user switcher message for switching from {@link android.os.UserHandle#SYSTEM}.
+     */
+    public abstract void setSwitchingFromSystemUserMessage(String switchingFromSystemUserMessage);
+
+    /**
+     * Sets the user switcher message for switching to {@link android.os.UserHandle#SYSTEM}.
+     */
+    public abstract void setSwitchingToSystemUserMessage(String switchingToSystemUserMessage);
+
+    /**
+     * Returns maximum number of users that can run simultaneously.
+     */
+    public abstract int getMaxRunningUsers();
+
+    /**
+     * Returns is the caller has the same uid as the Recents component
+     */
+    public abstract boolean isCallerRecents(int callingUid);
 }

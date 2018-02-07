@@ -16,20 +16,14 @@
 
 package com.android.systemui;
 
+import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+
 import android.content.Context;
-import android.database.ContentObserver;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
-import android.graphics.Point;
-import android.graphics.PorterDuff;
-import android.graphics.Region;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.UserHandle;
-import android.provider.Settings;
 import android.view.DisplayCutout;
 import android.view.Gravity;
 import android.view.View;
@@ -38,25 +32,35 @@ import android.view.ViewGroup.LayoutParams;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 
-import java.util.Collections;
-import java.util.List;
+import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
 
 /**
  * Emulates a display cutout by drawing its shape in an overlay as supplied by
  * {@link DisplayCutout}.
  */
-public class EmulatedDisplayCutout extends SystemUI {
+public class EmulatedDisplayCutout extends SystemUI implements ConfigurationListener {
     private View mOverlay;
     private boolean mAttached;
     private WindowManager mWindowManager;
 
     @Override
     public void start() {
+        Dependency.get(ConfigurationController.class).addCallback(this);
+
         mWindowManager = mContext.getSystemService(WindowManager.class);
-        mContext.getContentResolver().registerContentObserver(
-                Settings.Global.getUriFor(Settings.Global.EMULATE_DISPLAY_CUTOUT),
-                false, mObserver, UserHandle.USER_ALL);
-        mObserver.onChange(false);
+        updateAttached();
+    }
+
+    @Override
+    public void onOverlayChanged() {
+        updateAttached();
+    }
+
+    private void updateAttached() {
+        boolean shouldAttach = mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_fillMainBuiltInDisplayCutout);
+        setAttached(shouldAttach);
     }
 
     private void setAttached(boolean attached) {
@@ -88,22 +92,11 @@ public class EmulatedDisplayCutout extends SystemUI {
                 PixelFormat.TRANSLUCENT);
         lp.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS
                 | WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
-        lp.flags2 |= WindowManager.LayoutParams.FLAG2_LAYOUT_IN_DISPLAY_CUTOUT_AREA;
+        lp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
         lp.setTitle("EmulatedDisplayCutout");
         lp.gravity = Gravity.TOP;
         return lp;
     }
-
-    private ContentObserver mObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
-        @Override
-        public void onChange(boolean selfChange) {
-            boolean emulateCutout = Settings.Global.getInt(
-                    mContext.getContentResolver(), Settings.Global.EMULATE_DISPLAY_CUTOUT,
-                    Settings.Global.EMULATE_DISPLAY_CUTOUT_OFF)
-                    != Settings.Global.EMULATE_DISPLAY_CUTOUT_OFF;
-            setAttached(emulateCutout);
-        }
-    };
 
     private static class CutoutView extends View {
         private final Paint mPaint = new Paint();

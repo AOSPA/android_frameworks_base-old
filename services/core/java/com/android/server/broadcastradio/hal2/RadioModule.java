@@ -18,10 +18,15 @@ package com.android.server.broadcastradio.hal2;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.hardware.radio.ITuner;
 import android.hardware.radio.RadioManager;
 import android.hardware.broadcastradio.V2_0.AmFmRegionConfig;
+import android.hardware.broadcastradio.V2_0.Announcement;
+import android.hardware.broadcastradio.V2_0.IAnnouncementListener;
 import android.hardware.broadcastradio.V2_0.IBroadcastRadio;
+import android.hardware.broadcastradio.V2_0.ICloseHandle;
 import android.hardware.broadcastradio.V2_0.ITunerSession;
 import android.hardware.broadcastradio.V2_0.Result;
 import android.os.ParcelableException;
@@ -29,7 +34,11 @@ import android.os.RemoteException;
 import android.util.MutableInt;
 import android.util.Slog;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 class RadioModule {
     private static final String TAG = "BcRadio2Srv.module";
@@ -63,24 +72,75 @@ class RadioModule {
         }
     }
 
-    public @NonNull TunerSession openSession(@NonNull android.hardware.radio.ITunerCallback userCb) {
+    public @NonNull TunerSession openSession(@NonNull android.hardware.radio.ITunerCallback userCb)
+            throws RemoteException {
         TunerCallback cb = new TunerCallback(Objects.requireNonNull(userCb));
         Mutable<ITunerSession> hwSession = new Mutable<>();
         MutableInt halResult = new MutableInt(Result.UNKNOWN_ERROR);
 
-        try {
-            mService.openSession(cb, (int result, ITunerSession session) -> {
+        synchronized (mService) {
+            mService.openSession(cb, (result, session) -> {
                 hwSession.value = session;
                 halResult.value = result;
             });
-        } catch (RemoteException ex) {
-            Slog.e(TAG, "failed to open session", ex);
-            throw new ParcelableException(ex);
         }
 
         Convert.throwOnError("openSession", halResult.value);
         Objects.requireNonNull(hwSession.value);
 
-        return new TunerSession(hwSession.value, cb);
+        return new TunerSession(this, hwSession.value, cb);
+    }
+
+    public android.hardware.radio.ICloseHandle addAnnouncementListener(@NonNull int[] enabledTypes,
+            @NonNull android.hardware.radio.IAnnouncementListener listener) throws RemoteException {
+        ArrayList<Byte> enabledList = new ArrayList<>();
+        for (int type : enabledTypes) {
+            enabledList.add((byte)type);
+        }
+
+        MutableInt halResult = new MutableInt(Result.UNKNOWN_ERROR);
+        Mutable<ICloseHandle> hwCloseHandle = new Mutable<>();
+        IAnnouncementListener hwListener = new IAnnouncementListener.Stub() {
+            public void onListUpdated(ArrayList<Announcement> hwAnnouncements)
+                    throws RemoteException {
+                listener.onListUpdated(hwAnnouncements.stream().
+                    map(a -> Convert.announcementFromHal(a)).collect(Collectors.toList()));
+            }
+        };
+
+        synchronized (mService) {
+            mService.registerAnnouncementListener(enabledList, hwListener, (result, closeHnd) -> {
+                halResult.value = result;
+                hwCloseHandle.value = closeHnd;
+            });
+        }
+        Convert.throwOnError("addAnnouncementListener", halResult.value);
+
+        return new android.hardware.radio.ICloseHandle.Stub() {
+            public void close() {
+                try {
+                    hwCloseHandle.value.close();
+                } catch (RemoteException ex) {
+                    Slog.e(TAG, "Failed closing announcement listener", ex);
+                }
+            }
+        };
+    }
+
+    Bitmap getImage(int id) {
+        if (id == 0) throw new IllegalArgumentException("Image ID is missing");
+
+        byte[] rawImage;
+        synchronized (mService) {
+            List<Byte> rawList = Utils.maybeRethrow(() -> mService.getImage(id));
+            rawImage = new byte[rawList.size()];
+            for (int i = 0; i < rawList.size(); i++) {
+                rawImage[i] = rawList.get(i);
+            }
+        }
+
+        if (rawImage == null || rawImage.length == 0) return null;
+
+        return BitmapFactory.decodeByteArray(rawImage, 0, rawImage.length);
     }
 }

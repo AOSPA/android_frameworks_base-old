@@ -219,11 +219,7 @@ public class NetdEventListenerService extends INetdEventListener.Stub {
 
         for (INetdEventCallback callback : mNetdEventCallbackList) {
             if (callback != null) {
-                // TODO(rickywai): Remove this checking to collect ip in watchlist.
-                if (callback ==
-                        mNetdEventCallbackList[INetdEventCallback.CALLBACK_CALLER_DEVICE_POLICY]) {
-                    callback.onConnectEvent(ipAddr, port, timestamp, uid);
-                }
+                callback.onConnectEvent(ipAddr, port, timestamp, uid);
             }
         }
     }
@@ -255,6 +251,29 @@ public class NetdEventListenerService extends INetdEventListener.Stub {
         String dstMac = event.dstHwAddr.toString();
         StatsLog.write(StatsLog.PACKET_WAKEUP_OCCURRED,
                 uid, iface, ethertype, dstMac, srcIp, dstIp, ipNextHeader, srcPort, dstPort);
+    }
+
+    @Override
+    public synchronized void onTcpSocketStatsEvent(int[] networkIds,
+            int[] sentPackets, int[] lostPackets, int[] rttsUs, int[] sentAckDiffsMs) {
+        if (networkIds.length != sentPackets.length
+                || networkIds.length != lostPackets.length
+                || networkIds.length != rttsUs.length
+                || networkIds.length != sentAckDiffsMs.length) {
+            Log.e(TAG, "Mismatched lengths of TCP socket stats data arrays");
+            return;
+        }
+
+        long timestamp = System.currentTimeMillis();
+        for (int i = 0; i < networkIds.length; i++) {
+            int netId = networkIds[i];
+            int sent = sentPackets[i];
+            int lost = lostPackets[i];
+            int rttUs = rttsUs[i];
+            int sentAckDiffMs = sentAckDiffsMs[i];
+            getMetricsForNetwork(timestamp, netId)
+                    .addTcpStatsResult(sent, lost, rttUs, sentAckDiffMs);
+        }
     }
 
     private void addWakeupEvent(WakeupEvent event) {

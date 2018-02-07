@@ -4685,7 +4685,8 @@ message MetricsEvent {
     // OS: O MR
     AUTOFILL_SERVICE_DISABLED_SELF = 1135;
 
-    // Counter showing how long it took (in ms) to show the autofill UI after a field was focused
+    // Reports how long it took to show the autofill UI after a field was focused
+    // Tag FIELD_AUTOFILL_DURATION: Duration in ms
     // Tag FIELD_AUTOFILL_SERVICE: Package of service that processed the request
     // Package: Package of the autofill service
     // OS: O MR
@@ -4723,6 +4724,9 @@ message MetricsEvent {
     // Enclosing category for group of APP_TRANSITION_FOO events,
     // logged when we cancel an app transition.
     APP_TRANSITION_CANCELLED = 1144;
+
+    // Tag of a field representing a duration on autofill-related metrics.
+    FIELD_AUTOFILL_DURATION = 1145;
 
     // ---- End O-MR1 Constants, all O-MR1 constants go above this line ----
 
@@ -4868,17 +4872,17 @@ message MetricsEvent {
 
     // An autofill service asked to disable autofill for a given application.
     // Package: Package of app that is being disabled for autofill
-    // Counter: duration (in ms) that autofill will be disabled
     // OS: P
     // Tag FIELD_AUTOFILL_SERVICE: Package of service that processed the request
+    // Tag FIELD_AUTOFILL_DURATION: duration (in ms) that autofill will be disabled
     AUTOFILL_SERVICE_DISABLED_APP = 1231;
 
     // An autofill service asked to disable autofill for a given activity.
     // Package: Package of app whose activity is being disabled for autofill
-    // Counter: duration (in ms) that autofill will be disabled
     // OS: P
     // Tag FIELD_AUTOFILL_SERVICE: Package of service that processed the request
     // Tag FIELD_CLASS_NAME: Class name of the activity that is being disabled for autofill
+    // Tag FIELD_AUTOFILL_DURATION: duration (in ms) that autofill will be disabled
     AUTOFILL_SERVICE_DISABLED_ACTIVITY = 1232;
 
     // ACTION: Stop an app and turn on background check
@@ -5134,6 +5138,35 @@ message MetricsEvent {
     // OS: P
     ACTION_SCREENSHOT_POWER_MENU = 1282;
 
+    // OPEN: Settings > Apps & Notifications -> Special app access -> Directory Access
+    // CATEGORY: SETTINGS
+    // OS: P
+    DIRECTORY_ACCESS = 1283;
+
+    // OPEN: Settings > Apps & Notifications -> Special app access -> Directory Access -> Package
+    // CATEGORY: SETTINGS
+    // OS: P
+    APPLICATIONS_DIRECTORY_ACCESS_DETAIL = 1284;
+
+    // OPEN: Settings > Battery > Smart Battery > Restricted apps
+    // CATEGORY: SETTINGS
+    // OS: P
+    FUELGAUGE_RESTRICTED_APP_DETAILS = 1285;
+
+    // OPEN: Settings > Sound & notification > Do Not Disturb > Turn on now
+    // CATEGORY: SETTINGS
+    // OS: P
+    NOTIFICATION_ZEN_MODE_ENABLE_DIALOG = 1286;
+
+    // ACTION: Rotate suggestion accepted in rotation locked mode
+    // CATEGORY: GLOBAL_SYSTEM_UI
+    // OS: P
+    ACTION_ROTATION_SUGGESTION_ACCEPTED = 1287;
+
+    // OPEN: Rotation suggestion shown in rotation locked mode
+    // CATEGORY: GLOBAL_SYSTEM_UI
+    // OS: P
+    ROTATION_SUGGESTION_SHOWN = 1288;
 
     // ---- End P Constants, all P constants go above this line ----
     // Add new aosp constants above this line.

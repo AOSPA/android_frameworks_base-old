@@ -92,10 +92,20 @@ void StatsLogProcessor::onAnomalyAlarmFired(
 
 void StatsLogProcessor::mapIsolatedUidToHostUidIfNecessaryLocked(LogEvent* event) const {
     std::vector<Field> uidFields;
-    findFields(
-        event->getFieldValueMap(),
-        buildAttributionUidFieldMatcher(event->GetTagId(), Position::ANY),
-        &uidFields);
+    if (android::util::kAtomsWithAttributionChain.find(event->GetTagId()) !=
+        android::util::kAtomsWithAttributionChain.end()) {
+        findFields(
+            event->getFieldValueMap(),
+            buildAttributionUidFieldMatcher(event->GetTagId(), Position::ANY),
+            &uidFields);
+    } else if (android::util::kAtomsWithUidField.find(event->GetTagId()) !=
+               android::util::kAtomsWithUidField.end()) {
+        findFields(
+            event->getFieldValueMap(),
+            buildSimpleAtomFieldMatcher(event->GetTagId(), 1 /* uid is always the 1st field. */),
+            &uidFields);
+    }
+
     for (size_t i = 0; i < uidFields.size(); ++i) {
         DimensionsValue* value = event->findFieldValueOrNull(uidFields[i]);
         if (value != nullptr && value->value_case() == DimensionsValue::ValueCase::kValueInt) {
@@ -131,7 +141,13 @@ void StatsLogProcessor::OnLogEvent(LogEvent* event) {
     // The field numbers need to be currently updated by hand with atoms.proto
     if (event->GetTagId() == android::util::ISOLATED_UID_CHANGED) {
         onIsolatedUidChangedEventLocked(*event);
-    } else {
+    }
+
+    if (mMetricsManagers.empty()) {
+        return;
+    }
+
+    if (event->GetTagId() != android::util::ISOLATED_UID_CHANGED) {
         // Map the isolated uid to host uid if necessary.
         mapIsolatedUidToHostUidIfNecessaryLocked(event);
     }
@@ -180,6 +196,14 @@ size_t StatsLogProcessor::GetMetricsSize(const ConfigKey& key) const {
     return it->second->byteSize();
 }
 
+void StatsLogProcessor::dumpStates(FILE* out, bool verbose) {
+    std::lock_guard<std::mutex> lock(mMetricsMutex);
+    fprintf(out, "MetricsManager count: %lu\n", (unsigned long)mMetricsManagers.size());
+    for (auto metricsManager : mMetricsManagers) {
+        metricsManager.second->dumpStates(out, verbose);
+    }
+}
+
 void StatsLogProcessor::onDumpReport(const ConfigKey& key, const uint64_t& dumpTimeStampNs,
                                      ConfigMetricsReportList* report) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
@@ -197,6 +221,10 @@ void StatsLogProcessor::onDumpReport(const ConfigKey& key, const uint64_t& dumpT
 
 void StatsLogProcessor::onDumpReport(const ConfigKey& key, vector<uint8_t>* outData) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
+    onDumpReportLocked(key, outData);
+}
+
+void StatsLogProcessor::onDumpReportLocked(const ConfigKey& key, vector<uint8_t>* outData) {
     auto it = mMetricsManagers.find(key);
     if (it == mMetricsManagers.end()) {
         ALOGW("Config source %s does not exist", key.ToString().c_str());
@@ -236,7 +264,7 @@ void StatsLogProcessor::onDumpReport(const ConfigKey& key, vector<uint8_t>* outD
 
     // Then, check stats-data directory to see there's any file containing
     // ConfigMetricsReport from previous shutdowns to concatenate to reports.
-    StorageManager::appendConfigMetricsReport(STATS_DATA_DIR, proto);
+    StorageManager::appendConfigMetricsReport(proto);
 
     if (outData != nullptr) {
         outData->clear();
@@ -305,10 +333,10 @@ void StatsLogProcessor::WriteDataToDisk() {
     for (auto& pair : mMetricsManagers) {
         const ConfigKey& key = pair.first;
         vector<uint8_t> data;
-        onDumpReport(key, &data);
+        onDumpReportLocked(key, &data);
         // TODO: Add a guardrail to prevent accumulation of file on disk.
-        string file_name = StringPrintf("%s/%d-%lld-%ld", STATS_DATA_DIR, key.GetUid(),
-                                        (long long)key.GetId(), time(nullptr));
+        string file_name = StringPrintf("%s/%ld_%d_%lld", STATS_DATA_DIR, time(nullptr),
+                                        key.GetUid(), (long long)key.GetId());
         StorageManager::writeFile(file_name.c_str(), &data[0], data.size());
     }
 }

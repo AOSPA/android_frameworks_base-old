@@ -48,6 +48,7 @@ package android.app {
   public class AppOpsManager {
     method public static java.lang.String[] getOpStrs();
     method public void setMode(int, int, java.lang.String, int);
+    field public static final java.lang.String OPSTR_ACCEPT_HANDOVER = "android:accept_handover";
     field public static final java.lang.String OPSTR_ACCESS_NOTIFICATIONS = "android:access_notifications";
     field public static final java.lang.String OPSTR_ACTIVATE_VPN = "android:activate_vpn";
     field public static final java.lang.String OPSTR_ASSIST_SCREENSHOT = "android:assist_screenshot";
@@ -295,6 +296,43 @@ package android.hardware.camera2 {
 
 }
 
+package android.hardware.display {
+
+  public final class BrightnessChangeEvent implements android.os.Parcelable {
+    method public int describeContents();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessChangeEvent> CREATOR;
+    field public final float batteryLevel;
+    field public final float brightness;
+    field public final int colorTemperature;
+    field public final float lastBrightness;
+    field public final long[] luxTimestamps;
+    field public final float[] luxValues;
+    field public final boolean nightMode;
+    field public final java.lang.String packageName;
+    field public final long timeStamp;
+  }
+
+  public final class BrightnessConfiguration implements android.os.Parcelable {
+    method public int describeContents();
+    method public android.util.Pair<float[], float[]> getCurve();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.hardware.display.BrightnessConfiguration> CREATOR;
+  }
+
+  public static class BrightnessConfiguration.Builder {
+    ctor public BrightnessConfiguration.Builder(float[], float[]);
+    method public android.hardware.display.BrightnessConfiguration build();
+    method public android.hardware.display.BrightnessConfiguration.Builder setDescription(java.lang.String);
+  }
+
+  public final class DisplayManager {
+    method public java.util.List<android.hardware.display.BrightnessChangeEvent> getBrightnessEvents();
+    method public void setBrightnessConfiguration(android.hardware.display.BrightnessConfiguration);
+  }
+
+}
+
 package android.location {
 
   public final class GnssClock implements android.os.Parcelable {
@@ -484,6 +522,7 @@ package android.provider {
   }
 
   public static final class Settings.Global extends android.provider.Settings.NameValueTable {
+    field public static final java.lang.String LOCATION_GLOBAL_KILL_SWITCH = "location_global_kill_switch";
     field public static final java.lang.String LOW_POWER_MODE = "low_power";
     field public static final java.lang.String USE_OPEN_WIFI_PACKAGE = "use_open_wifi_package";
   }
@@ -524,11 +563,6 @@ package android.service.autofill {
 
   public final class CharSequenceTransformation extends android.service.autofill.InternalTransformation implements android.os.Parcelable android.service.autofill.Transformation {
     method public void apply(android.service.autofill.ValueFinder, android.widget.RemoteViews, int) throws java.lang.Exception;
-  }
-
-  public final class EditDistanceScorer {
-    method public static android.service.autofill.EditDistanceScorer getInstance();
-    method public float getScore(android.view.autofill.AutofillValue, java.lang.String);
   }
 
   public final class FillResponse implements android.os.Parcelable {
@@ -929,6 +963,9 @@ package android.view {
 
   public final class Choreographer {
     method public static long getFrameDelay();
+    method public void postCallback(int, java.lang.Runnable, java.lang.Object);
+    method public void postCallbackDelayed(int, java.lang.Runnable, java.lang.Object, long);
+    method public void removeCallbacks(int, java.lang.Runnable, java.lang.Object);
     method public static void setFrameDelay(long);
     field public static final int CALLBACK_ANIMATION = 1; // 0x1
   }
@@ -999,6 +1036,10 @@ package android.view.autofill {
 }
 
 package android.widget {
+
+  public abstract class AbsListView extends android.widget.AdapterView implements android.widget.Filter.FilterListener android.text.TextWatcher android.view.ViewTreeObserver.OnGlobalLayoutListener android.view.ViewTreeObserver.OnTouchModeChangeListener {
+    method public final boolean shouldDrawSelector();
+  }
 
   public class CalendarView extends android.widget.FrameLayout {
     method public boolean getBoundsForDate(long, android.graphics.Rect);

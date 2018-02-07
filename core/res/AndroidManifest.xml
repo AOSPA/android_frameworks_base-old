@@ -327,6 +327,10 @@
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.CONNECT_TO_NETWORK" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.PICK_WIFI_NETWORK" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.PICK_NETWORK_AFTER_FAILURE" />
+    <protected-broadcast android:name="com.android.server.wifi.wakeup.DISMISS_NOTIFICATION" />
+    <protected-broadcast android:name="com.android.server.wifi.wakeup.OPEN_WIFI_PREFERENCES" />
+    <protected-broadcast android:name="com.android.server.wifi.wakeup.OPEN_WIFI_SETTINGS" />
+    <protected-broadcast android:name="com.android.server.wifi.wakeup.TURN_OFF_WIFI_WAKE" />
     <protected-broadcast android:name="android.net.wifi.WIFI_STATE_CHANGED" />
     <protected-broadcast android:name="android.net.wifi.WIFI_AP_STATE_CHANGED" />
     <protected-broadcast android:name="android.net.wifi.WIFI_CREDENTIAL_CHANGED" />
@@ -510,6 +514,7 @@
     <protected-broadcast android:name="android.os.action.ACTION_EFFECTS_SUPPRESSOR_CHANGED" />
     <protected-broadcast android:name="android.app.action.NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED" />
     <protected-broadcast android:name="android.app.action.NOTIFICATION_CHANNEL_GROUP_BLOCK_STATE_CHANGED" />
+    <protected-broadcast android:name="android.app.action.APP_BLOCK_STATE_CHANGED" />
 
     <protected-broadcast android:name="android.permission.GET_APP_GRANTED_URI_PERMISSIONS" />
     <protected-broadcast android:name="android.permission.CLEAR_APP_GRANTED_URI_PERMISSIONS" />
@@ -554,8 +559,6 @@
     <protected-broadcast android:name="android.intent.action.DEVICE_LOCKED_CHANGED" />
 
     <!-- Added in O -->
-    <!-- TODO: temporary broadcast used by AutoFillManagerServiceImpl; will be removed -->
-    <protected-broadcast android:name="com.android.internal.autofill.action.REQUEST_AUTOFILL" />
     <protected-broadcast android:name="android.app.action.APPLICATION_DELEGATION_SCOPES_CHANGED" />
     <protected-broadcast android:name="com.android.server.wm.ACTION_REVOKE_SYSTEM_ALERT_WINDOW_PERMISSION" />
     <protected-broadcast android:name="android.media.tv.action.PARENTAL_CONTROLS_ENABLED_CHANGED" />
@@ -575,9 +578,9 @@
     <!-- Added in P -->
     <protected-broadcast android:name="android.app.action.PROFILE_OWNER_CHANGED" />
     <protected-broadcast android:name="android.app.action.TRANSFER_OWNERSHIP_COMPLETE" />
-
-    <!-- Added in P -->
+    <protected-broadcast android:name="android.app.action.AFFILIATED_PROFILE_TRANSFER_OWNERSHIP_COMPLETE" />
     <protected-broadcast android:name="android.app.action.DATA_SHARING_RESTRICTION_CHANGED" />
+    <protected-broadcast android:name="android.app.action.STATSD_STARTED" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -968,6 +971,23 @@
                 android:label="@string/permlab_manageOwnCalls"
                 android:description="@string/permdesc_manageOwnCalls"
                 android:protectionLevel="normal" />
+
+    <!-- Allows a calling app to continue a call which was started in another app.  An example is a
+         video calling app that wants to continue a voice call on the user's mobile network.<p>
+         When the handover of a call from one app to another takes place, there are two devices
+         which are involved in the handover; the initiating and receiving devices.  The initiating
+         device is where the request to handover the call was started, and the receiving device is
+         where the handover request is confirmed by the other party.<p>
+         This permission protects access to the
+         {@link android.telecom.TelecomManager#acceptHandover(Uri, int, PhoneAccountHandle)} which
+         the receiving side of the handover uses to accept a handover.
+         <p>Protection level: dangerous
+    -->
+    <permission android:name="android.permission.ACCEPT_HANDOVER"
+                android:permissionGroup="android.permission-group.PHONE"
+                android.label="@string/permlab_acceptHandover"
+                android:description="@string/permdesc_acceptHandovers"
+                android:protectionLevel="dangerous" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for accessing the device microphone                        -->
@@ -1437,6 +1457,12 @@
         android:label="@string/permlab_nfc"
         android:protectionLevel="normal" />
 
+    <!-- Allows applications to receive NFC transaction events.
+         <p>Protection level: normal
+    -->
+    <permission android:name="android.permission.NFC_TRANSACTION_EVENT"
+        android:protectionLevel="normal" />
+
     <!-- @SystemApi Allows an internal user to use privileged ConnectivityManager APIs.
          @hide -->
     <permission android:name="android.permission.CONNECTIVITY_INTERNAL"
@@ -1750,6 +1776,12 @@
            @hide -->
     <permission android:name="android.permission.SEND_EMBMS_INTENTS"
         android:protectionLevel="signature|privileged" />
+
+
+    <!-- Allows internal management of the sensor framework
+         @hide -->
+    <permission android:name="android.permission.MANAGE_SENSORS"
+        android:protectionLevel="signature" />
 
     <!-- Must be required by an ImsService to ensure that only the
          system can bind to it.
@@ -2311,6 +2343,11 @@
     <permission android:name="android.permission.RECOVERY"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @SystemApi Allows an application to read system update info.
+         @hide -->
+    <permission android:name="android.permission.READ_SYSTEM_UPDATE_INFO"
+        android:protectionLevel="signature" />
+
     <!-- Allows the system to bind to an application's task services
          @hide -->
     <permission android:name="android.permission.BIND_JOB_SERVICE"
@@ -2686,6 +2723,13 @@
     <permission android:name="android.permission.BIND_AUTOFILL_SERVICE"
         android:protectionLevel="signature" />
 
+    <!-- Must be required by an {@link android.service.autofill.AutofillFieldClassificationService}
+         to ensure that only the system can bind to it.
+         @hide This is not a third-party API (intended for OEMs and system apps).
+    -->
+    <permission android:name="android.permission.BIND_AUTOFILL_FIELD_CLASSIFICATION_SERVICE"
+                android:protectionLevel="signature" />
+
     <!-- Must be required by hotword enrollment application,
          to ensure that only the system can interact with it.
          @hide <p>Not for use by third-party applications.</p> -->
@@ -2834,6 +2878,14 @@
     <permission android:name="android.permission.INSTALL_SELF_UPDATES"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @SystemApi Allows an application to install updates. This is a limited version
+         of {@link android.Manifest.permission#INSTALL_PACKAGES}.
+        <p>Not for use by third-party applications.
+        @hide
+    -->
+    <permission android:name="android.permission.INSTALL_PACKAGE_UPDATES"
+        android:protectionLevel="signature|privileged" />
+
     <!-- @SystemApi Allows an application to clear user data.
          <p>Not for use by third-party applications
          @hide
@@ -2955,15 +3007,21 @@
 
     <!-- Allows an application to collect usage infomation about brightness slider changes.
          <p>Not for use by third-party applications.</p>
-         TODO: make a System API
-         @hide -->
+         @hide
+         @SystemApi -->
     <permission android:name="android.permission.BRIGHTNESS_SLIDER_USAGE"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|development" />
 
     <!-- Allows an application to modify the display brightness configuration
-         @hide -->
+         @hide
+         @SystemApi -->
     <permission android:name="android.permission.CONFIGURE_DISPLAY_BRIGHTNESS"
         android:protectionLevel="signature|privileged|development" />
+
+    <!-- Allows an application to control the system's display brightness
+         @hide -->
+    <permission android:name="android.permission.CONTROL_DISPLAY_BRIGHTNESS"
+        android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows an application to control VPN.
          <p>Not for use by third-party applications.</p>
@@ -3182,10 +3240,14 @@
     <permission android:name="android.permission.BIND_APPWIDGET"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @hide Allows sysui to manage user grants of slice permissions. -->
+    <permission android:name="android.permission.MANAGE_SLICE_PERMISSIONS"
+        android:protectionLevel="signature" />
+
     <!-- Allows an application to bind app's slices and get their
          content. This content will be surfaced to the
          user and not to leave the device.
-         <p>Not for use by third-party applications. -->
+         <p>Not for use by third-party applications.-->
     <permission android:name="android.permission.BIND_SLICE"
         android:protectionLevel="signature|privileged|development" />
 
@@ -3688,10 +3750,25 @@
     <permission android:name="android.permission.READ_RUNTIME_PROFILES"
                 android:protectionLevel="signature|privileged" />
 
+    <!-- @hide Allows audio policy management. -->
+    <permission android:name="android.permission.MANAGE_AUDIO_POLICY"
+        android:protectionLevel="signature" />
+
     <!-- @SystemApi Allows an application to turn on / off quiet mode.
          @hide <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.MODIFY_QUIET_MODE"
                 android:protectionLevel="signature|privileged" />
+
+    <!-- Allows internal management of the camera framework
+         @hide -->
+    <permission android:name="android.permission.MANAGE_CAMERA"
+        android:protectionLevel="signature" />
+
+    <!-- Allows an application to control remote animations. See
+         {@link ActivityOptions#makeRemoteAnimation}
+         @hide <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS"
+        android:protectionLevel="signature|privileged" />
 
     <application android:process="system"
                  android:persistent="true"
@@ -3890,6 +3967,7 @@
                   android:theme="@style/Theme.DeviceDefault.Light.Dialog.Alert"
                   android:excludeFromRecents="true"
                   android:process=":ui"
+                  android:label="@string/harmful_app_warning_title"
                   android:exported="false">
         </activity>
 

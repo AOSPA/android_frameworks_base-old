@@ -39,13 +39,29 @@ public class CarrierConfigManager {
     private final static String TAG = "CarrierConfigManager";
 
     /**
+     * Extra included in {@link #ACTION_CARRIER_CONFIG_CHANGED} to indicate the slot index that the
+     * broadcast is for.
+     */
+    public static final String EXTRA_SLOT_INDEX = "android.telephony.extra.SLOT_INDEX";
+
+    /**
+     * Optional extra included in {@link #ACTION_CARRIER_CONFIG_CHANGED} to indicate the
+     * subscription index that the broadcast is for, if a valid one is available.
+     */
+    public static final String EXTRA_SUBSCRIPTION_INDEX =
+            SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX;
+
+    /**
      * @hide
      */
     public CarrierConfigManager() {
     }
 
     /**
-     * This intent is broadcast by the system when carrier config changes.
+     * This intent is broadcast by the system when carrier config changes. An int is specified in
+     * {@link #EXTRA_SLOT_INDEX} to indicate the slot index that this is for. An optional int extra
+     * {@link #EXTRA_SUBSCRIPTION_INDEX} is included to indicate the subscription index if a valid
+     * one is available for the slot index.
      */
     public static final String
             ACTION_CARRIER_CONFIG_CHANGED = "android.telephony.action.CARRIER_CONFIG_CHANGED";
@@ -275,7 +291,6 @@ public class CarrierConfigManager {
      *
      * @see SubscriptionManager#getSubscriptionPlans(int)
      * @see SubscriptionManager#setSubscriptionPlans(int, java.util.List)
-     * @hide
      */
     @SystemApi
     public static final String KEY_CONFIG_PLANS_PACKAGE_OVERRIDE_STRING =
@@ -960,8 +975,9 @@ public class CarrierConfigManager {
     public static final String KEY_CARRIER_NAME_OVERRIDE_BOOL = "carrier_name_override_bool";
 
     /**
-     * String to identify carrier name in CarrierConfig app. This string is used only if
-     * #KEY_CARRIER_NAME_OVERRIDE_BOOL is true
+     * String to identify carrier name in CarrierConfig app. This string overrides SPN if
+     * #KEY_CARRIER_NAME_OVERRIDE_BOOL is true; otherwise, it will be used if its value is provided
+     * and SPN is unavailable
      * @hide
      */
     public static final String KEY_CARRIER_NAME_STRING = "carrier_name_string";
@@ -1643,6 +1659,13 @@ public class CarrierConfigManager {
             "roaming_operator_string_array";
 
     /**
+     * Controls whether Assisted Dialing is enabled and the preference is shown. This feature
+     * transforms numbers when the user is roaming.
+     */
+    public static final String KEY_ASSISTED_DIALING_ENABLED_BOOL =
+            "assisted_dialing_enabled_bool";
+
+    /**
      * URL from which the proto containing the public key of the Carrier used for
      * IMSI encryption will be downloaded.
      * @hide
@@ -2039,6 +2062,7 @@ public class CarrierConfigManager {
                 false);
         sDefaults.putStringArray(KEY_NON_ROAMING_OPERATOR_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_ROAMING_OPERATOR_STRING_ARRAY, null);
+        sDefaults.putBoolean(KEY_ASSISTED_DIALING_ENABLED_BOOL, true);
         sDefaults.putBoolean(KEY_SHOW_IMS_REGISTRATION_STATUS_BOOL, false);
         sDefaults.putBoolean(KEY_RTT_SUPPORTED_BOOL, false);
         sDefaults.putBoolean(KEY_DISABLE_CHARGE_INDICATION_BOOL, false);

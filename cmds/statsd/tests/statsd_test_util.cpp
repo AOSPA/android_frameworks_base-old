@@ -19,6 +19,14 @@ namespace android {
 namespace os {
 namespace statsd {
 
+AtomMatcher CreateSimpleAtomMatcher(const string& name, int atomId) {
+    AtomMatcher atom_matcher;
+    atom_matcher.set_id(StringToId(name));
+    auto simple_atom_matcher = atom_matcher.mutable_simple_atom_matcher();
+    simple_atom_matcher->set_atom_id(atomId);
+    return atom_matcher;
+}
+
 AtomMatcher CreateWakelockStateChangedAtomMatcher(const string& name,
                                                   WakelockStateChanged::State state) {
     AtomMatcher atom_matcher;
@@ -40,7 +48,7 @@ AtomMatcher CreateReleaseWakelockAtomMatcher() {
 }
 
 AtomMatcher CreateScreenStateChangedAtomMatcher(
-    const string& name, ScreenStateChanged::State state) {
+    const string& name, android::view::DisplayStateEnum state) {
     AtomMatcher atom_matcher;
     atom_matcher.set_id(StringToId(name));
     auto simple_atom_matcher = atom_matcher.mutable_simple_atom_matcher();
@@ -52,11 +60,13 @@ AtomMatcher CreateScreenStateChangedAtomMatcher(
 }
 
 AtomMatcher CreateScreenTurnedOnAtomMatcher() {
-    return CreateScreenStateChangedAtomMatcher("ScreenTurnedOn", ScreenStateChanged::STATE_ON);
+    return CreateScreenStateChangedAtomMatcher("ScreenTurnedOn",
+            android::view::DisplayStateEnum::DISPLAY_STATE_ON);
 }
 
 AtomMatcher CreateScreenTurnedOffAtomMatcher() {
-    return CreateScreenStateChangedAtomMatcher("ScreenTurnedOff", ScreenStateChanged::STATE_OFF);
+    return CreateScreenStateChangedAtomMatcher("ScreenTurnedOff",
+            ::android::view::DisplayStateEnum::DISPLAY_STATE_OFF);
 }
 
 AtomMatcher CreateSyncStateChangedAtomMatcher(
@@ -201,7 +211,7 @@ FieldMatcher CreateDimensions(const int atomId, const std::vector<int>& fields) 
 }
 
 std::unique_ptr<LogEvent> CreateScreenStateChangedEvent(
-    const ScreenStateChanged::State state, uint64_t timestampNs) {
+    const android::view::DisplayStateEnum state, uint64_t timestampNs) {
     auto event = std::make_unique<LogEvent>(android::util::SCREEN_STATE_CHANGED, timestampNs);
     EXPECT_TRUE(event->write(state));
     event->init();
@@ -213,7 +223,7 @@ std::unique_ptr<LogEvent> CreateWakelockStateChangedEvent(
     const WakelockStateChanged::State state, uint64_t timestampNs) {
     auto event = std::make_unique<LogEvent>(android::util::WAKELOCK_STATE_CHANGED, timestampNs);
     event->write(attributions);
-    event->write(WakelockStateChanged::PARTIAL);
+    event->write(android::os::WakeLockLevelEnum::PARTIAL_WAKE_LOCK);
     event->write(wakelockName);
     event->write(state);
     event->init();

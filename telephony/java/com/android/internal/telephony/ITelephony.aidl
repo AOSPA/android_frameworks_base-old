@@ -40,12 +40,14 @@ import android.telephony.TelephonyHistogram;
 import android.telephony.VisualVoicemailSmsFilterSettings;
 import com.android.ims.internal.IImsMMTelFeature;
 import com.android.ims.internal.IImsRcsFeature;
+import com.android.ims.internal.IImsRegistration;
 import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.OperatorInfo;
 
 import java.util.List;
 
+import android.telephony.UiccSlotInfo;
 
 /**
  * Interface used to interact with the phone.  Mostly this is used by the
@@ -808,6 +810,11 @@ interface ITelephony {
     IImsRcsFeature getRcsFeatureAndListen(int slotId, in IImsServiceFeatureCallback callback);
 
     /**
+    * Returns the IImsRegistration associated with the slot and feature specified.
+    */
+    IImsRegistration getImsRegistration(int slotId, int feature);
+
+    /**
      * Set the network selection mode to automatic.
      *
      * @param subId the id of the subscription to update.
@@ -1438,4 +1445,19 @@ interface ITelephony {
      * @hide
      */
     SignalStrength getSignalStrength(int subId);
+
+    /**
+     * Get slot info for all the UICC slots.
+     * @return UiccSlotInfo array.
+     * @hide
+     */
+    UiccSlotInfo[] getUiccSlotsInfo();
+
+    /**
+     * Map logicalSlot to physicalSlot, and activate the physicalSlot if it is inactive.
+     * @param physicalSlots Index i in the array representing physical slot for phone i. The array
+     *        size should be same as getPhoneCount().
+     * @return boolean Return true if the switch succeeds, false if the switch fails.
+     */
+    boolean switchSlots(in int[] physicalSlots);
 }

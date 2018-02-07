@@ -22,8 +22,8 @@ import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
-import android.annotation.SuppressLint;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.WorkerThread;
@@ -53,6 +53,7 @@ import android.util.Log;
 
 import com.android.ims.internal.IImsMMTelFeature;
 import com.android.ims.internal.IImsRcsFeature;
+import com.android.ims.internal.IImsRegistration;
 import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telecom.ITelecomService;
@@ -60,7 +61,6 @@ import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.IPhoneSubInfo;
 import com.android.internal.telephony.ITelephony;
 import com.android.internal.telephony.ITelephonyRegistry;
-import com.android.internal.telephony.OperatorInfo;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.RILConstants;
 import com.android.internal.telephony.TelephonyProperties;
@@ -1023,8 +1023,8 @@ public class TelephonyManager {
 
     /**
      * An int extra used with {@link #ACTION_SUBSCRIPTION_CARRIER_IDENTITY_CHANGED} which indicates
-     * the updated carrier id {@link TelephonyManager#getSubscriptionCarrierId()} of the current
-     * subscription.
+     * the updated carrier id {@link TelephonyManager#getAndroidCarrierIdForSubscription()} of
+     * the current subscription.
      * <p>Will be {@link TelephonyManager#UNKNOWN_CARRIER_ID} if the subscription is unavailable or
      * the carrier cannot be identified.
      */
@@ -2121,6 +2121,110 @@ public class TelephonyManager {
      * carrier restrictions.
      */
     public static final int SIM_STATE_CARD_RESTRICTED = 9;
+    /**
+     * SIM card state: Loaded: SIM card applications have been loaded
+     * @hide
+     */
+    @SystemApi
+    public static final int SIM_STATE_LOADED = 10;
+    /**
+     * SIM card state: SIM Card is present
+     * @hide
+     */
+    @SystemApi
+    public static final int SIM_STATE_PRESENT = 11;
+
+    /**
+     * Extra included in {@link #ACTION_SIM_CARD_STATE_CHANGED} and
+     * {@link #ACTION_SIM_APPLICATION_STATE_CHANGED} to indicate the card/application state.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_SIM_STATE = "android.telephony.extra.SIM_STATE";
+
+    /**
+     * Broadcast Action: The sim card state has changed.
+     * The intent will have the following extra values:</p>
+     * <dl>
+     *   <dt>{@link #EXTRA_SIM_STATE}</dt>
+     *   <dd>The sim card state. One of:
+     *     <dl>
+     *       <dt>{@link #SIM_STATE_ABSENT}</dt>
+     *       <dd>SIM card not found</dd>
+     *       <dt>{@link #SIM_STATE_CARD_IO_ERROR}</dt>
+     *       <dd>SIM card IO error</dd>
+     *       <dt>{@link #SIM_STATE_CARD_RESTRICTED}</dt>
+     *       <dd>SIM card is restricted</dd>
+     *       <dt>{@link #SIM_STATE_PRESENT}</dt>
+     *       <dd>SIM card is present</dd>
+     *     </dl>
+     *   </dd>
+     * </dl>
+     *
+     * <p class="note">Requires the READ_PRIVILEGED_PHONE_STATE permission.
+     *
+     * <p class="note">The current state can also be queried using {@link #getSimCardState()}.
+     *
+     * <p class="note">This is a protected intent that can only be sent by the system.
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_SIM_CARD_STATE_CHANGED =
+            "android.telephony.action.SIM_CARD_STATE_CHANGED";
+
+    /**
+     * Broadcast Action: The sim application state has changed.
+     * The intent will have the following extra values:</p>
+     * <dl>
+     *   <dt>{@link #EXTRA_SIM_STATE}</dt>
+     *   <dd>The sim application state. One of:
+     *     <dl>
+     *       <dt>{@link #SIM_STATE_NOT_READY}</dt>
+     *       <dd>SIM card applications not ready</dd>
+     *       <dt>{@link #SIM_STATE_PIN_REQUIRED}</dt>
+     *       <dd>SIM card PIN locked</dd>
+     *       <dt>{@link #SIM_STATE_PUK_REQUIRED}</dt>
+     *       <dd>SIM card PUK locked</dd>
+     *       <dt>{@link #SIM_STATE_NETWORK_LOCKED}</dt>
+     *       <dd>SIM card network locked</dd>
+     *       <dt>{@link #SIM_STATE_PERM_DISABLED}</dt>
+     *       <dd>SIM card permanently disabled due to PUK failures</dd>
+     *       <dt>{@link #SIM_STATE_LOADED}</dt>
+     *       <dd>SIM card data loaded</dd>
+     *     </dl>
+     *   </dd>
+     * </dl>
+     *
+     * <p class="note">Requires the READ_PRIVILEGED_PHONE_STATE permission.
+     *
+     * <p class="note">The current state can also be queried using
+     * {@link #getSimApplicationState()}.
+     *
+     * <p class="note">This is a protected intent that can only be sent by the system.
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_SIM_APPLICATION_STATE_CHANGED =
+            "android.telephony.action.SIM_APPLICATION_STATE_CHANGED";
+
+    /**
+     * Broadcast Action: Status of the SIM slots on the device has changed.
+     *
+     * <p class="note">Requires the READ_PRIVILEGED_PHONE_STATE permission.
+     *
+     * <p class="note">The status can be queried using
+     * {@link #getUiccSlotsInfo()}
+     *
+     * <p class="note">This is a protected intent that can only be sent by the system.
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_SIM_SLOT_STATUS_CHANGED =
+            "android.telephony.action.SIM_SLOT_STATUS_CHANGED";
 
     /**
      * @return true if a ICC card is present
@@ -2167,6 +2271,14 @@ public class TelephonyManager {
      * @see #SIM_STATE_CARD_RESTRICTED
      */
     public int getSimState() {
+        int simState = getSimStateIncludingLoaded();
+        if (simState == SIM_STATE_LOADED) {
+            simState = SIM_STATE_READY;
+        }
+        return simState;
+    }
+
+    private int getSimStateIncludingLoaded() {
         int slotIndex = getSlotIndex();
         // slotIndex may be invalid due to sim being absent. In that case query all slots to get
         // sim state
@@ -2185,7 +2297,63 @@ public class TelephonyManager {
                     "state as absent");
             return SIM_STATE_ABSENT;
         }
-        return getSimState(slotIndex);
+        return SubscriptionManager.getSimStateForSlotIndex(slotIndex);
+    }
+
+    /**
+     * Returns a constant indicating the state of the default SIM card.
+     *
+     * @see #SIM_STATE_UNKNOWN
+     * @see #SIM_STATE_ABSENT
+     * @see #SIM_STATE_CARD_IO_ERROR
+     * @see #SIM_STATE_CARD_RESTRICTED
+     * @see #SIM_STATE_PRESENT
+     *
+     * @hide
+     */
+    @SystemApi
+    public int getSimCardState() {
+        int simCardState = getSimState();
+        switch (simCardState) {
+            case SIM_STATE_UNKNOWN:
+            case SIM_STATE_ABSENT:
+            case SIM_STATE_CARD_IO_ERROR:
+            case SIM_STATE_CARD_RESTRICTED:
+                return simCardState;
+            default:
+                return SIM_STATE_PRESENT;
+        }
+    }
+
+    /**
+     * Returns a constant indicating the state of the card applications on the default SIM card.
+     *
+     * @see #SIM_STATE_UNKNOWN
+     * @see #SIM_STATE_PIN_REQUIRED
+     * @see #SIM_STATE_PUK_REQUIRED
+     * @see #SIM_STATE_NETWORK_LOCKED
+     * @see #SIM_STATE_NOT_READY
+     * @see #SIM_STATE_PERM_DISABLED
+     * @see #SIM_STATE_LOADED
+     *
+     * @hide
+     */
+    @SystemApi
+    public int getSimApplicationState() {
+        int simApplicationState = getSimStateIncludingLoaded();
+        switch (simApplicationState) {
+            case SIM_STATE_UNKNOWN:
+            case SIM_STATE_ABSENT:
+            case SIM_STATE_CARD_IO_ERROR:
+            case SIM_STATE_CARD_RESTRICTED:
+                return SIM_STATE_UNKNOWN;
+            case SIM_STATE_READY:
+                // Ready is not a valid state anymore. The state that is broadcast goes from
+                // NOT_READY to either LOCKED or LOADED.
+                return SIM_STATE_NOT_READY;
+            default:
+                return simApplicationState;
+        }
     }
 
     /**
@@ -2206,6 +2374,9 @@ public class TelephonyManager {
      */
     public int getSimState(int slotIndex) {
         int simState = SubscriptionManager.getSimStateForSlotIndex(slotIndex);
+        if (simState == SIM_STATE_LOADED) {
+            simState = SIM_STATE_READY;
+        }
         return simState;
     }
 
@@ -2427,6 +2598,53 @@ public class TelephonyManager {
         }
     }
 
+    /**
+     * Gets all the UICC slots.
+     *
+     * @return UiccSlotInfo array.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    public UiccSlotInfo[] getUiccSlotsInfo() {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony == null) {
+                return null;
+            }
+            return telephony.getUiccSlotsInfo();
+        } catch (RemoteException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Map logicalSlot to physicalSlot, and activate the physicalSlot if it is inactive. For
+     * example, passing the physicalSlots array [1, 0] means mapping the first item 1, which is
+     * physical slot index 1, to the logical slot 0; and mapping the second item 0, which is
+     * physical slot index 0, to the logical slot 1. The index of the array means the index of the
+     * logical slots.
+     *
+     * @param physicalSlots Index i in the array representing physical slot for phone i. The array
+     *        size should be same as {@link #getPhoneCount()}.
+     * @return boolean Return true if the switch succeeds, false if the switch fails.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public boolean switchSlots(int[] physicalSlots) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony == null) {
+                return false;
+            }
+            return telephony.switchSlots(physicalSlots);
+        } catch (RemoteException e) {
+            return false;
+        }
+    }
+
     //
     //
     // Subscriber Info
@@ -2514,6 +2732,33 @@ public class TelephonyManager {
         }
     }
 
+    /**
+     * Resets the Carrier Keys in the database. This involves 2 steps:
+     *  1. Delete the keys from the database.
+     *  2. Send an intent to download new Certificates.
+     * <p>
+     * Requires Permission:
+     *   {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}
+     * @hide
+     */
+    public void resetCarrierKeysForImsiEncryption() {
+        try {
+            IPhoneSubInfo info = getSubscriberInfo();
+            if (info == null) {
+                throw new RuntimeException("IMSI error: Subscriber Info is null");
+            }
+            int subId = getSubId(SubscriptionManager.getDefaultDataSubscriptionId());
+            info.resetCarrierKeysForImsiEncryption(subId, mContext.getOpPackageName());
+        } catch (RemoteException ex) {
+            Rlog.e(TAG, "getCarrierInfoForImsiEncryption RemoteException" + ex);
+            throw new RuntimeException("IMSI error: Remote Exception");
+        } catch (NullPointerException ex) {
+            // This could happen before phone restarts due to crashing
+            Rlog.e(TAG, "getCarrierInfoForImsiEncryption NullPointerException" + ex);
+            throw new RuntimeException("IMSI error: Null Pointer exception");
+        }
+    }
+
    /**
      * @param keyAvailability bitmask that defines the availabilty of keys for a type.
      * @param keyType the key type which is being checked. (WLAN, EPDG)
@@ -2549,7 +2794,7 @@ public class TelephonyManager {
      * device keystore.
      * <p>
      * Requires Permission:
-     *   {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
+     *   {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}
      * @param imsiEncryptionInfo which includes the Key Type, the Public Key
      *        (java.security.PublicKey) and the Key Identifier.and the Key Identifier.
      *        The keyIdentifier Attribute value pair that helps a server locate
@@ -4932,6 +5177,25 @@ public class TelephonyManager {
     }
 
     /**
+     * @return the {@IImsRegistration} interface that corresponds with the slot index and feature.
+     * @param slotIndex The SIM slot corresponding to the ImsService ImsRegistration is active for.
+     * @param feature An integer indicating the feature that we wish to get the ImsRegistration for.
+     * Corresponds to features defined in ImsFeature.
+     * @hide
+     */
+    public @Nullable IImsRegistration getImsRegistration(int slotIndex, int feature) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null) {
+                return telephony.getImsRegistration(slotIndex, feature);
+            }
+        } catch (RemoteException e) {
+            Rlog.e(TAG, "getImsRegistration, RemoteException: " + e.getMessage());
+        }
+        return null;
+    }
+
+    /**
      * Set IMS registration state
      *
      * @param Registration state
@@ -6765,14 +7029,19 @@ public class TelephonyManager {
 
     /**
      * Returns carrier id of the current subscription.
-     * <p>To recognize a carrier (including MVNO) as a first class identity, assign each carrier
-     * with a canonical integer a.k.a carrier id.
+     * <p>To recognize a carrier (including MVNO) as a first-class identity, Android assigns each
+     * carrier with a canonical integer a.k.a. android carrier id. The Android carrier ID is an
+     * Android platform-wide identifier for a carrier. AOSP maintains carrier ID assignments in
+     * <a href="https://android.googlesource.com/platform/packages/providers/TelephonyProvider/+/master/assets/carrier_list.textpb">here</a>
+     *
+     * <p>Apps which have carrier-specific configurations or business logic can use the carrier id
+     * as an Android platform-wide identifier for carriers.
      *
      * @return Carrier id of the current subscription. Return {@link #UNKNOWN_CARRIER_ID} if the
      * subscription is unavailable or the carrier cannot be identified.
      * @throws IllegalStateException if telephony service is unavailable.
      */
-    public int getSubscriptionCarrierId() {
+    public int getAndroidCarrierIdForSubscription() {
         try {
             ITelephony service = getITelephony();
             return service.getSubscriptionCarrierId(getSubId());
@@ -6788,17 +7057,18 @@ public class TelephonyManager {
 
     /**
      * Returns carrier name of the current subscription.
-     * <p>Carrier name is a user-facing name of carrier id {@link #getSubscriptionCarrierId()},
-     * usually the brand name of the subsidiary (e.g. T-Mobile). Each carrier could configure
-     * multiple {@link #getSimOperatorName() SPN} but should have a single carrier name.
-     * Carrier name is not a canonical identity, use {@link #getSubscriptionCarrierId()} instead.
+     * <p>Carrier name is a user-facing name of carrier id
+     * {@link #getAndroidCarrierIdForSubscription()}, usually the brand name of the subsidiary
+     * (e.g. T-Mobile). Each carrier could configure multiple {@link #getSimOperatorName() SPN} but
+     * should have a single carrier name. Carrier name is not a canonical identity,
+     * use {@link #getAndroidCarrierIdForSubscription()} instead.
      * <p>The returned carrier name is unlocalized.
      *
      * @return Carrier name of the current subscription. Return {@code null} if the subscription is
      * unavailable or the carrier cannot be identified.
      * @throws IllegalStateException if telephony service is unavailable.
      */
-    public String getSubscriptionCarrierName() {
+    public CharSequence getAndroidCarrierNameForSubscription() {
         try {
             ITelephony service = getITelephony();
             return service.getSubscriptionCarrierName(getSubId());

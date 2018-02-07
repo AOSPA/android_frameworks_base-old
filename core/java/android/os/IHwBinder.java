@@ -16,26 +16,57 @@
 
 package android.os;
 
+import android.annotation.SystemApi;
+
 /** @hide */
+@SystemApi
 public interface IHwBinder {
     // These MUST match their corresponding libhwbinder/IBinder.h definition !!!
+    /** @hide */
     public static final int FIRST_CALL_TRANSACTION = 1;
+    /** @hide */
     public static final int FLAG_ONEWAY = 1;
 
+    /**
+     * Process a hwbinder transaction.
+     *
+     * @hide
+     */
+    @SystemApi
     public void transact(
             int code, HwParcel request, HwParcel reply, int flags)
         throws RemoteException;
 
+    /**
+     * Return as IHwInterface instance only if this implements descriptor.
+     * @param descriptor for example foo.bar@1.0::IBaz
+     * @hide
+     */
+    @SystemApi
     public IHwInterface queryLocalInterface(String descriptor);
 
     /**
      * Interface for receiving a callback when the process hosting a service
      * has gone away.
      */
+    @SystemApi
     public interface DeathRecipient {
+        /**
+         * Callback for a registered process dying.
+         */
+        @SystemApi
         public void serviceDied(long cookie);
     }
 
+    /**
+     * Notifies the death recipient with the cookie when the process containing
+     * this binder dies.
+     */
+    @SystemApi
     public boolean linkToDeath(DeathRecipient recipient, long cookie);
+    /**
+     * Unregisters the death recipient from this binder.
+     */
+    @SystemApi
     public boolean unlinkToDeath(DeathRecipient recipient);
 }

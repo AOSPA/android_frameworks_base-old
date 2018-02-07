@@ -29,7 +29,6 @@ import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.os.RemoteException;
 import android.os.UserHandle;
-import android.telephony.SubscriptionPlan;
 import android.util.DebugUtils;
 import android.util.Pair;
 
@@ -113,6 +112,9 @@ public class NetworkPolicyManager {
      * applies to.
      */
     public static final String EXTRA_NETWORK_TEMPLATE = "android.net.NETWORK_TEMPLATE";
+
+    public static final int OVERRIDE_UNMETERED = 1 << 0;
+    public static final int OVERRIDE_CONGESTED = 1 << 1;
 
     private final Context mContext;
     private INetworkPolicyManager mService;
@@ -329,7 +331,7 @@ public class NetworkPolicyManager {
      * to access network when the device is idle or in battery saver mode. Otherwise, false.
      */
     public static boolean isProcStateAllowedWhileIdleOrPowerSaveMode(int procState) {
-        return procState <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
+        return procState <= ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
     }
 
     /**
@@ -337,7 +339,7 @@ public class NetworkPolicyManager {
      * to access network when the device is in data saver mode. Otherwise, false.
      */
     public static boolean isProcStateAllowedWhileOnRestrictBackground(int procState) {
-        return procState <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE;
+        return procState <= ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
     }
 
     public static String resolveNetworkId(WifiConfiguration config) {
@@ -347,5 +349,14 @@ public class NetworkPolicyManager {
 
     public static String resolveNetworkId(String ssid) {
         return WifiInfo.removeDoubleQuotes(ssid);
+    }
+
+    /** {@hide} */
+    public static class Listener extends INetworkPolicyListener.Stub {
+        @Override public void onUidRulesChanged(int uid, int uidRules) { }
+        @Override public void onMeteredIfacesChanged(String[] meteredIfaces) { }
+        @Override public void onRestrictBackgroundChanged(boolean restrictBackground) { }
+        @Override public void onUidPoliciesChanged(int uid, int uidPolicies) { }
+        @Override public void onSubscriptionOverride(int subId, int overrideMask, int overrideValue) { }
     }
 }

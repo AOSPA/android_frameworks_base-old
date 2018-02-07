@@ -17,6 +17,7 @@
 package android.app;
 
 import android.annotation.NonNull;
+import android.app.ActivityManager.StackInfo;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.display.DisplayManager;
@@ -34,8 +35,11 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.WindowManagerGlobal;
 
 import dalvik.system.CloseGuard;
+
+import java.util.List;
 
 /**
  * Activity container that allows launching activities into itself and does input forwarding.
@@ -57,7 +61,12 @@ public class ActivityView extends ViewGroup {
     private final SurfaceCallback mSurfaceCallback;
     private StateCallback mActivityViewCallback;
 
+    private IActivityManager mActivityManager;
     private IInputForwarder mInputForwarder;
+    // Temp container to store view coordinates on screen.
+    private final int[] mLocationOnScreen = new int[2];
+
+    private TaskStackListener mTaskStackListener;
 
     private final CloseGuard mGuard = CloseGuard.get();
     private boolean mOpened; // Protected by mGuard.
@@ -73,6 +82,7 @@ public class ActivityView extends ViewGroup {
     public ActivityView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
 
+        mActivityManager = ActivityManager.getService();
         mSurfaceView = new SurfaceView(context);
         mSurfaceCallback = new SurfaceCallback();
         mSurfaceView.getHolder().addCallback(mSurfaceCallback);
@@ -198,9 +208,28 @@ public class ActivityView extends ViewGroup {
         performRelease();
     }
 
+    /**
+     * Triggers an update of {@link ActivityView}'s location on screen to properly set touch exclude
+     * regions and avoid focus switches by touches on this view.
+     */
+    public void onLocationChanged() {
+        updateLocation();
+    }
+
     @Override
     public void onLayout(boolean changed, int l, int t, int r, int b) {
         mSurfaceView.layout(0 /* left */, 0 /* top */, r - l /* right */, b - t /* bottom */);
+    }
+
+    /** Send current location and size to the WM to set tap exclude region for this view. */
+    private void updateLocation() {
+        try {
+            getLocationOnScreen(mLocationOnScreen);
+            WindowManagerGlobal.getWindowSession().updateTapExcludeRegion(getWindow(), hashCode(),
+                    mLocationOnScreen[0], mLocationOnScreen[1], getWidth(), getHeight());
+        } catch (RemoteException e) {
+            e.rethrowAsRuntimeException();
+        }
     }
 
     @Override
@@ -241,6 +270,7 @@ public class ActivityView extends ViewGroup {
             } else {
                 mVirtualDisplay.setSurface(surfaceHolder.getSurface());
             }
+            updateLocation();
         }
 
         @Override
@@ -248,6 +278,7 @@ public class ActivityView extends ViewGroup {
             if (mVirtualDisplay != null) {
                 mVirtualDisplay.resize(width, height, getBaseDisplayDensity());
             }
+            updateLocation();
         }
 
         @Override
@@ -257,6 +288,7 @@ public class ActivityView extends ViewGroup {
             if (mVirtualDisplay != null) {
                 mVirtualDisplay.setSurface(null);
             }
+            cleanTapExcludeRegion();
         }
     }
 
@@ -278,6 +310,12 @@ public class ActivityView extends ViewGroup {
 
         mInputForwarder = InputManager.getInstance().createInputForwarder(
                 mVirtualDisplay.getDisplay().getDisplayId());
+        mTaskStackListener = new TaskBackgroundChangeListener();
+        try {
+            mActivityManager.registerTaskStackListener(mTaskStackListener);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to register task stack listener", e);
+        }
     }
 
     private void performRelease() {
@@ -289,6 +327,16 @@ public class ActivityView extends ViewGroup {
 
         if (mInputForwarder != null) {
             mInputForwarder = null;
+        }
+        cleanTapExcludeRegion();
+
+        if (mTaskStackListener != null) {
+            try {
+                mActivityManager.unregisterTaskStackListener(mTaskStackListener);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to unregister task stack listener", e);
+            }
+            mTaskStackListener = null;
         }
 
         final boolean displayReleased;
@@ -313,6 +361,17 @@ public class ActivityView extends ViewGroup {
         mOpened = false;
     }
 
+    /** Report to server that tap exclude region on hosting display should be cleared. */
+    private void cleanTapExcludeRegion() {
+        // Update tap exclude region with an empty rect to clean the state on server.
+        try {
+            WindowManagerGlobal.getWindowSession().updateTapExcludeRegion(getWindow(), hashCode(),
+                    0 /* left */, 0 /* top */, 0 /* width */, 0 /* height */);
+        } catch (RemoteException e) {
+            e.rethrowAsRuntimeException();
+        }
+    }
+
     /** Get density of the hosting display. */
     private int getBaseDisplayDensity() {
         final WindowManager wm = mContext.getSystemService(WindowManager.class);
@@ -332,4 +391,42 @@ public class ActivityView extends ViewGroup {
             super.finalize();
         }
     }
+
+    /**
+     * A task change listener that detects background color change of the topmost stack on our
+     * virtual display and updates the background of the surface view. This background will be shown
+     * when surface view is resized, but the app hasn't drawn its content in new size yet.
+     */
+    private class TaskBackgroundChangeListener extends TaskStackListener {
+
+        @Override
+        public void onTaskDescriptionChanged(int taskId, ActivityManager.TaskDescription td)
+                throws RemoteException {
+            if (mVirtualDisplay == null) {
+                return;
+            }
+
+            // Find the topmost task on our virtual display - it will define the background
+            // color of the surface view during resizing.
+            final int displayId = mVirtualDisplay.getDisplay().getDisplayId();
+            final List<StackInfo> stackInfoList = mActivityManager.getAllStackInfos();
+
+            // Iterate through stacks from top to bottom.
+            final int stackCount = stackInfoList.size();
+            for (int i = 0; i < stackCount; i++) {
+                final StackInfo stackInfo = stackInfoList.get(i);
+                // Only look for stacks on our virtual display.
+                if (stackInfo.displayId != displayId) {
+                    continue;
+                }
+                // Found the topmost stack on target display. Now check if the topmost task's
+                // description changed.
+                if (taskId == stackInfo.taskIds[stackInfo.taskIds.length - 1]) {
+                    mSurfaceView.setResizeBackgroundColor(td.getBackgroundColor());
+                }
+                break;
+            }
+        }
+    }
+
 }

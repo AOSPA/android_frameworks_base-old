@@ -23,6 +23,8 @@ import android.annotation.Nullable;
 import android.annotation.StringDef;
 import android.annotation.WorkerThread;
 import android.os.LocaleList;
+import android.os.Parcel;
+import android.os.Parcelable;
 import android.util.ArraySet;
 
 import com.android.internal.util.Preconditions;
@@ -45,12 +47,26 @@ public interface TextClassifier {
     /** @hide */
     String DEFAULT_LOG_TAG = "androidtc";
 
+    /** The TextClassifier failed to run. */
     String TYPE_UNKNOWN = "";
+    /** The classifier ran, but didn't recognize a known entity. */
     String TYPE_OTHER = "other";
+    /** E-mail address (e.g. "noreply@android.com"). */
     String TYPE_EMAIL = "email";
+    /** Phone number (e.g. "555-123 456"). */
     String TYPE_PHONE = "phone";
+    /** Physical address. */
     String TYPE_ADDRESS = "address";
+    /** Web URL. */
     String TYPE_URL = "url";
+    /** Time reference that is no more specific than a date. May be absolute such as "01/01/2000" or
+     * relative like "tomorrow". **/
+    String TYPE_DATE = "date";
+    /** Time reference that includes a specific time. May be absolute such as "01/01/2000 5:30pm" or
+     * relative like "tomorrow at 5:30pm". **/
+    String TYPE_DATE_TIME = "datetime";
+    /** Flight number in IATA format. */
+    String TYPE_FLIGHT_NUMBER = "flight";
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -61,6 +77,9 @@ public interface TextClassifier {
             TYPE_PHONE,
             TYPE_ADDRESS,
             TYPE_URL,
+            TYPE_DATE,
+            TYPE_DATE_TIME,
+            TYPE_FLIGHT_NUMBER,
     })
     @interface EntityType {}
 
@@ -275,8 +294,8 @@ public interface TextClassifier {
     /**
      * Returns a {@link Collection} of the entity types in the specified preset.
      *
-     * @see #ENTITIES_ALL
-     * @see #ENTITIES_NONE
+     * @see #ENTITY_PRESET_ALL
+     * @see #ENTITY_PRESET_NONE
      */
     default Collection<String> getEntitiesForPreset(@EntityPreset int entityPreset) {
         return Collections.EMPTY_LIST;
@@ -305,7 +324,7 @@ public interface TextClassifier {
      *
      * Configs are initially based on a predefined preset, and can be modified from there.
      */
-    final class EntityConfig {
+    final class EntityConfig implements Parcelable {
         private final @TextClassifier.EntityPreset int mEntityPreset;
         private final Collection<String> mExcludedEntityTypes;
         private final Collection<String> mIncludedEntityTypes;
@@ -354,6 +373,37 @@ public interface TextClassifier {
                 }
             }
             return Collections.unmodifiableList(entities);
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeInt(mEntityPreset);
+            dest.writeStringList(new ArrayList<>(mExcludedEntityTypes));
+            dest.writeStringList(new ArrayList<>(mIncludedEntityTypes));
+        }
+
+        public static final Parcelable.Creator<EntityConfig> CREATOR =
+                new Parcelable.Creator<EntityConfig>() {
+                    @Override
+                    public EntityConfig createFromParcel(Parcel in) {
+                        return new EntityConfig(in);
+                    }
+
+                    @Override
+                    public EntityConfig[] newArray(int size) {
+                        return new EntityConfig[size];
+                    }
+                };
+
+        private EntityConfig(Parcel in) {
+            mEntityPreset = in.readInt();
+            mExcludedEntityTypes = new ArraySet<>(in.createStringArrayList());
+            mIncludedEntityTypes = new ArraySet<>(in.createStringArrayList());
         }
     }
 

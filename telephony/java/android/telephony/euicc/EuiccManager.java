@@ -19,6 +19,7 @@ import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -71,8 +72,18 @@ public class EuiccManager {
      * TODO(b/35851809): Make this a SystemApi.
      */
     @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
-    public static final String ACTION_OTA_STATUS_CHANGED
-            = "android.telephony.euicc.action.OTA_STATUS_CHANGED";
+    public static final String ACTION_OTA_STATUS_CHANGED =
+            "android.telephony.euicc.action.OTA_STATUS_CHANGED";
+
+    /**
+     * Broadcast Action: The action sent to carrier app so it knows the carrier setup is not
+     * completed.
+     *
+     * TODO(b/35851809): Make this a public API.
+     */
+    @SdkConstant(SdkConstant.SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_NOTIFY_CARRIER_SETUP =
+            "android.telephony.euicc.action.NOTIFY_CARRIER_SETUP";
 
     /**
      * Intent action to provision an embedded subscription.
@@ -588,7 +599,11 @@ public class EuiccManager {
         }
     }
 
-    private static IEuiccController getIEuiccController() {
+    /**
+     * @hide
+     */
+    @TestApi
+    protected IEuiccController getIEuiccController() {
         return IEuiccController.Stub.asInterface(ServiceManager.getService("econtroller"));
     }
 }
