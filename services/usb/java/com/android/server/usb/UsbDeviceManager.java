@@ -1502,7 +1502,11 @@ public class UsbDeviceManager implements ActivityManagerInternal.ScreenObserver 
         private boolean trySetEnabledFunctions(String functions, boolean forceRestart) {
             if (functions == null || applyAdbFunction(functions)
                     .equals(UsbManager.USB_FUNCTION_NONE)) {
-                functions = getChargingFunctions();
+                functions = SystemProperties.get(getPersistProp(true),
+                            UsbManager.USB_FUNCTION_NONE);
+
+                if (functions.equals(UsbManager.USB_FUNCTION_NONE))
+                    functions = getChargingFunctions();
             }
             functions = applyAdbFunction(functions);
 
