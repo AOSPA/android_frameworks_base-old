@@ -23,8 +23,10 @@ import android.net.INetdEventCallback;
 import android.net.metrics.IpConnectivityLog;
 import android.os.Binder;
 import android.os.Process;
+import android.os.ResultReceiver;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.ShellCallback;
 import android.os.SystemProperties;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -61,7 +63,7 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
         @Override
         public void onStart() {
             if (Settings.Global.getInt(getContext().getContentResolver(),
-                    Settings.Global.NETWORK_WATCHLIST_ENABLED, 0) == 0) {
+                    Settings.Global.NETWORK_WATCHLIST_ENABLED, 1) == 0) {
                 // Watchlist service is disabled
                 Slog.i(TAG, "Network Watchlist service is disabled");
                 return;
@@ -74,12 +76,13 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
         public void onBootPhase(int phase) {
             if (phase == SystemService.PHASE_ACTIVITY_MANAGER_READY) {
                 if (Settings.Global.getInt(getContext().getContentResolver(),
-                        Settings.Global.NETWORK_WATCHLIST_ENABLED, 0) == 0) {
+                        Settings.Global.NETWORK_WATCHLIST_ENABLED, 1) == 0) {
                     // Watchlist service is disabled
                     Slog.i(TAG, "Network Watchlist service is disabled");
                     return;
                 }
                 try {
+                    mService.init();
                     mService.initIpConnectivityMetrics();
                     mService.startWatchlistLogging();
                 } catch (RemoteException e) {
@@ -127,6 +130,10 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
         mIpConnectivityMetrics = ipConnectivityMetrics;
     }
 
+    private void init() {
+        mConfig.removeTestModeConfig();
+    }
+
     private void initIpConnectivityMetrics() {
         mIpConnectivityMetrics = (IIpConnectivityMetrics) IIpConnectivityMetrics.Stub.asInterface(
                 ServiceManager.getService(IpConnectivityLog.SERVICE_NAME));
@@ -150,6 +157,22 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
             mNetworkWatchlistHandler.asyncNetworkEvent(null, new String[]{ipAddr}, uid);
         }
     };
+
+    private boolean isCallerShell() {
+        final int callingUid = Binder.getCallingUid();
+        return callingUid == Process.SHELL_UID || callingUid == Process.ROOT_UID;
+    }
+
+    @Override
+    public void onShellCommand(FileDescriptor in, FileDescriptor out, FileDescriptor err,
+            String[] args, ShellCallback callback, ResultReceiver resultReceiver) {
+        if (!isCallerShell()) {
+            Slog.w(TAG, "Only shell is allowed to call network watchlist shell commands");
+            return;
+        }
+        (new NetworkWatchlistShellCommand(mContext)).exec(this, in, out, err, args, callback,
+                resultReceiver);
+    }
 
     @VisibleForTesting
     protected boolean startWatchlistLoggingImpl() throws RemoteException {

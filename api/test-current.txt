@@ -183,10 +183,7 @@ package android.content {
   }
 
   public abstract class Context {
-    method public abstract int getUserId();
-  }
-
-  public class ContextWrapper extends android.content.Context {
+    method public android.os.UserHandle getUser();
     method public int getUserId();
   }
 
@@ -214,6 +211,7 @@ package android.content.pm {
     method public abstract boolean isPermissionReviewModeEnabled();
     field public static final java.lang.String FEATURE_ADOPTABLE_STORAGE = "android.software.adoptable_storage";
     field public static final java.lang.String FEATURE_FILE_BASED_ENCRYPTION = "android.software.file_based_encryption";
+    field public static final int MATCH_FACTORY_ONLY = 2097152; // 0x200000
   }
 
   public class PermissionInfo extends android.content.pm.PackageItemInfo implements android.os.Parcelable {
@@ -298,6 +296,15 @@ package android.hardware.camera2 {
 
 package android.hardware.display {
 
+  public final class AmbientBrightnessDayStats implements android.os.Parcelable {
+    method public int describeContents();
+    method public float[] getBucketBoundaries();
+    method public java.time.LocalDate getLocalDate();
+    method public float[] getStats();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.hardware.display.AmbientBrightnessDayStats> CREATOR;
+  }
+
   public final class BrightnessChangeEvent implements android.os.Parcelable {
     method public int describeContents();
     method public void writeToParcel(android.os.Parcel, int);
@@ -305,11 +312,14 @@ package android.hardware.display {
     field public final float batteryLevel;
     field public final float brightness;
     field public final int colorTemperature;
+    field public final boolean isDefaultBrightnessConfig;
+    field public final boolean isUserSetBrightness;
     field public final float lastBrightness;
     field public final long[] luxTimestamps;
     field public final float[] luxValues;
     field public final boolean nightMode;
     field public final java.lang.String packageName;
+    field public final float powerBrightnessFactor;
     field public final long timeStamp;
   }
 
@@ -565,6 +575,14 @@ package android.service.autofill {
     method public void apply(android.service.autofill.ValueFinder, android.widget.RemoteViews, int) throws java.lang.Exception;
   }
 
+  public final class DateTransformation extends android.service.autofill.InternalTransformation implements android.os.Parcelable android.service.autofill.Transformation {
+    method public void apply(android.service.autofill.ValueFinder, android.widget.RemoteViews, int) throws java.lang.Exception;
+  }
+
+  public final class DateValueSanitizer extends android.service.autofill.InternalSanitizer implements android.os.Parcelable android.service.autofill.Sanitizer {
+    method public android.view.autofill.AutofillValue sanitize(android.view.autofill.AutofillValue);
+  }
+
   public final class FillResponse implements android.os.Parcelable {
     method public int getFlags();
   }
@@ -599,7 +617,8 @@ package android.service.autofill {
   }
 
   public abstract interface ValueFinder {
-    method public abstract java.lang.String findByAutofillId(android.view.autofill.AutofillId);
+    method public default java.lang.String findByAutofillId(android.view.autofill.AutofillId);
+    method public abstract android.view.autofill.AutofillValue findRawValueByAutofillId(android.view.autofill.AutofillId);
   }
 
 }
@@ -731,11 +750,11 @@ package android.telephony.mbms.vendor {
     method public int cancelDownload(android.telephony.mbms.DownloadRequest) throws android.os.RemoteException;
     method public void dispose(int) throws android.os.RemoteException;
     method public int download(android.telephony.mbms.DownloadRequest) throws android.os.RemoteException;
-    method public int getDownloadStatus(android.telephony.mbms.DownloadRequest, android.telephony.mbms.FileInfo) throws android.os.RemoteException;
     method public int initialize(int, android.telephony.mbms.MbmsDownloadSessionCallback) throws android.os.RemoteException;
     method public java.util.List<android.telephony.mbms.DownloadRequest> listPendingDownloads(int) throws android.os.RemoteException;
     method public void onAppCallbackDied(int, int);
     method public int registerStateCallback(android.telephony.mbms.DownloadRequest, android.telephony.mbms.DownloadStateCallback) throws android.os.RemoteException;
+    method public int requestDownloadState(android.telephony.mbms.DownloadRequest, android.telephony.mbms.FileInfo) throws android.os.RemoteException;
     method public int requestUpdateFileServices(int, java.util.List<java.lang.String>) throws android.os.RemoteException;
     method public int resetDownloadKnowledge(android.telephony.mbms.DownloadRequest) throws android.os.RemoteException;
     method public int setTempFileRootDirectory(int, java.lang.String) throws android.os.RemoteException;
@@ -986,8 +1005,8 @@ package android.view {
   }
 
   public final class MotionEvent extends android.view.InputEvent implements android.os.Parcelable {
-    method public final void setActionButton(int);
-    method public final void setButtonState(int);
+    method public void setActionButton(int);
+    method public void setButtonState(int);
   }
 
   public class View implements android.view.accessibility.AccessibilityEventSource android.graphics.drawable.Drawable.Callback android.view.KeyEvent.Callback {
@@ -1031,6 +1050,14 @@ package android.view.autofill {
 
   public final class AutofillId implements android.os.Parcelable {
     ctor public AutofillId(int);
+  }
+
+}
+
+package android.view.inputmethod {
+
+  public final class InputMethodManager {
+    method public boolean isInputMethodPickerShown();
   }
 
 }

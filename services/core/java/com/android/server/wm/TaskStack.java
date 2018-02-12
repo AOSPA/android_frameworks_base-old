@@ -21,6 +21,7 @@ import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
+import static android.app.WindowConfiguration.PINNED_WINDOWING_MODE_ELEVATION_IN_DIP;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.res.Configuration.DENSITY_DPI_UNDEFINED;
@@ -53,6 +54,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.RemoteException;
+import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -736,13 +738,22 @@ public class TaskStack extends WindowContainer<Task> implements
     }
 
     private void updateSurfaceBounds() {
-        updateSurfaceBounds(getPendingTransaction());
+        updateSurfaceSize(getPendingTransaction());
+        updateSurfacePosition();
         scheduleAnimation();
     }
 
-    void updateSurfaceBounds(SurfaceControl.Transaction transaction) {
-        updateSurfaceSize(transaction);
-        updateSurfacePosition(transaction);
+    /**
+     * Calculate an amount by which to expand the stack bounds in each direction.
+     * Used to make room for shadows in the pinned windowing mode.
+     */
+    int getStackOutset() {
+        if (inPinnedWindowingMode()) {
+            final DisplayMetrics displayMetrics = getDisplayContent().getDisplayMetrics();
+            return mService.dipToPixel(PINNED_WINDOWING_MODE_ELEVATION_IN_DIP,
+                    displayMetrics);
+        }
+        return 0;
     }
 
     private void updateSurfaceSize(SurfaceControl.Transaction transaction) {
@@ -751,8 +762,13 @@ public class TaskStack extends WindowContainer<Task> implements
         }
 
         final Rect stackBounds = getBounds();
-        final int width = stackBounds.width();
-        final int height = stackBounds.height();
+        int width = stackBounds.width();
+        int height = stackBounds.height();
+
+        final int outset = getStackOutset();
+        width += 2*outset;
+        height += 2*outset;
+
         if (width == mLastSurfaceSize.x && height == mLastSurfaceSize.y) {
             return;
         }
@@ -1752,5 +1768,13 @@ public class TaskStack extends WindowContainer<Task> implements
     void stopDimming() {
         mDimmer.stopDim(getPendingTransaction());
         scheduleAnimation();
+    }
+
+    @Override
+    void getRelativePosition(Point outPos) {
+        super.getRelativePosition(outPos);
+        final int outset = getStackOutset();
+        outPos.x -= outset;
+        outPos.y -= outset;
     }
 }

@@ -104,6 +104,7 @@ extern int register_android_hardware_location_ActivityRecognitionHardware(JNIEnv
 extern int register_android_media_AudioRecord(JNIEnv *env);
 extern int register_android_media_AudioSystem(JNIEnv *env);
 extern int register_android_media_AudioTrack(JNIEnv *env);
+extern int register_android_media_MicrophoneInfo(JNIEnv *env);
 extern int register_android_media_JetPlayer(JNIEnv *env);
 extern int register_android_media_ToneGenerator(JNIEnv *env);
 
@@ -765,17 +766,16 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
 
     /*
      * Enable debugging only for apps forked from zygote.
-     * Set suspend=y to pause during VM init and use android ADB transport.
      */
     if (zygote) {
+      // Set the JDWP provider and required arguments. By default let the runtime choose how JDWP is
+      // implemented. When this is not set the runtime defaults to not allowing JDWP.
       addOption("-XjdwpOptions:suspend=n,server=y");
+      parseRuntimeOption("dalvik.vm.jdwp-provider",
+                         jdwpProviderBuf,
+                         "-XjdwpProvider:",
+                         "default");
     }
-
-    // Set the JDWP provider. By default let the runtime choose.
-    parseRuntimeOption("dalvik.vm.jdwp-provider",
-                       jdwpProviderBuf,
-                       "-XjdwpProvider:",
-                       "default");
 
     parseRuntimeOption("dalvik.vm.lockprof.threshold",
                        lockProfThresholdBuf,
@@ -1461,6 +1461,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_media_AudioSystem),
     REG_JNI(register_android_media_AudioTrack),
     REG_JNI(register_android_media_JetPlayer),
+    REG_JNI(register_android_media_MicrophoneInfo),
     REG_JNI(register_android_media_RemoteDisplay),
     REG_JNI(register_android_media_ToneGenerator),
 

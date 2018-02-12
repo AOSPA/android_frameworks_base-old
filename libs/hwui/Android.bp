@@ -134,10 +134,13 @@ cc_defaults {
     name: "libhwui_defaults",
     defaults: ["hwui_defaults"],
 
+    shared_libs: ["libstatslog"],
+
     whole_static_libs: ["libskia"],
 
     srcs: [
         "hwui/AnimatedImageDrawable.cpp",
+        "hwui/AnimatedImageThread.cpp",
         "hwui/Bitmap.cpp",
         "font/CacheTexture.cpp",
         "font/Font.cpp",
@@ -317,7 +320,10 @@ cc_test {
         "libgmock",
         "libhwui_static_debug",
     ],
-    shared_libs: ["libmemunreachable"],
+    shared_libs: [
+        "libmemunreachable",
+        "libstatslog",
+    ],
     cflags: [
         "-include debug/wrap_gles.h",
         "-DHWUI_NULL_GPU",
@@ -382,7 +388,10 @@ cc_benchmark {
 
     // set to libhwui_static_debug to skip actual GL commands
     whole_static_libs: ["libhwui"],
-    shared_libs: ["libmemunreachable"],
+    shared_libs: [
+        "libmemunreachable",
+        "libstatslog",
+    ],
 
     srcs: [
         "tests/macrobench/TestSceneRunner.cpp",
@@ -404,7 +413,10 @@ cc_benchmark {
     ],
 
     whole_static_libs: ["libhwui_static_debug"],
-    shared_libs: ["libmemunreachable"],
+    shared_libs: [
+        "libmemunreachable",
+        "libstatslog",
+    ],
 
     srcs: [
         "tests/microbench/main.cpp",

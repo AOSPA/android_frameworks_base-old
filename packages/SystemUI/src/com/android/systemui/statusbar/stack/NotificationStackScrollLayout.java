@@ -365,7 +365,7 @@ public class NotificationStackScrollLayout extends ViewGroup
     private boolean mGroupExpandedForMeasure;
     private boolean mScrollable;
     private View mForcedScroll;
-    private float mDarkAmount = 1.0f;
+    private float mDarkAmount = 0f;
     private static final Property<NotificationStackScrollLayout, Float> DARK_AMOUNT =
             new FloatProperty<NotificationStackScrollLayout>("darkAmount") {
                 @Override
@@ -402,6 +402,7 @@ public class NotificationStackScrollLayout extends ViewGroup
     private final int mSeparatorThickness;
     private final Rect mTmpRect = new Rect();
     private int mClockBottom;
+    private int mAntiBurnInOffsetX;
 
     public NotificationStackScrollLayout(Context context) {
         this(context, null);
@@ -523,9 +524,9 @@ public class NotificationStackScrollLayout extends ViewGroup
             setClipBounds(null);
         } else {
             float animProgress = Interpolators.FAST_OUT_SLOW_IN
-                    .getInterpolation(mDarkAmount);
+                    .getInterpolation(1f - mDarkAmount);
             float sidePaddingsProgress = Interpolators.FAST_OUT_SLOW_IN
-                    .getInterpolation(mDarkAmount * 2);
+                    .getInterpolation((1f - mDarkAmount) * 2);
             mTmpRect.set((int) MathUtils.lerp(darkLeft, lockScreenLeft, sidePaddingsProgress),
                     (int) MathUtils.lerp(darkTop, lockScreenTop, animProgress),
                     (int) MathUtils.lerp(darkRight, lockScreenRight, sidePaddingsProgress),
@@ -548,7 +549,7 @@ public class NotificationStackScrollLayout extends ViewGroup
         } else {
             float alpha =
                     BACKGROUND_ALPHA_DIMMED + (1 - BACKGROUND_ALPHA_DIMMED) * (1.0f - mDimAmount);
-            alpha *= mDarkAmount;
+            alpha *= 1f - mDarkAmount;
             // We need to manually blend in the background color
             int scrimColor = mScrimController.getBackgroundColor();
             color = ColorUtils.blendARGB(scrimColor, mBgColor, alpha);
@@ -2304,8 +2305,9 @@ public class NotificationStackScrollLayout extends ViewGroup
             return;
         }
 
+        final boolean awake = mDarkAmount != 0 || mAmbientState.isDark();
         mScrimController.setExcludedBackgroundArea(
-                mFadingOut || mParentNotFullyVisible || mDarkAmount != 1 || mIsClipped ? null
+                mFadingOut || mParentNotFullyVisible || awake || mIsClipped ? null
                         : mCurrentBounds);
         invalidate();
     }
@@ -3858,20 +3860,20 @@ public class NotificationStackScrollLayout extends ViewGroup
             mDarkNeedsAnimation = true;
             mDarkAnimationOriginIndex = findDarkAnimationOriginIndex(touchWakeUpScreenLocation);
             mNeedsAnimation =  true;
-            setDarkAmount(0.0f);
-        } else if (!dark) {
-            setDarkAmount(1.0f);
-        }
-        requestChildrenUpdate();
-        if (dark) {
-            mScrimController.setExcludedBackgroundArea(null);
         } else {
+            setDarkAmount(dark ? 1f : 0f);
             updateBackground();
         }
-
+        requestChildrenUpdate();
+        applyCurrentBackgroundBounds();
         updateWillNotDraw();
         updateContentHeight();
+        updateAntiBurnInTranslation();
         notifyHeightChangeListener(mShelf);
+    }
+
+    private void updateAntiBurnInTranslation() {
+        setTranslationX(mAmbientState.isDark() ? mAntiBurnInOffsetX : 0);
     }
 
     /**
@@ -3894,7 +3896,7 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     private void startBackgroundFadeIn() {
-        ObjectAnimator fadeAnimator = ObjectAnimator.ofFloat(this, DARK_AMOUNT, 0f, 1f);
+        ObjectAnimator fadeAnimator = ObjectAnimator.ofFloat(this, DARK_AMOUNT, mDarkAmount, 0f);
         fadeAnimator.setDuration(StackStateAnimator.ANIMATION_DURATION_WAKEUP);
         fadeAnimator.setInterpolator(Interpolators.ALPHA_IN);
         fadeAnimator.start();
@@ -4455,8 +4457,9 @@ public class NotificationStackScrollLayout extends ViewGroup
         mHeadsUpGoingAwayAnimationsAllowed = headsUpGoingAwayAnimationsAllowed;
     }
 
-    public void setDarkShelfOffsetX(int shelfOffsetX) {
-        mShelf.setDarkOffsetX(shelfOffsetX);
+    public void setAntiBurnInOffsetX(int antiBurnInOffsetX) {
+        mAntiBurnInOffsetX = antiBurnInOffsetX;
+        updateAntiBurnInTranslation();
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {

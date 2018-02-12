@@ -368,7 +368,7 @@ public final class OutputConfiguration implements Parcelable {
      * desirable for the camera application to request streams from individual physical cameras.
      * This call achieves it by mapping the OutputConfiguration to the physical camera id.</p>
      *
-     * <p>The valid physical camera id can be queried by {@link
+     * <p>The valid physical camera ids can be queried by {@link
      * android.hardware.camera2.CameraCharacteristics#getPhysicalCameraIds}.
      * </p>
      *
@@ -576,7 +576,7 @@ public final class OutputConfiguration implements Parcelable {
      *
      * @see #enableSurfaceSharing
      */
-    public static int getMaxSharedSurfaceCount() {
+    public int getMaxSharedSurfaceCount() {
         return MAX_SURFACES_COUNT;
     }
 

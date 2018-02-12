@@ -111,6 +111,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.IDeviceIdleController;
 import android.os.IInterface;
 import android.os.Looper;
 import android.os.Message;
@@ -286,6 +287,7 @@ public class NotificationManagerService extends SystemService {
     private AlarmManager mAlarmManager;
     private ICompanionDeviceManager mCompanionManager;
     private AccessibilityManager mAccessibilityManager;
+    private IDeviceIdleController mDeviceIdleController;
 
     final IBinder mForegroundToken = new Binder();
     private WorkerHandler mHandler;
@@ -659,6 +661,7 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         public void onNotificationClick(int callingUid, int callingPid, String key) {
+            exitIdle();
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r == null) {
@@ -683,6 +686,7 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void onNotificationActionClick(int callingUid, int callingPid, String key,
                 int actionIndex) {
+            exitIdle();
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r == null) {
@@ -812,6 +816,7 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         public void onNotificationDirectReplied(String key) {
+            exitIdle();
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r != null) {
@@ -1280,6 +1285,8 @@ public class NotificationManagerService extends SystemService {
         mAlarmManager = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
         mCompanionManager = companionManager;
         mActivityManager = activityManager;
+        mDeviceIdleController = IDeviceIdleController.Stub.asInterface(
+                ServiceManager.getService(Context.DEVICE_IDLE_CONTROLLER));
 
         mHandler = new WorkerHandler(looper);
         mRankingThread.start();
@@ -1533,6 +1540,15 @@ public class NotificationManagerService extends SystemService {
         sendRegisteredOnlyBroadcast(NotificationManager.ACTION_EFFECTS_SUPPRESSOR_CHANGED);
     }
 
+    private void exitIdle() {
+        try {
+            if (mDeviceIdleController != null) {
+                mDeviceIdleController.exitIdle("notification interaction");
+            }
+        } catch (RemoteException e) {
+        }
+    }
+
     private void updateNotificationChannelInt(String pkg, int uid, NotificationChannel channel,
             boolean fromListener) {
         if (channel.getImportance() == NotificationManager.IMPORTANCE_NONE) {
@@ -1577,7 +1593,7 @@ public class NotificationManagerService extends SystemService {
                     && update.getImportance() == IMPORTANCE_NONE)) {
                 getContext().sendBroadcastAsUser(
                         new Intent(ACTION_NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED)
-                                .putExtra(NotificationManager.EXTRA_BLOCK_STATE_CHANGED_ID,
+                                .putExtra(NotificationManager.EXTRA_NOTIFICATION_CHANNEL_ID,
                                         update.getId())
                                 .putExtra(NotificationManager.EXTRA_BLOCKED_STATE,
                                         update.getImportance() == IMPORTANCE_NONE)
@@ -1615,7 +1631,7 @@ public class NotificationManagerService extends SystemService {
             if (preUpdate.isBlocked() != update.isBlocked()) {
                 getContext().sendBroadcastAsUser(
                         new Intent(ACTION_NOTIFICATION_CHANNEL_GROUP_BLOCK_STATE_CHANGED)
-                                .putExtra(NotificationManager.EXTRA_BLOCK_STATE_CHANGED_ID,
+                                .putExtra(NotificationManager.EXTRA_NOTIFICATION_CHANNEL_GROUP_ID,
                                         update.getId())
                                 .putExtra(NotificationManager.EXTRA_BLOCKED_STATE,
                                         update.isBlocked())
@@ -2875,6 +2891,7 @@ public class NotificationManagerService extends SystemService {
         // Backup/restore interface
         @Override
         public byte[] getBackupPayload(int user) {
+            checkCallerIsSystem();
             if (DBG) Slog.d(TAG, "getBackupPayload u=" + user);
             //TODO: http://b/22388012
             if (user != UserHandle.USER_SYSTEM) {
@@ -2895,6 +2912,7 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         public void applyRestore(byte[] payload, int user) {
+            checkCallerIsSystem();
             if (DBG) Slog.d(TAG, "applyRestore u=" + user + " payload="
                     + (payload != null ? new String(payload, StandardCharsets.UTF_8) : null));
             if (payload == null) {
@@ -5669,6 +5687,12 @@ public class NotificationManagerService extends SystemService {
         @GuardedBy("mNotificationLock")
         protected void onServiceRemovedLocked(ManagedServiceInfo removed) {
             mListeners.unregisterService(removed.service, removed.userid);
+        }
+
+        @Override
+        public void onUserUnlocked(int user) {
+            if (DEBUG) Slog.d(TAG, "onUserUnlocked u=" + user);
+            rebindServices(true);
         }
 
         public void onNotificationEnqueued(final NotificationRecord r) {

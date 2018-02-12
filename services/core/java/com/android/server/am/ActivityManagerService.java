@@ -385,6 +385,7 @@ import android.view.RemoteAnimationDefinition;
 import android.view.View;
 import android.view.WindowManager;
 
+import android.view.autofill.AutofillManagerInternal;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -777,8 +778,11 @@ public class ActivityManagerService extends IActivityManager.Stub
     long mWaitForNetworkTimeoutMs;
 
     /**
-     * Helper class which parses out priority arguments and dumps sections according to their
-     * priority. If priority arguments are omitted, function calls the legacy dump command.
+     * Helper class which strips out priority and proto arguments then calls the dump function with
+     * the appropriate arguments. If priority arguments are omitted, function calls the legacy
+     * dump command.
+     * If priority arguments are omitted all sections are dumped, otherwise sections are dumped
+     * according to their priority.
      */
     private final PriorityDump.PriorityDumper mPriorityDumper = new PriorityDump.PriorityDumper() {
         @Override
@@ -790,23 +794,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void dumpNormal(FileDescriptor fd, PrintWriter pw, String[] args, boolean asProto) {
-            if (asProto) {
-                doDump(fd, pw, new String[0], asProto);
-            } else {
-                doDump(fd, pw, new String[]{"settings"}, asProto);
-                doDump(fd, pw, new String[]{"intents"}, asProto);
-                doDump(fd, pw, new String[]{"broadcasts"}, asProto);
-                doDump(fd, pw, new String[]{"providers"}, asProto);
-                doDump(fd, pw, new String[]{"permissions"}, asProto);
-                doDump(fd, pw, new String[]{"services"}, asProto);
-                doDump(fd, pw, new String[]{"recents"}, asProto);
-                doDump(fd, pw, new String[]{"lastanr"}, asProto);
-                doDump(fd, pw, new String[]{"starter"}, asProto);
-                if (mAssociations.size() > 0) {
-                    doDump(fd, pw, new String[]{"associations"}, asProto);
-                }
-                doDump(fd, pw, new String[]{"processes"}, asProto);
-            }
+            doDump(fd, pw, new String[]{"-a", "--normal-priority"}, asProto);
         }
 
         @Override
@@ -1282,6 +1270,40 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (mFontScaleUri.equals(uri)) {
                 updateFontScaleIfNeeded(userId);
             }
+        }
+    }
+
+    DevelopmentSettingsObserver mDevelopmentSettingsObserver;
+
+    private final class DevelopmentSettingsObserver extends ContentObserver {
+        private final Uri mUri = Settings.Global
+                .getUriFor(Settings.Global.DEVELOPMENT_SETTINGS_ENABLED);
+
+        private final ComponentName mBugreportStorageProvider = new ComponentName(
+                "com.android.shell", "com.android.shell.BugreportStorageProvider");
+
+        public DevelopmentSettingsObserver() {
+            super(mHandler);
+            mContext.getContentResolver().registerContentObserver(mUri, false, this,
+                    UserHandle.USER_ALL);
+            // Always kick once to ensure that we match current state
+            onChange();
+        }
+
+        @Override
+        public void onChange(boolean selfChange, Uri uri, @UserIdInt int userId) {
+            if (mUri.equals(uri)) {
+                onChange();
+            }
+        }
+
+        public void onChange() {
+            final boolean enabled = Settings.Global.getInt(mContext.getContentResolver(),
+                    Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, Build.IS_ENG ? 1 : 0) != 0;
+            mContext.getPackageManager().setComponentEnabledSetting(mBugreportStorageProvider,
+                    enabled ? PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+                            : PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
+                    0);
         }
     }
 
@@ -4027,8 +4049,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                 runtimeFlags |= Zygote.DEBUG_ENABLE_CHECKJNI;
             }
             String genDebugInfoProperty = SystemProperties.get("debug.generate-debug-info");
-            if ("true".equals(genDebugInfoProperty)) {
+            if ("1".equals(genDebugInfoProperty) || "true".equals(genDebugInfoProperty)) {
                 runtimeFlags |= Zygote.DEBUG_GENERATE_DEBUG_INFO;
+            }
+            String genMiniDebugInfoProperty = SystemProperties.get("dalvik.vm.minidebuginfo");
+            if ("1".equals(genMiniDebugInfoProperty) || "true".equals(genMiniDebugInfoProperty)) {
+                runtimeFlags |= Zygote.DEBUG_GENERATE_MINI_DEBUG_INFO;
             }
             if ("1".equals(SystemProperties.get("debug.jni.logging"))) {
                 runtimeFlags |= Zygote.DEBUG_ENABLE_JNI_LOGGING;
@@ -4331,7 +4357,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         final BatteryStatsImpl stats = mBatteryStatsService.getActiveStatistics();
         StatsLog.write(StatsLog.ACTIVITY_FOREGROUND_STATE_CHANGED,
             component.userId, component.realActivity.getPackageName(),
-            component.realActivity.getShortClassName(), resumed ? 1 : 0);
+            component.realActivity.getShortClassName(), resumed ?
+                        StatsLog.ACTIVITY_FOREGROUND_STATE_CHANGED__ACTIVITY__MOVE_TO_FOREGROUND :
+                        StatsLog.ACTIVITY_FOREGROUND_STATE_CHANGED__ACTIVITY__MOVE_TO_BACKGROUND);
         if (resumed) {
             if (mUsageStatsService != null) {
                 mUsageStatsService.reportEvent(component.realActivity, component.userId,
@@ -7472,6 +7500,18 @@ public class ActivityManagerService extends IActivityManager.Stub
                 thread.attachAgent(preBindAgent);
             }
 
+
+            // Figure out whether the app needs to run in autofill compat mode.
+            boolean isAutofillCompatEnabled = false;
+            if (UserHandle.getAppId(app.info.uid) >= Process.FIRST_APPLICATION_UID) {
+                final AutofillManagerInternal afm = LocalServices.getService(
+                        AutofillManagerInternal.class);
+                if (afm != null) {
+                    isAutofillCompatEnabled = afm.isCompatibilityModeRequested(
+                            app.info.packageName, app.info.versionCode, app.userId);
+                }
+            }
+
             checkTime(startTime, "attachApplicationLocked: immediately before bindApplication");
             mStackSupervisor.getActivityMetricsLogger().notifyBindApplication(app);
             if (app.isolatedEntryPoint != null) {
@@ -7489,7 +7529,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         new Configuration(getGlobalConfiguration()), app.compat,
                         getCommonServicesLocked(app.isolated),
                         mCoreSettingsObserver.getCoreSettingsLocked(),
-                        buildSerial);
+                        buildSerial, isAutofillCompatEnabled);
             } else {
                 thread.bindApplication(processName, appInfo, providers, null, profilerInfo,
                         null, null, null, testMode,
@@ -7498,7 +7538,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         new Configuration(getGlobalConfiguration()), app.compat,
                         getCommonServicesLocked(app.isolated),
                         mCoreSettingsObserver.getCoreSettingsLocked(),
-                        buildSerial);
+                        buildSerial, isAutofillCompatEnabled);
             }
 
             checkTime(startTime, "attachApplicationLocked: immediately after bindApplication");
@@ -12419,6 +12459,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mConstants.start(mContext.getContentResolver());
         mCoreSettingsObserver = new CoreSettingsObserver(this);
         mFontScaleSettingObserver = new FontScaleSettingObserver();
+        mDevelopmentSettingsObserver = new DevelopmentSettingsObserver();
         GlobalSettingsToPropertiesMapper.start(mContext.getContentResolver());
 
         // Now that the settings provider is published we can consider sending
@@ -12844,7 +12885,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         // TODO: Where should the corresponding '1' (start) write go?
-        StatsLog.write(StatsLog.DEVICE_ON_STATUS_CHANGED, 0);
+        StatsLog.write(StatsLog.DEVICE_ON_STATUS_CHANGED,
+                StatsLog.DEVICE_ON_STATUS_CHANGED__STATE__OFF);
 
         boolean timedout = false;
 
@@ -13632,6 +13674,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // Timed out.
                 return;
             }
+
             if ((sendReceiver=pae.receiver) != null) {
                 // Caller wants result sent back to them.
                 sendBundle = new Bundle();
@@ -15447,6 +15490,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         boolean dumpClient = false;
         boolean dumpCheckin = false;
         boolean dumpCheckinFormat = false;
+        boolean dumpNormalPriority = false;
         boolean dumpVisibleStacksOnly = false;
         boolean dumpFocusedStackOnly = false;
         String dumpPackage = null;
@@ -15479,6 +15523,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 dumpCheckin = dumpCheckinFormat = true;
             } else if ("-C".equals(opt)) {
                 dumpCheckinFormat = true;
+            } else if ("--normal-priority".equals(opt)) {
+                dumpNormalPriority = true;
             } else if ("-h".equals(opt)) {
                 ActivityManagerShellCommand.dumpHelp(pw, true);
                 return;
@@ -15880,11 +15926,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                     pw.println("-------------------------------------------------------------------------------");
                 }
                 dumpActivityContainersLocked(pw);
-                pw.println();
-                if (dumpAll) {
-                    pw.println("-------------------------------------------------------------------------------");
+                // Activities section is dumped as part of the Critical priority dump. Exclude the
+                // section if priority is Normal.
+                if (!dumpNormalPriority){
+                    pw.println();
+                    if (dumpAll) {
+                        pw.println("-------------------------------------------------------------------------------");
+                    }
+                    dumpActivitiesLocked(fd, pw, args, opti, dumpAll, dumpClient, dumpPackage);
                 }
-                dumpActivitiesLocked(fd, pw, args, opti, dumpAll, dumpClient, dumpPackage);
                 if (mAssociations.size() > 0) {
                     pw.println();
                     if (dumpAll) {
@@ -25424,6 +25474,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         public void notifyAppTransitionFinished() {
             synchronized (ActivityManagerService.this) {
                 mStackSupervisor.notifyAppTransitionDone();
+                mKeyguardController.notifyAppTransitionDone();
             }
         }
 

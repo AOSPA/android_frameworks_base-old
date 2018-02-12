@@ -323,6 +323,7 @@
     <protected-broadcast android:name="com.android.server.usb.ACTION_OPEN_IN_APPS" />
     <protected-broadcast android:name="com.android.server.am.DELETE_DUMPHEAP" />
     <protected-broadcast android:name="com.android.server.net.action.SNOOZE_WARNING" />
+    <protected-broadcast android:name="com.android.server.net.action.SNOOZE_RAPID" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.USER_DISMISSED_NOTIFICATION" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.CONNECT_TO_NETWORK" />
     <protected-broadcast android:name="com.android.server.wifi.ConnectToNetworkNotification.PICK_WIFI_NETWORK" />
@@ -1785,12 +1786,30 @@
 
     <!-- Must be required by an ImsService to ensure that only the
          system can bind to it.
-         <p>Protection level: signature|privileged
+         <p>Protection level: signature|privileged|vendorPrivileged
          @SystemApi
          @hide
     -->
     <permission android:name="android.permission.BIND_IMS_SERVICE"
         android:protectionLevel="signature|privileged|vendorPrivileged" />
+
+    <!-- Must be required by a telephony data service to ensure that only the
+         system can bind to it.
+         <p>Protection level: signature
+         @SystemApi
+         @hide
+    -->
+    <permission android:name="android.permission.BIND_TELEPHONY_DATA_SERVICE"
+        android:protectionLevel="signature" />
+
+    <!-- Must be required by a NetworkService to ensure that only the
+         system can bind to it.
+         <p>Protection level: signature
+         @SystemApi
+         @hide
+    -->
+    <permission android:name="android.permission.BIND_TELEPHONY_NETWORK_SERVICE"
+                android:protectionLevel="signature" />
 
     <!-- Allows an application to manage embedded subscriptions (those on a eUICC) through
          EuiccManager APIs.
@@ -2723,11 +2742,28 @@
     <permission android:name="android.permission.BIND_AUTOFILL_SERVICE"
         android:protectionLevel="signature" />
 
+   <!-- Alternative version of android.permission.BIND_AUTOFILL_FIELD_CLASSIFICATION_SERVICE.
+        This permission was renamed during the O previews but it was supported on the final O
+        release, so we need to carry it over.
+        <p>Protection level: signature
+        @hide
+    -->
+    <permission android:name="android.permission.BIND_AUTOFILL"
+        android:protectionLevel="signature" />
+
     <!-- Must be required by an {@link android.service.autofill.AutofillFieldClassificationService}
          to ensure that only the system can bind to it.
          @hide This is not a third-party API (intended for OEMs and system apps).
     -->
     <permission android:name="android.permission.BIND_AUTOFILL_FIELD_CLASSIFICATION_SERVICE"
+                android:protectionLevel="signature" />
+
+    <!-- Must be required by a android.service.textclassifier.TextClassifierService,
+         to ensure that only the system can bind to it.
+         @SystemApi @hide This is not a third-party API (intended for OEMs and system apps).
+         <p>Protection level: signature
+    -->
+    <permission android:name="android.permission.BIND_TEXTCLASSIFIER_SERVICE"
                 android:protectionLevel="signature" />
 
     <!-- Must be required by hotword enrollment application,
@@ -3010,6 +3046,13 @@
          @hide
          @SystemApi -->
     <permission android:name="android.permission.BRIGHTNESS_SLIDER_USAGE"
+        android:protectionLevel="signature|privileged|development" />
+
+    <!-- Allows an application to collect ambient light stats.
+         <p>Not for use by third party applications.</p>
+         TODO: Make a system API
+         @hide -->
+    <permission android:name="android.permission.ACCESS_AMBIENT_LIGHT_STATS"
         android:protectionLevel="signature|privileged|development" />
 
     <!-- Allows an application to modify the display brightness configuration
@@ -3818,6 +3861,7 @@
                 android:excludeFromRecents="true"
                 android:label="@string/user_owner_label"
                 android:exported="true"
+                android:visibleToInstantApps="true"
                 >
         </activity>
         <activity-alias android:name="com.android.internal.app.ForwardIntentToParent"
@@ -4146,6 +4190,16 @@
         <service android:name="com.android.server.display.BrightnessIdleJob"
                  android:permission="android.permission.BIND_JOB_SERVICE" >
         </service>
+
+        <service
+                android:name="com.android.server.autofill.AutofillCompatAccessibilityService"
+                android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+                android:exported="true">
+            <meta-data
+                    android:name="android.accessibilityservice"
+                    android:resource="@xml/autofill_compat_accessibility_service" />
+        </service>
+
 </application>
 
 </manifest>

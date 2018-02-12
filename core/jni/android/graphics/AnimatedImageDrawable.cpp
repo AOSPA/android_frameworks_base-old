@@ -16,20 +16,21 @@
 
 #include "GraphicsJNI.h"
 #include "ImageDecoder.h"
-#include "core_jni_helpers.h"
 #include "Utils.h"
+#include "core_jni_helpers.h"
 
-#include <hwui/AnimatedImageDrawable.h>
-#include <hwui/Canvas.h>
 #include <SkAndroidCodec.h>
 #include <SkAnimatedImage.h>
 #include <SkColorFilter.h>
 #include <SkPicture.h>
 #include <SkPictureRecorder.h>
+#include <hwui/AnimatedImageDrawable.h>
+#include <hwui/Canvas.h>
+#include <utils/Looper.h>
 
 using namespace android;
 
-static jmethodID gAnimatedImageDrawable_postOnAnimationEndMethodID;
+static jmethodID gAnimatedImageDrawable_onAnimationEndMethodID;
 
 // Note: jpostProcess holds a handle to the ImageDecoder.
 static jlong AnimatedImageDrawable_nCreate(JNIEnv* env, jobject /*clazz*/,
@@ -85,6 +86,9 @@ static jlong AnimatedImageDrawable_nGetNativeFinalizer(JNIEnv* /*env*/, jobject 
     return static_cast<jlong>(reinterpret_cast<uintptr_t>(&AnimatedImageDrawable_destruct));
 }
 
+// Java's FINISHED relies on this being -1
+static_assert(SkAnimatedImage::kFinished == -1);
+
 static jlong AnimatedImageDrawable_nDraw(JNIEnv* env, jobject /*clazz*/, jlong nativePtr,
                                          jlong canvasPtr) {
     auto* drawable = reinterpret_cast<AnimatedImageDrawable*>(nativePtr);
@@ -115,17 +119,14 @@ static jboolean AnimatedImageDrawable_nIsRunning(JNIEnv* env, jobject /*clazz*/,
     return drawable->isRunning();
 }
 
-// Java's NOT_RUNNING relies on this being -2.0.
-static_assert(SkAnimatedImage::kNotRunning == -2.0);
-
 static jboolean AnimatedImageDrawable_nStart(JNIEnv* env, jobject /*clazz*/, jlong nativePtr) {
     auto* drawable = reinterpret_cast<AnimatedImageDrawable*>(nativePtr);
     return drawable->start();
 }
 
-static void AnimatedImageDrawable_nStop(JNIEnv* env, jobject /*clazz*/, jlong nativePtr) {
+static jboolean AnimatedImageDrawable_nStop(JNIEnv* env, jobject /*clazz*/, jlong nativePtr) {
     auto* drawable = reinterpret_cast<AnimatedImageDrawable*>(nativePtr);
-    drawable->stop();
+    return drawable->stop();
 }
 
 // Java's LOOP_INFINITE relies on this being the same.
@@ -137,39 +138,74 @@ static void AnimatedImageDrawable_nSetLoopCount(JNIEnv* env, jobject /*clazz*/, 
     drawable->setRepetitionCount(loopCount);
 }
 
-class JniAnimationEndListener : public OnAnimationEndListener {
+class InvokeListener : public MessageHandler {
 public:
-    JniAnimationEndListener(JNIEnv* env, jobject javaObject) {
+    InvokeListener(JNIEnv* env, jobject javaObject) {
         LOG_ALWAYS_FATAL_IF(env->GetJavaVM(&mJvm) != JNI_OK);
-        mJavaObject = env->NewGlobalRef(javaObject);
+        // Hold a weak reference to break a cycle that would prevent GC.
+        mWeakRef = env->NewWeakGlobalRef(javaObject);
     }
 
-    ~JniAnimationEndListener() override {
+    ~InvokeListener() override {
         auto* env = get_env_or_die(mJvm);
-        env->DeleteGlobalRef(mJavaObject);
+        env->DeleteWeakGlobalRef(mWeakRef);
     }
 
-    void onAnimationEnd() override {
+    virtual void handleMessage(const Message&) override {
         auto* env = get_env_or_die(mJvm);
-        env->CallVoidMethod(mJavaObject, gAnimatedImageDrawable_postOnAnimationEndMethodID);
+        jobject localRef = env->NewLocalRef(mWeakRef);
+        if (localRef) {
+            env->CallVoidMethod(localRef, gAnimatedImageDrawable_onAnimationEndMethodID);
+        }
     }
 
 private:
     JavaVM* mJvm;
-    jobject mJavaObject;
+    jweak mWeakRef;
+};
+
+class JniAnimationEndListener : public OnAnimationEndListener {
+public:
+    JniAnimationEndListener(sp<Looper>&& looper, JNIEnv* env, jobject javaObject) {
+        mListener = new InvokeListener(env, javaObject);
+        mLooper = std::move(looper);
+    }
+
+    void onAnimationEnd() override { mLooper->sendMessage(mListener, 0); }
+
+private:
+    sp<InvokeListener> mListener;
+    sp<Looper> mLooper;
 };
 
 static void AnimatedImageDrawable_nSetOnAnimationEndListener(JNIEnv* env, jobject /*clazz*/,
                                                              jlong nativePtr, jobject jdrawable) {
     auto* drawable = reinterpret_cast<AnimatedImageDrawable*>(nativePtr);
-    drawable->setOnAnimationEndListener(std::unique_ptr<OnAnimationEndListener>(
-                new JniAnimationEndListener(env, jdrawable)));
+    if (!jdrawable) {
+        drawable->setOnAnimationEndListener(nullptr);
+    } else {
+        sp<Looper> looper = Looper::getForThread();
+        if (!looper.get()) {
+            doThrowISE(env,
+                       "Must set AnimatedImageDrawable's AnimationCallback on a thread with a "
+                       "looper!");
+            return;
+        }
+
+        drawable->setOnAnimationEndListener(
+                std::make_unique<JniAnimationEndListener>(std::move(looper), env, jdrawable));
+    }
 }
 
 static long AnimatedImageDrawable_nNativeByteSize(JNIEnv* env, jobject /*clazz*/, jlong nativePtr) {
     auto* drawable = reinterpret_cast<AnimatedImageDrawable*>(nativePtr);
     // FIXME: Report the size of the internal SkBitmap etc.
     return sizeof(drawable);
+}
+
+static void AnimatedImageDrawable_nMarkInvisible(JNIEnv* env, jobject /*clazz*/, jlong nativePtr) {
+    auto* drawable = reinterpret_cast<AnimatedImageDrawable*>(nativePtr);
+    drawable->markInvisible();
 }
 
 static const JNINativeMethod gAnimatedImageDrawableMethods[] = {
@@ -181,15 +217,16 @@ static const JNINativeMethod gAnimatedImageDrawableMethods[] = {
     { "nSetColorFilter",     "(JJ)V",                                                        (void*) AnimatedImageDrawable_nSetColorFilter },
     { "nIsRunning",          "(J)Z",                                                         (void*) AnimatedImageDrawable_nIsRunning },
     { "nStart",              "(J)Z",                                                         (void*) AnimatedImageDrawable_nStart },
-    { "nStop",               "(J)V",                                                         (void*) AnimatedImageDrawable_nStop },
+    { "nStop",               "(J)Z",                                                         (void*) AnimatedImageDrawable_nStop },
     { "nSetLoopCount",       "(JI)V",                                                        (void*) AnimatedImageDrawable_nSetLoopCount },
     { "nSetOnAnimationEndListener", "(JLandroid/graphics/drawable/AnimatedImageDrawable;)V", (void*) AnimatedImageDrawable_nSetOnAnimationEndListener },
     { "nNativeByteSize",     "(J)J",                                                         (void*) AnimatedImageDrawable_nNativeByteSize },
+    { "nMarkInvisible",      "(J)V",                                                         (void*) AnimatedImageDrawable_nMarkInvisible },
 };
 
 int register_android_graphics_drawable_AnimatedImageDrawable(JNIEnv* env) {
     jclass animatedImageDrawable_class = FindClassOrDie(env, "android/graphics/drawable/AnimatedImageDrawable");
-    gAnimatedImageDrawable_postOnAnimationEndMethodID = GetMethodIDOrDie(env, animatedImageDrawable_class, "postOnAnimationEnd", "()V");
+    gAnimatedImageDrawable_onAnimationEndMethodID = GetMethodIDOrDie(env, animatedImageDrawable_class, "onAnimationEnd", "()V");
 
     return android::RegisterMethodsOrDie(env, "android/graphics/drawable/AnimatedImageDrawable",
             gAnimatedImageDrawableMethods, NELEM(gAnimatedImageDrawableMethods));
