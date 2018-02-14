@@ -78,6 +78,7 @@ import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
+import android.util.BoostFramework;
 import android.view.Surface.OutOfResourcesException;
 import android.view.View.AttachInfo;
 import android.view.View.FocusDirection;
@@ -496,6 +497,9 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private String mTag = TAG;
+    boolean mHaveMoveEvent = false;
+    boolean mIsPerfLockAcquired = false;
+    BoostFramework mPerf = null;
 
     public ViewRootImpl(Context context, Display display) {
         mContext = context;
@@ -3142,6 +3146,16 @@ public final class ViewRootImpl implements ViewParent,
         scrollToRectOrFocus(null, false);
 
         if (mAttachInfo.mViewScrollChanged) {
+            if (mHaveMoveEvent && !mIsPerfLockAcquired) {
+                mIsPerfLockAcquired = true;
+                if (mPerf == null) {
+                    mPerf = new BoostFramework();
+                }
+                if (mPerf != null) {
+                    String currentPackage = mContext.getPackageName();
+                    mPerf.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST, currentPackage, -1, BoostFramework.Scroll.PREFILING);
+                }
+            }
             mAttachInfo.mViewScrollChanged = false;
             mAttachInfo.mTreeObserver.dispatchOnScrollChanged();
         }
@@ -5029,6 +5043,13 @@ public final class ViewRootImpl implements ViewParent,
             mAttachInfo.mUnbufferedDispatchRequested = false;
             mAttachInfo.mHandlingPointerEvent = true;
             boolean handled = mView.dispatchPointerEvent(event);
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_MOVE) {
+                mHaveMoveEvent = true;
+            } else if (action == MotionEvent.ACTION_UP) {
+                mHaveMoveEvent = false;
+                mIsPerfLockAcquired = false;
+            }
             maybeUpdatePointerIcon(event);
             maybeUpdateTooltip(event);
             mAttachInfo.mHandlingPointerEvent = false;
