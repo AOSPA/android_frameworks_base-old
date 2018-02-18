@@ -116,8 +116,8 @@ public class CallbackHandlerTest extends SysuiTestCase {
         boolean wide = true;
         int subId = 5;
         boolean roaming = true;
-        mHandler.setMobileDataIndicators(status, qs, type, qsType, in, out, typeDescription,
-                description, wide, subId, roaming);
+        mHandler.setMobileDataIndicators(status, qs, type, qsType, in, out, 0, 0, 0,
+                typeDescription, description, wide, subId, roaming);
         waitForCallbacks();
 
         ArgumentCaptor<IconState> statusArg = ArgumentCaptor.forClass(IconState.class);
@@ -132,7 +132,11 @@ public class CallbackHandlerTest extends SysuiTestCase {
         ArgumentCaptor<Integer> subIdArg = ArgumentCaptor.forClass(Integer.class);
         Mockito.verify(mSignalCallback).setMobileDataIndicators(statusArg.capture(),
                 qsArg.capture(), typeIconArg.capture(), qsTypeIconArg.capture(), inArg.capture(),
-                outArg.capture(), typeContentArg.capture(), descArg.capture(), wideArg.capture(),
+                outArg.capture(),
+                ArgumentCaptor.forClass(Integer.class).capture(),
+                ArgumentCaptor.forClass(Integer.class).capture(),
+                ArgumentCaptor.forClass(Integer.class).capture(),
+                typeContentArg.capture(), descArg.capture(), wideArg.capture(),
                 subIdArg.capture(), eq(roaming));
         assertEquals(status, statusArg.getValue());
         assertEquals(qs, qsArg.getValue());
