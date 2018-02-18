@@ -332,6 +332,25 @@
     <protected-broadcast android:name="com.android.server.wifi.wakeup.OPEN_WIFI_PREFERENCES" />
     <protected-broadcast android:name="com.android.server.wifi.wakeup.OPEN_WIFI_SETTINGS" />
     <protected-broadcast android:name="com.android.server.wifi.wakeup.TURN_OFF_WIFI_WAKE" />
+
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.WIGIG_CREDENTIAL_CHANGED" />
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.WIGIG_STATE_CHANGED" />
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.WIGIG_AP_STATE_CHANGED" />
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.supplicant.CONNECTION_CHANGE" />
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.STATE_CHANGE" />
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.CONFIGURED_NETWORKS_CHANGE" />
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.SCAN_RESULTS" />
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.LINK_CONFIGURATION_CHANGED" />
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.WIGIG_RATE_UPGRADE_STATE_CHANGED" />
+    <protected-broadcast android:name="com.qualcomm.qti.wigig.RSSI_CHANGED" />
+    <protected-broadcast android:name="wigig_scan_available" />
+    <protected-broadcast android:name="android.net.wigig.p2p.STATE_CHANGED" />
+    <protected-broadcast android:name="android.net.wigig.p2p.CONNECTION_STATE_CHANGE" />
+    <protected-broadcast android:name="android.net.wigig.p2p.PEERS_CHANGED" />
+    <protected-broadcast android:name="android.net.wigig.p2p.DISCOVERY_STATE_CHANGE" />
+    <protected-broadcast android:name="android.net.wigig.p2p.THIS_DEVICE_CHANGED" />
+    <protected-broadcast android:name="android.net.wigig.p2p.PERSISTENT_GROUPS_CHANGED" />
+
     <protected-broadcast android:name="android.net.wifi.WIFI_STATE_CHANGED" />
     <protected-broadcast android:name="android.net.wifi.WIFI_AP_STATE_CHANGED" />
     <protected-broadcast android:name="android.net.wifi.WIFI_CREDENTIAL_CHANGED" />
@@ -355,6 +374,7 @@
     <protected-broadcast android:name="android.net.wifi.p2p.PEERS_CHANGED" />
     <protected-broadcast android:name="android.net.wifi.p2p.CONNECTION_STATE_CHANGE" />
     <protected-broadcast android:name="android.net.wifi.p2p.PERSISTENT_GROUPS_CHANGED" />
+    <protected-broadcast android:name="android.net.wifi.COUNTRY_CODE_CHANGED" />
     <protected-broadcast android:name="android.net.conn.TETHER_STATE_CHANGED" />
     <protected-broadcast android:name="android.net.conn.INET_CONDITION_ACTION" />
     <protected-broadcast android:name="android.net.conn.NETWORK_CONDITIONS_MEASURED" />
