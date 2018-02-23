@@ -214,6 +214,7 @@ extern int register_com_android_internal_os_FuseAppLoop(JNIEnv* env);
 extern int register_com_android_internal_os_Zygote(JNIEnv *env);
 extern int register_com_android_internal_os_ZygoteInit(JNIEnv *env);
 extern int register_com_android_internal_util_VirtualRefBasePtr(JNIEnv *env);
+extern int register_com_android_internal_app_ActivityTrigger(JNIEnv *env);
 
 static AndroidRuntime* gCurRuntime = NULL;
 
@@ -1493,6 +1494,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_com_android_internal_content_NativeLibraryHelper),
     REG_JNI(register_com_android_internal_net_NetworkStatsFactory),
     REG_JNI(register_com_android_internal_os_FuseAppLoop),
+    REG_JNI(register_com_android_internal_app_ActivityTrigger),
 };
 
 /*
