@@ -1158,9 +1158,12 @@ public final class SystemServer {
             if (enableWigig) {
                 try {
                     Slog.i(TAG, "Wigig Service");
+                    String wigigClassPath =
+                        "/system/framework/wigig-service.jar" + ":" +
+                        "/system/framework/vendor.qti.hardware.wigig.supptunnel-V1.0-java.jar" + ":" +
+                        "/system/framework/vendor.qti.hardware.wigig.netperftuner-V1.0-java.jar";
                     PathClassLoader wigigClassLoader =
-                            new PathClassLoader("/system/framework/wigig-service.jar",
-                                    getClass().getClassLoader());
+                            new PathClassLoader(wigigClassPath, getClass().getClassLoader());
                     Class wigigP2pClass = wigigClassLoader.loadClass(
                         "com.qualcomm.qti.server.wigig.p2p.WigigP2pServiceImpl");
                     Constructor<Class> ctor = wigigP2pClass.getConstructor(Context.class);
