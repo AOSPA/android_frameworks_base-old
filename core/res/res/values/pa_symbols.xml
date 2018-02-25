@@ -123,4 +123,7 @@
     <java-symbol type="string" name="global_restart_recovery_message" />
     <java-symbol type="string" name="global_restart_bootloader" />
     <java-symbol type="string" name="global_restart_bootloader_message" />
+
+    <!-- Notification info -->
+    <java-symbol type="color" name="notification_info_button_text" />
 </resources>
