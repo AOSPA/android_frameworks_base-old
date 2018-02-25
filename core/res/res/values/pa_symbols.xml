@@ -104,4 +104,7 @@
     <!-- Device keyhandlers -->
     <java-symbol type="array" name="config_deviceKeyHandlerLibs" />
     <java-symbol type="array" name="config_deviceKeyHandlerClasses" />
+
+    <!-- Notification info -->
+    <java-symbol type="color" name="notification_info_button_text" />
 </resources>
