@@ -24,15 +24,15 @@ import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_W
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
-import android.app.ActivityManager;
 import android.app.ActivityManager.TaskSnapshot;
 import android.app.WindowConfiguration;
-import android.graphics.GraphicBuffer;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
+import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
 import android.view.IRecentsAnimationController;
@@ -41,6 +41,7 @@ import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
+import com.google.android.collect.Sets;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 
@@ -59,9 +60,11 @@ public class RecentsAnimationController {
     private final IRecentsAnimationRunner mRunner;
     private final RecentsAnimationCallbacks mCallbacks;
     private final ArrayList<TaskAnimationAdapter> mPendingAnimations = new ArrayList<>();
+    private final int mDisplayId;
 
     // The recents component app token that is shown behind the visibile tasks
     private AppWindowToken mHomeAppToken;
+    private Rect mMinimizedHomeBounds = new Rect();
 
     // We start the RecentsAnimationController in a pending-start state since we need to wait for
     // the wallpaper/activity to draw before we can give control to the handler to start animating
@@ -97,17 +100,13 @@ public class RecentsAnimationController {
                         final TaskAnimationAdapter adapter = mPendingAnimations.get(i);
                         final Task task = adapter.mTask;
                         if (task.mTaskId == taskId) {
-                            // TODO: Save this screenshot as the task snapshot?
-                            final Rect taskFrame = new Rect();
-                            task.getBounds(taskFrame);
-                            final GraphicBuffer buffer = SurfaceControl.captureLayers(
-                                    task.getSurfaceControl().getHandle(), taskFrame, 1f);
-                            final AppWindowToken topChild = task.getTopChild();
-                            final WindowState mainWindow = topChild.findMainWindow();
-                            return new TaskSnapshot(buffer, topChild.getConfiguration().orientation,
-                                    mainWindow.mStableInsets,
-                                    ActivityManager.isLowRamDeviceStatic() /* reduced */,
-                                    1.0f /* scale */);
+                            final TaskSnapshotController snapshotController =
+                                    mService.mTaskSnapshotController;
+                            final ArraySet<Task> tasks = Sets.newArraySet(task);
+                            snapshotController.snapshotTasks(tasks);
+                            snapshotController.addSkipClosingAppSnapshotTasks(tasks);
+                            return snapshotController.getSnapshot(taskId, 0 /* userId */,
+                                    false /* restoreFromDisk */, false /* reducedResolution */);
                         }
                     }
                     return null;
@@ -158,13 +157,9 @@ public class RecentsAnimationController {
     };
 
     /**
-     * Initializes a new RecentsAnimationController.
-     *
      * @param remoteAnimationRunner The remote runner which should be notified when the animation is
      *                              ready to start or has been canceled
      * @param callbacks Callbacks to be made when the animation finishes
-     * @param restoreHomeBehindStackId The stack id to restore the home stack behind once the
-     *                                 animation is complete. Will be passed to the callback.
      */
     RecentsAnimationController(WindowManagerService service,
             IRecentsAnimationRunner remoteAnimationRunner, RecentsAnimationCallbacks callbacks,
@@ -172,16 +167,19 @@ public class RecentsAnimationController {
         mService = service;
         mRunner = remoteAnimationRunner;
         mCallbacks = callbacks;
+        mDisplayId = displayId;
+    }
 
-        final DisplayContent dc = mService.mRoot.getDisplayContent(displayId);
-        final ArrayList<Task> visibleTasks = dc.getVisibleTasks();
-        if (visibleTasks.isEmpty()) {
-            cancelAnimation();
-            return;
-        }
-
+    /**
+     * Initializes the recents animation controller. This is a separate call from the constructor
+     * because it may call cancelAnimation() which needs to properly clean up the controller
+     * in the window manager.
+     */
+    public void initialize() {
         // Make leashes for each of the visible tasks and add it to the recents animation to be
         // started
+        final DisplayContent dc = mService.mRoot.getDisplayContent(mDisplayId);
+        final ArrayList<Task> visibleTasks = dc.getVisibleTasks();
         final int taskCount = visibleTasks.size();
         for (int i = 0; i < taskCount; i++) {
             final Task task = visibleTasks.get(i);
@@ -194,18 +192,26 @@ public class RecentsAnimationController {
             addAnimation(task);
         }
 
+        // Skip the animation if there is nothing to animate
+        if (mPendingAnimations.isEmpty()) {
+            cancelAnimation();
+            return;
+        }
+
         // Adjust the wallpaper visibility for the showing home activity
         final AppWindowToken recentsComponentAppToken =
                 dc.getHomeStack().getTopChild().getTopFullscreenAppToken();
         if (recentsComponentAppToken != null) {
             if (DEBUG) Log.d(TAG, "setHomeApp(" + recentsComponentAppToken.getName() + ")");
             mHomeAppToken = recentsComponentAppToken;
-            final WallpaperController wc = dc.mWallpaperController;
             if (recentsComponentAppToken.windowsCanBeWallpaperTarget()) {
                 dc.pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
                 dc.setLayoutNeeded();
             }
         }
+
+        // Save the minimized home height
+        dc.getDockedDividerController().getHomeStackBoundsInDockedMode(mMinimizedHomeBounds);
 
         mService.mWindowPlacerLocked.performSurfacePlacement();
     }
@@ -221,8 +227,10 @@ public class RecentsAnimationController {
     }
 
     void startAnimation() {
-        if (DEBUG) Log.d(TAG, "startAnimation(): mPendingStart=" + mPendingStart);
-        if (!mPendingStart) {
+        if (DEBUG) Log.d(TAG, "startAnimation(): mPendingStart=" + mPendingStart
+                + " mCanceled=" + mCanceled);
+        if (!mPendingStart || mCanceled) {
+            // Skip starting if we've already started or canceled the animation
             return;
         }
         try {
@@ -232,7 +240,15 @@ public class RecentsAnimationController {
                 appAnimations[i] = mPendingAnimations.get(i).createRemoteAnimationApp();
             }
             mPendingStart = false;
-            mRunner.onAnimationStart(mController, appAnimations);
+
+            final Rect minimizedHomeBounds =
+                    mHomeAppToken != null && mHomeAppToken.inSplitScreenSecondaryWindowingMode()
+                            ? mMinimizedHomeBounds : null;
+            final Rect contentInsets =
+                    mHomeAppToken != null && mHomeAppToken.findMainWindow() != null
+                            ? mHomeAppToken.findMainWindow().mContentInsets : null;
+            mRunner.onAnimationStart_New(mController, appAnimations, contentInsets,
+                    minimizedHomeBounds);
         } catch (RemoteException e) {
             Slog.e(TAG, "Failed to start recents animation", e);
         }
@@ -334,11 +350,15 @@ public class RecentsAnimationController {
         }
 
         RemoteAnimationTarget createRemoteAnimationApp() {
-            // TODO: Do we need position and stack bounds?
+            final Point position = new Point();
+            final Rect bounds = new Rect();
+            final WindowContainer container = mTask.getParent();
+            container.getRelativePosition(position);
+            container.getBounds(bounds);
+            final WindowState mainWindow = mTask.getTopVisibleAppMainWindow();
             return new RemoteAnimationTarget(mTask.mTaskId, MODE_CLOSING, mCapturedLeash,
-                    !mTask.fillsParent(),
-                    mTask.getTopVisibleAppMainWindow().mWinAnimator.mLastClipRect,
-                    mTask.getPrefixOrderIndex(), new Point(), new Rect(),
+                    !mTask.fillsParent(), mainWindow.mWinAnimator.mLastClipRect,
+                    mainWindow.mContentInsets, mTask.getPrefixOrderIndex(), position, bounds,
                     mTask.getWindowConfiguration());
         }
 

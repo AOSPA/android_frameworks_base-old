@@ -230,7 +230,7 @@
 
     <!-- The height of the quick settings footer that holds the user switcher, settings icon,
          etc. -->
-    <dimen name="qs_footer_height">48dp</dimen>
+    <dimen name="qs_footer_height">56dp</dimen>
 
     <!-- The padding between the notifications and the quick settings container -->
     <dimen name="qs_notification_padding">@dimen/notification_side_paddings</dimen>
@@ -337,7 +337,7 @@
     <dimen name="qs_footer_padding_end">24dp</dimen>
     <dimen name="qs_footer_icon_size">16dp</dimen>
     <!-- Difference between drag handle margin in QQS and expanded QS -->
-    <dimen name="qs_footer_drag_handle_offset">6dp</dimen>
+    <dimen name="qs_footer_drag_handle_offset">10dp</dimen>
 
     <dimen name="qs_notif_collapsed_space">64dp</dimen>
 
@@ -513,7 +513,7 @@
     <dimen name="multi_user_avatar_keyguard_size">22dp</dimen>
 
     <!-- The width of user avatar when expanded -->
-    <dimen name="multi_user_avatar_expanded_size">16dp</dimen>
+    <dimen name="multi_user_avatar_expanded_size">18dp</dimen>
 
     <!-- The font size of the time when collapsed in QS -->
     <dimen name="qs_time_collapsed_size">14sp</dimen>
@@ -704,6 +704,8 @@
     <dimen name="volume_expander_margin_end">2dp</dimen>
     <dimen name="volume_expander_margin_top">6dp</dimen>
 
+    <dimen name="volume_panel_elevation">8dp</dimen>
+
     <!-- Padding between icon and text for managed profile toast -->
     <dimen name="managed_profile_toast_padding">4dp</dimen>
 
@@ -853,8 +855,6 @@
     <dimen name="default_gear_space">18dp</dimen>
     <dimen name="cell_overlay_padding">18dp</dimen>
 
-    <dimen name="signal_icon_size">17dp</dimen>
-
     <dimen name="hwui_edge_margin">16dp</dimen>
 
     <dimen name="global_actions_panel_width">120dp</dimen>
@@ -883,36 +883,56 @@
     <dimen name="nav_quick_scrub_track_edge_padding">42dp</dimen>
     <dimen name="nav_quick_scrub_track_thickness">2dp</dimen>
 
-    <!-- Intended corner radius when drawing the mobile signal -->
-    <dimen name="stat_sys_mobile_signal_corner_radius">0.75dp</dimen>
-    <!-- How far to inset the rounded edges -->
-    <dimen name="stat_sys_mobile_signal_circle_inset">0.9dp</dimen>
-
     <!-- Home button padding for sizing -->
-    <dimen name="home_padding">15dp</dimen>
+    <dimen name="home_padding">16dp</dimen>
 
     <!-- Smart reply button -->
-    <dimen name="smart_reply_button_corner_radius">24dip</dimen>
     <dimen name="smart_reply_button_spacing">8dp</dimen>
-    <dimen name="smart_reply_button_padding_vertical">4dp</dimen>
+    <dimen name="smart_reply_button_padding_vertical">10dp</dimen>
+    <dimen name="smart_reply_button_padding_horizontal_single_line">12dp</dimen>
+    <dimen name="smart_reply_button_padding_horizontal_double_line">16dp</dimen>
+    <dimen name="smart_reply_button_min_height">40dp</dimen>
     <dimen name="smart_reply_button_font_size">14sp</dimen>
+    <dimen name="smart_reply_button_line_spacing_extra">6sp</dimen> <!-- Total line height 20sp. -->
 
     <dimen name="fingerprint_dialog_icon_size">44dp</dimen>
     <dimen name="fingerprint_dialog_fp_icon_size">60dp</dimen>
     <dimen name="fingerprint_dialog_animation_translation_offset">350dp</dimen>
 
-    <!-- WirelessCharging Animation values -->
-    <!-- Starting text size of batteryLevel for wireless charging animation -->
-    <dimen name="config_batteryLevelTextSizeStart" format="float">5.0</dimen>
-    <!-- Ending text size of batteryLevel for wireless charging animation -->
-    <dimen name="config_batteryLevelTextSizeEnd" format="float">32.0</dimen>
-    <!-- Wireless Charging battery level text animation duration -->
-    <integer name="config_batteryLevelTextAnimationDuration">400</integer>
+    <!-- Wireless Charging Animation values -->
+    <dimen name="wireless_charging_dots_radius_start">0dp</dimen>
+    <dimen name="wireless_charging_dots_radius_end">4dp</dimen>
+    <dimen name="wireless_charging_circle_radius_start">28dp</dimen>
+    <dimen name="wireless_charging_circle_radius_end">92dp</dimen>
+    <integer name="wireless_charging_angle_offset">20</integer>
+    <integer name="wireless_charging_scale_dots_duration">83</integer>
+    <integer name="wireless_charging_num_dots">20</integer>
+    <!-- Starting text size in dp of batteryLevel for wireless charging animation -->
+    <dimen name="wireless_charging_anim_battery_level_text_size_start">0dp</dimen>
+    <!-- Ending text size in dp of batteryLevel for wireless charging animation -->
+    <dimen name="wireless_charging_anim_battery_level_text_size_end">14dp</dimen>
+    <!-- time until battery info is at full opacity-->
+    <integer name="wireless_charging_anim_opacity_offset">80</integer>
+    <!-- duration batteryLevel opacity goes from 0 to 1 duration -->
+    <integer name="wireless_charging_battery_level_text_opacity_duration">117</integer>
+    <!-- battery text scale animation duration -->
+    <integer name="wireless_charging_battery_level_text_scale_animation_duration">367</integer>
+    <!--time until wireless charging animation starts to fade-->
+    <integer name="wireless_charging_fade_offset">920</integer>
+    <!-- duration wireless charging animation takes to full fade to 0 opacity -->
+    <integer name="wireless_charging_fade_duration">200</integer>
 
     <!-- Wired charging on AOD, text animation duration -->
-    <integer name="wired_charging_aod_text_animation_duration_down">500</integer>
+    <integer name="wired_charging_keyguard_text_animation_duration_down">500</integer>
     <!-- Wired charging on AOD, text animation duration -->
-    <integer name="wired_charging_aod_text_animation_duration_up">300</integer>
+    <integer name="wired_charging_keyguard_text_animation_duration_up">300</integer>
     <!-- Wired charging on AOD, text animation distance -->
-    <integer name="wired_charging_aod_text_animation_distance">-30</integer>
+    <integer name="wired_charging_keyguard_text_animation_distance">-30</integer>
+
+    <!-- Logout button -->
+    <dimen name="logout_button_layout_height">32dp</dimen>
+    <dimen name="logout_button_padding_horizontal">16dp</dimen>
+    <dimen name="logout_button_margin_bottom">12dp</dimen>
+    <dimen name="logout_button_corner_radius">2dp</dimen>
+
 </resources>

@@ -3692,18 +3692,15 @@ public final class Settings {
                 new SettingsValidators.InclusiveIntegerRangeValidator(0, 3);
 
         /**
-         * User-selected RTT mode
+         * User-selected RTT mode. When on, outgoing and incoming calls will be answered as RTT
+         * calls when supported by the device and carrier. Boolean value.
          * 0 = OFF
-         * 1 = FULL
-         * 2 = VCO
-         * 3 = HCO
-         * Uses the same constants as TTY (e.g. {@link android.telecom.TelecomManager#TTY_MODE_OFF})
-         * @hide
+         * 1 = ON
          */
         public static final String RTT_CALLING_MODE = "rtt_calling_mode";
 
         /** @hide */
-        public static final Validator RTT_CALLING_MODE_VALIDATOR = TTY_MODE_VALIDATOR;
+        public static final Validator RTT_CALLING_MODE_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
          * Whether the sounds effects (key clicks, lid open ...) are enabled. The value is
@@ -5385,6 +5382,17 @@ public final class Settings {
                 "autofill_user_data_max_field_classification_size";
 
         /**
+         * Defines value returned by
+         * {@link android.service.autofill.UserData#getMaxCategoryCount()}.
+         *
+         * @hide
+         */
+        @SystemApi
+        @TestApi
+        public static final String AUTOFILL_USER_DATA_MAX_CATEGORY_COUNT =
+                "autofill_user_data_max_category_count";
+
+        /**
          * Defines value returned by {@link android.service.autofill.UserData#getMaxValueLength()}.
          *
          * @hide
@@ -5442,32 +5450,6 @@ public final class Settings {
          * where imeId is ComponentName and subtype is int32.
          */
         public static final String ENABLED_INPUT_METHODS = "enabled_input_methods";
-
-        private static final Validator ENABLED_INPUT_METHODS_VALIDATOR = new Validator() {
-            @Override
-            public boolean validate(String value) {
-                if (value == null) {
-                    return false;
-                }
-                String[] inputMethods = value.split(":");
-                boolean valid = true;
-                for (String inputMethod : inputMethods) {
-                    if (inputMethod.length() == 0) {
-                        return false;
-                    }
-                    String[] subparts = inputMethod.split(";");
-                    for (String subpart : subparts) {
-                        // allow either a non negative integer or a ComponentName
-                        valid |= (NON_NEGATIVE_INTEGER_VALIDATOR.validate(subpart)
-                                || COMPONENT_NAME_VALIDATOR.validate(subpart));
-                    }
-                    if (!valid) {
-                        return false;
-                    }
-                }
-                return valid;
-            }
-        };
 
         /**
          * List of system input methods that are currently disabled.  This is a string
@@ -7396,7 +7378,8 @@ public final class Settings {
          */
         public static final String NIGHT_DISPLAY_AUTO_MODE = "night_display_auto_mode";
 
-        private static final Validator NIGHT_DISPLAY_AUTO_MODE_VALIDATOR = BOOLEAN_VALIDATOR;
+        private static final Validator NIGHT_DISPLAY_AUTO_MODE_VALIDATOR =
+                new SettingsValidators.InclusiveIntegerRangeValidator(0, 2);
 
         /**
          * Control the color temperature of Night Display, represented in Kelvin.
@@ -7679,6 +7662,24 @@ public final class Settings {
          */
         public static final String BACKUP_MANAGER_CONSTANTS = "backup_manager_constants";
 
+
+        /**
+         * Local transport parameters so we can configure it for tests.
+         * This is encoded as a key=value list, separated by commas.
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * fake_encryption_flag  (boolean)
+         * </pre>
+         *
+         * <p>
+         * Type: string
+         * @hide
+         */
+        public static final String BACKUP_LOCAL_TRANSPORT_PARAMETERS =
+                "backup_local_transport_parameters";
+
         /**
          * Flag to set if the system should predictively attempt to re-enable Bluetooth while
          * the user is driving.
@@ -7708,7 +7709,6 @@ public final class Settings {
             ACCESSIBILITY_DISPLAY_MAGNIFICATION_SCALE,
             ENABLED_ACCESSIBILITY_SERVICES,
             ENABLED_VR_LISTENERS,
-            ENABLED_INPUT_METHODS,
             TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES,
             TOUCH_EXPLORATION_ENABLED,
             ACCESSIBILITY_ENABLED,
@@ -7814,7 +7814,6 @@ public final class Settings {
             VALIDATORS.put(ENABLED_ACCESSIBILITY_SERVICES,
                     ENABLED_ACCESSIBILITY_SERVICES_VALIDATOR);
             VALIDATORS.put(ENABLED_VR_LISTENERS, ENABLED_VR_LISTENERS_VALIDATOR);
-            VALIDATORS.put(ENABLED_INPUT_METHODS, ENABLED_INPUT_METHODS_VALIDATOR);
             VALIDATORS.put(TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES,
                     TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES_VALIDATOR);
             VALIDATORS.put(TOUCH_EXPLORATION_ENABLED, TOUCH_EXPLORATION_ENABLED_VALIDATOR);
@@ -8389,10 +8388,10 @@ public final class Settings {
         private static final Validator POWER_SOUNDS_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
-         * URI for the "wireless charging started" sound.
+         * URI for the "wireless charging started" and "wired charging started" sound.
          * @hide
          */
-        public static final String WIRELESS_CHARGING_STARTED_SOUND =
+        public static final String CHARGING_STARTED_SOUND =
                 "wireless_charging_started_sound";
 
         /**
@@ -8562,9 +8561,8 @@ public final class Settings {
          *
          * @see android.service.euicc.EuiccService
          * @hide
-         *
-         * TODO(b/35851809): Make this a SystemApi.
          */
+        @SystemApi
         public static final String DEFAULT_SM_DP_PLUS = "default_sm_dp_plus";
 
         /**
@@ -8780,6 +8778,7 @@ public final class Settings {
        /** {@hide} */
        public static final String NETSTATS_POLL_INTERVAL = "netstats_poll_interval";
        /** {@hide} */
+       @Deprecated
        public static final String NETSTATS_TIME_CACHE_MAX_AGE = "netstats_time_cache_max_age";
        /** {@hide} */
        public static final String NETSTATS_GLOBAL_ALERT_BYTES = "netstats_global_alert_bytes";
@@ -10477,6 +10476,9 @@ public final class Settings {
          * <pre>
          * smart_selection_dark_launch              (boolean)
          * smart_selection_enabled_for_edit_text    (boolean)
+         * suggest_selection_max_range_length       (int)
+         * classify_text_max_range_length           (int)
+         * generate_links_max_text_length           (int)
          * </pre>
          *
          * <p>
@@ -10495,6 +10497,7 @@ public final class Settings {
          * track_cpu_times_by_proc_state (boolean)
          * track_cpu_active_cluster_time (boolean)
          * read_binary_cpu_time          (boolean)
+         * proc_state_cpu_times_read_delay_ms (long)
          * </pre>
          *
          * <p>
@@ -10503,6 +10506,16 @@ public final class Settings {
          * see also com.android.internal.os.BatteryStatsImpl.Constants
          */
         public static final String BATTERY_STATS_CONSTANTS = "battery_stats_constants";
+
+        /**
+         * SyncManager specific settings.
+         *
+         * <p>
+         * Type: string
+         * @hide
+         * @see com.android.server.content.SyncManagerConstants
+         */
+        public static final String SYNC_MANAGER_CONSTANTS = "sync_manager_constants";
 
         /**
          * Whether or not App Standby feature is enabled. This controls throttling of apps
@@ -11372,13 +11385,23 @@ public final class Settings {
                 "chained_battery_attribution_enabled";
 
         /**
-         * The packages whitelisted to be run in autofill compatibility mode.
+         * The packages whitelisted to be run in autofill compatibility mode. The list
+         * of packages is ":" colon delimited.
          *
          * @hide
          */
         @SystemApi
+        @TestApi
         public static final String AUTOFILL_COMPAT_ALLOWED_PACKAGES =
                 "autofill_compat_allowed_packages";
+
+        /**
+         * Exemptions to the hidden API blacklist.
+         *
+         * @hide
+         */
+        public static final String HIDDEN_API_BLACKLIST_EXEMPTIONS =
+                "hidden_api_blacklist_exemptions";
 
         /**
          * Settings to backup. This is here so that it's in the same place as the settings
@@ -12079,6 +12102,28 @@ public final class Settings {
                 "enable_gnss_raw_meas_full_tracking";
 
         /**
+         * Whether the notification should be ongoing (persistent) when a carrier app install is
+         * required.
+         *
+         * The value is a boolean (1 or 0).
+         * @hide
+         */
+        @SystemApi
+        public static final String INSTALL_CARRIER_APP_NOTIFICATION_PERSISTENT =
+                "install_carrier_app_notification_persistent";
+
+        /**
+         * The amount of time (ms) to hide the install carrier app notification after the user has
+         * ignored it. After this time passes, the notification will be shown again
+         *
+         * The value is a long
+         * @hide
+         */
+        @SystemApi
+        public static final String INSTALL_CARRIER_APP_NOTIFICATION_SLEEP_MILLIS =
+                "install_carrier_app_notification_sleep_millis";
+
+        /**
          * Whether we've enabled zram on this device. Takes effect on
          * reboot. The value "1" enables zram; "0" disables it, and
          * everything else is unspecified.
@@ -12088,11 +12133,22 @@ public final class Settings {
                 "zram_enabled";
 
         /**
-         * Whether smart replies in notifications are enabled.
+         * Configuration flags for smart replies in notifications.
+         * This is encoded as a key=value list, separated by commas. Ex:
+         *
+         * "enabled=1,max_squeeze_remeasure_count=3"
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * enabled                         (boolean)
+         * max_squeeze_remeasure_attempts  (int)
+         * </pre>
+         * @see com.android.systemui.statusbar.policy.SmartReplyConstants
          * @hide
          */
-        public static final String ENABLE_SMART_REPLIES_IN_NOTIFICATIONS =
-                "enable_smart_replies_in_notifications";
+        public static final String SMART_REPLIES_IN_NOTIFICATIONS_FLAGS =
+                "smart_replies_in_notifications_flags";
 
         /**
          * If nonzero, crashes in foreground processes will bring up a dialog.
@@ -12113,6 +12169,12 @@ public final class Settings {
          * @hide
          */
         public static final String SHOW_MUTE_IN_CRASH_DIALOG = "show_mute_in_crash_dialog";
+
+        /**
+         * If nonzero, will show the zen upgrade notification when the user toggles DND on/off.
+         * @hide
+         */
+        public static final String SHOW_ZEN_UPGRADE_NOTIFICATION = "show_zen_upgrade_notification";
     }
 
     /**

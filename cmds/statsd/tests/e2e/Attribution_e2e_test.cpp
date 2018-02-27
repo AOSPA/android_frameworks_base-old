@@ -47,7 +47,7 @@ StatsdConfig CreateStatsdConfig() {
     *countMetric->mutable_dimensions_in_what() =
         CreateAttributionUidAndTagDimensions(
             android::util::WAKELOCK_STATE_CHANGED, {Position::FIRST});
-    countMetric->set_bucket(ONE_MINUTE);
+    countMetric->set_bucket(FIVE_MINUTES);
     return config;
 }
 
@@ -146,9 +146,13 @@ TEST(AttributionE2eTest, TestAttributionMatchAndSlice) {
         processor->OnLogEvent(event.get());
     }
     ConfigMetricsReportList reports;
-    processor->onDumpReport(cfgKey, bucketStartTimeNs + 4 * bucketSizeNs + 1, &reports);
+    vector<uint8_t> buffer;
+    processor->onDumpReport(cfgKey, bucketStartTimeNs + 4 * bucketSizeNs + 1, &buffer);
+    EXPECT_TRUE(buffer.size() > 0);
+    EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
     EXPECT_EQ(reports.reports_size(), 1);
     EXPECT_EQ(reports.reports(0).metrics_size(), 1);
+
     StatsLogReport::CountMetricDataWrapper countMetrics;
     sortMetricDataByDimensionsValue(reports.reports(0).metrics(0).count_metrics(), &countMetrics);
     EXPECT_EQ(countMetrics.data_size(), 4);
@@ -159,11 +163,11 @@ TEST(AttributionE2eTest, TestAttributionMatchAndSlice) {
             "App1");
     EXPECT_EQ(data.bucket_info_size(), 2);
     EXPECT_EQ(data.bucket_info(0).count(), 2);
-    EXPECT_EQ(data.bucket_info(0).start_bucket_nanos(), bucketStartTimeNs);
-    EXPECT_EQ(data.bucket_info(0).end_bucket_nanos(), bucketStartTimeNs + bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(0).start_bucket_elapsed_nanos(), bucketStartTimeNs);
+    EXPECT_EQ(data.bucket_info(0).end_bucket_elapsed_nanos(), bucketStartTimeNs + bucketSizeNs);
     EXPECT_EQ(data.bucket_info(1).count(), 1);
-    EXPECT_EQ(data.bucket_info(1).start_bucket_nanos(), bucketStartTimeNs + 2 * bucketSizeNs);
-    EXPECT_EQ(data.bucket_info(1).end_bucket_nanos(), bucketStartTimeNs + 3 * bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(1).start_bucket_elapsed_nanos(), bucketStartTimeNs + 2 * bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(1).end_bucket_elapsed_nanos(), bucketStartTimeNs + 3 * bucketSizeNs);
 
     data = countMetrics.data(1);
     ValidateAttributionUidAndTagDimension(
@@ -171,11 +175,11 @@ TEST(AttributionE2eTest, TestAttributionMatchAndSlice) {
             "GMSCoreModule1");
     EXPECT_EQ(data.bucket_info_size(), 2);
     EXPECT_EQ(data.bucket_info(0).count(), 1);
-    EXPECT_EQ(data.bucket_info(0).start_bucket_nanos(), bucketStartTimeNs);
-    EXPECT_EQ(data.bucket_info(0).end_bucket_nanos(), bucketStartTimeNs + bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(0).start_bucket_elapsed_nanos(), bucketStartTimeNs);
+    EXPECT_EQ(data.bucket_info(0).end_bucket_elapsed_nanos(), bucketStartTimeNs + bucketSizeNs);
     EXPECT_EQ(data.bucket_info(1).count(), 1);
-    EXPECT_EQ(data.bucket_info(1).start_bucket_nanos(), bucketStartTimeNs + bucketSizeNs);
-    EXPECT_EQ(data.bucket_info(1).end_bucket_nanos(), bucketStartTimeNs + 2 * bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(1).start_bucket_elapsed_nanos(), bucketStartTimeNs + bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(1).end_bucket_elapsed_nanos(), bucketStartTimeNs + 2 * bucketSizeNs);
 
     data = countMetrics.data(2);
     ValidateAttributionUidAndTagDimension(
@@ -183,8 +187,8 @@ TEST(AttributionE2eTest, TestAttributionMatchAndSlice) {
             "GMSCoreModule3");
     EXPECT_EQ(data.bucket_info_size(), 1);
     EXPECT_EQ(data.bucket_info(0).count(), 1);
-    EXPECT_EQ(data.bucket_info(0).start_bucket_nanos(), bucketStartTimeNs + 3 * bucketSizeNs);
-    EXPECT_EQ(data.bucket_info(0).end_bucket_nanos(), bucketStartTimeNs + 4 * bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(0).start_bucket_elapsed_nanos(), bucketStartTimeNs + 3 * bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(0).end_bucket_elapsed_nanos(), bucketStartTimeNs + 4 * bucketSizeNs);
 
     data = countMetrics.data(3);
     ValidateAttributionUidAndTagDimension(
@@ -192,8 +196,8 @@ TEST(AttributionE2eTest, TestAttributionMatchAndSlice) {
             "GMSCoreModule2");
     EXPECT_EQ(data.bucket_info_size(), 1);
     EXPECT_EQ(data.bucket_info(0).count(), 1);
-    EXPECT_EQ(data.bucket_info(0).start_bucket_nanos(), bucketStartTimeNs + 2 * bucketSizeNs);
-    EXPECT_EQ(data.bucket_info(0).end_bucket_nanos(), bucketStartTimeNs + 3 * bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(0).start_bucket_elapsed_nanos(), bucketStartTimeNs + 2 * bucketSizeNs);
+    EXPECT_EQ(data.bucket_info(0).end_bucket_elapsed_nanos(), bucketStartTimeNs + 3 * bucketSizeNs);
 }
 
 #else

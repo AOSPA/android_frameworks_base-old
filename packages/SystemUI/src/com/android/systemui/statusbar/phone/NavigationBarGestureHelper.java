@@ -16,6 +16,12 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static android.view.WindowManager.DOCKED_INVALID;
+import static android.view.WindowManager.DOCKED_LEFT;
+import static android.view.WindowManager.DOCKED_TOP;
+import static com.android.systemui.OverviewProxyService.DEBUG_OVERVIEW_PROXY;
+import static com.android.systemui.OverviewProxyService.TAG_OPS;
+
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.res.Resources;
@@ -27,25 +33,18 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
-
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.policy.DividerSnapAlgorithm.SnapTarget;
 import com.android.systemui.Dependency;
 import com.android.systemui.OverviewProxyService;
+import com.android.systemui.OverviewProxyService.OverviewProxyListener;
 import com.android.systemui.R;
 import com.android.systemui.RecentsComponent;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.plugins.statusbar.phone.NavGesture.GestureHelper;
 import com.android.systemui.shared.recents.IOverviewProxy;
-import com.android.systemui.shared.recents.utilities.Utilities;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.tuner.TunerService;
-
-import static android.view.WindowManager.DOCKED_INVALID;
-import static android.view.WindowManager.DOCKED_LEFT;
-import static android.view.WindowManager.DOCKED_TOP;
-import static com.android.systemui.OverviewProxyService.DEBUG_OVERVIEW_PROXY;
-import static com.android.systemui.OverviewProxyService.TAG_OPS;
 
 /**
  * Class to detect gestures on the navigation bar.
@@ -84,8 +83,16 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
     private int mTouchDownY;
     private boolean mDownOnRecents;
     private VelocityTracker mVelocityTracker;
-    private OverviewProxyService mOverviewEventSender = Dependency.get(OverviewProxyService.class);
+    private OverviewProxyService mOverviewProxyService = Dependency.get(OverviewProxyService.class);
+    private final OverviewProxyListener mOverviewProxyListener = new OverviewProxyListener() {
+        @Override
+        public void onRecentsAnimationStarted() {
+            mRecentsAnimationStarted = true;
+            mQuickScrubController.cancelQuickSwitch();
+        }
+    };
 
+    private boolean mRecentsAnimationStarted;
     private boolean mDockWindowEnabled;
     private boolean mDockWindowTouchSlopExceeded;
     private int mDragMode;
@@ -97,10 +104,12 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
         mScrollTouchSlop = r.getDimensionPixelSize(R.dimen.navigation_bar_min_swipe_distance);
         mQuickScrubController = new QuickScrubController(context);
         Dependency.get(TunerService.class).addTunable(this, KEY_DOCK_WINDOW_GESTURE);
+        mOverviewProxyService.addCallback(mOverviewProxyListener);
     }
 
     public void destroy() {
         Dependency.get(TunerService.class).removeTunable(this);
+        mOverviewProxyService.removeCallback(mOverviewProxyListener);
     }
 
     public void setComponents(RecentsComponent recentsComponent, Divider divider,
@@ -117,11 +126,14 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
     }
 
     private boolean proxyMotionEvents(MotionEvent event) {
-        final IOverviewProxy overviewProxy = mOverviewEventSender.getProxy();
-        if (overviewProxy != null) {
+        final IOverviewProxy overviewProxy = mOverviewProxyService.getProxy();
+        if (overviewProxy != null && mNavigationBarView.isQuickStepSwipeUpEnabled()) {
             mNavigationBarView.requestUnbufferedDispatch(event);
             event.transform(mTransformGlobalMatrix);
             try {
+                if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                    overviewProxy.onPreMotionEvent(mNavigationBarView.getDownHitTarget());
+                }
                 overviewProxy.onMotionEvent(event);
                 if (DEBUG_OVERVIEW_PROXY) {
                     Log.d(TAG_OPS, "Send MotionEvent: " + event.toString());
@@ -137,8 +149,12 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
     }
 
     public boolean onInterceptTouchEvent(MotionEvent event) {
-        int action = event.getAction();
-        switch (action & MotionEvent.ACTION_MASK) {
+        if (mNavigationBarView.inScreenPinning()) {
+            return false;
+        }
+
+        int action = event.getActionMasked();
+        switch (action) {
             case MotionEvent.ACTION_DOWN: {
                 mTouchDownX = (int) event.getX();
                 mTouchDownY = (int) event.getY();
@@ -146,19 +162,45 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
                 mTransformLocalMatrix.set(Matrix.IDENTITY_MATRIX);
                 mNavigationBarView.transformMatrixToGlobal(mTransformGlobalMatrix);
                 mNavigationBarView.transformMatrixToLocal(mTransformLocalMatrix);
+                mRecentsAnimationStarted = false;
                 break;
             }
         }
-        if (mStatusBar.isPresenterFullyCollapsed()
-                && !mQuickScrubController.onInterceptTouchEvent(event)) {
+        boolean handledByQuickscrub = mQuickScrubController.onInterceptTouchEvent(event);
+        if (mStatusBar.isPresenterFullyCollapsed() && !handledByQuickscrub) {
+            // Proxy motion events until we start intercepting for quickscrub
             proxyMotionEvents(event);
+        }
+
+        boolean result = handledByQuickscrub;
+        result |= mRecentsAnimationStarted;
+        if (mDockWindowEnabled) {
+            result |= interceptDockWindowEvent(event);
+        }
+        return result;
+    }
+
+    public boolean onTouchEvent(MotionEvent event) {
+        if (mNavigationBarView.inScreenPinning()) {
             return false;
         }
-        return (mDockWindowEnabled && interceptDockWindowEvent(event));
+
+        // The same down event was just sent on intercept and therefore can be ignored here
+        boolean ignoreProxyDownEvent = event.getAction() == MotionEvent.ACTION_DOWN
+                && mOverviewProxyService.getProxy() != null;
+        boolean result = mStatusBar.isPresenterFullyCollapsed()
+                && (mQuickScrubController.onTouchEvent(event)
+                || ignoreProxyDownEvent
+                || proxyMotionEvents(event));
+        result |= mRecentsAnimationStarted;
+        if (mDockWindowEnabled) {
+            result |= handleDockWindowEvent(event);
+        }
+        return result;
     }
 
     public void onDraw(Canvas canvas) {
-        if (mOverviewEventSender.getProxy() != null) {
+        if (mNavigationBarView.isQuickScrubEnabled()) {
             mQuickScrubController.onDraw(canvas);
         }
     }
@@ -305,20 +347,6 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
             return DRAG_MODE_DIVIDER;
         }
         return DRAG_MODE_RECENTS;
-    }
-
-    public boolean onTouchEvent(MotionEvent event) {
-        // The same down event was just sent on intercept and therefore can be ignored here
-        boolean ignoreProxyDownEvent = event.getAction() == MotionEvent.ACTION_DOWN
-                && mOverviewEventSender.getProxy() != null;
-        boolean result = mStatusBar.isPresenterFullyCollapsed()
-                && (mQuickScrubController.onTouchEvent(event)
-                || ignoreProxyDownEvent
-                || proxyMotionEvents(event));
-        if (mDockWindowEnabled) {
-            result |= handleDockWindowEvent(event);
-        }
-        return result;
     }
 
     @Override

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define DEBUG true  // STOPSHIP if true
+#define DEBUG false  // STOPSHIP if true
 #include "Log.h"
 
 #include "DurationAnomalyTracker.h"
@@ -52,12 +52,12 @@ void DurationAnomalyTracker::declareAnomalyIfAlarmExpired(const MetricDimensionK
 }
 
 void DurationAnomalyTracker::startAlarm(const MetricDimensionKey& dimensionKey,
-                                const uint64_t& timestampNs) {
-
-    uint32_t timestampSec = static_cast<uint32_t>(timestampNs / NS_PER_SEC);
+                                        const uint64_t& timestampNs) {
+    // Alarms are stored in secs. Must round up, since if it fires early, it is ignored completely.
+    uint32_t timestampSec = static_cast<uint32_t>((timestampNs -1)/ NS_PER_SEC) + 1; // round up
     if (isInRefractoryPeriod(timestampNs, dimensionKey)) {
-        VLOG("Skipping setting anomaly alarm since it'd fall in the refractory period");
-        return;
+        VLOG("Setting a delayed anomaly alarm lest it fall in the refractory period");
+        timestampSec = getRefractoryPeriodEndsSec(dimensionKey) + 1;
     }
     sp<const AnomalyAlarm> alarm = new AnomalyAlarm{timestampSec};
     mAlarms.insert({dimensionKey, alarm});
@@ -86,15 +86,15 @@ void DurationAnomalyTracker::stopAllAlarms() {
     }
 }
 
-void DurationAnomalyTracker::informAlarmsFired(const uint64_t& timestampNs,
+void DurationAnomalyTracker::informAlarmsFired(
+        const uint64_t& timestampNs,
         unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>>& firedAlarms) {
-
     if (firedAlarms.empty() || mAlarms.empty()) return;
     // Find the intersection of firedAlarms and mAlarms.
     // The for loop is inefficient, since it loops over all keys, but that's okay since it is very
     // seldomly called. The alternative would be having AnomalyAlarms store information about the
-    // DurationAnomalyTracker and key, but that's a lot of data overhead to speed up something that is
-    // rarely ever called.
+    // DurationAnomalyTracker and key, but that's a lot of data overhead to speed up something that
+    // is rarely ever called.
     unordered_map<MetricDimensionKey, sp<const AnomalyAlarm>> matchedAlarms;
     for (const auto& kv : mAlarms) {
         if (firedAlarms.count(kv.second) > 0) {

@@ -140,6 +140,7 @@ import android.view.Display;
 import com.android.internal.app.ActivityTrigger;
 
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.os.BatteryStatsImpl;
@@ -1453,7 +1454,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
                 mService.mLifecycleManager.scheduleTransaction(prev.app.thread, prev.appToken,
                         PauseActivityItem.obtain(prev.finishing, userLeaving,
-                                prev.configChangeFlags, pauseImmediately));
+                                prev.configChangeFlags, pauseImmediately).setDescription(
+                                        prev.getLifecycleDescription("startPausingLocked")));
             } catch (Exception e) {
                 // Ignore exception, if process died other code will cleanup.
                 Slog.w(TAG, "Exception thrown during pause", e);
@@ -1533,7 +1535,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     if (r.finishing) {
                         if (DEBUG_PAUSE) Slog.v(TAG,
                                 "Executing finish of failed to pause activity: " + r);
-                        finishCurrentActivityLocked(r, FINISH_AFTER_VISIBLE, false);
+                        finishCurrentActivityLocked(r, FINISH_AFTER_VISIBLE, false,
+                                "activityPausedLocked");
                     }
                 }
             }
@@ -1550,7 +1553,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             prev.state = ActivityState.PAUSED;
             if (prev.finishing) {
                 if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Executing finish of activity: " + prev);
-                prev = finishCurrentActivityLocked(prev, FINISH_AFTER_VISIBLE, false);
+                prev = finishCurrentActivityLocked(prev, FINISH_AFTER_VISIBLE, false,
+                        "completedPausedLocked");
             } else if (prev.app != null) {
                 if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Enqueue pending stop if needed: " + prev
                         + " wasStopping=" + wasStopping + " visible=" + prev.visible);
@@ -2221,6 +2225,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
      *       Use {@link ActivityStackSupervisor#resumeFocusedStackTopActivityLocked} to resume the
      *       right activity for the current system state.
      */
+    @GuardedBy("mService")
     boolean resumeTopActivityUncheckedLocked(ActivityRecord prev, ActivityOptions options) {
         if (mStackSupervisor.inResumeTopActivity) {
             // Don't even start recursing.
@@ -2260,6 +2265,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         mStackSupervisor.mRecentTasks.add(r.getTask());
     }
 
+    @GuardedBy("mService")
     private boolean resumeTopActivityInnerLocked(ActivityRecord prev, ActivityOptions options) {
         if (!mService.mBooting && !mService.mBooted) {
             // Not ready yet!
@@ -3709,8 +3715,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
                 final int finishMode = (r.visible || r.nowVisible) ? FINISH_AFTER_VISIBLE
                         : FINISH_AFTER_PAUSE;
-                final boolean removedActivity = finishCurrentActivityLocked(r, finishMode, oomAdj)
-                        == null;
+                final boolean removedActivity = finishCurrentActivityLocked(r, finishMode, oomAdj,
+                        "finishActivityLocked") == null;
 
                 // The following code is an optimization. When the last non-task overlay activity
                 // is removed from the task, we remove the entire task from the stack. However,
@@ -3751,7 +3757,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     static final int FINISH_AFTER_PAUSE = 1;
     static final int FINISH_AFTER_VISIBLE = 2;
 
-    final ActivityRecord finishCurrentActivityLocked(ActivityRecord r, int mode, boolean oomAdj) {
+    final ActivityRecord finishCurrentActivityLocked(ActivityRecord r, int mode, boolean oomAdj,
+            String reason) {
         // First things first: if this activity is currently visible,
         // and the resumed activity is not yet visible, then hold off on
         // finishing until the resumed one becomes visible.
@@ -3794,7 +3801,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 || prevState == STOPPED
                 || prevState == ActivityState.INITIALIZING) {
             r.makeFinishingLocked();
-            boolean activityRemoved = destroyActivityLocked(r, true, "finish-imm");
+            boolean activityRemoved = destroyActivityLocked(r, true, "finish-imm:" + reason);
 
             if (finishingActivityInNonFocusedStack) {
                 // Finishing activity that was in paused state and it was in not currently focused
@@ -3830,7 +3837,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     continue;
                 }
                 Slog.d(TAG, "finishAllActivitiesLocked: finishing " + r + " immediately");
-                finishCurrentActivityLocked(r, FINISH_IMMEDIATELY, false);
+                finishCurrentActivityLocked(r, FINISH_IMMEDIATELY, false,
+                        "finishAllActivitiesLocked");
             }
         }
         if (noActivitiesInStack) {
@@ -4253,7 +4261,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 if (DEBUG_SWITCH) Slog.i(TAG_SWITCH, "Destroying: " + r);
                 mService.mLifecycleManager.scheduleTransaction(r.app.thread, r.appToken,
                         DestroyActivityItem.obtain(r.finishing, r.configChangeFlags)
-                            .setDescription(r.getLifecycleDescription("destroyActivityLocked")));
+                            .setDescription(
+                                    r.getLifecycleDescription("destroyActivityLocked:" + reason)));
             } catch (Exception e) {
                 // We can just ignore exceptions here...  if the process
                 // has crashed, our death notification will clean things
@@ -4917,7 +4926,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                             + r.intent.getComponent().flattenToShortString());
                     // Force the destroy to skip right to removal.
                     r.app = null;
-                    finishCurrentActivityLocked(r, FINISH_IMMEDIATELY, false);
+                    finishCurrentActivityLocked(r, FINISH_IMMEDIATELY, false,
+                            "handleAppCrashedLocked");
                 }
             }
         }

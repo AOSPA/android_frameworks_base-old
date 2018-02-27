@@ -399,6 +399,7 @@ message GlobalSettingsProto {
     optional SettingProto euicc_factory_reset_timeout_millis = 333 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto storage_settings_clobber_threshold = 334 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto chained_battery_attribution_enabled = 353 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    optional SettingProto hidden_api_blacklist_exemptions = 355 [ (android.privacy).dest = DEST_AUTOMATIC ];
     // Subscription to be used for voice call on a multi sim device. The
     // supported values are 0 = SUB1, 1 = SUB2 and etc.
     optional SettingProto multi_sim_voice_call_subscription = 276 [ (android.privacy).dest = DEST_AUTOMATIC ];
@@ -421,15 +422,18 @@ message GlobalSettingsProto {
     optional SettingProto enable_deletion_helper_no_threshold_toggle = 340 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto notification_snooze_options = 341 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto enable_gnss_raw_meas_full_tracking = 346 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    optional SettingProto install_carrier_app_notification_persistent = 356 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    optional SettingProto install_carrier_app_notification_sleep_millis = 357 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto zram_enabled = 347 [ (android.privacy).dest = DEST_AUTOMATIC ];
-    optional SettingProto enable_smart_replies_in_notifications = 348 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    optional SettingProto smart_replies_in_notifications_flags = 348 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto show_first_crash_dialog = 349 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto show_restart_in_crash_dialog = 351 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto show_mute_in_crash_dialog = 352 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    optional SettingsProto show_zen_upgrade_notification = 354  [ (android.privacy).dest = DEST_AUTOMATIC ];
 
     // Please insert fields in the same order as in
     // frameworks/base/core/java/android/provider/Settings.java.
-    // Next tag = 354;
+    // Next tag = 356;
 }
 
 message SecureSettingsProto {
@@ -662,10 +666,11 @@ message SecureSettingsProto {
     optional SettingProto backup_manager_constants = 169;
     optional SettingProto show_first_crash_dialog_dev_option = 195 [ (android.privacy).dest = DEST_AUTOMATIC ];
     optional SettingProto bluetooth_on_while_driving = 196 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    optional SettingProto backup_local_transport_parameters = 197;
 
     // Please insert fields in the same order as in
     // frameworks/base/core/java/android/provider/Settings.java.
-    // Next tag = 197
+    // Next tag = 198
 }
 
 message SystemSettingsProto {

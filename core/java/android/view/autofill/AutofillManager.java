@@ -16,10 +16,15 @@
 
 package android.view.autofill;
 
+import static android.service.autofill.FillRequest.FLAG_MANUAL_REQUEST;
+import static android.view.autofill.Helper.sDebug;
+import static android.view.autofill.Helper.sVerbose;
+
 import android.accessibilityservice.AccessibilityServiceInfo;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresFeature;
 import android.annotation.SystemService;
 import android.content.ComponentName;
 import android.content.Context;
@@ -47,13 +52,14 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
 import android.view.accessibility.AccessibilityWindowInfo;
+
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.Preconditions;
+
 import org.xmlpull.v1.XmlPullParserException;
-import sun.misc.Cleaner;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -66,11 +72,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-import static android.service.autofill.FillRequest.FLAG_MANUAL_REQUEST;
-import static android.view.autofill.Helper.sDebug;
-import static android.view.autofill.Helper.sVerbose;
-
-// TODO: use java.lang.ref.Cleaner once Android supports Java 9
+//TODO: use java.lang.ref.Cleaner once Android supports Java 9
+import sun.misc.Cleaner;
 
 /**
  * The {@link AutofillManager} provides ways for apps and custom views to integrate with the
@@ -133,6 +136,7 @@ import static android.view.autofill.Helper.sVerbose;
  * <p>It is safe to call into its methods from any thread.
  */
 @SystemService(Context.AUTOFILL_MANAGER_SERVICE)
+@RequiresFeature(PackageManager.FEATURE_AUTOFILL)
 public final class AutofillManager {
 
     private static final String TAG = "AutofillManager";
@@ -352,6 +356,13 @@ public final class AutofillManager {
     /** Views that are only tracked because they are fillable and could be anchoring the UI. */
     @GuardedBy("mLock")
     @Nullable private ArraySet<AutofillId> mFillableIds;
+
+    /**
+     * Views that were already "entered" - if they're entered again when the session is not active,
+     * they're ignored
+     * */
+    @GuardedBy("mLock")
+    @Nullable private ArraySet<AutofillId> mEnteredIds;
 
     /** If set, session is commited when the field is clicked. */
     @GuardedBy("mLock")
@@ -616,10 +627,9 @@ public final class AutofillManager {
     /**
      * @hide
      */
-    public boolean isCompatibilityModeEnabled() {
-        synchronized (mLock) {
-            return mCompatibilityBridge != null;
-        }
+    @GuardedBy("mLock")
+    public boolean isCompatibilityModeEnabledLocked() {
+        return mCompatibilityBridge != null;
     }
 
     /**
@@ -708,17 +718,30 @@ public final class AutofillManager {
         notifyViewEntered(view, 0);
     }
 
-    private boolean shouldIgnoreViewEnteredLocked(@NonNull View view, int flags) {
+    @GuardedBy("mLock")
+    private boolean shouldIgnoreViewEnteredLocked(@NonNull AutofillId id, int flags) {
         if (isDisabledByServiceLocked()) {
             if (sVerbose) {
-                Log.v(TAG, "ignoring notifyViewEntered(flags=" + flags + ", view=" + view
-                        + ") on state " + getStateAsStringLocked());
+                Log.v(TAG, "ignoring notifyViewEntered(flags=" + flags + ", view=" + id
+                        + ") on state " + getStateAsStringLocked() + " because disabled by svc");
             }
             return true;
         }
-        if (sVerbose && isFinishedLocked()) {
-            Log.v(TAG, "not ignoring notifyViewEntered(flags=" + flags + ", view=" + view
-                    + ") on state " + getStateAsStringLocked());
+        if (isFinishedLocked()) {
+            // Session already finished: ignore if automatic request and view already entered
+            if ((flags & FLAG_MANUAL_REQUEST) == 0 && mEnteredIds != null
+                    && mEnteredIds.contains(id)) {
+                if (sVerbose) {
+                    Log.v(TAG, "ignoring notifyViewEntered(flags=" + flags + ", view=" + id
+                            + ") on state " + getStateAsStringLocked()
+                            + " because view was already entered: " + mEnteredIds);
+                }
+                return true;
+            }
+        }
+        if (sVerbose) {
+            Log.v(TAG, "not ignoring notifyViewEntered(flags=" + flags + ", view=" + id
+                    + ", state " + getStateAsStringLocked() + ", enteredIds=" + mEnteredIds);
         }
         return false;
     }
@@ -748,8 +771,10 @@ public final class AutofillManager {
     }
 
     /** Returns AutofillCallback if need fire EVENT_INPUT_UNAVAILABLE */
+    @GuardedBy("mLock")
     private AutofillCallback notifyViewEnteredLocked(@NonNull View view, int flags) {
-        if (shouldIgnoreViewEnteredLocked(view, flags)) return null;
+        final AutofillId id = getAutofillId(view);
+        if (shouldIgnoreViewEnteredLocked(id, flags)) return null;
 
         AutofillCallback callback = null;
 
@@ -762,7 +787,6 @@ public final class AutofillManager {
         } else {
             // don't notify entered when Activity is already in background
             if (!isClientDisablingEnterExitEvent()) {
-                final AutofillId id = getAutofillId(view);
                 final AutofillValue value = view.getAutofillValue();
 
                 if (!isActiveLocked()) {
@@ -772,6 +796,7 @@ public final class AutofillManager {
                     // Update focus on existing session.
                     updateSessionLocked(id, null, value, ACTION_VIEW_ENTERED, flags);
                 }
+                addEnteredIdLocked(id);
             }
         }
         return callback;
@@ -791,6 +816,7 @@ public final class AutofillManager {
         }
     }
 
+    @GuardedBy("mLock")
     void notifyViewExitedLocked(@NonNull View view) {
         ensureServiceClientAddedIfNeededLocked();
 
@@ -892,10 +918,12 @@ public final class AutofillManager {
     }
 
     /** Returns AutofillCallback if need fire EVENT_INPUT_UNAVAILABLE */
+    @GuardedBy("mLock")
     private AutofillCallback notifyViewEnteredLocked(View view, int virtualId, Rect bounds,
                                                      int flags) {
+        final AutofillId id = getAutofillId(view, virtualId);
         AutofillCallback callback = null;
-        if (shouldIgnoreViewEnteredLocked(view, flags)) return callback;
+        if (shouldIgnoreViewEnteredLocked(id, flags)) return callback;
 
         ensureServiceClientAddedIfNeededLocked();
 
@@ -906,8 +934,6 @@ public final class AutofillManager {
         } else {
             // don't notify entered when Activity is already in background
             if (!isClientDisablingEnterExitEvent()) {
-                final AutofillId id = getAutofillId(view, virtualId);
-
                 if (!isActiveLocked()) {
                     // Starts new session.
                     startSessionLocked(id, bounds, null, flags);
@@ -915,9 +941,18 @@ public final class AutofillManager {
                     // Update focus on existing session.
                     updateSessionLocked(id, bounds, null, ACTION_VIEW_ENTERED, flags);
                 }
+                addEnteredIdLocked(id);
             }
         }
         return callback;
+    }
+
+    @GuardedBy("mLock")
+    private void addEnteredIdLocked(@NonNull AutofillId id) {
+        if (mEnteredIds == null) {
+            mEnteredIds = new ArraySet<>(1);
+        }
+        mEnteredIds.add(id);
     }
 
     /**
@@ -935,6 +970,7 @@ public final class AutofillManager {
         }
     }
 
+    @GuardedBy("mLock")
     private void notifyViewExitedLocked(@NonNull View view, int virtualId) {
         ensureServiceClientAddedIfNeededLocked();
 
@@ -985,9 +1021,9 @@ public final class AutofillManager {
             }
 
             if (!mEnabled || !isActiveLocked()) {
-                if (sVerbose && mEnabled) {
-                    Log.v(TAG, "notifyValueChanged(" + view + "): ignoring on state "
-                            + getStateAsStringLocked());
+                if (sVerbose) {
+                    Log.v(TAG, "notifyValueChanged(" + view.getAutofillId()
+                            + "): ignoring on state " + getStateAsStringLocked());
                 }
                 return;
             }
@@ -1017,6 +1053,10 @@ public final class AutofillManager {
         }
         synchronized (mLock) {
             if (!mEnabled || !isActiveLocked()) {
+                if (sVerbose) {
+                    Log.v(TAG, "notifyValueChanged(" + view.getAutofillId() + ":" + virtualId
+                            + "): ignoring on state " + getStateAsStringLocked());
+                }
                 return;
             }
 
@@ -1025,18 +1065,35 @@ public final class AutofillManager {
         }
     }
 
+    /**
+     * Called to indicate a {@link View} is clicked.
+     *
+     * @param view view that has been clicked.
+     */
+    public void notifyViewClicked(@NonNull View view) {
+        notifyViewClicked(view.getAutofillId());
+    }
 
     /**
-     * Called when a {@link View} is clicked. Currently only used by views that should trigger save.
+     * Called to indicate a virtual view has been clicked.
      *
-     * @hide
+     * @param view the virtual view parent.
+     * @param virtualId id identifying the virtual child inside the parent view.
      */
-    public void notifyViewClicked(View view) {
-        final AutofillId id = view.getAutofillId();
+    public void notifyViewClicked(@NonNull View view, int virtualId) {
+        notifyViewClicked(getAutofillId(view, virtualId));
+    }
 
+    private void notifyViewClicked(AutofillId id) {
+        if (!hasAutofillFeature()) {
+            return;
+        }
         if (sVerbose) Log.v(TAG, "notifyViewClicked(): id=" + id + ", trigger=" + mSaveTriggerId);
 
         synchronized (mLock) {
+            if (!mEnabled || !isActiveLocked()) {
+                return;
+            }
             if (mSaveTriggerId != null && mSaveTriggerId.equals(id)) {
                 if (sDebug) Log.d(TAG, "triggering commit by click of " + id);
                 commitLocked();
@@ -1051,16 +1108,16 @@ public final class AutofillManager {
      *
      * @hide
      */
-    public void onActivityFinished() {
+    public void onActivityFinishing() {
         if (!hasAutofillFeature()) {
             return;
         }
         synchronized (mLock) {
             if (mSaveOnFinish) {
-                if (sDebug) Log.d(TAG, "Committing session on finish() as requested by service");
+                if (sDebug) Log.d(TAG, "onActivityFinishing(): calling commitLocked()");
                 commitLocked();
             } else {
-                if (sDebug) Log.d(TAG, "Cancelling session on finish() as requested by service");
+                if (sDebug) Log.d(TAG, "onActivityFinishing(): calling cancelLocked()");
                 cancelLocked();
             }
         }
@@ -1081,11 +1138,13 @@ public final class AutofillManager {
         if (!hasAutofillFeature()) {
             return;
         }
+        if (sVerbose) Log.v(TAG, "commit() called by app");
         synchronized (mLock) {
             commitLocked();
         }
     }
 
+    @GuardedBy("mLock")
     private void commitLocked() {
         if (!mEnabled && !isActiveLocked()) {
             return;
@@ -1114,6 +1173,7 @@ public final class AutofillManager {
         }
     }
 
+    @GuardedBy("mLock")
     private void cancelLocked() {
         if (!mEnabled && !isActiveLocked()) {
             return;
@@ -1377,11 +1437,14 @@ public final class AutofillManager {
         return new AutofillId(parent.getAutofillViewId(), virtualId);
     }
 
+    @GuardedBy("mLock")
     private void startSessionLocked(@NonNull AutofillId id, @NonNull Rect bounds,
             @NonNull AutofillValue value, int flags) {
         if (sVerbose) {
             Log.v(TAG, "startSessionLocked(): id=" + id + ", bounds=" + bounds + ", value=" + value
-                    + ", flags=" + flags + ", state=" + getStateAsStringLocked());
+                    + ", flags=" + flags + ", state=" + getStateAsStringLocked()
+                    + ", compatMode=" + isCompatibilityModeEnabledLocked()
+                    + ", enteredIds=" + mEnteredIds);
         }
         if (mState != STATE_UNKNOWN && !isFinishedLocked() && (flags & FLAG_MANUAL_REQUEST) == 0) {
             if (sVerbose) {
@@ -1392,11 +1455,12 @@ public final class AutofillManager {
         }
         try {
             final AutofillClient client = getClient();
-            if (client == null) return; // NOTE: getClient() already logd it..
+            if (client == null) return; // NOTE: getClient() already logged it..
 
             mSessionId = mService.startSession(client.autofillClientGetActivityToken(),
                     mServiceClient.asBinder(), id, bounds, value, mContext.getUserId(),
-                    mCallback != null, flags, client.autofillClientGetComponentName());
+                    mCallback != null, flags, client.autofillClientGetComponentName(),
+                    isCompatibilityModeEnabledLocked());
             if (mSessionId != NO_SESSION) {
                 mState = STATE_ACTIVE;
             }
@@ -1406,6 +1470,7 @@ public final class AutofillManager {
         }
     }
 
+    @GuardedBy("mLock")
     private void finishSessionLocked() {
         if (sVerbose) Log.v(TAG, "finishSessionLocked(): " + getStateAsStringLocked());
 
@@ -1417,9 +1482,10 @@ public final class AutofillManager {
             throw e.rethrowFromSystemServer();
         }
 
-        resetSessionLocked();
+        resetSessionLocked(/* resetEnteredIds= */ true);
     }
 
+    @GuardedBy("mLock")
     private void cancelSessionLocked() {
         if (sVerbose) Log.v(TAG, "cancelSessionLocked(): " + getStateAsStringLocked());
 
@@ -1431,20 +1497,25 @@ public final class AutofillManager {
             throw e.rethrowFromSystemServer();
         }
 
-        resetSessionLocked();
+        resetSessionLocked(/* resetEnteredIds= */ true);
     }
 
-    private void resetSessionLocked() {
+    @GuardedBy("mLock")
+    private void resetSessionLocked(boolean resetEnteredIds) {
         mSessionId = NO_SESSION;
         mState = STATE_UNKNOWN;
         mTrackedViews = null;
         mFillableIds = null;
         mSaveTriggerId = null;
+        if (resetEnteredIds) {
+            mEnteredIds = null;
+        }
     }
 
+    @GuardedBy("mLock")
     private void updateSessionLocked(AutofillId id, Rect bounds, AutofillValue value, int action,
             int flags) {
-        if (sVerbose && action != ACTION_VIEW_EXITED) {
+        if (sVerbose) {
             Log.v(TAG, "updateSessionLocked(): id=" + id + ", bounds=" + bounds
                     + ", value=" + value + ", action=" + action + ", flags=" + flags);
         }
@@ -1459,7 +1530,7 @@ public final class AutofillManager {
                         client.autofillClientGetActivityToken(),
                         mServiceClient.asBinder(), id, bounds, value, mContext.getUserId(),
                         mCallback != null, flags, client.autofillClientGetComponentName(),
-                        mSessionId, action);
+                        mSessionId, action, isCompatibilityModeEnabledLocked());
                 if (newId != mSessionId) {
                     if (sDebug) Log.d(TAG, "Session restarted: " + mSessionId + "=>" + newId);
                     mSessionId = newId;
@@ -1476,6 +1547,7 @@ public final class AutofillManager {
         }
     }
 
+    @GuardedBy("mLock")
     private void ensureServiceClientAddedIfNeededLocked() {
         if (getClient() == null) {
             return;
@@ -1613,7 +1685,7 @@ public final class AutofillManager {
             mEnabled = (flags & SET_STATE_FLAG_ENABLED) != 0;
             if (!mEnabled || (flags & SET_STATE_FLAG_RESET_SESSION) != 0) {
                 // Reset the session state
-                resetSessionLocked();
+                resetSessionLocked(/* resetEnteredIds= */ true);
             }
             if ((flags & SET_STATE_FLAG_RESET_CLIENT) != 0) {
                 // Reset connection to system
@@ -1809,7 +1881,7 @@ public final class AutofillManager {
     private void setSessionFinished(int newState) {
         synchronized (mLock) {
             if (sVerbose) Log.v(TAG, "setSessionFinished(): from " + mState + " to " + newState);
-            resetSessionLocked();
+            resetSessionLocked(/* resetEnteredIds= */ false);
             mState = newState;
         }
     }
@@ -1937,13 +2009,16 @@ public final class AutofillManager {
             pw.print(pfx2); pw.print("invisible:"); pw.println(mTrackedViews.mInvisibleTrackedIds);
         }
         pw.print(pfx); pw.print("fillable ids: "); pw.println(mFillableIds);
+        pw.print(pfx); pw.print("entered ids: "); pw.println(mEnteredIds);
         pw.print(pfx); pw.print("save trigger id: "); pw.println(mSaveTriggerId);
         pw.print(pfx); pw.print("save on finish(): "); pw.println(mSaveOnFinish);
-        pw.print(pfx); pw.print("compat mode enabled: "); pw.println(isCompatibilityModeEnabled());
+        pw.print(pfx); pw.print("compat mode enabled: "); pw.println(
+                isCompatibilityModeEnabledLocked());
         pw.print(pfx); pw.print("debug: "); pw.print(sDebug);
         pw.print(" verbose: "); pw.println(sVerbose);
     }
 
+    @GuardedBy("mLock")
     private String getStateAsStringLocked() {
         switch (mState) {
             case STATE_UNKNOWN:
@@ -1961,14 +2036,17 @@ public final class AutofillManager {
         }
     }
 
+    @GuardedBy("mLock")
     private boolean isActiveLocked() {
         return mState == STATE_ACTIVE;
     }
 
+    @GuardedBy("mLock")
     private boolean isDisabledByServiceLocked() {
         return mState == STATE_DISABLED_BY_SERVICE;
     }
 
+    @GuardedBy("mLock")
     private boolean isFinishedLocked() {
         return mState == STATE_FINISHED;
     }
@@ -2164,6 +2242,7 @@ public final class AutofillManager {
                     AutofillValue.forText(node.getText()));
         }
 
+        @GuardedBy("mLock")
         private void updateTrackedViewsLocked() {
             if (mTrackedViews != null) {
                 mTrackedViews.onVisibleForAutofillChangedLocked();
@@ -2273,6 +2352,7 @@ public final class AutofillManager {
                 final boolean[] isVisible;
 
                 if (client.autofillClientIsVisibleForAutofill()) {
+                    if (sVerbose) Log.v(TAG, "client is visible, check tracked ids");
                     isVisible = client.autofillClientGetViewVisibility(trackedIds);
                 } else {
                     // All false
@@ -2292,7 +2372,7 @@ public final class AutofillManager {
             }
 
             if (sVerbose) {
-                Log.v(TAG, "TrackedViews(trackedIds=" + trackedIds + "): "
+                Log.v(TAG, "TrackedViews(trackedIds=" + Arrays.toString(trackedIds) + "): "
                         + " mVisibleTrackedIds=" + mVisibleTrackedIds
                         + " mInvisibleTrackedIds=" + mInvisibleTrackedIds);
             }
@@ -2308,6 +2388,7 @@ public final class AutofillManager {
          * @param id the id of the view/virtual view whose visibility changed.
          * @param isVisible visible if the view is visible in the view hierarchy.
          */
+        @GuardedBy("mLock")
         void notifyViewVisibilityChangedLocked(@NonNull AutofillId id, boolean isVisible) {
             if (sDebug) {
                 Log.d(TAG, "notifyViewVisibilityChangedLocked(): id=" + id + " isVisible="
@@ -2341,6 +2422,7 @@ public final class AutofillManager {
          *
          * @see AutofillClient#autofillClientIsVisibleForAutofill()
          */
+        @GuardedBy("mLock")
         void onVisibleForAutofillChangedLocked() {
             // The visibility of the views might have changed while the client was not be visible,
             // hence update the visibility state for all views.
@@ -2396,6 +2478,9 @@ public final class AutofillManager {
             }
 
             if (mVisibleTrackedIds == null) {
+                if (sVerbose) {
+                    Log.v(TAG, "onVisibleForAutofillChangedLocked(): no more visible ids");
+                }
                 finishSessionLocked();
             }
         }

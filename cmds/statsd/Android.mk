@@ -19,11 +19,9 @@ statsd_common_src := \
     ../../core/java/android/os/IStatsManager.aidl \
     src/stats_log.proto \
     src/statsd_config.proto \
-    src/statsd_internal.proto \
     src/atoms.proto \
-    src/field_util.cpp \
+    src/FieldValue.cpp \
     src/stats_log_util.cpp \
-    src/dimension.cpp \
     src/anomaly/AnomalyMonitor.cpp \
     src/anomaly/AnomalyTracker.cpp \
     src/anomaly/DurationAnomalyTracker.cpp \
@@ -44,6 +42,7 @@ statsd_common_src := \
     src/external/KernelUidCpuActiveTimeReader.cpp \
     src/external/KernelUidCpuClusterTimeReader.cpp \
     src/external/StatsPullerManagerImpl.cpp \
+    src/external/puller_util.cpp \
     src/logd/LogEvent.cpp \
     src/logd/LogListener.cpp \
     src/logd/LogReader.cpp \
@@ -65,6 +64,7 @@ statsd_common_src := \
     src/storage/StorageManager.cpp \
     src/StatsLogProcessor.cpp \
     src/StatsService.cpp \
+    src/subscriber/IncidentdReporter.cpp \
     src/subscriber/SubscriberReporter.cpp \
     src/HashableDimensionKey.cpp \
     src/guardrail/MemoryLeakTrackUtil.cpp \
@@ -116,10 +116,8 @@ LOCAL_SRC_FILES := \
 
 LOCAL_CFLAGS += \
     -Wall \
+    -Wextra \
     -Werror \
-    -Wno-missing-field-initializers \
-    -Wno-unused-variable \
-    -Wno-unused-function \
     -Wno-unused-parameter
 
 ifeq (debug,)
@@ -170,10 +168,10 @@ LOCAL_CFLAGS += \
 
 LOCAL_SRC_FILES := \
     $(statsd_common_src) \
-    tests/dimension_test.cpp \
     tests/AnomalyMonitor_test.cpp \
     tests/anomaly/AnomalyTracker_test.cpp \
     tests/ConfigManager_test.cpp \
+    tests/external/puller_util_test.cpp \
     tests/indexed_priority_queue_test.cpp \
     tests/LogEntryMatcher_test.cpp \
     tests/LogReader_test.cpp \
@@ -181,6 +179,7 @@ LOCAL_SRC_FILES := \
     tests/MetricsManager_test.cpp \
     tests/StatsLogProcessor_test.cpp \
     tests/UidMap_test.cpp \
+    tests/FieldValue_test.cpp \
     tests/condition/CombinationConditionTracker_test.cpp \
     tests/condition/SimpleConditionTracker_test.cpp \
     tests/metrics/OringDurationTracker_test.cpp \
@@ -239,7 +238,8 @@ LOCAL_MODULE := statsd_benchmark
 LOCAL_SRC_FILES := $(statsd_common_src) \
                    benchmark/main.cpp \
                    benchmark/hello_world_benchmark.cpp \
-                   benchmark/log_event_benchmark.cpp
+                   benchmark/log_event_benchmark.cpp \
+                   benchmark/stats_write_benchmark.cpp
 
 LOCAL_C_INCLUDES := $(statsd_common_c_includes)
 
@@ -258,7 +258,8 @@ LOCAL_STATIC_LIBRARIES := \
     $(statsd_common_static_libraries)
 
 LOCAL_SHARED_LIBRARIES := $(statsd_common_shared_libraries) \
-    libgtest_prod
+    libgtest_prod \
+    libstatslog
 
 LOCAL_PROTOC_OPTIMIZE_TYPE := lite
 

@@ -708,6 +708,8 @@ class ActivityStarter {
         ActivityOptions checkedOptions = options != null
                 ? options.getOptions(intent, aInfo, callerApp, mSupervisor)
                 : null;
+        checkedOptions = mService.getActivityStartController().getPendingRemoteAnimationRegistry()
+                .overrideOptionsIfNeeded(callingPackage, checkedOptions);
         if (mService.mController != null) {
             try {
                 // The Intent we give to the watcher has the extra data
@@ -790,7 +792,7 @@ class ActivityStarter {
         // Instead, launch the ephemeral installer. Once the installer is finished, it
         // starts either the intent we resolved here [on install error] or the ephemeral
         // app [on install success].
-        if (rInfo != null && rInfo.isInstantAppAvailable) {
+        if (rInfo != null && rInfo.auxiliaryInfo != null) {
             intent = createLaunchIntent(rInfo.auxiliaryInfo, ephemeralIntent,
                     callingPackage, verificationBundle, resolvedType, userId);
             resolvedType = null;
@@ -930,6 +932,7 @@ class ActivityStarter {
         // Don't modify the client's object!
         intent = new Intent(intent);
         if (componentSpecified
+                && !(Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() == null)
                 && !Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE.equals(intent.getAction())
                 && !Intent.ACTION_RESOLVE_INSTANT_APP_PACKAGE.equals(intent.getAction())
                 && mService.getPackageManagerInternalLocked()

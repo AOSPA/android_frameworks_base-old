@@ -16,6 +16,7 @@
 
 package com.android.server.location;
 
+import android.annotation.Nullable;
 import android.app.AlarmManager;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
@@ -28,11 +29,11 @@ import android.hardware.location.GeofenceHardware;
 import android.hardware.location.GeofenceHardwareImpl;
 import android.location.Criteria;
 import android.location.FusedBatchOptions;
+import android.location.GnssMeasurementsEvent;
+import android.location.GnssNavigationMessage;
 import android.location.GnssStatus;
 import android.location.IGnssStatusListener;
 import android.location.IGnssStatusProvider;
-import android.location.GnssMeasurementsEvent;
-import android.location.GnssNavigationMessage;
 import android.location.IGpsGeofenceHardware;
 import android.location.ILocationManager;
 import android.location.INetInitiatedListener;
@@ -48,16 +49,16 @@ import android.net.NetworkInfo;
 import android.net.NetworkRequest;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.PowerManager.ServiceType;
-import android.os.PowerSaveState;
 import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.Bundle;
-import android.os.PersistableBundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.PersistableBundle;
 import android.os.PowerManager;
+import android.os.PowerManager.ServiceType;
+import android.os.PowerSaveState;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -68,25 +69,21 @@ import android.os.WorkSource.WorkChain;
 import android.provider.Settings;
 import android.provider.Telephony.Carriers;
 import android.provider.Telephony.Sms.Intents;
+import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
 import android.telephony.TelephonyManager;
-import android.telephony.CarrierConfigManager;
 import android.telephony.gsm.GsmCellLocation;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.NtpTrustedTime;
-
 import com.android.internal.app.IAppOpsService;
 import com.android.internal.app.IBatteryStats;
-import com.android.internal.location.gnssmetrics.GnssMetrics;
 import com.android.internal.location.GpsNetInitiatedHandler;
 import com.android.internal.location.GpsNetInitiatedHandler.GpsNiNotification;
 import com.android.internal.location.ProviderProperties;
 import com.android.internal.location.ProviderRequest;
-
-import libcore.io.IoUtils;
-
+import com.android.internal.location.gnssmetrics.GnssMetrics;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
@@ -97,11 +94,13 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
-import java.util.Map;
-import java.util.HashMap;
+
+import libcore.io.IoUtils;
 
 /**
  * A GNSS implementation of LocationProvider used by LocationManager.
@@ -206,7 +205,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
     private static final int UPDATE_NETWORK_STATE = 4;
     private static final int INJECT_NTP_TIME = 5;
     private static final int DOWNLOAD_XTRA_DATA = 6;
-    private static final int UPDATE_LOCATION = 7;
+    private static final int UPDATE_LOCATION = 7;  // Handle external location from network listener
     private static final int ADD_LISTENER = 8;
     private static final int REMOVE_LISTENER = 9;
     private static final int INJECT_NTP_TIME_FINISHED = 10;
@@ -215,6 +214,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
     private static final int INITIALIZE_HANDLER = 13;
     private static final int REQUEST_SUPL_CONNECTION = 14;
     private static final int RELEASE_SUPL_CONNECTION = 15;
+    private static final int REQUEST_LOCATION = 16;
 
     // Request setid
     private static final int AGPS_RIL_REQUEST_SETID_IMSI = 1;
@@ -248,6 +248,13 @@ public class GnssLocationProvider implements LocationProviderInterface {
     private static final int TCP_MIN_PORT = 0;
     private static final int TCP_MAX_PORT = 0xffff;
 
+    // 10 seconds.
+    private static final long LOCATION_TIME_FRESHNESS_THESHOLD_MILLIS = 10 * 1000;
+    // 1 second, or 1 Hz frequency.
+    private static final long LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS = 1000;
+    // 30 seconds.
+    private static final long LOCATION_UPDATE_DURATION_MILLIS = 30 * 1000;
+
     /** simpler wrapper for ProviderRequest + Worksource */
     private static class GpsRequest {
         public ProviderRequest request;
@@ -256,6 +263,42 @@ public class GnssLocationProvider implements LocationProviderInterface {
         public GpsRequest(ProviderRequest request, WorkSource source) {
             this.request = request;
             this.source = source;
+        }
+    }
+
+    // Simple class to hold stats reported in the Extras Bundle
+    private static class LocationExtras {
+        private int mSvCount;
+        private int mMeanCn0;
+        private int mMaxCn0;
+        private final Bundle mBundle;
+
+        public LocationExtras() {
+            mBundle = new Bundle();
+        }
+
+        public void set(int svCount, int meanCn0, int maxCn0) {
+            mSvCount = svCount;
+            mMeanCn0 = meanCn0;
+            mMaxCn0 = maxCn0;
+            setBundle(mBundle);
+        }
+
+        public void reset() {
+            set(0,0,0);
+        }
+
+        // Also used by outside methods to add to other bundles
+        public void setBundle(Bundle extras) {
+            if (extras != null) {
+                extras.putInt("satellites", mSvCount);
+                extras.putInt("meanCn0", mMeanCn0);
+                extras.putInt("maxCn0", mMaxCn0);
+            }
+        }
+
+        public Bundle getBundle() {
+            return mBundle;
         }
     }
 
@@ -369,10 +412,12 @@ public class GnssLocationProvider implements LocationProviderInterface {
     private final NtpTrustedTime mNtpTime;
     private final ILocationManager mILocationManager;
     private Location mLocation = new Location(LocationManager.GPS_PROVIDER);
-    private Bundle mLocationExtras = new Bundle();
+    private final LocationExtras mLocationExtras = new LocationExtras();
     private final GnssStatusListenerHelper mListenerHelper;
     private final GnssMeasurementsProvider mGnssMeasurementsProvider;
     private final GnssNavigationMessageProvider mGnssNavigationMessageProvider;
+    private final FusedLocationListener mFusedLocationListener = new FusedLocationListener();
+    private static int sNumFusedLocationUpdatesRequests = 0;
 
     // Handler for processing events
     private Handler mHandler;
@@ -713,7 +758,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
         mNtpTime = NtpTrustedTime.getInstance(context);
         mILocationManager = ilocationManager;
 
-        mLocation.setExtras(mLocationExtras);
+        mLocation.setExtras(mLocationExtras.getBundle());
 
         // Create a wake lock
         mPowerManager = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
@@ -1038,6 +1083,89 @@ public class GnssLocationProvider implements LocationProviderInterface {
         });
     }
 
+    private void handleRequestLocation(boolean independentFromGnss) {
+        if (isRequestLocationRateLimited()) {
+            if (DEBUG) {
+                Log.d(TAG, "RequestLocation is denied due to too frequent requests.");
+            }
+            return;
+        }
+
+        LocationManager locationManager = (LocationManager) mContext.getSystemService(
+                Context.LOCATION_SERVICE);
+
+        if (independentFromGnss) {
+            // For fast GNSS TTFF
+            Location networkLocation = getLastFreshLocation(locationManager,
+                    LocationManager.NETWORK_PROVIDER);
+            if (networkLocation != null) {
+                handleUpdateLocation(networkLocation);
+                return;
+            }
+            locationManager.requestSingleUpdate(LocationManager.NETWORK_PROVIDER,
+                    new NetworkLocationListener(),
+                    mHandler.getLooper());
+        } else {
+            // For Device-Based Hybrid (E911)
+            locationManager.requestLocationUpdates(LocationManager.FUSED_PROVIDER,
+                    LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS, /*minDistance=*/ 0,
+                    mFusedLocationListener, mHandler.getLooper());
+            sNumFusedLocationUpdatesRequests++;
+            mHandler.postDelayed(() -> {
+                if (--sNumFusedLocationUpdatesRequests == 0) {
+                    locationManager.removeUpdates(mFusedLocationListener);
+                }
+            }, LOCATION_UPDATE_DURATION_MILLIS);
+        }
+    }
+
+    private void injectBestLocation(Location location) {
+        int gnssLocationFlags = LOCATION_HAS_LAT_LONG |
+                (location.hasAltitude() ? LOCATION_HAS_ALTITUDE : 0) |
+                (location.hasSpeed() ? LOCATION_HAS_SPEED : 0) |
+                (location.hasBearing() ? LOCATION_HAS_BEARING : 0) |
+                (location.hasAccuracy() ? LOCATION_HAS_HORIZONTAL_ACCURACY : 0) |
+                (location.hasVerticalAccuracy() ? LOCATION_HAS_VERTICAL_ACCURACY : 0) |
+                (location.hasSpeedAccuracy() ? LOCATION_HAS_SPEED_ACCURACY : 0) |
+                (location.hasBearingAccuracy() ? LOCATION_HAS_BEARING_ACCURACY : 0);
+
+        double latitudeDegrees = location.getLatitude();
+        double longitudeDegrees = location.getLongitude();
+        double altitudeMeters = location.getAltitude();
+        float speedMetersPerSec = location.getSpeed();
+        float bearingDegrees = location.getBearing();
+        float horizontalAccuracyMeters = location.getAccuracy();
+        float verticalAccuracyMeters = location.getVerticalAccuracyMeters();
+        float speedAccuracyMetersPerSecond = location.getSpeedAccuracyMetersPerSecond();
+        float bearingAccuracyDegrees = location.getBearingAccuracyDegrees();
+        long timestamp = location.getTime();
+        native_inject_best_location(gnssLocationFlags, latitudeDegrees, longitudeDegrees,
+                altitudeMeters, speedMetersPerSec, bearingDegrees, horizontalAccuracyMeters,
+                verticalAccuracyMeters, speedAccuracyMetersPerSecond, bearingAccuracyDegrees,
+                timestamp);
+    }
+
+    /**
+     * Get the last fresh location.
+     *
+     * Return null if the last location is not available or not fresh.
+     */
+    private @Nullable
+    Location getLastFreshLocation(LocationManager locationManager, String provider) {
+        Location location = locationManager.getLastKnownLocation(provider);
+        if (location != null && System.currentTimeMillis() - location.getTime()
+                < LOCATION_TIME_FRESHNESS_THESHOLD_MILLIS) {
+            return location;
+        }
+        return null;
+    }
+
+    /** Returns true if the location request is too frequent. */
+    private boolean isRequestLocationRateLimited() {
+        // TODO(b/73198123): implement exponential backoff.
+        return false;
+    }
+
     private void handleDownloadXtraData() {
         if (!mSupportsXtra) {
             // native code reports xtra not supported, don't try
@@ -1245,26 +1373,14 @@ public class GnssLocationProvider implements LocationProviderInterface {
 
     @Override
     public int getStatus(Bundle extras) {
-        setLocationExtras(extras);
+        mLocationExtras.setBundle(extras);
         return mStatus;
     }
 
-    private void updateStatus(int status, int svCount, int meanCn0, int maxCn0) {
-        if (status != mStatus || svCount != mSvCount || meanCn0 != mMeanCn0 || maxCn0 != mMaxCn0) {
+    private void updateStatus(int status) {
+        if (status != mStatus) {
             mStatus = status;
-            mSvCount = svCount;
-            mMeanCn0 = meanCn0;
-            mMaxCn0 = maxCn0;
-            setLocationExtras(mLocationExtras);
             mStatusUpdateTime = SystemClock.elapsedRealtime();
-        }
-    }
-
-    private void setLocationExtras(Bundle extras) {
-        if (extras != null) {
-            extras.putInt("satellites", mSvCount);
-            extras.putInt("meanCn0", mMeanCn0);
-            extras.putInt("maxCn0", mMaxCn0);
         }
     }
 
@@ -1563,7 +1679,8 @@ public class GnssLocationProvider implements LocationProviderInterface {
             }
 
             // reset SV count to zero
-            updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE, 0, 0, 0);
+            updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE);
+            mLocationExtras.reset();
             mFixRequestTime = SystemClock.elapsedRealtime();
             if (!hasCapability(GPS_CAPABILITY_SCHEDULING)) {
                 // set timer to give up if we do not receive a fix within NO_FIX_TIMEOUT
@@ -1586,7 +1703,8 @@ public class GnssLocationProvider implements LocationProviderInterface {
             mLastFixTime = 0;
 
             // reset SV count to zero
-            updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE, 0, 0, 0);
+            updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE);
+            mLocationExtras.reset();
         }
     }
 
@@ -1626,7 +1744,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
             // It would be nice to push the elapsed real-time timestamp
             // further down the stack, but this is still useful
             mLocation.setElapsedRealtimeNanos(SystemClock.elapsedRealtimeNanos());
-            mLocation.setExtras(mLocationExtras);
+            mLocation.setExtras(mLocationExtras.getBundle());
 
             try {
                 mILocationManager.reportLocation(mLocation, false);
@@ -1662,8 +1780,9 @@ public class GnssLocationProvider implements LocationProviderInterface {
         }
 
         if (mStarted && mStatus != LocationProvider.AVAILABLE) {
-            // we want to time out if we do not receive a fix
-            // within the time out and we are requesting infrequent fixes
+            // For devices that use framework scheduling, a timer may be set to ensure we don't
+            // spend too much power searching for a location, when the requested update rate is slow.
+            // As we just recievied a location, we'll cancel that timer.
             if (!hasCapability(GPS_CAPABILITY_SCHEDULING) && mFixInterval < NO_FIX_TIMEOUT) {
                 mAlarmManager.cancel(mTimeoutIntent);
             }
@@ -1672,7 +1791,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
             Intent intent = new Intent(LocationManager.GPS_FIX_CHANGE_ACTION);
             intent.putExtra(LocationManager.EXTRA_GPS_ENABLED, true);
             mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
-            updateStatus(LocationProvider.AVAILABLE, mSvCount, mMeanCn0, mMaxCn0);
+            updateStatus(LocationProvider.AVAILABLE);
         }
 
         if (!hasCapability(GPS_CAPABILITY_SCHEDULING) && mStarted &&
@@ -1771,7 +1890,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
             meanCn0 /= usedInFixCount;
         }
         // return number of sats used in fix instead of total reported
-        updateStatus(mStatus, usedInFixCount, meanCn0, maxCn0);
+        mLocationExtras.set(usedInFixCount, meanCn0, maxCn0);
 
         if (mNavigating && mStatus == LocationProvider.AVAILABLE && mLastFixTime > 0 &&
                 SystemClock.elapsedRealtime() - mLastFixTime > RECENT_FIX_TIMEOUT) {
@@ -1779,7 +1898,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
             Intent intent = new Intent(LocationManager.GPS_FIX_CHANGE_ACTION);
             intent.putExtra(LocationManager.EXTRA_GPS_ENABLED, false);
             mContext.sendBroadcastAsUser(intent, UserHandle.ALL);
-            updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE, mSvCount, mMeanCn0, mMaxCn0);
+            updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE);
         }
     }
 
@@ -2244,6 +2363,16 @@ public class GnssLocationProvider implements LocationProviderInterface {
     }
 
     /**
+     * Called from native code to request location info.
+     */
+    private void requestLocation(boolean independentFromGnss) {
+        if (DEBUG) {
+            Log.d(TAG, "requestLocation. independentFromGnss: " + independentFromGnss);
+        }
+        sendMessage(REQUEST_LOCATION, 0, independentFromGnss);
+    }
+
+    /**
      * Called from native code to request utc time info
      */
     private void requestUtcTime() {
@@ -2254,7 +2383,6 @@ public class GnssLocationProvider implements LocationProviderInterface {
     /**
      * Called from native code to request reference location info
      */
-
     private void requestRefLocation() {
         TelephonyManager phone = (TelephonyManager)
                 mContext.getSystemService(Context.TELEPHONY_SERVICE);
@@ -2329,6 +2457,9 @@ public class GnssLocationProvider implements LocationProviderInterface {
                     break;
                 case INJECT_NTP_TIME:
                     handleInjectNtpTime();
+                    break;
+                case REQUEST_LOCATION:
+                    handleRequestLocation((boolean) msg.obj);
                     break;
                 case DOWNLOAD_XTRA_DATA:
                     handleDownloadXtraData();
@@ -2455,15 +2586,7 @@ public class GnssLocationProvider implements LocationProviderInterface {
         }
     }
 
-    private final class NetworkLocationListener implements LocationListener {
-        @Override
-        public void onLocationChanged(Location location) {
-            // this callback happens on mHandler looper
-            if (LocationManager.NETWORK_PROVIDER.equals(location.getProvider())) {
-                handleUpdateLocation(location);
-            }
-        }
-
+    private abstract class LocationChangeListener implements LocationListener {
         @Override
         public void onStatusChanged(String provider, int status, Bundle extras) {
         }
@@ -2474,6 +2597,26 @@ public class GnssLocationProvider implements LocationProviderInterface {
 
         @Override
         public void onProviderDisabled(String provider) {
+        }
+    }
+
+    private final class NetworkLocationListener extends LocationChangeListener {
+        @Override
+        public void onLocationChanged(Location location) {
+            // this callback happens on mHandler looper
+            if (LocationManager.NETWORK_PROVIDER.equals(location.getProvider())) {
+                handleUpdateLocation(location);
+            }
+        }
+    }
+
+    private final class FusedLocationListener extends LocationChangeListener {
+        @Override
+        public void onLocationChanged(Location location) {
+            if (LocationManager.FUSED_PROVIDER.equals(location.getProvider())) {
+                Log.d(TAG, "fused location listener: " + location);
+                injectBestLocation(location);
+            }
         }
     }
 
@@ -2641,6 +2784,8 @@ public class GnssLocationProvider implements LocationProviderInterface {
                 return "RELEASE_SUPL_CONNECTION";
             case INJECT_NTP_TIME:
                 return "INJECT_NTP_TIME";
+            case REQUEST_LOCATION:
+                return "REQUEST_LOCATION";
             case DOWNLOAD_XTRA_DATA:
                 return "DOWNLOAD_XTRA_DATA";
             case INJECT_NTP_TIME_FINISHED:
@@ -2726,9 +2871,6 @@ public class GnssLocationProvider implements LocationProviderInterface {
     private float mSvElevations[] = new float[MAX_SVS];
     private float mSvAzimuths[] = new float[MAX_SVS];
     private float mSvCarrierFreqs[] = new float[MAX_SVS];
-    private int mSvCount;
-    private int mMeanCn0;
-    private int mMaxCn0;
     // preallocated to avoid memory allocation in reportNmea()
     private byte[] mNmeaBuffer = new byte[120];
 
@@ -2763,6 +2905,19 @@ public class GnssLocationProvider implements LocationProviderInterface {
             float[] azimuths, float[] carrierFrequencies);
 
     private native int native_read_nmea(byte[] buffer, int bufferSize);
+
+    private native void native_inject_best_location(
+            int gnssLocationFlags,
+            double latitudeDegrees,
+            double longitudeDegrees,
+            double altitudeMeters,
+            float speedMetersPerSec,
+            float bearingDegrees,
+            float horizontalAccuracyMeters,
+            float verticalAccuracyMeters,
+            float speedAccuracyMetersPerSecond,
+            float bearingAccuracyDegrees,
+            long timestamp);
 
     private native void native_inject_location(double latitude, double longitude, float accuracy);
 

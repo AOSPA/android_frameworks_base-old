@@ -19,6 +19,7 @@
 
 #include "EventMetricProducer.h"
 #include "stats_util.h"
+#include "stats_log_util.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -42,14 +43,13 @@ namespace statsd {
 
 // for StatsLogReport
 const int FIELD_ID_ID = 1;
-const int FIELD_ID_START_REPORT_NANOS = 2;
-const int FIELD_ID_END_REPORT_NANOS = 3;
 const int FIELD_ID_EVENT_METRICS = 4;
 // for EventMetricDataWrapper
 const int FIELD_ID_DATA = 1;
 // for EventMetricData
-const int FIELD_ID_TIMESTAMP_NANOS = 1;
+const int FIELD_ID_ELAPSED_TIMESTAMP_NANOS = 1;
 const int FIELD_ID_ATOMS = 2;
+const int FIELD_ID_WALL_CLOCK_TIMESTAMP_NANOS = 3;
 
 EventMetricProducer::EventMetricProducer(const ConfigKey& key, const EventMetric& metric,
                                          const int conditionIndex,
@@ -57,23 +57,22 @@ EventMetricProducer::EventMetricProducer(const ConfigKey& key, const EventMetric
                                          const uint64_t startTimeNs)
     : MetricProducer(metric.id(), key, startTimeNs, conditionIndex, wizard) {
     if (metric.links().size() > 0) {
-        mConditionLinks.insert(mConditionLinks.begin(), metric.links().begin(),
-                               metric.links().end());
+        for (const auto& link : metric.links()) {
+            Metric2Condition mc;
+            mc.conditionId = link.condition();
+            translateFieldMatcher(link.fields_in_what(), &mc.metricFields);
+            translateFieldMatcher(link.fields_in_condition(), &mc.conditionFields);
+            mMetric2ConditionLinks.push_back(mc);
+        }
         mConditionSliced = true;
     }
-
-    startNewProtoOutputStreamLocked();
-
+    mProto = std::make_unique<ProtoOutputStream>();
     VLOG("metric %lld created. bucket size %lld start_time: %lld", (long long)metric.id(),
          (long long)mBucketSizeNs, (long long)mStartTimeNs);
 }
 
 EventMetricProducer::~EventMetricProducer() {
     VLOG("~EventMetricProducer() called");
-}
-
-void EventMetricProducer::startNewProtoOutputStreamLocked() {
-    mProto = std::make_unique<ProtoOutputStream>();
 }
 
 void EventMetricProducer::onSlicedConditionMayChangeLocked(const uint64_t eventTime) {
@@ -96,18 +95,12 @@ std::unique_ptr<std::vector<uint8_t>> serializeProtoLocked(ProtoOutputStream& pr
     return buffer;
 }
 
-void EventMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs, StatsLogReport* report) {
-
-}
-
 void EventMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
                                              ProtoOutputStream* protoOutput) {
     if (mProto->size() <= 0) {
         return;
     }
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)mMetricId);
-    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_START_REPORT_NANOS, (long long)mStartTimeNs);
-    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_END_REPORT_NANOS, (long long)dumpTimeNs);
 
     size_t bufferSize = mProto->size();
     VLOG("metric %lld dump report now... proto size: %zu ",
@@ -117,8 +110,7 @@ void EventMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
     protoOutput->write(FIELD_TYPE_MESSAGE | FIELD_ID_EVENT_METRICS,
                        reinterpret_cast<char*>(buffer.get()->data()), buffer.get()->size());
 
-    startNewProtoOutputStreamLocked();
-    mStartTimeNs = dumpTimeNs;
+    mProto->clear();
 }
 
 void EventMetricProducer::onConditionChangedLocked(const bool conditionMet,
@@ -137,9 +129,12 @@ void EventMetricProducer::onMatchedLogEventInternalLocked(
 
     long long wrapperToken =
             mProto->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_DATA);
-    mProto->write(FIELD_TYPE_INT64 | FIELD_ID_TIMESTAMP_NANOS, (long long)event.GetTimestampNs());
+    mProto->write(FIELD_TYPE_INT64 | FIELD_ID_ELAPSED_TIMESTAMP_NANOS,
+        (long long)event.GetElapsedTimestampNs());
     long long eventToken = mProto->start(FIELD_TYPE_MESSAGE | FIELD_ID_ATOMS);
     event.ToProto(*mProto);
+    mProto->write(FIELD_TYPE_INT64 | FIELD_ID_WALL_CLOCK_TIMESTAMP_NANOS,
+        (long long)getWallClockNs());
     mProto->end(eventToken);
     mProto->end(wrapperToken);
 }

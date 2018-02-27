@@ -842,8 +842,6 @@
     <string name="recents_stack_action_button_label">Clear all</string>
     <!-- Recents: Hint text that shows on the drop targets to start multiwindow. [CHAR LIMIT=NONE] -->
     <string name="recents_drag_hint_message">Drag here to use split screen</string>
-    <!-- Recents: Text that shows above the nav bar after launching a few apps. [CHAR LIMIT=NONE] -->
-    <string name="recents_swipe_up_onboarding">Swipe up to switch apps</string>
 
     <!-- Recents: MultiStack add stack split horizontal radio button. [CHAR LIMIT=NONE] -->
     <string name="recents_multistack_add_stack_dialog_split_horizontal">Split Horizontal</string>
@@ -1342,8 +1340,7 @@
     <string name="volume_stream_content_description_vibrate_a11y">%1$s. Tap to set to vibrate.</string>
     <string name="volume_stream_content_description_mute_a11y">%1$s. Tap to mute.</string>
 
-    <string name="volume_dialog_accessibility_shown_message">%s volume controls shown. Swipe up to dismiss.</string>
-    <string name="volume_dialog_accessibility_dismissed_message">Volume controls hidden</string>
+    <string name="volume_dialog_title">%s volume controls</string>
 
     <string name="output_title">Media output</string>
     <string name="output_calls_title">Phone call output</string>
@@ -1754,15 +1751,13 @@
     <string-array name="nav_bar_buttons">
         <item>Clipboard</item>
         <item>Keycode</item>
-        <item>Keyboard switcher</item>
-        <item>Rotation suggestion</item>
+        <item>Rotate confirm, keyboard switcher</item>
         <item>None</item>
     </string-array>
     <string-array name="nav_bar_button_values" translatable="false">
         <item>clipboard</item>
         <item>key</item>
         <item>menu_ime</item>
-        <item>rotate</item>
         <item>space</item>
     </string-array>
 

@@ -19,6 +19,7 @@
 
 #include <shared_mutex>
 
+#include "HashableDimensionKey.h"
 #include "anomaly/AnomalyTracker.h"
 #include "condition/ConditionWizard.h"
 #include "config/ConfigKey.h"
@@ -53,15 +54,32 @@ public:
 
     virtual ~MetricProducer(){};
 
-    void notifyAppUpgrade(const string& apk, const int uid, const int64_t version) override{
+    /**
+     * Forces this metric to split into a partial bucket right now. If we're past a full bucket, we
+     * first call the standard flushing code to flush up to the latest full bucket. Then we call
+     * the flush again when the end timestamp is forced to be now, and then after flushing, update
+     * the start timestamp to be now.
+     */
+    void notifyAppUpgrade(const uint64_t& eventTimeNs, const string& apk, const int uid,
+                          const int64_t version) override {
+        std::lock_guard<std::mutex> lock(mMutex);
+
+        if (eventTimeNs > getCurrentBucketEndTimeNs()) {
+            // Flush full buckets on the normal path up to the latest bucket boundary.
+            flushIfNeededLocked(eventTimeNs);
+        }
+        // Now flush a partial bucket.
+        flushCurrentBucketLocked(eventTimeNs);
+        mCurrentBucketStartTimeNs = eventTimeNs;
+        // Don't update the current bucket number so that the anomaly tracker knows this bucket
+        // is a partial bucket and can merge it with the previous bucket.
+    };
+
+    void notifyAppRemoved(const uint64_t& eventTimeNs, const string& apk, const int uid) override{
             // TODO: Implement me.
     };
 
-    void notifyAppRemoved(const string& apk, const int uid) override{
-            // TODO: Implement me.
-    };
-
-    void onUidMapReceived() override{
+    void onUidMapReceived(const uint64_t& eventTimeNs) override{
             // TODO: Implement me.
     };
 
@@ -87,14 +105,10 @@ public:
     };
 
     // Output the metrics data to [protoOutput]. All metrics reports end with the same timestamp.
+    // This method clears all the past buckets.
     void onDumpReport(const uint64_t dumpTimeNs, android::util::ProtoOutputStream* protoOutput) {
         std::lock_guard<std::mutex> lock(mMutex);
         return onDumpReportLocked(dumpTimeNs, protoOutput);
-    }
-
-    void onDumpReport(const uint64_t dumpTimeNs, StatsLogReport* report) {
-        std::lock_guard<std::mutex> lock(mMutex);
-        return onDumpReportLocked(dumpTimeNs, report);
     }
 
     void dumpStates(FILE* out, bool verbose) const {
@@ -109,6 +123,7 @@ public:
         return byteSizeLocked();
     }
 
+    /* If alert is valid, adds an AnomalyTracker and returns it. If invalid, returns nullptr. */
     virtual sp<AnomalyTracker> addAnomalyTracker(const Alert &alert) {
         std::lock_guard<std::mutex> lock(mMutex);
         sp<AnomalyTracker> anomalyTracker = new AnomalyTracker(alert, mConfigKey);
@@ -123,6 +138,11 @@ public:
         return mBucketSizeNs;
     }
 
+    // Only needed for unit-testing to override guardrail.
+    void setBucketSize(int64_t bucketSize) {
+        mBucketSizeNs = bucketSize;
+    }
+
     inline const int64_t& getMetricId() {
         return mMetricId;
     }
@@ -132,19 +152,46 @@ protected:
     virtual void onSlicedConditionMayChangeLocked(const uint64_t eventTime) = 0;
     virtual void onDumpReportLocked(const uint64_t dumpTimeNs,
                                     android::util::ProtoOutputStream* protoOutput) = 0;
-    virtual void onDumpReportLocked(const uint64_t dumpTimeNs, StatsLogReport* report) = 0;
     virtual size_t byteSizeLocked() const = 0;
     virtual void dumpStatesLocked(FILE* out, bool verbose) const = 0;
+
+    /**
+     * Flushes the current bucket if the eventTime is after the current bucket's end time.
+     */
+    virtual void flushIfNeededLocked(const uint64_t& eventTime){};
+
+    /**
+     * For metrics that aggregate (ie, every metric producer except for EventMetricProducer),
+     * we need to be able to flush the current buckets on demand (ie, end the current bucket and
+     * start new bucket). If this function is called when eventTimeNs is greater than the current
+     * bucket's end timestamp, than we flush up to the end of the latest full bucket; otherwise,
+     * we assume that we want to flush a partial bucket. The bucket start timestamp and bucket
+     * number are not changed by this function. This method should only be called by
+     * flushIfNeededLocked or the app upgrade handler; the caller MUST update the bucket timestamp
+     * and bucket number as needed.
+     */
+    virtual void flushCurrentBucketLocked(const uint64_t& eventTimeNs){};
+
+    // Convenience to compute the current bucket's end time, which is always aligned with the
+    // start time of the metric.
+    uint64_t getCurrentBucketEndTimeNs() {
+        return mStartTimeNs + (mCurrentBucketNum + 1) * mBucketSizeNs;
+    }
 
     const int64_t mMetricId;
 
     const ConfigKey mConfigKey;
 
-    // The start time for the current in memory metrics data.
+    // The time when this metric producer was first created. The end time for the current bucket
+    // can be computed from this based on mCurrentBucketNum.
     uint64_t mStartTimeNs;
 
+    // Start time may not be aligned with the start of statsd if there is an app upgrade in the
+    // middle of a bucket.
     uint64_t mCurrentBucketStartTimeNs;
 
+    // Used by anomaly detector to track which bucket we are in. This is not sent with the produced
+    // report.
     uint64_t mCurrentBucketNum;
 
     int64_t mBucketSizeNs;
@@ -157,10 +204,10 @@ protected:
 
     int mConditionTrackerIndex;
 
-    FieldMatcher mDimensionsInWhat;  // The dimensions_in_what defined in statsd_config
-    FieldMatcher mDimensionsInCondition;  // The dimensions_in_condition defined in statsd_config
+    vector<Matcher> mDimensionsInWhat;       // The dimensions_in_what defined in statsd_config
+    vector<Matcher> mDimensionsInCondition;  // The dimensions_in_condition defined in statsd_config
 
-    std::vector<MetricConditionLink> mConditionLinks;
+    std::vector<Metric2Condition> mMetric2ConditionLinks;
 
     std::vector<sp<AnomalyTracker>> mAnomalyTrackers;
 

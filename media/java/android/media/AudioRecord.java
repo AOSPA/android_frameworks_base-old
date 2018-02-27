@@ -1425,6 +1425,7 @@ public class AudioRecord implements AudioRouting
     /*
      * Call BEFORE adding a routing callback handler.
      */
+    @GuardedBy("mRoutingChangeListeners")
     private void testEnableNativeRoutingCallbacksLocked() {
         if (mRoutingChangeListeners.size() == 0) {
             native_enableDeviceCallback();
@@ -1434,6 +1435,7 @@ public class AudioRecord implements AudioRouting
     /*
      * Call AFTER removing a routing callback handler.
      */
+    @GuardedBy("mRoutingChangeListeners")
     private void testDisableNativeRoutingCallbacksLocked() {
         if (mRoutingChangeListeners.size() == 0) {
             native_disableDeviceCallback();

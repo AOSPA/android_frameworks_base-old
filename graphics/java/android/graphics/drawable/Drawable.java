@@ -1171,9 +1171,13 @@ public abstract class Drawable {
     /**
      * Create a drawable from an inputstream, using the given resources and
      * value to determine density information.
+     *
+     * @deprecated Prefer the version without an Options object.
      */
-    public static Drawable createFromResourceStream(Resources res, TypedValue value,
-            InputStream is, String srcName, BitmapFactory.Options opts) {
+    @Nullable
+    public static Drawable createFromResourceStream(@Nullable Resources res,
+            @Nullable TypedValue value, @Nullable InputStream is, @Nullable String srcName,
+            @Nullable BitmapFactory.Options opts) {
         if (is == null) {
             return null;
         }
@@ -1197,7 +1201,6 @@ public abstract class Drawable {
         // an application in compatibility mode, without scaling those down
         // to the compatibility density only to have them scaled back up when
         // drawn to the screen.
-        if (opts == null) opts = new BitmapFactory.Options();
         opts.inScreenDensity = Drawable.resolveDensity(res, 0);
         Bitmap  bm = BitmapFactory.decodeResourceStream(res, value, is, pad, opts);
         if (bm != null) {

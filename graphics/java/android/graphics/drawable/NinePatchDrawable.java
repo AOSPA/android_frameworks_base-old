@@ -667,8 +667,9 @@ public class NinePatchDrawable extends Drawable {
             return;
         }
 
-        final int sourceDensity = ninePatch.getDensity();
         final int targetDensity = mTargetDensity;
+        final int sourceDensity = ninePatch.getDensity() == Bitmap.DENSITY_NONE ?
+            targetDensity : ninePatch.getDensity();
 
         final Insets sourceOpticalInsets = mNinePatchState.mOpticalInsets;
         if (sourceOpticalInsets != Insets.NONE) {

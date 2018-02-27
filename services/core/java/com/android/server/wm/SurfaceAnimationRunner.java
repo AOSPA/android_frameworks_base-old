@@ -151,6 +151,7 @@ class SurfaceAnimationRunner {
         }
     }
 
+    @GuardedBy("mLock")
     private void startPendingAnimationsLocked() {
         for (int i = mPendingAnimations.size() - 1; i >= 0; i--) {
             startAnimationLocked(mPendingAnimations.valueAt(i));
@@ -158,6 +159,7 @@ class SurfaceAnimationRunner {
         mPendingAnimations.clear();
     }
 
+    @GuardedBy("mLock")
     private void startAnimationLocked(RunningAnimation a) {
         final ValueAnimator anim = mAnimatorFactory.makeAnimator();
 
@@ -167,7 +169,12 @@ class SurfaceAnimationRunner {
         anim.addUpdateListener(animation -> {
             synchronized (mCancelLock) {
                 if (!a.mCancelled) {
-                    applyTransformation(a, mFrameTransaction, anim.getCurrentPlayTime());
+                    final long duration = anim.getDuration();
+                    long currentPlayTime = anim.getCurrentPlayTime();
+                    if (currentPlayTime > duration) {
+                        currentPlayTime = duration;
+                    }
+                    applyTransformation(a, mFrameTransaction, currentPlayTime);
                 }
             }
 

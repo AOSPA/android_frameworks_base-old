@@ -65,7 +65,7 @@ class ActivityManagerDebugConfig {
     static final boolean DEBUG_NETWORK = DEBUG_ALL || false;
     static final boolean DEBUG_OOM_ADJ = DEBUG_ALL || false;
     static final boolean DEBUG_OOM_ADJ_REASON = DEBUG_ALL || false;
-    static final boolean DEBUG_PAUSE = DEBUG_ALL || false;
+    static final boolean DEBUG_PAUSE = DEBUG_ALL || true;
     static final boolean DEBUG_POWER = DEBUG_ALL || false;
     static final boolean DEBUG_POWER_QUICK = DEBUG_POWER || false;
     static final boolean DEBUG_PROCESS_OBSERVERS = DEBUG_ALL || false;
@@ -81,7 +81,7 @@ class ActivityManagerDebugConfig {
     static final boolean DEBUG_FOREGROUND_SERVICE = DEBUG_ALL || false;
     static final boolean DEBUG_SERVICE_EXECUTING = DEBUG_ALL || false;
     static final boolean DEBUG_STACK = DEBUG_ALL || false;
-    static final boolean DEBUG_STATES = DEBUG_ALL_ACTIVITIES || false;
+    static final boolean DEBUG_STATES = DEBUG_ALL_ACTIVITIES || true;
     static final boolean DEBUG_SWITCH = DEBUG_ALL || false;
     static final boolean DEBUG_TASKS = DEBUG_ALL || false;
     static final boolean DEBUG_TRANSITION = DEBUG_ALL || false;

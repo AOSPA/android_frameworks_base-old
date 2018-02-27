@@ -12,9 +12,9 @@ import android.net.wifi.rtt.RangingRequest;
 import android.net.wifi.rtt.RangingResult;
 import android.net.wifi.rtt.RangingResultCallback;
 import android.net.wifi.rtt.WifiRttManager;
-import android.os.Looper;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.SystemClock;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -24,6 +24,7 @@ import java.util.List;
 
 /** @hide */
 @SystemApi
+@Deprecated
 @SystemService(Context.WIFI_RTT_SERVICE)
 public class RttManager {
 
@@ -181,6 +182,7 @@ public class RttManager {
     /**
      * This class describe the RTT capability of the Hardware
      */
+    @Deprecated
     public static class RttCapabilities implements Parcelable {
         /** @deprecated It is not supported*/
         @Deprecated
@@ -314,12 +316,16 @@ public class RttManager {
              };
     }
 
+    /**
+     * This method is deprecated. Please use the {@link WifiRttManager} API.
+     */
     @RequiresPermission(Manifest.permission.LOCATION_HARDWARE)
     public RttCapabilities getRttCapabilities() {
         return mRttCapabilities;
     }
 
     /** specifies parameters for RTT request */
+    @Deprecated
     public static class RttParams {
         /**
          * type of destination device being ranged
@@ -502,6 +508,7 @@ public class RttManager {
     }
 
     /** pseudo-private class used to parcel arguments */
+    @Deprecated
     public static class ParcelableRttParams implements Parcelable {
 
         @NonNull
@@ -589,12 +596,14 @@ public class RttManager {
                 };
     }
 
+    @Deprecated
     public static class WifiInformationElement {
         /** Information Element ID 0xFF means element is invalid. */
         public byte id;
         public byte[] data;
     }
     /** specifies RTT results */
+    @Deprecated
     public static class RttResult {
         /** mac address of the device being ranged. */
         public String bssid;
@@ -746,6 +755,7 @@ public class RttManager {
 
 
     /** pseudo-private class used to parcel results. */
+    @Deprecated
     public static class ParcelableRttResults implements Parcelable {
 
         public RttResult mResults[];
@@ -838,8 +848,8 @@ public class RttManager {
                     }
                     dest.writeByte(result.LCR.id);
                     if (result.LCR.id != (byte) 0xFF) {
-                        dest.writeInt((byte) result.LCR.data.length);
-                        dest.writeByte(result.LCR.id);
+                        dest.writeByte((byte) result.LCR.data.length);
+                        dest.writeByteArray(result.LCR.data);
                     }
                     dest.writeByte(result.secure ? (byte) 1 : 0);
                 }
@@ -911,7 +921,7 @@ public class RttManager {
                 };
     }
 
-
+    @Deprecated
     public static interface RttListener {
         public void onSuccess(RttResult[] results);
         public void onFailure(int reason, String description);
@@ -919,52 +929,11 @@ public class RttManager {
     }
 
     /**
-     * A parcelable that contains rtt client information.
-     *
-     * @hide
-     */
-    public static class RttClient implements Parcelable {
-        // Package name of RttClient.
-        private final String mPackageName;
-
-        public RttClient(String packageName) {
-            mPackageName = packageName;
-        }
-
-        protected RttClient(Parcel in) {
-            mPackageName = in.readString();
-        }
-
-        public static final Creator<RttManager.RttClient> CREATOR =
-                new Creator<RttManager.RttClient>() {
-            @Override
-            public RttManager.RttClient createFromParcel(Parcel in) {
-                return new RttManager.RttClient(in);
-            }
-
-            @Override
-            public RttManager.RttClient[] newArray(int size) {
-                return new RttManager.RttClient[size];
-            }
-        };
-
-        @Override
-        public int describeContents() {
-            return 0;
-        }
-
-        @Override
-        public void writeToParcel(Parcel parcel, int i) {
-            parcel.writeString(mPackageName);
-        }
-
-        public String getPackageName() {
-            return mPackageName;
-        }
-    }
-
-    /**
      * Request to start an RTT ranging
+     * <p>
+     * This method is deprecated. Please use the
+     * {@link WifiRttManager#startRanging(RangingRequest, java.util.concurrent.Executor, RangingResultCallback)}
+     * API.
      *
      * @param params  -- RTT request Parameters
      * @param listener -- Call back to inform RTT result
@@ -1000,7 +969,9 @@ public class RttManager {
                     android.net.wifi.rtt.ResponderConfig.fromScanResult(reconstructed));
         }
         try {
-            mNewService.startRanging(builder.build(), new RangingResultCallback() {
+            mNewService.startRanging(builder.build(),
+                    mContext.getMainExecutor(),
+                    new RangingResultCallback() {
                 @Override
                 public void onRangingFailure(int code) {
                     int localCode = REASON_UNSPECIFIED;
@@ -1018,15 +989,20 @@ public class RttManager {
                         legacyResults[i] = new RttResult();
                         legacyResults[i].status = result.getStatus();
                         legacyResults[i].bssid = result.getMacAddress().toString();
-                        legacyResults[i].distance = result.getDistanceMm() / 10;
-                        legacyResults[i].distanceStandardDeviation =
-                                result.getDistanceStdDevMm() / 10;
-                        legacyResults[i].rssi = result.getRssi();
-                        legacyResults[i].ts = result.getRangingTimestampUs();
+                        if (result.getStatus() == RangingResult.STATUS_SUCCESS) {
+                            legacyResults[i].distance = result.getDistanceMm() / 10;
+                            legacyResults[i].distanceStandardDeviation =
+                                    result.getDistanceStdDevMm() / 10;
+                            legacyResults[i].rssi = result.getRssi() * -2;
+                            legacyResults[i].ts = result.getRangingTimestampMillis() * 1000;
+                        } else {
+                            // just in case legacy API needed some relatively real timestamp
+                            legacyResults[i].ts = SystemClock.elapsedRealtime() * 1000;
+                        }
                     }
                     listener.onSuccess(legacyResults);
                 }
-            }, null);
+            });
         } catch (IllegalArgumentException e) {
             Log.e(TAG, "startRanging: invalid arguments - " + e);
             listener.onFailure(REASON_INVALID_REQUEST, e.getMessage());
@@ -1036,6 +1012,10 @@ public class RttManager {
         }
     }
 
+    /**
+     * This method is deprecated and performs no function. Please use the {@link WifiRttManager}
+     * API.
+     */
     @RequiresPermission(android.Manifest.permission.LOCATION_HARDWARE)
     public void stopRanging(RttListener listener) {
         Log.e(TAG, "stopRanging: unsupported operation - nop");
@@ -1050,6 +1030,7 @@ public class RttManager {
      * The client can freely destroy or reuse the callback after {@link RttManager#disableResponder}
      * is called.
      */
+    @Deprecated
     public abstract static class ResponderCallback {
         /** Callback when responder is enabled. */
         public abstract void onResponderEnabled(ResponderConfig config);
@@ -1065,6 +1046,10 @@ public class RttManager {
      * Note calling this method with the same callback when the responder is already enabled won't
      * change the responder state, a cached {@link ResponderConfig} from the last enabling will be
      * returned through the callback.
+     * <p>
+     * This method is deprecated and will throw an {@link UnsupportedOperationException}
+     * exception. Please use the {@link WifiRttManager} API to perform a Wi-Fi Aware peer-to-peer
+     * ranging.
      *
      * @param callback Callback for responder enabling/disabling result.
      * @throws IllegalArgumentException If {@code callback} is null.
@@ -1081,6 +1066,10 @@ public class RttManager {
      * <p>
      * Calling this method when responder isn't enabled won't have any effect. The callback can be
      * reused for enabling responder after this method is called.
+     * <p>
+     * This method is deprecated and will throw an {@link UnsupportedOperationException}
+     * exception. Please use the {@link WifiRttManager} API to perform a Wi-Fi Aware peer-to-peer
+     * ranging.
      *
      * @param callback The same callback used for enabling responder.
      * @throws IllegalArgumentException If {@code callback} is null.
@@ -1097,6 +1086,7 @@ public class RttManager {
      *
      * @see ScanResult
      */
+    @Deprecated
     public static class ResponderConfig implements Parcelable {
 
         // TODO: make all fields final once we can get mac address from responder HAL APIs.
@@ -1202,8 +1192,8 @@ public class RttManager {
     /** @hide */
     public static final int CMD_OP_REG_BINDER           = BASE + 9;
 
-    private final Context mContext;
     private final WifiRttManager mNewService;
+    private final Context mContext;
     private RttCapabilities mRttCapabilities;
 
     /**
@@ -1211,17 +1201,15 @@ public class RttManager {
      * Applications will almost always want to use
      * {@link android.content.Context#getSystemService Context.getSystemService()} to retrieve
      * the standard {@link android.content.Context#WIFI_RTT_SERVICE Context.WIFI_RTT_SERVICE}.
-     * @param context the application context
-     * @param service the Binder interface
-     * @param looper Looper for running the callbacks.
+     * @param service the new WifiRttManager service
      *
      * @hide
      */
-    public RttManager(Context context, IRttManager service, Looper looper) {
+    public RttManager(Context context, WifiRttManager service) {
+        mNewService = service;
         mContext = context;
-        mNewService = (WifiRttManager) mContext.getSystemService(Context.WIFI_RTT_RANGING_SERVICE);
 
-        boolean rttSupported = mContext.getPackageManager().hasSystemFeature(
+        boolean rttSupported = context.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_WIFI_RTT);
 
         mRttCapabilities = new RttCapabilities();

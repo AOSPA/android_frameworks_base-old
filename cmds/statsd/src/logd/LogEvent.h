@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "field_util.h"
+#include "FieldValue.h"
 #include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 
 #include <android/util/ProtoOutputStream.h>
@@ -24,11 +24,8 @@
 #include <log/log_read.h>
 #include <private/android_logger.h>
 #include <utils/Errors.h>
-#include <utils/JenkinsHash.h>
 
-#include <memory>
 #include <string>
-#include <map>
 #include <vector>
 
 namespace android {
@@ -37,7 +34,6 @@ namespace statsd {
 
 using std::string;
 using std::vector;
-
 /**
  * Wrapper for the log_msg structure.
  */
@@ -51,14 +47,18 @@ public:
     /**
      * Constructs a LogEvent with synthetic data for testing. Must call init() before reading.
      */
-    explicit LogEvent(int32_t tagId, uint64_t timestampNs);
+    explicit LogEvent(int32_t tagId, int64_t wallClockTimestampNs, int64_t elapsedTimestampNs);
+
+    // For testing. The timestamp is used as both elapsed real time and logd timestamp.
+    explicit LogEvent(int32_t tagId, int64_t timestampNs);
 
     ~LogEvent();
 
     /**
      * Get the timestamp associated with this event.
      */
-    inline uint64_t GetTimestampNs() const { return mTimestampNs; }
+    inline int64_t GetLogdTimestampNs() const { return mLogdTimestampNs; }
+    inline int64_t GetElapsedTimestampNs() const { return mElapsedTimestampNs; }
 
     /**
      * Get the tag for this event.
@@ -76,22 +76,10 @@ public:
      * Returns BAD_TYPE if the index is available but the data is the wrong type.
      */
     int64_t GetLong(size_t key, status_t* err) const;
+    int GetInt(size_t key, status_t* err) const;
     const char* GetString(size_t key, status_t* err) const;
     bool GetBool(size_t key, status_t* err) const;
     float GetFloat(size_t key, status_t* err) const;
-
-    /*
-     * Get DimensionsValue proto objects from FieldMatcher.
-     */
-    void GetAtomDimensionsValueProtos(
-        const FieldMatcher& matcher, std::vector<DimensionsValue> *dimensionsValues) const;
-    bool GetAtomDimensionsValueProto(
-        const FieldMatcher& matcher, DimensionsValue* dimensionsValue) const;
-
-    /*
-     * Get a DimensionsValue proto objects from Field.
-     */
-    bool GetSimpleAtomDimensionsValueProto(size_t field, DimensionsValue* dimensionsValue) const;
 
     /**
      * Write test data to the LogEvent. This can only be used when the LogEvent is constructed
@@ -123,20 +111,30 @@ public:
     void init();
 
     /**
-     * Set timestamp if the original timestamp is missing.
+     * Set elapsed timestamp if the original timestamp is missing.
      */
-    void setTimestampNs(uint64_t timestampNs) {mTimestampNs = timestampNs;}
-
-    inline int size() const {
-        return mFieldValueMap.size();
+    void setElapsedTimestampNs(int64_t timestampNs) {
+        mElapsedTimestampNs = timestampNs;
     }
 
     /**
-     * Returns the mutable DimensionsValue proto for the specific the field.
+     * Set the timestamp if the original logd timestamp is missing.
      */
-    DimensionsValue* findFieldValueOrNull(const Field& field);
+    void setLogdWallClockTimestampNs(int64_t timestampNs) {
+        mLogdTimestampNs = timestampNs;
+    }
 
-    inline const FieldValueMap& getFieldValueMap() const { return mFieldValueMap; }
+    inline int size() const {
+        return mValues.size();
+    }
+
+    const std::vector<FieldValue>& getValues() const {
+        return mValues;
+    }
+
+    std::vector<FieldValue>* getMutableValues() {
+        return &mValues;
+    }
 
 private:
     /**
@@ -150,14 +148,20 @@ private:
      */
     void init(android_log_context context);
 
-    FieldValueMap mFieldValueMap;
+    // The items are naturally sorted in DFS order as we read them. this allows us to do fast
+    // matching.
+    std::vector<FieldValue> mValues;
 
     // This field is used when statsD wants to create log event object and write fields to it. After
     // calling init() function, this object would be destroyed to save memory usage.
     // When the log event is created from log msg, this field is never initiated.
     android_log_context mContext = NULL;
 
-    uint64_t mTimestampNs;
+    // The timestamp set by the logd.
+    int64_t mLogdTimestampNs;
+
+    // The elapsed timestamp set by statsd log writer.
+    int64_t mElapsedTimestampNs;
 
     int mTagId;
 

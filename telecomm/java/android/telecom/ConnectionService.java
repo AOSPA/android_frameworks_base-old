@@ -21,7 +21,6 @@ import android.app.Service;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -124,6 +123,7 @@ public abstract class ConnectionService extends Service {
     private static final String SESSION_ABORT = "CS.ab";
     private static final String SESSION_ANSWER = "CS.an";
     private static final String SESSION_ANSWER_VIDEO = "CS.anV";
+    private static final String SESSION_DEFLECT = "CS.def";
     private static final String SESSION_REJECT = "CS.r";
     private static final String SESSION_REJECT_MESSAGE = "CS.rWM";
     private static final String SESSION_SILENCE = "CS.s";
@@ -143,6 +143,7 @@ public abstract class ConnectionService extends Service {
     private static final String SESSION_HANDOVER_COMPLETE = "CS.hC";
     private static final String SESSION_EXTRAS_CHANGED = "CS.oEC";
     private static final String SESSION_START_RTT = "CS.+RTT";
+    private static final String SESSION_UPDATE_RTT_PIPES = "CS.uRTT";
     private static final String SESSION_STOP_RTT = "CS.-RTT";
     private static final String SESSION_RTT_UPGRADE_RESPONSE = "CS.rTRUR";
     private static final String SESSION_CONNECTION_SERVICE_FOCUS_LOST = "CS.cSFL";
@@ -181,6 +182,7 @@ public abstract class ConnectionService extends Service {
     private static final int MSG_CONNECTION_SERVICE_FOCUS_GAINED = 31;
     private static final int MSG_HANDOVER_FAILED = 32;
     private static final int MSG_HANDOVER_COMPLETE = 33;
+    private static final int MSG_DEFLECT = 34;
     //Proprietary values starts after this.
     private static final int MSG_ADD_PARTICIPANT_WITH_CONFERENCE = 40;
 
@@ -349,6 +351,20 @@ public abstract class ConnectionService extends Service {
                 args.arg1 = callId;
                 args.arg2 = Log.createSubsession();
                 mHandler.obtainMessage(MSG_ANSWER, args).sendToTarget();
+            } finally {
+                Log.endSession();
+            }
+        }
+
+        @Override
+        public void deflect(String callId, Uri address, Session.Info sessionInfo) {
+            Log.startSession(sessionInfo, SESSION_DEFLECT);
+            try {
+                SomeArgs args = SomeArgs.obtain();
+                args.arg1 = callId;
+                args.arg2 = address;
+                args.arg3 = Log.createSubsession();
+                mHandler.obtainMessage(MSG_DEFLECT, args).sendToTarget();
             } finally {
                 Log.endSession();
             }
@@ -851,6 +867,17 @@ public abstract class ConnectionService extends Service {
                         String callId = (String) args.arg1;
                         int videoState = args.argi1;
                         answerVideo(callId, videoState);
+                    } finally {
+                        args.recycle();
+                        Log.endSession();
+                    }
+                    break;
+                }
+                case MSG_DEFLECT: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    Log.continueSession((Session) args.arg3, SESSION_HANDLER + SESSION_DEFLECT);
+                    try {
+                        deflect((String) args.arg1, (Uri) args.arg2);
                     } finally {
                         args.recycle();
                         Log.endSession();
@@ -1626,6 +1653,11 @@ public abstract class ConnectionService extends Service {
         findConnectionForAction(callId, "answer").onAnswer();
     }
 
+    private void deflect(String callId, Uri address) {
+        Log.d(this, "deflect %s", callId);
+        findConnectionForAction(callId, "deflect").onDeflect(address);
+    }
+
     private void reject(String callId) {
         Log.d(this, "reject %s", callId);
         findConnectionForAction(callId, "reject").onReject();
@@ -1865,7 +1897,6 @@ public abstract class ConnectionService extends Service {
         Log.d(this, "stopRtt(%s)", callId);
         if (mConnectionById.containsKey(callId)) {
             findConnectionForAction(callId, "stopRtt").onStopRtt();
-            findConnectionForAction(callId, "stopRtt").unsetRttProperty();
         } else if (mConferenceById.containsKey(callId)) {
             Log.w(this, "stopRtt called on a conference.");
         }
@@ -2007,7 +2038,7 @@ public abstract class ConnectionService extends Service {
                             null : conference.getVideoProvider().getInterface(),
                     conference.getVideoState(),
                     conference.getConnectTimeMillis(),
-                    conference.getConnectElapsedTime(),
+                    conference.getConnectionStartElapsedRealTime(),
                     conference.getStatusHints(),
                     conference.getExtras());
 

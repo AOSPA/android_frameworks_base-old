@@ -67,7 +67,6 @@ import com.android.server.am.ActivityManagerService;
 import com.android.server.audio.AudioService;
 import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
-import com.android.server.car.CarServiceHelperService;
 import com.android.server.clipboard.ClipboardService;
 import com.android.server.connectivity.IpConnectivityMetrics;
 import com.android.server.coverage.CoverageService;
@@ -203,7 +202,7 @@ public final class SystemServer {
     private static final String THERMAL_OBSERVER_CLASS =
             "com.google.android.clockwork.ThermalObserver";
     private static final String WEAR_CONNECTIVITY_SERVICE_CLASS =
-            "com.google.android.clockwork.connectivity.WearConnectivityService";
+            "com.android.clockwork.connectivity.WearConnectivityService";
     private static final String WEAR_SIDEKICK_SERVICE_CLASS =
             "com.google.android.clockwork.sidekick.SidekickService";
     private static final String WEAR_DISPLAY_SERVICE_CLASS =
@@ -226,6 +225,8 @@ public final class SystemServer {
             "com.google.android.things.services.IoTSystemService";
     private static final String SLICE_MANAGER_SERVICE_CLASS =
             "com.android.server.slice.SliceManagerService$Lifecycle";
+    private static final String CAR_SERVICE_HELPER_SERVICE_CLASS =
+            "com.android.internal.car.CarServiceHelperService";
 
     private static final String PERSISTENT_DATA_BLOCK_PROP = "ro.frp.pst";
 
@@ -738,7 +739,6 @@ public final class SystemServer {
         Object wigigP2pService = null;
         Object wigigService = null;
 
-        boolean disableRtt = SystemProperties.getBoolean("config.disable_rtt", false);
         boolean disableSystemTextClassifier = SystemProperties.getBoolean(
                 "config.disable_systemtextclassifier", false);
         boolean disableCameraService = SystemProperties.getBoolean("config.disable_cameraservice",
@@ -858,6 +858,14 @@ public final class SystemServer {
             ServiceManager.addService(Context.INPUT_SERVICE, inputManager);
             traceEnd();
 
+            traceBeginAndSlog("SetWindowManagerService");
+            mActivityManagerService.setWindowManager(wm);
+            traceEnd();
+
+            traceBeginAndSlog("WindowManagerServiceOnInitReady");
+            wm.onInitReady();
+            traceEnd();
+
             // Start receiving calls from HIDL services. Start in in a separate thread
             // because it need to connect to SensorManager. This have to start
             // after START_SENSOR_SERVICE is done.
@@ -874,10 +882,6 @@ public final class SystemServer {
                 mSystemServiceManager.startService(VrManagerService.class);
                 traceEnd();
             }
-
-            traceBeginAndSlog("SetWindowManagerService");
-            mActivityManagerService.setWindowManager(wm);
-            traceEnd();
 
             traceBeginAndSlog("StartInputManager");
             inputManager.setWindowManagerCallbacks(wm.getInputMonitor());
@@ -1120,18 +1124,12 @@ public final class SystemServer {
                 traceEnd();
             }
 
-            if (!disableRtt) {
-                traceBeginAndSlog("StartWifiRtt");
-                mSystemServiceManager.startService("com.android.server.wifi.RttService");
+            if (context.getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_WIFI_RTT)) {
+                traceBeginAndSlog("StartRttService");
+                mSystemServiceManager.startService(
+                    "com.android.server.wifi.rtt.RttService");
                 traceEnd();
-
-                if (context.getPackageManager().hasSystemFeature(
-                    PackageManager.FEATURE_WIFI_RTT)) {
-                    traceBeginAndSlog("StartRttService");
-                    mSystemServiceManager.startService(
-                        "com.android.server.wifi.rtt.RttService");
-                    traceEnd();
-                }
             }
 
             if (context.getPackageManager().hasSystemFeature(
@@ -1813,7 +1811,7 @@ public final class SystemServer {
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
                 traceBeginAndSlog("StartCarServiceHelperService");
-                mSystemServiceManager.startService(CarServiceHelperService.class);
+                mSystemServiceManager.startService(CAR_SERVICE_HELPER_SERVICE_CLASS);
                 traceEnd();
             }
 

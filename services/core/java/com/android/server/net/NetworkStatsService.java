@@ -68,6 +68,7 @@ import static com.android.server.NetworkManagementService.LIMIT_GLOBAL_ALERT;
 import static com.android.server.NetworkManagementSocketTagger.resetKernelUidStats;
 import static com.android.server.NetworkManagementSocketTagger.setKernelCounterSet;
 
+import android.annotation.NonNull;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.usage.NetworkStatsManager;
@@ -97,6 +98,7 @@ import android.net.TrafficStats;
 import android.os.Binder;
 import android.os.DropBoxManager;
 import android.os.Environment;
+import android.os.BestClock;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -120,10 +122,8 @@ import android.util.ArraySet;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.MathUtils;
-import android.util.NtpTrustedTime;
 import android.util.Slog;
 import android.util.SparseIntArray;
-import android.util.TrustedTime;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
@@ -140,6 +140,8 @@ import java.io.File;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -167,7 +169,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private final Context mContext;
     private final INetworkManagementService mNetworkManager;
     private final AlarmManager mAlarmManager;
-    private final TrustedTime mTime;
+    private final Clock mClock;
     private final TelephonyManager mTeleManager;
     private final NetworkStatsSettings mSettings;
     private final NetworkStatsObservers mStatsObservers;
@@ -202,7 +204,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      */
     public interface NetworkStatsSettings {
         public long getPollInterval();
-        public long getTimeCacheMaxAge();
         public boolean getSampleEnabled();
         public boolean getAugmentEnabled();
 
@@ -281,14 +282,19 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private long mPersistThreshold = 2 * MB_IN_BYTES;
     private long mGlobalAlertBytes;
 
-    private static File getDefaultSystemDir() {
+    private static @NonNull File getDefaultSystemDir() {
         return new File(Environment.getDataDirectory(), "system");
     }
 
-    private static File getDefaultBaseDir() {
+    private static @NonNull File getDefaultBaseDir() {
         File baseDir = new File(getDefaultSystemDir(), "netstats");
         baseDir.mkdirs();
         return baseDir;
+    }
+
+    private static @NonNull Clock getDefaultClock() {
+        return new BestClock(ZoneOffset.UTC, SystemClock.currentNetworkTimeClock(),
+                Clock.systemUTC());
     }
 
     public static NetworkStatsService create(Context context,
@@ -299,7 +305,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
 
         NetworkStatsService service = new NetworkStatsService(context, networkManager, alarmManager,
-                wakeLock, NtpTrustedTime.getInstance(context), TelephonyManager.getDefault(),
+                wakeLock, getDefaultClock(), TelephonyManager.getDefault(),
                 new DefaultNetworkStatsSettings(context), new NetworkStatsObservers(),
                 getDefaultSystemDir(), getDefaultBaseDir());
 
@@ -313,13 +319,13 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
     @VisibleForTesting
     NetworkStatsService(Context context, INetworkManagementService networkManager,
-            AlarmManager alarmManager, PowerManager.WakeLock wakeLock, TrustedTime time,
+            AlarmManager alarmManager, PowerManager.WakeLock wakeLock, Clock clock,
             TelephonyManager teleManager, NetworkStatsSettings settings,
             NetworkStatsObservers statsObservers, File systemDir, File baseDir) {
         mContext = checkNotNull(context, "missing Context");
         mNetworkManager = checkNotNull(networkManager, "missing INetworkManagementService");
         mAlarmManager = checkNotNull(alarmManager, "missing AlarmManager");
-        mTime = checkNotNull(time, "missing TrustedTime");
+        mClock = checkNotNull(clock, "missing Clock");
         mSettings = checkNotNull(settings, "missing NetworkStatsSettings");
         mTeleManager = checkNotNull(teleManager, "missing TelephonyManager");
         mWakeLock = checkNotNull(wakeLock, "missing WakeLock");
@@ -405,6 +411,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 mNonMonotonicObserver, dropBox, prefix, config.bucketDuration, includeTags);
     }
 
+    @GuardedBy("mStatsLock")
     private void shutdownLocked() {
         mContext.unregisterReceiver(mTetherReceiver);
         mContext.unregisterReceiver(mPollReceiver);
@@ -412,8 +419,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         mContext.unregisterReceiver(mUserReceiver);
         mContext.unregisterReceiver(mShutdownReceiver);
 
-        final long currentTime = mTime.hasCache() ? mTime.currentTimeMillis()
-                : System.currentTimeMillis();
+        final long currentTime = mClock.millis();
 
         // persist any pending stats
         mDevRecorder.forcePersistLocked(currentTime);
@@ -421,16 +427,10 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         mUidRecorder.forcePersistLocked(currentTime);
         mUidTagRecorder.forcePersistLocked(currentTime);
 
-        mDevRecorder = null;
-        mXtRecorder = null;
-        mUidRecorder = null;
-        mUidTagRecorder = null;
-
-        mXtStatsCached = null;
-
         mSystemReady = false;
     }
 
+    @GuardedBy("mStatsLock")
     private void maybeUpgradeLegacyStatsLocked() {
         File file;
         try {
@@ -829,8 +829,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
 
         // update and persist if beyond new thresholds
-        final long currentTime = mTime.hasCache() ? mTime.currentTimeMillis()
-                : System.currentTimeMillis();
+        final long currentTime = mClock.millis();
         synchronized (mStatsLock) {
             if (!mSystemReady) return;
 
@@ -909,6 +908,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * reflect current {@link #mPersistThreshold} value. Always defers to
      * {@link Global} values when defined.
      */
+    @GuardedBy("mStatsLock")
     private void updatePersistThresholdsLocked() {
         mDevRecorder.setPersistThreshold(mSettings.getDevPersistBytes(mPersistThreshold));
         mXtRecorder.setPersistThreshold(mSettings.getXtPersistBytes(mPersistThreshold));
@@ -1029,6 +1029,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * are active on a single {@code iface}, they are combined under a single
      * {@link NetworkIdentitySet}.
      */
+    @GuardedBy("mStatsLock")
     private void updateIfacesLocked(Network[] defaultNetworks) {
         if (!mSystemReady) return;
         if (LOGV) Slog.v(TAG, "updateIfacesLocked()");
@@ -1128,6 +1129,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         return ident;
     }
 
+    @GuardedBy("mStatsLock")
     private void recordSnapshotLocked(long currentTime) throws RemoteException {
         // snapshot and record current counters; read UID stats first to
         // avoid over counting dev stats.
@@ -1163,9 +1165,9 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * Bootstrap initial stats snapshot, usually during {@link #systemReady()}
      * so we have baseline values without double-counting.
      */
+    @GuardedBy("mStatsLock")
     private void bootstrapStatsLocked() {
-        final long currentTime = mTime.hasCache() ? mTime.currentTimeMillis()
-                : System.currentTimeMillis();
+        final long currentTime = mClock.millis();
 
         try {
             recordSnapshotLocked(currentTime);
@@ -1177,11 +1179,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     }
 
     private void performPoll(int flags) {
-        // try refreshing time source when stale
-        if (mTime.getCacheAge() > mSettings.getTimeCacheMaxAge()) {
-            mTime.forceRefresh();
-        }
-
         synchronized (mStatsLock) {
             mWakeLock.acquire();
 
@@ -1197,6 +1194,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * Periodic poll operation, reading current statistics and recording into
      * {@link NetworkStatsHistory}.
      */
+    @GuardedBy("mStatsLock")
     private void performPollLocked(int flags) {
         if (!mSystemReady) return;
         if (LOGV) Slog.v(TAG, "performPollLocked(flags=0x" + Integer.toHexString(flags) + ")");
@@ -1208,8 +1206,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         final boolean persistForce = (flags & FLAG_PERSIST_FORCE) != 0;
 
         // TODO: consider marking "untrusted" times in historical stats
-        final long currentTime = mTime.hasCache() ? mTime.currentTimeMillis()
-                : System.currentTimeMillis();
+        final long currentTime = mClock.millis();
 
         try {
             recordSnapshotLocked(currentTime);
@@ -1258,9 +1255,10 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     /**
      * Sample recent statistics summary into {@link EventLog}.
      */
+    @GuardedBy("mStatsLock")
     private void performSampleLocked() {
         // TODO: migrate trustedtime fixes to separate binary log events
-        final long trustedTime = mTime.hasCache() ? mTime.currentTimeMillis() : -1;
+        final long currentTime = mClock.millis();
 
         NetworkTemplate template;
         NetworkStats.Entry devTotal;
@@ -1277,7 +1275,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 devTotal.rxBytes, devTotal.rxPackets, devTotal.txBytes, devTotal.txPackets,
                 xtTotal.rxBytes, xtTotal.rxPackets, xtTotal.txBytes, xtTotal.txPackets,
                 uidTotal.rxBytes, uidTotal.rxPackets, uidTotal.txBytes, uidTotal.txPackets,
-                trustedTime);
+                currentTime);
 
         // collect wifi sample
         template = buildTemplateWifiWildcard();
@@ -1289,12 +1287,13 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 devTotal.rxBytes, devTotal.rxPackets, devTotal.txBytes, devTotal.txPackets,
                 xtTotal.rxBytes, xtTotal.rxPackets, xtTotal.txBytes, xtTotal.txPackets,
                 uidTotal.rxBytes, uidTotal.rxPackets, uidTotal.txBytes, uidTotal.txPackets,
-                trustedTime);
+                currentTime);
     }
 
     /**
      * Clean up {@link #mUidRecorder} after UID is removed.
      */
+    @GuardedBy("mStatsLock")
     private void removeUidsLocked(int... uids) {
         if (LOGV) Slog.v(TAG, "removeUidsLocked() for UIDs " + Arrays.toString(uids));
 
@@ -1313,6 +1312,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     /**
      * Clean up {@link #mUidRecorder} after user is removed.
      */
+    @GuardedBy("mStatsLock")
     private void removeUserLocked(int userId) {
         if (LOGV) Slog.v(TAG, "removeUserLocked() for userId=" + userId);
 
@@ -1434,6 +1434,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
+    @GuardedBy("mStatsLock")
     private void dumpProtoLocked(FileDescriptor fd) {
         final ProtoOutputStream proto = new ProtoOutputStream(fd);
 
@@ -1608,10 +1609,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         @Override
         public long getPollInterval() {
             return getGlobalLong(NETSTATS_POLL_INTERVAL, 30 * MINUTE_IN_MILLIS);
-        }
-        @Override
-        public long getTimeCacheMaxAge() {
-            return getGlobalLong(NETSTATS_TIME_CACHE_MAX_AGE, DAY_IN_MILLIS);
         }
         @Override
         public long getGlobalAlertBytes(long def) {

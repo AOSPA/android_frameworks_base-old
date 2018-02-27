@@ -167,6 +167,7 @@ import android.util.BoostFramework;
 import android.view.Display;
 import android.view.RemoteAnimationAdapter;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.ReferrerIntent;
 import com.android.internal.os.logging.MetricsLoggerWrapper;
@@ -1458,7 +1459,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     lifecycleItem = ResumeActivityItem.obtain(mService.isNextTransitionForward())
                             .setDescription(r.getLifecycleDescription("realStartActivityLocked"));
                 } else {
-                    lifecycleItem = PauseActivityItem.obtain();
+                    lifecycleItem = PauseActivityItem.obtain()
+                            .setDescription(r.getLifecycleDescription("realStartActivityLocked"));
                 }
                 clientTransaction.setLifecycleStateRequest(lifecycleItem);
 
@@ -1514,6 +1516,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             Slog.w(TAG, "Activity " + r + " being launched, but already in LRU list");
         }
 
+        // TODO(lifecycler): Resume or pause requests are done as part of launch transaction,
+        // so updating the state should be done accordingly.
         if (andResume && readyToResume()) {
             // As part of the process of launching, ActivityThread also performs
             // a resume.
@@ -1864,6 +1868,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
      * Called when the frontmost task is idle.
      * @return the state of mService.mBooting before this was called.
      */
+    @GuardedBy("mService")
     private boolean checkFinishBootingLocked() {
         final boolean booting = mService.mBooting;
         boolean enableScreen = false;
@@ -1879,6 +1884,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     }
 
     // Checked.
+    @GuardedBy("mService")
     final ActivityRecord activityIdleInternalLocked(final IBinder token, boolean fromTimeout,
             boolean processPausingActivities, Configuration config) {
         if (DEBUG_ALL) Slog.v(TAG, "Activity idle: " + token);
@@ -1956,7 +1962,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             final ActivityStack stack = r.getStack();
             if (stack != null) {
                 if (r.finishing) {
-                    stack.finishCurrentActivityLocked(r, ActivityStack.FINISH_IMMEDIATELY, false);
+                    stack.finishCurrentActivityLocked(r, ActivityStack.FINISH_IMMEDIATELY, false,
+                            "activityIdleInternalLocked");
                 } else {
                     stack.stopActivityLocked(r);
                 }
@@ -4130,25 +4137,12 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             if (activityDisplay == null) {
                 return;
             }
-            final boolean destroyContentOnRemoval
-                    = activityDisplay.shouldDestroyContentOnRemove();
-            while (activityDisplay.getChildCount() > 0) {
-                final ActivityStack stack = activityDisplay.getChildAt(0);
-                if (destroyContentOnRemoval) {
-                    moveStackToDisplayLocked(stack.mStackId, DEFAULT_DISPLAY, false /* onTop */);
-                    stack.finishAllActivitiesLocked(true /* immediately */);
-                } else {
-                    // Moving all tasks to fullscreen stack, because it's guaranteed to be
-                    // a valid launch stack for all activities. This way the task history from
-                    // external display will be preserved on primary after move.
-                    moveTasksToFullscreenStackLocked(stack, true /* onTop */);
-                }
-            }
+
+            activityDisplay.remove();
 
             releaseSleepTokens(activityDisplay);
 
             mActivityDisplays.remove(displayId);
-            mWindowManager.onDisplayRemoved(displayId);
         }
     }
 
@@ -4575,7 +4569,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
     int startActivityFromRecents(int callingPid, int callingUid, int taskId,
             SafeActivityOptions options) {
-        final TaskRecord task;
+        TaskRecord task = null;
         final String callingPackage;
         final Intent intent;
         final int userId;
@@ -4638,13 +4632,6 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                             targetActivity);
                 }
 
-                // If we are launching the task in the docked stack, put it into resizing mode so
-                // the window renders full-screen with the background filling the void. Also only
-                // call this at the end to make sure that tasks exists on the window manager side.
-                if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
-                    setResizingDuringAnimation(task);
-                }
-
                 mService.getActivityStartController().postStartActivityProcessingForLastStarter(
                         task.getTopActivity(), ActivityManager.START_TASK_TO_FRONT,
                         task.getStack());
@@ -4654,15 +4641,28 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             intent = task.intent;
             intent.addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY);
             userId = task.userId;
-            int result = mService.getActivityStartController().startActivityInPackage(
+            return mService.getActivityStartController().startActivityInPackage(
                     task.mCallingUid, callingPid, callingUid, callingPackage, intent, null, null,
-                    null, 0, 0, options, userId, task,
-                    "startActivityFromRecents");
-            if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY) {
-                setResizingDuringAnimation(task);
-            }
-            return result;
+                    null, 0, 0, options, userId, task, "startActivityFromRecents");
         } finally {
+            if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY && task != null) {
+                // If we are launching the task in the docked stack, put it into resizing mode so
+                // the window renders full-screen with the background filling the void. Also only
+                // call this at the end to make sure that tasks exists on the window manager side.
+                setResizingDuringAnimation(task);
+
+                final ActivityDisplay display = task.getStack().getDisplay();
+                final ActivityStack topSecondaryStack =
+                        display.getTopStackInWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
+                if (topSecondaryStack.isActivityTypeHome()) {
+                    // If the home activity if the top split-screen secondary stack, then the
+                    // primary split-screen stack is in the minimized mode which means it can't
+                    // receive input keys, so we should move the focused app to the home app so that
+                    // window manager can correctly calculate the focus window that can receive
+                    // input keys.
+                    moveHomeStackToFront("startActivityFromRecents: homeVisibleInSplitScreen");
+                }
+            }
             mWindowManager.continueSurfaceLayout();
         }
     }

@@ -160,7 +160,7 @@ class SettingsProtoDumpUtil {
                 Settings.Global.POWER_SOUNDS_ENABLED,
                 GlobalSettingsProto.POWER_SOUNDS_ENABLED);
         dumpSetting(s, p,
-                Settings.Global.WIRELESS_CHARGING_STARTED_SOUND,
+                Settings.Global.CHARGING_STARTED_SOUND,
                 GlobalSettingsProto.WIRELESS_CHARGING_STARTED_SOUND);
         dumpSetting(s, p,
                 Settings.Global.CHARGING_SOUNDS_ENABLED,
@@ -870,6 +870,12 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING,
                 GlobalSettingsProto.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING);
+        dumpSetting(s, p,
+                Settings.Global.INSTALL_CARRIER_APP_NOTIFICATION_PERSISTENT,
+                GlobalSettingsProto.INSTALL_CARRIER_APP_NOTIFICATION_PERSISTENT);
+        dumpSetting(s, p,
+                Settings.Global.INSTALL_CARRIER_APP_NOTIFICATION_SLEEP_MILLIS,
+                GlobalSettingsProto.INSTALL_CARRIER_APP_NOTIFICATION_SLEEP_MILLIS);
         // Settings.Global.SHOW_PROCESSES intentionally excluded since it's deprecated.
         dumpSetting(s, p,
                 Settings.Global.LOW_POWER_MODE,
@@ -1055,6 +1061,9 @@ class SettingsProtoDumpUtil {
                 Global.CHAINED_BATTERY_ATTRIBUTION_ENABLED,
                 GlobalSettingsProto.CHAINED_BATTERY_ATTRIBUTION_ENABLED);
         dumpSetting(s, p,
+                Global.HIDDEN_API_BLACKLIST_EXEMPTIONS,
+                GlobalSettingsProto.HIDDEN_API_BLACKLIST_EXEMPTIONS);
+        dumpSetting(s, p,
                 Settings.Global.MULTI_SIM_VOICE_CALL_SUBSCRIPTION,
                 GlobalSettingsProto.MULTI_SIM_VOICE_CALL_SUBSCRIPTION);
         dumpSetting(s, p,
@@ -1112,8 +1121,8 @@ class SettingsProtoDumpUtil {
                 Settings.Global.ZRAM_ENABLED,
                 GlobalSettingsProto.ZRAM_ENABLED);
         dumpSetting(s, p,
-                Settings.Global.ENABLE_SMART_REPLIES_IN_NOTIFICATIONS,
-                GlobalSettingsProto.ENABLE_SMART_REPLIES_IN_NOTIFICATIONS);
+                Settings.Global.SMART_REPLIES_IN_NOTIFICATIONS_FLAGS,
+                GlobalSettingsProto.SMART_REPLIES_IN_NOTIFICATIONS_FLAGS);
         dumpSetting(s, p,
                 Settings.Global.SHOW_FIRST_CRASH_DIALOG,
                 GlobalSettingsProto.SHOW_FIRST_CRASH_DIALOG);
@@ -1123,6 +1132,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.SHOW_MUTE_IN_CRASH_DIALOG,
                 GlobalSettingsProto.SHOW_MUTE_IN_CRASH_DIALOG);
+        dumpSetting(s, p,
+                Settings.Global.SHOW_ZEN_UPGRADE_NOTIFICATION,
+                GlobalSettingsProto.SHOW_ZEN_UPGRADE_NOTIFICATION);
 
         // Please insert new settings using the same order as in Settings.Global.
     }
@@ -1749,6 +1761,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.BACKUP_MANAGER_CONSTANTS,
                 SecureSettingsProto.BACKUP_MANAGER_CONSTANTS);
+        dumpSetting(s, p,
+                Settings.Secure.BACKUP_LOCAL_TRANSPORT_PARAMETERS,
+                SecureSettingsProto.BACKUP_LOCAL_TRANSPORT_PARAMETERS);
         dumpSetting(s, p,
                 Settings.Secure.BLUETOOTH_ON_WHILE_DRIVING,
                 SecureSettingsProto.BLUETOOTH_ON_WHILE_DRIVING);

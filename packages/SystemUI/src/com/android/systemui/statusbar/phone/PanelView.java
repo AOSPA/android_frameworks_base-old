@@ -50,8 +50,8 @@ import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.policy.HeadsUpManager;
 import android.util.BoostFramework;
+import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -76,7 +76,7 @@ public abstract class PanelView extends FrameLayout {
     }
 
     protected StatusBar mStatusBar;
-    protected HeadsUpManager mHeadsUpManager;
+    protected HeadsUpManagerPhone mHeadsUpManager;
 
     private float mPeekHeight;
     private float mHintDistance;
@@ -1270,7 +1270,7 @@ public abstract class PanelView extends FrameLayout {
      */
     protected abstract int getClearAllHeight();
 
-    public void setHeadsUpManager(HeadsUpManager headsUpManager) {
+    public void setHeadsUpManager(HeadsUpManagerPhone headsUpManager) {
         mHeadsUpManager = headsUpManager;
     }
 

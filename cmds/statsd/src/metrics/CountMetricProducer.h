@@ -57,7 +57,6 @@ protected:
 private:
     void onDumpReportLocked(const uint64_t dumpTimeNs,
                             android::util::ProtoOutputStream* protoOutput) override;
-    void onDumpReportLocked(const uint64_t dumpTimeNs, StatsLogReport* report) override;
 
     // Internal interface to handle condition change.
     void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
@@ -71,13 +70,19 @@ private:
     void dumpStatesLocked(FILE* out, bool verbose) const override{};
 
     // Util function to flush the old packet.
-    void flushIfNeededLocked(const uint64_t& newEventTime);
+    void flushIfNeededLocked(const uint64_t& newEventTime) override;
+
+    void flushCurrentBucketLocked(const uint64_t& eventTimeNs) override;
 
     // TODO: Add a lock to mPastBuckets.
     std::unordered_map<MetricDimensionKey, std::vector<CountBucket>> mPastBuckets;
 
-    // The current bucket.
+    // The current bucket (may be a partial bucket).
     std::shared_ptr<DimToValMap> mCurrentSlicedCounter = std::make_shared<DimToValMap>();
+
+    // The sum of previous partial buckets in the current full bucket (excluding the current
+    // partial bucket). This is only updated while flushing the current bucket.
+    std::shared_ptr<DimToValMap> mCurrentFullCounters = std::make_shared<DimToValMap>();
 
     static const size_t kBucketSize = sizeof(CountBucket{});
 
@@ -87,6 +92,8 @@ private:
     FRIEND_TEST(CountMetricProducerTest, TestEventsWithNonSlicedCondition);
     FRIEND_TEST(CountMetricProducerTest, TestEventsWithSlicedCondition);
     FRIEND_TEST(CountMetricProducerTest, TestAnomalyDetectionUnSliced);
+    FRIEND_TEST(CountMetricProducerTest, TestEventWithAppUpgrade);
+    FRIEND_TEST(CountMetricProducerTest, TestEventWithAppUpgradeInNextBucket);
 };
 
 }  // namespace statsd

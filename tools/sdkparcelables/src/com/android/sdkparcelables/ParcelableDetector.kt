@@ -1,3 +1,19 @@
+/*
+ * Copyright (C) 2018 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.android.sdkparcelables
 
 /** A class that uses an ancestor map to find all classes that
@@ -11,6 +27,8 @@ class ParcelableDetector {
             impl.build()
             return impl.parcelables
         }
+
+        const val PARCELABLE_CLASS = "android/os/Parcelable"
     }
 
     private class Impl(val ancestors: Map<String, Ancestors>) {
@@ -19,7 +37,7 @@ class ParcelableDetector {
 
         fun build() {
             val classList = ancestors.keys
-            classList.filterTo(parcelables, this::isParcelable)
+            classList.filterTo(parcelables, { (it != PARCELABLE_CLASS) && isParcelable(it) })
             parcelables.sort()
         }
 
@@ -28,7 +46,7 @@ class ParcelableDetector {
                 return false
             }
 
-            if (c == "android/os/Parcelable") {
+            if (c == PARCELABLE_CLASS) {
                 return true
             }
 

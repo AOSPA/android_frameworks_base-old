@@ -51,11 +51,12 @@ public:
 
     void setAnomalyMonitor(const sp<AnomalyMonitor>& anomalyMonitor);
 
-    void notifyAppUpgrade(const string& apk, const int uid, const int64_t version) override;
+    void notifyAppUpgrade(const uint64_t& eventTimeNs, const string& apk, const int uid,
+                          const int64_t version) override;
 
-    void notifyAppRemoved(const string& apk, const int uid) override;
+    void notifyAppRemoved(const uint64_t& eventTimeNs, const string& apk, const int uid) override;
 
-    void onUidMapReceived() override;
+    void onUidMapReceived(const uint64_t& eventTimeNs) override;
 
     bool shouldAddUidMapListener() const {
         return !mAllowedPkg.empty();
@@ -63,9 +64,14 @@ public:
 
     void dumpStates(FILE* out, bool verbose);
 
+    // Returns the elapsed realtime when this metric manager last reported metrics.
+    uint64_t getLastReportTimeNs() {
+        return mLastReportTimeNs;
+    };
+
     // Config source owner can call onDumpReport() to get all the metrics collected.
-    virtual void onDumpReport(android::util::ProtoOutputStream* protoOutput);
-    virtual void onDumpReport(const uint64_t& dumpTimeStampNs, ConfigMetricsReport* report);
+    virtual void onDumpReport(const uint64_t dumpTimeNs,
+                              android::util::ProtoOutputStream* protoOutput);
 
     // Computes the total byte size of all metrics managed by a single config source.
     // Does not change the state.
@@ -76,6 +82,8 @@ private:
     sp<UidMap> mUidMap;
 
     bool mConfigValid = false;
+
+    uint64_t mLastReportTimeNs;
 
     // The uid log sources from StatsdConfig.
     std::vector<int32_t> mAllowedUid;

@@ -187,11 +187,6 @@ void SkiaCanvas::restoreToCount(int restoreCount) {
 static inline SkCanvas::SaveLayerFlags layerFlags(SaveFlags::Flags flags) {
     SkCanvas::SaveLayerFlags layerFlags = 0;
 
-    // We intentionally ignore the SaveFlags::HasAlphaLayer and
-    // SkCanvas::kIsOpaque_SaveLayerFlag flags because HWUI ignores it
-    // and our Android client may use it incorrectly.
-    // In Skia, this flag is purely for performance optimization.
-
     if (!(flags & SaveFlags::ClipToLayer)) {
         layerFlags |= SkCanvas::kDontClipToLayer_Legacy_SaveLayerFlag;
     }
@@ -747,6 +742,12 @@ void SkiaCanvas::drawGlyphs(ReadGlyphFunc glyphFunc, int count, const SkPaint& p
     SkPaint paintCopy(paint);
     paintCopy.setTextAlign(SkPaint::kLeft_Align);
     SkASSERT(paintCopy.getTextEncoding() == SkPaint::kGlyphID_TextEncoding);
+    // Stroke with a hairline is drawn on HW with a fill style for compatibility with Android O and
+    // older.
+    if (!mCanvasOwned && sApiLevel <= 27 && paintCopy.getStrokeWidth() <= 0
+            && paintCopy.getStyle() == SkPaint::kStroke_Style) {
+        paintCopy.setStyle(SkPaint::kFill_Style);
+    }
 
     SkRect bounds =
             SkRect::MakeLTRB(boundsLeft + x, boundsTop + y, boundsRight + x, boundsBottom + y);

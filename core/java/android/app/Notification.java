@@ -1055,11 +1055,10 @@ public class Notification implements Parcelable
     /**
      * {@link #extras} key: A
      * {@link android.content.ContentUris content URI} pointing to an image that can be displayed
-     * in the background when the notification is selected. The URI must point to an image stream
-     * suitable for passing into
+     * in the background when the notification is selected. Used on television platforms.
+     * The URI must point to an image stream suitable for passing into
      * {@link android.graphics.BitmapFactory#decodeStream(java.io.InputStream)
-     * BitmapFactory.decodeStream}; all other content types will be ignored. The content provider
-     * URI used for this purpose must require no permissions to read the image data.
+     * BitmapFactory.decodeStream}; all other content types will be ignored.
      */
     public static final String EXTRA_BACKGROUND_IMAGE_URI = "android.backgroundImageUri";
 
@@ -4617,10 +4616,15 @@ public class Notification implements Parcelable
                 if (N>MAX_ACTION_BUTTONS) N=MAX_ACTION_BUTTONS;
                 for (int i=0; i<N; i++) {
                     Action action = mActions.get(i);
-                    validRemoteInput |= hasValidRemoteInput(action);
+                    boolean actionHasValidInput = hasValidRemoteInput(action);
+                    validRemoteInput |= actionHasValidInput;
 
                     final RemoteViews button = generateActionButton(action, emphazisedMode,
                             i % 2 != 0, p.ambient);
+                    if (actionHasValidInput) {
+                        // Clear the drawable
+                        button.setInt(R.id.action0, "setBackgroundResource", 0);
+                    }
                     big.addView(R.id.actions, button);
                 }
             } else {
@@ -6435,7 +6439,7 @@ public class Notification implements Parcelable
         public RemoteViews makeContentView(boolean increasedHeight) {
             mBuilder.mOriginalActions = mBuilder.mActions;
             mBuilder.mActions = new ArrayList<>();
-            RemoteViews remoteViews = makeBigContentView(true /* showRightIcon */);
+            RemoteViews remoteViews = makeMessagingView(true /* isCollapsed */);
             mBuilder.mActions = mBuilder.mOriginalActions;
             mBuilder.mOriginalActions = null;
             return remoteViews;
@@ -6470,11 +6474,11 @@ public class Notification implements Parcelable
          */
         @Override
         public RemoteViews makeBigContentView() {
-            return makeBigContentView(false /* showRightIcon */);
+            return makeMessagingView(false /* isCollapsed */);
         }
 
         @NonNull
-        private RemoteViews makeBigContentView(boolean showRightIcon) {
+        private RemoteViews makeMessagingView(boolean isCollapsed) {
             CharSequence conversationTitle = !TextUtils.isEmpty(super.mBigContentTitle)
                     ? super.mBigContentTitle
                     : mConversationTitle;
@@ -6485,21 +6489,24 @@ public class Notification implements Parcelable
                 nameReplacement = conversationTitle;
                 conversationTitle = null;
             }
+            boolean hideLargeIcon = !isCollapsed || isOneToOne;
             RemoteViews contentView = mBuilder.applyStandardTemplateWithActions(
                     mBuilder.getMessagingLayoutResource(),
                     mBuilder.mParams.reset().hasProgress(false).title(conversationTitle).text(null)
-                            .hideLargeIcon(!showRightIcon || isOneToOne)
+                            .hideLargeIcon(hideLargeIcon)
                             .headerTextSecondary(conversationTitle)
-                            .alwaysShowReply(showRightIcon));
+                            .alwaysShowReply(isCollapsed));
             addExtras(mBuilder.mN.extras);
             // also update the end margin if there is an image
             int endMargin = R.dimen.notification_content_margin_end;
-            if (mBuilder.mN.hasLargeIcon() && showRightIcon) {
+            if (isCollapsed) {
                 endMargin = R.dimen.notification_content_plus_picture_margin_end;
             }
             contentView.setViewLayoutMarginEndDimen(R.id.notification_main_column, endMargin);
             contentView.setInt(R.id.status_bar_latest_event_content, "setLayoutColor",
                     mBuilder.resolveContrastColor());
+            contentView.setBoolean(R.id.status_bar_latest_event_content, "setIsCollapsed",
+                    isCollapsed);
             contentView.setIcon(R.id.status_bar_latest_event_content, "setLargeIcon",
                     mBuilder.mN.mLargeIcon);
             contentView.setCharSequence(R.id.status_bar_latest_event_content, "setNameReplacement",
@@ -6566,7 +6573,7 @@ public class Notification implements Parcelable
          */
         @Override
         public RemoteViews makeHeadsUpContentView(boolean increasedHeight) {
-            RemoteViews remoteViews = makeBigContentView(true /* showRightIcon */);
+            RemoteViews remoteViews = makeMessagingView(true /* isCollapsed */);
             remoteViews.setInt(R.id.notification_messaging, "setMaxDisplayedLines", 1);
             return remoteViews;
         }
@@ -8855,6 +8862,7 @@ public class Notification implements Parcelable
         private static final String EXTRA_CONTENT_INTENT = "content_intent";
         private static final String EXTRA_DELETE_INTENT = "delete_intent";
         private static final String EXTRA_CHANNEL_ID = "channel_id";
+        private static final String EXTRA_SUPPRESS_SHOW_OVER_APPS = "suppressShowOverApps";
 
         // Flags bitwise-ored to mFlags
         private static final int FLAG_AVAILABLE_ON_TV = 0x1;
@@ -8863,6 +8871,7 @@ public class Notification implements Parcelable
         private String mChannelId;
         private PendingIntent mContentIntent;
         private PendingIntent mDeleteIntent;
+        private boolean mSuppressShowOverApps;
 
         /**
          * Create a {@link TvExtender} with default options.
@@ -8882,6 +8891,7 @@ public class Notification implements Parcelable
             if (bundle != null) {
                 mFlags = bundle.getInt(EXTRA_FLAGS);
                 mChannelId = bundle.getString(EXTRA_CHANNEL_ID);
+                mSuppressShowOverApps = bundle.getBoolean(EXTRA_SUPPRESS_SHOW_OVER_APPS);
                 mContentIntent = bundle.getParcelable(EXTRA_CONTENT_INTENT);
                 mDeleteIntent = bundle.getParcelable(EXTRA_DELETE_INTENT);
             }
@@ -8898,6 +8908,7 @@ public class Notification implements Parcelable
 
             bundle.putInt(EXTRA_FLAGS, mFlags);
             bundle.putString(EXTRA_CHANNEL_ID, mChannelId);
+            bundle.putBoolean(EXTRA_SUPPRESS_SHOW_OVER_APPS, mSuppressShowOverApps);
             if (mContentIntent != null) {
                 bundle.putParcelable(EXTRA_CONTENT_INTENT, mContentIntent);
             }
@@ -8989,6 +9000,23 @@ public class Notification implements Parcelable
          */
         public PendingIntent getDeleteIntent() {
             return mDeleteIntent;
+        }
+
+        /**
+         * Specifies whether this notification should suppress showing a message over top of apps
+         * outside of the launcher.
+         */
+        public TvExtender setSuppressShowOverApps(boolean suppress) {
+            mSuppressShowOverApps = suppress;
+            return this;
+        }
+
+        /**
+         * Returns true if this notification should not show messages over top of apps
+         * outside of the launcher.
+         */
+        public boolean getSuppressShowOverApps() {
+            return mSuppressShowOverApps;
         }
     }
 

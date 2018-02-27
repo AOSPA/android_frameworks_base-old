@@ -356,7 +356,10 @@ public final class Call {
          * Add participant in an active or conference call option
          * @hide
          */
-        public static final int CAPABILITY_ADD_PARTICIPANT = 0x01000000;
+        public static final int CAPABILITY_ADD_PARTICIPANT = 0x02000000;
+
+        /** Call supports the deflect feature. */
+        public static final int CAPABILITY_SUPPORT_DEFLECT = 0x01000000;
 
         //******************************************************************************************
         // Next CAPABILITY value: 0x02000000
@@ -428,8 +431,14 @@ public final class Call {
          */
         public static final int PROPERTY_ASSISTED_DIALING_USED = 0x00000200;
 
+        /**
+         * Indicates that the call is an RTT call. Use {@link #getRttCall()} to get the
+         * {@link RttCall} object that is used to send and receive text.
+         */
+        public static final int PROPERTY_RTT = 0x00000400;
+
         //******************************************************************************************
-        // Next PROPERTY value: 0x00000400
+        // Next PROPERTY value: 0x00000800
         //******************************************************************************************
 
         private final String mTelecomCallId;
@@ -536,6 +545,9 @@ public final class Call {
             }
             if (can(capabilities, CAPABILITY_ADD_PARTICIPANT)) {
                 builder.append(" CAPABILITY_ADD_PARTICIPANT");
+            }
+            if (can(capabilities, CAPABILITY_SUPPORT_DEFLECT)) {
+                builder.append(" CAPABILITY_SUPPORT_DEFLECT");
             }
             builder.append("]");
             return builder.toString();
@@ -1192,6 +1204,23 @@ public final class Call {
                 return null;
             }
         }
+
+        /**
+         * Closes the underlying file descriptors
+         * @hide
+         */
+        public void close() {
+            try {
+                mReceiveStream.close();
+            } catch (IOException e) {
+                // ignore
+            }
+            try {
+                mTransmitStream.close();
+            } catch (IOException e) {
+                // ignore
+            }
+        }
     }
 
     /**
@@ -1241,6 +1270,15 @@ public final class Call {
      */
     public void answer(int videoState) {
         mInCallAdapter.answerCall(mTelecomCallId, videoState);
+    }
+
+    /**
+     * Instructs this {@link #STATE_RINGING} {@code Call} to deflect.
+     *
+     * @param address The address to which the call will be deflected.
+     */
+    public void deflect(Uri address) {
+        mInCallAdapter.deflectCall(mTelecomCallId, address);
     }
 
     /**
@@ -1658,7 +1696,7 @@ public final class Call {
      * @return true if there is a connection, false otherwise.
      */
     public boolean isRttActive() {
-        return mRttCall != null;
+        return mRttCall != null && mDetails.hasProperty(Details.PROPERTY_RTT);
     }
 
     /**
@@ -1861,7 +1899,8 @@ public final class Call {
 
         boolean isRttChanged = false;
         boolean rttModeChanged = false;
-        if (parcelableCall.getParcelableRttCall() != null && parcelableCall.getIsRttCallChanged()) {
+        if (parcelableCall.getIsRttCallChanged()
+                && mDetails.hasProperty(Details.PROPERTY_RTT)) {
             ParcelableRttCall parcelableRttCall = parcelableCall.getParcelableRttCall();
             InputStreamReader receiveStream = new InputStreamReader(
                     new ParcelFileDescriptor.AutoCloseInputStream(

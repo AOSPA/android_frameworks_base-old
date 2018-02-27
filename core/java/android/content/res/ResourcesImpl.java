@@ -27,9 +27,11 @@ import android.annotation.StyleRes;
 import android.annotation.StyleableRes;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ActivityInfo.Config;
+import android.content.res.AssetManager.AssetInputStream;
 import android.content.res.Configuration.NativeConfig;
 import android.content.res.Resources.NotFoundException;
 import android.graphics.Bitmap;
+import android.graphics.ImageDecoder;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
@@ -543,7 +545,7 @@ public class ResourcesImpl {
         }
     }
 
-    @Nullable
+    @NonNull
     Drawable loadDrawable(@NonNull Resources wrapper, @NonNull TypedValue value, int id,
             int density, @Nullable Resources.Theme theme)
             throws NotFoundException {
@@ -627,7 +629,7 @@ public class ResourcesImpl {
             } else if (isColorDrawable) {
                 dr = new ColorDrawable(value.data);
             } else {
-                dr = loadDrawableForCookie(wrapper, value, id, density, null);
+                dr = loadDrawableForCookie(wrapper, value, id, density);
             }
             // DrawableContainer' constant state has drawables instances. In order to leave the
             // constant state intact in the cache, we need to create a new DrawableContainer after
@@ -752,10 +754,31 @@ public class ResourcesImpl {
     }
 
     /**
+     * Loads a Drawable from an encoded image stream, or null.
+     *
+     * This call will handle closing ais.
+     */
+    private Drawable decodeImageDrawable(@NonNull AssetInputStream ais,
+            @NonNull Resources wrapper, @NonNull TypedValue value) {
+        ImageDecoder.Source src = new ImageDecoder.AssetInputStreamSource(ais,
+                            wrapper, value);
+        try {
+            return ImageDecoder.decodeDrawable(src, (decoder, info, s) -> {
+                decoder.setAllocator(ImageDecoder.ALLOCATOR_SOFTWARE);
+            });
+        } catch (IOException ioe) {
+            // This is okay. This may be something that ImageDecoder does not
+            // support, like SVG.
+            return null;
+        }
+    }
+
+    /**
      * Loads a drawable from XML or resources stream.
      */
+    @NonNull
     private Drawable loadDrawableForCookie(@NonNull Resources wrapper, @NonNull TypedValue value,
-            int id, int density, @Nullable Resources.Theme theme) {
+            int id, int density) {
         if (value.string == null) {
             throw new NotFoundException("Resource \"" + getResourceName(id) + "\" ("
                     + Integer.toHexString(id) + ") is not a Drawable (color or path): " + value);
@@ -774,21 +797,22 @@ public class ResourcesImpl {
             }
         }
 
-        // For prelaod tracing.
+        // For preload tracing.
         long startTime = 0;
         int startBitmapCount = 0;
         long startBitmapSize = 0;
-        int startDrwableCount = 0;
+        int startDrawableCount = 0;
         if (TRACE_FOR_DETAILED_PRELOAD) {
             startTime = System.nanoTime();
             startBitmapCount = Bitmap.sPreloadTracingNumInstantiatedBitmaps;
             startBitmapSize = Bitmap.sPreloadTracingTotalBitmapsSize;
-            startDrwableCount = sPreloadTracingNumLoadedDrawables;
+            startDrawableCount = sPreloadTracingNumLoadedDrawables;
         }
 
         if (DEBUG_LOAD) {
             Log.v(TAG, "Loading drawable for cookie " + value.assetCookie + ": " + file);
         }
+
 
         final Drawable dr;
 
@@ -804,13 +828,13 @@ public class ResourcesImpl {
                 if (file.endsWith(".xml")) {
                     final XmlResourceParser rp = loadXmlResourceParser(
                             file, id, value.assetCookie, "drawable");
-                    dr = Drawable.createFromXmlForDensity(wrapper, rp, density, theme);
+                    dr = Drawable.createFromXmlForDensity(wrapper, rp, density, null);
                     rp.close();
                 } else {
                     final InputStream is = mAssets.openNonAsset(
                             value.assetCookie, file, AssetManager.ACCESS_STREAMING);
-                    dr = Drawable.createFromResourceStream(wrapper, value, is, file, null);
-                    is.close();
+                    AssetInputStream ais = (AssetInputStream) is;
+                    dr = decodeImageDrawable(ais, wrapper, value);
                 }
             } finally {
                 stack.pop();
@@ -834,7 +858,7 @@ public class ResourcesImpl {
                     final long loadedBitmapSize =
                             Bitmap.sPreloadTracingTotalBitmapsSize - startBitmapSize;
                     final int loadedDrawables =
-                            sPreloadTracingNumLoadedDrawables - startDrwableCount;
+                            sPreloadTracingNumLoadedDrawables - startDrawableCount;
 
                     sPreloadTracingNumLoadedDrawables++;
 
@@ -910,6 +934,7 @@ public class ResourcesImpl {
      * first try to load CSL from the cache. If not found, try to get from the constant state.
      * Last, parse the XML and generate the CSL.
      */
+    @Nullable
     private ComplexColor loadComplexColorFromName(Resources wrapper, Resources.Theme theme,
             TypedValue value, int id) {
         final long key = (((long) value.assetCookie) << 32) | value.data;
@@ -985,7 +1010,7 @@ public class ResourcesImpl {
         return complexColor;
     }
 
-    @Nullable
+    @NonNull
     ColorStateList loadColorStateList(Resources wrapper, TypedValue value, int id,
             Resources.Theme theme)
             throws NotFoundException {
@@ -1043,9 +1068,10 @@ public class ResourcesImpl {
      * We deferred the parser creation to this function b/c we need to differentiate b/t gradient
      * and selector tag.
      *
-     * @return a ComplexColor (GradientColor or ColorStateList) based on the XML file content.
+     * @return a ComplexColor (GradientColor or ColorStateList) based on the XML file content, or
+     *     {@code null} if the XML file is neither.
      */
-    @Nullable
+    @NonNull
     private ComplexColor loadComplexColorForCookie(Resources wrapper, TypedValue value, int id,
             Resources.Theme theme) {
         if (value.string == null) {

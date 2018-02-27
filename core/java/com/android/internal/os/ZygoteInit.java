@@ -98,10 +98,6 @@ public class ZygoteInit {
 
     private static final String SOCKET_NAME_ARG = "--socket-name=";
 
-    /* Dexopt flag to disable hidden API access checks when dexopting SystemServer.
-     * Must be kept in sync with com.android.server.pm.Installer. */
-    private static final int DEXOPT_DISABLE_HIDDEN_API_CHECKS = 1 << 10;
-
     /**
      * Used to pre-load resources.
      */
@@ -569,10 +565,7 @@ public class ZygoteInit {
             if (dexoptNeeded != DexFile.NO_DEXOPT_NEEDED) {
                 final String packageName = "*";
                 final String outputPath = null;
-                // Dexopt with a flag which lifts restrictions on hidden API usage.
-                // Offending methods would otherwise be re-verified at runtime and
-                // we want to avoid the performance overhead of that.
-                final int dexFlags = DEXOPT_DISABLE_HIDDEN_API_CHECKS;
+                final int dexFlags = 0;
                 final String compilerFilter = systemServerFilter;
                 final String uuid = StorageManager.UUID_PRIVATE_INTERNAL;
                 final String seInfo = null;
@@ -583,7 +576,8 @@ public class ZygoteInit {
                     installd.dexopt(classPathElement, Process.SYSTEM_UID, packageName,
                             instructionSet, dexoptNeeded, outputPath, dexFlags, compilerFilter,
                             uuid, classLoaderContext, seInfo, false /* downgrade */,
-                            targetSdkVersion, /*profileName*/ null, /*dexMetadataPath*/ null);
+                            targetSdkVersion, /*profileName*/ null, /*dexMetadataPath*/ null,
+                            "server-dexopt");
                 } catch (RemoteException | ServiceSpecificException e) {
                     // Ignore (but log), we need this on the classpath for fallback mode.
                     Log.w(TAG, "Failed compiling classpath element for system server: "
@@ -762,7 +756,7 @@ public class ZygoteInit {
                 throw new RuntimeException("No ABI list supplied.");
             }
 
-            zygoteServer.registerServerSocket(socketName);
+            zygoteServer.registerServerSocketFromEnv(socketName);
             // In some configurations, we avoid preloading resources and classes eagerly.
             // In such cases, we will preload things prior to our first fork.
             if (!enableLazyPreload) {
@@ -875,6 +869,17 @@ public class ZygoteInit {
         RuntimeInit.commonInit();
         ZygoteInit.nativeZygoteInit();
         return RuntimeInit.applicationInit(targetSdkVersion, argv, classLoader);
+    }
+
+    /**
+     * The main function called when starting a child zygote process. This is used as an
+     * alternative to zygoteInit(), which skips calling into initialization routines that
+     * start the Binder threadpool.
+     */
+    static final Runnable childZygoteInit(
+            int targetSdkVersion, String[] argv, ClassLoader classLoader) {
+        RuntimeInit.Arguments args = new RuntimeInit.Arguments(argv);
+        return RuntimeInit.findStaticMain(args.startClass, args.startArgs, classLoader);
     }
 
     private static final native void nativeZygoteInit();

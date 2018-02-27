@@ -16,6 +16,9 @@
 package com.android.settingslib;
 
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
+
+import static com.android.settingslib.Utils.STORAGE_MANAGER_SHOW_OPT_IN_PROPERTY;
+
 import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Matchers.eq;
@@ -30,13 +33,14 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.location.LocationManager;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.Settings.Secure;
 import android.text.TextUtils;
+
 import com.android.settingslib.wrapper.LocationManagerWrapper;
-import java.util.HashMap;
-import java.util.Map;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -50,11 +54,11 @@ import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 import org.robolectric.shadows.ShadowSettings;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @RunWith(SettingsLibRobolectricTestRunner.class)
-@Config(
-        manifest = TestConfig.MANIFEST_PATH,
-        sdk = TestConfig.SDK_VERSION,
-        shadows = {
+@Config(shadows = {
             UtilsTest.ShadowSecure.class,
             UtilsTest.ShadowLocationManagerWrapper.class})
 public class UtilsTest {
@@ -136,7 +140,7 @@ public class UtilsTest {
     }
 
     @Test
-    public void testStorageManagerDaysToRetainUsesResources() {
+    public void testGetDefaultStorageManagerDaysToRetain_storageManagerDaysToRetainUsesResources() {
         Resources resources = mock(Resources.class);
         when(resources.getInteger(
                         eq(
@@ -147,6 +151,12 @@ public class UtilsTest {
                                         .config_storageManagerDaystoRetainDefault)))
                 .thenReturn(60);
         assertThat(Utils.getDefaultStorageManagerDaysToRetain(resources)).isEqualTo(60);
+    }
+
+    @Test
+    public void testIsStorageManagerEnabled_UsesSystemProperties() {
+        SystemProperties.set(STORAGE_MANAGER_SHOW_OPT_IN_PROPERTY, "false");
+        assertThat(Utils.isStorageManagerEnabled(mContext)).isTrue();
     }
 
     private static ArgumentMatcher<Intent> actionMatches(String expected) {
