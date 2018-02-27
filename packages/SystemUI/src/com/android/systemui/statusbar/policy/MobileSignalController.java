@@ -78,6 +78,7 @@ public class MobileSignalController extends SignalController<
     private final int STATUS_BAR_STYLE_DEFAULT_DATA = 2;
     private final int STATUS_BAR_STYLE_DATA_VOICE = 3;
     private int mStyle = STATUS_BAR_STYLE_ANDROID_DEFAULT;
+    private boolean mDualBar = false;
 
     // TODO: Reduce number of vars passed in, if we have the NetworkController, probably don't
     // need listener lists anymore.
@@ -577,7 +578,19 @@ public class MobileSignalController extends SignalController<
             singleSignalIcon = unstackedSignalIcon;
         }
 
-        if (mStyle == STATUS_BAR_STYLE_CDMA_1X_COMBINED) {
+        int[] subId = SubscriptionManager.getSubId(getSimSlotIndex());
+        if (subId != null && subId.length >= 1) {
+            mDualBar = SubscriptionManager.getResourcesForSubId(mContext,
+                        subId[0]).getBoolean(com.android.internal.R.bool.config_dual_bar);
+        }
+
+        if (DEBUG) {
+            Log.d(mTag, "mDualBar:" + mDualBar);
+            Log.d(mTag, "mStyle:" + mStyle);
+        }
+
+        if (mStyle == STATUS_BAR_STYLE_CDMA_1X_COMBINED
+                || (mStyle == STATUS_BAR_STYLE_DATA_VOICE && mDualBar)) {
             if (!roaming && showDataAndVoice()) {
                 stackedVoiceIcon = TelephonyIcons.getStackedVoiceIcon(voiceLevel);
             } else if (roaming && dataActivityId != 0) {
@@ -660,11 +673,14 @@ public class MobileSignalController extends SignalController<
     }
 
     private boolean showDataAndVoice() {
-        if (mStyle != STATUS_BAR_STYLE_CDMA_1X_COMBINED) {
+        if (!(mStyle == STATUS_BAR_STYLE_CDMA_1X_COMBINED
+                || (mStyle == STATUS_BAR_STYLE_DATA_VOICE && mDualBar))) {
             return false;
         }
+
         int dataType = getDataNetworkType();
         int voiceType = getVoiceNetworkType();
+
         if ((dataType == TelephonyManager.NETWORK_TYPE_EVDO_0
                 || dataType == TelephonyManager.NETWORK_TYPE_EVDO_0
                 || dataType == TelephonyManager.NETWORK_TYPE_EVDO_A

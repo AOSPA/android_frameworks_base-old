@@ -3246,4 +3246,7 @@
   <java-symbol type="string" name="screenshot_edit" />
 
   <java-symbol type="bool" name="config_keepRestrictedProfilesInBackground" />
+
+  <!-- whether to show dual bar -->
+  <java-symbol type="bool" name="config_dual_bar" />
 </resources>
