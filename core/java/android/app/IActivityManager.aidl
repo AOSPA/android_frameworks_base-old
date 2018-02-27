@@ -19,6 +19,7 @@ package android.app;
 import android.app.ActivityManager;
 import android.app.ApplicationErrorReport;
 import android.app.ContentProviderHolder;
+import android.app.GrantedUriPermission;
 import android.app.IApplicationThread;
 import android.app.IActivityController;
 import android.app.IAppTask;
@@ -65,6 +66,8 @@ import android.os.PersistableBundle;
 import android.os.StrictMode;
 import android.os.WorkSource;
 import android.service.voice.IVoiceInteractionSession;
+import android.view.IRecentsAnimationRunner;
+import android.view.RemoteAnimationDefinition;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.policy.IKeyguardDismissCallback;
@@ -144,6 +147,7 @@ interface IActivityManager {
     void publishService(in IBinder token, in Intent intent, in IBinder service);
     void activityResumed(in IBinder token);
     void setDebugApp(in String packageName, boolean waitForDebugger, boolean persistent);
+    void setAgentApp(in String packageName, @nullable String agent);
     void setAlwaysFinish(boolean enabled);
     boolean startInstrumentation(in ComponentName className, in String profileFile,
             int flags, in Bundle arguments, in IInstrumentationWatcher watcher,
@@ -356,6 +360,20 @@ interface IActivityManager {
      */
     void requestTelephonyBugReport(in String shareTitle, in String shareDescription);
 
+    /**
+     *  Deprecated - This method is only used by Wifi, and it will soon be replaced by a proper
+     *  bug report API.
+     *
+     *  Takes a minimal bugreport of Wifi-related state.
+     *
+     *  @param shareTitle should be a valid legible string less than 50 chars long
+     *  @param shareDescription should be less than 91 bytes when encoded into UTF-8 format
+     *
+     *  @throws IllegalArgumentException if shareTitle or shareDescription is too big or if the
+     *          parameters cannot be encoding to an UTF-8 charset.
+     */
+    void requestWifiBugReport(in String shareTitle, in String shareDescription);
+
     long inputDispatchingTimedOut(int pid, boolean aboveSystem, in String reason);
     void clearPendingBackup();
     Intent getIntentForIntentSender(in IIntentSender sender);
@@ -426,8 +444,9 @@ interface IActivityManager {
             in Bundle options, int userId);
     int startAssistantActivity(in String callingPackage, int callingPid, int callingUid,
             in Intent intent, in String resolvedType, in Bundle options, int userId);
-    int startRecentsActivity(in IAssistDataReceiver assistDataReceiver, in Bundle options,
-            in Bundle activityOptions, int userId);
+    void startRecentsActivity(in Intent intent, in IAssistDataReceiver assistDataReceiver,
+            in IRecentsAnimationRunner recentsAnimationRunner);
+    void cancelRecentsAnimation();
     int startActivityFromRecents(int taskId, in Bundle options);
     Bundle getActivityOptions(in IBinder token);
     List<IBinder> getAppTasks(in String callingPackage);
@@ -553,7 +572,7 @@ interface IActivityManager {
             in Rect tempDockedTaskInsetBounds,
             in Rect tempOtherTaskBounds, in Rect tempOtherTaskInsetBounds);
     int setVrMode(in IBinder token, boolean enabled, in ComponentName packageName);
-    // Gets the URI permissions granted to an arbitrary package.
+    // Gets the URI permissions granted to an arbitrary package (or all packages if null)
     // NOTE: this is different from getPersistedUriPermissions(), which returns the URIs the package
     // granted to another packages (instead of those granted to it).
     ParceledListSlice getGrantedUriPermissions(in String packageName, int userId);
@@ -672,4 +691,9 @@ interface IActivityManager {
       *  user unlock progress.
       */
      boolean startUserInBackgroundWithListener(int userid, IProgressListener unlockProgressListener);
+
+     /**
+      * Registers remote animations for a specific activity.
+      */
+     void registerRemoteAnimations(in IBinder token, in RemoteAnimationDefinition definition);
 }

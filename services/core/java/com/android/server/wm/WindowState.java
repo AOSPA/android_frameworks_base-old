@@ -20,6 +20,7 @@ import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.SurfaceControl.Transaction;
+import static android.view.View.SYSTEM_UI_FLAG_FULLSCREEN;
 import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_CONTENT;
 import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_FRAME;
 import static android.view.ViewTreeObserver.InternalInsetsInfo.TOUCHABLE_INSETS_REGION;
@@ -30,6 +31,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCRE
 import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
 import static android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
+import static android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
@@ -39,6 +41,8 @@ import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 import static android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
 import static android.view.WindowManager.LayoutParams.FORMAT_CHANGED;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
+import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
+import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
 import static android.view.WindowManager.LayoutParams.MATCH_PARENT;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
@@ -189,6 +193,7 @@ import android.view.animation.Animation;
 import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.server.input.InputWindowHandle;
 import com.android.server.policy.WindowManagerPolicy;
@@ -198,7 +203,6 @@ import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedList;
 import java.util.function.Predicate;
 
 /** A window in the window manager. */
@@ -624,6 +628,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private boolean mDrawnStateEvaluated;
 
     private final Point mSurfacePosition = new Point();
+
+    /**
+     * A region inside of this window to be excluded from touch-related focus switches.
+     */
+    private TapExcludeRegionHolder mTapExcludeRegionHolder;
 
     /**
      * Compares two window sub-layers and returns -1 if the first is lesser than the second in terms
@@ -1866,6 +1875,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (WindowManagerService.excludeWindowTypeFromTapOutTask(type)) {
             dc.mTapExcludedWindows.remove(this);
         }
+        if (mTapExcludeRegionHolder != null) {
+            // If a tap exclude region container was initialized for this window, then it should've
+            // also been registered in display.
+            dc.mTapExcludeProvidingWindows.remove(this);
+        }
         mPolicy.removeWindowLw(this);
 
         disposeInputChannel();
@@ -2122,18 +2136,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mClientChannel = null;
         }
         mInputWindowHandle.inputChannel = null;
-    }
-
-    private Dimmer getDimmer() {
-        Task task = getTask();
-        if (task != null) {
-            return task.getDimmer();
-        }
-        TaskStack taskStack = getStack();
-        if (taskStack != null) {
-            return taskStack.getDimmer();
-        }
-        return null;
     }
 
     /** Returns true if the replacement window was removed. */
@@ -2977,7 +2979,33 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     /** @return true when the window is in fullscreen task, but has non-fullscreen bounds set. */
     boolean isLetterboxedAppWindow() {
-        return !isInMultiWindowMode() && mAppToken != null && !mAppToken.matchParentBounds();
+        return !isInMultiWindowMode() && mAppToken != null && !mAppToken.matchParentBounds()
+                || isLetterboxedForDisplayCutoutLw();
+    }
+
+    @Override
+    public boolean isLetterboxedForDisplayCutoutLw() {
+        if (mAppToken == null) {
+            // Only windows with an AppWindowToken are letterboxed.
+            return false;
+        }
+        if (getDisplayContent().getDisplayInfo().displayCutout == null) {
+            // No cutout, no letterbox.
+            return false;
+        }
+        if (mAttrs.layoutInDisplayCutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS) {
+            // Layout in cutout, no letterbox.
+            return false;
+        }
+        // TODO: handle dialogs and other non-filling windows
+        if (mAttrs.layoutInDisplayCutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER) {
+            // Never layout in cutout, always letterbox.
+            return true;
+        }
+        // Letterbox if any fullscreen mode is set.
+        final int fl = mAttrs.flags;
+        final int sysui = mSystemUiVisibility;
+        return (fl & FLAG_FULLSCREEN) != 0 || (sysui & (SYSTEM_UI_FLAG_FULLSCREEN)) != 0;
     }
 
     boolean isDragResizeChanged() {
@@ -3923,6 +3951,22 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return null;
     }
 
+    /**
+     * @return True if we our one of our ancestors has {@link #mAnimatingExit} set to true, false
+     *         otherwise.
+     */
+    @VisibleForTesting
+    boolean isSelfOrAncestorWindowAnimatingExit() {
+        WindowState window = this;
+        do {
+            if (window.mAnimatingExit) {
+                return true;
+            }
+            window = window.getParentWindow();
+        } while (window != null);
+        return false;
+    }
+
     void onExitAnimationDone() {
         if (DEBUG_ANIM) Slog.v(TAG, "onExitAnimationDone in " + this
                 + ": exiting=" + mAnimatingExit + " remove=" + mRemoveOnExit
@@ -3958,7 +4002,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mService.mAccessibilityController.onSomeWindowResizedOrMovedLocked();
         }
 
-        if (!mAnimatingExit) {
+        if (!isSelfOrAncestorWindowAnimatingExit()) {
             return;
         }
 
@@ -4460,11 +4504,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private void applyDims(Dimmer dimmer) {
         if (!mAnimatingExit && mAppDied) {
             mIsDimming = true;
-            getDimmer().dimAbove(getPendingTransaction(), this, DEFAULT_DIM_AMOUNT_DEAD_WINDOW);
+            dimmer.dimAbove(getPendingTransaction(), this, DEFAULT_DIM_AMOUNT_DEAD_WINDOW);
         } else if ((mAttrs.flags & FLAG_DIM_BEHIND) != 0
-                && !mAnimatingExit && isVisible()) {
+                && !mAnimatingExit && isVisible() && !mWinAnimator.mLastHidden) {
             mIsDimming = true;
-            getDimmer().dimBelow(getPendingTransaction(), this, mAttrs.dimAmount);
+            dimmer.dimBelow(getPendingTransaction(), this, mAttrs.dimAmount);
         }
     }
 
@@ -4475,7 +4519,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (dimmer != null) {
             applyDims(dimmer);
         }
-
         updateSurfacePosition(mPendingTransaction);
 
         mWinAnimator.prepareSurfaceLocked(true);
@@ -4572,6 +4615,37 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             w.assignChildLayers(t);
             layer++;
         }
+    }
+
+    /**
+     * Update a tap exclude region with a rectangular area identified by provided id. The requested
+     * area will be clipped to the window bounds.
+     */
+    void updateTapExcludeRegion(int regionId, int left, int top, int width, int height) {
+        final DisplayContent currentDisplay = getDisplayContent();
+        if (currentDisplay == null) {
+            throw new IllegalStateException("Trying to update window not attached to any display.");
+        }
+
+        if (mTapExcludeRegionHolder == null) {
+            mTapExcludeRegionHolder = new TapExcludeRegionHolder();
+
+            // Make sure that this window is registered as one that provides a tap exclude region
+            // for its containing display.
+            currentDisplay.mTapExcludeProvidingWindows.add(this);
+        }
+
+        mTapExcludeRegionHolder.updateRegion(regionId, left, top, width, height);
+        // Trigger touch exclude region update on current display.
+        final boolean isAppFocusedOnDisplay = mService.mFocusedApp != null
+                && mService.mFocusedApp.getDisplayContent() == currentDisplay;
+        currentDisplay.setTouchExcludeRegion(isAppFocusedOnDisplay ? mService.mFocusedApp.getTask()
+                : null);
+    }
+
+    /** Union the region with current tap exclude region that this window provides. */
+    void amendTapExcludeRegion(Region region) {
+        mTapExcludeRegionHolder.amendRegion(region, getBounds());
     }
 
     private final class MoveAnimationSpec implements AnimationSpec {

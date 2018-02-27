@@ -38,10 +38,14 @@ import android.app.AppOpsManager.OpEntry;
 import android.app.AppOpsManager.PackageOps;
 import android.app.IActivityManager;
 import android.app.IUidObserver;
+import android.app.usage.UsageStatsManager;
+import android.app.usage.UsageStatsManagerInternal;
+import android.app.usage.UsageStatsManagerInternal.AppIdleStateChangeListener;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.BatteryManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager.ServiceType;
@@ -50,13 +54,17 @@ import android.os.PowerSaveState;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.provider.Settings;
+import android.provider.Settings.Global;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
+import android.test.mock.MockContentResolver;
 import android.util.ArraySet;
 import android.util.Pair;
 
 import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsService;
+import com.android.internal.util.test.FakeSettingsProvider;
 import com.android.server.ForceAppStandbyTracker.Listener;
 
 import org.junit.Before;
@@ -68,6 +76,7 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
@@ -102,6 +111,21 @@ public class ForceAppStandbyTrackerTest {
         PowerManagerInternal injectPowerManagerInternal() {
             return mMockPowerManagerInternal;
         }
+
+        @Override
+        UsageStatsManagerInternal injectUsageStatsManagerInternal() {
+            return mMockUsageStatsManagerInternal;
+        }
+
+        @Override
+        int injectGetGlobalSettingInt(String key, int def) {
+            Integer val = mGlobalSettings.get(key);
+
+            return (val == null) ? def : val;
+        }
+
+        @Override
+        boolean isSmallBatteryDevice() { return mIsSmallBatteryDevice; };
     }
 
     private static final int UID_1 = Process.FIRST_APPLICATION_UID + 1;
@@ -132,14 +156,23 @@ public class ForceAppStandbyTrackerTest {
     @Mock
     private PowerManagerInternal mMockPowerManagerInternal;
 
+    @Mock
+    private UsageStatsManagerInternal mMockUsageStatsManagerInternal;
+
+    private MockContentResolver mMockContentResolver;
+
     private IUidObserver mIUidObserver;
     private IAppOpsCallback.Stub mAppOpsCallback;
     private Consumer<PowerSaveState> mPowerSaveObserver;
     private BroadcastReceiver mReceiver;
+    private AppIdleStateChangeListener mAppIdleStateChangeListener;
 
     private boolean mPowerSaveMode;
+    private boolean mIsSmallBatteryDevice;
 
     private final ArraySet<Pair<Integer, String>> mRestrictedPackages = new ArraySet();
+
+    private final HashMap<String, Integer> mGlobalSettings = new HashMap<>();
 
     @Before
     public void setUp() {
@@ -182,6 +215,9 @@ public class ForceAppStandbyTrackerTest {
                 any(int[].class)
                 )).thenAnswer(inv -> new ArrayList<AppOpsManager.PackageOps>());
 
+        mMockContentResolver = new MockContentResolver();
+        when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
+
         // Call start.
         instance.start();
 
@@ -194,6 +230,8 @@ public class ForceAppStandbyTrackerTest {
                 ArgumentCaptor.forClass(Consumer.class);
         ArgumentCaptor<BroadcastReceiver> receiverCaptor =
                 ArgumentCaptor.forClass(BroadcastReceiver.class);
+        ArgumentCaptor<AppIdleStateChangeListener> appIdleStateChangeListenerCaptor =
+                ArgumentCaptor.forClass(AppIdleStateChangeListener.class);
 
         verify(mMockIActivityManager).registerUidObserver(
                 uidObserverArgumentCaptor.capture(),
@@ -211,16 +249,20 @@ public class ForceAppStandbyTrackerTest {
 
         verify(mMockContext).registerReceiver(
                 receiverCaptor.capture(), any(IntentFilter.class));
+        verify(mMockUsageStatsManagerInternal).addAppIdleStateChangeListener(
+                appIdleStateChangeListenerCaptor.capture());
 
         mIUidObserver = uidObserverArgumentCaptor.getValue();
         mAppOpsCallback = appOpsCallbackCaptor.getValue();
         mPowerSaveObserver = powerSaveObserverCaptor.getValue();
         mReceiver = receiverCaptor.getValue();
+        mAppIdleStateChangeListener = appIdleStateChangeListenerCaptor.getValue();
 
         assertNotNull(mIUidObserver);
         assertNotNull(mAppOpsCallback);
         assertNotNull(mPowerSaveObserver);
         assertNotNull(mReceiver);
+        assertNotNull(instance.mFlagsObserver);
     }
 
     private void setAppOps(int uid, String packageName, boolean restrict) throws RemoteException {
@@ -241,11 +283,23 @@ public class ForceAppStandbyTrackerTest {
     private static final int JOBS_AND_ALARMS = ALARMS_ONLY | JOBS_ONLY;
 
     private void areRestricted(ForceAppStandbyTrackerTestable instance, int uid, String packageName,
-            int restrictionTypes) {
+            int restrictionTypes, boolean exemptFromBatterySaver) {
         assertEquals(((restrictionTypes & JOBS_ONLY) != 0),
-                instance.areJobsRestricted(uid, packageName));
+                instance.areJobsRestricted(uid, packageName, exemptFromBatterySaver));
         assertEquals(((restrictionTypes & ALARMS_ONLY) != 0),
-                instance.areAlarmsRestricted(uid, packageName));
+                instance.areAlarmsRestricted(uid, packageName, exemptFromBatterySaver));
+    }
+
+    private void areRestricted(ForceAppStandbyTrackerTestable instance, int uid, String packageName,
+            int restrictionTypes) {
+        areRestricted(instance, uid, packageName, restrictionTypes,
+                /*exemptFromBatterySaver=*/ false);
+    }
+
+    private void areRestrictedWithExemption(ForceAppStandbyTrackerTestable instance,
+            int uid, String packageName, int restrictionTypes) {
+        areRestricted(instance, uid, packageName, restrictionTypes,
+                /*exemptFromBatterySaver=*/ true);
     }
 
     @Test
@@ -258,6 +312,10 @@ public class ForceAppStandbyTrackerTest {
         areRestricted(instance, UID_2, PACKAGE_2, NONE);
         areRestricted(instance, Process.SYSTEM_UID, PACKAGE_SYSTEM, NONE);
 
+        areRestrictedWithExemption(instance, UID_1, PACKAGE_1, NONE);
+        areRestrictedWithExemption(instance, UID_2, PACKAGE_2, NONE);
+        areRestrictedWithExemption(instance, Process.SYSTEM_UID, PACKAGE_SYSTEM, NONE);
+
         mPowerSaveMode = true;
         mPowerSaveObserver.accept(getPowerSaveState());
 
@@ -266,6 +324,10 @@ public class ForceAppStandbyTrackerTest {
         areRestricted(instance, UID_1, PACKAGE_1, JOBS_AND_ALARMS);
         areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
         areRestricted(instance, Process.SYSTEM_UID, PACKAGE_SYSTEM, NONE);
+
+        areRestrictedWithExemption(instance, UID_1, PACKAGE_1, NONE);
+        areRestrictedWithExemption(instance, UID_2, PACKAGE_2, NONE);
+        areRestrictedWithExemption(instance, Process.SYSTEM_UID, PACKAGE_SYSTEM, NONE);
 
         // Toggle the foreground state.
         mPowerSaveMode = true;
@@ -393,6 +455,73 @@ public class ForceAppStandbyTrackerTest {
         assertTrue(instance.isUidTempPowerSaveWhitelisted(UID_10_2));
     }
 
+    @Test
+    public void testExempt() throws Exception {
+        final ForceAppStandbyTrackerTestable instance = newInstance();
+        callStart(instance);
+
+        assertFalse(instance.isForceAllAppsStandbyEnabled());
+        areRestricted(instance, UID_1, PACKAGE_1, NONE);
+        areRestricted(instance, UID_2, PACKAGE_2, NONE);
+        areRestricted(instance, Process.SYSTEM_UID, PACKAGE_SYSTEM, NONE);
+
+        mPowerSaveMode = true;
+        mPowerSaveObserver.accept(getPowerSaveState());
+
+        assertTrue(instance.isForceAllAppsStandbyEnabled());
+
+        areRestricted(instance, UID_1, PACKAGE_1, JOBS_AND_ALARMS);
+        areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
+        areRestricted(instance, UID_10_2, PACKAGE_2, JOBS_AND_ALARMS);
+        areRestricted(instance, Process.SYSTEM_UID, PACKAGE_SYSTEM, NONE);
+
+        // Exempt package 2 on user-10.
+        mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_2, /*user=*/ 10, false,
+                UsageStatsManager.STANDBY_BUCKET_EXEMPTED);
+
+        areRestricted(instance, UID_1, PACKAGE_1, JOBS_AND_ALARMS);
+        areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
+        areRestricted(instance, UID_10_2, PACKAGE_2, NONE);
+
+        areRestrictedWithExemption(instance, UID_1, PACKAGE_1, NONE);
+        areRestrictedWithExemption(instance, UID_2, PACKAGE_2, NONE);
+        areRestrictedWithExemption(instance, UID_10_2, PACKAGE_2, NONE);
+
+        // Exempt package 1 on user-0.
+        mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_1, /*user=*/ 0, false,
+                UsageStatsManager.STANDBY_BUCKET_EXEMPTED);
+
+        areRestricted(instance, UID_1, PACKAGE_1, NONE);
+        areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
+        areRestricted(instance, UID_10_2, PACKAGE_2, NONE);
+
+        // Unexempt package 2 on user-10.
+        mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_2, /*user=*/ 10, false,
+                UsageStatsManager.STANDBY_BUCKET_ACTIVE);
+
+        areRestricted(instance, UID_1, PACKAGE_1, NONE);
+        areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
+        areRestricted(instance, UID_10_2, PACKAGE_2, JOBS_AND_ALARMS);
+
+        // Check force-app-standby.
+        // EXEMPT doesn't exempt from force-app-standby.
+        mPowerSaveMode = false;
+        mPowerSaveObserver.accept(getPowerSaveState());
+
+        mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_1, /*user=*/ 0, false,
+                UsageStatsManager.STANDBY_BUCKET_EXEMPTED);
+        mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_2, /*user=*/ 0, false,
+                UsageStatsManager.STANDBY_BUCKET_EXEMPTED);
+
+        setAppOps(UID_1, PACKAGE_1, true);
+
+        areRestricted(instance, UID_1, PACKAGE_1, JOBS_AND_ALARMS);
+        areRestricted(instance, UID_2, PACKAGE_2, NONE);
+
+        areRestrictedWithExemption(instance, UID_1, PACKAGE_1, JOBS_AND_ALARMS);
+        areRestrictedWithExemption(instance, UID_2, PACKAGE_2, NONE);
+    }
+
     public void loadPersistedAppOps() throws Exception {
         final ForceAppStandbyTrackerTestable instance = newInstance();
 
@@ -495,8 +624,8 @@ public class ForceAppStandbyTrackerTest {
         verify(l, times(0)).unblockAlarmsForUidPackage(anyInt(), anyString());
         reset(l);
 
-        // Power save on.
-        mPowerSaveMode = true;
+        // Updating to the same state should not fire listener
+        mPowerSaveMode = false;
         mPowerSaveObserver.accept(getPowerSaveState());
 
         assertNoCallbacks(l);
@@ -534,14 +663,14 @@ public class ForceAppStandbyTrackerTest {
 
         verify(l, times(0)).unblockAllUnrestrictedAlarms();
         verify(l, times(0)).unblockAlarmsForUid(anyInt());
-        verify(l, times(0)).unblockAlarmsForUidPackage(eq(UID_10_2), eq(PACKAGE_2));
+        verify(l, times(1)).unblockAlarmsForUidPackage(eq(UID_10_2), eq(PACKAGE_2));
         reset(l);
 
         setAppOps(UID_10_2, PACKAGE_2, false);
 
         verify(l, times(0)).updateAllJobs();
         verify(l, times(0)).updateJobsForUid(anyInt());
-        verify(l, times(1)).updateJobsForUidPackage(eq(UID_10_2), eq(PACKAGE_2));
+        verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString());
 
         verify(l, times(0)).unblockAllUnrestrictedAlarms();
         verify(l, times(0)).unblockAlarmsForUid(anyInt());
@@ -634,10 +763,21 @@ public class ForceAppStandbyTrackerTest {
         mPowerSaveMode = true;
         mPowerSaveObserver.accept(getPowerSaveState());
 
+        waitUntilMainHandlerDrain();
+        verify(l, times(1)).updateAllJobs();
+        verify(l, times(0)).updateJobsForUid(anyInt());
+        verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString());
+
+        verify(l, times(0)).unblockAllUnrestrictedAlarms();
+        verify(l, times(0)).unblockAlarmsForUid(anyInt());
+        verify(l, times(0)).unblockAlarmsForUidPackage(anyInt(), anyString());
+        reset(l);
+
         instance.setPowerSaveWhitelistAppIds(new int[] {UID_1, UID_2}, new int[] {});
 
         waitUntilMainHandlerDrain();
-        verify(l, times(1)).updateAllJobs();
+        // Called once for updating all whitelist and once for updating temp whitelist
+        verify(l, times(2)).updateAllJobs();
         verify(l, times(0)).updateJobsForUid(anyInt());
         verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString());
 
@@ -699,7 +839,7 @@ public class ForceAppStandbyTrackerTest {
         verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString());
 
         verify(l, times(0)).unblockAllUnrestrictedAlarms();
-        verify(l, times(0)).unblockAlarmsForUid(anyInt());
+        verify(l, times(1)).unblockAlarmsForUid(eq(UID_10_1));
         verify(l, times(0)).unblockAlarmsForUidPackage(anyInt(), anyString());
         reset(l);
 
@@ -723,7 +863,7 @@ public class ForceAppStandbyTrackerTest {
         verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString());
 
         verify(l, times(0)).unblockAllUnrestrictedAlarms();
-        verify(l, times(0)).unblockAlarmsForUid(anyInt());
+        verify(l, times(1)).unblockAlarmsForUid(eq(UID_10_1));
         verify(l, times(0)).unblockAlarmsForUidPackage(anyInt(), anyString());
         reset(l);
 
@@ -743,6 +883,16 @@ public class ForceAppStandbyTrackerTest {
         mPowerSaveMode = false;
         mPowerSaveObserver.accept(getPowerSaveState());
 
+        waitUntilMainHandlerDrain();
+        verify(l, times(1)).updateAllJobs();
+        verify(l, times(0)).updateJobsForUid(eq(UID_10_1));
+        verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString());
+
+        verify(l, times(1)).unblockAllUnrestrictedAlarms();
+        verify(l, times(0)).unblockAlarmsForUid(anyInt());
+        verify(l, times(0)).unblockAlarmsForUidPackage(anyInt(), anyString());
+        reset(l);
+
         mIUidObserver.onUidActive(UID_10_1);
 
         waitUntilMainHandlerDrain();
@@ -751,7 +901,7 @@ public class ForceAppStandbyTrackerTest {
         verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString());
 
         verify(l, times(0)).unblockAllUnrestrictedAlarms();
-        verify(l, times(0)).unblockAlarmsForUid(anyInt());
+        verify(l, times(1)).unblockAlarmsForUid(eq(UID_10_1));
         verify(l, times(0)).unblockAlarmsForUidPackage(anyInt(), anyString());
         reset(l);
 
@@ -775,7 +925,7 @@ public class ForceAppStandbyTrackerTest {
         verify(l, times(0)).updateJobsForUidPackage(anyInt(), anyString());
 
         verify(l, times(0)).unblockAllUnrestrictedAlarms();
-        verify(l, times(0)).unblockAlarmsForUid(anyInt());
+        verify(l, times(1)).unblockAlarmsForUid(eq(UID_10_1));
         verify(l, times(0)).unblockAlarmsForUidPackage(anyInt(), anyString());
         reset(l);
 
@@ -820,6 +970,56 @@ public class ForceAppStandbyTrackerTest {
 
         assertFalse(instance.isRunAnyInBackgroundAppOpsAllowed(UID_2, PACKAGE_2));
         assertTrue(instance.isRunAnyInBackgroundAppOpsAllowed(UID_10_2, PACKAGE_2));
+    }
+
+    @Test
+    public void testSmallBatteryAndPluggedIn() throws Exception {
+        // This is a small battery device
+        mIsSmallBatteryDevice = true;
+
+        final ForceAppStandbyTrackerTestable instance = newInstance();
+        callStart(instance);
+        assertFalse(instance.isForceAllAppsStandbyEnabled());
+
+        // Setting/experiment for all app standby for small battery is enabled
+        mGlobalSettings.put(Global.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED, 1);
+        instance.mFlagsObserver.onChange(true,
+                Global.getUriFor(Global.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED));
+        assertTrue(instance.isForceAllAppsStandbyEnabled());
+
+        // When battery is plugged in, force app standby is disabled
+        Intent intent = new Intent(Intent.ACTION_BATTERY_CHANGED);
+        intent.putExtra(BatteryManager.EXTRA_PLUGGED, BatteryManager.BATTERY_PLUGGED_USB);
+        mReceiver.onReceive(mMockContext, intent);
+        assertFalse(instance.isForceAllAppsStandbyEnabled());
+
+        // When battery stops plugged in, force app standby is enabled
+        mReceiver.onReceive(mMockContext, new Intent(Intent.ACTION_BATTERY_CHANGED));
+        assertTrue(instance.isForceAllAppsStandbyEnabled());
+    }
+
+    @Test
+    public void testNotSmallBatteryAndPluggedIn() throws Exception {
+        // Not a small battery device, so plugged in status should not affect forced app standby
+        mIsSmallBatteryDevice = false;
+
+        final ForceAppStandbyTrackerTestable instance = newInstance();
+        callStart(instance);
+        assertFalse(instance.isForceAllAppsStandbyEnabled());
+
+        mPowerSaveMode = true;
+        mPowerSaveObserver.accept(getPowerSaveState());
+        assertTrue(instance.isForceAllAppsStandbyEnabled());
+
+        // When battery is plugged in, force app standby is unaffected
+        Intent intent = new Intent(Intent.ACTION_BATTERY_CHANGED);
+        intent.putExtra(BatteryManager.EXTRA_PLUGGED, BatteryManager.BATTERY_PLUGGED_USB);
+        mReceiver.onReceive(mMockContext, intent);
+        assertTrue(instance.isForceAllAppsStandbyEnabled());
+
+        // When battery stops plugged in, force app standby is unaffected
+        mReceiver.onReceive(mMockContext, new Intent(Intent.ACTION_BATTERY_CHANGED));
+        assertTrue(instance.isForceAllAppsStandbyEnabled());
     }
 
     static int[] array(int... appIds) {

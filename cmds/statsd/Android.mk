@@ -34,9 +34,10 @@ statsd_common_src := \
     src/config/ConfigKey.cpp \
     src/config/ConfigListener.cpp \
     src/config/ConfigManager.cpp \
+    src/external/Perfetto.cpp \
     src/external/StatsPuller.cpp \
     src/external/StatsCompanionServicePuller.cpp \
-    src/external/ResourcePowerManagerPuller.cpp \
+    src/external/SubsystemSleepStatePuller.cpp \
     src/external/CpuTimePerUidPuller.cpp \
     src/external/CpuTimePerUidFreqPuller.cpp \
     src/external/StatsPullerManagerImpl.cpp \
@@ -57,9 +58,11 @@ statsd_common_src := \
     src/metrics/MetricsManager.cpp \
     src/metrics/metrics_manager_util.cpp \
     src/packages/UidMap.cpp \
+    src/perfetto/perfetto_config.proto \
     src/storage/StorageManager.cpp \
     src/StatsLogProcessor.cpp \
     src/StatsService.cpp \
+    src/subscriber/SubscriberReporter.cpp \
     src/HashableDimensionKey.cpp \
     src/guardrail/MemoryLeakTrackUtil.cpp \
     src/guardrail/StatsdStats.cpp
@@ -186,7 +189,8 @@ LOCAL_SRC_FILES := \
     tests/statsd_test_util.cpp \
     tests/e2e/WakelockDuration_e2e_test.cpp \
     tests/e2e/MetricConditionLink_e2e_test.cpp \
-    tests/e2e/Attribution_e2e_test.cpp
+    tests/e2e/Attribution_e2e_test.cpp \
+    tests/e2e/GaugeMetric_e2e_test.cpp
 
 LOCAL_STATIC_LIBRARIES := \
     $(statsd_common_static_libraries) \
@@ -198,6 +202,63 @@ LOCAL_PROTOC_OPTIMIZE_TYPE := lite
 
 include $(BUILD_NATIVE_TEST)
 
+##############################
+# stats proto static java lib
+##############################
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := statsdprotolite
+
+LOCAL_SRC_FILES := \
+    src/stats_log.proto \
+    src/statsd_config.proto \
+    src/perfetto/perfetto_config.proto \
+    src/atoms.proto
+
+LOCAL_PROTOC_OPTIMIZE_TYPE := lite
+
+LOCAL_STATIC_JAVA_LIBRARIES := \
+    platformprotoslite
+
+include $(BUILD_STATIC_JAVA_LIBRARY)
+
+##############################
+# statsd micro benchmark
+##############################
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := statsd_benchmark
+
+LOCAL_SRC_FILES := $(statsd_common_src) \
+                   benchmark/main.cpp \
+                   benchmark/hello_world_benchmark.cpp \
+                   benchmark/log_event_benchmark.cpp
+
+LOCAL_C_INCLUDES := $(statsd_common_c_includes)
+
+LOCAL_CFLAGS := -Wall \
+                -Werror \
+                -Wno-unused-parameter \
+                -Wno-unused-variable \
+                -Wno-unused-function \
+
+# Bug: http://b/29823425 Disable -Wvarargs for Clang update to r271374
+LOCAL_CFLAGS += -Wno-varargs
+
+LOCAL_AIDL_INCLUDES := $(statsd_common_aidl_includes)
+
+LOCAL_STATIC_LIBRARIES := \
+    $(statsd_common_static_libraries)
+
+LOCAL_SHARED_LIBRARIES := $(statsd_common_shared_libraries) \
+    libgtest_prod
+
+LOCAL_PROTOC_OPTIMIZE_TYPE := lite
+
+LOCAL_MODULE_TAGS := eng tests
+
+include $(BUILD_NATIVE_BENCHMARK)
+
 
 statsd_common_src:=
 statsd_common_aidl_includes:=
@@ -205,7 +266,5 @@ statsd_common_c_includes:=
 statsd_common_static_libraries:=
 statsd_common_shared_libraries:=
 
-
-##############################
 
 include $(call all-makefiles-under,$(LOCAL_PATH))

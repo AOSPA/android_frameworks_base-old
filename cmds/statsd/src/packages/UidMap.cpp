@@ -106,9 +106,9 @@ void UidMap::updateMap(const int64_t& timestamp, const vector<int32_t>& uid,
             t->set_uid(uid[j]);
         }
         mBytesUsed += snapshot->ByteSize();
+        ensureBytesUsedBelowLimit();
         StatsdStats::getInstance().setCurrentUidMapMemory(mBytesUsed);
         StatsdStats::getInstance().setUidMapSnapshots(mOutput.snapshots_size());
-        ensureBytesUsedBelowLimit();
         getListenerListCopyLocked(&broadcastList);
     }
     // To avoid invoking callback while holding the internal lock. we get a copy of the listener
@@ -142,9 +142,9 @@ void UidMap::updateApp(const int64_t& timestamp, const String16& app_16, const i
         log->set_uid(uid);
         log->set_version(versionCode);
         mBytesUsed += log->ByteSize();
+        ensureBytesUsedBelowLimit();
         StatsdStats::getInstance().setCurrentUidMapMemory(mBytesUsed);
         StatsdStats::getInstance().setUidMapChanges(mOutput.changes_size());
-        ensureBytesUsedBelowLimit();
 
         auto range = mMap.equal_range(int(uid));
         bool found = false;
@@ -222,9 +222,9 @@ void UidMap::removeApp(const int64_t& timestamp, const String16& app_16, const i
         log->set_app(app);
         log->set_uid(uid);
         mBytesUsed += log->ByteSize();
+        ensureBytesUsedBelowLimit();
         StatsdStats::getInstance().setCurrentUidMapMemory(mBytesUsed);
         StatsdStats::getInstance().setUidMapChanges(mOutput.changes_size());
-        ensureBytesUsedBelowLimit();
 
         auto range = mMap.equal_range(int(uid));
         for (auto it = range.first; it != range.second; ++it) {
@@ -281,20 +281,10 @@ int UidMap::getHostUidOrSelf(int uid) const {
 
 void UidMap::clearOutput() {
     mOutput.Clear();
-    // Re-initialize the initial state for the outputs. This results in extra data being uploaded
-    // but helps ensure we can re-construct the UID->app name, versionCode mapping in server.
-    auto snapshot = mOutput.add_snapshots();
-    for (auto it : mMap) {
-        auto t = snapshot->add_package_info();
-        t->set_name(it.second.packageName);
-        t->set_version(it.second.versionCode);
-        t->set_uid(it.first);
-    }
-
     // Also update the guardrail trackers.
     StatsdStats::getInstance().setUidMapChanges(0);
     StatsdStats::getInstance().setUidMapSnapshots(1);
-    mBytesUsed = snapshot->ByteSize();
+    mBytesUsed = 0;
     StatsdStats::getInstance().setCurrentUidMapMemory(mBytesUsed);
 }
 
@@ -346,6 +336,19 @@ UidMapping UidMap::getOutput(const int64_t& timestamp, const ConfigKey& key) {
                 it_deltas = deltas->erase(it_deltas);
             } else {
                 ++it_deltas;
+            }
+        }
+
+        if (mOutput.snapshots_size() == 0) {
+            // Produce another snapshot. This results in extra data being uploaded but helps
+            // ensure we can re-construct the UID->app name, versionCode mapping in server.
+            auto snapshot = mOutput.add_snapshots();
+            snapshot->set_timestamp_nanos(timestamp);
+            for (auto it : mMap) {
+                auto t = snapshot->add_package_info();
+                t->set_name(it.second.packageName);
+                t->set_version(it.second.versionCode);
+                t->set_uid(it.first);
             }
         }
     }
@@ -471,6 +474,9 @@ const std::map<string, uint32_t> UidMap::sAidToUidMapping = {{"AID_ROOT", 0},
                                                              {"AID_AUTOMOTIVE_EVS", 1062},
                                                              {"AID_LOWPAN", 1063},
                                                              {"AID_HSM", 1064},
+                                                             {"AID_RESERVED_DISK", 1065},
+                                                             {"AID_STATSD", 1066},
+                                                             {"AID_INCIDENTD", 1067},
                                                              {"AID_SHELL", 2000},
                                                              {"AID_CACHE", 2001},
                                                              {"AID_DIAG", 2002}};

@@ -38,12 +38,12 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.IRestrictionsManager;
 import android.content.RestrictionsManager;
+import android.content.pm.CrossProfileApps;
+import android.content.pm.ICrossProfileApps;
 import android.content.pm.IShortcutService;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
-import android.content.pm.crossprofile.CrossProfileApps;
-import android.content.pm.crossprofile.ICrossProfileApps;
 import android.content.res.Resources;
 import android.hardware.ConsumerIrManager;
 import android.hardware.ISerialManager;
@@ -112,6 +112,7 @@ import android.os.IBinder;
 import android.os.IHardwarePropertiesManager;
 import android.os.IPowerManager;
 import android.os.IRecoverySystem;
+import android.os.ISystemUpdateManager;
 import android.os.IUserManager;
 import android.os.IncidentManager;
 import android.os.PowerManager;
@@ -119,6 +120,7 @@ import android.os.Process;
 import android.os.RecoverySystem;
 import android.os.ServiceManager;
 import android.os.ServiceManager.ServiceNotFoundException;
+import android.os.SystemUpdateManager;
 import android.os.SystemVibrator;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -139,7 +141,6 @@ import android.telephony.TelephonyManager;
 import android.telephony.euicc.EuiccCardManager;
 import android.telephony.euicc.EuiccManager;
 import android.util.Log;
-import android.util.StatsManager;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.WindowManager;
@@ -484,6 +485,17 @@ final class SystemServiceRegistry {
                         ServiceManager.getServiceOrThrow(Context.STORAGE_STATS_SERVICE));
                 return new StorageStatsManager(ctx, service);
             }});
+
+        registerService(Context.SYSTEM_UPDATE_SERVICE, SystemUpdateManager.class,
+                new CachedServiceFetcher<SystemUpdateManager>() {
+                    @Override
+                    public SystemUpdateManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        IBinder b = ServiceManager.getServiceOrThrow(
+                                Context.SYSTEM_UPDATE_SERVICE);
+                        ISystemUpdateManager service = ISystemUpdateManager.Stub.asInterface(b);
+                        return new SystemUpdateManager(service);
+                    }});
 
         registerService(Context.TELEPHONY_SERVICE, TelephonyManager.class,
                 new CachedServiceFetcher<TelephonyManager>() {

@@ -44,6 +44,7 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_WIFI_P2P;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_XCAP;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 import static android.net.NetworkCapabilities.TRANSPORT_ETHERNET;
+import static android.net.NetworkCapabilities.TRANSPORT_VPN;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI_AWARE;
 
@@ -101,6 +102,7 @@ import android.net.NetworkSpecifier;
 import android.net.NetworkUtils;
 import android.net.RouteInfo;
 import android.net.StringNetworkSpecifier;
+import android.net.UidRange;
 import android.net.metrics.IpConnectivityLog;
 import android.net.util.MultinetworkPolicyTracker;
 import android.os.ConditionVariable;
@@ -126,11 +128,13 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.WakeupMessage;
 import com.android.internal.util.test.BroadcastInterceptingContext;
 import com.android.internal.util.test.FakeSettingsProvider;
+import com.android.server.connectivity.ConnectivityConstants;
 import com.android.server.connectivity.DefaultNetworkMetrics;
 import com.android.server.connectivity.IpConnectivityMetrics;
 import com.android.server.connectivity.MockableSystemProperties;
 import com.android.server.connectivity.NetworkAgentInfo;
 import com.android.server.connectivity.NetworkMonitor;
+import com.android.server.connectivity.Vpn;
 import com.android.server.net.NetworkPinner;
 import com.android.server.net.NetworkPolicyManagerInternal;
 
@@ -360,7 +364,7 @@ public class ConnectivityServiceTest {
 
         MockNetworkAgent(int transport, LinkProperties linkProperties) {
             final int type = transportToLegacyType(transport);
-            final String typeName = ConnectivityManager.getNetworkTypeName(type);
+            final String typeName = ConnectivityManager.getNetworkTypeName(transport);
             mNetworkInfo = new NetworkInfo(type, 0, typeName, "Mock");
             mNetworkCapabilities = new NetworkCapabilities();
             mNetworkCapabilities.addTransportType(transport);
@@ -376,6 +380,9 @@ public class ConnectivityServiceTest {
                     break;
                 case TRANSPORT_WIFI_AWARE:
                     mScore = 20;
+                    break;
+                case TRANSPORT_VPN:
+                    mScore = ConnectivityConstants.VPN_DEFAULT_SCORE;
                     break;
                 default:
                     throw new UnsupportedOperationException("unimplemented network type");
@@ -435,6 +442,11 @@ public class ConnectivityServiceTest {
 
         public void removeCapability(int capability) {
             mNetworkCapabilities.removeCapability(capability);
+            mNetworkAgent.sendNetworkCapabilities(mNetworkCapabilities);
+        }
+
+        public void setUids(Set<UidRange> uids) {
+            mNetworkCapabilities.setUids(uids);
             mNetworkAgent.sendNetworkCapabilities(mNetworkCapabilities);
         }
 
@@ -1392,39 +1404,80 @@ public class ConnectivityServiceTest {
             return null;
         }
 
-        void expectAvailableCallbacks(
-                MockNetworkAgent agent, boolean expectSuspended, int timeoutMs) {
+        // Expects onAvailable and the callbacks that follow it. These are:
+        // - onSuspended, iff the network was suspended when the callbacks fire.
+        // - onCapabilitiesChanged.
+        // - onLinkPropertiesChanged.
+        //
+        // @param agent the network to expect the callbacks on.
+        // @param expectSuspended whether to expect a SUSPENDED callback.
+        // @param expectValidated the expected value of the VALIDATED capability in the
+        //        onCapabilitiesChanged callback.
+        // @param timeoutMs how long to wait for the callbacks.
+        void expectAvailableCallbacks(MockNetworkAgent agent, boolean expectSuspended,
+                boolean expectValidated, int timeoutMs) {
             expectCallback(CallbackState.AVAILABLE, agent, timeoutMs);
             if (expectSuspended) {
                 expectCallback(CallbackState.SUSPENDED, agent, timeoutMs);
             }
-            expectCallback(CallbackState.NETWORK_CAPABILITIES, agent, timeoutMs);
+            if (expectValidated) {
+                expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, agent);
+            } else {
+                expectCapabilitiesWithout(NET_CAPABILITY_VALIDATED, agent);
+            }
             expectCallback(CallbackState.LINK_PROPERTIES, agent, timeoutMs);
         }
 
-        void expectAvailableCallbacks(MockNetworkAgent agent) {
-            expectAvailableCallbacks(agent, false, TIMEOUT_MS);
+        // Expects the available callbacks (validated), plus onSuspended.
+        void expectAvailableAndSuspendedCallbacks(MockNetworkAgent agent, boolean expectValidated) {
+            expectAvailableCallbacks(agent, true, expectValidated, TIMEOUT_MS);
         }
 
-        void expectAvailableAndSuspendedCallbacks(MockNetworkAgent agent) {
-            expectAvailableCallbacks(agent, true, TIMEOUT_MS);
+        void expectAvailableCallbacksValidated(MockNetworkAgent agent) {
+            expectAvailableCallbacks(agent, false, true, TIMEOUT_MS);
         }
 
-        void expectAvailableAndValidatedCallbacks(MockNetworkAgent agent) {
-            expectAvailableCallbacks(agent, false, TIMEOUT_MS);
+        void expectAvailableCallbacksUnvalidated(MockNetworkAgent agent) {
+            expectAvailableCallbacks(agent, false, false, TIMEOUT_MS);
+        }
+
+        // Expects the available callbacks (where the onCapabilitiesChanged must contain the
+        // VALIDATED capability), plus another onCapabilitiesChanged which is identical to the
+        // one we just sent.
+        // TODO: this is likely a bug. Fix it and remove this method.
+        void expectAvailableDoubleValidatedCallbacks(MockNetworkAgent agent) {
+            expectCallback(CallbackState.AVAILABLE, agent, TIMEOUT_MS);
+            NetworkCapabilities nc1 = expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, agent);
+            expectCallback(CallbackState.LINK_PROPERTIES, agent, TIMEOUT_MS);
+            NetworkCapabilities nc2 = expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, agent);
+            assertEquals(nc1, nc2);
+        }
+
+        // Expects the available callbacks where the onCapabilitiesChanged must not have validated,
+        // then expects another onCapabilitiesChanged that has the validated bit set. This is used
+        // when a network connects and satisfies a callback, and then immediately validates.
+        void expectAvailableThenValidatedCallbacks(MockNetworkAgent agent) {
+            expectAvailableCallbacksUnvalidated(agent);
             expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, agent);
         }
 
-        void expectCapabilitiesWith(int capability, MockNetworkAgent agent) {
+        NetworkCapabilities expectCapabilitiesWith(int capability, MockNetworkAgent agent) {
             CallbackInfo cbi = expectCallback(CallbackState.NETWORK_CAPABILITIES, agent);
             NetworkCapabilities nc = (NetworkCapabilities) cbi.arg;
             assertTrue(nc.hasCapability(capability));
+            return nc;
         }
 
-        void expectCapabilitiesWithout(int capability, MockNetworkAgent agent) {
+        NetworkCapabilities expectCapabilitiesWithout(int capability, MockNetworkAgent agent) {
             CallbackInfo cbi = expectCallback(CallbackState.NETWORK_CAPABILITIES, agent);
             NetworkCapabilities nc = (NetworkCapabilities) cbi.arg;
             assertFalse(nc.hasCapability(capability));
+            return nc;
+        }
+
+        void expectCapabilitiesLike(Predicate<NetworkCapabilities> fn, MockNetworkAgent agent) {
+            CallbackInfo cbi = expectCallback(CallbackState.NETWORK_CAPABILITIES, agent);
+            assertTrue(fn.test((NetworkCapabilities) cbi.arg));
         }
 
         void assertNoCallback() {
@@ -1461,8 +1514,8 @@ public class ConnectivityServiceTest {
         ConditionVariable cv = waitForConnectivityBroadcasts(1);
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(false);
-        genericNetworkCallback.expectAvailableCallbacks(mCellNetworkAgent);
-        cellNetworkCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        genericNetworkCallback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
+        cellNetworkCallback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
         assertEquals(mCellNetworkAgent.getNetwork(), mCm.getActiveNetwork());
         waitFor(cv);
         assertNoCallbacks(genericNetworkCallback, wifiNetworkCallback, cellNetworkCallback);
@@ -1476,8 +1529,8 @@ public class ConnectivityServiceTest {
         cv = waitForConnectivityBroadcasts(2);
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(false);
-        genericNetworkCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
-        wifiNetworkCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        genericNetworkCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        wifiNetworkCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
         waitFor(cv);
         assertNoCallbacks(genericNetworkCallback, wifiNetworkCallback, cellNetworkCallback);
@@ -1500,8 +1553,8 @@ public class ConnectivityServiceTest {
         // Test validated networks
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(true);
-        genericNetworkCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
-        cellNetworkCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        genericNetworkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
+        cellNetworkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
         assertEquals(mCellNetworkAgent.getNetwork(), mCm.getActiveNetwork());
         assertNoCallbacks(genericNetworkCallback, wifiNetworkCallback, cellNetworkCallback);
 
@@ -1513,10 +1566,10 @@ public class ConnectivityServiceTest {
 
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
-        genericNetworkCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        genericNetworkCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         genericNetworkCallback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
         genericNetworkCallback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
-        wifiNetworkCallback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
+        wifiNetworkCallback.expectAvailableThenValidatedCallbacks(mWiFiNetworkAgent);
         cellNetworkCallback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
         assertNoCallbacks(genericNetworkCallback, wifiNetworkCallback, cellNetworkCallback);
@@ -1552,32 +1605,32 @@ public class ConnectivityServiceTest {
         mEthernetNetworkAgent.addCapability(NET_CAPABILITY_NOT_METERED);
 
         mCellNetworkAgent.connect(true);
-        callback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        callback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
         assertEquals(mCellNetworkAgent.getNetwork(), mCm.getActiveNetwork());
 
         mWiFiNetworkAgent.connect(true);
         // We get AVAILABLE on wifi when wifi connects and satisfies our unmetered request.
         // We then get LOSING when wifi validates and cell is outscored.
-        callback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         // TODO: Investigate sending validated before losing.
         callback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
         callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
 
         mEthernetNetworkAgent.connect(true);
-        callback.expectAvailableCallbacks(mEthernetNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mEthernetNetworkAgent);
         // TODO: Investigate sending validated before losing.
         callback.expectCallback(CallbackState.LOSING, mWiFiNetworkAgent);
         callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mEthernetNetworkAgent);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mEthernetNetworkAgent);
+        defaultCallback.expectAvailableDoubleValidatedCallbacks(mEthernetNetworkAgent);
         assertEquals(mEthernetNetworkAgent.getNetwork(), mCm.getActiveNetwork());
 
         mEthernetNetworkAgent.disconnect();
         callback.expectCallback(CallbackState.LOST, mEthernetNetworkAgent);
         defaultCallback.expectCallback(CallbackState.LOST, mEthernetNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableCallbacksValidated(mWiFiNetworkAgent);
 
         for (int i = 0; i < 4; i++) {
             MockNetworkAgent oldNetwork, newNetwork;
@@ -1594,7 +1647,7 @@ public class ConnectivityServiceTest {
             callback.expectCallback(CallbackState.LOSING, oldNetwork);
             // TODO: should we send an AVAILABLE callback to newNetwork, to indicate that it is no
             // longer lingering?
-            defaultCallback.expectAvailableCallbacks(newNetwork);
+            defaultCallback.expectAvailableCallbacksValidated(newNetwork);
             assertEquals(newNetwork.getNetwork(), mCm.getActiveNetwork());
         }
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
@@ -1614,7 +1667,7 @@ public class ConnectivityServiceTest {
         // Disconnect our test networks.
         mWiFiNetworkAgent.disconnect();
         defaultCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
         mCellNetworkAgent.disconnect();
         defaultCallback.expectCallback(CallbackState.LOST, mCellNetworkAgent);
 
@@ -1630,22 +1683,22 @@ public class ConnectivityServiceTest {
 
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(false);   // Score: 10
-        callback.expectAvailableCallbacks(mCellNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
         assertEquals(mCellNetworkAgent.getNetwork(), mCm.getActiveNetwork());
 
         // Bring up wifi with a score of 20.
         // Cell stays up because it would satisfy the default request if it validated.
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(false);   // Score: 20
-        callback.expectAvailableCallbacks(mWiFiNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
 
         mWiFiNetworkAgent.disconnect();
         callback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
         defaultCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
         assertEquals(mCellNetworkAgent.getNetwork(), mCm.getActiveNetwork());
 
         // Bring up wifi with a score of 70.
@@ -1653,33 +1706,33 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.adjustScore(50);
         mWiFiNetworkAgent.connect(false);   // Score: 70
-        callback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         callback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
 
         // Tear down wifi.
         mWiFiNetworkAgent.disconnect();
         callback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
         defaultCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
         assertEquals(mCellNetworkAgent.getNetwork(), mCm.getActiveNetwork());
 
         // Bring up wifi, then validate it. Previous versions would immediately tear down cell, but
         // it's arguably correct to linger it, since it was the default network before it validated.
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
-        callback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         // TODO: Investigate sending validated before losing.
         callback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
         callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableThenValidatedCallbacks(mWiFiNetworkAgent);
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
 
         mWiFiNetworkAgent.disconnect();
         callback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
         defaultCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
         mCellNetworkAgent.disconnect();
         callback.expectCallback(CallbackState.LOST, mCellNetworkAgent);
         defaultCallback.expectCallback(CallbackState.LOST, mCellNetworkAgent);
@@ -1687,12 +1740,12 @@ public class ConnectivityServiceTest {
         // If a network is lingering, and we add and remove a request from it, resume lingering.
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(true);
-        callback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        callback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
-        callback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         // TODO: Investigate sending validated before losing.
         callback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
         callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
@@ -1711,7 +1764,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent.disconnect();
         callback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
         defaultCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
 
         // Cell is now the default network. Pin it with a cell-specific request.
         noopCallback = new NetworkCallback();  // Can't reuse NetworkCallbacks. http://b/20701525
@@ -1720,8 +1773,8 @@ public class ConnectivityServiceTest {
         // Now connect wifi, and expect it to become the default network.
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
-        callback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableThenValidatedCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
         // The default request is lingering on cell, but nothing happens to cell, and we send no
         // callbacks for it, because it's kept up by cellRequest.
         callback.assertNoCallback();
@@ -1737,14 +1790,14 @@ public class ConnectivityServiceTest {
         // Register a TRACK_DEFAULT request and check that it does not affect lingering.
         TestNetworkCallback trackDefaultCallback = new TestNetworkCallback();
         mCm.registerDefaultNetworkCallback(trackDefaultCallback);
-        trackDefaultCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        trackDefaultCallback.expectAvailableCallbacksValidated(mWiFiNetworkAgent);
         mEthernetNetworkAgent = new MockNetworkAgent(TRANSPORT_ETHERNET);
         mEthernetNetworkAgent.connect(true);
-        callback.expectAvailableCallbacks(mEthernetNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mEthernetNetworkAgent);
         callback.expectCallback(CallbackState.LOSING, mWiFiNetworkAgent);
         callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mEthernetNetworkAgent);
-        trackDefaultCallback.expectAvailableAndValidatedCallbacks(mEthernetNetworkAgent);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mEthernetNetworkAgent);
+        trackDefaultCallback.expectAvailableDoubleValidatedCallbacks(mEthernetNetworkAgent);
+        defaultCallback.expectAvailableDoubleValidatedCallbacks(mEthernetNetworkAgent);
 
         // Let linger run its course.
         callback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent, lingerTimeoutMs);
@@ -1771,13 +1824,13 @@ public class ConnectivityServiceTest {
         // Bring up validated cell.
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(true);
-        callback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        callback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
 
         // Bring up unvalidated wifi with explicitlySelected=true.
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.explicitlySelected(false);
         mWiFiNetworkAgent.connect(false);
-        callback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
 
         // Cell Remains the default.
         assertEquals(mCellNetworkAgent.getNetwork(), mCm.getActiveNetwork());
@@ -1800,7 +1853,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.explicitlySelected(false);
         mWiFiNetworkAgent.connect(false);
-        callback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
 
         // If the user chooses no on the "No Internet access, stay connected?" dialog, we ask the
         // network to disconnect.
@@ -1811,7 +1864,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.explicitlySelected(false);
         mWiFiNetworkAgent.connect(true);
-        callback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         callback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
         callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
         assertEquals(mWiFiNetworkAgent.getNetwork(), mCm.getActiveNetwork());
@@ -1820,7 +1873,7 @@ public class ConnectivityServiceTest {
         // TODO: fix this.
         mEthernetNetworkAgent = new MockNetworkAgent(TRANSPORT_ETHERNET);
         mEthernetNetworkAgent.connect(true);
-        callback.expectAvailableAndValidatedCallbacks(mEthernetNetworkAgent);
+        callback.expectAvailableThenValidatedCallbacks(mEthernetNetworkAgent);
         assertEquals(mEthernetNetworkAgent.getNetwork(), mCm.getActiveNetwork());
         callback.assertNoCallback();
 
@@ -1993,7 +2046,7 @@ public class ConnectivityServiceTest {
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.addCapability(NET_CAPABILITY_MMS);
         mCellNetworkAgent.connectWithoutInternet();
-        networkCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        networkCallback.expectAvailableCallbacksUnvalidated(mCellNetworkAgent);
         verifyActiveNetwork(TRANSPORT_WIFI);
 
         // Test releasing NetworkRequest disconnects cellular with MMS
@@ -2022,7 +2075,7 @@ public class ConnectivityServiceTest {
         MockNetworkAgent mmsNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mmsNetworkAgent.addCapability(NET_CAPABILITY_MMS);
         mmsNetworkAgent.connectWithoutInternet();
-        networkCallback.expectAvailableCallbacks(mmsNetworkAgent);
+        networkCallback.expectAvailableCallbacksUnvalidated(mmsNetworkAgent);
         verifyActiveNetwork(TRANSPORT_CELLULAR);
 
         // Test releasing MMS NetworkRequest does not disconnect main cellular NetworkAgent
@@ -2049,7 +2102,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         String firstRedirectUrl = "http://example.com/firstPath";
         mWiFiNetworkAgent.connectWithCaptivePortal(firstRedirectUrl);
-        captivePortalCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        captivePortalCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         assertEquals(mWiFiNetworkAgent.waitForRedirectUrl(), firstRedirectUrl);
 
         // Take down network.
@@ -2062,7 +2115,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         String secondRedirectUrl = "http://example.com/secondPath";
         mWiFiNetworkAgent.connectWithCaptivePortal(secondRedirectUrl);
-        captivePortalCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        captivePortalCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         assertEquals(mWiFiNetworkAgent.waitForRedirectUrl(), secondRedirectUrl);
 
         // Make captive portal disappear then revalidate.
@@ -2072,9 +2125,7 @@ public class ConnectivityServiceTest {
         captivePortalCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
 
         // Expect NET_CAPABILITY_VALIDATED onAvailable callback.
-        validatedCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
-        // TODO: Investigate only sending available callbacks.
-        validatedCallback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
+        validatedCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
 
         // Break network connectivity.
         // Expect NET_CAPABILITY_VALIDATED onLost callback.
@@ -2098,7 +2149,7 @@ public class ConnectivityServiceTest {
         // Bring up wifi.
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
-        validatedCallback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
+        validatedCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
         Network wifiNetwork = mWiFiNetworkAgent.getNetwork();
 
         // Check that calling startCaptivePortalApp does nothing.
@@ -2109,7 +2160,7 @@ public class ConnectivityServiceTest {
         // Turn into a captive portal.
         mWiFiNetworkAgent.getWrappedNetworkMonitor().gen204ProbeResult = 302;
         mCm.reportNetworkConnectivity(wifiNetwork, false);
-        captivePortalCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        captivePortalCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         validatedCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
 
         // Check that startCaptivePortalApp sends the expected intent.
@@ -2122,7 +2173,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent.getWrappedNetworkMonitor().gen204ProbeResult = 204;
         CaptivePortal c = (CaptivePortal) intent.getExtra(ConnectivityManager.EXTRA_CAPTIVE_PORTAL);
         c.reportCaptivePortalDismissed();
-        validatedCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        validatedCallback.expectAvailableCallbacksValidated(mWiFiNetworkAgent);
         captivePortalCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
 
         mCm.unregisterNetworkCallback(validatedCallback);
@@ -2165,7 +2216,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent.connectWithCaptivePortal(secondRedirectUrl);
 
         // Expect NET_CAPABILITY_VALIDATED onAvailable callback.
-        validatedCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        validatedCallback.expectAvailableCallbacksValidated(mWiFiNetworkAgent);
         // But there should be no CaptivePortal callback.
         captivePortalCallback.assertNoCallback();
     }
@@ -2203,14 +2254,14 @@ public class ConnectivityServiceTest {
 
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(false);
-        cEmpty1.expectAvailableCallbacks(mWiFiNetworkAgent);
-        cEmpty2.expectAvailableCallbacks(mWiFiNetworkAgent);
-        cEmpty3.expectAvailableCallbacks(mWiFiNetworkAgent);
-        cEmpty4.expectAvailableCallbacks(mWiFiNetworkAgent);
+        cEmpty1.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        cEmpty2.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        cEmpty3.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        cEmpty4.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         assertNoCallbacks(cFoo, cBar);
 
         mWiFiNetworkAgent.setNetworkSpecifier(new StringNetworkSpecifier("foo"));
-        cFoo.expectAvailableCallbacks(mWiFiNetworkAgent);
+        cFoo.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         for (TestNetworkCallback c: emptyCallbacks) {
             c.expectCallback(CallbackState.NETWORK_CAPABILITIES, mWiFiNetworkAgent);
         }
@@ -2219,7 +2270,7 @@ public class ConnectivityServiceTest {
 
         mWiFiNetworkAgent.setNetworkSpecifier(new StringNetworkSpecifier("bar"));
         cFoo.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
-        cBar.expectAvailableCallbacks(mWiFiNetworkAgent);
+        cBar.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         for (TestNetworkCallback c: emptyCallbacks) {
             c.expectCallback(CallbackState.NETWORK_CAPABILITIES, mWiFiNetworkAgent);
         }
@@ -2348,14 +2399,14 @@ public class ConnectivityServiceTest {
         // Bring up cell and expect CALLBACK_AVAILABLE.
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(true);
-        cellNetworkCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
-        defaultNetworkCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        cellNetworkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
+        defaultNetworkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
 
         // Bring up wifi and expect CALLBACK_AVAILABLE.
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
         cellNetworkCallback.assertNoCallback();
-        defaultNetworkCallback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
+        defaultNetworkCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
 
         // Bring down cell. Expect no default network callback, since it wasn't the default.
         mCellNetworkAgent.disconnect();
@@ -2365,7 +2416,7 @@ public class ConnectivityServiceTest {
         // Bring up cell. Expect no default network callback, since it won't be the default.
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(true);
-        cellNetworkCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        cellNetworkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
         defaultNetworkCallback.assertNoCallback();
 
         // Bring down wifi. Expect the default network callback to notified of LOST wifi
@@ -2373,7 +2424,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent.disconnect();
         cellNetworkCallback.assertNoCallback();
         defaultNetworkCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
-        defaultNetworkCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultNetworkCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
         mCellNetworkAgent.disconnect();
         cellNetworkCallback.expectCallback(CallbackState.LOST, mCellNetworkAgent);
         defaultNetworkCallback.expectCallback(CallbackState.LOST, mCellNetworkAgent);
@@ -2394,7 +2445,7 @@ public class ConnectivityServiceTest {
         // We should get onAvailable(), onCapabilitiesChanged(), and
         // onLinkPropertiesChanged() in rapid succession. Additionally, we
         // should get onCapabilitiesChanged() when the mobile network validates.
-        cellNetworkCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        cellNetworkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
         cellNetworkCallback.assertNoCallback();
 
         // Update LinkProperties.
@@ -2415,7 +2466,7 @@ public class ConnectivityServiceTest {
         mCm.registerDefaultNetworkCallback(dfltNetworkCallback);
         // We should get onAvailable(), onCapabilitiesChanged(), onLinkPropertiesChanged(),
         // as well as onNetworkSuspended() in rapid succession.
-        dfltNetworkCallback.expectAvailableAndSuspendedCallbacks(mCellNetworkAgent);
+        dfltNetworkCallback.expectAvailableAndSuspendedCallbacks(mCellNetworkAgent, true);
         dfltNetworkCallback.assertNoCallback();
 
         mCm.unregisterNetworkCallback(dfltNetworkCallback);
@@ -2455,18 +2506,18 @@ public class ConnectivityServiceTest {
 
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(true);
-        callback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
-        fgCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        callback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
+        fgCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
         assertTrue(isForegroundNetwork(mCellNetworkAgent));
 
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
 
         // When wifi connects, cell lingers.
-        callback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         callback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
         callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
-        fgCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        fgCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         fgCallback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
         fgCallback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
         assertTrue(isForegroundNetwork(mCellNetworkAgent));
@@ -2490,8 +2541,8 @@ public class ConnectivityServiceTest {
         // is currently delivered before the onAvailable() callbacks.
         // TODO: Fix this.
         cellCallback.expectCapabilitiesWith(NET_CAPABILITY_FOREGROUND, mCellNetworkAgent);
-        cellCallback.expectAvailableCallbacks(mCellNetworkAgent);
-        fgCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        cellCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
+        fgCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
         // Expect a network capabilities update with FOREGROUND, because the most recent
         // request causes its state to change.
         callback.expectCapabilitiesWith(NET_CAPABILITY_FOREGROUND, mCellNetworkAgent);
@@ -2511,7 +2562,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent.disconnect();
         callback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
         fgCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
-        fgCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        fgCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
         assertTrue(isForegroundNetwork(mCellNetworkAgent));
 
         mCm.unregisterNetworkCallback(callback);
@@ -2651,7 +2702,7 @@ public class ConnectivityServiceTest {
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         testFactory.expectAddRequests(2);  // Because the cell request changes score twice.
         mCellNetworkAgent.connect(true);
-        cellNetworkCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        cellNetworkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
         testFactory.waitForNetworkRequests(2);
         assertFalse(testFactory.getMyStartRequested());  // Because the cell network outscores us.
 
@@ -2742,16 +2793,15 @@ public class ConnectivityServiceTest {
         // Bring up validated cell.
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         mCellNetworkAgent.connect(true);
-        cellNetworkCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mCellNetworkAgent);
+        cellNetworkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
         Network cellNetwork = mCellNetworkAgent.getNetwork();
 
         // Bring up validated wifi.
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
-        validatedWifiCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
-        validatedWifiCallback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
+        defaultCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
+        validatedWifiCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
         Network wifiNetwork = mWiFiNetworkAgent.getNetwork();
 
         // Fail validation on wifi.
@@ -2772,18 +2822,18 @@ public class ConnectivityServiceTest {
         // that we switch back to cell.
         tracker.configRestrictsAvoidBadWifi = false;
         tracker.reevaluate();
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
         assertEquals(mCm.getActiveNetwork(), cellNetwork);
 
         // Switch back to a restrictive carrier.
         tracker.configRestrictsAvoidBadWifi = true;
         tracker.reevaluate();
-        defaultCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         assertEquals(mCm.getActiveNetwork(), wifiNetwork);
 
         // Simulate the user selecting "switch" on the dialog, and check that we switch to cell.
         mCm.setAvoidUnvalidated(wifiNetwork);
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
         assertFalse(mCm.getNetworkCapabilities(wifiNetwork).hasCapability(
                 NET_CAPABILITY_VALIDATED));
         assertTrue(mCm.getNetworkCapabilities(cellNetwork).hasCapability(
@@ -2794,9 +2844,8 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent.disconnect();
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(true);
-        defaultCallback.expectAvailableAndValidatedCallbacks(mWiFiNetworkAgent);
-        validatedWifiCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
-        validatedWifiCallback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
+        defaultCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
+        validatedWifiCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
         wifiNetwork = mWiFiNetworkAgent.getNetwork();
 
         // Fail validation on wifi and expect the dialog to appear.
@@ -2810,7 +2859,7 @@ public class ConnectivityServiceTest {
         tracker.reevaluate();
 
         // We now switch to cell.
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
         assertFalse(mCm.getNetworkCapabilities(wifiNetwork).hasCapability(
                 NET_CAPABILITY_VALIDATED));
         assertTrue(mCm.getNetworkCapabilities(cellNetwork).hasCapability(
@@ -2821,17 +2870,17 @@ public class ConnectivityServiceTest {
         // We switch to wifi and then to cell.
         Settings.Global.putString(cr, Settings.Global.NETWORK_AVOID_BAD_WIFI, null);
         tracker.reevaluate();
-        defaultCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         assertEquals(mCm.getActiveNetwork(), wifiNetwork);
         Settings.Global.putInt(cr, Settings.Global.NETWORK_AVOID_BAD_WIFI, 1);
         tracker.reevaluate();
-        defaultCallback.expectAvailableCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
         assertEquals(mCm.getActiveNetwork(), cellNetwork);
 
         // If cell goes down, we switch to wifi.
         mCellNetworkAgent.disconnect();
         defaultCallback.expectCallback(CallbackState.LOST, mCellNetworkAgent);
-        defaultCallback.expectAvailableCallbacks(mWiFiNetworkAgent);
+        defaultCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
         validatedWifiCallback.assertNoCallback();
 
         mCm.unregisterNetworkCallback(cellNetworkCallback);
@@ -2873,7 +2922,7 @@ public class ConnectivityServiceTest {
 
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(false);
-        networkCallback.expectAvailableCallbacks(mWiFiNetworkAgent, false, timeoutMs);
+        networkCallback.expectAvailableCallbacks(mWiFiNetworkAgent, false, false, timeoutMs);
 
         // pass timeout and validate that UNAVAILABLE is not called
         networkCallback.assertNoCallback();
@@ -2894,7 +2943,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
         mWiFiNetworkAgent.connect(false);
         final int assertTimeoutMs = 100;
-        networkCallback.expectAvailableCallbacks(mWiFiNetworkAgent, false, assertTimeoutMs);
+        networkCallback.expectAvailableCallbacks(mWiFiNetworkAgent, false, false, assertTimeoutMs);
         mWiFiNetworkAgent.disconnect();
         networkCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
 
@@ -3381,7 +3430,7 @@ public class ConnectivityServiceTest {
 
         // Bring up wifi aware network.
         wifiAware.connect(false, false);
-        callback.expectAvailableCallbacks(wifiAware);
+        callback.expectAvailableCallbacksUnvalidated(wifiAware);
 
         assertNull(mCm.getActiveNetworkInfo());
         assertNull(mCm.getActiveNetwork());
@@ -3469,34 +3518,50 @@ public class ConnectivityServiceTest {
     @Test
     public void testStatsIfacesChanged() throws Exception {
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+
+        Network[] onlyCell = new Network[]{mCellNetworkAgent.getNetwork()};
+        Network[] onlyWifi = new Network[]{mWiFiNetworkAgent.getNetwork()};
 
         // Simple connection should have updated ifaces
         mCellNetworkAgent.connect(false);
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces();
+        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
+        reset(mStatsService);
+
+        // Default network switch should update ifaces.
+        mWiFiNetworkAgent.connect(false);
+        waitForIdle();
+        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyWifi);
+        reset(mStatsService);
+
+        // Disconnect should update ifaces.
+        mWiFiNetworkAgent.disconnect();
+        waitForIdle();
+        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
         reset(mStatsService);
 
         // Metered change should update ifaces
         mCellNetworkAgent.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces();
+        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
         reset(mStatsService);
 
         mCellNetworkAgent.removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces();
+        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
         reset(mStatsService);
 
         // Captive portal change shouldn't update ifaces
         mCellNetworkAgent.addCapability(NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL);
         waitForIdle();
-        verify(mStatsService, never()).forceUpdateIfaces();
+        verify(mStatsService, never()).forceUpdateIfaces(onlyCell);
         reset(mStatsService);
 
         // Roaming change should update ifaces
         mCellNetworkAgent.addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING);
         waitForIdle();
-        verify(mStatsService, atLeastOnce()).forceUpdateIfaces();
+        verify(mStatsService, atLeastOnce()).forceUpdateIfaces(onlyCell);
         reset(mStatsService);
     }
 
@@ -3576,5 +3641,77 @@ public class ConnectivityServiceTest {
             }
             return;
         }
+    }
+
+    @Test
+    public void testVpnNetworkActive() {
+        final int uid = Process.myUid();
+
+        final TestNetworkCallback genericNetworkCallback = new TestNetworkCallback();
+        final TestNetworkCallback wifiNetworkCallback = new TestNetworkCallback();
+        final TestNetworkCallback vpnNetworkCallback = new TestNetworkCallback();
+        final NetworkRequest genericRequest = new NetworkRequest.Builder().build();
+        final NetworkRequest wifiRequest = new NetworkRequest.Builder()
+                .addTransportType(TRANSPORT_WIFI).build();
+        final NetworkRequest vpnNetworkRequest = new NetworkRequest.Builder()
+                .addTransportType(TRANSPORT_VPN).build();
+        mCm.registerNetworkCallback(genericRequest, genericNetworkCallback);
+        mCm.registerNetworkCallback(wifiRequest, wifiNetworkCallback);
+        mCm.registerNetworkCallback(vpnNetworkRequest, vpnNetworkCallback);
+
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+        mWiFiNetworkAgent.connect(false);
+
+        genericNetworkCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        wifiNetworkCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        vpnNetworkCallback.assertNoCallback();
+
+        // TODO : check callbacks agree with the return value of mCm.getActiveNetwork().
+        // Right now this is not possible because establish() is not adequately instrumented
+        // in this test.
+
+        final MockNetworkAgent vpnNetworkAgent = new MockNetworkAgent(TRANSPORT_VPN);
+        final ArraySet<UidRange> ranges = new ArraySet<>();
+        ranges.add(new UidRange(uid, uid));
+        vpnNetworkAgent.setUids(ranges);
+        vpnNetworkAgent.connect(false);
+
+        genericNetworkCallback.expectAvailableCallbacksUnvalidated(vpnNetworkAgent);
+        wifiNetworkCallback.assertNoCallback();
+        vpnNetworkCallback.expectAvailableCallbacksUnvalidated(vpnNetworkAgent);
+
+        genericNetworkCallback.expectCallback(CallbackState.NETWORK_CAPABILITIES, vpnNetworkAgent);
+        vpnNetworkCallback.expectCapabilitiesLike(
+                nc -> nc.appliesToUid(uid) && !nc.appliesToUid(uid + 1), vpnNetworkAgent);
+
+        ranges.clear();
+        vpnNetworkAgent.setUids(ranges);
+
+        genericNetworkCallback.expectCallback(CallbackState.LOST, vpnNetworkAgent);
+        wifiNetworkCallback.assertNoCallback();
+        vpnNetworkCallback.expectCallback(CallbackState.LOST, vpnNetworkAgent);
+
+        ranges.add(new UidRange(uid, uid));
+        vpnNetworkAgent.setUids(ranges);
+
+        genericNetworkCallback.expectAvailableCallbacksValidated(vpnNetworkAgent);
+        wifiNetworkCallback.assertNoCallback();
+        vpnNetworkCallback.expectAvailableCallbacksValidated(vpnNetworkAgent);
+
+        mWiFiNetworkAgent.disconnect();
+
+        genericNetworkCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
+        wifiNetworkCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
+        vpnNetworkCallback.assertNoCallback();
+
+        vpnNetworkAgent.disconnect();
+
+        genericNetworkCallback.expectCallback(CallbackState.LOST, vpnNetworkAgent);
+        wifiNetworkCallback.assertNoCallback();
+        vpnNetworkCallback.expectCallback(CallbackState.LOST, vpnNetworkAgent);
+
+        mCm.unregisterNetworkCallback(genericNetworkCallback);
+        mCm.unregisterNetworkCallback(wifiNetworkCallback);
+        mCm.unregisterNetworkCallback(vpnNetworkCallback);
     }
 }

@@ -25,12 +25,14 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
+import android.provider.Settings;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.util.Log;
@@ -119,6 +121,8 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_AIRPLANE_MODE,
             UserManager.DISALLOW_CONFIG_BRIGHTNESS,
             UserManager.DISALLOW_SHARE_INTO_MANAGED_PROFILE,
+            UserManager.DISALLOW_AMBIENT_DISPLAY,
+            UserManager.DISALLOW_CONFIG_SCREEN_TIMEOUT
     });
 
     /**
@@ -540,6 +544,41 @@ public class UserRestrictionsUtils {
                             context.getContentResolver(),
                             android.provider.Settings.Global.SAFE_BOOT_DISALLOWED,
                             newValue ? 1 : 0);
+                    break;
+                case UserManager.DISALLOW_AIRPLANE_MODE:
+                    if (newValue) {
+                        final boolean airplaneMode = Settings.Global.getInt(
+                                context.getContentResolver(),
+                                Settings.Global.AIRPLANE_MODE_ON, 0) == 1;
+                        if (airplaneMode) {
+                            android.provider.Settings.Global.putInt(
+                                    context.getContentResolver(),
+                                    android.provider.Settings.Global.AIRPLANE_MODE_ON, 0);
+                            // Post the intent.
+                            Intent intent = new Intent(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+                            intent.putExtra("state", 0);
+                            context.sendBroadcastAsUser(intent, UserHandle.ALL);
+                        }
+                    }
+                    break;
+                case UserManager.DISALLOW_AMBIENT_DISPLAY:
+                    if (newValue) {
+                        android.provider.Settings.Secure.putString(
+                                context.getContentResolver(),
+                                Settings.Secure.DOZE_ENABLED, "0");
+                        android.provider.Settings.Secure.putString(
+                                context.getContentResolver(),
+                                Settings.Secure.DOZE_ALWAYS_ON, "0");
+                        android.provider.Settings.Secure.putString(
+                                context.getContentResolver(),
+                                Settings.Secure.DOZE_PULSE_ON_PICK_UP, "0");
+                        android.provider.Settings.Secure.putString(
+                                context.getContentResolver(),
+                                Settings.Secure.DOZE_PULSE_ON_LONG_PRESS, "0");
+                        android.provider.Settings.Secure.putString(
+                                context.getContentResolver(),
+                                Settings.Secure.DOZE_PULSE_ON_DOUBLE_TAP, "0");
+                    }
                     break;
             }
         } finally {

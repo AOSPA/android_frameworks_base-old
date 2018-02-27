@@ -16,6 +16,7 @@
 
 package com.android.server.am;
 
+import android.app.ActivityManager;
 import android.bluetooth.BluetoothActivityEnergyInfo;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -40,6 +41,8 @@ import android.os.UserManagerInternal;
 import android.os.WorkSource;
 import android.os.WorkSource.WorkChain;
 import android.os.connectivity.CellularBatteryStats;
+import android.os.connectivity.WifiBatteryStats;
+import android.os.connectivity.GpsBatteryStats;
 import android.os.health.HealthStatsParceler;
 import android.os.health.HealthStatsWriter;
 import android.os.health.UidHealthStats;
@@ -351,10 +354,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
     }
 
+    /** @param state Process state from ActivityManager.java. */
     void noteUidProcessState(int uid, int state) {
         synchronized (mStats) {
             // TODO: remove this once we figure out properly where and how
-            StatsLog.write(StatsLog.UID_PROCESS_STATE_CHANGED, uid, state);
+            StatsLog.write(StatsLog.UID_PROCESS_STATE_CHANGED, uid,
+                    ActivityManager.processStateAmToProto(state));
 
             mStats.noteUidProcessStateLocked(uid, state);
         }
@@ -580,17 +585,17 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
     }
 
-    public void noteStartGps(int uid) {
+    @Override
+    public void noteGpsChanged(WorkSource oldWs, WorkSource newWs) {
         enforceCallingPermission();
         synchronized (mStats) {
-            mStats.noteStartGpsLocked(uid);
+            mStats.noteGpsChangedLocked(oldWs, newWs);
         }
     }
 
-    public void noteStopGps(int uid) {
-        enforceCallingPermission();
+    public void noteGpsSignalQuality(int signalLevel) {
         synchronized (mStats) {
-            mStats.noteStopGpsLocked(uid);
+            mStats.noteGpsSignalQualityLocked(signalLevel);
         }
     }
 
@@ -1444,6 +1449,26 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     public CellularBatteryStats getCellularBatteryStats() {
         synchronized (mStats) {
             return mStats.getCellularBatteryStats();
+        }
+    }
+
+    /**
+     * Gets a snapshot of Wifi stats
+     * @hide
+     */
+    public WifiBatteryStats getWifiBatteryStats() {
+        synchronized (mStats) {
+            return mStats.getWifiBatteryStats();
+        }
+    }
+
+    /**
+     * Gets a snapshot of Gps stats
+     * @hide
+     */
+    public GpsBatteryStats getGpsBatteryStats() {
+        synchronized (mStats) {
+            return mStats.getGpsBatteryStats();
         }
     }
 

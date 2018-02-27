@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.stack;
 
+import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator.ExpandAnimationParameters;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
@@ -29,6 +31,7 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PointF;
@@ -43,6 +46,7 @@ import android.support.annotation.VisibleForTesting;
 import android.util.AttributeSet;
 import android.util.FloatProperty;
 import android.util.Log;
+import android.util.MathUtils;
 import android.util.Pair;
 import android.util.Property;
 import android.view.ContextThemeWrapper;
@@ -123,7 +127,7 @@ public class NotificationStackScrollLayout extends ViewGroup
     /**
      * Sentinel value for no current active pointer. Used by {@link #mActivePointerId}.
      */
-    private static final int INVALID_POINTER = -1;;
+    private static final int INVALID_POINTER = -1;
 
     private ExpandHelper mExpandHelper;
     private NotificationSwipeHelper mSwipeHelper;
@@ -158,7 +162,12 @@ public class NotificationStackScrollLayout extends ViewGroup
     private int mCollapsedSize;
     private int mPaddingBetweenElements;
     private int mIncreasedPaddingBetweenElements;
+    private int mRegularTopPadding;
+    private int mDarkTopPadding;
+    // Current padding, will be either mRegularTopPadding or mDarkTopPadding
     private int mTopPadding;
+    // Distance between AOD separator and shelf
+    private int mDarkSeparatorPadding;
     private int mBottomMargin;
     private int mBottomInset = 0;
 
@@ -356,17 +365,17 @@ public class NotificationStackScrollLayout extends ViewGroup
     private boolean mGroupExpandedForMeasure;
     private boolean mScrollable;
     private View mForcedScroll;
-    private float mBackgroundFadeAmount = 1.0f;
-    private static final Property<NotificationStackScrollLayout, Float> BACKGROUND_FADE =
-            new FloatProperty<NotificationStackScrollLayout>("backgroundFade") {
+    private float mDarkAmount = 1.0f;
+    private static final Property<NotificationStackScrollLayout, Float> DARK_AMOUNT =
+            new FloatProperty<NotificationStackScrollLayout>("darkAmount") {
                 @Override
                 public void setValue(NotificationStackScrollLayout object, float value) {
-                    object.setBackgroundFadeAmount(value);
+                    object.setDarkAmount(value);
                 }
 
                 @Override
                 public Float get(NotificationStackScrollLayout object) {
-                    return object.getBackgroundFadeAmount();
+                    return object.getDarkAmount();
                 }
             };
     private boolean mUsingLightTheme;
@@ -389,6 +398,10 @@ public class NotificationStackScrollLayout extends ViewGroup
     private Runnable mAnimateScroll = this::animateScroll;
     private int mCornerRadius;
     private int mSidePaddings;
+    private final int mSeparatorWidth;
+    private final int mSeparatorThickness;
+    private final Rect mTmpRect = new Rect();
+    private int mClockBottom;
 
     public NotificationStackScrollLayout(Context context) {
         this(context, null);
@@ -423,9 +436,12 @@ public class NotificationStackScrollLayout extends ViewGroup
                 res.getBoolean(R.bool.config_drawNotificationBackground);
         mFadeNotificationsOnDismiss =
                 res.getBoolean(R.bool.config_fadeNotificationsOnDismiss);
+        mSeparatorWidth = res.getDimensionPixelSize(R.dimen.widget_separator_width);
+        mSeparatorThickness = res.getDimensionPixelSize(R.dimen.widget_separator_thickness);
+        mDarkSeparatorPadding = res.getDimensionPixelSize(R.dimen.widget_bottom_separator_padding);
 
         updateWillNotDraw();
-        mBackgroundPaint.setAntiAlias(true);;
+        mBackgroundPaint.setAntiAlias(true);
         if (DEBUG) {
             mDebugPaint = new Paint();
             mDebugPaint.setColor(0xffff0000);
@@ -472,10 +488,9 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     protected void onDraw(Canvas canvas) {
-        if (mShouldDrawNotificationBackground && !mAmbientState.isDark()
-                && mCurrentBounds.top < mCurrentBounds.bottom) {
-            canvas.drawRoundRect(mSidePaddings, mCurrentBounds.top, getWidth() - mSidePaddings,
-                    mCurrentBounds.bottom, mCornerRadius, mCornerRadius, mBackgroundPaint);
+        if (mShouldDrawNotificationBackground
+                && (mCurrentBounds.top < mCurrentBounds.bottom || mAmbientState.isDark())) {
+            drawBackground(canvas);
         }
 
         if (DEBUG) {
@@ -488,17 +503,57 @@ public class NotificationStackScrollLayout extends ViewGroup
         }
     }
 
+    private void drawBackground(Canvas canvas) {
+        final int lockScreenLeft = mSidePaddings;
+        final int lockScreenRight = getWidth() - mSidePaddings;
+        final int lockScreenTop = mCurrentBounds.top;
+        final int lockScreenBottom = mCurrentBounds.bottom;
+        final int darkLeft = getWidth() / 2 - mSeparatorWidth / 2;
+        final int darkRight = darkLeft + mSeparatorWidth;
+        final int darkTop = (int) (mRegularTopPadding + mSeparatorThickness / 2f);
+        final int darkBottom = darkTop + mSeparatorThickness;
+
+        if (mAmbientState.hasPulsingNotifications()) {
+            // TODO draw divider between notification and shelf
+        } else if (mAmbientState.isDark()) {
+            // Only draw divider on AOD if we actually have notifications
+            if (mFirstVisibleBackgroundChild != null) {
+                canvas.drawRect(darkLeft, darkTop, darkRight, darkBottom, mBackgroundPaint);
+            }
+            setClipBounds(null);
+        } else {
+            float animProgress = Interpolators.FAST_OUT_SLOW_IN
+                    .getInterpolation(mDarkAmount);
+            float sidePaddingsProgress = Interpolators.FAST_OUT_SLOW_IN
+                    .getInterpolation(mDarkAmount * 2);
+            mTmpRect.set((int) MathUtils.lerp(darkLeft, lockScreenLeft, sidePaddingsProgress),
+                    (int) MathUtils.lerp(darkTop, lockScreenTop, animProgress),
+                    (int) MathUtils.lerp(darkRight, lockScreenRight, sidePaddingsProgress),
+                    (int) MathUtils.lerp(darkBottom, lockScreenBottom, animProgress));
+            canvas.drawRoundRect(mTmpRect.left, mTmpRect.top, mTmpRect.right, mTmpRect.bottom,
+                    mCornerRadius, mCornerRadius, mBackgroundPaint);
+            setClipBounds(animProgress == 1 ? null : mTmpRect);
+        }
+    }
+
     private void updateBackgroundDimming() {
         // No need to update the background color if it's not being drawn.
         if (!mShouldDrawNotificationBackground) {
             return;
         }
 
-        float alpha = BACKGROUND_ALPHA_DIMMED + (1 - BACKGROUND_ALPHA_DIMMED) * (1.0f - mDimAmount);
-        alpha *= mBackgroundFadeAmount;
-        // We need to manually blend in the background color
-        int scrimColor = mScrimController.getBackgroundColor();
-        int color = ColorUtils.blendARGB(scrimColor, mBgColor, alpha);
+        final int color;
+        if (mAmbientState.isDark()) {
+            color = Color.WHITE;
+        } else {
+            float alpha =
+                    BACKGROUND_ALPHA_DIMMED + (1 - BACKGROUND_ALPHA_DIMMED) * (1.0f - mDimAmount);
+            alpha *= mDarkAmount;
+            // We need to manually blend in the background color
+            int scrimColor = mScrimController.getBackgroundColor();
+            color = ColorUtils.blendARGB(scrimColor, mBgColor, alpha);
+        }
+
         if (mCachedBackgroundColor != color) {
             mCachedBackgroundColor = color;
             mBackgroundPaint.setColor(color);
@@ -634,6 +689,11 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     private void updateAlgorithmHeightAndPadding() {
+        if (mPulsing != null) {
+            mTopPadding = mClockBottom;
+        } else {
+            mTopPadding = mAmbientState.isDark() ? mDarkTopPadding : mRegularTopPadding;
+        }
         mAmbientState.setLayoutHeight(getLayoutHeight());
         updateAlgorithmLayoutMinHeight();
         mAmbientState.setTopPadding(mTopPadding);
@@ -670,7 +730,7 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     private void updateClippingToTopRoundedCorner() {
-        Float clipStart = (float) mTopPadding;
+        Float clipStart = (float) mTopPadding + mAmbientState.getExpandAnimationTopChange();
         Float clipEnd = clipStart + mCornerRadius;
         boolean first = true;
         for (int i = 0; i < getChildCount(); i++) {
@@ -756,8 +816,9 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     private void setTopPadding(int topPadding, boolean animate) {
-        if (mTopPadding != topPadding) {
-            mTopPadding = topPadding;
+        if (mRegularTopPadding != topPadding) {
+            mRegularTopPadding = topPadding;
+            mDarkTopPadding = topPadding + mDarkSeparatorPadding;
             updateAlgorithmHeightAndPadding();
             updateContentHeight();
             if (animate && mAnimationsEnabled && mIsExpanded) {
@@ -960,33 +1021,15 @@ public class NotificationStackScrollLayout extends ViewGroup
                 mHeadsUpManager.addSwipedOutNotification(row.getStatusBarNotification().getKey());
             }
         }
-        performDismiss(v, mGroupManager, false /* fromAccessibility */);
+        if (v instanceof ExpandableNotificationRow) {
+            ((ExpandableNotificationRow) v).performDismiss(false /* fromAccessibility */);
+        }
 
         mFalsingManager.onNotificationDismissed();
         if (mFalsingManager.shouldEnforceBouncer()) {
             mStatusBar.executeRunnableDismissingKeyguard(null, null /* cancelAction */,
                     false /* dismissShade */, true /* afterKeyguardGone */, false /* deferred */);
         }
-    }
-
-    public static void performDismiss(View v, NotificationGroupManager groupManager,
-            boolean fromAccessibility) {
-        if (!(v instanceof ExpandableNotificationRow)) {
-            return;
-        }
-        ExpandableNotificationRow row = (ExpandableNotificationRow) v;
-        if (groupManager.isOnlyChildInGroup(row.getStatusBarNotification())) {
-            ExpandableNotificationRow groupSummary =
-                    groupManager.getLogicalGroupSummary(row.getStatusBarNotification());
-            if (groupSummary.isClearable()) {
-                performDismiss(groupSummary, groupManager, fromAccessibility);
-            }
-        }
-        row.setDismissed(true, fromAccessibility);
-        if (row.isClearable()) {
-            row.performDismiss();
-        }
-        if (DEBUG) Log.v(TAG, "onChildDismissed: " + v);
     }
 
     @Override
@@ -2262,7 +2305,7 @@ public class NotificationStackScrollLayout extends ViewGroup
         }
 
         mScrimController.setExcludedBackgroundArea(
-                mFadingOut || mParentNotFullyVisible || mAmbientState.isDark() || mIsClipped ? null
+                mFadingOut || mParentNotFullyVisible || mDarkAmount != 1 || mIsClipped ? null
                         : mCurrentBounds);
         invalidate();
     }
@@ -2947,6 +2990,17 @@ public class NotificationStackScrollLayout extends ViewGroup
                 && (mIsExpanded || isPinnedHeadsUp(child)), child);
     }
 
+    @Override
+    public void setExpandingNotification(ExpandableNotificationRow row) {
+        mAmbientState.setExpandingNotification(row);
+        requestChildrenUpdate();
+    }
+
+    @Override
+    public void applyExpandAnimationParams(ExpandAnimationParameters params) {
+        mAmbientState.setExpandAnimationTopChange(params == null ? 0 : params.getTopChange());
+        requestChildrenUpdate();
+    }
 
     private void updateAnimationState(boolean running, View child) {
         if (child instanceof ExpandableNotificationRow) {
@@ -3804,9 +3858,9 @@ public class NotificationStackScrollLayout extends ViewGroup
             mDarkNeedsAnimation = true;
             mDarkAnimationOriginIndex = findDarkAnimationOriginIndex(touchWakeUpScreenLocation);
             mNeedsAnimation =  true;
-            setBackgroundFadeAmount(0.0f);
+            setDarkAmount(0.0f);
         } else if (!dark) {
-            setBackgroundFadeAmount(1.0f);
+            setDarkAmount(1.0f);
         }
         requestChildrenUpdate();
         if (dark) {
@@ -3826,21 +3880,21 @@ public class NotificationStackScrollLayout extends ViewGroup
      * {@link #mAmbientState}'s dark mode is toggled.
      */
     private void updateWillNotDraw() {
-        boolean willDraw = !mAmbientState.isDark() && mShouldDrawNotificationBackground || DEBUG;
+        boolean willDraw = mShouldDrawNotificationBackground || DEBUG;
         setWillNotDraw(!willDraw);
     }
 
-    private void setBackgroundFadeAmount(float fadeAmount) {
-        mBackgroundFadeAmount = fadeAmount;
+    private void setDarkAmount(float darkAmount) {
+        mDarkAmount = darkAmount;
         updateBackgroundDimming();
     }
 
-    public float getBackgroundFadeAmount() {
-        return mBackgroundFadeAmount;
+    public float getDarkAmount() {
+        return mDarkAmount;
     }
 
     private void startBackgroundFadeIn() {
-        ObjectAnimator fadeAnimator = ObjectAnimator.ofFloat(this, BACKGROUND_FADE, 0f, 1f);
+        ObjectAnimator fadeAnimator = ObjectAnimator.ofFloat(this, DARK_AMOUNT, 0f, 1f);
         fadeAnimator.setDuration(StackStateAnimator.ANIMATION_DURATION_WAKEUP);
         fadeAnimator.setInterpolator(Interpolators.ALPHA_IN);
         fadeAnimator.start();
@@ -4270,13 +4324,15 @@ public class NotificationStackScrollLayout extends ViewGroup
         return mIsExpanded;
     }
 
-    public void setPulsing(Collection<HeadsUpManager.HeadsUpEntry> pulsing) {
+    public void setPulsing(Collection<HeadsUpManager.HeadsUpEntry> pulsing, int clockBottom) {
         if (mPulsing == null && pulsing == null) {
             return;
         }
         mPulsing = pulsing;
+        mClockBottom = clockBottom;
         mAmbientState.setPulsing(pulsing);
         updateNotificationAnimationStates();
+        updateAlgorithmHeightAndPadding();
         updateContentHeight();
         notifyHeightChangeListener(mShelf);
         requestChildrenUpdate();

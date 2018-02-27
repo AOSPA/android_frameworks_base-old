@@ -224,6 +224,34 @@ public class UserManager {
     public static final String DISALLOW_CONFIG_BRIGHTNESS = "no_config_brightness";
 
     /**
+     * Specifies if ambient display is disallowed for the user.
+     *
+     * <p>The default value is <code>false</code>.
+     *
+     * <p>This user restriction has no effect on managed profiles.
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_AMBIENT_DISPLAY = "no_ambient_display";
+
+    /**
+     * Specifies if a user is disallowed from changing screen off timeout.
+     *
+     * <p>The default value is <code>false</code>.
+     *
+     * <p>This user restriction has no effect on managed profiles.
+     * <p>Key for user restrictions.
+     * <p>Type: Boolean
+     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
+     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
+     * @see #getUserRestrictions()
+     */
+    public static final String DISALLOW_CONFIG_SCREEN_TIMEOUT = "no_config_screen_timeout";
+
+    /**
      * Specifies if a user is disallowed from enabling the
      * "Unknown Sources" setting, that allows installation of apps from unknown sources.
      * The default value is <code>false</code>.
@@ -763,6 +791,7 @@ public class UserManager {
      * @see #getUserRestrictions()
      * @hide
      */
+    @SystemApi
     public static final String DISALLOW_RUN_IN_BACKGROUND = "no_run_in_background";
 
     /**
@@ -2228,12 +2257,6 @@ public class UserManager {
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
-    }
-
-    /** @removed */
-    @Deprecated
-    public boolean trySetQuietModeEnabled(boolean enableQuietMode, @NonNull UserHandle userHandle) {
-        return requestQuietModeEnabled(enableQuietMode, userHandle);
     }
 
     /**

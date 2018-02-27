@@ -24,6 +24,7 @@ import android.app.job.IJobService;
 import android.app.job.JobInfo;
 import android.app.job.JobParameters;
 import android.app.job.JobWorkItem;
+import android.app.usage.UsageStatsManagerInternal;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -46,6 +47,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
 import com.android.server.EventLogTags;
+import com.android.server.LocalServices;
 import com.android.server.job.controllers.JobStatus;
 
 /**
@@ -238,6 +240,11 @@ public final class JobServiceContext implements ServiceConnection {
                 }
             }
 
+            UsageStatsManagerInternal usageStats =
+                    LocalServices.getService(UsageStatsManagerInternal.class);
+            usageStats.setLastJobRunTime(job.getSourcePackageName(), job.getSourceUserId(),
+                    mExecutionStartTimeElapsed);
+
             // Once we'e begun executing a job, we by definition no longer care whether
             // it was inflated from disk with not-yet-coherent delay/deadline bounds.
             job.clearPersistedUtcTimes();
@@ -312,13 +319,14 @@ public final class JobServiceContext implements ServiceConnection {
         return mTimeoutElapsed;
     }
 
-    boolean timeoutIfExecutingLocked(String pkgName, int userId, boolean matchJobId, int jobId) {
+    boolean timeoutIfExecutingLocked(String pkgName, int userId, boolean matchJobId, int jobId,
+            String reason) {
         final JobStatus executing = getRunningJobLocked();
         if (executing != null && (userId == UserHandle.USER_ALL || userId == executing.getUserId())
                 && (pkgName == null || pkgName.equals(executing.getSourcePackageName()))
                 && (!matchJobId || jobId == executing.getJobId())) {
             if (mVerb == VERB_EXECUTING) {
-                mParams.setStopReason(JobParameters.REASON_TIMEOUT);
+                mParams.setStopReason(JobParameters.REASON_TIMEOUT, reason);
                 sendStopMessageLocked("force timeout from shell");
                 return true;
             }
@@ -399,7 +407,7 @@ public final class JobServiceContext implements ServiceConnection {
                     (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
             PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
                     runningJob.getTag());
-            wl.setWorkSource(new WorkSource(runningJob.getSourceUid()));
+            wl.setWorkSource(deriveWorkSource(runningJob));
             wl.setReferenceCounted(false);
             wl.acquire();
 
@@ -415,6 +423,19 @@ public final class JobServiceContext implements ServiceConnection {
             }
             mWakeLock = wl;
             doServiceBoundLocked();
+        }
+    }
+
+    private WorkSource deriveWorkSource(JobStatus runningJob) {
+        final int jobUid = runningJob.getSourceUid();
+        if (WorkSource.isChainedBatteryAttributionEnabled(mContext)) {
+            WorkSource workSource = new WorkSource();
+            workSource.createWorkChain()
+                    .addNode(jobUid, null)
+                    .addNode(android.os.Process.SYSTEM_UID, "JobScheduler");
+            return workSource;
+        } else {
+            return new WorkSource(jobUid);
         }
     }
 
@@ -537,7 +558,7 @@ public final class JobServiceContext implements ServiceConnection {
             }
             return;
         }
-        mParams.setStopReason(arg1);
+        mParams.setStopReason(arg1, debugReason);
         if (arg1 == JobParameters.REASON_PREEMPT) {
             mPreferredUid = mRunningJob != null ? mRunningJob.getUid() :
                     NO_PREFERRED_UID;
@@ -687,7 +708,7 @@ public final class JobServiceContext implements ServiceConnection {
                 // Not an error - client ran out of time.
                 Slog.i(TAG, "Client timed out while executing (no jobFinished received), " +
                         "sending onStop: " + getRunningJobNameLocked());
-                mParams.setStopReason(JobParameters.REASON_TIMEOUT);
+                mParams.setStopReason(JobParameters.REASON_TIMEOUT, "client timed out");
                 sendStopMessageLocked("timeout while executing");
                 break;
             default:

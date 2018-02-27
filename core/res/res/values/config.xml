@@ -430,13 +430,13 @@
     <integer translatable="false" name="config_mobile_hotspot_provision_check_period">24</integer>
 
     <!-- Activity name to enable wifi tethering after provisioning app succeeds -->
-    <string translatable="false" name="config_wifi_tether_enable">com.android.settings/.TetherService</string>
+    <string translatable="false" name="config_wifi_tether_enable">com.android.settings/.wifi.tether.TetherService</string>
 
     <!-- Controls the WiFi wakeup feature.
           0 = Not available.
           1 = Available.
      -->
-    <integer translatable="false" name="config_wifi_wakeup_available">0</integer>
+    <integer translatable="false" name="config_wifi_wakeup_available">1</integer>
 
     <!-- Array of ConnectivityManager.TYPE_xxxx values allowable for tethering.
 
@@ -640,18 +640,12 @@
     <!-- Wifi driver supports batched scan -->
     <bool translatable="false" name="config_wifi_batched_scan_supported">false</bool>
 
-    <!-- Idle Receive current for wifi radio. 0 by default-->
-    <integer translatable="false" name="config_wifi_idle_receive_cur_ma">0</integer>
+    <!-- Wifi driver supports Automatic channel selection (ACS) for softap -->
+    <bool translatable="false" name="config_wifi_softap_acs_supported">false</bool>
 
-    <!-- Rx current for wifi radio. 0 by default-->
-    <integer translatable="false" name="config_wifi_active_rx_cur_ma">0</integer>
-
-    <!-- Tx current for wifi radio. 0 by default-->
-    <integer translatable="false" name="config_wifi_tx_cur_ma">0</integer>
-
-    <!-- Operating volatage for wifi radio. 0 by default-->
-    <integer translatable="false" name="config_wifi_operating_voltage_mv">0</integer>
-
+    <!-- Wifi driver supports IEEE80211AC for softap -->
+    <bool translatable="false" name="config_wifi_softap_ieee80211ac_supported">false</bool>
+    
     <!-- Flag indicating whether the we should enable the automatic brightness in Settings.
          Software implementation will be used if config_hardware_auto_brightness_available is not set -->
     <bool name="config_automatic_brightness_available">false</bool>
@@ -2780,9 +2774,28 @@
     <!-- The bounding path of the cutout region of the main built-in display.
          Must either be empty if there is no cutout region, or a string that is parsable by
          {@link android.util.PathParser}.
+
          The path is assumed to be specified in display coordinates with pixel units and in
-         the display's native orientation. -->
+         the display's native orientation, with the origin of the coordinate system at the
+         center top of the display.
+
+         To facilitate writing device-independent emulation overlays, the marker `@dp` can be
+         appended after the path string to interpret coordinates in dp instead of px units.
+         Note that a physical cutout should be configured in pixels for the best results.
+
+         Example for a 10px x 10px square top-center cutout:
+                <string ...>M -5,0 L -5,10 L 5,10 L 5,0 Z</string>
+         Example for a 10dp x 10dp square top-center cutout:
+                <string ...>M -5,0 L -5,10 L 5,10 L 5,0 Z @dp</string>
+
+         @see https://www.w3.org/TR/SVG/paths.html#PathData
+         -->
     <string translatable="false" name="config_mainBuiltInDisplayCutout"></string>
+
+    <!-- Whether the display cutout region of the main built-in display should be forced to
+         black in software (to avoid aliasing or emulate a cutout that is not physically existent).
+         -->
+    <bool name="config_fillMainBuiltInDisplayCutout">false</bool>
 
     <!-- Ultrasound support for Mic/speaker path -->
     <!-- Whether the default microphone audio source supports near-ultrasound frequencies
@@ -3231,6 +3244,10 @@
          or empty if the default should be used. -->
     <string translatable="false" name="config_deviceSpecificDevicePolicyManagerService"></string>
 
+    <!-- Class name of the device specific implementation to replace the AudioService
+         or empty if the default should be used. -->
+    <string translatable="false" name="config_deviceSpecificAudioService"></string>
+
     <!-- Component name of media projection permission dialog -->
     <string name="config_mediaProjectionPermissionDialogComponent" translateable="false">com.android.systemui/com.android.systemui.media.MediaProjectionPermissionActivity</string>
 
@@ -3240,8 +3257,13 @@
     <dimen name="config_buttonCornerRadius">@dimen/control_corner_material</dimen>
     <!-- Controls whether system buttons use all caps for text -->
     <bool name="config_buttonTextAllCaps">true</bool>
-    <!-- Name of the font family used for system buttons -->
-    <string name="config_fontFamilyButton">@string/font_family_button_material</string>
+    <!-- Name of the font family used for system surfaces where the font should use medium weight -->
+    <string name="config_headlineFontFamilyMedium">@string/font_family_button_material</string>
 
     <string translatable="false" name="config_batterySaverDeviceSpecificConfig"></string>
+
+    <!-- Package name that should be granted Notification Assistant access -->
+    <string name="config_defaultAssistantAccessPackage" translatable="false">android.ext.services</string>
+
+    <bool name="config_supportBluetoothPersistedState">true</bool>
 </resources>

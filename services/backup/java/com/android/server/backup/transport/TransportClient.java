@@ -16,6 +16,8 @@
 
 package com.android.server.backup.transport;
 
+import static com.android.server.backup.transport.TransportUtils.formatMessage;
+
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.annotation.WorkerThread;
@@ -28,17 +30,27 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.UserHandle;
+import android.text.format.DateFormat;
 import android.util.ArrayMap;
-import android.util.Log;
+import android.util.EventLog;
+import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.backup.IBackupTransport;
 import com.android.internal.util.Preconditions;
+import com.android.server.EventLogTags;
 import com.android.server.backup.TransportManager;
+import com.android.server.backup.transport.TransportUtils.Priority;
+
+import dalvik.system.CloseGuard;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.WeakReference;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -62,15 +74,23 @@ import java.util.concurrent.ExecutionException;
  * @see TransportManager
  */
 public class TransportClient {
-    private static final String TAG = "TransportClient";
+    @VisibleForTesting static final String TAG = "TransportClient";
+    private static final int LOG_BUFFER_SIZE = 5;
 
     private final Context mContext;
     private final Intent mBindIntent;
+    private final ServiceConnection mConnection;
     private final String mIdentifier;
+    private final String mCreatorLogString;
     private final ComponentName mTransportComponent;
     private final Handler mListenerHandler;
     private final String mPrefixForLog;
     private final Object mStateLock = new Object();
+    private final Object mLogBufferLock = new Object();
+    private final CloseGuard mCloseGuard = CloseGuard.get();
+
+    @GuardedBy("mLogBufferLock")
+    private final List<String> mLogBuffer = new LinkedList<>();
 
     @GuardedBy("mStateLock")
     private final Map<TransportConnectionListener, String> mListeners = new ArrayMap<>();
@@ -86,12 +106,14 @@ public class TransportClient {
             Context context,
             Intent bindIntent,
             ComponentName transportComponent,
-            String identifier) {
+            String identifier,
+            String caller) {
         this(
                 context,
                 bindIntent,
                 transportComponent,
                 identifier,
+                caller,
                 new Handler(Looper.getMainLooper()));
     }
 
@@ -101,78 +123,26 @@ public class TransportClient {
             Intent bindIntent,
             ComponentName transportComponent,
             String identifier,
+            String caller,
             Handler listenerHandler) {
         mContext = context;
         mTransportComponent = transportComponent;
         mBindIntent = bindIntent;
         mIdentifier = identifier;
+        mCreatorLogString = caller;
         mListenerHandler = listenerHandler;
+        mConnection = new TransportConnection(context, this);
 
         // For logging
         String classNameForLog = mTransportComponent.getShortClassName().replaceFirst(".*\\.", "");
-        mPrefixForLog = classNameForLog + "#" + mIdentifier + ": ";
+        mPrefixForLog = classNameForLog + "#" + mIdentifier + ":";
+
+        mCloseGuard.open("markAsDisposed");
     }
 
     public ComponentName getTransportComponent() {
         return mTransportComponent;
     }
-
-    // Calls to onServiceDisconnected() or onBindingDied() turn TransportClient UNUSABLE. After one
-    // of these calls, if a binding happen again the new service can be a different instance. Since
-    // transports are stateful, we don't want a new instance responding for an old instance's state.
-    private ServiceConnection mConnection =
-            new ServiceConnection() {
-                @Override
-                public void onServiceConnected(ComponentName componentName, IBinder binder) {
-                    IBackupTransport transport = IBackupTransport.Stub.asInterface(binder);
-                    synchronized (mStateLock) {
-                        checkStateIntegrityLocked();
-
-                        if (mState != State.UNUSABLE) {
-                            log(Log.DEBUG, "Transport connected");
-                            setStateLocked(State.CONNECTED, transport);
-                            notifyListenersAndClearLocked(transport);
-                        }
-                    }
-                }
-
-                @Override
-                public void onServiceDisconnected(ComponentName componentName) {
-                    synchronized (mStateLock) {
-                        log(Log.ERROR, "Service disconnected: client UNUSABLE");
-                        setStateLocked(State.UNUSABLE, null);
-                        // After unbindService() no calls back to mConnection
-                        mContext.unbindService(this);
-                    }
-                }
-
-                @Override
-                public void onBindingDied(ComponentName name) {
-                    synchronized (mStateLock) {
-                        checkStateIntegrityLocked();
-
-                        log(Log.ERROR, "Binding died: client UNUSABLE");
-                        // After unbindService() no calls back to mConnection
-                        switch (mState) {
-                            case State.UNUSABLE:
-                                break;
-                            case State.IDLE:
-                                log(Log.ERROR, "Unexpected state transition IDLE => UNUSABLE");
-                                setStateLocked(State.UNUSABLE, null);
-                                break;
-                            case State.BOUND_AND_CONNECTING:
-                                setStateLocked(State.UNUSABLE, null);
-                                mContext.unbindService(this);
-                                notifyListenersAndClearLocked(null);
-                                break;
-                            case State.CONNECTED:
-                                setStateLocked(State.UNUSABLE, null);
-                                mContext.unbindService(this);
-                                break;
-                        }
-                    }
-                }
-            };
 
     /**
      * Attempts to connect to the transport (if needed).
@@ -227,7 +197,7 @@ public class TransportClient {
 
             switch (mState) {
                 case State.UNUSABLE:
-                    log(Log.DEBUG, caller, "Async connect: UNUSABLE client");
+                    log(Priority.WARN, caller, "Async connect: UNUSABLE client");
                     notifyListener(listener, null, caller);
                     break;
                 case State.IDLE:
@@ -236,27 +206,30 @@ public class TransportClient {
                                     mBindIntent,
                                     mConnection,
                                     Context.BIND_AUTO_CREATE,
-                                    TransportManager.createSystemUserHandle());
+                                    UserHandle.SYSTEM);
                     if (hasBound) {
                         // We don't need to set a time-out because we are guaranteed to get a call
                         // back in ServiceConnection, either an onServiceConnected() or
                         // onBindingDied().
-                        log(Log.DEBUG, caller, "Async connect: service bound, connecting");
+                        log(Priority.DEBUG, caller, "Async connect: service bound, connecting");
                         setStateLocked(State.BOUND_AND_CONNECTING, null);
                         mListeners.put(listener, caller);
                     } else {
-                        log(Log.ERROR, "Async connect: bindService returned false");
+                        log(Priority.ERROR, "Async connect: bindService returned false");
                         // mState remains State.IDLE
                         mContext.unbindService(mConnection);
                         notifyListener(listener, null, caller);
                     }
                     break;
                 case State.BOUND_AND_CONNECTING:
-                    log(Log.DEBUG, caller, "Async connect: already connecting, adding listener");
+                    log(
+                            Priority.DEBUG,
+                            caller,
+                            "Async connect: already connecting, adding listener");
                     mListeners.put(listener, caller);
                     break;
                 case State.CONNECTED:
-                    log(Log.DEBUG, caller, "Async connect: reusing transport");
+                    log(Priority.DEBUG, caller, "Async connect: reusing transport");
                     notifyListener(listener, mTransport, caller);
                     break;
             }
@@ -273,7 +246,7 @@ public class TransportClient {
         synchronized (mStateLock) {
             checkStateIntegrityLocked();
 
-            log(Log.DEBUG, caller, "Unbind requested (was " + stateToString(mState) + ")");
+            log(Priority.DEBUG, caller, "Unbind requested (was " + stateToString(mState) + ")");
             switch (mState) {
                 case State.UNUSABLE:
                 case State.IDLE:
@@ -289,6 +262,15 @@ public class TransportClient {
                     mContext.unbindService(mConnection);
                     break;
             }
+        }
+    }
+
+    /** Marks this TransportClient as disposed, allowing it to be GC'ed without warnings. */
+    public void markAsDisposed() {
+        synchronized (mStateLock) {
+            Preconditions.checkState(
+                    mState < State.BOUND_AND_CONNECTING, "Can't mark as disposed if still bound");
+            mCloseGuard.close();
         }
     }
 
@@ -322,14 +304,14 @@ public class TransportClient {
 
         IBackupTransport transport = mTransport;
         if (transport != null) {
-            log(Log.DEBUG, caller, "Sync connect: reusing transport");
+            log(Priority.DEBUG, caller, "Sync connect: reusing transport");
             return transport;
         }
 
         // If it's already UNUSABLE we return straight away, no need to go to main-thread
         synchronized (mStateLock) {
             if (mState == State.UNUSABLE) {
-                log(Log.DEBUG, caller, "Sync connect: UNUSABLE client");
+                log(Priority.WARN, caller, "Sync connect: UNUSABLE client");
                 return null;
             }
         }
@@ -339,14 +321,14 @@ public class TransportClient {
                 (requestedTransport, transportClient) ->
                         transportFuture.complete(requestedTransport);
 
-        log(Log.DEBUG, caller, "Sync connect: calling async");
+        log(Priority.DEBUG, caller, "Sync connect: calling async");
         connectAsync(requestListener, caller);
 
         try {
             return transportFuture.get();
         } catch (InterruptedException | ExecutionException e) {
             String error = e.getClass().getSimpleName();
-            log(Log.ERROR, caller, error + " while waiting for transport: " + e.getMessage());
+            log(Priority.ERROR, caller, error + " while waiting for transport: " + e.getMessage());
             return null;
         }
     }
@@ -366,7 +348,7 @@ public class TransportClient {
     public IBackupTransport connectOrThrow(String caller) throws TransportNotAvailableException {
         IBackupTransport transport = connect(caller);
         if (transport == null) {
-            log(Log.ERROR, caller, "Transport connection failed");
+            log(Priority.ERROR, caller, "Transport connection failed");
             throw new TransportNotAvailableException();
         }
         return transport;
@@ -385,7 +367,7 @@ public class TransportClient {
             throws TransportNotAvailableException {
         IBackupTransport transport = mTransport;
         if (transport == null) {
-            log(Log.ERROR, caller, "Transport not connected");
+            log(Priority.ERROR, caller, "Transport not connected");
             throw new TransportNotAvailableException();
         }
         return transport;
@@ -400,14 +382,97 @@ public class TransportClient {
                 + "}";
     }
 
+    @Override
+    protected void finalize() throws Throwable {
+        synchronized (mStateLock) {
+            mCloseGuard.warnIfOpen();
+            if (mState >= State.BOUND_AND_CONNECTING) {
+                String callerLogString = "TransportClient.finalize()";
+                log(
+                        Priority.ERROR,
+                        callerLogString,
+                        "Dangling TransportClient created in [" + mCreatorLogString + "] being "
+                                + "GC'ed. Left bound, unbinding...");
+                try {
+                    unbind(callerLogString);
+                } catch (IllegalStateException e) {
+                    // May throw because there may be a race between this method being called and
+                    // the framework calling any method on the connection with the weak reference
+                    // there already cleared. In this case the connection will unbind before this
+                    // is called. This is fine.
+                }
+            }
+        }
+    }
+
+    private void onServiceConnected(IBinder binder) {
+        IBackupTransport transport = IBackupTransport.Stub.asInterface(binder);
+        synchronized (mStateLock) {
+            checkStateIntegrityLocked();
+
+            if (mState != State.UNUSABLE) {
+                log(Priority.DEBUG, "Transport connected");
+                setStateLocked(State.CONNECTED, transport);
+                notifyListenersAndClearLocked(transport);
+            }
+        }
+    }
+
+    /**
+     * If we are called here the TransportClient becomes UNUSABLE. After one of these calls, if a
+     * binding happen again the new service can be a different instance. Since transports are
+     * stateful, we don't want a new instance responding for an old instance's state.
+     */
+    private void onServiceDisconnected() {
+        synchronized (mStateLock) {
+            log(Priority.ERROR, "Service disconnected: client UNUSABLE");
+            setStateLocked(State.UNUSABLE, null);
+            // After unbindService() no calls back to mConnection
+            mContext.unbindService(mConnection);
+        }
+    }
+
+    /**
+     * If we are called here the TransportClient becomes UNUSABLE for the same reason as in {@link
+     * #onServiceDisconnected()}.
+     */
+    private void onBindingDied() {
+        synchronized (mStateLock) {
+            checkStateIntegrityLocked();
+
+            log(Priority.ERROR, "Binding died: client UNUSABLE");
+            // After unbindService() no calls back to mConnection
+            switch (mState) {
+                case State.UNUSABLE:
+                    break;
+                case State.IDLE:
+                    log(Priority.ERROR, "Unexpected state transition IDLE => UNUSABLE");
+                    setStateLocked(State.UNUSABLE, null);
+                    break;
+                case State.BOUND_AND_CONNECTING:
+                    setStateLocked(State.UNUSABLE, null);
+                    mContext.unbindService(mConnection);
+                    notifyListenersAndClearLocked(null);
+                    break;
+                case State.CONNECTED:
+                    setStateLocked(State.UNUSABLE, null);
+                    mContext.unbindService(mConnection);
+                    break;
+            }
+        }
+    }
+
     private void notifyListener(
-            TransportConnectionListener listener, IBackupTransport transport, String caller) {
-        log(Log.VERBOSE, caller, "Notifying listener of transport = " + transport);
+            TransportConnectionListener listener,
+            @Nullable IBackupTransport transport,
+            String caller) {
+        String transportString = (transport != null) ? "IBackupTransport" : "null";
+        log(Priority.INFO, "Notifying [" + caller + "] transport = " + transportString);
         mListenerHandler.post(() -> listener.onTransportConnectionResult(transport, this));
     }
 
     @GuardedBy("mStateLock")
-    private void notifyListenersAndClearLocked(IBackupTransport transport) {
+    private void notifyListenersAndClearLocked(@Nullable IBackupTransport transport) {
         for (Map.Entry<TransportConnectionListener, String> entry : mListeners.entrySet()) {
             TransportConnectionListener listener = entry.getKey();
             String caller = entry.getValue();
@@ -418,9 +483,44 @@ public class TransportClient {
 
     @GuardedBy("mStateLock")
     private void setStateLocked(@State int state, @Nullable IBackupTransport transport) {
-        log(Log.VERBOSE, "State: " + stateToString(mState) + " => " + stateToString(state));
+        log(Priority.VERBOSE, "State: " + stateToString(mState) + " => " + stateToString(state));
+        onStateTransition(mState, state);
         mState = state;
         mTransport = transport;
+    }
+
+    private void onStateTransition(int oldState, int newState) {
+        String transport = mTransportComponent.flattenToShortString();
+        int bound = transitionThroughState(oldState, newState, State.BOUND_AND_CONNECTING);
+        int connected = transitionThroughState(oldState, newState, State.CONNECTED);
+        if (bound != Transition.NO_TRANSITION) {
+            int value = (bound == Transition.UP) ? 1 : 0; // 1 is bound, 0 is not bound
+            EventLog.writeEvent(EventLogTags.BACKUP_TRANSPORT_LIFECYCLE, transport, value);
+        }
+        if (connected != Transition.NO_TRANSITION) {
+            int value = (connected == Transition.UP) ? 1 : 0; // 1 is connected, 0 is not connected
+            EventLog.writeEvent(EventLogTags.BACKUP_TRANSPORT_CONNECTION, transport, value);
+        }
+    }
+
+    /**
+     * Returns:
+     *
+     * <ul>
+     *   <li>{@link Transition#UP}, if oldState < stateReference <= newState
+     *   <li>{@link Transition#DOWN}, if oldState >= stateReference > newState
+     *   <li>{@link Transition#NO_TRANSITION}, otherwise
+     */
+    @Transition
+    private int transitionThroughState(
+            @State int oldState, @State int newState, @State int stateReference) {
+        if (oldState < stateReference && stateReference <= newState) {
+            return Transition.UP;
+        }
+        if (oldState >= stateReference && stateReference > newState) {
+            return Transition.DOWN;
+        }
+        return Transition.NO_TRANSITION;
     }
 
     @GuardedBy("mStateLock")
@@ -452,7 +552,7 @@ public class TransportClient {
 
     private void checkState(boolean assertion, String message) {
         if (!assertion) {
-            log(Log.ERROR, message);
+            log(Priority.ERROR, message);
         }
     }
 
@@ -472,21 +572,100 @@ public class TransportClient {
     }
 
     private void log(int priority, String message) {
-        TransportUtils.log(priority, TAG, message);
+        TransportUtils.log(priority, TAG, formatMessage(mPrefixForLog, null, message));
+        saveLogEntry(formatMessage(null, null, message));
     }
 
-    private void log(int priority, String caller, String msg) {
-        TransportUtils.log(priority, TAG, mPrefixForLog, caller, msg);
-        // TODO(brufino): Log in internal list for dump
-        // CharSequence time = DateFormat.format("yyyy-MM-dd HH:mm:ss", System.currentTimeMillis());
+    private void log(int priority, String caller, String message) {
+        TransportUtils.log(priority, TAG, formatMessage(mPrefixForLog, caller, message));
+        saveLogEntry(formatMessage(null, caller, message));
+    }
+
+    private void saveLogEntry(String message) {
+        CharSequence time = DateFormat.format("yyyy-MM-dd HH:mm:ss", System.currentTimeMillis());
+        message = time + " " + message;
+        synchronized (mLogBufferLock) {
+            if (mLogBuffer.size() == LOG_BUFFER_SIZE) {
+                mLogBuffer.remove(mLogBuffer.size() - 1);
+            }
+            mLogBuffer.add(0, message);
+        }
+    }
+
+    List<String> getLogBuffer() {
+        synchronized (mLogBufferLock) {
+            return Collections.unmodifiableList(mLogBuffer);
+        }
+    }
+
+    @IntDef({Transition.DOWN, Transition.NO_TRANSITION, Transition.UP})
+    @Retention(RetentionPolicy.SOURCE)
+    private @interface Transition {
+        int DOWN = -1;
+        int NO_TRANSITION = 0;
+        int UP = 1;
     }
 
     @IntDef({State.UNUSABLE, State.IDLE, State.BOUND_AND_CONNECTING, State.CONNECTED})
     @Retention(RetentionPolicy.SOURCE)
     private @interface State {
+        // Constant values MUST be in order
         int UNUSABLE = 0;
         int IDLE = 1;
         int BOUND_AND_CONNECTING = 2;
         int CONNECTED = 3;
+    }
+
+    /**
+     * This class is a proxy to TransportClient methods that doesn't hold a strong reference to the
+     * TransportClient, allowing it to be GC'ed. If the reference was lost it logs a message.
+     */
+    private static class TransportConnection implements ServiceConnection {
+        private final Context mContext;
+        private final WeakReference<TransportClient> mTransportClientRef;
+
+        private TransportConnection(Context context, TransportClient transportClient) {
+            mContext = context;
+            mTransportClientRef = new WeakReference<>(transportClient);
+        }
+
+        @Override
+        public void onServiceConnected(ComponentName transportComponent, IBinder binder) {
+            TransportClient transportClient = mTransportClientRef.get();
+            if (transportClient == null) {
+                referenceLost("TransportConnection.onServiceConnected()");
+                return;
+            }
+            transportClient.onServiceConnected(binder);
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName transportComponent) {
+            TransportClient transportClient = mTransportClientRef.get();
+            if (transportClient == null) {
+                referenceLost("TransportConnection.onServiceDisconnected()");
+                return;
+            }
+            transportClient.onServiceDisconnected();
+        }
+
+        @Override
+        public void onBindingDied(ComponentName transportComponent) {
+            TransportClient transportClient = mTransportClientRef.get();
+            if (transportClient == null) {
+                referenceLost("TransportConnection.onBindingDied()");
+                return;
+            }
+            transportClient.onBindingDied();
+        }
+
+        /** @see TransportClient#finalize() */
+        private void referenceLost(String caller) {
+            mContext.unbindService(this);
+            TransportUtils.log(
+                    Priority.INFO,
+                    TAG,
+                    caller + " called but TransportClient reference has been GC'ed");
+        }
     }
 }

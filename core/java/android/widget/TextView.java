@@ -27,8 +27,10 @@ import android.annotation.ColorInt;
 import android.annotation.DrawableRes;
 import android.annotation.FloatRange;
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.Px;
 import android.annotation.Size;
 import android.annotation.StringRes;
 import android.annotation.StyleRes;
@@ -52,6 +54,7 @@ import android.graphics.BaseCanvas;
 import android.graphics.Canvas;
 import android.graphics.Insets;
 import android.graphics.Paint;
+import android.graphics.Paint.FontMetricsInt;
 import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
@@ -77,8 +80,8 @@ import android.text.GraphicsOperations;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.text.Layout;
+import android.text.MeasuredText;
 import android.text.ParcelableSpan;
-import android.text.PremeasuredText;
 import android.text.Selection;
 import android.text.SpanWatcher;
 import android.text.Spannable;
@@ -306,6 +309,7 @@ import java.util.Locale;
  * @attr ref android.R.styleable#TextView_autoSizeMaxTextSize
  * @attr ref android.R.styleable#TextView_autoSizeStepGranularity
  * @attr ref android.R.styleable#TextView_autoSizePresetSizes
+ * @attr ref android.R.styleable#TextView_accessibilityHeading
  */
 @RemoteView
 public class TextView extends View implements ViewTreeObserver.OnPreDrawListener {
@@ -400,6 +404,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private int mCurTextColor;
     private int mCurHintTextColor;
     private boolean mFreezesText;
+    private boolean mIsAccessibilityHeading;
 
     private Editable.Factory mEditableFactory = Editable.Factory.getInstance();
     private Spannable.Factory mSpannableFactory = Spannable.Factory.getInstance();
@@ -924,6 +929,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         int inputType = EditorInfo.TYPE_NULL;
         a = theme.obtainStyledAttributes(
                     attrs, com.android.internal.R.styleable.TextView, defStyleAttr, defStyleRes);
+        int firstBaselineToTopHeight = -1;
+        int lastBaselineToBottomHeight = -1;
+        int lineHeight = -1;
 
         readTextAppearance(context, a, attributes, true /* styleArray */);
 
@@ -1249,6 +1257,20 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 case com.android.internal.R.styleable.TextView_justificationMode:
                     mJustificationMode = a.getInt(attr, Layout.JUSTIFICATION_MODE_NONE);
                     break;
+
+                case com.android.internal.R.styleable.TextView_firstBaselineToTopHeight:
+                    firstBaselineToTopHeight = a.getDimensionPixelSize(attr, -1);
+                    break;
+
+                case com.android.internal.R.styleable.TextView_lastBaselineToBottomHeight:
+                    lastBaselineToBottomHeight = a.getDimensionPixelSize(attr, -1);
+                    break;
+
+                case com.android.internal.R.styleable.TextView_lineHeight:
+                    lineHeight = a.getDimensionPixelSize(attr, -1);
+                    break;
+                case com.android.internal.R.styleable.TextView_accessibilityHeading:
+                    mIsAccessibilityHeading = a.getBoolean(attr, false);
             }
         }
 
@@ -1562,6 +1584,16 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             }
         } else {
             mAutoSizeTextType = AUTO_SIZE_TEXT_TYPE_NONE;
+        }
+
+        if (firstBaselineToTopHeight >= 0) {
+            setFirstBaselineToTopHeight(firstBaselineToTopHeight);
+        }
+        if (lastBaselineToBottomHeight >= 0) {
+            setLastBaselineToBottomHeight(lastBaselineToBottomHeight);
+        }
+        if (lineHeight >= 0) {
+            setLineHeight(lineHeight);
         }
     }
 
@@ -2365,7 +2397,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         setText(mText);
 
         if (hasPasswordTransformationMethod()) {
-            notifyAccessibilityStateChanged(
+            notifyViewAccessibilityStateChangedIfNeeded(
                     AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
         }
 
@@ -3165,6 +3197,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
     }
 
+    /**
+     * @inheritDoc
+     *
+     * @see #setFirstBaselineToTopHeight(int)
+     * @see #setLastBaselineToBottomHeight(int)
+     */
     @Override
     public void setPadding(int left, int top, int right, int bottom) {
         if (left != mPaddingLeft
@@ -3179,6 +3217,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         invalidate();
     }
 
+    /**
+     * @inheritDoc
+     *
+     * @see #setFirstBaselineToTopHeight(int)
+     * @see #setLastBaselineToBottomHeight(int)
+     */
     @Override
     public void setPaddingRelative(int start, int top, int end, int bottom) {
         if (start != getPaddingStart()
@@ -3191,6 +3235,97 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         // the super call will requestLayout()
         super.setPaddingRelative(start, top, end, bottom);
         invalidate();
+    }
+
+    /**
+     * Updates the top padding of the TextView so that {@code firstBaselineToTopHeight} is
+     * equal to the distance between the firt text baseline and the top of this TextView.
+     * <strong>Note</strong> that if {@code FontMetrics.top} or {@code FontMetrics.ascent} was
+     * already greater than {@code firstBaselineToTopHeight}, the top padding is not updated.
+     *
+     * @param firstBaselineToTopHeight distance between first baseline to top of the container
+     *      in pixels
+     *
+     * @see #getFirstBaselineToTopHeight()
+     * @see #setPadding(int, int, int, int)
+     * @see #setPaddingRelative(int, int, int, int)
+     *
+     * @attr ref android.R.styleable#TextView_firstBaselineToTopHeight
+     */
+    public void setFirstBaselineToTopHeight(@Px @IntRange(from = 0) int firstBaselineToTopHeight) {
+        Preconditions.checkArgumentNonnegative(firstBaselineToTopHeight);
+
+        final FontMetricsInt fontMetrics = getPaint().getFontMetricsInt();
+        final int fontMetricsTop;
+        if (getIncludeFontPadding()) {
+            fontMetricsTop = fontMetrics.top;
+        } else {
+            fontMetricsTop = fontMetrics.ascent;
+        }
+
+        // TODO: Decide if we want to ignore density ratio (i.e. when the user changes font size
+        // in settings). At the moment, we don't.
+
+        if (firstBaselineToTopHeight > Math.abs(fontMetricsTop)) {
+            final int paddingTop = firstBaselineToTopHeight - (-fontMetricsTop);
+            setPadding(getPaddingLeft(), paddingTop, getPaddingRight(), getPaddingBottom());
+        }
+    }
+
+    /**
+     * Updates the bottom padding of the TextView so that {@code lastBaselineToBottomHeight} is
+     * equal to the distance between the last text baseline and the bottom of this TextView.
+     * <strong>Note</strong> that if {@code FontMetrics.bottom} or {@code FontMetrics.descent} was
+     * already greater than {@code lastBaselineToBottomHeight}, the bottom padding is not updated.
+     *
+     * @param lastBaselineToBottomHeight distance between last baseline to bottom of the container
+     *      in pixels
+     *
+     * @see #getLastBaselineToBottomHeight()
+     * @see #setPadding(int, int, int, int)
+     * @see #setPaddingRelative(int, int, int, int)
+     *
+     * @attr ref android.R.styleable#TextView_lastBaselineToBottomHeight
+     */
+    public void setLastBaselineToBottomHeight(
+            @Px @IntRange(from = 0) int lastBaselineToBottomHeight) {
+        Preconditions.checkArgumentNonnegative(lastBaselineToBottomHeight);
+
+        final FontMetricsInt fontMetrics = getPaint().getFontMetricsInt();
+        final int fontMetricsBottom;
+        if (getIncludeFontPadding()) {
+            fontMetricsBottom = fontMetrics.bottom;
+        } else {
+            fontMetricsBottom = fontMetrics.descent;
+        }
+
+        // TODO: Decide if we want to ignore density ratio (i.e. when the user changes font size
+        // in settings). At the moment, we don't.
+
+        if (lastBaselineToBottomHeight > Math.abs(fontMetricsBottom)) {
+            final int paddingBottom = lastBaselineToBottomHeight - fontMetricsBottom;
+            setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), paddingBottom);
+        }
+    }
+
+    /**
+     * Returns the distance between the first text baseline and the top of this TextView.
+     *
+     * @see #setFirstBaselineToTopHeight(int)
+     * @attr ref android.R.styleable#TextView_firstBaselineToTopHeight
+     */
+    public int getFirstBaselineToTopHeight() {
+        return getPaddingTop() - getPaint().getFontMetricsInt().top;
+    }
+
+    /**
+     * Returns the distance between the last text baseline and the bottom of this TextView.
+     *
+     * @see #setLastBaselineToBottomHeight(int)
+     * @attr ref android.R.styleable#TextView_lastBaselineToBottomHeight
+     */
+    public int getLastBaselineToBottomHeight() {
+        return getPaddingBottom() + getPaint().getFontMetricsInt().bottom;
     }
 
     /**
@@ -3756,6 +3891,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *
      * @param elegant set the paint's elegant metrics flag.
      *
+     * @see #isElegantTextHeight()
      * @see Paint#isElegantTextHeight()
      *
      * @attr ref android.R.styleable#TextView_elegantTextHeight
@@ -4974,6 +5110,54 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
+     * Sets an explicit line height for this TextView. This is equivalent to the vertical distance
+     * between subsequent baselines in the TextView.
+     *
+     * @param lineHeight the line height in pixels
+     *
+     * @see #setLineSpacing(float, float)
+     * @see #getLineSpacing()
+     *
+     * @attr ref android.R.styleable#TextView_lineHeight
+     */
+    public void setLineHeight(@Px @IntRange(from = 0) int lineHeight) {
+        Preconditions.checkArgumentNonnegative(lineHeight);
+
+        final int fontHeight = getPaint().getFontMetricsInt(null);
+        // Make sure we don't setLineSpacing if it's not needed to avoid unnecessary redraw.
+        if (lineHeight != fontHeight) {
+            // Set lineSpacingExtra by the difference of lineSpacing with lineHeight
+            setLineSpacing(lineHeight - fontHeight, 1f);
+        }
+    }
+
+    /**
+     * Gets whether this view is a heading for accessibility purposes.
+     *
+     * @return {@code true} if the view is a heading, {@code false} otherwise.
+     *
+     * @attr ref android.R.styleable#TextView_accessibilityHeading
+     */
+    public boolean isAccessibilityHeading() {
+        return mIsAccessibilityHeading;
+    }
+
+    /**
+     * Set if view is a heading for a section of content for accessibility purposes.
+     *
+     * @param isHeading {@code true} if the view is a heading, {@code false} otherwise.
+     *
+     * @attr ref android.R.styleable#TextView_accessibilityHeading
+     */
+    public void setAccessibilityHeading(boolean isHeading) {
+        if (isHeading != mIsAccessibilityHeading) {
+            mIsAccessibilityHeading = isHeading;
+            notifyViewAccessibilityStateChangedIfNeeded(
+                    AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
+        }
+    }
+
+    /**
      * Convenience method to append the specified text to the TextView's
      * display buffer, upgrading it to {@link android.widget.TextView.BufferType#EDITABLE}
      * if it was not already editable.
@@ -5393,7 +5577,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (imm != null) imm.restartInput(this);
         } else if (type == BufferType.SPANNABLE || mMovement != null) {
             text = mSpannableFactory.newSpannable(text);
-        } else if (!(text instanceof PremeasuredText || text instanceof CharWrapper)) {
+        } else if (!(text instanceof MeasuredText || text instanceof CharWrapper)) {
             text = TextUtils.stringOrSpannedString(text);
         }
 
@@ -5476,7 +5660,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         sendOnTextChanged(text, 0, oldlen, textLength);
         onTextChanged(text, 0, oldlen, textLength);
 
-        notifyAccessibilityStateChanged(AccessibilityEvent.CONTENT_CHANGE_TYPE_TEXT);
+        notifyViewAccessibilityStateChangedIfNeeded(AccessibilityEvent.CONTENT_CHANGE_TYPE_TEXT);
 
         if (needEditableForNotification) {
             sendAfterTextChanged((Editable) text);
@@ -6210,7 +6394,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public void setError(CharSequence error, Drawable icon) {
         createEditorIfNeeded();
         mEditor.setError(error, icon);
-        notifyAccessibilityStateChanged(
+        notifyViewAccessibilityStateChangedIfNeeded(
                 AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
     }
 
@@ -9125,8 +9309,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     /**
      *
-     * Checks whether the transformation method applied to this TextView is set to ALL CAPS. This
-     * settings is internally ignored if this field is editable or selectable.
+     * Checks whether the transformation method applied to this TextView is set to ALL CAPS.
      * @return Whether the current transformation method is for ALL CAPS.
      *
      * @see #setAllCaps(boolean)
@@ -10524,6 +10707,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         info.setText(getTextForAccessibility());
         info.setHintText(mHint);
         info.setShowingHintText(isShowingHint());
+        info.setHeading(mIsAccessibilityHeading);
 
         if (mBufferType == BufferType.EDITABLE) {
             info.setEditable(true);

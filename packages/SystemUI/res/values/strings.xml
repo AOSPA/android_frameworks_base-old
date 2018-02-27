@@ -61,10 +61,25 @@
     <!-- When the battery is low, this is displayed to the user in a dialog.  The title of the low battery alert.  [CHAR LIMIT=NONE]-->
     <string name="battery_low_title">Battery is low</string>
 
+    <!-- When the battery is low and hybrid notifications are enabled, this is displayed to the user in a dialog.
+         The title of the low battery alert.  [CHAR LIMIT=NONE]-->
+    <string name="battery_low_title_hybrid">Battery is low. Turn on Battery Saver</string>
+
     <!-- A message that appears when the battery level is getting low in a dialog.  This is
-        appened to the subtitle of the low battery alert.  "percentage" is the percentage of battery
+        appended to the subtitle of the low battery alert.  "percentage" is the percentage of battery
         remaining [CHAR LIMIT=none]-->
     <string name="battery_low_percent_format"><xliff:g id="percentage">%s</xliff:g> remaining</string>
+
+    <!-- A message that appears when the battery remaining estimate is low in a dialog.  This is
+    appended to the subtitle of the low battery alert.  "percentage" is the percentage of battery
+    remaining. "time" is the amount of time remaining before the phone runs out of battery [CHAR LIMIT=none]-->
+    <string name="battery_low_percent_format_hybrid"><xliff:g id="percentage">%s</xliff:g> remaining, about <xliff:g id="time">%s</xliff:g> left based on your usage</string>
+
+    <!-- A message that appears when the battery remaining estimate is low in a dialog and insufficient
+    data was present to say it is customized to the user. This is appended to the subtitle of the
+    low battery alert.  "percentage" is the percentage of battery remaining. "time" is the amount
+     of time remaining before the phone runs out of battery [CHAR LIMIT=none]-->
+    <string name="battery_low_percent_format_hybrid_short"><xliff:g id="percentage">%s</xliff:g> remaining, about <xliff:g id="time">%s</xliff:g> left</string>
 
     <!-- Same as battery_low_percent_format, with a notice about battery saver if on. [CHAR LIMIT=none]-->
     <string name="battery_low_percent_format_saver_started"><xliff:g id="percentage">%s</xliff:g> remaining. Battery Saver is on.</string>
@@ -213,6 +228,8 @@
     <string name="accessibility_menu">Menu</string>
     <!-- Content description of the accessibility button in the navigation bar (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_accessibility_button">Accessibility</string>
+    <!-- Content description of the rotate button in the navigation bar (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_rotate_button">Rotate screen</string>
     <!-- Content description of the recents button for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_recent">Overview</string>
     <!-- Content description of the search button for accessibility. [CHAR LIMIT=NONE] -->
@@ -241,6 +258,13 @@
     <string name="recents_caption_resize">Select new task layout</string>
     <!-- Button name for "Cancel". [CHAR LIMIT=NONE] -->
     <string name="cancel">Cancel</string>
+
+    <!-- Content description of the fingerprint icon when the system-provided fingerprint dialog is showing, for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_fingerprint_dialog_fingerprint_icon">Fingerprint icon</string>
+    <!-- Content description of the application icon when the system-provided fingerprint dialog is showing, for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_fingerprint_dialog_app_icon">Application icon</string>
+    <!-- Content description for the error/help message are when the system-provided fingerprint dialog is showing, for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_fingerprint_dialog_help_area">Help message area</string>
 
     <!-- Content description of the compatibility zoom button for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_compatibility_zoom_button">Compatibility zoom button.</string>
@@ -442,7 +466,7 @@
     <string name="accessibility_casting">@string/quick_settings_casting</string>
 
     <!-- Content description of the work mode icon in the notification panel for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_work_mode">Work mode</string>
+    <string name="accessibility_work_mode">@string/quick_settings_work_mode_on_label</string>
 
     <!-- Content description to tell the user that this button will remove an application from recents -->
     <string name="accessibility_recents_item_will_be_dismissed">Dismiss <xliff:g id="app" example="Calendar">%s</xliff:g>.</string>
@@ -658,6 +682,15 @@
     <string name="quick_settings_bluetooth_off_label">Bluetooth Off</string>
     <!-- QuickSettings: Bluetooth detail panel, text when there are no items [CHAR LIMIT=NONE] -->
     <string name="quick_settings_bluetooth_detail_empty_text">No paired devices available</string>
+    <!-- QuickSettings: Bluetooth secondary label for the battery level of a connected device [CHAR LIMIT=20]-->
+    <string name="quick_settings_bluetooth_secondary_label_battery_level"><xliff:g id="battery_level_as_percentage">%s</xliff:g> battery</string>
+    <!-- QuickSettings: Bluetooth secondary label for an audio device being connected [CHAR LIMIT=20]-->
+    <string name="quick_settings_bluetooth_secondary_label_audio">Audio</string>
+    <!-- QuickSettings: Bluetooth secondary label for a headset being connected [CHAR LIMIT=20]-->
+    <string name="quick_settings_bluetooth_secondary_label_headset">Headset</string>
+    <!-- QuickSettings: Bluetooth secondary label for an input/IO device being connected [CHAR LIMIT=20]-->
+    <string name="quick_settings_bluetooth_secondary_label_input">Input</string>
+
     <!-- QuickSettings: Brightness [CHAR LIMIT=NONE] -->
     <string name="quick_settings_brightness_label">Brightness</string>
     <!-- QuickSettings: Rotation Unlocked [CHAR LIMIT=NONE] -->
@@ -738,6 +771,13 @@
     <string name="quick_settings_tethering_label">Tethering</string>
     <!-- QuickSettings: Hotspot. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_hotspot_label">Hotspot</string>
+    <!-- QuickSettings: Hotspot. Secondary label shown when the hotspot is being enabled [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_hotspot_secondary_label_transient">Turning on...</string>
+    <!-- QuickSettings: Hotspot: Secondary label for how many devices are connected to the hotspot [CHAR LIMIT=NONE] -->
+    <plurals name="quick_settings_hotspot_secondary_label_num_devices">
+        <item quantity="one">%d device</item>
+        <item quantity="other">%d devices</item>
+    </plurals>
     <!-- QuickSettings: Notifications [CHAR LIMIT=NONE] -->
     <string name="quick_settings_notifications_label">Notifications</string>
     <!-- QuickSettings: Flashlight [CHAR LIMIT=NONE] -->
@@ -756,10 +796,25 @@
     <string name="quick_settings_cellular_detail_data_limit"><xliff:g id="data_limit" example="2.0 GB">%s</xliff:g> limit</string>
     <!-- QuickSettings: Cellular detail panel, data warning format string [CHAR LIMIT=NONE] -->
     <string name="quick_settings_cellular_detail_data_warning"><xliff:g id="data_limit" example="2.0 GB">%s</xliff:g> warning</string>
-    <!-- QuickSettings: Work mode [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_work_mode_label">Work mode</string>
+    <!-- QuickSettings: This string is in the easy-to-view settings that a user can pull down from
+    the top of their phone's screen. This is a label for a toggle to turn the work profile on and
+    off. "Work profile" means a separate profile on a user's phone that's specifically for their
+    work apps and managed by their company. "Work" is used as an adjective. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_work_mode_on_label">Work profile</string>
+    <!-- QuickSettings: This is a label for a toggle to turn the work profile on and off and this is
+         shown when work profile is off. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_work_mode_off_label">Notifications &amp; apps are off</string>
     <!-- QuickSettings: Label for the toggle to activate Night display (renamed "Night Light" with title caps). [CHAR LIMIT=20] -->
     <string name="quick_settings_night_display_label">Night Light</string>
+    <!-- QuickSettings: Secondary text for when the Night Light will be enabled at sunset. [CHAR LIMIT=20] -->
+    <string name="quick_settings_night_secondary_label_on_at_sunset">On at sunset</string>
+    <!-- QuickSettings: Secondary text for when the Night Light will be on until sunrise. [CHAR LIMIT=20] -->
+    <string name="quick_settings_night_secondary_label_until_sunrise">Until sunrise</string>
+    <!-- QuickSettings: Secondary text for when the Night Light will be enabled at some user-selected time. [CHAR LIMIT=20] -->
+    <string name="quick_settings_night_secondary_label_on_at">On at <xliff:g id="time" example="10 pm">%s</xliff:g></string>
+    <!-- QuickSettings: Secondary text for when the Night Light will be on until some user-selected time. [CHAR LIMIT=20] -->
+    <string name="quick_settings_night_secondary_label_until">Until <xliff:g id="time" example="7 am">%s</xliff:g></string>
+
     <!-- QuickSettings: NFC tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_nfc_label">NFC</string>
     <!-- QuickSettings: NFC (off) [CHAR LIMIT=NONE] -->
@@ -785,6 +840,8 @@
     <string name="recents_stack_action_button_label">Clear all</string>
     <!-- Recents: Hint text that shows on the drop targets to start multiwindow. [CHAR LIMIT=NONE] -->
     <string name="recents_drag_hint_message">Drag here to use split screen</string>
+    <!-- Recents: Text that shows above the nav bar after launching a few apps. [CHAR LIMIT=NONE] -->
+    <string name="recents_swipe_up_onboarding">Swipe up to switch apps</string>
 
     <!-- Recents: MultiStack add stack split horizontal radio button. [CHAR LIMIT=NONE] -->
     <string name="recents_multistack_add_stack_dialog_split_horizontal">Split Horizontal</string>
@@ -1451,6 +1508,10 @@
     <string name="notification_channel_disabled">You won\'t see these notifications anymore</string>
 
     <!-- Notification Inline controls: continue receiving notifications prompt, channel level -->
+    <string name="inline_blocking_helper">You usually dismiss these notifications.
+    \nKeep showing them?</string>
+
+    <!-- Notification Inline controls: continue receiving notifications prompt, channel level -->
     <string name="inline_keep_showing">Keep showing these notifications?</string>
 
     <!-- Notification inline controls: block notifications button -->
@@ -1678,12 +1739,14 @@
         <item>Clipboard</item>
         <item>Keycode</item>
         <item>Keyboard switcher</item>
+        <item>Rotation suggestion</item>
         <item>None</item>
     </string-array>
     <string-array name="nav_bar_button_values" translatable="false">
         <item>clipboard</item>
         <item>key</item>
         <item>menu_ime</item>
+        <item>rotate</item>
         <item>space</item>
     </string-array>
 
@@ -2024,6 +2087,7 @@
     <!-- Do Not Disturb button to change the current settings [CHAR LIMIT=20] -->
     <string name="qs_dnd_replace">Replace</string>
 
+
     <!-- Title of the "running foreground services" dialog. [CHAR LIMIT=NONE] -->
     <string name="running_foreground_services_title">Apps running in background</string>
 
@@ -2041,5 +2105,27 @@
     <string name="touch_filtered_warning">Because an app is obscuring a permission request, Settings
         can’t verify your response.</string>
 
+    <!-- Title of prompt requesting access to display slices [CHAR LIMIT=NONE] -->
+    <string name="slice_permission_title">Allow <xliff:g id="app" example="Example App">%1$s</xliff:g> to show <xliff:g id="app_2" example="Other Example App">%2$s</xliff:g> slices?</string>
 
+    <!-- Description of what kind of access is given to a slice host [CHAR LIMIT=NONE] -->
+    <string name="slice_permission_text_1"> - It can read information from <xliff:g id="app" example="Example App">%1$s</xliff:g></string>
+    <!-- Description of what kind of access is given to a slice host [CHAR LIMIT=NONE] -->
+    <string name="slice_permission_text_2"> - It can take actions inside <xliff:g id="app" example="Example App">%1$s</xliff:g></string>
+
+    <!-- Text on checkbox allowing the app to show slices from all apps [CHAR LIMIT=NONE] -->
+    <string name="slice_permission_checkbox">Allow <xliff:g id="app" example="Example App">%1$s</xliff:g> to show slices from any app</string>
+
+    <!-- Option to grant the slice permission request on the screen [CHAR LIMIT=15] -->
+    <string name="slice_permission_allow">Allow</string>
+
+    <!-- Option to grant the slice permission request on the screen [CHAR LIMIT=15] -->
+    <string name="slice_permission_deny">Deny</string>
+
+
+    <!-- Carrier Name -->
+    <string name="China_Mobile">China Mobile</string>
+    <string name="China_Unicom">China Unicom</string>
+    <string name="China_Telecom">China Telecom</string>
+    <string name="China_Mobile_HD">China Mobile (HD)</string>
 </resources>

@@ -84,8 +84,10 @@ public class Watchdog extends Thread {
         "/system/bin/sdcard",
         "/system/bin/surfaceflinger",
         "media.extractor", // system/bin/mediaextractor
+        "media.metrics", // system/bin/mediametrics
         "media.codec", // vendor/bin/hw/android.hardware.media.omx@1.0-service
         "com.android.bluetooth",  // Bluetooth service
+        "statsd",  // Stats daemon
     };
 
     public static final List<String> HAL_INTERFACES_OF_INTEREST = Arrays.asList(

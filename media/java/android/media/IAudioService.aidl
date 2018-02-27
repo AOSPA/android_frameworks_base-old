@@ -166,7 +166,8 @@ interface IAudioService {
     boolean isHdmiSystemAudioSupported();
 
     String registerAudioPolicy(in AudioPolicyConfig policyConfig,
-            in IAudioPolicyCallback pcb, boolean hasFocusListener, boolean isFocusPolicy);
+            in IAudioPolicyCallback pcb, boolean hasFocusListener, boolean isFocusPolicy,
+            boolean isVolumeController);
 
     oneway void unregisterAudioPolicyAsync(in IAudioPolicyCallback pcb);
 
@@ -202,6 +203,9 @@ interface IAudioService {
             in IAudioPolicyCallback pcb);
 
     oneway void playerHasOpPlayAudio(in int piid, in boolean hasOpPlayAudio);
+
+    int setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(in BluetoothDevice device,
+            int state, int profile, boolean suppressNoisyIntent);
 
     // WARNING: read warning at top of file, it is recommended to add new methods at the end
 }

@@ -100,6 +100,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     /** Total number of elements in this subtree, including our own hierarchy element. */
     private int mTreeWeight = 1;
 
+    /**
+     * Indicates whether we are animating and have committed the transaction to reparent our 
+     * surface to the animation leash
+     */
+    private boolean mCommittedReparentToAnimationLeash;
+
     WindowContainer(WindowManagerService service) {
         mService = service;
         mPendingTransaction = service.mTransactionFactory.make();
@@ -337,9 +343,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /** Returns true if this window container has the input child. */
-    boolean hasChild(WindowContainer child) {
+    boolean hasChild(E child) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final WindowContainer current = mChildren.get(i);
+            final E current = mChildren.get(i);
             if (current == child || current.hasChild(child)) {
                 return true;
             }
@@ -461,8 +467,20 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void onResize() {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowContainer wc = mChildren.get(i);
-            wc.onResize();
+            wc.onParentResize();
         }
+    }
+
+    void onParentResize() {
+        // In the case this container has specified its own bounds, a parent resize will not
+        // affect its bounds. Any relevant changes will be propagated through changes to the
+        // Configuration override.
+        if (hasOverrideBounds()) {
+            return;
+        }
+
+        // Default implementation is to treat as resize on self.
+        onResize();
     }
 
     void onMovedByResize() {
@@ -1025,9 +1043,21 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      */
     void prepareSurfaces() {
         SurfaceControl.mergeToGlobalTransaction(getPendingTransaction());
+
+        // If a leash has been set when the transaction was committed, then the leash reparent has
+        // been committed.
+        mCommittedReparentToAnimationLeash = mSurfaceAnimator.hasLeash();
         for (int i = 0; i < mChildren.size(); i++) {
             mChildren.get(i).prepareSurfaces();
         }
+    }
+
+    /**
+     * @return true if the reparent to animation leash transaction has been committed, false
+     * otherwise.
+     */
+    boolean hasCommittedReparentToAnimationLeash() {
+        return mCommittedReparentToAnimationLeash;
     }
 
     /**
@@ -1200,5 +1230,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             final Rect parentBounds = parent.getBounds();
             outPos.offset(-parentBounds.left, -parentBounds.top);
         }
+    }
+
+    Dimmer getDimmer() {
+        if (mParent == null) {
+            return null;
+        }
+        return mParent.getDimmer();
     }
 }

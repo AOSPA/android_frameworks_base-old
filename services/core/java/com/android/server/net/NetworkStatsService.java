@@ -25,6 +25,7 @@ import static android.content.Intent.ACTION_USER_REMOVED;
 import static android.content.Intent.EXTRA_UID;
 import static android.net.ConnectivityManager.ACTION_TETHER_STATE_CHANGED;
 import static android.net.ConnectivityManager.isNetworkTypeMobile;
+import static android.net.NetworkStats.DEFAULT_NETWORK_ALL;
 import static android.net.NetworkStats.IFACE_ALL;
 import static android.net.NetworkStats.METERED_ALL;
 import static android.net.NetworkStats.ROAMING_ALL;
@@ -83,6 +84,7 @@ import android.net.INetworkManagementEventObserver;
 import android.net.INetworkStatsService;
 import android.net.INetworkStatsSession;
 import android.net.LinkProperties;
+import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkIdentity;
 import android.net.NetworkInfo;
@@ -231,13 +233,23 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private final Object mStatsLock = new Object();
 
     /** Set of currently active ifaces. */
+    @GuardedBy("mStatsLock")
     private final ArrayMap<String, NetworkIdentitySet> mActiveIfaces = new ArrayMap<>();
+
     /** Set of currently active ifaces for UID stats. */
+    @GuardedBy("mStatsLock")
     private final ArrayMap<String, NetworkIdentitySet> mActiveUidIfaces = new ArrayMap<>();
+
     /** Current default active iface. */
     private String mActiveIface;
+
     /** Set of any ifaces associated with mobile networks since boot. */
+    @GuardedBy("mStatsLock")
     private String[] mMobileIfaces = new String[0];
+
+    /** Set of all ifaces currently used by traffic that does not explicitly specify a Network. */
+    @GuardedBy("mStatsLock")
+    private Network[] mDefaultNetworks = new Network[0];
 
     private final DropBoxNonMonotonicObserver mNonMonotonicObserver =
             new DropBoxNonMonotonicObserver();
@@ -666,9 +678,9 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         final NetworkStatsHistory.Entry entry = history.getValues(start, end, now, null);
 
         final NetworkStats stats = new NetworkStats(end - start, 1);
-        stats.addValues(new NetworkStats.Entry(IFACE_ALL, UID_ALL, SET_ALL, TAG_NONE, METERED_ALL,
-                ROAMING_ALL, entry.rxBytes, entry.rxPackets, entry.txBytes, entry.txPackets,
-                entry.operations));
+        stats.addValues(new NetworkStats.Entry(IFACE_ALL, UID_ALL, SET_ALL, TAG_NONE,
+                METERED_ALL, ROAMING_ALL, DEFAULT_NETWORK_ALL, entry.rxBytes, entry.rxPackets,
+                entry.txBytes, entry.txPackets, entry.operations));
         return stats;
     }
 
@@ -779,13 +791,13 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     }
 
     @Override
-    public void forceUpdateIfaces() {
+    public void forceUpdateIfaces(Network[] defaultNetworks) {
         mContext.enforceCallingOrSelfPermission(READ_NETWORK_USAGE_HISTORY, TAG);
         assertBandwidthControlEnabled();
 
         final long token = Binder.clearCallingIdentity();
         try {
-            updateIfaces();
+            updateIfaces(defaultNetworks);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -875,17 +887,21 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
     @Override
     public long getUidStats(int uid, int type) {
-        return nativeGetUidStat(uid, type);
+        return nativeGetUidStat(uid, type, checkBpfStatsEnable());
     }
 
     @Override
     public long getIfaceStats(String iface, int type) {
-        return nativeGetIfaceStat(iface, type);
+        return nativeGetIfaceStat(iface, type, checkBpfStatsEnable());
     }
 
     @Override
     public long getTotalStats(int type) {
-        return nativeGetTotalStat(type);
+        return nativeGetTotalStat(type, checkBpfStatsEnable());
+    }
+
+    private boolean checkBpfStatsEnable() {
+        return new File("/sys/fs/bpf/traffic_uid_stats_map").exists();
     }
 
     /**
@@ -996,11 +1012,11 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     };
 
-    private void updateIfaces() {
+    private void updateIfaces(Network[] defaultNetworks) {
         synchronized (mStatsLock) {
             mWakeLock.acquire();
             try {
-                updateIfacesLocked();
+                updateIfacesLocked(defaultNetworks);
             } finally {
                 mWakeLock.release();
             }
@@ -1013,7 +1029,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * are active on a single {@code iface}, they are combined under a single
      * {@link NetworkIdentitySet}.
      */
-    private void updateIfacesLocked() {
+    private void updateIfacesLocked(Network[] defaultNetworks) {
         if (!mSystemReady) return;
         if (LOGV) Slog.v(TAG, "updateIfacesLocked()");
 
@@ -1040,12 +1056,18 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         // Rebuild active interfaces based on connected networks
         mActiveIfaces.clear();
         mActiveUidIfaces.clear();
+        if (defaultNetworks != null) {
+            // Caller is ConnectivityService. Update the list of default networks.
+            mDefaultNetworks = defaultNetworks;
+        }
 
         final ArraySet<String> mobileIfaces = new ArraySet<>();
         for (NetworkState state : states) {
             if (state.networkInfo.isConnected()) {
                 final boolean isMobile = isNetworkTypeMobile(state.networkInfo.getType());
-                final NetworkIdentity ident = NetworkIdentity.buildNetworkIdentity(mContext, state);
+                final boolean isDefault = ArrayUtils.contains(mDefaultNetworks, state.network);
+                final NetworkIdentity ident = NetworkIdentity.buildNetworkIdentity(mContext, state,
+                        isDefault);
 
                 // Traffic occurring on the base interface is always counted for
                 // both total usage and UID details.
@@ -1065,7 +1087,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                         // Copy the identify from IMS one but mark it as metered.
                         NetworkIdentity vtIdent = new NetworkIdentity(ident.getType(),
                                 ident.getSubType(), ident.getSubscriberId(), ident.getNetworkId(),
-                                ident.getRoaming(), true);
+                                ident.getRoaming(), true /* metered */,
+                                true /* onDefaultNetwork */);
                         findOrCreateNetworkIdentitySet(mActiveIfaces, VT_INTERFACE).add(vtIdent);
                         findOrCreateNetworkIdentitySet(mActiveUidIfaces, VT_INTERFACE).add(vtIdent);
                     }
@@ -1511,7 +1534,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                     return true;
                 }
                 case MSG_UPDATE_IFACES: {
-                    mService.updateIfaces();
+                    mService.updateIfaces(null);
                     return true;
                 }
                 case MSG_REGISTER_GLOBAL_ALERT: {
@@ -1649,7 +1672,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private static int TYPE_TCP_RX_PACKETS;
     private static int TYPE_TCP_TX_PACKETS;
 
-    private static native long nativeGetTotalStat(int type);
-    private static native long nativeGetIfaceStat(String iface, int type);
-    private static native long nativeGetUidStat(int uid, int type);
+    private static native long nativeGetTotalStat(int type, boolean useBpfStats);
+    private static native long nativeGetIfaceStat(String iface, int type, boolean useBpfStats);
+    private static native long nativeGetUidStat(int uid, int type, boolean useBpfStats);
 }

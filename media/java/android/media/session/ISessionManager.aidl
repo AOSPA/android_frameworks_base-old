@@ -17,6 +17,7 @@ package android.media.session;
 
 import android.content.ComponentName;
 import android.media.IRemoteVolumeController;
+import android.media.ISessionTokensListener;
 import android.media.session.IActiveSessionsListener;
 import android.media.session.ICallback;
 import android.media.session.IOnMediaKeyListener;
@@ -49,4 +50,13 @@ interface ISessionManager {
     void setCallback(in ICallback callback);
     void setOnVolumeKeyLongPressListener(in IOnVolumeKeyLongPressListener listener);
     void setOnMediaKeyListener(in IOnMediaKeyListener listener);
+
+    // MediaSession2
+    boolean onSessionCreated(in Bundle sessionToken);
+    void onSessionDestroyed(in Bundle sessionToken);
+    List<Bundle> getSessionTokens(boolean activeSessionOnly, boolean sessionServiceOnly);
+
+    void addSessionTokensListener(in ISessionTokensListener listener, int userId,
+            String packageName);
+    void removeSessionTokensListener(in ISessionTokensListener listener);
 }

@@ -39,6 +39,7 @@ import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.ShellCallback;
 import android.os.ShellCommand;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.storage.StorageManagerInternal;
@@ -248,7 +249,7 @@ public class AppOpsService extends IAppOpsService.Stub {
 
     public AppOpsService(File storagePath, Handler handler) {
         LockGuard.installLock(this, LockGuard.INDEX_APP_OPS);
-        mFile = new AtomicFile(storagePath);
+        mFile = new AtomicFile(storagePath, "appops");
         mHandler = handler;
         readState();
     }
@@ -1316,14 +1317,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                             isPrivileged = (appInfo.privateFlags
                                     & ApplicationInfo.PRIVATE_FLAG_PRIVILEGED) != 0;
                         } else {
-                            if ("media".equals(packageName)) {
-                                pkgUid = Process.MEDIA_UID;
-                                isPrivileged = false;
-                            } else if ("audioserver".equals(packageName)) {
-                                pkgUid = Process.AUDIOSERVER_UID;
-                                isPrivileged = false;
-                            } else if ("cameraserver".equals(packageName)) {
-                                pkgUid = Process.CAMERASERVER_UID;
+                            pkgUid = resolveUid(packageName);
+                            if (pkgUid >= 0) {
                                 isPrivileged = false;
                             }
                         }
@@ -1672,8 +1667,6 @@ public class AppOpsService extends IAppOpsService.Stub {
 
     void writeState() {
         synchronized (mFile) {
-            List<AppOpsManager.PackageOps> allOps = getPackagesForOps(null);
-
             FileOutputStream stream;
             try {
                 stream = mFile.startWrite();
@@ -1681,6 +1674,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                 Slog.w(TAG, "Failed to write state: " + e);
                 return;
             }
+
+            List<AppOpsManager.PackageOps> allOps = getPackagesForOps(null);
 
             try {
                 XmlSerializer out = new FastXmlSerializer();
@@ -1957,9 +1952,8 @@ public class AppOpsService extends IAppOpsService.Stub {
             if (nonpackageUid != -1) {
                 packageName = null;
             } else {
-                if ("root".equals(packageName)) {
-                    packageUid = 0;
-                } else {
+                packageUid = resolveUid(packageName);
+                if (packageUid < 0) {
                     packageUid = AppGlobals.getPackageManager().getPackageUid(packageName,
                             PackageManager.MATCH_UNINSTALLED_PACKAGES, userId);
                 }
@@ -2052,6 +2046,10 @@ public class AppOpsService extends IAppOpsService.Stub {
                     }
                     if (ops == null || ops.size() <= 0) {
                         pw.println("No operations.");
+                        if (shell.op > AppOpsManager.OP_NONE && shell.op < AppOpsManager._NUM_OP) {
+                            pw.println("Default mode: " + AppOpsManager.modeToString(
+                                    AppOpsManager.opToDefaultMode(shell.op)));
+                        }
                         return 0;
                     }
                     final long now = System.currentTimeMillis();
@@ -2061,24 +2059,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                             AppOpsManager.OpEntry ent = entries.get(j);
                             pw.print(AppOpsManager.opToName(ent.getOp()));
                             pw.print(": ");
-                            switch (ent.getMode()) {
-                                case AppOpsManager.MODE_ALLOWED:
-                                    pw.print("allow");
-                                    break;
-                                case AppOpsManager.MODE_IGNORED:
-                                    pw.print("ignore");
-                                    break;
-                                case AppOpsManager.MODE_ERRORED:
-                                    pw.print("deny");
-                                    break;
-                                case AppOpsManager.MODE_DEFAULT:
-                                    pw.print("default");
-                                    break;
-                                default:
-                                    pw.print("mode=");
-                                    pw.print(ent.getMode());
-                                    break;
-                            }
+                            pw.print(AppOpsManager.modeToString(ent.getMode()));
                             if (ent.getTime() != 0) {
                                 pw.print("; time=");
                                 TimeUtils.formatDuration(now - ent.getTime(), pw);
@@ -2563,14 +2544,39 @@ public class AppOpsService extends IAppOpsService.Stub {
     }
 
     private static String resolvePackageName(int uid, String packageName)  {
-        if (uid == 0) {
+        if (uid == Process.ROOT_UID) {
             return "root";
         } else if (uid == Process.SHELL_UID) {
             return "com.android.shell";
+        } else if (uid == Process.MEDIA_UID) {
+            return "media";
+        } else if (uid == Process.AUDIOSERVER_UID) {
+            return "audioserver";
+        } else if (uid == Process.CAMERASERVER_UID) {
+            return "cameraserver";
         } else if (uid == Process.SYSTEM_UID && packageName == null) {
             return "android";
         }
         return packageName;
+    }
+
+    private static int resolveUid(String packageName)  {
+        if (packageName == null) {
+            return -1;
+        }
+        switch (packageName) {
+            case "root":
+                return Process.ROOT_UID;
+            case "shell":
+                return Process.SHELL_UID;
+            case "media":
+                return Process.MEDIA_UID;
+            case "audioserver":
+                return Process.AUDIOSERVER_UID;
+            case "cameraserver":
+                return Process.CAMERASERVER_UID;
+        }
+        return -1;
     }
 
     private static String[] getPackagesForUid(int uid) {

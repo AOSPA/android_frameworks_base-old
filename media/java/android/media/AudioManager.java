@@ -400,6 +400,18 @@ public class AudioManager {
     public static final int ADJUST_TOGGLE_MUTE = 101;
 
     /** @hide */
+    @IntDef(flag = false, prefix = "ADJUST", value = {
+            ADJUST_RAISE,
+            ADJUST_LOWER,
+            ADJUST_SAME,
+            ADJUST_MUTE,
+            ADJUST_UNMUTE,
+            ADJUST_TOGGLE_MUTE }
+            )
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface VolumeAdjustment {}
+
+    /** @hide */
     public static final String adjustToString(int adj) {
         switch (adj) {
             case ADJUST_RAISE: return "ADJUST_RAISE";
@@ -1327,6 +1339,19 @@ public class AudioManager {
             throw e.rethrowFromSystemServer();
         }
      }
+
+    //====================================================================
+    // Offload query
+    /**
+     * Returns whether offloaded playback of an audio format is supported on the device.
+     * Offloaded playback is where the decoding of an audio stream is not competing with other
+     * software resources. In general, it is supported by dedicated hardware, such as audio DSPs.
+     * @param format the audio format (codec, sample rate, channels) being checked.
+     * @return true if the given audio format can be offloaded.
+     */
+    public boolean isOffloadedPlaybackSupported(@NonNull AudioFormat format) {
+        return AudioSystem.isOffloadSupported(format);
+    }
 
     //====================================================================
     // Bluetooth SCO control
@@ -2976,7 +3001,7 @@ public class AudioManager {
         final IAudioService service = getService();
         try {
             String regId = service.registerAudioPolicy(policy.getConfig(), policy.cb(),
-                    policy.hasFocusListener(), policy.isFocusPolicy());
+                    policy.hasFocusListener(), policy.isFocusPolicy(), policy.isVolumeController());
             if (regId == null) {
                 return ERROR;
             } else {
@@ -3739,6 +3764,33 @@ public class AudioManager {
         int delay = 0;
         try {
             delay = service.setBluetoothA2dpDeviceConnectionState(device, state, profile);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        return delay;
+    }
+
+     /**
+     * Indicate A2DP source or sink connection state change and eventually suppress
+     * the {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent.
+     * @param device Bluetooth device connected/disconnected
+     * @param state  new connection state (BluetoothProfile.STATE_xxx)
+     * @param profile profile for the A2DP device
+     * (either {@link android.bluetooth.BluetoothProfile.A2DP} or
+     * {@link android.bluetooth.BluetoothProfile.A2DP_SINK})
+     * @param suppressNoisyIntent if true the
+     * {@link AudioManager.ACTION_AUDIO_BECOMING_NOISY} intent will not be sent.
+     * @return a delay in ms that the caller should wait before broadcasting
+     * BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED intent.
+     * {@hide}
+     */
+    public int setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
+                BluetoothDevice device, int state, int profile, boolean suppressNoisyIntent) {
+        final IAudioService service = getService();
+        int delay = 0;
+        try {
+            delay = service.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(device,
+                state, profile, suppressNoisyIntent);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

@@ -26,6 +26,8 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.database.ContentObserver;
+import android.media.AudioDeviceCallback;
+import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.AudioSystem;
 import android.media.IVolumeController;
@@ -41,6 +43,7 @@ import android.os.RemoteException;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.service.notification.Condition;
+import android.service.notification.ZenModeConfig;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.accessibility.AccessibilityManager;
@@ -105,6 +108,9 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     private boolean mShowA11yStream;
     private boolean mShowVolumeDialog;
     private boolean mShowSafetyWarning;
+    private DeviceCallback mDeviceCallback = new DeviceCallback();
+    private AudioDeviceInfo mConnectedDevice;
+    private final NotificationManager mNotificationManager;
 
     private boolean mDestroyed;
     private VolumePolicy mVolumePolicy;
@@ -116,6 +122,8 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
 
     public VolumeDialogControllerImpl(Context context) {
         mContext = context.getApplicationContext();
+        mNotificationManager = (NotificationManager) mContext.getSystemService(
+                Context.NOTIFICATION_SERVICE);
         Events.writeEvent(mContext, Events.EVENT_COLLECTION_STARTED);
         mWorkerThread = new HandlerThread(VolumeDialogControllerImpl.class.getSimpleName());
         mWorkerThread.start();
@@ -180,6 +188,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         } catch (SecurityException e) {
             Log.w(TAG, "No access to media sessions", e);
         }
+        mAudio.registerAudioDeviceCallback(mDeviceCallback, mWorker);
     }
 
     public void setVolumePolicy(VolumePolicy policy) {
@@ -205,6 +214,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         mMediaSessions.destroy();
         mObserver.destroy();
         mReceiver.destroy();
+        mAudio.unregisterAudioDeviceCallback(mDeviceCallback);
         mWorkerThread.quitSafely();
     }
 
@@ -419,6 +429,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         }
         updateRingerModeExternalW(mAudio.getRingerMode());
         updateZenModeW();
+        updateZenConfig();
         updateEffectsSuppressorW(mNoMan.getEffectsSuppressor());
         mCallbacks.onStateChanged(mState);
     }
@@ -501,6 +512,26 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         if (mState.zenMode == zen) return false;
         mState.zenMode = zen;
         Events.writeEvent(mContext, Events.EVENT_ZEN_MODE_CHANGED, zen);
+        return true;
+    }
+
+    private boolean updateZenConfig() {
+        final NotificationManager.Policy policy = mNotificationManager.getNotificationPolicy();
+        boolean disallowAlarms = (policy.priorityCategories & NotificationManager.Policy
+                .PRIORITY_CATEGORY_ALARMS) == 0;
+        boolean disallowMedia = (policy.priorityCategories & NotificationManager.Policy
+                .PRIORITY_CATEGORY_MEDIA_SYSTEM_OTHER) == 0;
+        boolean disallowRinger = ZenModeConfig.areAllPriorityOnlyNotificationZenSoundsMuted(policy);
+        if (mState.disallowAlarms == disallowAlarms && mState.disallowMedia == disallowMedia
+                && mState.disallowRinger == disallowRinger) {
+            return false;
+        }
+        mState.disallowAlarms = disallowAlarms;
+        mState.disallowMedia = disallowMedia;
+        mState.disallowRinger = disallowRinger;
+        Events.writeEvent(mContext, Events.EVENT_ZEN_CONFIG_CHANGED, "disallowAlarms=" +
+                disallowAlarms + " disallowMedia=" + disallowMedia + " disallowRinger=" +
+                disallowRinger);
         return true;
     }
 
@@ -664,6 +695,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
                 case USER_ACTIVITY: onUserActivityW(); break;
                 case SHOW_SAFETY_WARNING: onShowSafetyWarningW(msg.arg1); break;
                 case ACCESSIBILITY_MODE_CHANGED: onAccessibilityModeChanged((Boolean) msg.obj);
+
             }
         }
     }
@@ -803,6 +835,18 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
                 });
             }
         }
+
+        @Override
+        public void onConnectedDeviceChanged(String deviceName) {
+            for (final Map.Entry<Callbacks, Handler> entry : mCallbackMap.entrySet()) {
+                entry.getValue().post(new Runnable() {
+                    @Override
+                    public void run() {
+                        entry.getKey().onConnectedDeviceChanged(deviceName);
+                    }
+                });
+            }
+        }
     }
 
 
@@ -831,6 +875,10 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
             if (ZEN_MODE_URI.equals(uri)) {
                 changed = updateZenModeW();
             }
+            if (ZEN_MODE_CONFIG_URI.equals(uri)) {
+                changed |= updateZenConfig();
+            }
+
             if (changed) {
                 mCallbacks.onStateChanged(mState);
             }
@@ -1001,6 +1049,34 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
                 if (D.BUG) Log.d(TAG, triggeringMethod + ": added stream " +  mNextStream
                         + " from token + "+ token.toString());
                 mNextStream++;
+            }
+        }
+    }
+
+    protected final class DeviceCallback extends AudioDeviceCallback {
+        public void onAudioDevicesAdded(AudioDeviceInfo[] addedDevices) {
+            for (AudioDeviceInfo info : addedDevices) {
+                if (info.isSink()
+                        && (info.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+                        || info.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO)) {
+                    mConnectedDevice = info;
+                    mCallbacks.onConnectedDeviceChanged(info.getProductName().toString());
+                }
+            }
+        }
+
+        public void onAudioDevicesRemoved(AudioDeviceInfo[] removedDevices) {
+            if (mConnectedDevice == null) {
+                mCallbacks.onConnectedDeviceChanged(null);
+                return;
+            }
+            for (AudioDeviceInfo info : removedDevices) {
+                if (info.isSink() == mConnectedDevice.isSink()
+                        && Objects.equals(info.getProductName(), mConnectedDevice.getProductName())
+                        && info.getType() == mConnectedDevice.getType()) {
+                    mConnectedDevice = null;
+                    mCallbacks.onConnectedDeviceChanged(null);
+                }
             }
         }
     }

@@ -90,5 +90,12 @@ interface IDisplayManager {
     // Sets the global brightness configuration for a given user. Requires
     // CONFIGURE_DISPLAY_BRIGHTNESS, and INTERACT_ACROSS_USER if the user being configured is not
     // the same as the calling user.
-    void setBrightnessConfigurationForUser(in BrightnessConfiguration c, int userId);
+    void setBrightnessConfigurationForUser(in BrightnessConfiguration c, int userId,
+            String packageName);
+
+    // Temporarily sets the display brightness.
+    void setTemporaryBrightness(int brightness);
+
+    // Temporarily sets the auto brightness adjustment factor.
+    void setTemporaryAutoBrightnessAdjustment(float adjustment);
 }

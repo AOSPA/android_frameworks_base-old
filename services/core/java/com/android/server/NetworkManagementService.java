@@ -21,9 +21,6 @@ import static android.Manifest.permission.DUMP;
 import static android.Manifest.permission.NETWORK_SETTINGS;
 import static android.Manifest.permission.NETWORK_STACK;
 import static android.Manifest.permission.SHUTDOWN;
-import static android.net.ConnectivityManager.PRIVATE_DNS_DEFAULT_MODE;
-import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_OPPORTUNISTIC;
-import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME;
 import static android.net.NetworkPolicyManager.FIREWALL_CHAIN_DOZABLE;
 import static android.net.NetworkPolicyManager.FIREWALL_CHAIN_NAME_DOZABLE;
 import static android.net.NetworkPolicyManager.FIREWALL_CHAIN_NAME_NONE;
@@ -1957,15 +1954,6 @@ public class NetworkManagementService extends INetworkManagementService.Stub
         }
     }
 
-    private static boolean shouldUseTls(ContentResolver cr) {
-        String privateDns = Settings.Global.getString(cr, Settings.Global.PRIVATE_DNS_MODE);
-        if (TextUtils.isEmpty(privateDns)) {
-            privateDns = PRIVATE_DNS_DEFAULT_MODE;
-        }
-        return privateDns.equals(PRIVATE_DNS_MODE_OPPORTUNISTIC) ||
-               privateDns.startsWith(PRIVATE_DNS_MODE_PROVIDER_HOSTNAME);
-    }
-
     @Override
     public void addVpnUidRanges(int netId, UidRange[] ranges) {
         mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
@@ -2508,12 +2496,16 @@ public class NetworkManagementService extends INetworkManagementService.Stub
 
     @Override
     public void removeNetwork(int netId) {
-        mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
+        mContext.enforceCallingOrSelfPermission(NETWORK_STACK, TAG);
 
         try {
-            mConnector.execute("network", "destroy", netId);
-        } catch (NativeDaemonConnectorException e) {
-            throw e.rethrowAsParcelableException();
+            mNetdService.networkDestroy(netId);
+        } catch (ServiceSpecificException e) {
+            Log.w(TAG, "removeNetwork(" + netId + "): ", e);
+            throw e;
+        } catch (RemoteException e) {
+            Log.w(TAG, "removeNetwork(" + netId + "): ", e);
+            throw e.rethrowAsRuntimeException();
         }
     }
 

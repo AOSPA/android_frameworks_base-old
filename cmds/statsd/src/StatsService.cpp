@@ -24,6 +24,7 @@
 #include "guardrail/MemoryLeakTrackUtil.h"
 #include "guardrail/StatsdStats.h"
 #include "storage/StorageManager.h"
+#include "subscriber/SubscriberReporter.h"
 
 #include <android-base/file.h>
 #include <binder/IPCThreadState.h>
@@ -67,6 +68,7 @@ CompanionDeathRecipient::CompanionDeathRecipient(const sp<AnomalyMonitor>& anoma
 void CompanionDeathRecipient::binderDied(const wp<IBinder>& who) {
     ALOGW("statscompanion service died");
     mAnomalyMonitor->setStatsCompanionService(nullptr);
+    SubscriberReporter::getInstance().setStatsCompanionService(nullptr);
 }
 
 // ======================================================================
@@ -173,8 +175,13 @@ status_t StatsService::dump(int fd, const Vector<String16>& args) {
         return NO_MEMORY;  // the fd is already open
     }
 
+    bool verbose = false;
+    if (args.size() > 0 && !args[0].compare(String16("-v"))) {
+        verbose = true;
+    }
+
     // TODO: Proto format for incident reports
-    dump_impl(out);
+    dump_impl(out, verbose);
 
     fclose(out);
     return NO_ERROR;
@@ -183,8 +190,9 @@ status_t StatsService::dump(int fd, const Vector<String16>& args) {
 /**
  * Write debugging data about statsd in text format.
  */
-void StatsService::dump_impl(FILE* out) {
-    mConfigManager->Dump(out);
+void StatsService::dump_impl(FILE* out, bool verbose) {
+    StatsdStats::getInstance().dumpStats(out);
+    mProcessor->dumpStates(out, verbose);
 }
 
 /**
@@ -296,9 +304,8 @@ void StatsService::print_cmd_help(FILE* out) {
     fprintf(out, "  NAME          The name of the configuration\n");
     fprintf(out, "\n");
     fprintf(out, "\n");
-    fprintf(out, "usage: adb shell cmd stats print-stats [reset]\n");
+    fprintf(out, "usage: adb shell cmd stats print-stats\n");
     fprintf(out, "  Prints some basic stats.\n");
-    fprintf(out, "  reset: 1 to reset the statsd stats. default=0.\n");
 }
 
 status_t StatsService::cmd_trigger_broadcast(FILE* out, Vector<String8>& args) {
@@ -380,6 +387,8 @@ status_t StatsService::cmd_config(FILE* in, FILE* out, FILE* err, Vector<String8
                             "The config can only be set for other UIDs on eng or userdebug "
                             "builds.\n");
                 }
+            } else if (argCount == 2 && args[1] == "remove") {
+                good = true;
             }
 
             if (!good) {
@@ -487,14 +496,8 @@ status_t StatsService::cmd_print_stats(FILE* out, const Vector<String8>& args) {
         fprintf(out, "Config %s uses %zu bytes\n", key.ToString().c_str(),
                 mProcessor->GetMetricsSize(key));
     }
-    fprintf(out, "Detailed statsd stats in logcat...\n");
     StatsdStats& statsdStats = StatsdStats::getInstance();
-    bool reset = false;
-    if (args.size() > 1) {
-        reset = strtol(args[1].string(), NULL, 10);
-    }
-    vector<uint8_t> output;
-    statsdStats.dumpStats(&output, reset);
+    statsdStats.dumpStats(out);
     return NO_ERROR;
 }
 
@@ -687,6 +690,7 @@ Status StatsService::statsCompanionReady() {
     VLOG("StatsService::statsCompanionReady linking to statsCompanion.");
     IInterface::asBinder(statsCompanion)->linkToDeath(new CompanionDeathRecipient(mAnomalyMonitor));
     mAnomalyMonitor->setStatsCompanionService(statsCompanion);
+    SubscriberReporter::getInstance().setStatsCompanionService(statsCompanion);
 
     return Status::ok();
 }
@@ -731,7 +735,7 @@ Status StatsService::addConfiguration(int64_t key,
     if (checkCallingPermission(String16(kPermissionDump))) {
         ConfigKey configKey(ipc->getCallingUid(), key);
         StatsdConfig cfg;
-        if (!cfg.ParseFromArray(&config[0], config.size())) {
+        if (config.empty() || !cfg.ParseFromArray(&config[0], config.size())) {
             *success = false;
             return Status::ok();
         }
@@ -749,7 +753,9 @@ Status StatsService::addConfiguration(int64_t key,
 Status StatsService::removeConfiguration(int64_t key, bool* success) {
     IPCThreadState* ipc = IPCThreadState::self();
     if (checkCallingPermission(String16(kPermissionDump))) {
-        mConfigManager->RemoveConfig(ConfigKey(ipc->getCallingUid(), key));
+        ConfigKey configKey(ipc->getCallingUid(), key);
+        mConfigManager->RemoveConfig(configKey);
+        SubscriberReporter::getInstance().removeConfig(configKey);
         *success = true;
         return Status::ok();
     } else {
@@ -757,6 +763,42 @@ Status StatsService::removeConfiguration(int64_t key, bool* success) {
         return Status::fromExceptionCode(binder::Status::EX_SECURITY);
     }
 }
+
+Status StatsService::setBroadcastSubscriber(int64_t configId,
+                                            int64_t subscriberId,
+                                            const sp<android::IBinder>& intentSender,
+                                            bool* success) {
+    VLOG("StatsService::setBroadcastSubscriber called.");
+    IPCThreadState* ipc = IPCThreadState::self();
+    if (checkCallingPermission(String16(kPermissionDump))) {
+        ConfigKey configKey(ipc->getCallingUid(), configId);
+        SubscriberReporter::getInstance()
+                .setBroadcastSubscriber(configKey, subscriberId, intentSender);
+        *success = true;
+        return Status::ok();
+    } else {
+        *success = false;
+        return Status::fromExceptionCode(binder::Status::EX_SECURITY);
+    }
+}
+
+Status StatsService::unsetBroadcastSubscriber(int64_t configId,
+                                              int64_t subscriberId,
+                                              bool* success) {
+    VLOG("StatsService::unsetBroadcastSubscriber called.");
+    IPCThreadState* ipc = IPCThreadState::self();
+    if (checkCallingPermission(String16(kPermissionDump))) {
+        ConfigKey configKey(ipc->getCallingUid(), configId);
+        SubscriberReporter::getInstance()
+                .unsetBroadcastSubscriber(configKey, subscriberId);
+        *success = true;
+        return Status::ok();
+    } else {
+        *success = false;
+        return Status::fromExceptionCode(binder::Status::EX_SECURITY);
+    }
+}
+
 
 void StatsService::binderDied(const wp <IBinder>& who) {
 }

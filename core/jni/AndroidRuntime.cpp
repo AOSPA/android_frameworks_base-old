@@ -63,6 +63,7 @@ extern int register_android_graphics_CreateJavaOutputStreamAdaptor(JNIEnv* env);
 extern int register_android_graphics_GraphicBuffer(JNIEnv* env);
 extern int register_android_graphics_Graphics(JNIEnv* env);
 extern int register_android_graphics_ImageDecoder(JNIEnv*);
+extern int register_android_graphics_drawable_AnimatedImageDrawable(JNIEnv*);
 extern int register_android_graphics_Interpolator(JNIEnv* env);
 extern int register_android_graphics_MaskFilter(JNIEnv* env);
 extern int register_android_graphics_Movie(JNIEnv* env);
@@ -166,7 +167,6 @@ extern int register_android_os_Parcel(JNIEnv* env);
 extern int register_android_os_SELinux(JNIEnv* env);
 extern int register_android_os_VintfObject(JNIEnv *env);
 extern int register_android_os_VintfRuntimeInfo(JNIEnv *env);
-extern int register_android_os_seccomp(JNIEnv* env);
 extern int register_android_os_SystemProperties(JNIEnv *env);
 extern int register_android_os_SystemClock(JNIEnv* env);
 extern int register_android_os_Trace(JNIEnv* env);
@@ -178,7 +178,7 @@ extern int register_android_net_LocalSocketImpl(JNIEnv* env);
 extern int register_android_net_NetworkUtils(JNIEnv* env);
 extern int register_android_text_AndroidCharacter(JNIEnv *env);
 extern int register_android_text_Hyphenator(JNIEnv *env);
-extern int register_android_text_MeasuredText(JNIEnv* env);
+extern int register_android_text_MeasuredParagraph(JNIEnv* env);
 extern int register_android_text_StaticLayout(JNIEnv *env);
 extern int register_android_opengl_classes(JNIEnv *env);
 extern int register_android_ddm_DdmHandleNativeHeap(JNIEnv *env);
@@ -973,6 +973,12 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
         addOption("--generate-debug-info");
     }
 
+    // The mini-debug-info makes it possible to backtrace through JIT code.
+    if (property_get_bool("dalvik.vm.minidebuginfo", 0)) {
+        addOption("-Xcompiler-option");
+        addOption("--generate-mini-debug-info");
+    }
+
     /*
      * Retrieve the build fingerprint and provide it to the runtime. That way, ANR dumps will
      * contain the fingerprint and can be parsed.
@@ -1342,7 +1348,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_content_XmlBlock),
     REG_JNI(register_android_text_AndroidCharacter),
     REG_JNI(register_android_text_Hyphenator),
-    REG_JNI(register_android_text_MeasuredText),
+    REG_JNI(register_android_text_MeasuredParagraph),
     REG_JNI(register_android_text_StaticLayout),
     REG_JNI(register_android_view_InputDevice),
     REG_JNI(register_android_view_KeyCharacterMap),
@@ -1397,6 +1403,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_graphics_FontFamily),
     REG_JNI(register_android_graphics_GraphicBuffer),
     REG_JNI(register_android_graphics_ImageDecoder),
+    REG_JNI(register_android_graphics_drawable_AnimatedImageDrawable),
     REG_JNI(register_android_graphics_Interpolator),
     REG_JNI(register_android_graphics_MaskFilter),
     REG_JNI(register_android_graphics_Matrix),
@@ -1427,7 +1434,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_os_GraphicsEnvironment),
     REG_JNI(register_android_os_MessageQueue),
     REG_JNI(register_android_os_SELinux),
-    REG_JNI(register_android_os_seccomp),
     REG_JNI(register_android_os_Trace),
     REG_JNI(register_android_os_UEventObserver),
     REG_JNI(register_android_net_LocalSocketImpl),

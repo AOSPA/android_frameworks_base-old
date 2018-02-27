@@ -691,6 +691,7 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      *   <li>{@link #CONTROL_AE_MODE_ON_AUTO_FLASH ON_AUTO_FLASH}</li>
      *   <li>{@link #CONTROL_AE_MODE_ON_ALWAYS_FLASH ON_ALWAYS_FLASH}</li>
      *   <li>{@link #CONTROL_AE_MODE_ON_AUTO_FLASH_REDEYE ON_AUTO_FLASH_REDEYE}</li>
+     *   <li>{@link #CONTROL_AE_MODE_ON_EXTERNAL_FLASH ON_EXTERNAL_FLASH}</li>
      * </ul></p>
      * <p><b>Available values for this device:</b><br>
      * {@link CameraCharacteristics#CONTROL_AE_AVAILABLE_MODES android.control.aeAvailableModes}</p>
@@ -708,6 +709,7 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * @see #CONTROL_AE_MODE_ON_AUTO_FLASH
      * @see #CONTROL_AE_MODE_ON_ALWAYS_FLASH
      * @see #CONTROL_AE_MODE_ON_AUTO_FLASH_REDEYE
+     * @see #CONTROL_AE_MODE_ON_EXTERNAL_FLASH
      */
     @PublicKey
     public static final Key<Integer> CONTROL_AE_MODE =
@@ -877,7 +879,7 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * </tr>
      * </tbody>
      * </table>
-     * <p>When {@link CaptureRequest#CONTROL_AE_MODE android.control.aeMode} is AE_MODE_ON_*:</p>
+     * <p>When {@link CaptureRequest#CONTROL_AE_MODE android.control.aeMode} is AE_MODE_ON*:</p>
      * <table>
      * <thead>
      * <tr>
@@ -998,10 +1000,13 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * </tr>
      * </tbody>
      * </table>
+     * <p>If the camera device supports AE external flash mode (ON_EXTERNAL_FLASH is included in
+     * {@link CameraCharacteristics#CONTROL_AE_AVAILABLE_MODES android.control.aeAvailableModes}), aeState must be FLASH_REQUIRED after the camera device
+     * finishes AE scan and it's too dark without flash.</p>
      * <p>For the above table, the camera device may skip reporting any state changes that happen
      * without application intervention (i.e. mode switch, trigger, locking). Any state that
      * can be skipped in that manner is called a transient state.</p>
-     * <p>For example, for above AE modes (AE_MODE_ON_*), in addition to the state transitions
+     * <p>For example, for above AE modes (AE_MODE_ON*), in addition to the state transitions
      * listed in above table, it is also legal for the camera device to skip one or more
      * transient states between two results. See below table for examples:</p>
      * <table>
@@ -1072,6 +1077,7 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * Present on all camera devices that report being at least {@link CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED HARDWARE_LEVEL_LIMITED} devices in the
      * {@link CameraCharacteristics#INFO_SUPPORTED_HARDWARE_LEVEL android.info.supportedHardwareLevel} key</p>
      *
+     * @see CameraCharacteristics#CONTROL_AE_AVAILABLE_MODES
      * @see CaptureRequest#CONTROL_AE_LOCK
      * @see CaptureRequest#CONTROL_AE_MODE
      * @see CaptureRequest#CONTROL_AE_PRECAPTURE_TRIGGER
@@ -2197,8 +2203,6 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
      * significant illumination change, this value will be set to DETECTED for a single capture
      * result. Otherwise the value will be NOT_DETECTED. The threshold for detection is similar
      * to what would trigger a new passive focus scan to begin in CONTINUOUS autofocus modes.</p>
-     * <p>afSceneChange may be DETECTED only if afMode is AF_MODE_CONTINUOUS_VIDEO or
-     * AF_MODE_CONTINUOUS_PICTURE. In other AF modes, afSceneChange must be NOT_DETECTED.</p>
      * <p>This key will be available if the camera device advertises this key via {@link android.hardware.camera2.CameraCharacteristics#getAvailableCaptureResultKeys }.</p>
      * <p><b>Possible values:</b>
      * <ul>
@@ -3903,6 +3907,76 @@ public class CaptureResult extends CameraMetadata<CaptureResult.Key<?>> {
     @PublicKey
     public static final Key<Integer> STATISTICS_LENS_SHADING_MAP_MODE =
             new Key<Integer>("android.statistics.lensShadingMapMode", int.class);
+
+    /**
+     * <p>Whether the camera device outputs the OIS data in output
+     * result metadata.</p>
+     * <p>When set to ON,
+     * {@link CaptureResult#STATISTICS_OIS_TIMESTAMPS android.statistics.oisTimestamps}, android.statistics.oisShiftPixelX,
+     * android.statistics.oisShiftPixelY will provide OIS data in the output result metadata.</p>
+     * <p><b>Possible values:</b>
+     * <ul>
+     *   <li>{@link #STATISTICS_OIS_DATA_MODE_OFF OFF}</li>
+     *   <li>{@link #STATISTICS_OIS_DATA_MODE_ON ON}</li>
+     * </ul></p>
+     * <p><b>Available values for this device:</b><br>
+     * android.Statistics.info.availableOisDataModes</p>
+     * <p><b>Optional</b> - This value may be {@code null} on some devices.</p>
+     *
+     * @see CaptureResult#STATISTICS_OIS_TIMESTAMPS
+     * @see #STATISTICS_OIS_DATA_MODE_OFF
+     * @see #STATISTICS_OIS_DATA_MODE_ON
+     */
+    @PublicKey
+    public static final Key<Integer> STATISTICS_OIS_DATA_MODE =
+            new Key<Integer>("android.statistics.oisDataMode", int.class);
+
+    /**
+     * <p>An array of timestamps of OIS samples, in nanoseconds.</p>
+     * <p>The array contains the timestamps of OIS samples. The timestamps are in the same
+     * timebase as and comparable to {@link CaptureResult#SENSOR_TIMESTAMP android.sensor.timestamp}.</p>
+     * <p><b>Units</b>: nanoseconds</p>
+     * <p><b>Optional</b> - This value may be {@code null} on some devices.</p>
+     *
+     * @see CaptureResult#SENSOR_TIMESTAMP
+     */
+    @PublicKey
+    public static final Key<long[]> STATISTICS_OIS_TIMESTAMPS =
+            new Key<long[]>("android.statistics.oisTimestamps", long[].class);
+
+    /**
+     * <p>An array of shifts of OIS samples, in x direction.</p>
+     * <p>The array contains the amount of shifts in x direction, in pixels, based on OIS samples.
+     * A positive value is a shift from left to right in active array coordinate system. For
+     * example, if the optical center is (1000, 500) in active array coordinates, an shift of
+     * (3, 0) puts the new optical center at (1003, 500).</p>
+     * <p>The number of shifts must match the number of timestamps in
+     * {@link CaptureResult#STATISTICS_OIS_TIMESTAMPS android.statistics.oisTimestamps}.</p>
+     * <p><b>Units</b>: Pixels in active array.</p>
+     * <p><b>Optional</b> - This value may be {@code null} on some devices.</p>
+     *
+     * @see CaptureResult#STATISTICS_OIS_TIMESTAMPS
+     */
+    @PublicKey
+    public static final Key<float[]> STATISTICS_OIS_X_SHIFTS =
+            new Key<float[]>("android.statistics.oisXShifts", float[].class);
+
+    /**
+     * <p>An array of shifts of OIS samples, in y direction.</p>
+     * <p>The array contains the amount of shifts in y direction, in pixels, based on OIS samples.
+     * A positive value is a shift from top to bottom in active array coordinate system. For
+     * example, if the optical center is (1000, 500) in active array coordinates, an shift of
+     * (0, 5) puts the new optical center at (1000, 505).</p>
+     * <p>The number of shifts must match the number of timestamps in
+     * {@link CaptureResult#STATISTICS_OIS_TIMESTAMPS android.statistics.oisTimestamps}.</p>
+     * <p><b>Units</b>: Pixels in active array.</p>
+     * <p><b>Optional</b> - This value may be {@code null} on some devices.</p>
+     *
+     * @see CaptureResult#STATISTICS_OIS_TIMESTAMPS
+     */
+    @PublicKey
+    public static final Key<float[]> STATISTICS_OIS_Y_SHIFTS =
+            new Key<float[]>("android.statistics.oisYShifts", float[].class);
 
     /**
      * <p>Tonemapping / contrast / gamma curve for the blue

@@ -64,7 +64,9 @@ public abstract class RadioTuner {
      *  <li>{@link RadioManager#STATUS_DEAD_OBJECT} if the binder transaction to the native
      *  service fails, </li>
      * </ul>
+     * @deprecated Only applicable for HAL 1.x.
      */
+    @Deprecated
     public abstract int setConfiguration(RadioManager.BandConfig config);
 
     /**
@@ -80,7 +82,10 @@ public abstract class RadioTuner {
      *  <li>{@link RadioManager#STATUS_DEAD_OBJECT} if the binder transaction to the native
      *  service fails, </li>
      * </ul>
+     *
+     * @deprecated Only applicable for HAL 1.x.
      */
+    @Deprecated
     public abstract int getConfiguration(RadioManager.BandConfig[] config);
 
 
@@ -228,7 +233,9 @@ public abstract class RadioTuner {
      *  <li>{@link RadioManager#STATUS_DEAD_OBJECT} if the binder transaction to the native
      *  service fails, </li>
      * </ul>
+     * @deprecated Use {@link onProgramInfoChanged} callback instead.
      */
+    @Deprecated
     public abstract int getProgramInformation(RadioManager.ProgramInfo[] info);
 
     /**
@@ -280,9 +287,27 @@ public abstract class RadioTuner {
      * @throws IllegalStateException if the scan is in progress or has not been started,
      *         startBackgroundScan() call may fix it.
      * @throws IllegalArgumentException if the vendorFilter argument is not valid.
+     * @deprecated Use {@link getDynamicProgramList} instead.
      */
+    @Deprecated
     public abstract @NonNull List<RadioManager.ProgramInfo>
             getProgramList(@Nullable Map<String, String> vendorFilter);
+
+    /**
+     * Get the dynamic list of discovered radio stations.
+     *
+     * The list object is updated asynchronously; to get the updates register
+     * with {@link ProgramList#addListCallback}.
+     *
+     * When the returned object is no longer used, it must be closed.
+     *
+     * @param filter filter for the list, or null to get the full list.
+     * @return the dynamic program list object, close it after use
+     *         or {@code null} if program list is not supported by the tuner
+     */
+    public @Nullable ProgramList getDynamicProgramList(@Nullable ProgramList.Filter filter) {
+        return null;
+    }
 
     /**
      * Checks, if the analog playback is forced, see setAnalogForced.
@@ -409,7 +434,10 @@ public abstract class RadioTuner {
      * Get current antenna connection state for current configuration.
      * Only valid if a configuration has been applied.
      * @return {@code true} if the antenna is connected, {@code false} otherwise.
+     *
+     * @deprecated Use {@link onAntennaState} callback instead
      */
+    @Deprecated
     public abstract boolean isAntennaConnected();
 
     /**
@@ -428,20 +456,41 @@ public abstract class RadioTuner {
     public abstract boolean hasControl();
 
     /** Indicates a failure of radio IC or driver.
-     * The application must close and re open the tuner */
+     * The application must close and re open the tuner
+     * @deprecated See {@link onError} callback.
+     */
+    @Deprecated
     public static final int ERROR_HARDWARE_FAILURE = 0;
     /** Indicates a failure of the radio service.
-     * The application must close and re open the tuner */
+     * The application must close and re open the tuner
+     * @deprecated See {@link onError} callback.
+     */
+    @Deprecated
     public static final  int ERROR_SERVER_DIED = 1;
-    /** A pending seek or tune operation was cancelled */
+    /** A pending seek or tune operation was cancelled
+     * @deprecated See {@link onError} callback.
+     */
+    @Deprecated
     public static final  int ERROR_CANCELLED = 2;
-    /** A pending seek or tune operation timed out */
+    /** A pending seek or tune operation timed out
+     * @deprecated See {@link onError} callback.
+     */
+    @Deprecated
     public static final  int ERROR_SCAN_TIMEOUT = 3;
-    /** The requested configuration could not be applied */
+    /** The requested configuration could not be applied
+     * @deprecated See {@link onError} callback.
+     */
+    @Deprecated
     public static final  int ERROR_CONFIG = 4;
-    /** Background scan was interrupted due to hardware becoming temporarily unavailable. */
+    /** Background scan was interrupted due to hardware becoming temporarily unavailable.
+     * @deprecated See {@link onError} callback.
+     */
+    @Deprecated
     public static final int ERROR_BACKGROUND_SCAN_UNAVAILABLE = 5;
-    /** Background scan failed due to other error, ie. HW failure. */
+    /** Background scan failed due to other error, ie. HW failure.
+     * @deprecated See {@link onError} callback.
+     */
+    @Deprecated
     public static final int ERROR_BACKGROUND_SCAN_FAILED = 6;
 
     /**
@@ -455,13 +504,29 @@ public abstract class RadioTuner {
          * status is one of {@link #ERROR_HARDWARE_FAILURE}, {@link #ERROR_SERVER_DIED},
          * {@link #ERROR_CANCELLED}, {@link #ERROR_SCAN_TIMEOUT},
          * {@link #ERROR_CONFIG}
+         *
+         * @deprecated Use {@link onTuneFailed} for tune, scan and step;
+         *             other use cases (configuration, background scan) are already deprecated.
          */
         public void onError(int status) {}
+
+        /**
+         * Called when tune, scan or step operation fails.
+         *
+         * @param result cause of the failure
+         * @param selector ProgramSelector argument of tune that failed;
+         *                 null for scan and step.
+         */
+        public void onTuneFailed(int result, @Nullable ProgramSelector selector) {}
+
         /**
          * onConfigurationChanged() is called upon successful completion of
          * {@link RadioManager#openTuner(int, RadioManager.BandConfig, boolean, Callback, Handler)}
          * or {@link RadioTuner#setConfiguration(RadioManager.BandConfig)}
+         *
+         * @deprecated Only applicable for HAL 1.x.
          */
+        @Deprecated
         public void onConfigurationChanged(RadioManager.BandConfig config) {}
 
         /**

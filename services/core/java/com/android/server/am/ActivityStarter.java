@@ -31,6 +31,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.content.Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP;
 import static android.content.Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT;
@@ -74,6 +75,7 @@ import static com.android.server.am.TaskRecord.REPARENT_KEEP_STACK_AT_FRONT;
 import static com.android.server.am.TaskRecord.REPARENT_MOVE_STACK_TO_FRONT;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.IApplicationThread;
@@ -298,21 +300,21 @@ class ActivityStarter {
         int realCallingPid;
         int realCallingUid;
         int startFlags;
-        ActivityOptions activityOptions;
+        SafeActivityOptions activityOptions;
         boolean ignoreTargetSecurity;
         boolean componentSpecified;
+        boolean avoidMoveToFront;
         ActivityRecord[] outActivity;
         TaskRecord inTask;
         String reason;
         ProfilerInfo profilerInfo;
         Configuration globalConfig;
-        Bundle waitOptions;
         int userId;
         WaitResult waitResult;
 
         /**
          * Indicates that we should wait for the result of the start request. This flag is set when
-         * {@link ActivityStarter#setMayWait(Bundle, int)} is called.
+         * {@link ActivityStarter#setMayWait(int)} is called.
          * {@see ActivityStarter#startActivityMayWait}.
          */
         boolean mayWait;
@@ -353,10 +355,10 @@ class ActivityStarter {
             reason = null;
             profilerInfo = null;
             globalConfig = null;
-            waitOptions = null;
             userId = 0;
             waitResult = null;
             mayWait = false;
+            avoidMoveToFront = false;
         }
 
         /**
@@ -388,10 +390,10 @@ class ActivityStarter {
             reason = request.reason;
             profilerInfo = request.profilerInfo;
             globalConfig = request.globalConfig;
-            waitOptions = request.waitOptions;
             userId = request.userId;
             waitResult = request.waitResult;
             mayWait = request.mayWait;
+            avoidMoveToFront = request.avoidMoveToFront;
         }
     }
 
@@ -473,7 +475,7 @@ class ActivityStarter {
                         mRequest.voiceSession, mRequest.voiceInteractor, mRequest.resultTo,
                         mRequest.resultWho, mRequest.requestCode, mRequest.startFlags,
                         mRequest.profilerInfo, mRequest.waitResult, mRequest.globalConfig,
-                        mRequest.waitOptions, mRequest.ignoreTargetSecurity, mRequest.userId,
+                        mRequest.activityOptions, mRequest.ignoreTargetSecurity, mRequest.userId,
                         mRequest.inTask, mRequest.reason);
             } else {
                 return startActivity(mRequest.caller, mRequest.intent, mRequest.ephemeralIntent,
@@ -513,7 +515,7 @@ class ActivityStarter {
             IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
             IBinder resultTo, String resultWho, int requestCode, int callingPid, int callingUid,
             String callingPackage, int realCallingPid, int realCallingUid, int startFlags,
-            ActivityOptions options, boolean ignoreTargetSecurity, boolean componentSpecified,
+            SafeActivityOptions options, boolean ignoreTargetSecurity, boolean componentSpecified,
             ActivityRecord[] outActivity, TaskRecord inTask, String reason) {
 
         if (TextUtils.isEmpty(reason)) {
@@ -555,8 +557,9 @@ class ActivityStarter {
             IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
             IBinder resultTo, String resultWho, int requestCode, int callingPid, int callingUid,
             String callingPackage, int realCallingPid, int realCallingUid, int startFlags,
-            ActivityOptions options, boolean ignoreTargetSecurity, boolean componentSpecified,
-            ActivityRecord[] outActivity, TaskRecord inTask) {
+            SafeActivityOptions options,
+            boolean ignoreTargetSecurity, boolean componentSpecified, ActivityRecord[] outActivity,
+            TaskRecord inTask) {
         int err = ActivityManager.START_SUCCESS;
         // Pull the optional Ephemeral Installer-only bundle out of the options early.
         final Bundle verificationBundle
@@ -603,7 +606,7 @@ class ActivityStarter {
             // Transfer the result target from the source activity to the new
             // one being started, including any failures.
             if (requestCode >= 0) {
-                ActivityOptions.abort(options);
+                SafeActivityOptions.abort(options);
                 return ActivityManager.START_FORWARD_AND_REQUEST_CONFLICT;
             }
             resultRecord = sourceRecord.resultTo;
@@ -691,16 +694,20 @@ class ActivityStarter {
                 resultStack.sendActivityResultLocked(
                         -1, resultRecord, resultWho, requestCode, RESULT_CANCELED, null);
             }
-            ActivityOptions.abort(options);
+            SafeActivityOptions.abort(options);
             return err;
         }
 
         boolean abort = !mSupervisor.checkStartAnyActivityPermission(intent, aInfo, resultWho,
-                requestCode, callingPid, callingUid, callingPackage, ignoreTargetSecurity, callerApp,
-                resultRecord, resultStack, options);
+                requestCode, callingPid, callingUid, callingPackage, ignoreTargetSecurity,
+                callerApp, resultRecord, resultStack);
         abort |= !mService.mIntentFirewall.checkStartActivity(intent, callingUid,
                 callingPid, resolvedType, aInfo.applicationInfo);
 
+        // Merge the two options bundles, while realCallerOptions takes precedence.
+        ActivityOptions checkedOptions = options != null
+                ? options.getOptions(intent, aInfo, callerApp, mSupervisor)
+                : null;
         if (mService.mController != null) {
             try {
                 // The Intent we give to the watcher has the extra data
@@ -715,7 +722,7 @@ class ActivityStarter {
 
         mInterceptor.setStates(userId, realCallingPid, realCallingUid, startFlags, callingPackage);
         if (mInterceptor.intercept(intent, rInfo, aInfo, resolvedType, inTask, callingPid,
-                callingUid, options)) {
+                callingUid, checkedOptions)) {
             // activity start was intercepted, e.g. because the target user is currently in quiet
             // mode (turn off work) or the target application is suspended
             intent = mInterceptor.mIntent;
@@ -725,7 +732,7 @@ class ActivityStarter {
             inTask = mInterceptor.mInTask;
             callingPid = mInterceptor.mCallingPid;
             callingUid = mInterceptor.mCallingUid;
-            options = mInterceptor.mActivityOptions;
+            checkedOptions = mInterceptor.mActivityOptions;
         }
 
         if (abort) {
@@ -735,7 +742,7 @@ class ActivityStarter {
             }
             // We pretend to the caller that it was really started, but
             // they will just get a cancel result.
-            ActivityOptions.abort(options);
+            ActivityOptions.abort(checkedOptions);
             return START_ABORTED;
         }
 
@@ -783,7 +790,7 @@ class ActivityStarter {
         // Instead, launch the ephemeral installer. Once the installer is finished, it
         // starts either the intent we resolved here [on install error] or the ephemeral
         // app [on install success].
-        if (rInfo != null && rInfo.auxiliaryInfo != null) {
+        if (rInfo != null && rInfo.isInstantAppAvailable) {
             intent = createLaunchIntent(rInfo.auxiliaryInfo, ephemeralIntent,
                     callingPackage, verificationBundle, resolvedType, userId);
             resolvedType = null;
@@ -796,7 +803,7 @@ class ActivityStarter {
         ActivityRecord r = new ActivityRecord(mService, callerApp, callingPid, callingUid,
                 callingPackage, intent, resolvedType, aInfo, mService.getGlobalConfiguration(),
                 resultRecord, resultWho, requestCode, componentSpecified, voiceSession != null,
-                mSupervisor, options, sourceRecord);
+                mSupervisor, checkedOptions, sourceRecord);
         if (outActivity != null) {
             outActivity[0] = r;
         }
@@ -808,13 +815,16 @@ class ActivityStarter {
         }
 
         final ActivityStack stack = mSupervisor.mFocusedStack;
+
+        // If we are starting an activity that is not from the same uid as the currently resumed
+        // one, check whether app switches are allowed.
         if (voiceSession == null && (stack.mResumedActivity == null
-                || stack.mResumedActivity.info.applicationInfo.uid != callingUid)) {
+                || stack.mResumedActivity.info.applicationInfo.uid != realCallingUid)) {
             if (!mService.checkAppSwitchAllowedLocked(callingPid, callingUid,
                     realCallingPid, realCallingUid, "Activity start")) {
                 mController.addPendingActivityLaunch(new PendingActivityLaunch(r,
                         sourceRecord, startFlags, stack, callerApp));
-                ActivityOptions.abort(options);
+                ActivityOptions.abort(checkedOptions);
                 return ActivityManager.START_SWITCHES_CANCELED;
             }
         }
@@ -833,28 +843,34 @@ class ActivityStarter {
         mController.doPendingActivityLaunches(false);
 
         return startActivity(r, sourceRecord, voiceSession, voiceInteractor, startFlags,
-                true /* doResume */, options, inTask, outActivity);
+                true /* doResume */, checkedOptions, inTask, outActivity);
     }
+
 
     /**
      * Creates a launch intent for the given auxiliary resolution data.
      */
-    private @NonNull Intent createLaunchIntent(@NonNull AuxiliaryResolveInfo auxiliaryResponse,
+    private @NonNull Intent createLaunchIntent(@Nullable AuxiliaryResolveInfo auxiliaryResponse,
             Intent originalIntent, String callingPackage, Bundle verificationBundle,
             String resolvedType, int userId) {
-        if (auxiliaryResponse.needsPhaseTwo) {
+        if (auxiliaryResponse != null && auxiliaryResponse.needsPhaseTwo) {
             // request phase two resolution
             mService.getPackageManagerInternalLocked().requestInstantAppResolutionPhaseTwo(
                     auxiliaryResponse, originalIntent, resolvedType, callingPackage,
                     verificationBundle, userId);
         }
         return InstantAppResolver.buildEphemeralInstallerIntent(
-                Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE, originalIntent,
-                auxiliaryResponse.failureIntent, callingPackage, verificationBundle,
-                resolvedType, userId, auxiliaryResponse.packageName, auxiliaryResponse.splitName,
-                auxiliaryResponse.installFailureActivity, auxiliaryResponse.versionCode,
-                auxiliaryResponse.token, auxiliaryResponse.resolveInfo.getExtras(),
-                auxiliaryResponse.needsPhaseTwo);
+                originalIntent,
+                InstantAppResolver.sanitizeIntent(originalIntent),
+                auxiliaryResponse == null ? null : auxiliaryResponse.failureIntent,
+                callingPackage,
+                verificationBundle,
+                resolvedType,
+                userId,
+                auxiliaryResponse == null ? null : auxiliaryResponse.installFailureActivity,
+                auxiliaryResponse == null ? null : auxiliaryResponse.token,
+                auxiliaryResponse != null && auxiliaryResponse.needsPhaseTwo,
+                auxiliaryResponse == null ? null : auxiliaryResponse.filters);
     }
 
     void postStartActivityProcessing(ActivityRecord r, int result, ActivityStack targetStack) {
@@ -900,8 +916,8 @@ class ActivityStarter {
             IVoiceInteractionSession voiceSession, IVoiceInteractor voiceInteractor,
             IBinder resultTo, String resultWho, int requestCode, int startFlags,
             ProfilerInfo profilerInfo, WaitResult outResult,
-            Configuration globalConfig, Bundle bOptions, boolean ignoreTargetSecurity, int userId,
-            TaskRecord inTask, String reason) {
+            Configuration globalConfig, SafeActivityOptions options, boolean ignoreTargetSecurity,
+            int userId, TaskRecord inTask, String reason) {
         // Refuse possible leaked file descriptors
         if (intent != null && intent.hasFileDescriptors()) {
             throw new IllegalArgumentException("File descriptors passed in Intent");
@@ -914,12 +930,12 @@ class ActivityStarter {
         // Don't modify the client's object!
         intent = new Intent(intent);
         if (componentSpecified
-                && intent.getData() != null
-                && Intent.ACTION_VIEW.equals(intent.getAction())
+                && !Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE.equals(intent.getAction())
+                && !Intent.ACTION_RESOLVE_INSTANT_APP_PACKAGE.equals(intent.getAction())
                 && mService.getPackageManagerInternalLocked()
                         .isInstantAppInstallerComponent(intent.getComponent())) {
             // intercept intents targeted directly to the ephemeral installer the
-            // ephemeral installer should never be started with a raw URL; instead
+            // ephemeral installer should never be started with a raw Intent; instead
             // adjust the intent so it looks like a "normal" instant app launch
             intent.setComponent(null /*component*/);
             componentSpecified = false;
@@ -953,7 +969,6 @@ class ActivityStarter {
         // Collect information about the target of the Intent.
         ActivityInfo aInfo = mSupervisor.resolveActivity(intent, rInfo, startFlags, profilerInfo);
 
-        ActivityOptions options = ActivityOptions.fromBundle(bOptions);
         synchronized (mService) {
             final int realCallingPid = Binder.getCallingPid();
             final int realCallingUid = Binder.getCallingUid();
@@ -993,7 +1008,7 @@ class ActivityStarter {
                                 Slog.w(TAG, "Unable to find app for caller " + caller
                                         + " (pid=" + callingPid + ") when starting: "
                                         + intent.toString());
-                                ActivityOptions.abort(options);
+                                SafeActivityOptions.abort(options);
                                 return ActivityManager.START_PERMISSION_DENIED;
                             }
                         }
@@ -1039,12 +1054,10 @@ class ActivityStarter {
             }
 
             final ActivityRecord[] outRecord = new ActivityRecord[1];
-            int res = startActivity(caller, intent, ephemeralIntent, resolvedType,
-                    aInfo, rInfo, voiceSession, voiceInteractor,
-                    resultTo, resultWho, requestCode, callingPid,
-                    callingUid, callingPackage, realCallingPid, realCallingUid, startFlags,
-                    options, ignoreTargetSecurity, componentSpecified, outRecord, inTask,
-                    reason);
+            int res = startActivity(caller, intent, ephemeralIntent, resolvedType, aInfo, rInfo,
+                    voiceSession, voiceInteractor, resultTo, resultWho, requestCode, callingPid,
+                    callingUid, callingPackage, realCallingPid, realCallingUid, startFlags, options,
+                    ignoreTargetSecurity, componentSpecified, outRecord, inTask, reason);
 
             Binder.restoreCallingIdentity(origId);
 
@@ -1248,7 +1261,7 @@ class ActivityStarter {
                     outActivity[0] = reusedActivity;
                 }
 
-                return START_TASK_TO_FRONT;
+                return mMovedToFront ? START_TASK_TO_FRONT : START_DELIVERED_TO_TOP;
             }
         }
 
@@ -1481,19 +1494,23 @@ class ActivityStarter {
             mDoResume = false;
         }
 
-        if (mOptions != null && mOptions.getLaunchTaskId() != -1
-                && mOptions.getTaskOverlay()) {
-            r.mTaskOverlay = true;
-            if (!mOptions.canTaskOverlayResume()) {
-                final TaskRecord task = mSupervisor.anyTaskForIdLocked(mOptions.getLaunchTaskId());
-                final ActivityRecord top = task != null ? task.getTopActivity() : null;
-                if (top != null && top.state != RESUMED) {
+        if (mOptions != null) {
+            if (mOptions.getLaunchTaskId() != -1 && mOptions.getTaskOverlay()) {
+                r.mTaskOverlay = true;
+                if (!mOptions.canTaskOverlayResume()) {
+                    final TaskRecord task = mSupervisor.anyTaskForIdLocked(
+                            mOptions.getLaunchTaskId());
+                    final ActivityRecord top = task != null ? task.getTopActivity() : null;
+                    if (top != null && top.state != RESUMED) {
 
-                    // The caller specifies that we'd like to be avoided to be moved to the front,
-                    // so be it!
-                    mDoResume = false;
-                    mAvoidMoveToFront = true;
+                        // The caller specifies that we'd like to be avoided to be moved to the
+                        // front, so be it!
+                        mDoResume = false;
+                        mAvoidMoveToFront = true;
+                    }
                 }
+            } else if (mOptions.getAvoidMoveToFront()) {
+                mAvoidMoveToFront = true;
             }
         }
 
@@ -1834,7 +1851,7 @@ class ActivityStarter {
         // Need to update mTargetStack because if task was moved out of it, the original stack may
         // be destroyed.
         mTargetStack = intentActivity.getStack();
-        if (!mMovedToFront && mDoResume) {
+        if (!mAvoidMoveToFront && !mMovedToFront && mDoResume) {
             if (DEBUG_TASKS) Slog.d(TAG_TASKS, "Bring to front target: " + mTargetStack
                     + " from " + intentActivity);
             mTargetStack.moveToFront("intentActivityFound");
@@ -2447,9 +2464,13 @@ class ActivityStarter {
         return this;
     }
 
-    ActivityStarter setActivityOptions(ActivityOptions options) {
+    ActivityStarter setActivityOptions(SafeActivityOptions options) {
         mRequest.activityOptions = options;
         return this;
+    }
+
+    ActivityStarter setActivityOptions(Bundle bOptions) {
+        return setActivityOptions(SafeActivityOptions.fromBundle(bOptions));
     }
 
     ActivityStarter setIgnoreTargetSecurity(boolean ignoreTargetSecurity) {
@@ -2487,19 +2508,13 @@ class ActivityStarter {
         return this;
     }
 
-    ActivityStarter setWaitOptions(Bundle options) {
-        mRequest.waitOptions = options;
-        return this;
-    }
-
     ActivityStarter setUserId(int userId) {
         mRequest.userId = userId;
         return this;
     }
 
-    ActivityStarter setMayWait(Bundle options, int userId) {
+    ActivityStarter setMayWait(int userId) {
         mRequest.mayWait = true;
-        mRequest.waitOptions = options;
         mRequest.userId = userId;
 
         return this;

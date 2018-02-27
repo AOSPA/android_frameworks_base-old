@@ -23,7 +23,7 @@
 #include <climits>
 #include "CpuTimePerUidFreqPuller.h"
 #include "CpuTimePerUidPuller.h"
-#include "ResourcePowerManagerPuller.h"
+#include "SubsystemSleepStatePuller.h"
 #include "StatsCompanionServicePuller.h"
 #include "StatsPullerManagerImpl.h"
 #include "StatsService.h"
@@ -58,16 +58,31 @@ StatsPullerManagerImpl::StatsPullerManagerImpl()
     mPullers.insert({android::util::MOBILE_BYTES_TRANSFER_BY_FG_BG,
                      make_shared<StatsCompanionServicePuller>(
                              android::util::MOBILE_BYTES_TRANSFER_BY_FG_BG)});
-    mPullers.insert({android::util::PLATFORM_SLEEP_STATE,
-                     make_shared<ResourcePowerManagerPuller>(android::util::PLATFORM_SLEEP_STATE)});
-    mPullers.insert({android::util::SLEEP_STATE_VOTER,
-                     make_shared<ResourcePowerManagerPuller>(android::util::SLEEP_STATE_VOTER)});
     mPullers.insert(
             {android::util::SUBSYSTEM_SLEEP_STATE,
-             make_shared<ResourcePowerManagerPuller>(android::util::SUBSYSTEM_SLEEP_STATE)});
+             make_shared<SubsystemSleepStatePuller>()});
     mPullers.insert({android::util::CPU_TIME_PER_FREQ, make_shared<StatsCompanionServicePuller>(android::util::CPU_TIME_PER_FREQ)});
     mPullers.insert({android::util::CPU_TIME_PER_UID, make_shared<CpuTimePerUidPuller>()});
     mPullers.insert({android::util::CPU_TIME_PER_UID_FREQ, make_shared<CpuTimePerUidFreqPuller>()});
+    mPullers.insert(
+            {android::util::SYSTEM_ELAPSED_REALTIME,
+             make_shared<StatsCompanionServicePuller>(android::util::SYSTEM_ELAPSED_REALTIME)});
+    mPullers.insert({android::util::SYSTEM_UPTIME,
+                     make_shared<StatsCompanionServicePuller>(android::util::SYSTEM_UPTIME)});
+    mPullers.insert({android::util::DISK_SPACE,
+                     make_shared<StatsCompanionServicePuller>(android::util::DISK_SPACE)});
+    mPullers.insert(
+            {android::util::BLUETOOTH_ACTIVITY_INFO,
+             make_shared<StatsCompanionServicePuller>(android::util::BLUETOOTH_ACTIVITY_INFO)});
+
+    mPullers.insert(
+            {android::util::BLUETOOTH_BYTES_TRANSFER,
+             make_shared<StatsCompanionServicePuller>(android::util::BLUETOOTH_BYTES_TRANSFER)});
+    mPullers.insert(
+            {android::util::WIFI_ACTIVITY_ENERGY_INFO,
+             make_shared<StatsCompanionServicePuller>(android::util::WIFI_ACTIVITY_ENERGY_INFO)});
+    mPullers.insert({android::util::MODEM_ACTIVITY_INFO,
+                     make_shared<StatsCompanionServicePuller>(android::util::MODEM_ACTIVITY_INFO)});
 
     mStatsCompanionService = StatsService::getStatsCompanionService();
 }

@@ -19,6 +19,7 @@ package com.android.server.am;
 import static android.Manifest.permission.BIND_VOICE_INTERACTION;
 import static android.Manifest.permission.CHANGE_CONFIGURATION;
 import static android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST;
+import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS;
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.INTERNAL_SYSTEM_WINDOW;
@@ -26,9 +27,9 @@ import static android.Manifest.permission.MANAGE_ACTIVITY_STACKS;
 import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.Manifest.permission.REMOVE_TASKS;
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
-import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
 import static android.app.ActivityManager.RESIZE_MODE_PRESERVE_WINDOW;
+import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
 import static android.app.ActivityManagerInternal.ASSIST_KEY_CONTENT;
 import static android.app.ActivityManagerInternal.ASSIST_KEY_DATA;
@@ -37,6 +38,7 @@ import static android.app.ActivityManagerInternal.ASSIST_KEY_STRUCTURE;
 import static android.app.ActivityThread.PROC_START_SEQ_IDENT;
 import static android.app.AppOpsManager.OP_ASSIST_STRUCTURE;
 import static android.app.AppOpsManager.OP_NONE;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
@@ -44,6 +46,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
@@ -83,6 +86,7 @@ import static android.os.Process.ROOT_UID;
 import static android.os.Process.SCHED_FIFO;
 import static android.os.Process.SCHED_OTHER;
 import static android.os.Process.SCHED_RESET_ON_FORK;
+import static android.os.Process.SE_UID;
 import static android.os.Process.SHELL_UID;
 import static android.os.Process.SIGNAL_QUIT;
 import static android.os.Process.SIGNAL_USR1;
@@ -119,6 +123,7 @@ import static android.service.voice.VoiceInteractionSession.SHOW_SOURCE_APPLICAT
 import static android.text.format.DateUtils.DAY_IN_MILLIS;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
+
 import static com.android.internal.util.XmlUtils.readBooleanAttribute;
 import static com.android.internal.util.XmlUtils.readIntAttribute;
 import static com.android.internal.util.XmlUtils.readLongAttribute;
@@ -192,11 +197,12 @@ import static com.android.server.am.TaskRecord.INVALID_TASK_ID;
 import static com.android.server.am.TaskRecord.LOCK_TASK_AUTH_DONT_LOCK;
 import static com.android.server.am.TaskRecord.REPARENT_KEEP_STACK_AT_FRONT;
 import static com.android.server.am.TaskRecord.REPARENT_LEAVE_STACK_IN_PLACE;
-import static com.android.server.wm.AppTransition.TRANSIT_ACTIVITY_OPEN;
-import static com.android.server.wm.AppTransition.TRANSIT_NONE;
-import static com.android.server.wm.AppTransition.TRANSIT_TASK_IN_PLACE;
-import static com.android.server.wm.AppTransition.TRANSIT_TASK_OPEN;
-import static com.android.server.wm.AppTransition.TRANSIT_TASK_TO_FRONT;
+import static android.view.WindowManager.TRANSIT_ACTIVITY_OPEN;
+import static android.view.WindowManager.TRANSIT_NONE;
+import static android.view.WindowManager.TRANSIT_TASK_IN_PLACE;
+import static android.view.WindowManager.TRANSIT_TASK_OPEN;
+import static android.view.WindowManager.TRANSIT_TASK_TO_FRONT;
+
 import static org.xmlpull.v1.XmlPullParser.END_DOCUMENT;
 import static org.xmlpull.v1.XmlPullParser.START_TAG;
 
@@ -213,6 +219,7 @@ import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityManagerInternal;
 import android.app.ActivityManagerInternal.ScreenObserver;
 import android.app.ActivityManagerInternal.SleepToken;
+import android.app.ActivityManagerProto;
 import android.app.ActivityOptions;
 import android.app.ActivityThread;
 import android.app.AlertDialog;
@@ -223,6 +230,7 @@ import android.app.ApplicationThreadConstants;
 import android.app.BroadcastOptions;
 import android.app.ContentProviderHolder;
 import android.app.Dialog;
+import android.app.GrantedUriPermission;
 import android.app.IActivityController;
 import android.app.IActivityManager;
 import android.app.IApplicationThread;
@@ -276,8 +284,8 @@ import android.content.pm.IPackageManager;
 import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageManagerInternal;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.PathPermission;
 import android.content.pm.PermissionInfo;
@@ -293,6 +301,7 @@ import android.database.ContentObserver;
 import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.hardware.display.DisplayManagerInternal;
 import android.location.LocationManager;
 import android.media.audiofx.AudioEffect;
 import android.metrics.LogMaker;
@@ -354,22 +363,25 @@ import android.text.style.SuggestionSpan;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AtomicFile;
-import android.util.LongSparseArray;
-import android.util.StatsLog;
-import android.util.TimingsTraceLog;
 import android.util.DebugUtils;
 import android.util.EventLog;
 import android.util.Log;
+import android.util.LongSparseArray;
 import android.util.Pair;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
+import android.util.StatsLog;
 import android.util.TimeUtils;
+import android.util.TimingsTraceLog;
 import android.util.Xml;
 import android.util.proto.ProtoOutputStream;
+import android.util.proto.ProtoUtils;
 import android.view.Gravity;
+import android.view.IRecentsAnimationRunner;
 import android.view.LayoutInflater;
+import android.view.RemoteAnimationDefinition;
 import android.view.View;
 import android.view.WindowManager;
 
@@ -391,12 +403,14 @@ import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.BinderInternal;
+import com.android.internal.os.logging.MetricsLoggerWrapper;
 import com.android.internal.os.ByteTransferPipe;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.os.Zygote;
 import com.android.internal.policy.IKeyguardDismissCallback;
+import com.android.internal.policy.KeyguardDismissCallback;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
@@ -421,12 +435,16 @@ import com.android.server.SystemServiceManager;
 import com.android.server.ThreadPriorityBooster;
 import com.android.server.Watchdog;
 import com.android.server.am.ActivityStack.ActivityState;
-import com.android.server.am.EventLogTags;
 import com.android.server.am.proto.ActivityManagerServiceProto;
 import com.android.server.am.proto.BroadcastProto;
 import com.android.server.am.proto.GrantUriProto;
+import com.android.server.am.proto.ImportanceTokenProto;
 import com.android.server.am.proto.MemInfoProto;
 import com.android.server.am.proto.NeededUriGrantsProto;
+import com.android.server.am.proto.ProcessOomProto;
+import com.android.server.am.proto.ProcessToGcProto;
+import com.android.server.am.proto.ProcessesProto;
+import com.android.server.am.proto.ProcessesProto.UidObserverRegistrationProto;
 import com.android.server.am.proto.StickyBroadcastProto;
 import com.android.server.firewall.IntentFirewall;
 import com.android.server.job.JobSchedulerInternal;
@@ -435,7 +453,14 @@ import com.android.server.pm.Installer.InstallerException;
 import com.android.server.utils.PriorityDump;
 import com.android.server.vr.VrManagerInternal;
 import com.android.server.wm.PinnedStackWindowController;
+import com.android.server.wm.RecentsAnimationController;
 import com.android.server.wm.WindowManagerService;
+
+import dalvik.system.VMRuntime;
+
+import libcore.io.IoUtils;
+import libcore.util.EmptyArray;
+
 import com.google.android.collect.Lists;
 import com.google.android.collect.Maps;
 
@@ -471,13 +496,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-
-import dalvik.system.VMRuntime;
-
-import libcore.io.IoUtils;
-import libcore.util.EmptyArray;
 
 public class ActivityManagerService extends IActivityManager.Stub
         implements Watchdog.Monitor, BatteryStatsImpl.BatteryCallback {
@@ -930,6 +951,16 @@ public class ActivityManagerService extends IActivityManager.Stub
             return "ImportanceToken { " + Integer.toHexString(System.identityHashCode(this))
                     + " " + reason + " " + pid + " " + token + " }";
         }
+
+        void writeToProto(ProtoOutputStream proto, long fieldId) {
+            final long pToken = proto.start(fieldId);
+            proto.write(ImportanceTokenProto.PID, pid);
+            if (token != null) {
+                proto.write(ImportanceTokenProto.TOKEN, token.toString());
+            }
+            proto.write(ImportanceTokenProto.REASON, reason);
+            proto.end(pToken);
+        }
     }
     final SparseArray<ImportanceToken> mImportantProcesses = new SparseArray<ImportanceToken>();
 
@@ -1308,6 +1339,14 @@ public class ActivityManagerService extends IActivityManager.Stub
             duration = _duration;
             tag = _tag;
         }
+
+        void writeToProto(ProtoOutputStream proto, long fieldId) {
+            final long token = proto.start(fieldId);
+            proto.write(ProcessesProto.PendingTempWhitelist.TARGET_UID, targetUid);
+            proto.write(ProcessesProto.PendingTempWhitelist.DURATION_MS, duration);
+            proto.write(ProcessesProto.PendingTempWhitelist.TAG, tag);
+            proto.end(token);
+        }
     }
 
     final SparseArray<PendingTempWhitelist> mPendingTempWhitelist = new SparseArray<>();
@@ -1575,6 +1614,14 @@ public class ActivityManagerService extends IActivityManager.Stub
     String mProfileApp = null;
     ProcessRecord mProfileProc = null;
     ProfilerInfo mProfilerInfo = null;
+
+    /**
+     * Stores a map of process name -> agent string. When a process is started and mAgentAppMap
+     * is not null, this map is checked and the mapped agent installed during bind-time. Note:
+     * A non-null agent in mProfileInfo overrides this.
+     */
+    private @Nullable Map<String, String> mAppAgentMap = null;
+
     int mProfileType = 0;
     final ProcessMap<Pair<Long, String>> mMemWatchProcesses = new ProcessMap<>();
     String mMemWatchDumpProcName;
@@ -1584,7 +1631,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     String mTrackAllocationApp = null;
     String mNativeDebuggingApp = null;
 
-    final long[] mTmpLong = new long[2];
+    final long[] mTmpLong = new long[3];
 
     private final ArraySet<BroadcastQueue> mTmpBroadcastQueue = new ArraySet();
 
@@ -1632,6 +1679,20 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         final SparseIntArray lastProcStates;
 
+        // Please keep the enum lists in sync
+        private static int[] ORIG_ENUMS = new int[]{
+                ActivityManager.UID_OBSERVER_IDLE,
+                ActivityManager.UID_OBSERVER_ACTIVE,
+                ActivityManager.UID_OBSERVER_GONE,
+                ActivityManager.UID_OBSERVER_PROCSTATE,
+        };
+        private static int[] PROTO_ENUMS = new int[]{
+                ActivityManagerProto.UID_OBSERVER_FLAG_IDLE,
+                ActivityManagerProto.UID_OBSERVER_FLAG_ACTIVE,
+                ActivityManagerProto.UID_OBSERVER_FLAG_GONE,
+                ActivityManagerProto.UID_OBSERVER_FLAG_PROCSTATE,
+        };
+
         UidObserverRegistration(int _uid, String _pkg, int _which, int _cutpoint) {
             uid = _uid;
             pkg = _pkg;
@@ -1642,6 +1703,25 @@ public class ActivityManagerService extends IActivityManager.Stub
             } else {
                 lastProcStates = null;
             }
+        }
+
+        void writeToProto(ProtoOutputStream proto, long fieldId) {
+            final long token = proto.start(fieldId);
+            proto.write(UidObserverRegistrationProto.UID, uid);
+            proto.write(UidObserverRegistrationProto.PACKAGE, pkg);
+            ProtoUtils.writeBitWiseFlagsToProtoEnum(proto, UidObserverRegistrationProto.FLAGS,
+                    which, ORIG_ENUMS, PROTO_ENUMS);
+            proto.write(UidObserverRegistrationProto.CUT_POINT, cutpoint);
+            if (lastProcStates != null) {
+                final int NI = lastProcStates.size();
+                for (int i=0; i<NI; i++) {
+                    final long pToken = proto.start(UidObserverRegistrationProto.LAST_PROC_STATES);
+                    proto.write(UidObserverRegistrationProto.ProcState.UID, lastProcStates.keyAt(i));
+                    proto.write(UidObserverRegistrationProto.ProcState.STATE, lastProcStates.valueAt(i));
+                    proto.end(pToken);
+                }
+            }
+            proto.end(token);
         }
     }
 
@@ -2494,22 +2574,24 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
 
                 int num = 0;
-                long[] tmp = new long[2];
+                long[] tmp = new long[3];
                 do {
                     ProcessRecord proc;
                     int procState;
+                    int statType;
                     int pid;
                     long lastPssTime;
                     synchronized (ActivityManagerService.this) {
                         if (mPendingPssProcesses.size() <= 0) {
                             if (mTestPssMode || DEBUG_PSS) Slog.d(TAG_PSS,
-                                    "Collected PSS of " + num + " processes in "
+                                    "Collected pss of " + num + " processes in "
                                     + (SystemClock.uptimeMillis() - start) + "ms");
                             mPendingPssProcesses.clear();
                             return;
                         }
                         proc = mPendingPssProcesses.remove(0);
                         procState = proc.pssProcState;
+                        statType = proc.pssStatType;
                         lastPssTime = proc.lastPssTime;
                         if (proc.thread != null && procState == proc.setProcState
                                 && (lastPssTime+ProcessList.PSS_SAFE_TIME_FROM_STATE_CHANGE)
@@ -2528,8 +2610,17 @@ public class ActivityManagerService extends IActivityManager.Stub
                             if (pss != 0 && proc.thread != null && proc.setProcState == procState
                                     && proc.pid == pid && proc.lastPssTime == lastPssTime) {
                                 num++;
-                                recordPssSampleLocked(proc, procState, pss, tmp[0], tmp[1],
-                                        endTime-startTime, SystemClock.uptimeMillis());
+                                ProcessList.commitNextPssTime(proc.procStateMemTracker);
+                                recordPssSampleLocked(proc, procState, pss, tmp[0], tmp[1], tmp[2],
+                                        statType, endTime-startTime, SystemClock.uptimeMillis());
+                            } else {
+                                ProcessList.abortNextPssTime(proc.procStateMemTracker);
+                                if (DEBUG_PSS) Slog.d(TAG_PSS, "Skipped pss collection of " + pid +
+                                        ": " + (proc.thread == null ? "NO_THREAD " : "") +
+                                        (proc.pid != pid ? "PID_CHANGED " : "") +
+                                        " initState=" + procState + " curState=" +
+                                        proc.setProcState + " " +
+                                        (proc.lastPssTime != lastPssTime ? "TIME_CHANGED" : ""));
                             }
                         }
                     }
@@ -2826,7 +2917,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 });
 
-        mGrantFile = new AtomicFile(new File(systemDir, "urigrants.xml"));
+        mGrantFile = new AtomicFile(new File(systemDir, "urigrants.xml"), "uri-grants");
 
         mUserController = new UserController(this);
 
@@ -3357,6 +3448,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     final void showAppWarningsIfNeededLocked(ActivityRecord r) {
         mAppWarnings.showUnsupportedCompileSdkDialogIfNeeded(r);
         mAppWarnings.showUnsupportedDisplaySizeDialogIfNeeded(r);
+        mAppWarnings.showDeprecatedTargetDialogIfNeeded(r);
     }
 
     private int updateLruProcessInternalLocked(ProcessRecord app, long now, int index,
@@ -3954,8 +4046,13 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             if (app.info.isPrivilegedApp() &&
                     SystemProperties.getBoolean("pm.dexopt.priv-apps-oob", false)) {
-                runtimeFlags |= Zygote.DISABLE_VERIFIER;
                 runtimeFlags |= Zygote.ONLY_USE_SYSTEM_OAT_FILES;
+            }
+
+            if (app.info.isAllowedToUseHiddenApi()) {
+                // This app is allowed to use undocumented and private APIs. Set
+                // up its runtime with the appropriate flag.
+                runtimeFlags |= Zygote.DISABLE_HIDDEN_API_CHECKS;
             }
 
             String invokeWith = null;
@@ -4702,7 +4799,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 .setRequestCode(requestCode)
                 .setStartFlags(startFlags)
                 .setProfilerInfo(profilerInfo)
-                .setMayWait(bOptions, userId)
+                .setActivityOptions(bOptions)
+                .setMayWait(userId)
                 .execute();
 
     }
@@ -4773,7 +4871,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     .setResultWho(resultWho)
                     .setRequestCode(requestCode)
                     .setStartFlags(startFlags)
-                    .setMayWait(bOptions, userId)
+                    .setActivityOptions(bOptions)
+                    .setMayWait(userId)
                     .setIgnoreTargetSecurity(ignoreTargetSecurity)
                     .execute();
         } catch (SecurityException e) {
@@ -4809,7 +4908,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 .setResultWho(resultWho)
                 .setRequestCode(requestCode)
                 .setStartFlags(startFlags)
-                .setMayWait(bOptions, userId)
+                .setActivityOptions(bOptions)
+                .setMayWait(userId)
                 .setProfilerInfo(profilerInfo)
                 .setWaitResult(res)
                 .execute();
@@ -4833,7 +4933,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 .setRequestCode(requestCode)
                 .setStartFlags(startFlags)
                 .setGlobalConfiguration(config)
-                .setMayWait(bOptions, userId)
+                .setActivityOptions(bOptions)
+                .setMayWait(userId)
                 .execute();
     }
 
@@ -4888,7 +4989,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 .setVoiceInteractor(interactor)
                 .setStartFlags(startFlags)
                 .setProfilerInfo(profilerInfo)
-                .setMayWait(bOptions, userId)
+                .setActivityOptions(bOptions)
+                .setMayWait(userId)
                 .execute();
     }
 
@@ -4903,27 +5005,22 @@ public class ActivityManagerService extends IActivityManager.Stub
                 .setCallingUid(callingUid)
                 .setCallingPackage(callingPackage)
                 .setResolvedType(resolvedType)
-                .setMayWait(bOptions, userId)
+                .setActivityOptions(bOptions)
+                .setMayWait(userId)
                 .execute();
     }
 
     @Override
-    public int startRecentsActivity(IAssistDataReceiver assistDataReceiver, Bundle options,
-            Bundle activityOptions, int userId) {
-        if (!mRecentTasks.isCallerRecents(Binder.getCallingUid())) {
-            String msg = "Permission Denial: startRecentsActivity() from pid="
-                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                    + " not recent tasks package";
-            Slog.w(TAG, msg);
-            throw new SecurityException(msg);
-        }
-
-        final int recentsUid = mRecentTasks.getRecentsComponentUid();
-        final ComponentName recentsComponent = mRecentTasks.getRecentsComponent();
-        final String recentsPackage = recentsComponent.getPackageName();
+    public void startRecentsActivity(Intent intent, IAssistDataReceiver assistDataReceiver,
+                IRecentsAnimationRunner recentsAnimationRunner) {
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "startRecentsActivity()");
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (this) {
+                final int recentsUid = mRecentTasks.getRecentsComponentUid();
+                final ComponentName recentsComponent = mRecentTasks.getRecentsComponent();
+                final String recentsPackage = recentsComponent.getPackageName();
+
                 // If provided, kick off the request for the assist data in the background before
                 // starting the activity
                 if (assistDataReceiver != null) {
@@ -4940,16 +5037,24 @@ public class ActivityManagerService extends IActivityManager.Stub
                             recentsUid, recentsPackage);
                 }
 
-                final Intent intent = new Intent();
-                intent.setFlags(FLAG_ACTIVITY_NEW_TASK);
-                intent.setComponent(recentsComponent);
-                intent.putExtras(options);
+                // Start a new recents animation
+                final RecentsAnimation anim = new RecentsAnimation(this, mStackSupervisor,
+                        mActivityStartController, mWindowManager, mUserController);
+                anim.startRecentsActivity(intent, recentsAnimationRunner, recentsComponent,
+                        recentsUid);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(origId);
+        }
+    }
 
-                return mActivityStartController.obtainStarter(intent, "startRecentsActivity")
-                        .setCallingUid(recentsUid)
-                        .setCallingPackage(recentsPackage)
-                        .setMayWait(activityOptions, userId)
-                        .execute();
+    @Override
+    public void cancelRecentsAnimation() {
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "cancelRecentsAnimation()");
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            synchronized (this) {
+                mWindowManager.cancelRecentsAnimation();
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -5036,17 +5141,17 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (intent != null && intent.hasFileDescriptors() == true) {
             throw new IllegalArgumentException("File descriptors passed in Intent");
         }
-        ActivityOptions options = ActivityOptions.fromBundle(bOptions);
+        SafeActivityOptions options = SafeActivityOptions.fromBundle(bOptions);
 
         synchronized (this) {
             final ActivityRecord r = ActivityRecord.isInStackLocked(callingActivity);
             if (r == null) {
-                ActivityOptions.abort(options);
+                SafeActivityOptions.abort(options);
                 return false;
             }
             if (r.app == null || r.app.thread == null) {
                 // The caller is not running...  d'oh!
-                ActivityOptions.abort(options);
+                SafeActivityOptions.abort(options);
                 return false;
             }
             intent = new Intent(intent);
@@ -5091,7 +5196,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             if (aInfo == null) {
                 // Nobody who is next!
-                ActivityOptions.abort(options);
+                SafeActivityOptions.abort(options);
                 if (debug) Slog.d(TAG, "Next matching activity: nothing found");
                 return false;
             }
@@ -5153,10 +5258,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         enforceCallerIsRecentsOrHasPermission(START_TASKS_FROM_RECENTS,
                 "startActivityFromRecents()");
 
+        final int callingPid = Binder.getCallingPid();
+        final int callingUid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (this) {
-                return mStackSupervisor.startActivityFromRecents(taskId, bOptions);
+                return mStackSupervisor.startActivityFromRecents(callingPid, callingUid, taskId,
+                        SafeActivityOptions.fromBundle(bOptions));
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -5173,7 +5281,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 userId, false, ALLOW_FULL_ONLY, reason, null);
         // TODO: Switch to user app stacks here.
         int ret = mActivityStartController.startActivities(caller, -1, callingPackage,
-                intents, resolvedTypes, resultTo, bOptions, userId, reason);
+                intents, resolvedTypes, resultTo, SafeActivityOptions.fromBundle(bOptions), userId,
+                reason);
         return ret;
     }
 
@@ -6228,7 +6337,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     if (!keepState) {
                         synchronized (this) {
                             // Remove all permissions granted from/to this package
-                            removeUriPermissionsForPackageLocked(packageName, resolvedUserId, true);
+                            removeUriPermissionsForPackageLocked(packageName, resolvedUserId, true,
+                                    false);
                         }
 
                         // Reset notification state
@@ -6242,7 +6352,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                     // Clear its pending alarms
                     AlarmManagerInternal ami = LocalServices.getService(AlarmManagerInternal.class);
-                    ami.removeAlarmsForUid(uid);
+                    ami.removeAlarmsForUid(appInfo.uid);
                 }
             } catch (RemoteException e) {
             }
@@ -6556,7 +6666,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     if (proc.thread != null && proc.setAdj == oomAdj) {
                         // Record this for posterity if the process has been stable.
                         proc.baseProcessTracker.addPss(infos[i].getTotalPss(),
-                                infos[i].getTotalUss(), false,
+                                infos[i].getTotalUss(), infos[i].getTotalRss(), false,
                                 ProcessStats.ADD_PSS_EXTERNAL_SLOW, endTime-startTime,
                                 proc.pkgList);
                     }
@@ -6579,7 +6689,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     oomAdj = proc != null ? proc.setAdj : 0;
                 }
             }
-            long[] tmpUss = new long[1];
+            long[] tmpUss = new long[3];
             long startTime = SystemClock.currentThreadTimeMillis();
             pss[i] = Debug.getPss(pids[i], tmpUss, null);
             long endTime = SystemClock.currentThreadTimeMillis();
@@ -6587,7 +6697,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 synchronized (this) {
                     if (proc.thread != null && proc.setAdj == oomAdj) {
                         // Record this for posterity if the process has been stable.
-                        proc.baseProcessTracker.addPss(pss[i], tmpUss[0], false,
+                        proc.baseProcessTracker.addPss(pss[i], tmpUss[0], tmpUss[2], false,
                                 ProcessStats.ADD_PSS_EXTERNAL, endTime-startTime, proc.pkgList);
                     }
                 }
@@ -6883,7 +6993,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         // Remove transient permissions granted from/to this package/user
-        removeUriPermissionsForPackageLocked(packageName, userId, false);
+        removeUriPermissionsForPackageLocked(packageName, userId, false, false);
 
         if (doit) {
             for (i = mBroadcastQueues.length - 1; i >= 0; i--) {
@@ -7259,18 +7369,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
 
-            ProfilerInfo profilerInfo = null;
-            String agent = null;
-            if (mProfileApp != null && mProfileApp.equals(processName)) {
-                mProfileProc = app;
-                profilerInfo = (mProfilerInfo != null && mProfilerInfo.profileFile != null) ?
-                        new ProfilerInfo(mProfilerInfo) : null;
-                agent = mProfilerInfo != null ? mProfilerInfo.agent : null;
-            } else if (app.instr != null && app.instr.mProfileFile != null) {
-                profilerInfo = new ProfilerInfo(app.instr.mProfileFile, null, 0, false, false,
-                        null);
-            }
-
             boolean enableTrackAllocation = false;
             if (mTrackAllocationApp != null && mTrackAllocationApp.equals(processName)) {
                 enableTrackAllocation = true;
@@ -7294,6 +7392,39 @@ public class ActivityManagerService extends IActivityManager.Stub
                     + processName + " with config " + getGlobalConfiguration());
             ApplicationInfo appInfo = app.instr != null ? app.instr.mTargetInfo : app.info;
             app.compat = compatibilityInfoForPackageLocked(appInfo);
+
+            ProfilerInfo profilerInfo = null;
+            String preBindAgent = null;
+            if (mProfileApp != null && mProfileApp.equals(processName)) {
+                mProfileProc = app;
+                if (mProfilerInfo != null) {
+                    // Send a profiler info object to the app if either a file is given, or
+                    // an agent should be loaded at bind-time.
+                    boolean needsInfo = mProfilerInfo.profileFile != null
+                            || mProfilerInfo.attachAgentDuringBind;
+                    profilerInfo = needsInfo ? new ProfilerInfo(mProfilerInfo) : null;
+                    if (mProfilerInfo.agent != null) {
+                        preBindAgent = mProfilerInfo.agent;
+                    }
+                }
+            } else if (app.instr != null && app.instr.mProfileFile != null) {
+                profilerInfo = new ProfilerInfo(app.instr.mProfileFile, null, 0, false, false,
+                        null, false);
+            }
+            if (mAppAgentMap != null && mAppAgentMap.containsKey(processName)) {
+                // We need to do a debuggable check here. See setAgentApp for why the check is
+                // postponed to here.
+                if ((app.info.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                    String agent = mAppAgentMap.get(processName);
+                    // Do not overwrite already requested agent.
+                    if (profilerInfo == null) {
+                        profilerInfo = new ProfilerInfo(null, null, 0, false, false,
+                                mAppAgentMap.get(processName), true);
+                    } else if (profilerInfo.agent == null) {
+                        profilerInfo = profilerInfo.setAgent(mAppAgentMap.get(processName), true);
+                    }
+                }
+            }
 
             if (profilerInfo != null && profilerInfo.profileFd != null) {
                 profilerInfo.profileFd = profilerInfo.profileFd.dup();
@@ -7337,8 +7468,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             // If we were asked to attach an agent on startup, do so now, before we're binding
             // application code.
-            if (agent != null) {
-                thread.attachAgent(agent);
+            if (preBindAgent != null) {
+                thread.attachAgent(preBindAgent);
             }
 
             checkTime(startTime, "attachApplicationLocked: immediately before bindApplication");
@@ -7925,9 +8056,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         flags &= ~(PendingIntent.FLAG_NO_CREATE|PendingIntent.FLAG_CANCEL_CURRENT
                 |PendingIntent.FLAG_UPDATE_CURRENT);
 
-        PendingIntentRecord.Key key = new PendingIntentRecord.Key(
-                type, packageName, activity, resultWho,
-                requestCode, intents, resolvedTypes, flags, bOptions, userId);
+        PendingIntentRecord.Key key = new PendingIntentRecord.Key(type, packageName, activity,
+                resultWho, requestCode, intents, resolvedTypes, flags,
+                SafeActivityOptions.fromBundle(bOptions), userId);
         WeakReference<PendingIntentRecord> ref;
         ref = mIntentSenderRecords.get(key);
         PendingIntentRecord rec = ref != null ? ref.get() : null;
@@ -8376,8 +8507,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     stack.setPictureInPictureAspectRatio(aspectRatio);
                     stack.setPictureInPictureActions(actions);
 
-                    MetricsLogger.action(mContext, MetricsEvent.ACTION_PICTURE_IN_PICTURE_ENTERED,
-                            r.supportsEnterPipOnTaskSwitch);
+                    MetricsLoggerWrapper.logPictureInPictureEnter(mContext, r.supportsEnterPipOnTaskSwitch);
                     logPictureInPictureArgs(params);
                 };
 
@@ -8386,20 +8516,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                     // entering picture-in-picture (this will prompt the user to authenticate if the
                     // device is currently locked).
                     try {
-                        dismissKeyguard(token, new IKeyguardDismissCallback.Stub() {
-                            @Override
-                            public void onDismissError() throws RemoteException {
-                                // Do nothing
-                            }
-
+                        dismissKeyguard(token, new KeyguardDismissCallback() {
                             @Override
                             public void onDismissSucceeded() throws RemoteException {
                                 mHandler.post(enterPipRunnable);
-                            }
-
-                            @Override
-                            public void onDismissCancelled() throws RemoteException {
-                                // Do nothing
                             }
                         }, null /* message */);
                     } catch (RemoteException e) {
@@ -8598,6 +8718,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Slog.e(TAG, "No such permission: "+ permission, nnfe);
             }
             return false;
+        }
+
+        @Override
+        public int getPackageUid(String packageName, int flags) {
+            try {
+                return mActivityManagerService.mContext.getPackageManager()
+                        .getPackageUid(packageName, flags);
+            } catch (NameNotFoundException nnfe) {
+                return -1;
+            }
         }
     }
 
@@ -8822,7 +8952,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             case AppOpsManager.MODE_ALLOWED:
                 // If force-background-check is enabled, restrict all apps that aren't whitelisted.
                 if (mForceBackgroundCheck &&
-                        UserHandle.isApp(uid) &&
+                        !UserHandle.isCore(uid) &&
                         !isOnDeviceIdleWhitelistLocked(uid)) {
                     if (DEBUG_BACKGROUND_CHECK) {
                         Slog.i(TAG, "Force background check: " +
@@ -9586,9 +9716,11 @@ public class ActivityManagerService extends IActivityManager.Stub
      * @param userHandle User to match, or {@link UserHandle#USER_ALL} to apply
      *            to all users.
      * @param persistable If persistable grants should be removed.
+     * @param targetOnly When {@code true}, only remove permissions where the app is the target,
+     * not source.
      */
     private void removeUriPermissionsForPackageLocked(
-            String packageName, int userHandle, boolean persistable) {
+            String packageName, int userHandle, boolean persistable, boolean targetOnly) {
         if (userHandle == UserHandle.USER_ALL && packageName == null) {
             throw new IllegalArgumentException("Must narrow by either package or user");
         }
@@ -9607,7 +9739,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     final UriPermission perm = it.next();
 
                     // Only inspect grants matching package
-                    if (packageName == null || perm.sourcePkg.equals(packageName)
+                    if (packageName == null || (!targetOnly && perm.sourcePkg.equals(packageName))
                             || perm.targetPkg.equals(packageName)) {
                         // Hacky solution as part of fixing a security bug; ignore
                         // grants associated with DownloadManager so we don't have
@@ -9726,6 +9858,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     private void writeGrantedUriPermissions() {
         if (DEBUG_URI_PERMISSION) Slog.v(TAG_URI_PERMISSION, "writeGrantedUriPermissions()");
 
+        final long startTime = SystemClock.uptimeMillis();
+
         // Snapshot permissions so we can persist without lock
         ArrayList<UriPermission.Snapshot> persist = Lists.newArrayList();
         synchronized (this) {
@@ -9742,7 +9876,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         FileOutputStream fos = null;
         try {
-            fos = mGrantFile.startWrite();
+            fos = mGrantFile.startWrite(startTime);
 
             XmlSerializer out = new FastXmlSerializer();
             out.setOutput(fos, StandardCharsets.UTF_8.name());
@@ -9859,8 +9993,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             boolean persistChanged = false;
             GrantUri grantUri = new GrantUri(userId, uri, false);
 
-            UriPermission exactPerm = findUriPermissionLocked(callingUid,
-                    new GrantUri(userId, uri, false));
+            UriPermission exactPerm = findUriPermissionLocked(callingUid, grantUri);
             UriPermission prefixPerm = findUriPermissionLocked(callingUid,
                     new GrantUri(userId, uri, true));
 
@@ -9991,7 +10124,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 if (perms == null) {
                     Slog.w(TAG, "No permission grants found for " + packageName);
                 } else {
-                    for (UriPermission perm : perms.values()) {
+                    for (int j = 0; j < perms.size(); j++) {
+                        final UriPermission perm = perms.valueAt(j);
                         if (packageName.equals(perm.targetPkg) && perm.persistedModeFlags != 0) {
                             result.add(perm.buildPersistedPublicApiObject());
                         }
@@ -10002,7 +10136,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 for (int i = 0; i < size; i++) {
                     final ArrayMap<GrantUri, UriPermission> perms =
                             mGrantedUriPermissions.valueAt(i);
-                    for (UriPermission perm : perms.values()) {
+                    for (int j = 0; j < perms.size(); j++) {
+                        final UriPermission perm = perms.valueAt(j);
                         if (packageName.equals(perm.sourcePkg) && perm.persistedModeFlags != 0) {
                             result.add(perm.buildPersistedPublicApiObject());
                         }
@@ -10014,32 +10149,36 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public ParceledListSlice<android.content.UriPermission> getGrantedUriPermissions(
-            String packageName, int userId) {
+    public ParceledListSlice<GrantedUriPermission> getGrantedUriPermissions(
+            @Nullable String packageName, int userId) {
         enforceCallingPermission(android.Manifest.permission.GET_APP_GRANTED_URI_PERMISSIONS,
                 "getGrantedUriPermissions");
 
-        final ArrayList<android.content.UriPermission> result = Lists.newArrayList();
+        final List<GrantedUriPermission> result = new ArrayList<>();
         synchronized (this) {
             final int size = mGrantedUriPermissions.size();
             for (int i = 0; i < size; i++) {
                 final ArrayMap<GrantUri, UriPermission> perms = mGrantedUriPermissions.valueAt(i);
-                for (UriPermission perm : perms.values()) {
-                    if (packageName.equals(perm.targetPkg) && perm.targetUserId == userId
+                for (int j = 0; j < perms.size(); j++) {
+                    final UriPermission perm = perms.valueAt(j);
+                    if ((packageName == null || packageName.equals(perm.targetPkg))
+                            && perm.targetUserId == userId
                             && perm.persistedModeFlags != 0) {
-                        result.add(perm.buildPersistedPublicApiObject());
+                        result.add(perm.buildGrantedUriPermission());
                     }
                 }
             }
         }
-        return new ParceledListSlice<android.content.UriPermission>(result);
+        return new ParceledListSlice<>(result);
     }
 
     @Override
     public void clearGrantedUriPermissions(String packageName, int userId) {
         enforceCallingPermission(android.Manifest.permission.CLEAR_APP_GRANTED_URI_PERMISSIONS,
                 "clearGrantedUriPermissions");
-        removeUriPermissionsForPackageLocked(packageName, userId, true);
+        synchronized(this) {
+            removeUriPermissionsForPackageLocked(packageName, userId, true, true);
+        }
     }
 
     @Override
@@ -10402,10 +10541,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public Bitmap getTaskDescriptionIcon(String filePath, int userId) {
-        if (userId != UserHandle.getCallingUserId()) {
-            enforceCallingPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
-                    "getTaskDescriptionIcon");
-        }
+        userId = mUserController.handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(),
+                userId, false, ALLOW_FULL_ONLY, "getTaskDescriptionIcon", null);
+
         final File passedIconFile = new File(filePath);
         final File legitIconFile = new File(TaskPersister.getUserImagesDir(userId),
                 passedIconFile.getName());
@@ -10420,9 +10558,13 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public void startInPlaceAnimationOnFrontMostApplication(Bundle opts)
             throws RemoteException {
-        final ActivityOptions activityOptions = ActivityOptions.fromBundle(opts);
-        if (activityOptions.getAnimationType() != ActivityOptions.ANIM_CUSTOM_IN_PLACE ||
-                activityOptions.getCustomInPlaceResId() == 0) {
+        final SafeActivityOptions safeOptions = SafeActivityOptions.fromBundle(opts);
+        final ActivityOptions activityOptions = safeOptions != null
+                ? safeOptions.getOptions(mStackSupervisor)
+                : null;
+        if (activityOptions == null
+                || activityOptions.getAnimationType() != ActivityOptions.ANIM_CUSTOM_IN_PLACE
+                || activityOptions.getCustomInPlaceResId() == 0) {
             throw new IllegalArgumentException("Expected in-place ActivityOption " +
                     "with valid animation");
         }
@@ -10525,16 +10667,17 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         if (DEBUG_STACK) Slog.d(TAG_STACK, "moveTaskToFront: moving taskId=" + taskId);
         synchronized(this) {
-            moveTaskToFrontLocked(taskId, flags, bOptions, false /* fromRecents */);
+            moveTaskToFrontLocked(taskId, flags, SafeActivityOptions.fromBundle(bOptions),
+                    false /* fromRecents */);
         }
     }
 
-    void moveTaskToFrontLocked(int taskId, int flags, Bundle bOptions, boolean fromRecents) {
-        ActivityOptions options = ActivityOptions.fromBundle(bOptions);
+    void moveTaskToFrontLocked(int taskId, int flags, SafeActivityOptions options,
+            boolean fromRecents) {
 
         if (!checkAppSwitchAllowedLocked(Binder.getCallingPid(),
                 Binder.getCallingUid(), -1, -1, "Task to front")) {
-            ActivityOptions.abort(options);
+            SafeActivityOptions.abort(options);
             return;
         }
         final long origId = Binder.clearCallingIdentity();
@@ -10548,7 +10691,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Slog.e(TAG, "moveTaskToFront: Attempt to violate Lock Task Mode");
                 return;
             }
-            mStackSupervisor.findTaskToMoveToFront(task, flags, options, "moveTaskToFront",
+            ActivityOptions realOptions = options != null
+                    ? options.getOptions(mStackSupervisor)
+                    : null;
+            mStackSupervisor.findTaskToMoveToFront(task, flags, realOptions, "moveTaskToFront",
                     false /* forceNonResizable */);
 
             final ActivityRecord topActivity = task.getTopActivity();
@@ -10562,7 +10708,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
-        ActivityOptions.abort(options);
+        SafeActivityOptions.abort(options);
     }
 
     /**
@@ -10817,8 +10963,20 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
 
                 if (toTop) {
+                    // Caller wants the current split-screen primary stack to be the top stack after
+                    // it goes fullscreen, so move it to the front.
                     stack.moveToFront("dismissSplitScreenMode");
+                } else if (mStackSupervisor.isFocusedStack(stack)) {
+                    // In this case the current split-screen primary stack shouldn't be the top
+                    // stack after it goes fullscreen, but it current has focus, so we move the
+                    // focus to the top-most split-screen secondary stack next to it.
+                    final ActivityStack otherStack = stack.getDisplay().getTopStackInWindowingMode(
+                            WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
+                    if (otherStack != null) {
+                        otherStack.moveToFront("dismissSplitScreenMode_other");
+                    }
                 }
+
                 stack.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
             }
         } finally {
@@ -12927,6 +13085,52 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
+    /**
+     * Set or remove an agent to be run whenever an app with the given process name starts.
+     *
+     * This method will not check whether the given process name matches a debuggable app. That
+     * would require scanning all current packages, and a rescan when new packages are installed
+     * or updated.
+     *
+     * Instead, do the check when an application is started and matched to a stored agent.
+     *
+     * @param packageName the process name of the app.
+     * @param agent the agent string to be used, or null to remove any previously set agent.
+     */
+    @Override
+    public void setAgentApp(@NonNull String packageName, @Nullable String agent) {
+        synchronized (this) {
+            // note: hijacking SET_ACTIVITY_WATCHER, but should be changed to
+            // its own permission.
+            if (checkCallingPermission(
+                    android.Manifest.permission.SET_ACTIVITY_WATCHER) !=
+                        PackageManager.PERMISSION_GRANTED) {
+                throw new SecurityException(
+                        "Requires permission " + android.Manifest.permission.SET_ACTIVITY_WATCHER);
+            }
+
+            if (agent == null) {
+                if (mAppAgentMap != null) {
+                    mAppAgentMap.remove(packageName);
+                    if (mAppAgentMap.isEmpty()) {
+                        mAppAgentMap = null;
+                    }
+                }
+            } else {
+                if (mAppAgentMap == null) {
+                    mAppAgentMap = new HashMap<>();
+                }
+                if (mAppAgentMap.size() >= 100) {
+                    // Limit the size of the map, to avoid OOMEs.
+                    Slog.e(TAG, "App agent map has too many entries, cannot add " + packageName
+                            + "/" + agent);
+                    return;
+                }
+                mAppAgentMap.put(packageName, agent);
+            }
+        }
+    }
+
     void setTrackAllocationApp(ApplicationInfo app, String processName) {
         synchronized (this) {
             boolean isDebuggable = "1".equals(SystemProperties.get(SYSTEM_DEBUGGABLE, "0"));
@@ -13054,6 +13258,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             case ActivityManager.BUGREPORT_OPTION_TELEPHONY:
                 extraOptions = "bugreporttelephony";
                 break;
+            case ActivityManager.BUGREPORT_OPTION_WIFI:
+                extraOptions = "bugreportwifi";
+                break;
             default:
                 throw new IllegalArgumentException("Provided bugreport type is not correct, value: "
                         + bugreportType);
@@ -13075,9 +13282,8 @@ public class ActivityManagerService extends IActivityManager.Stub
      * No new code should be calling it.
      */
     @Deprecated
-    @Override
-    public void requestTelephonyBugReport(String shareTitle, String shareDescription) {
-
+    private void requestBugReportWithDescription(String shareTitle, String shareDescription,
+                                                 int bugreportType) {
         if (!TextUtils.isEmpty(shareTitle)) {
             if (shareTitle.length() > MAX_BUGREPORT_TITLE_SIZE) {
                 String errorStr = "shareTitle should be less than " +
@@ -13106,8 +13312,33 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         Slog.d(TAG, "Bugreport notification title " + shareTitle
                 + " description " + shareDescription);
-        requestBugReport(ActivityManager.BUGREPORT_OPTION_TELEPHONY);
+        requestBugReport(bugreportType);
     }
+
+    /**
+     * @deprecated This method is only used by a few internal components and it will soon be
+     * replaced by a proper bug report API (which will be restricted to a few, pre-defined apps).
+     * No new code should be calling it.
+     */
+    @Deprecated
+    @Override
+    public void requestTelephonyBugReport(String shareTitle, String shareDescription) {
+        requestBugReportWithDescription(shareTitle, shareDescription,
+                ActivityManager.BUGREPORT_OPTION_TELEPHONY);
+    }
+
+    /**
+     * @deprecated This method is only used by a few internal components and it will soon be
+     * replaced by a proper bug report API (which will be restricted to a few, pre-defined apps).
+     * No new code should be calling it.
+     */
+    @Deprecated
+    @Override
+    public void requestWifiBugReport(String shareTitle, String shareDescription) {
+        requestBugReportWithDescription(shareTitle, shareDescription,
+                ActivityManager.BUGREPORT_OPTION_WIFI);
+    }
+
 
     public static long getInputDispatchingTimeoutLocked(ActivityRecord r) {
         return r != null ? getInputDispatchingTimeoutLocked(r.app) : KEY_DISPATCHING_TIMEOUT;
@@ -13520,6 +13751,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public boolean convertToTranslucent(IBinder token, Bundle options) {
+        SafeActivityOptions safeOptions = SafeActivityOptions.fromBundle(options);
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (this) {
@@ -13531,7 +13763,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 int index = task.mActivities.lastIndexOf(r);
                 if (index > 0) {
                     ActivityRecord under = task.mActivities.get(index - 1);
-                    under.returningOptions = ActivityOptions.fromBundle(options);
+                    under.returningOptions = safeOptions != null ? safeOptions.getOptions(r) : null;
                 }
                 final boolean translucentChanged = r.changeWindowTranslucency(false);
                 if (translucentChanged) {
@@ -13676,7 +13908,8 @@ public class ActivityManagerService extends IActivityManager.Stub
      * not.
      */
     private void enforceSystemHasVrFeature() {
-        if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_VR_MODE)) {
+        if (!mContext.getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_VR_MODE_HIGH_PERFORMANCE)) {
             throw new UnsupportedOperationException("VR mode not supported on this device!");
         }
     }
@@ -13735,9 +13968,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public int setVrMode(IBinder token, boolean enabled, ComponentName packageName) {
-        if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_VR_MODE)) {
-            throw new UnsupportedOperationException("VR mode not supported on this device!");
-        }
+        enforceSystemHasVrFeature();
 
         final VrManagerInternal vrService = LocalServices.getService(VrManagerInternal.class);
 
@@ -13769,9 +14000,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     @Override
     public boolean isVrModePackageEnabled(ComponentName packageName) {
-        if (!mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_VR_MODE)) {
-            throw new UnsupportedOperationException("VR mode not supported on this device!");
-        }
+        enforceSystemHasVrFeature();
 
         final VrManagerInternal vrService = LocalServices.getService(VrManagerInternal.class);
 
@@ -14201,7 +14430,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         && proc.setProcState >= ActivityManager.PROCESS_STATE_PERSISTENT) {
                     proc.notCachedSinceIdle = true;
                     proc.initialIdlePss = 0;
-                    proc.nextPssTime = ProcessList.computeNextPssTime(proc.setProcState, true,
+                    proc.nextPssTime = ProcessList.computeNextPssTime(proc.setProcState, null,
                             mTestPssMode, isSleepingLocked(), now);
                 }
             }
@@ -14514,6 +14743,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             mUserController.sendUserSwitchBroadcasts(-1, currentUserId);
 
             BinderInternal.nSetBinderProxyCountEnabled(true);
+            //STOPSHIP: Temporary BinderProxy Threshold for b/71353150
+            BinderInternal.nSetBinderProxyCountWatermarks(1500, 1200);
             BinderInternal.setBinderProxyCountCallback(
                     new BinderInternal.BinderProxyLimitListener() {
                         @Override
@@ -15219,7 +15450,6 @@ public class ActivityManagerService extends IActivityManager.Stub
         boolean dumpVisibleStacksOnly = false;
         boolean dumpFocusedStackOnly = false;
         String dumpPackage = null;
-        int dumpAppId = -1;
 
         int opti = 0;
         while (opti < args.length) {
@@ -15293,6 +15523,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             } else if ("service".equals(cmd)) {
                 mServices.writeToProto(proto);
+            } else if ("processes".equals(cmd) || "p".equals(cmd)) {
+                if (opti < args.length) {
+                    dumpPackage = args[opti];
+                    opti++;
+                }
+                // output proto is ProcessProto
+                synchronized (this) {
+                    writeProcessesToProtoLocked(proto, dumpPackage);
+                }
             } else {
                 // default option, dump everything, output is ActivityManagerServiceProto
                 synchronized (this) {
@@ -15307,6 +15546,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                     long serviceToken = proto.start(ActivityManagerServiceProto.SERVICES);
                     mServices.writeToProto(proto);
                     proto.end(serviceToken);
+
+                    long processToken = proto.start(ActivityManagerServiceProto.PROCESSES);
+                    writeProcessesToProtoLocked(proto, dumpPackage);
+                    proto.end(processToken);
                 }
             }
             proto.flush();
@@ -15314,16 +15557,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             return;
         }
 
-        if (dumpPackage != null) {
-            try {
-                ApplicationInfo info = mContext.getPackageManager().getApplicationInfo(
-                        dumpPackage, 0);
-                dumpAppId = UserHandle.getAppId(info.uid);
-            } catch (NameNotFoundException e) {
-                e.printStackTrace();
-            }
-        }
-
+        int dumpAppId = getAppId(dumpPackage);
         boolean more = false;
         // Is the caller requesting to dump a particular piece of data?
         if (opti < args.length) {
@@ -15365,33 +15599,17 @@ public class ActivityManagerService extends IActivityManager.Stub
                     pw.println(BinderInternal.nGetBinderProxyCount(Integer.parseInt(uid)));
                 }
             } else if ("broadcasts".equals(cmd) || "b".equals(cmd)) {
-                String[] newArgs;
-                String name;
-                if (opti >= args.length) {
-                    name = null;
-                    newArgs = EMPTY_STRING_ARRAY;
-                } else {
+                if (opti < args.length) {
                     dumpPackage = args[opti];
                     opti++;
-                    newArgs = new String[args.length - opti];
-                    if (args.length > 2) System.arraycopy(args, opti, newArgs, 0,
-                            args.length - opti);
                 }
                 synchronized (this) {
                     dumpBroadcastsLocked(fd, pw, args, opti, true, dumpPackage);
                 }
             } else if ("broadcast-stats".equals(cmd)) {
-                String[] newArgs;
-                String name;
-                if (opti >= args.length) {
-                    name = null;
-                    newArgs = EMPTY_STRING_ARRAY;
-                } else {
+                if (opti < args.length) {
                     dumpPackage = args[opti];
                     opti++;
-                    newArgs = new String[args.length - opti];
-                    if (args.length > 2) System.arraycopy(args, opti, newArgs, 0,
-                            args.length - opti);
                 }
                 synchronized (this) {
                     if (dumpCheckinFormat) {
@@ -15402,33 +15620,17 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 }
             } else if ("intents".equals(cmd) || "i".equals(cmd)) {
-                String[] newArgs;
-                String name;
-                if (opti >= args.length) {
-                    name = null;
-                    newArgs = EMPTY_STRING_ARRAY;
-                } else {
+                if (opti < args.length) {
                     dumpPackage = args[opti];
                     opti++;
-                    newArgs = new String[args.length - opti];
-                    if (args.length > 2) System.arraycopy(args, opti, newArgs, 0,
-                            args.length - opti);
                 }
                 synchronized (this) {
                     dumpPendingIntentsLocked(fd, pw, args, opti, true, dumpPackage);
                 }
             } else if ("processes".equals(cmd) || "p".equals(cmd)) {
-                String[] newArgs;
-                String name;
-                if (opti >= args.length) {
-                    name = null;
-                    newArgs = EMPTY_STRING_ARRAY;
-                } else {
+                if (opti < args.length) {
                     dumpPackage = args[opti];
                     opti++;
-                    newArgs = new String[args.length - opti];
-                    if (args.length > 2) System.arraycopy(args, opti, newArgs, 0,
-                            args.length - opti);
                 }
                 synchronized (this) {
                     dumpProcessesLocked(fd, pw, args, opti, true, dumpPackage, dumpAppId);
@@ -15849,8 +16051,21 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
+    private int getAppId(String dumpPackage) {
+        if (dumpPackage != null) {
+            try {
+                ApplicationInfo info = mContext.getPackageManager().getApplicationInfo(
+                        dumpPackage, 0);
+                return UserHandle.getAppId(info.uid);
+            } catch (NameNotFoundException e) {
+                e.printStackTrace();
+            }
+        }
+        return -1;
+    }
+
     boolean dumpUids(PrintWriter pw, String dumpPackage, int dumpAppId, SparseArray<UidRecord> uids,
-            String header, boolean needSep) {
+                String header, boolean needSep) {
         boolean printed = false;
         for (int i=0; i<uids.size(); i++) {
             UidRecord uidRec = uids.valueAt(i);
@@ -16068,7 +16283,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     "OnHold Norm", "OnHold PERS", dumpPackage);
         }
 
-        needSep = dumpProcessesToGc(fd, pw, args, opti, needSep, dumpAll, dumpPackage);
+        needSep = dumpProcessesToGc(pw, needSep, dumpPackage);
 
         needSep = mAppErrors.dumpLocked(fd, pw, needSep, dumpPackage);
 
@@ -16353,8 +16568,327 @@ public class ActivityManagerService extends IActivityManager.Stub
         pw.println("  mForceBackgroundCheck=" + mForceBackgroundCheck);
     }
 
-    boolean dumpProcessesToGc(FileDescriptor fd, PrintWriter pw, String[] args,
-            int opti, boolean needSep, boolean dumpAll, String dumpPackage) {
+    void writeProcessesToProtoLocked(ProtoOutputStream proto, String dumpPackage) {
+        int numPers = 0;
+
+        final int NP = mProcessNames.getMap().size();
+        for (int ip=0; ip<NP; ip++) {
+            SparseArray<ProcessRecord> procs = mProcessNames.getMap().valueAt(ip);
+            final int NA = procs.size();
+            for (int ia = 0; ia<NA; ia++) {
+                ProcessRecord r = procs.valueAt(ia);
+                if (dumpPackage != null && !r.pkgList.containsKey(dumpPackage)) {
+                    continue;
+                }
+                r.writeToProto(proto, ProcessesProto.PROCS);
+                if (r.persistent) {
+                    numPers++;
+                }
+            }
+        }
+
+        for (int i=0; i<mIsolatedProcesses.size(); i++) {
+            ProcessRecord r = mIsolatedProcesses.valueAt(i);
+            if (dumpPackage != null && !r.pkgList.containsKey(dumpPackage)) {
+                continue;
+            }
+            r.writeToProto(proto, ProcessesProto.ISOLATED_PROCS);
+        }
+
+        for (int i=0; i<mActiveInstrumentation.size(); i++) {
+            ActiveInstrumentation ai = mActiveInstrumentation.get(i);
+            if (dumpPackage != null && !ai.mClass.getPackageName().equals(dumpPackage)
+                    && !ai.mTargetInfo.packageName.equals(dumpPackage)) {
+                continue;
+            }
+            ai.writeToProto(proto, ProcessesProto.ACTIVE_INSTRUMENTATIONS);
+        }
+
+        int whichAppId = getAppId(dumpPackage);
+        for (int i=0; i<mActiveUids.size(); i++) {
+            UidRecord uidRec = mActiveUids.valueAt(i);
+            if (dumpPackage != null && UserHandle.getAppId(uidRec.uid) != whichAppId) {
+                continue;
+            }
+            uidRec.writeToProto(proto, ProcessesProto.ACTIVE_UIDS);
+        }
+
+        for (int i=0; i<mValidateUids.size(); i++) {
+            UidRecord uidRec = mValidateUids.valueAt(i);
+            if (dumpPackage != null && UserHandle.getAppId(uidRec.uid) != whichAppId) {
+                continue;
+            }
+            uidRec.writeToProto(proto, ProcessesProto.VALIDATE_UIDS);
+        }
+
+        if (mLruProcesses.size() > 0) {
+            long lruToken = proto.start(ProcessesProto.LRU_PROCS);
+            int total = mLruProcesses.size();
+            proto.write(ProcessesProto.LruProcesses.SIZE, total);
+            proto.write(ProcessesProto.LruProcesses.NON_ACT_AT, total-mLruProcessActivityStart);
+            proto.write(ProcessesProto.LruProcesses.NON_SVC_AT, total-mLruProcessServiceStart);
+            writeProcessOomListToProto(proto, ProcessesProto.LruProcesses.LIST, this,
+                    mLruProcesses,false, dumpPackage);
+            proto.end(lruToken);
+        }
+
+        if (dumpPackage != null) {
+            synchronized (mPidsSelfLocked) {
+                for (int i=0; i<mPidsSelfLocked.size(); i++) {
+                    ProcessRecord r = mPidsSelfLocked.valueAt(i);
+                    if (!r.pkgList.containsKey(dumpPackage)) {
+                        continue;
+                    }
+                    r.writeToProto(proto, ProcessesProto.PIDS_SELF_LOCKED);
+                }
+            }
+        }
+
+        if (mImportantProcesses.size() > 0) {
+            synchronized (mPidsSelfLocked) {
+                for (int i=0; i<mImportantProcesses.size(); i++) {
+                    ImportanceToken it = mImportantProcesses.valueAt(i);
+                    ProcessRecord r = mPidsSelfLocked.get(it.pid);
+                    if (dumpPackage != null && (r == null
+                            || !r.pkgList.containsKey(dumpPackage))) {
+                        continue;
+                    }
+                    it.writeToProto(proto, ProcessesProto.IMPORTANT_PROCS);
+                }
+            }
+        }
+
+        for (int i=0; i<mPersistentStartingProcesses.size(); i++) {
+            ProcessRecord r = mPersistentStartingProcesses.get(i);
+            if (dumpPackage != null && !dumpPackage.equals(r.info.packageName)) {
+                continue;
+            }
+            r.writeToProto(proto, ProcessesProto.PERSISTENT_STARTING_PROCS);
+        }
+
+        for (int i=0; i<mRemovedProcesses.size(); i++) {
+            ProcessRecord r = mRemovedProcesses.get(i);
+            if (dumpPackage != null && !dumpPackage.equals(r.info.packageName)) {
+                continue;
+            }
+            r.writeToProto(proto, ProcessesProto.REMOVED_PROCS);
+        }
+
+        for (int i=0; i<mProcessesOnHold.size(); i++) {
+            ProcessRecord r = mProcessesOnHold.get(i);
+            if (dumpPackage != null && !dumpPackage.equals(r.info.packageName)) {
+                continue;
+            }
+            r.writeToProto(proto, ProcessesProto.ON_HOLD_PROCS);
+        }
+
+        writeProcessesToGcToProto(proto, ProcessesProto.GC_PROCS, dumpPackage);
+        mAppErrors.writeToProto(proto, ProcessesProto.APP_ERRORS, dumpPackage);
+
+        if (dumpPackage == null) {
+            mUserController.writeToProto(proto, ProcessesProto.USER_CONTROLLER);
+            getGlobalConfiguration().writeToProto(proto, ProcessesProto.GLOBAL_CONFIGURATION);
+            proto.write(ProcessesProto.CONFIG_WILL_CHANGE, getFocusedStack().mConfigWillChange);
+        }
+
+        if (mHomeProcess != null && (dumpPackage == null
+                || mHomeProcess.pkgList.containsKey(dumpPackage))) {
+            mHomeProcess.writeToProto(proto, ProcessesProto.HOME_PROC);
+        }
+
+        if (mPreviousProcess != null && (dumpPackage == null
+                || mPreviousProcess.pkgList.containsKey(dumpPackage))) {
+            mPreviousProcess.writeToProto(proto, ProcessesProto.PREVIOUS_PROC);
+            proto.write(ProcessesProto.PREVIOUS_PROC_VISIBLE_TIME_MS, mPreviousProcessVisibleTime);
+        }
+
+        if (mHeavyWeightProcess != null && (dumpPackage == null
+                || mHeavyWeightProcess.pkgList.containsKey(dumpPackage))) {
+            mHeavyWeightProcess.writeToProto(proto, ProcessesProto.HEAVY_WEIGHT_PROC);
+        }
+
+        for (Map.Entry<String, Integer> entry : mCompatModePackages.getPackages().entrySet()) {
+            String pkg = entry.getKey();
+            int mode = entry.getValue();
+            if (dumpPackage == null || dumpPackage.equals(pkg)) {
+                long compatToken = proto.start(ProcessesProto.SCREEN_COMPAT_PACKAGES);
+                proto.write(ProcessesProto.ScreenCompatPackage.PACKAGE, pkg);
+                proto.write(ProcessesProto.ScreenCompatPackage.MODE, mode);
+                proto.end(compatToken);
+            }
+        }
+
+        final int NI = mUidObservers.getRegisteredCallbackCount();
+        for (int i=0; i<NI; i++) {
+            final UidObserverRegistration reg = (UidObserverRegistration)
+                    mUidObservers.getRegisteredCallbackCookie(i);
+            if (dumpPackage == null || dumpPackage.equals(reg.pkg)) {
+                reg.writeToProto(proto, ProcessesProto.UID_OBSERVERS);
+            }
+        }
+
+        for (int v : mDeviceIdleWhitelist) {
+            proto.write(ProcessesProto.DEVICE_IDLE_WHITELIST, v);
+        }
+
+        for (int v : mDeviceIdleTempWhitelist) {
+            proto.write(ProcessesProto.DEVICE_IDLE_TEMP_WHITELIST, v);
+        }
+
+        if (mPendingTempWhitelist.size() > 0) {
+            for (int i=0; i < mPendingTempWhitelist.size(); i++) {
+                mPendingTempWhitelist.valueAt(i).writeToProto(proto,
+                        ProcessesProto.PENDING_TEMP_WHITELIST);
+            }
+        }
+
+        if (dumpPackage == null) {
+            final long sleepToken = proto.start(ProcessesProto.SLEEP_STATUS);
+            proto.write(ProcessesProto.SleepStatus.WAKEFULNESS,
+                    PowerManagerInternal.wakefulnessToProtoEnum(mWakefulness));
+            for (SleepToken st : mStackSupervisor.mSleepTokens) {
+                proto.write(ProcessesProto.SleepStatus.SLEEP_TOKENS, st.toString());
+            }
+            proto.write(ProcessesProto.SleepStatus.SLEEPING, mSleeping);
+            proto.write(ProcessesProto.SleepStatus.SHUTTING_DOWN, mShuttingDown);
+            proto.write(ProcessesProto.SleepStatus.TEST_PSS_MODE, mTestPssMode);
+            proto.end(sleepToken);
+
+            if (mRunningVoice != null) {
+                final long vrToken = proto.start(ProcessesProto.RUNNING_VOICE);
+                proto.write(ProcessesProto.VoiceProto.SESSION, mRunningVoice.toString());
+                mVoiceWakeLock.writeToProto(proto, ProcessesProto.VoiceProto.WAKELOCK);
+                proto.end(vrToken);
+            }
+
+            mVrController.writeToProto(proto, ProcessesProto.VR_CONTROLLER);
+        }
+
+        if (mDebugApp != null || mOrigDebugApp != null || mDebugTransient
+                || mOrigWaitForDebugger) {
+            if (dumpPackage == null || dumpPackage.equals(mDebugApp)
+                    || dumpPackage.equals(mOrigDebugApp)) {
+                final long debugAppToken = proto.start(ProcessesProto.DEBUG);
+                proto.write(ProcessesProto.DebugApp.DEBUG_APP, mDebugApp);
+                proto.write(ProcessesProto.DebugApp.ORIG_DEBUG_APP, mOrigDebugApp);
+                proto.write(ProcessesProto.DebugApp.DEBUG_TRANSIENT, mDebugTransient);
+                proto.write(ProcessesProto.DebugApp.ORIG_WAIT_FOR_DEBUGGER, mOrigWaitForDebugger);
+                proto.end(debugAppToken);
+            }
+        }
+
+        if (mCurAppTimeTracker != null) {
+            mCurAppTimeTracker.writeToProto(proto, ProcessesProto.CURRENT_TRACKER, true);
+        }
+
+        if (mMemWatchProcesses.getMap().size() > 0) {
+            final long token = proto.start(ProcessesProto.MEM_WATCH_PROCESSES);
+            ArrayMap<String, SparseArray<Pair<Long, String>>> procs = mMemWatchProcesses.getMap();
+            for (int i=0; i<procs.size(); i++) {
+                final String proc = procs.keyAt(i);
+                final SparseArray<Pair<Long, String>> uids = procs.valueAt(i);
+                final long ptoken = proto.start(ProcessesProto.MemWatchProcess.PROCS);
+                proto.write(ProcessesProto.MemWatchProcess.Process.NAME, proc);
+                for (int j=0; j<uids.size(); j++) {
+                    final long utoken = proto.start(ProcessesProto.MemWatchProcess.Process.MEM_STATS);
+                    Pair<Long, String> val = uids.valueAt(j);
+                    proto.write(ProcessesProto.MemWatchProcess.Process.MemStats.UID, uids.keyAt(j));
+                    proto.write(ProcessesProto.MemWatchProcess.Process.MemStats.SIZE,
+                            DebugUtils.sizeValueToString(val.first, new StringBuilder()));
+                    proto.write(ProcessesProto.MemWatchProcess.Process.MemStats.REPORT_TO, val.second);
+                    proto.end(utoken);
+                }
+                proto.end(ptoken);
+            }
+
+            final long dtoken = proto.start(ProcessesProto.MemWatchProcess.DUMP);
+            proto.write(ProcessesProto.MemWatchProcess.Dump.PROC_NAME, mMemWatchDumpProcName);
+            proto.write(ProcessesProto.MemWatchProcess.Dump.FILE, mMemWatchDumpFile);
+            proto.write(ProcessesProto.MemWatchProcess.Dump.PID, mMemWatchDumpPid);
+            proto.write(ProcessesProto.MemWatchProcess.Dump.UID, mMemWatchDumpUid);
+            proto.end(dtoken);
+
+            proto.end(token);
+        }
+
+        if (mTrackAllocationApp != null) {
+            if (dumpPackage == null || dumpPackage.equals(mTrackAllocationApp)) {
+                proto.write(ProcessesProto.TRACK_ALLOCATION_APP, mTrackAllocationApp);
+            }
+        }
+
+        if (mProfileApp != null || mProfileProc != null || (mProfilerInfo != null &&
+                (mProfilerInfo.profileFile != null || mProfilerInfo.profileFd != null))) {
+            if (dumpPackage == null || dumpPackage.equals(mProfileApp)) {
+                final long token = proto.start(ProcessesProto.PROFILE);
+                proto.write(ProcessesProto.Profile.APP_NAME, mProfileApp);
+                mProfileProc.writeToProto(proto,ProcessesProto.Profile.PROC);
+                if (mProfilerInfo != null) {
+                    mProfilerInfo.writeToProto(proto, ProcessesProto.Profile.INFO);
+                    proto.write(ProcessesProto.Profile.TYPE, mProfileType);
+                }
+                proto.end(token);
+            }
+        }
+
+        if (dumpPackage == null || dumpPackage.equals(mNativeDebuggingApp)) {
+            proto.write(ProcessesProto.NATIVE_DEBUGGING_APP, mNativeDebuggingApp);
+        }
+
+        if (dumpPackage == null) {
+            proto.write(ProcessesProto.ALWAYS_FINISH_ACTIVITIES, mAlwaysFinishActivities);
+            if (mController != null) {
+                final long token = proto.start(ProcessesProto.CONTROLLER);
+                proto.write(ProcessesProto.Controller.CONTROLLER, mController.toString());
+                proto.write(ProcessesProto.Controller.IS_A_MONKEY, mControllerIsAMonkey);
+                proto.end(token);
+            }
+            proto.write(ProcessesProto.TOTAL_PERSISTENT_PROCS, numPers);
+            proto.write(ProcessesProto.PROCESSES_READY, mProcessesReady);
+            proto.write(ProcessesProto.SYSTEM_READY, mSystemReady);
+            proto.write(ProcessesProto.BOOTED, mBooted);
+            proto.write(ProcessesProto.FACTORY_TEST, mFactoryTest);
+            proto.write(ProcessesProto.BOOTING, mBooting);
+            proto.write(ProcessesProto.CALL_FINISH_BOOTING, mCallFinishBooting);
+            proto.write(ProcessesProto.BOOT_ANIMATION_COMPLETE, mBootAnimationComplete);
+            proto.write(ProcessesProto.LAST_POWER_CHECK_UPTIME_MS, mLastPowerCheckUptime);
+            mStackSupervisor.mGoingToSleep.writeToProto(proto, ProcessesProto.GOING_TO_SLEEP);
+            mStackSupervisor.mLaunchingActivity.writeToProto(proto, ProcessesProto.LAUNCHING_ACTIVITY);
+            proto.write(ProcessesProto.ADJ_SEQ, mAdjSeq);
+            proto.write(ProcessesProto.LRU_SEQ, mLruSeq);
+            proto.write(ProcessesProto.NUM_NON_CACHED_PROCS, mNumNonCachedProcs);
+            proto.write(ProcessesProto.NUM_SERVICE_PROCS, mNumServiceProcs);
+            proto.write(ProcessesProto.NEW_NUM_SERVICE_PROCS, mNewNumServiceProcs);
+            proto.write(ProcessesProto.ALLOW_LOWER_MEM_LEVEL, mAllowLowerMemLevel);
+            proto.write(ProcessesProto.LAST_MEMORY_LEVEL, mLastMemoryLevel);
+            proto.write(ProcessesProto.LAST_NUM_PROCESSES, mLastNumProcesses);
+            long now = SystemClock.uptimeMillis();
+            ProtoUtils.toDuration(proto, ProcessesProto.LAST_IDLE_TIME, mLastIdleTime, now);
+            proto.write(ProcessesProto.LOW_RAM_SINCE_LAST_IDLE_MS, getLowRamTimeSinceIdle(now));
+        }
+
+    }
+
+    void writeProcessesToGcToProto(ProtoOutputStream proto, long fieldId, String dumpPackage) {
+        if (mProcessesToGc.size() > 0) {
+            long now = SystemClock.uptimeMillis();
+            for (int i=0; i<mProcessesToGc.size(); i++) {
+                ProcessRecord r = mProcessesToGc.get(i);
+                if (dumpPackage != null && !dumpPackage.equals(r.info.packageName)) {
+                    continue;
+                }
+                final long token = proto.start(fieldId);
+                r.writeToProto(proto, ProcessToGcProto.PROC);
+                proto.write(ProcessToGcProto.REPORT_LOW_MEMORY, r.reportLowMemory);
+                proto.write(ProcessToGcProto.NOW_UPTIME_MS, now);
+                proto.write(ProcessToGcProto.LAST_GCED_MS, r.lastRequestedGc);
+                proto.write(ProcessToGcProto.LAST_LOW_MEMORY_MS, r.lastLowMemory);
+                proto.end(token);
+            }
+        }
+    }
+
+    boolean dumpProcessesToGc(PrintWriter pw, boolean needSep, String dumpPackage) {
         if (mProcessesToGc.size() > 0) {
             boolean printed = false;
             long now = SystemClock.uptimeMillis();
@@ -16432,7 +16966,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             needSep = true;
         }
 
-        dumpProcessesToGc(fd, pw, args, opti, needSep, dumpAll, null);
+        dumpProcessesToGc(pw, needSep, null);
 
         pw.println();
         pw.println("  mHomeProcess: " + mHomeProcess);
@@ -16983,11 +17517,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         return numPers;
     }
 
-    private static final boolean dumpProcessOomList(PrintWriter pw,
-            ActivityManagerService service, List<ProcessRecord> origList,
-            String prefix, String normalLabel, String persistentLabel,
-            boolean inclDetails, String dumpPackage) {
-
+    private static final ArrayList<Pair<ProcessRecord, Integer>>
+        sortProcessOomList(List<ProcessRecord> origList, String dumpPackage) {
         ArrayList<Pair<ProcessRecord, Integer>> list
                 = new ArrayList<Pair<ProcessRecord, Integer>>(origList.size());
         for (int i=0; i<origList.size(); i++) {
@@ -16996,10 +17527,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 continue;
             }
             list.add(new Pair<ProcessRecord, Integer>(origList.get(i), i));
-        }
-
-        if (list.size() <= 0) {
-            return false;
         }
 
         Comparator<Pair<ProcessRecord, Integer>> comparator
@@ -17021,6 +17548,113 @@ public class ActivityManagerService extends IActivityManager.Stub
         };
 
         Collections.sort(list, comparator);
+        return list;
+    }
+
+    private static final boolean writeProcessOomListToProto(ProtoOutputStream proto, long fieldId,
+            ActivityManagerService service, List<ProcessRecord> origList,
+            boolean inclDetails, String dumpPackage) {
+        ArrayList<Pair<ProcessRecord, Integer>> list = sortProcessOomList(origList, dumpPackage);
+        if (list.isEmpty()) return false;
+
+        final long curUptime = SystemClock.uptimeMillis();
+
+        for (int i = list.size() - 1; i >= 0; i--) {
+            ProcessRecord r = list.get(i).first;
+            long token = proto.start(fieldId);
+            String oomAdj = ProcessList.makeOomAdjString(r.setAdj);
+            proto.write(ProcessOomProto.PERSISTENT, r.persistent);
+            proto.write(ProcessOomProto.NUM, (origList.size()-1)-list.get(i).second);
+            proto.write(ProcessOomProto.OOM_ADJ, oomAdj);
+            int schedGroup = ProcessOomProto.SCHED_GROUP_UNKNOWN;
+            switch (r.setSchedGroup) {
+                case ProcessList.SCHED_GROUP_BACKGROUND:
+                    schedGroup = ProcessOomProto.SCHED_GROUP_BACKGROUND;
+                    break;
+                case ProcessList.SCHED_GROUP_DEFAULT:
+                    schedGroup = ProcessOomProto.SCHED_GROUP_DEFAULT;
+                    break;
+                case ProcessList.SCHED_GROUP_TOP_APP:
+                    schedGroup = ProcessOomProto.SCHED_GROUP_TOP_APP;
+                    break;
+                case ProcessList.SCHED_GROUP_TOP_APP_BOUND:
+                    schedGroup = ProcessOomProto.SCHED_GROUP_TOP_APP_BOUND;
+                    break;
+            }
+            if (schedGroup != ProcessOomProto.SCHED_GROUP_UNKNOWN) {
+                proto.write(ProcessOomProto.SCHED_GROUP, schedGroup);
+            }
+            if (r.foregroundActivities) {
+                proto.write(ProcessOomProto.ACTIVITIES, true);
+            } else if (r.foregroundServices) {
+                proto.write(ProcessOomProto.SERVICES, true);
+            }
+            proto.write(ProcessOomProto.STATE, ProcessList.makeProcStateProtoEnum(r.curProcState));
+            proto.write(ProcessOomProto.TRIM_MEMORY_LEVEL, r.trimMemoryLevel);
+            r.writeToProto(proto, ProcessOomProto.PROC);
+            proto.write(ProcessOomProto.ADJ_TYPE, r.adjType);
+            if (r.adjSource != null || r.adjTarget != null) {
+                if (r.adjTarget instanceof  ComponentName) {
+                    ComponentName cn = (ComponentName) r.adjTarget;
+                    cn.writeToProto(proto, ProcessOomProto.ADJ_TARGET_COMPONENT_NAME);
+                } else if (r.adjTarget != null) {
+                    proto.write(ProcessOomProto.ADJ_TARGET_OBJECT, r.adjTarget.toString());
+                }
+                if (r.adjSource instanceof ProcessRecord) {
+                    ProcessRecord p = (ProcessRecord) r.adjSource;
+                    p.writeToProto(proto, ProcessOomProto.ADJ_SOURCE_PROC);
+                } else if (r.adjSource != null) {
+                    proto.write(ProcessOomProto.ADJ_SOURCE_OBJECT, r.adjSource.toString());
+                }
+            }
+            if (inclDetails) {
+                long detailToken = proto.start(ProcessOomProto.DETAIL);
+                proto.write(ProcessOomProto.Detail.MAX_ADJ, r.maxAdj);
+                proto.write(ProcessOomProto.Detail.CUR_RAW_ADJ, r.curRawAdj);
+                proto.write(ProcessOomProto.Detail.SET_RAW_ADJ, r.setRawAdj);
+                proto.write(ProcessOomProto.Detail.CUR_ADJ, r.curAdj);
+                proto.write(ProcessOomProto.Detail.SET_ADJ, r.setAdj);
+                proto.write(ProcessOomProto.Detail.CURRENT_STATE,
+                        ProcessList.makeProcStateProtoEnum(r.curProcState));
+                proto.write(ProcessOomProto.Detail.SET_STATE,
+                        ProcessList.makeProcStateProtoEnum(r.setProcState));
+                proto.write(ProcessOomProto.Detail.LAST_PSS, DebugUtils.sizeValueToString(
+                        r.lastPss*1024, new StringBuilder()));
+                proto.write(ProcessOomProto.Detail.LAST_SWAP_PSS, DebugUtils.sizeValueToString(
+                        r.lastSwapPss*1024, new StringBuilder()));
+                proto.write(ProcessOomProto.Detail.LAST_CACHED_PSS, DebugUtils.sizeValueToString(
+                        r.lastCachedPss*1024, new StringBuilder()));
+                proto.write(ProcessOomProto.Detail.CACHED, r.cached);
+                proto.write(ProcessOomProto.Detail.EMPTY, r.empty);
+                proto.write(ProcessOomProto.Detail.HAS_ABOVE_CLIENT, r.hasAboveClient);
+
+                if (r.setProcState >= ActivityManager.PROCESS_STATE_SERVICE) {
+                    if (r.lastCpuTime != 0) {
+                        long uptimeSince = curUptime - service.mLastPowerCheckUptime;
+                        long timeUsed = r.curCpuTime - r.lastCpuTime;
+                        long cpuTimeToken = proto.start(ProcessOomProto.Detail.SERVICE_RUN_TIME);
+                        proto.write(ProcessOomProto.Detail.CpuRunTime.OVER_MS, uptimeSince);
+                        proto.write(ProcessOomProto.Detail.CpuRunTime.USED_MS, timeUsed);
+                        proto.write(ProcessOomProto.Detail.CpuRunTime.ULTILIZATION,
+                                (100.0*timeUsed)/uptimeSince);
+                        proto.end(cpuTimeToken);
+                    }
+                }
+                proto.end(detailToken);
+            }
+            proto.end(token);
+        }
+
+        return true;
+    }
+
+    private static final boolean dumpProcessOomList(PrintWriter pw,
+            ActivityManagerService service, List<ProcessRecord> origList,
+            String prefix, String normalLabel, String persistentLabel,
+            boolean inclDetails, String dumpPackage) {
+
+        ArrayList<Pair<ProcessRecord, Integer>> list = sortProcessOomList(origList, dumpPackage);
+        if (list.isEmpty()) return false;
 
         final long curUptime = SystemClock.uptimeMillis();
         final long uptimeSince = curUptime - service.mLastPowerCheckUptime;
@@ -17728,12 +18362,13 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 final long myTotalPss = mi.getTotalPss();
                 final long myTotalUss = mi.getTotalUss();
+                final long myTotalRss = mi.getTotalRss();
                 final long myTotalSwapPss = mi.getTotalSwappedOutPss();
 
                 synchronized (this) {
                     if (r.thread != null && oomAdj == r.getSetAdjWithServices()) {
                         // Record this for posterity if the process has been stable.
-                        r.baseProcessTracker.addPss(myTotalPss, myTotalUss, true,
+                        r.baseProcessTracker.addPss(myTotalPss, myTotalUss, myTotalRss, true,
                                 reportType, endTime-startTime, r.pkgList);
                     }
                 }
@@ -18224,12 +18859,13 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             final long myTotalPss = mi.getTotalPss();
             final long myTotalUss = mi.getTotalUss();
+            final long myTotalRss = mi.getTotalRss();
             final long myTotalSwapPss = mi.getTotalSwappedOutPss();
 
             synchronized (this) {
                 if (r.thread != null && oomAdj == r.getSetAdjWithServices()) {
                     // Record this for posterity if the process has been stable.
-                    r.baseProcessTracker.addPss(myTotalPss, myTotalUss, true,
+                    r.baseProcessTracker.addPss(myTotalPss, myTotalUss, myTotalRss, true,
                             reportType, endTime-startTime, r.pkgList);
                 }
             }
@@ -20002,6 +20638,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             case PHONE_UID:
             case BLUETOOTH_UID:
             case NFC_UID:
+            case SE_UID:
                 isCallerSystem = true;
                 break;
             default:
@@ -20135,7 +20772,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                                                 intent.getIntExtra(Intent.EXTRA_UID, -1), ssp);
 
                                         // Remove all permissions granted from/to this package
-                                        removeUriPermissionsForPackageLocked(ssp, userId, true);
+                                        removeUriPermissionsForPackageLocked(ssp, userId, true,
+                                                false);
 
                                         mRecentTasks.removeTasksByPackageName(ssp, userId);
 
@@ -21471,6 +22109,17 @@ public class ActivityManagerService extends IActivityManager.Stub
     private void resizeStackWithBoundsFromWindowManager(int stackId, boolean deferResume) {
         final Rect newStackBounds = new Rect();
         final ActivityStack stack = mStackSupervisor.getStack(stackId);
+
+        // TODO(b/71548119): Revert CL introducing below once cause of mismatch is found.
+        if (stack == null) {
+            final StringWriter writer = new StringWriter();
+            final PrintWriter printWriter = new PrintWriter(writer);
+            mStackSupervisor.dumpDisplays(printWriter);
+            printWriter.flush();
+
+            Log.wtf(TAG, "stack not found:" + stackId + " displays:" + writer);
+        }
+
         stack.getBoundsForNewConfiguration(newStackBounds);
         mStackSupervisor.resizeStackLocked(
                 stack, !newStackBounds.isEmpty() ? newStackBounds : null /* bounds */,
@@ -22493,14 +23142,13 @@ public class ActivityManagerService extends IActivityManager.Stub
      * Record new PSS sample for a process.
      */
     void recordPssSampleLocked(ProcessRecord proc, int procState, long pss, long uss, long swapPss,
-            long pssDuration, long now) {
+            long rss, int statType, long pssDuration, long now) {
         EventLogTags.writeAmPss(proc.pid, proc.uid, proc.processName, pss * 1024, uss * 1024,
-                swapPss * 1024);
+                swapPss * 1024, rss * 1024, statType, procState, pssDuration);
         proc.lastPssTime = now;
-        proc.baseProcessTracker.addPss(pss, uss, true, ProcessStats.ADD_PSS_INTERNAL,
-                pssDuration, proc.pkgList);
+        proc.baseProcessTracker.addPss(pss, uss, rss, true, statType, pssDuration, proc.pkgList);
         if (DEBUG_PSS) Slog.d(TAG_PSS,
-                "PSS of " + proc.toShortString() + ": " + pss + " lastPss=" + proc.lastPss
+                "pss of " + proc.toShortString() + ": " + pss + " lastPss=" + proc.lastPss
                 + " state=" + ProcessList.makeProcStateString(procState));
         if (proc.initialIdlePss == 0) {
             proc.initialIdlePss = pss;
@@ -22599,8 +23247,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (mPendingPssProcesses.size() == 0) {
             mBgHandler.sendEmptyMessage(COLLECT_PSS_BG_MSG);
         }
-        if (DEBUG_PSS) Slog.d(TAG_PSS, "Requesting PSS of: " + proc);
+        if (DEBUG_PSS) Slog.d(TAG_PSS, "Requesting pss of: " + proc);
         proc.pssProcState = procState;
+        proc.pssStatType = ProcessStats.ADD_PSS_INTERNAL_SINGLE;
         mPendingPssProcesses.add(proc);
     }
 
@@ -22615,7 +23264,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 return;
             }
         }
-        if (DEBUG_PSS) Slog.d(TAG_PSS, "Requesting PSS of all procs!  memLowered=" + memLowered);
+        if (DEBUG_PSS) Slog.d(TAG_PSS, "Requesting pss of all procs!  memLowered=" + memLowered);
         mLastFullPssTime = now;
         mFullPssPending = true;
         mPendingPssProcesses.ensureCapacity(mLruProcesses.size());
@@ -22628,8 +23277,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             if (memLowered || now > (app.lastStateTime+ProcessList.PSS_ALL_INTERVAL)) {
                 app.pssProcState = app.setProcState;
-                app.nextPssTime = ProcessList.computeNextPssTime(app.curProcState, true,
-                        mTestPssMode, isSleepingLocked(), now);
+                app.pssStatType = always ? ProcessStats.ADD_PSS_INTERNAL_ALL_POLL
+                        : ProcessStats.ADD_PSS_INTERNAL_ALL_MEM;
+                app.nextPssTime = ProcessList.computeNextPssTime(app.curProcState,
+                        app.procStateMemTracker, mTestPssMode, isSleepingLocked(), now);
                 mPendingPssProcesses.add(app);
             }
         }
@@ -22996,16 +23647,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                 long startTime = SystemClock.currentThreadTimeMillis();
                 long pss = Debug.getPss(app.pid, mTmpLong, null);
                 long endTime = SystemClock.currentThreadTimeMillis();
-                recordPssSampleLocked(app, app.curProcState, pss, endTime-startTime,
-                        mTmpLong[0], mTmpLong[1], now);
+                recordPssSampleLocked(app, app.curProcState, pss, mTmpLong[0], mTmpLong[1],
+                        mTmpLong[2], ProcessStats.ADD_PSS_INTERNAL_SINGLE, endTime-startTime, now);
                 mPendingPssProcesses.remove(app);
                 Slog.i(TAG, "Recorded pss for " + app + " state " + app.setProcState
                         + " to " + app.curProcState + ": "
                         + (SystemClock.uptimeMillis()-start) + "ms");
             }
             app.lastStateTime = now;
-            app.nextPssTime = ProcessList.computeNextPssTime(app.curProcState, true,
-                    mTestPssMode, isSleepingLocked(), now);
+            app.nextPssTime = ProcessList.computeNextPssTime(app.curProcState,
+                    app.procStateMemTracker, mTestPssMode, isSleepingLocked(), now);
             if (DEBUG_PSS) Slog.d(TAG_PSS, "Process state change from "
                     + ProcessList.makeProcStateString(app.setProcState) + " to "
                     + ProcessList.makeProcStateString(app.curProcState) + " next pss in "
@@ -23015,10 +23666,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                     && now > (app.lastStateTime+ProcessList.minTimeFromStateChange(
                     mTestPssMode)))) {
                 requestPssLocked(app, app.setProcState);
-                app.nextPssTime = ProcessList.computeNextPssTime(app.curProcState, false,
-                        mTestPssMode, isSleepingLocked(), now);
+                app.nextPssTime = ProcessList.computeNextPssTime(app.curProcState,
+                        app.procStateMemTracker, mTestPssMode, isSleepingLocked(), now);
             } else if (false && DEBUG_PSS) Slog.d(TAG_PSS,
-                    "Not requesting PSS of " + app + ": next=" + (app.nextPssTime-now));
+                    "Not requesting pss of " + app + ": next=" + (app.nextPssTime-now));
         }
         if (app.setProcState != app.curProcState) {
             if (DEBUG_SWITCH || DEBUG_OOM_ADJ || mCurOomAdjUid == app.uid) {
@@ -24077,7 +24728,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final int size = mActiveUids.size();
         for (int i = 0; i < size; i++) {
             final int uid = mActiveUids.keyAt(i);
-            if (!UserHandle.isApp(uid)) {
+            if (UserHandle.isCore(uid)) {
                 continue;
             }
             final UidRecord uidRec = mActiveUids.valueAt(i);
@@ -24878,16 +25529,20 @@ public class ActivityManagerService extends IActivityManager.Stub
             // "= 0" is needed because otherwise catch(RemoteException) would make it look like
             // packageUid may not be initialized.
             int packageUid = 0;
+            final long ident = Binder.clearCallingIdentity();
             try {
                 packageUid = AppGlobals.getPackageManager().getPackageUid(
                         packageName, PackageManager.MATCH_DEBUG_TRIAGED_MISSING, userId);
             } catch (RemoteException e) {
                 // Shouldn't happen.
+            } finally {
+                Binder.restoreCallingIdentity(ident);
             }
 
             synchronized (ActivityManagerService.this) {
                 return mActivityStartController.startActivitiesInPackage(packageUid, packageName,
-                        intents, resolvedTypes, /*resultTo*/ null, bOptions, userId);
+                        intents, resolvedTypes, null /* resultTo */,
+                        SafeActivityOptions.fromBundle(bOptions), userId);
             }
         }
 
@@ -25130,6 +25785,30 @@ public class ActivityManagerService extends IActivityManager.Stub
         public void registerScreenObserver(ScreenObserver observer) {
             mScreenObservers.add(observer);
         }
+
+        @Override
+        public boolean canStartMoreUsers() {
+            return mUserController.canStartMoreUsers();
+        }
+
+        @Override
+        public void setSwitchingFromSystemUserMessage(String switchingFromSystemUserMessage) {
+            mUserController.setSwitchingFromSystemUserMessage(switchingFromSystemUserMessage);
+        }
+
+        @Override
+        public void setSwitchingToSystemUserMessage(String switchingToSystemUserMessage) {
+            mUserController.setSwitchingToSystemUserMessage(switchingToSystemUserMessage);
+        }
+
+        @Override
+        public int getMaxRunningUsers() {
+            return mUserController.mMaxRunningUsers;
+        }
+
+        public boolean isCallerRecents(int callingUid) {
+            return getRecentTasks().isCallerRecents(callingUid);
+        }
     }
 
     /**
@@ -25340,6 +26019,19 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
         }
+        if (updateFrameworkRes) {
+            // Update system server components that need to know about changed overlays. Because the
+            // overlay is applied in ActivityThread, we need to serialize through its thread too.
+            final Executor executor = ActivityThread.currentActivityThread().getExecutor();
+            final DisplayManagerInternal display =
+                    LocalServices.getService(DisplayManagerInternal.class);
+            if (display != null) {
+                executor.execute(display::onOverlayChanged);
+            }
+            if (mWindowManager != null) {
+                executor.execute(mWindowManager::onOverlayChanged);
+            }
+        }
     }
 
     /**
@@ -25425,6 +26117,25 @@ public class ActivityManagerService extends IActivityManager.Stub
             final long origId = Binder.clearCallingIdentity();
             try {
                 r.setTurnScreenOn(turnScreenOn);
+            } finally {
+                Binder.restoreCallingIdentity(origId);
+            }
+        }
+    }
+
+    @Override
+    public void registerRemoteAnimations(IBinder token, RemoteAnimationDefinition definition)
+            throws RemoteException {
+        enforceCallingPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS,
+                "registerRemoteAnimations");
+        synchronized (this) {
+            final ActivityRecord r = ActivityRecord.isInStackLocked(token);
+            if (r == null) {
+                return;
+            }
+            final long origId = Binder.clearCallingIdentity();
+            try {
+                r.registerRemoteAnimations(definition);
             } finally {
                 Binder.restoreCallingIdentity(origId);
             }

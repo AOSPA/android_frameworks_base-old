@@ -50,6 +50,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.hamcrest.MockitoHamcrest.argThat;
 
 import android.Manifest.permission;
+import android.annotation.RawRes;
 import android.app.Activity;
 import android.app.Notification;
 import android.app.admin.DeviceAdminReceiver;
@@ -78,6 +79,7 @@ import android.provider.Settings;
 import android.security.KeyChain;
 import android.security.keystore.AttestationUtils;
 import android.telephony.TelephonyManager;
+import android.telephony.data.ApnSetting;
 import android.test.MoreAsserts;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.ArraySet;
@@ -92,10 +94,13 @@ import com.android.server.pm.UserRestrictionsUtils;
 
 import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
+import java.io.File;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -126,6 +131,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
             permission.MANAGE_DEVICE_ADMINS, permission.MANAGE_PROFILE_AND_DEVICE_OWNERS,
             permission.MANAGE_USERS, permission.INTERACT_ACROSS_USERS_FULL);
     public static final String NOT_DEVICE_OWNER_MSG = "does not own the device";
+    public static final String NOT_PROFILE_OWNER_MSG = "does not own the profile";
     public static final String ONGOING_CALL_MSG = "ongoing call on the device";
 
     // TODO replace all instances of this with explicit {@link #mServiceContext}.
@@ -186,6 +192,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         initializeDpms();
 
         Mockito.reset(getServices().usageStatsManagerInternal);
+        Mockito.reset(getServices().networkPolicyManagerInternal);
         setUpPackageManagerForAdmin(admin1, DpmMockContext.CALLER_UID);
         setUpPackageManagerForAdmin(admin2, DpmMockContext.CALLER_UID);
         setUpPackageManagerForAdmin(admin3, DpmMockContext.CALLER_UID);
@@ -199,9 +206,14 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         setUpUserManager();
     }
 
+    private TransferOwnershipMetadataManager getMockTransferMetadataManager() {
+        return dpms.mTransferOwnershipMetadataManager;
+    }
+
     @Override
     protected void tearDown() throws Exception {
         flushTasks();
+        getMockTransferMetadataManager().deleteMetadataFile();
         super.tearDown();
     }
 
@@ -211,7 +223,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         LocalServices.removeServiceForTest(DevicePolicyManagerInternal.class);
 
         dpms = new DevicePolicyManagerServiceTestable(getServices(), mContext);
-        dpms.handleStart();
         dpms.systemReady(SystemService.PHASE_LOCK_SETTINGS_READY);
         dpms.systemReady(SystemService.PHASE_BOOT_COMPLETED);
 
@@ -283,7 +294,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertNull(LocalServices.getService(DevicePolicyManagerInternal.class));
     }
 
-    public void testHandleStart() throws Exception {
+    public void testLoadAdminData() throws Exception {
         // Device owner in SYSTEM_USER
         setDeviceOwner();
         // Profile owner in CALLER_USER_HANDLE
@@ -301,12 +312,29 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         // Verify
         verify(getServices().usageStatsManagerInternal).setActiveAdminApps(
-                MockUtils.checkAdminApps(admin1.getPackageName()),
+                MockUtils.checkApps(admin1.getPackageName()),
                 eq(UserHandle.USER_SYSTEM));
         verify(getServices().usageStatsManagerInternal).setActiveAdminApps(
-                MockUtils.checkAdminApps(admin2.getPackageName(),
+                MockUtils.checkApps(admin2.getPackageName(),
                         adminAnotherPackage.getPackageName()),
                 eq(DpmMockContext.CALLER_USER_HANDLE));
+        verify(getServices().usageStatsManagerInternal).onAdminDataAvailable();
+        verify(getServices().networkPolicyManagerInternal).onAdminDataAvailable();
+    }
+
+    public void testLoadAdminData_noAdmins() throws Exception {
+        final int ANOTHER_USER_ID = 15;
+        getServices().addUser(ANOTHER_USER_ID, 0);
+
+        initializeDpms();
+
+        // Verify
+        verify(getServices().usageStatsManagerInternal).setActiveAdminApps(
+                null, DpmMockContext.CALLER_USER_HANDLE);
+        verify(getServices().usageStatsManagerInternal).setActiveAdminApps(
+                null, ANOTHER_USER_ID);
+        verify(getServices().usageStatsManagerInternal).onAdminDataAvailable();
+        verify(getServices().networkPolicyManagerInternal).onAdminDataAvailable();
     }
 
     /**
@@ -688,7 +716,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
 
         assertFalse(dpm.isAdminActiveAsUser(admin1, DpmMockContext.CALLER_USER_HANDLE));
         verify(getServices().usageStatsManagerInternal).setActiveAdminApps(
-                MockUtils.checkAdminApps(admin2.getPackageName()),
+                MockUtils.checkApps(admin2.getPackageName()),
                 eq(DpmMockContext.CALLER_USER_HANDLE));
 
         // Again broadcast from saveSettingsLocked().
@@ -1343,6 +1371,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 eq(packageName),
                 anyInt(),
                 eq(userId));
+        doReturn(true).when(getServices().ipackageManager).isPackageAvailable(packageName, userId);
         // Setup application UID with the PackageManager
         doReturn(uid).when(getServices().packageManager).getPackageUidAsUser(
                 eq(packageName),
@@ -2084,6 +2113,98 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         }
     }
 
+    public void testSetGetMeteredDataDisabled() throws Exception {
+        setAsProfileOwner(admin1);
+
+        final ArrayList<String> emptyList = new ArrayList<>();
+        assertEquals(emptyList, dpm.getMeteredDataDisabled(admin1));
+
+        // Setup
+        final ArrayList<String> pkgsToRestrict = new ArrayList<>();
+        final String package1 = "com.example.one";
+        final String package2 = "com.example.two";
+        pkgsToRestrict.add(package1);
+        pkgsToRestrict.add(package2);
+        setupPackageInPackageManager(package1, DpmMockContext.CALLER_USER_HANDLE, 123, 0);
+        setupPackageInPackageManager(package2, DpmMockContext.CALLER_USER_HANDLE, 456, 0);
+        List<String> excludedPkgs = dpm.setMeteredDataDisabled(admin1, pkgsToRestrict);
+
+        // Verify
+        assertEquals(emptyList, excludedPkgs);
+        assertEquals(pkgsToRestrict, dpm.getMeteredDataDisabled(admin1));
+        verify(getServices().networkPolicyManagerInternal).setMeteredRestrictedPackages(
+                MockUtils.checkApps(pkgsToRestrict.toArray(new String[0])),
+                eq(DpmMockContext.CALLER_USER_HANDLE));
+
+        // Setup
+        pkgsToRestrict.remove(package1);
+        excludedPkgs = dpm.setMeteredDataDisabled(admin1, pkgsToRestrict);
+
+        // Verify
+        assertEquals(emptyList, excludedPkgs);
+        assertEquals(pkgsToRestrict, dpm.getMeteredDataDisabled(admin1));
+        verify(getServices().networkPolicyManagerInternal).setMeteredRestrictedPackages(
+                MockUtils.checkApps(pkgsToRestrict.toArray(new String[0])),
+                eq(DpmMockContext.CALLER_USER_HANDLE));
+    }
+
+    public void testSetGetMeteredDataDisabled_deviceAdmin() {
+        mContext.callerPermissions.add(permission.MANAGE_DEVICE_ADMINS);
+        dpm.setActiveAdmin(admin1, true);
+        assertTrue(dpm.isAdminActive(admin1));
+        mContext.callerPermissions.remove(permission.MANAGE_DEVICE_ADMINS);
+
+        assertExpectException(SecurityException.class,  /* messageRegex= */ NOT_PROFILE_OWNER_MSG,
+                () -> dpm.setMeteredDataDisabled(admin1, new ArrayList<>()));
+        assertExpectException(SecurityException.class,  /* messageRegex= */ NOT_PROFILE_OWNER_MSG,
+                () -> dpm.getMeteredDataDisabled(admin1));
+    }
+
+    public void testGetMeteredDataDisabledForUser() throws Exception {
+        setAsProfileOwner(admin1);
+
+        // Setup
+        final ArrayList<String> emptyList = new ArrayList<>();
+        final ArrayList<String> pkgsToRestrict = new ArrayList<>();
+        final String package1 = "com.example.one";
+        final String package2 = "com.example.two";
+        final String package3 = "com.example.three";
+        pkgsToRestrict.add(package1);
+        pkgsToRestrict.add(package2);
+        setupPackageInPackageManager(package1, DpmMockContext.CALLER_USER_HANDLE, 123, 0);
+        setupPackageInPackageManager(package2, DpmMockContext.CALLER_USER_HANDLE, 456, 0);
+        List<String> excludedPkgs = dpm.setMeteredDataDisabled(admin1, pkgsToRestrict);
+
+        // Verify
+        assertEquals(emptyList, excludedPkgs);
+        mContext.binder.callingUid = DpmMockContext.SYSTEM_UID;
+        assertTrue(package1 + "should be restricted",
+                dpm.isMeteredDataDisabledForUser(admin1, package1,
+                        DpmMockContext.CALLER_USER_HANDLE));
+        assertTrue(package2 + "should be restricted",
+                dpm.isMeteredDataDisabledForUser(admin1, package2,
+                        DpmMockContext.CALLER_USER_HANDLE));
+        assertFalse(package3 + "should not be restricted",
+                dpm.isMeteredDataDisabledForUser(admin1, package3,
+                        DpmMockContext.CALLER_USER_HANDLE));
+    }
+
+    public void testGetMeteredDataDisabledForUser_nonSystemUidCaller() throws Exception {
+        setAsProfileOwner(admin1);
+        assertExpectException(SecurityException.class,
+                /* messageRegex= */ "Only the system can query restricted pkgs",
+                () -> dpm.isMeteredDataDisabledForUser(
+                        admin1, "com.example.one", DpmMockContext.CALLER_USER_HANDLE));
+        dpm.clearProfileOwner(admin1);
+
+        setDeviceOwner();
+        assertExpectException(SecurityException.class,
+                /* messageRegex= */ "Only the system can query restricted pkgs",
+                () -> dpm.isMeteredDataDisabledForUser(
+                        admin1, "com.example.one", DpmMockContext.CALLER_USER_HANDLE));
+        clearDeviceOwner();
+    }
+
     public void testCreateAdminSupportIntent() throws Exception {
         // Setup device owner.
         mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
@@ -2119,8 +2240,8 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertEquals(UserManager.DISALLOW_ADJUST_VOLUME,
                 intent.getStringExtra(DevicePolicyManager.EXTRA_RESTRICTION));
 
-        // Try with POLICY_DISABLE_CAMERA and POLICY_DISABLE_SCREEN_CAPTURE, which are not
-        // user restrictions
+        // Try with POLICY_DISABLE_CAMERA, POLICY_DISABLE_SCREEN_CAPTURE and
+        // POLICY_MANDATORY_BACKUPS, which are not user restrictions
 
         // Camera is not disabled
         intent = dpm.createAdminSupportIntent(DevicePolicyManager.POLICY_DISABLE_CAMERA);
@@ -2142,6 +2263,19 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         intent = dpm.createAdminSupportIntent(DevicePolicyManager.POLICY_DISABLE_SCREEN_CAPTURE);
         assertNotNull(intent);
         assertEquals(DevicePolicyManager.POLICY_DISABLE_SCREEN_CAPTURE,
+                intent.getStringExtra(DevicePolicyManager.EXTRA_RESTRICTION));
+
+        // Backups are not mandatory
+        intent = dpm.createAdminSupportIntent(DevicePolicyManager.POLICY_MANDATORY_BACKUPS);
+        assertNull(intent);
+
+        // Backups are mandatory
+        ComponentName transportComponent = ComponentName.unflattenFromString(
+                "android/com.android.internal.backup.LocalTransport");
+        dpm.setMandatoryBackupTransport(admin1, transportComponent);
+        intent = dpm.createAdminSupportIntent(DevicePolicyManager.POLICY_MANDATORY_BACKUPS);
+        assertNotNull(intent);
+        assertEquals(DevicePolicyManager.POLICY_MANDATORY_BACKUPS,
                 intent.getStringExtra(DevicePolicyManager.EXTRA_RESTRICTION));
 
         // Same checks for different user
@@ -3573,15 +3707,47 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         MoreAsserts.assertEmpty(targetUsers);
     }
 
+    private void verifyLockTaskState(int userId) throws Exception {
+        verifyLockTaskState(userId, new String[0], DevicePolicyManager.LOCK_TASK_FEATURE_NONE);
+    }
+
+    private void verifyLockTaskState(int userId, String[] packages, int flags) throws Exception {
+        verify(getServices().iactivityManager).updateLockTaskPackages(userId, packages);
+        verify(getServices().iactivityManager).updateLockTaskFeatures(userId, flags);
+    }
+
+    private void verifyCanSetLockTask(int uid, int userId, ComponentName who, String[] packages,
+            int flags) throws Exception {
+        mContext.binder.callingUid = uid;
+        dpm.setLockTaskPackages(who, packages);
+        MoreAsserts.assertEquals(packages, dpm.getLockTaskPackages(who));
+        for (String p : packages) {
+            assertTrue(dpm.isLockTaskPermitted(p));
+        }
+        assertFalse(dpm.isLockTaskPermitted("anotherPackage"));
+        // Test to see if set lock task features can be set
+        dpm.setLockTaskFeatures(who, flags);
+        verifyLockTaskState(userId, packages, flags);
+    }
+
+    private void verifyCanNotSetLockTask(int uid, ComponentName who, String[] packages,
+            int flags) throws Exception {
+        mContext.binder.callingUid = uid;
+        assertExpectException(SecurityException.class, /* messageRegex =*/ null,
+                () -> dpm.setLockTaskPackages(who, packages));
+        assertExpectException(SecurityException.class, /* messageRegex =*/ null,
+                () -> dpm.getLockTaskPackages(who));
+        assertFalse(dpm.isLockTaskPermitted("doPackage1"));
+        assertExpectException(SecurityException.class, /* messageRegex =*/ null,
+                () -> dpm.setLockTaskFeatures(who, flags));
+    }
+
     public void testLockTaskPolicyAllowedForAffiliatedUsers() throws Exception {
         // Setup a device owner.
         mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
         setupDeviceOwner();
         // Lock task policy is updated when loading user data.
-        verify(getServices().iactivityManager).updateLockTaskPackages(
-                UserHandle.USER_SYSTEM, new String[0]);
-        verify(getServices().iactivityManager).updateLockTaskFeatures(
-                UserHandle.USER_SYSTEM, DevicePolicyManager.LOCK_TASK_FEATURE_NONE);
+        verifyLockTaskState(UserHandle.USER_SYSTEM);
 
         // Set up a managed profile managed by different package (package name shouldn't matter)
         final int MANAGED_PROFILE_USER_ID = 15;
@@ -3589,40 +3755,30 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         final ComponentName adminDifferentPackage =
                 new ComponentName("another.package", "whatever.class");
         addManagedProfile(adminDifferentPackage, MANAGED_PROFILE_ADMIN_UID, admin2);
-        verify(getServices().iactivityManager).updateLockTaskPackages(
-                MANAGED_PROFILE_USER_ID, new String[0]);
-        verify(getServices().iactivityManager).updateLockTaskFeatures(
-                MANAGED_PROFILE_USER_ID, DevicePolicyManager.LOCK_TASK_FEATURE_NONE);
+        verifyLockTaskState(MANAGED_PROFILE_USER_ID);
+
+        // Setup a PO on the secondary user
+        mContext.binder.callingUid = DpmMockContext.CALLER_UID;
+        setAsProfileOwner(admin3);
+        verifyLockTaskState(DpmMockContext.CALLER_USER_HANDLE);
 
         // The DO can still set lock task packages
-        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
         final String[] doPackages = {"doPackage1", "doPackage2"};
-        dpm.setLockTaskPackages(admin1, doPackages);
-        MoreAsserts.assertEquals(doPackages, dpm.getLockTaskPackages(admin1));
-        assertTrue(dpm.isLockTaskPermitted("doPackage1"));
-        assertFalse(dpm.isLockTaskPermitted("anotherPackage"));
-        verify(getServices().iactivityManager).updateLockTaskPackages(
-                UserHandle.USER_SYSTEM, doPackages);
-        // And the DO can still set lock task features
-        final int doFlags = DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS
+        final int flags = DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS
                 | DevicePolicyManager.LOCK_TASK_FEATURE_RECENTS;
-        dpm.setLockTaskFeatures(admin1, doFlags);
-        verify(getServices().iactivityManager).updateLockTaskFeatures(
-                UserHandle.USER_SYSTEM, doFlags);
+        verifyCanSetLockTask(DpmMockContext.CALLER_SYSTEM_USER_UID, UserHandle.USER_SYSTEM, admin1, doPackages, flags);
+
+        final String[] secondaryPoPackages = {"secondaryPoPackage1", "secondaryPoPackage2"};
+        final int secondaryPoFlags = DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS
+                | DevicePolicyManager.LOCK_TASK_FEATURE_RECENTS;
+        verifyCanNotSetLockTask(DpmMockContext.CALLER_UID, admin3, secondaryPoPackages, secondaryPoFlags);
 
         // Managed profile is unaffiliated - shouldn't be able to setLockTaskPackages.
         mContext.binder.callingUid = MANAGED_PROFILE_ADMIN_UID;
         final String[] poPackages = {"poPackage1", "poPackage2"};
-        assertExpectException(SecurityException.class, /* messageRegex =*/ null,
-                () -> dpm.setLockTaskPackages(adminDifferentPackage, poPackages));
-        assertExpectException(SecurityException.class, /* messageRegex =*/ null,
-                () -> dpm.getLockTaskPackages(adminDifferentPackage));
-        assertFalse(dpm.isLockTaskPermitted("doPackage1"));
-        // And it shouldn't be able to setLockTaskFeatures.
         final int poFlags = DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS
                 | DevicePolicyManager.LOCK_TASK_FEATURE_RECENTS;
-        assertExpectException(SecurityException.class, /* messageRegex =*/ null,
-                () -> dpm.setLockTaskFeatures(adminDifferentPackage, poFlags));
+        verifyCanNotSetLockTask(MANAGED_PROFILE_ADMIN_UID, adminDifferentPackage, poPackages, poFlags);
 
         // Setting same affiliation ids
         final Set<String> userAffiliationIds = Collections.singleton("some-affiliation-id");
@@ -3637,12 +3793,9 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         MoreAsserts.assertEquals(poPackages, dpm.getLockTaskPackages(adminDifferentPackage));
         assertTrue(dpm.isLockTaskPermitted("poPackage1"));
         assertFalse(dpm.isLockTaskPermitted("doPackage2"));
-        verify(getServices().iactivityManager).updateLockTaskPackages(
-                MANAGED_PROFILE_USER_ID, poPackages);
         // And it can set lock task features.
         dpm.setLockTaskFeatures(adminDifferentPackage, poFlags);
-        verify(getServices().iactivityManager).updateLockTaskFeatures(
-                MANAGED_PROFILE_USER_ID, poFlags);
+        verifyLockTaskState(MANAGED_PROFILE_USER_ID, poPackages, poFlags);
 
         // Unaffiliate the profile, lock task mode no longer available on the profile.
         dpm.setAffiliationIds(adminDifferentPackage, Collections.emptySet());
@@ -3653,8 +3806,38 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         verify(getServices().iactivityManager, times(2)).updateLockTaskFeatures(
                 MANAGED_PROFILE_USER_ID, DevicePolicyManager.LOCK_TASK_FEATURE_NONE);
 
+        // Verify that lock task packages were not cleared for the DO
         mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
         assertTrue(dpm.isLockTaskPermitted("doPackage1"));
+
+    }
+
+    public void testLockTaskPolicyForProfileOwner() throws Exception {
+        // Setup a PO
+        mContext.binder.callingUid = DpmMockContext.CALLER_UID;
+        setAsProfileOwner(admin1);
+        verifyLockTaskState(DpmMockContext.CALLER_USER_HANDLE);
+
+        final String[] poPackages = {"poPackage1", "poPackage2"};
+        final int poFlags = DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS
+                | DevicePolicyManager.LOCK_TASK_FEATURE_RECENTS;
+        verifyCanSetLockTask(DpmMockContext.CALLER_UID, DpmMockContext.CALLER_USER_HANDLE, admin1,
+                poPackages, poFlags);
+
+        // Set up a managed profile managed by different package (package name shouldn't matter)
+        final int MANAGED_PROFILE_USER_ID = 15;
+        final int MANAGED_PROFILE_ADMIN_UID = UserHandle.getUid(MANAGED_PROFILE_USER_ID, 20456);
+        final ComponentName adminDifferentPackage =
+                new ComponentName("another.package", "whatever.class");
+        addManagedProfile(adminDifferentPackage, MANAGED_PROFILE_ADMIN_UID, admin2);
+        verifyLockTaskState(MANAGED_PROFILE_USER_ID);
+
+        // Managed profile is unaffiliated - shouldn't be able to setLockTaskPackages.
+        mContext.binder.callingUid = MANAGED_PROFILE_ADMIN_UID;
+        final String[] mpoPackages = {"poPackage1", "poPackage2"};
+        final int mpoFlags = DevicePolicyManager.LOCK_TASK_FEATURE_NOTIFICATIONS
+                | DevicePolicyManager.LOCK_TASK_FEATURE_RECENTS;
+        verifyCanNotSetLockTask(MANAGED_PROFILE_ADMIN_UID, adminDifferentPackage, mpoPackages, mpoFlags);
     }
 
     public void testIsDeviceManaged() throws Exception {
@@ -4531,6 +4714,23 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 MockUtils.checkUserHandle(UserHandle.USER_SYSTEM));
     }
 
+    public void testOverrideApnAPIsFailWithPO() throws Exception {
+        setupProfileOwner();
+        ApnSetting apn = (new ApnSetting.Builder()).build();
+        assertExpectException(SecurityException.class, null, () ->
+                dpm.addOverrideApn(admin1, apn));
+        assertExpectException(SecurityException.class, null, () ->
+                dpm.updateOverrideApn(admin1, 0, apn));
+        assertExpectException(SecurityException.class, null, () ->
+                dpm.removeOverrideApn(admin1, 0));
+        assertExpectException(SecurityException.class, null, () ->
+                dpm.getOverrideApns(admin1));
+        assertExpectException(SecurityException.class, null, () ->
+                dpm.setOverrideApnsEnabled(admin1, false));
+        assertExpectException(SecurityException.class, null, () ->
+                dpm.isOverrideApnEnabled(admin1));
+    }
+
     private void verifyCanGetOwnerInstalledCaCerts(
             final ComponentName caller, final DpmMockContext callerContext) throws Exception {
         final String alias = "cert";
@@ -4687,6 +4887,176 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         assertAttestationFlags(ID_TYPE_SERIAL | ID_TYPE_IMEI | ID_TYPE_MEID | ID_TYPE_BASE_INFO,
                 new int[] {AttestationUtils.ID_TYPE_IMEI, AttestationUtils.ID_TYPE_SERIAL,
                     AttestationUtils.ID_TYPE_MEID});
+    }
+
+    public void testRevertDeviceOwnership_noMetadataFile() throws Exception {
+        setDeviceOwner();
+        initializeDpms();
+        assertFalse(getMockTransferMetadataManager().metadataFileExists());
+        assertTrue(dpms.isDeviceOwner(admin1, UserHandle.USER_SYSTEM));
+        assertTrue(dpms.isAdminActive(admin1, UserHandle.USER_SYSTEM));
+    }
+
+    public void testRevertDeviceOwnership_adminAndDeviceMigrated() throws Exception {
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.active_admin_migrated),
+                getDeviceOwnerPoliciesFile());
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.device_owner_migrated),
+                getDeviceOwnerFile());
+        assertDeviceOwnershipRevertedWithFakeTransferMetadata();
+    }
+
+    public void testRevertDeviceOwnership_deviceNotMigrated()
+            throws Exception {
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.active_admin_migrated),
+                getDeviceOwnerPoliciesFile());
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.device_owner_not_migrated),
+                getDeviceOwnerFile());
+        assertDeviceOwnershipRevertedWithFakeTransferMetadata();
+    }
+
+    public void testRevertDeviceOwnership_adminAndDeviceNotMigrated()
+            throws Exception {
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.active_admin_not_migrated),
+                getDeviceOwnerPoliciesFile());
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.device_owner_not_migrated),
+                getDeviceOwnerFile());
+        assertDeviceOwnershipRevertedWithFakeTransferMetadata();
+    }
+
+    public void testRevertProfileOwnership_noMetadataFile() throws Exception {
+        setupProfileOwner();
+        initializeDpms();
+        assertFalse(getMockTransferMetadataManager().metadataFileExists());
+        assertTrue(dpms.isProfileOwner(admin1, DpmMockContext.CALLER_USER_HANDLE));
+        assertTrue(dpms.isAdminActive(admin1, DpmMockContext.CALLER_USER_HANDLE));
+        UserHandle userHandle = UserHandle.of(DpmMockContext.CALLER_USER_HANDLE);
+    }
+
+    public void testRevertProfileOwnership_adminAndProfileMigrated() throws Exception {
+        getServices().addUser(DpmMockContext.CALLER_USER_HANDLE, UserInfo.FLAG_MANAGED_PROFILE,
+                UserHandle.USER_SYSTEM);
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.active_admin_migrated),
+                getProfileOwnerPoliciesFile());
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.profile_owner_migrated),
+                getProfileOwnerFile());
+        assertProfileOwnershipRevertedWithFakeTransferMetadata();
+    }
+
+    public void testRevertProfileOwnership_profileNotMigrated() throws Exception {
+        getServices().addUser(DpmMockContext.CALLER_USER_HANDLE, UserInfo.FLAG_MANAGED_PROFILE,
+                UserHandle.USER_SYSTEM);
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.active_admin_migrated),
+                getProfileOwnerPoliciesFile());
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.profile_owner_not_migrated),
+                getProfileOwnerFile());
+        assertProfileOwnershipRevertedWithFakeTransferMetadata();
+    }
+
+    public void testRevertProfileOwnership_adminAndProfileNotMigrated() throws Exception {
+        getServices().addUser(DpmMockContext.CALLER_USER_HANDLE, UserInfo.FLAG_MANAGED_PROFILE,
+                UserHandle.USER_SYSTEM);
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.active_admin_not_migrated),
+                getProfileOwnerPoliciesFile());
+        DpmTestUtils.writeInputStreamToFile(
+                getRawStream(com.android.frameworks.servicestests.R.raw.profile_owner_not_migrated),
+                getProfileOwnerFile());
+        assertProfileOwnershipRevertedWithFakeTransferMetadata();
+    }
+
+    // admin1 is the outgoing DPC, adminAnotherPakcage is the incoming one.
+    private void assertDeviceOwnershipRevertedWithFakeTransferMetadata() throws Exception {
+        writeFakeTransferMetadataFile(UserHandle.USER_SYSTEM,
+                TransferOwnershipMetadataManager.ADMIN_TYPE_DEVICE_OWNER);
+
+        final long ident = mServiceContext.binder.clearCallingIdentity();
+        setUpPackageManagerForAdmin(admin1, DpmMockContext.CALLER_SYSTEM_USER_UID);
+        setUpPackageManagerForFakeAdmin(adminAnotherPackage,
+                DpmMockContext.CALLER_SYSTEM_USER_UID, admin1);
+        // To simulate a reboot, we just reinitialize dpms and call systemReady
+        initializeDpms();
+
+        assertTrue(dpm.isDeviceOwnerApp(admin1.getPackageName()));
+        assertFalse(dpm.isDeviceOwnerApp(adminAnotherPackage.getPackageName()));
+        assertFalse(dpm.isAdminActive(adminAnotherPackage));
+        assertTrue(dpm.isAdminActive(admin1));
+        assertTrue(dpm.isDeviceOwnerAppOnCallingUser(admin1.getPackageName()));
+        assertEquals(admin1, dpm.getDeviceOwnerComponentOnCallingUser());
+
+        assertTrue(dpm.isDeviceOwnerAppOnAnyUser(admin1.getPackageName()));
+        assertEquals(admin1, dpm.getDeviceOwnerComponentOnAnyUser());
+        assertEquals(UserHandle.USER_SYSTEM, dpm.getDeviceOwnerUserId());
+        assertFalse(getMockTransferMetadataManager().metadataFileExists());
+
+        mServiceContext.binder.restoreCallingIdentity(ident);
+    }
+
+    // admin1 is the outgoing DPC, adminAnotherPakcage is the incoming one.
+    private void assertProfileOwnershipRevertedWithFakeTransferMetadata() throws Exception {
+        writeFakeTransferMetadataFile(DpmMockContext.CALLER_USER_HANDLE,
+                TransferOwnershipMetadataManager.ADMIN_TYPE_PROFILE_OWNER);
+
+        int uid = UserHandle.getUid(DpmMockContext.CALLER_USER_HANDLE,
+                DpmMockContext.CALLER_SYSTEM_USER_UID);
+        setUpPackageManagerForAdmin(admin1, uid);
+        setUpPackageManagerForFakeAdmin(adminAnotherPackage, uid, admin1);
+        // To simulate a reboot, we just reinitialize dpms and call systemReady
+        initializeDpms();
+
+        assertTrue(dpm.isProfileOwnerApp(admin1.getPackageName()));
+        assertTrue(dpm.isAdminActive(admin1));
+        assertFalse(dpm.isProfileOwnerApp(adminAnotherPackage.getPackageName()));
+        assertFalse(dpm.isAdminActive(adminAnotherPackage));
+        assertEquals(dpm.getProfileOwnerAsUser(DpmMockContext.CALLER_USER_HANDLE), admin1);
+        assertFalse(getMockTransferMetadataManager().metadataFileExists());
+    }
+
+    private void writeFakeTransferMetadataFile(int callerUserHandle, String adminType) {
+        TransferOwnershipMetadataManager metadataManager = getMockTransferMetadataManager();
+        metadataManager.deleteMetadataFile();
+
+        final TransferOwnershipMetadataManager.Metadata metadata =
+                new TransferOwnershipMetadataManager.Metadata(
+                        admin1.flattenToString(), adminAnotherPackage.flattenToString(),
+                        callerUserHandle,
+                        adminType);
+        metadataManager.saveMetadataFile(metadata);
+    }
+
+    private File getDeviceOwnerFile() {
+        return dpms.mOwners.getDeviceOwnerFile();
+    }
+
+    private File getProfileOwnerFile() {
+        return dpms.mOwners.getProfileOwnerFile(DpmMockContext.CALLER_USER_HANDLE);
+    }
+
+    private File getProfileOwnerPoliciesFile() {
+        File parentDir = dpms.mMockInjector.environmentGetUserSystemDirectory(
+                DpmMockContext.CALLER_USER_HANDLE);
+        return getPoliciesFile(parentDir);
+    }
+
+    private File getDeviceOwnerPoliciesFile() {
+        return getPoliciesFile(getServices().systemUserDataDir);
+    }
+
+    private File getPoliciesFile(File parentDir) {
+        return new File(parentDir, "device_policies.xml");
+    }
+
+    private InputStream getRawStream(@RawRes int id) {
+        return mRealTestContext.getResources().openRawResource(id);
     }
 
     private void setUserSetupCompleteForUser(boolean isUserSetupComplete, int userhandle) {

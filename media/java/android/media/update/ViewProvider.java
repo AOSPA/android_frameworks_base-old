@@ -17,8 +17,6 @@
 package android.media.update;
 
 import android.annotation.SystemApi;
-import android.graphics.Canvas;
-import android.view.KeyEvent;
 import android.view.MotionEvent;
 
 /**
@@ -39,13 +37,9 @@ public interface ViewProvider {
     // TODO Add more (all?) methods from View
     void onAttachedToWindow_impl();
     void onDetachedFromWindow_impl();
-    void onLayout_impl(boolean changed, int left, int top, int right, int bottom);
-    void draw_impl(Canvas canvas);
     CharSequence getAccessibilityClassName_impl();
     boolean onTouchEvent_impl(MotionEvent ev);
     boolean onTrackballEvent_impl(MotionEvent ev);
-    boolean onKeyDown_impl(int keyCode, KeyEvent event);
     void onFinishInflate_impl();
-    boolean dispatchKeyEvent_impl(KeyEvent event);
     void setEnabled_impl(boolean enabled);
 }

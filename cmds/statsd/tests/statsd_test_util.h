@@ -23,6 +23,9 @@ namespace android {
 namespace os {
 namespace statsd {
 
+// Create AtomMatcher proto to simply match a specific atom type.
+AtomMatcher CreateSimpleAtomMatcher(const string& name, int atomId);
+
 // Create AtomMatcher proto for acquiring wakelock.
 AtomMatcher CreateAcquireWakelockAtomMatcher();
 
@@ -81,7 +84,7 @@ FieldMatcher CreateAttributionUidDimensions(const int atomId,
 
 // Create log event for screen state changed.
 std::unique_ptr<LogEvent> CreateScreenStateChangedEvent(
-    const ScreenStateChanged::State state, uint64_t timestampNs);
+    const android::view::DisplayStateEnum state, uint64_t timestampNs);
 
 // Create log event for app moving to background.
 std::unique_ptr<LogEvent> CreateMoveToBackgroundEvent(const int uid, uint64_t timestampNs);
@@ -135,7 +138,7 @@ template <typename T>
 void sortMetricDataByDimensionsValue(const T& metricData, T* sortedMetricData) {
     std::map<HashableDimensionKey, int> dimensionIndexMap;
     for (int i = 0; i < metricData.data_size(); ++i) {
-        dimensionIndexMap.insert(std::make_pair(metricData.data(i).dimension(), i));
+        dimensionIndexMap.insert(std::make_pair(metricData.data(i).dimensions_in_what(), i));
     }
     for (const auto& itr : dimensionIndexMap) {
         *sortedMetricData->add_data() = metricData.data(itr.second);

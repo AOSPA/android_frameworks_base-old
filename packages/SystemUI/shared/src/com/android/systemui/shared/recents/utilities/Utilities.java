@@ -20,6 +20,7 @@ import android.animation.Animator;
 import android.animation.AnimatorSet;
 import android.animation.RectEvaluator;
 import android.annotation.FloatRange;
+import android.annotation.Nullable;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -28,14 +29,18 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.os.Handler;
+import android.os.Message;
 import android.os.Trace;
 import android.util.ArraySet;
 import android.util.IntProperty;
 import android.util.Property;
 import android.util.TypedValue;
+import android.view.Surface;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
+import android.view.ViewRootImpl;
 import android.view.ViewStub;
 
 import java.util.ArrayList;
@@ -291,6 +296,28 @@ public class Utilities {
     }
 
     /**
+     * @return The next frame name for the specified surface or -1 if the surface is no longer
+     *         valid.
+     */
+    public static long getNextFrameNumber(Surface s) {
+        return s != null && s.isValid()
+                ? s.getNextFrameNumber()
+                : -1;
+
+    }
+
+    /**
+     * @return The surface for the specified view.
+     */
+    public static @Nullable Surface getSurface(View v) {
+        ViewRootImpl viewRoot = v.getViewRootImpl();
+        if (viewRoot == null) {
+            return null;
+        }
+        return viewRoot.mSurface;
+    }
+
+    /**
      * Returns a lightweight dump of a rect.
      */
     public static String dumpRect(Rect r) {
@@ -298,5 +325,13 @@ public class Utilities {
             return "N:0,0-0,0";
         }
         return r.left + "," + r.top + "-" + r.right + "," + r.bottom;
+    }
+
+    /**
+     * Posts a runnable on a handler at the front of the queue ignoring any sync barriers.
+     */
+    public static void postAtFrontOfQueueAsynchronously(Handler h, Runnable r) {
+        Message msg = h.obtainMessage().setCallback(r);
+        h.sendMessageAtFrontOfQueue(msg);
     }
 }

@@ -38,6 +38,7 @@ import android.os.RemoteCallback;
 import android.os.UserHandle;
 import android.security.keymaster.KeymasterCertificateChain;
 import android.security.keystore.ParcelableKeyGenParameterSpec;
+import android.telephony.data.ApnSetting;
 
 import java.util.List;
 
@@ -226,6 +227,7 @@ interface IDevicePolicyManager {
     UserHandle createAndManageUser(in ComponentName who, in String name, in ComponentName profileOwner, in PersistableBundle adminExtras, in int flags);
     boolean removeUser(in ComponentName who, in UserHandle userHandle);
     boolean switchUser(in ComponentName who, in UserHandle userHandle);
+    boolean startUserInBackground(in ComponentName who, in UserHandle userHandle);
     boolean stopUser(in ComponentName who, in UserHandle userHandle);
     boolean logoutUser(in ComponentName who);
     List<UserHandle> getSecondaryUsers(in ComponentName who);
@@ -293,6 +295,7 @@ interface IDevicePolicyManager {
 
     void setSystemUpdatePolicy(in ComponentName who, in SystemUpdatePolicy policy);
     SystemUpdatePolicy getSystemUpdatePolicy();
+    void clearSystemUpdatePolicyFreezePeriodRecord();
 
     boolean setKeyguardDisabled(in ComponentName admin, boolean disabled);
     boolean setStatusBarDisabled(in ComponentName who, boolean disabled);
@@ -358,6 +361,8 @@ interface IDevicePolicyManager {
 
     void setBackupServiceEnabled(in ComponentName admin, boolean enabled);
     boolean isBackupServiceEnabled(in ComponentName admin);
+    void setMandatoryBackupTransport(in ComponentName admin, in ComponentName backupTransportComponent);
+    ComponentName getMandatoryBackupTransport();
 
     void setNetworkLoggingEnabled(in ComponentName admin, boolean enabled);
     boolean isNetworkLoggingEnabled(in ComponentName admin);
@@ -381,11 +386,33 @@ interface IDevicePolicyManager {
     boolean isCurrentInputMethodSetByOwner();
     StringParceledListSlice getOwnerInstalledCaCerts(in UserHandle user);
 
-    boolean clearApplicationUserData(in ComponentName admin, in String packageName, in IPackageDataObserver callback);
+    void clearApplicationUserData(in ComponentName admin, in String packageName, in IPackageDataObserver callback);
 
     void setLogoutEnabled(in ComponentName admin, boolean enabled);
     boolean isLogoutEnabled();
 
     List<String> getDisallowedSystemApps(in ComponentName admin, int userId, String provisioningAction);
+
     void transferOwnership(in ComponentName admin, in ComponentName target, in PersistableBundle bundle);
+    PersistableBundle getTransferOwnershipBundle();
+
+    void setStartUserSessionMessage(in ComponentName admin, in CharSequence startUserSessionMessage);
+    void setEndUserSessionMessage(in ComponentName admin, in CharSequence endUserSessionMessage);
+    CharSequence getStartUserSessionMessage(in ComponentName admin);
+    CharSequence getEndUserSessionMessage(in ComponentName admin);
+
+    void setPrintingEnabled(in ComponentName admin, boolean enabled);
+    boolean isPrintingEnabled();
+
+    List<String> setMeteredDataDisabled(in ComponentName admin, in List<String> packageNames);
+    List<String> getMeteredDataDisabled(in ComponentName admin);
+
+    int addOverrideApn(in ComponentName admin, in ApnSetting apnSetting);
+    boolean updateOverrideApn(in ComponentName admin, int apnId, in ApnSetting apnSetting);
+    boolean removeOverrideApn(in ComponentName admin, int apnId);
+    List<ApnSetting> getOverrideApns(in ComponentName admin);
+    void setOverrideApnsEnabled(in ComponentName admin, boolean enabled);
+    boolean isOverrideApnEnabled(in ComponentName admin);
+
+    boolean isMeteredDataDisabledForUser(in ComponentName admin, String packageName, int userId);
 }

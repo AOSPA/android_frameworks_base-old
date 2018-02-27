@@ -169,8 +169,9 @@ final class OverlayManagerServiceImpl {
         }
 
         final PackageInfo targetPackage = mPackageManager.getPackageInfo(packageName, userId);
-        updateAllOverlaysForTarget(packageName, userId, targetPackage);
-        mListener.onOverlaysChanged(packageName, userId);
+        if (updateAllOverlaysForTarget(packageName, userId, targetPackage)) {
+            mListener.onOverlaysChanged(packageName, userId);
+        }
     }
 
     void onTargetPackageChanged(@NonNull final String packageName, final int userId) {
@@ -210,7 +211,9 @@ final class OverlayManagerServiceImpl {
             Slog.d(TAG, "onTargetPackageRemoved packageName=" + packageName + " userId=" + userId);
         }
 
-        updateAllOverlaysForTarget(packageName, userId, null);
+        if (updateAllOverlaysForTarget(packageName, userId, null)) {
+            mListener.onOverlaysChanged(packageName, userId);
+        }
     }
 
     /**
@@ -280,7 +283,18 @@ final class OverlayManagerServiceImpl {
     }
 
     void onOverlayPackageRemoved(@NonNull final String packageName, final int userId) {
-        Slog.wtf(TAG, "onOverlayPackageRemoved called, but only pre-installed overlays supported");
+        try {
+            final OverlayInfo overlayInfo = mSettings.getOverlayInfo(packageName, userId);
+            if (mSettings.remove(packageName, userId)) {
+                removeIdmapIfPossible(overlayInfo);
+                if (overlayInfo.isEnabled()) {
+                    // Only trigger updates if the overlay was enabled.
+                    mListener.onOverlaysChanged(overlayInfo.targetPackageName, userId);
+                }
+            }
+        } catch (OverlayManagerSettings.BadKeyException e) {
+            Slog.e(TAG, "failed to remove overlay", e);
+        }
     }
 
     OverlayInfo getOverlayInfo(@NonNull final String packageName, final int userId) {

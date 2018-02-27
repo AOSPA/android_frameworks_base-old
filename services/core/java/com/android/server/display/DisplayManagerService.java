@@ -29,6 +29,7 @@ import com.android.internal.util.IndentingPrintWriter;
 
 import android.Manifest;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.AppOpsManager;
 import android.content.Context;
@@ -1005,11 +1006,13 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private void setBrightnessConfigurationForUserInternal(
-            @NonNull BrightnessConfiguration c, @UserIdInt int userId) {
+            @NonNull BrightnessConfiguration c, @UserIdInt int userId,
+            @Nullable String packageName) {
         final int userSerial = getUserManager().getUserSerialNumber(userId);
         synchronized (mSyncRoot) {
             try {
-                mPersistentDataStore.setBrightnessConfigurationForUser(c, userSerial);
+                mPersistentDataStore.setBrightnessConfigurationForUser(c, userSerial,
+                        packageName);
             } finally {
                 mPersistentDataStore.saveIfNeeded();
             }
@@ -1833,7 +1836,7 @@ public final class DisplayManagerService extends SystemService {
 
         @Override // Binder call
         public void setBrightnessConfigurationForUser(
-                BrightnessConfiguration c, @UserIdInt int userId) {
+                BrightnessConfiguration c, @UserIdInt int userId, String packageName) {
             mContext.enforceCallingOrSelfPermission(
                     Manifest.permission.CONFIGURE_DISPLAY_BRIGHTNESS,
                     "Permission required to change the display's brightness configuration");
@@ -1843,10 +1846,42 @@ public final class DisplayManagerService extends SystemService {
                         "Permission required to change the display brightness"
                         + " configuration of another user");
             }
-            Preconditions.checkNotNull(c);
+            if (packageName != null && !validatePackageName(getCallingUid(), packageName)) {
+                packageName = null;
+            }
             final long token = Binder.clearCallingIdentity();
             try {
-                setBrightnessConfigurationForUserInternal(c, userId);
+                setBrightnessConfigurationForUserInternal(c, userId, packageName);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public void setTemporaryBrightness(int brightness) {
+            mContext.enforceCallingOrSelfPermission(
+                    Manifest.permission.CONTROL_DISPLAY_BRIGHTNESS,
+                    "Permission required to set the display's brightness");
+            final long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mSyncRoot) {
+                    mDisplayPowerController.setTemporaryBrightness(brightness);
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public void setTemporaryAutoBrightnessAdjustment(float adjustment) {
+            mContext.enforceCallingOrSelfPermission(
+                    Manifest.permission.CONTROL_DISPLAY_BRIGHTNESS,
+                    "Permission required to set the display's auto brightness adjustment");
+            final long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mSyncRoot) {
+                    mDisplayPowerController.setTemporaryAutoBrightnessAdjustment(adjustment);
+                }
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -2007,6 +2042,15 @@ public final class DisplayManagerService extends SystemService {
         public void persistBrightnessSliderEvents() {
             synchronized (mSyncRoot) {
                 mDisplayPowerController.persistBrightnessSliderEvents();
+            }
+        }
+
+        @Override
+        public void onOverlayChanged() {
+            synchronized (mSyncRoot) {
+                for (int i = 0; i < mDisplayDevices.size(); i++) {
+                    mDisplayDevices.get(i).onOverlayChangedLocked();
+                }
             }
         }
     }

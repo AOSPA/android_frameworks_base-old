@@ -264,8 +264,8 @@ public class RippleDrawable extends LayerDrawable {
         }
 
         setRippleActive(enabled && pressed);
+        setBackgroundActive(hovered, focused, pressed);
 
-        setBackgroundActive(hovered, focused);
         return changed;
     }
 
@@ -280,13 +280,13 @@ public class RippleDrawable extends LayerDrawable {
         }
     }
 
-    private void setBackgroundActive(boolean hovered, boolean focused) {
+    private void setBackgroundActive(boolean hovered, boolean focused, boolean pressed) {
         if (mBackground == null && (hovered || focused)) {
             mBackground = new RippleBackground(this, mHotspotBounds, isBounded());
             mBackground.setup(mState.mMaxRadius, mDensity);
         }
         if (mBackground != null) {
-            mBackground.setState(focused, hovered, true);
+            mBackground.setState(focused, hovered, pressed);
         }
     }
 
@@ -878,23 +878,22 @@ public class RippleDrawable extends LayerDrawable {
 
         // Grab the color for the current state and cut the alpha channel in
         // half so that the ripple and background together yield full alpha.
-        final int color = mState.mColor.getColorForState(getState(), Color.BLACK);
-        final int halfAlpha = (Color.alpha(color) / 2) << 24;
+        int color = mState.mColor.getColorForState(getState(), Color.BLACK);
+        if (Color.alpha(color) > 128) {
+            color = (color & 0x00FFFFFF) | 0x80000000;
+        }
         final Paint p = mRipplePaint;
 
         if (mMaskColorFilter != null) {
             // The ripple timing depends on the paint's alpha value, so we need
             // to push just the alpha channel into the paint and let the filter
             // handle the full-alpha color.
-            final int fullAlphaColor = color | (0xFF << 24);
-            mMaskColorFilter.setColor(fullAlphaColor);
-
-            p.setColor(halfAlpha);
+            mMaskColorFilter.setColor(color | 0xFF000000);
+            p.setColor(color & 0xFF000000);
             p.setColorFilter(mMaskColorFilter);
             p.setShader(mMaskShader);
         } else {
-            final int halfAlphaColor = (color & 0xFFFFFF) | halfAlpha;
-            p.setColor(halfAlphaColor);
+            p.setColor(color);
             p.setColorFilter(null);
             p.setShader(null);
         }

@@ -25,6 +25,7 @@ import static android.system.OsConstants.SOCK_DGRAM;
 import static com.android.internal.util.Preconditions.checkNotNull;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
 import android.net.IIpSecService;
 import android.net.INetd;
 import android.net.IpSecAlgorithm;
@@ -33,7 +34,9 @@ import android.net.IpSecManager;
 import android.net.IpSecSpiResponse;
 import android.net.IpSecTransform;
 import android.net.IpSecTransformResponse;
+import android.net.IpSecTunnelInterfaceResponse;
 import android.net.IpSecUdpEncapResponse;
+import android.net.Network;
 import android.net.NetworkUtils;
 import android.net.TrafficStats;
 import android.net.util.NetdService;
@@ -49,6 +52,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseBooleanArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -62,7 +66,6 @@ import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import libcore.io.IoUtils;
 
@@ -83,7 +86,7 @@ public class IpSecService extends IIpSecService.Stub {
 
     private static final String NETD_SERVICE_NAME = "netd";
     private static final int[] DIRECTIONS =
-            new int[] {IpSecTransform.DIRECTION_OUT, IpSecTransform.DIRECTION_IN};
+            new int[] {IpSecManager.DIRECTION_OUT, IpSecManager.DIRECTION_IN};
 
     private static final int NETD_FETCH_TIMEOUT_MS = 5000; // ms
     private static final int MAX_PORT_BIND_ATTEMPTS = 10;
@@ -99,15 +102,16 @@ public class IpSecService extends IIpSecService.Stub {
 
     static final int FREE_PORT_MIN = 1024; // ports 1-1023 are reserved
     static final int PORT_MAX = 0xFFFF; // ports are an unsigned 16-bit integer
+    static final String TUNNEL_INTERFACE_PREFIX = "ipsec";
 
     /* Binder context for this service */
     private final Context mContext;
 
     /**
-     * The next non-repeating global ID for tracking resources between users, this service,
-     * and kernel data structures. Accessing this variable is not thread safe, so it is
-     * only read or modified within blocks synchronized on IpSecService.this. We want to
-     * avoid -1 (INVALID_RESOURCE_ID) and 0 (we probably forgot to initialize it).
+     * The next non-repeating global ID for tracking resources between users, this service, and
+     * kernel data structures. Accessing this variable is not thread safe, so it is only read or
+     * modified within blocks synchronized on IpSecService.this. We want to avoid -1
+     * (INVALID_RESOURCE_ID) and 0 (we probably forgot to initialize it).
      */
     @GuardedBy("IpSecService.this")
     private int mNextResourceId = 1;
@@ -148,7 +152,7 @@ public class IpSecService extends IIpSecService.Stub {
          * resources.
          *
          * <p>References to the IResource object may be held by other RefcountedResource objects,
-         * and as such, the kernel resources and quota may not be cleaned up.
+         * and as such, the underlying resources and quota may not be cleaned up.
          */
         void invalidate() throws RemoteException;
 
@@ -298,7 +302,12 @@ public class IpSecService extends IIpSecService.Stub {
         }
     }
 
-    /* Very simple counting class that looks much like a counting semaphore */
+    /**
+     * Very simple counting class that looks much like a counting semaphore
+     *
+     * <p>This class is not thread-safe, and expects that that users of this class will ensure
+     * synchronization and thread safety by holding the IpSecService.this instance lock.
+     */
     @VisibleForTesting
     static class ResourceTracker {
         private final int mMax;
@@ -341,27 +350,43 @@ public class IpSecService extends IIpSecService.Stub {
 
     @VisibleForTesting
     static final class UserRecord {
-        /* Type names */
-        public static final String TYPENAME_SPI = "SecurityParameterIndex";
-        public static final String TYPENAME_TRANSFORM = "IpSecTransform";
-        public static final String TYPENAME_ENCAP_SOCKET = "UdpEncapSocket";
-
         /* Maximum number of each type of resource that a single UID may possess */
+        public static final int MAX_NUM_TUNNEL_INTERFACES = 2;
         public static final int MAX_NUM_ENCAP_SOCKETS = 2;
         public static final int MAX_NUM_TRANSFORMS = 4;
         public static final int MAX_NUM_SPIS = 8;
 
+        /**
+         * Store each of the OwnedResource types in an (thinly wrapped) sparse array for indexing
+         * and explicit (user) reference management.
+         *
+         * <p>These are stored in separate arrays to improve debuggability and dump output clarity.
+         *
+         * <p>Resources are removed from this array when the user releases their explicit reference
+         * by calling one of the releaseResource() methods.
+         */
         final RefcountedResourceArray<SpiRecord> mSpiRecords =
-                new RefcountedResourceArray<>(TYPENAME_SPI);
-        final ResourceTracker mSpiQuotaTracker = new ResourceTracker(MAX_NUM_SPIS);
-
+                new RefcountedResourceArray<>(SpiRecord.class.getSimpleName());
         final RefcountedResourceArray<TransformRecord> mTransformRecords =
-                new RefcountedResourceArray<>(TYPENAME_TRANSFORM);
-        final ResourceTracker mTransformQuotaTracker = new ResourceTracker(MAX_NUM_TRANSFORMS);
-
+                new RefcountedResourceArray<>(TransformRecord.class.getSimpleName());
         final RefcountedResourceArray<EncapSocketRecord> mEncapSocketRecords =
-                new RefcountedResourceArray<>(TYPENAME_ENCAP_SOCKET);
+                new RefcountedResourceArray<>(EncapSocketRecord.class.getSimpleName());
+        final RefcountedResourceArray<TunnelInterfaceRecord> mTunnelInterfaceRecords =
+                new RefcountedResourceArray<>(TunnelInterfaceRecord.class.getSimpleName());
+
+        /**
+         * Trackers for quotas for each of the OwnedResource types.
+         *
+         * <p>These trackers are separate from the resource arrays, since they are incremented and
+         * decremented at different points in time. Specifically, quota is only returned upon final
+         * resource deallocation (after all explicit and implicit references are released). Note
+         * that it is possible that calls to releaseResource() will not return the used quota if
+         * there are other resources that depend on (are parents of) the resource being released.
+         */
+        final ResourceTracker mSpiQuotaTracker = new ResourceTracker(MAX_NUM_SPIS);
+        final ResourceTracker mTransformQuotaTracker = new ResourceTracker(MAX_NUM_TRANSFORMS);
         final ResourceTracker mSocketQuotaTracker = new ResourceTracker(MAX_NUM_ENCAP_SOCKETS);
+        final ResourceTracker mTunnelQuotaTracker = new ResourceTracker(MAX_NUM_TUNNEL_INTERFACES);
 
         void removeSpiRecord(int resourceId) {
             mSpiRecords.remove(resourceId);
@@ -369,6 +394,10 @@ public class IpSecService extends IIpSecService.Stub {
 
         void removeTransformRecord(int resourceId) {
             mTransformRecords.remove(resourceId);
+        }
+
+        void removeTunnelInterfaceRecord(int resourceId) {
+            mTunnelInterfaceRecords.remove(resourceId);
         }
 
         void removeEncapSocketRecord(int resourceId) {
@@ -395,11 +424,15 @@ public class IpSecService extends IIpSecService.Stub {
         }
     }
 
+    /**
+     * This class is not thread-safe, and expects that that users of this class will ensure
+     * synchronization and thread safety by holding the IpSecService.this instance lock.
+     */
     @VisibleForTesting
     static final class UserResourceTracker {
         private final SparseArray<UserRecord> mUserRecords = new SparseArray<>();
 
-        /** Never-fail getter that populates the list of UIDs as-needed */
+        /** Lazy-initialization/getter that populates or retrieves the UserRecord as needed */
         public UserRecord getUserRecord(int uid) {
             checkCallerUid(uid);
 
@@ -428,18 +461,20 @@ public class IpSecService extends IIpSecService.Stub {
     @VisibleForTesting final UserResourceTracker mUserResourceTracker = new UserResourceTracker();
 
     /**
-     * The KernelResourceRecord class provides a facility to cleanly and reliably track system
+     * The OwnedResourceRecord class provides a facility to cleanly and reliably track system
      * resources. It relies on a provided resourceId that should uniquely identify the kernel
      * resource. To use this class, the user should implement the invalidate() and
      * freeUnderlyingResources() methods that are responsible for cleaning up IpSecService resource
-     * tracking arrays and kernel resources, respectively
+     * tracking arrays and kernel resources, respectively.
+     *
+     * <p>This class associates kernel resources with the UID that owns and controls them.
      */
-    private abstract class KernelResourceRecord implements IResource {
+    private abstract class OwnedResourceRecord implements IResource {
         final int pid;
         final int uid;
         protected final int mResourceId;
 
-        KernelResourceRecord(int resourceId) {
+        OwnedResourceRecord(int resourceId) {
             super();
             if (resourceId == INVALID_RESOURCE_ID) {
                 throw new IllegalArgumentException("Resource ID must not be INVALID_RESOURCE_ID");
@@ -479,8 +514,6 @@ public class IpSecService extends IIpSecService.Stub {
         }
     };
 
-    // TODO: Move this to right after RefcountedResource. With this here, Gerrit was showing many
-    // more things as changed.
     /**
      * Thin wrapper over SparseArray to ensure resources exist, and simplify generic typing.
      *
@@ -534,46 +567,56 @@ public class IpSecService extends IIpSecService.Stub {
         }
     }
 
-    private final class TransformRecord extends KernelResourceRecord {
+    /**
+     * Tracks an SA in the kernel, and manages cleanup paths. Once a TransformRecord is
+     * created, the SpiRecord that originally tracked the SAs will reliquish the
+     * responsibility of freeing the underlying SA to this class via the mOwnedByTransform flag.
+     */
+    private final class TransformRecord extends OwnedResourceRecord {
         private final IpSecConfig mConfig;
-        private final SpiRecord[] mSpis;
+        private final SpiRecord mSpi;
         private final EncapSocketRecord mSocket;
 
         TransformRecord(
-                int resourceId, IpSecConfig config, SpiRecord[] spis, EncapSocketRecord socket) {
+                int resourceId, IpSecConfig config, SpiRecord spi, EncapSocketRecord socket) {
             super(resourceId);
             mConfig = config;
-            mSpis = spis;
+            mSpi = spi;
             mSocket = socket;
+
+            spi.setOwnedByTransform();
         }
 
         public IpSecConfig getConfig() {
             return mConfig;
         }
 
-        public SpiRecord getSpiRecord(int direction) {
-            return mSpis[direction];
+        public SpiRecord getSpiRecord() {
+            return mSpi;
+        }
+
+        public EncapSocketRecord getSocketRecord() {
+            return mSocket;
         }
 
         /** always guarded by IpSecService#this */
         @Override
         public void freeUnderlyingResources() {
-            for (int direction : DIRECTIONS) {
-                int spi = mSpis[direction].getSpi();
-                try {
-                    mSrvConfig
-                            .getNetdInstance()
-                            .ipSecDeleteSecurityAssociation(
-                                    mResourceId,
-                                    direction,
-                                    mConfig.getLocalAddress(),
-                                    mConfig.getRemoteAddress(),
-                                    spi);
-                } catch (ServiceSpecificException e) {
-                    // FIXME: get the error code and throw is at an IOException from Errno Exception
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Failed to delete SA with ID: " + mResourceId);
-                }
+            int spi = mSpi.getSpi();
+            try {
+                mSrvConfig
+                        .getNetdInstance()
+                        .ipSecDeleteSecurityAssociation(
+                                mResourceId,
+                                mConfig.getSourceAddress(),
+                                mConfig.getDestinationAddress(),
+                                spi,
+                                mConfig.getMarkValue(),
+                                mConfig.getMarkMask());
+            } catch (ServiceSpecificException e) {
+                // FIXME: get the error code and throw is at an IOException from Errno Exception
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to delete SA with ID: " + mResourceId);
             }
 
             getResourceTracker().give();
@@ -597,10 +640,8 @@ public class IpSecService extends IIpSecService.Stub {
                     .append(super.toString())
                     .append(", mSocket=")
                     .append(mSocket)
-                    .append(", mSpis[OUT].mResourceId=")
-                    .append(mSpis[IpSecTransform.DIRECTION_OUT].mResourceId)
-                    .append(", mSpis[IN].mResourceId=")
-                    .append(mSpis[IpSecTransform.DIRECTION_IN].mResourceId)
+                    .append(", mSpi.mResourceId=")
+                    .append(mSpi.mResourceId)
                     .append(", mConfig=")
                     .append(mConfig)
                     .append("}");
@@ -608,45 +649,33 @@ public class IpSecService extends IIpSecService.Stub {
         }
     }
 
-    private final class SpiRecord extends KernelResourceRecord {
-        private final int mDirection;
-        private final String mLocalAddress;
-        private final String mRemoteAddress;
+    /**
+     * Tracks a single SA in the kernel, and manages cleanup paths. Once used in a Transform, the
+     * responsibility for cleaning up underlying resources will be passed to the TransformRecord
+     * object
+     */
+    private final class SpiRecord extends OwnedResourceRecord {
+        private final String mSourceAddress;
+        private final String mDestinationAddress;
         private int mSpi;
 
         private boolean mOwnedByTransform = false;
 
-        SpiRecord(
-                int resourceId,
-                int direction,
-                String localAddress,
-                String remoteAddress,
-                int spi) {
+        SpiRecord(int resourceId, String sourceAddress, String destinationAddress, int spi) {
             super(resourceId);
-            mDirection = direction;
-            mLocalAddress = localAddress;
-            mRemoteAddress = remoteAddress;
+            mSourceAddress = sourceAddress;
+            mDestinationAddress = destinationAddress;
             mSpi = spi;
         }
 
         /** always guarded by IpSecService#this */
         @Override
         public void freeUnderlyingResources() {
-            if (mOwnedByTransform) {
-                Log.d(TAG, "Cannot release Spi " + mSpi + ": Currently locked by a Transform");
-                // Because SPIs are "handed off" to transform, objects, they should never be
-                // freed from the SpiRecord once used in a transform. (They refer to the same SA,
-                // thus ownership and responsibility for freeing these resources passes to the
-                // Transform object). Thus, we should let the user free them without penalty once
-                // they are applied in a Transform object.
-                return;
-            }
-
             try {
                 mSrvConfig
                         .getNetdInstance()
                         .ipSecDeleteSecurityAssociation(
-                                mResourceId, mDirection, mLocalAddress, mRemoteAddress, mSpi);
+                                mResourceId, mSourceAddress, mDestinationAddress, mSpi, 0, 0);
             } catch (ServiceSpecificException e) {
                 // FIXME: get the error code and throw is at an IOException from Errno Exception
             } catch (RemoteException e) {
@@ -662,6 +691,10 @@ public class IpSecService extends IIpSecService.Stub {
             return mSpi;
         }
 
+        public String getDestinationAddress() {
+            return mDestinationAddress;
+        }
+
         public void setOwnedByTransform() {
             if (mOwnedByTransform) {
                 // Programming error
@@ -669,6 +702,10 @@ public class IpSecService extends IIpSecService.Stub {
             }
 
             mOwnedByTransform = true;
+        }
+
+        public boolean getOwnedByTransform() {
+            return mOwnedByTransform;
         }
 
         @Override
@@ -689,12 +726,10 @@ public class IpSecService extends IIpSecService.Stub {
                     .append(super.toString())
                     .append(", mSpi=")
                     .append(mSpi)
-                    .append(", mDirection=")
-                    .append(mDirection)
-                    .append(", mLocalAddress=")
-                    .append(mLocalAddress)
-                    .append(", mRemoteAddress=")
-                    .append(mRemoteAddress)
+                    .append(", mSourceAddress=")
+                    .append(mSourceAddress)
+                    .append(", mDestinationAddress=")
+                    .append(mDestinationAddress)
                     .append(", mOwnedByTransform=")
                     .append(mOwnedByTransform)
                     .append("}");
@@ -702,7 +737,173 @@ public class IpSecService extends IIpSecService.Stub {
         }
     }
 
-    private final class EncapSocketRecord extends KernelResourceRecord {
+    // These values have been reserved in ConnectivityService
+    @VisibleForTesting static final int TUN_INTF_NETID_START = 0xFC00;
+
+    @VisibleForTesting static final int TUN_INTF_NETID_RANGE = 0x0400;
+
+    private final SparseBooleanArray mTunnelNetIds = new SparseBooleanArray();
+    private int mNextTunnelNetIdIndex = 0;
+
+    /**
+     * Reserves a netId within the range of netIds allocated for IPsec tunnel interfaces
+     *
+     * <p>This method should only be called from Binder threads. Do not call this from within the
+     * system server as it will crash the system on failure.
+     *
+     * @return an integer key within the netId range, if successful
+     * @throws IllegalStateException if unsuccessful (all netId are currently reserved)
+     */
+    @VisibleForTesting
+    int reserveNetId() {
+        synchronized (mTunnelNetIds) {
+            for (int i = 0; i < TUN_INTF_NETID_RANGE; i++) {
+                int index = mNextTunnelNetIdIndex;
+                int netId = index + TUN_INTF_NETID_START;
+                if (++mNextTunnelNetIdIndex >= TUN_INTF_NETID_RANGE) mNextTunnelNetIdIndex = 0;
+                if (!mTunnelNetIds.get(netId)) {
+                    mTunnelNetIds.put(netId, true);
+                    return netId;
+                }
+            }
+        }
+        throw new IllegalStateException("No free netIds to allocate");
+    }
+
+    @VisibleForTesting
+    void releaseNetId(int netId) {
+        synchronized (mTunnelNetIds) {
+            mTunnelNetIds.delete(netId);
+        }
+    }
+
+    private final class TunnelInterfaceRecord extends OwnedResourceRecord {
+        private final String mInterfaceName;
+        private final Network mUnderlyingNetwork;
+
+        // outer addresses
+        private final String mLocalAddress;
+        private final String mRemoteAddress;
+
+        private final int mIkey;
+        private final int mOkey;
+
+        TunnelInterfaceRecord(
+                int resourceId,
+                String interfaceName,
+                Network underlyingNetwork,
+                String localAddr,
+                String remoteAddr,
+                int ikey,
+                int okey) {
+            super(resourceId);
+
+            mInterfaceName = interfaceName;
+            mUnderlyingNetwork = underlyingNetwork;
+            mLocalAddress = localAddr;
+            mRemoteAddress = remoteAddr;
+            mIkey = ikey;
+            mOkey = okey;
+        }
+
+        /** always guarded by IpSecService#this */
+        @Override
+        public void freeUnderlyingResources() {
+            // Calls to netd
+            //       Teardown VTI
+            //       Delete global policies
+            try {
+                mSrvConfig.getNetdInstance().removeVirtualTunnelInterface(mInterfaceName);
+
+                for (int direction : DIRECTIONS) {
+                    int mark = (direction == IpSecManager.DIRECTION_IN) ? mIkey : mOkey;
+                    mSrvConfig
+                            .getNetdInstance()
+                            .ipSecDeleteSecurityPolicy(
+                                    0, direction, mLocalAddress, mRemoteAddress, mark, 0xffffffff);
+                }
+            } catch (ServiceSpecificException e) {
+                // FIXME: get the error code and throw is at an IOException from Errno Exception
+            } catch (RemoteException e) {
+                Log.e(
+                        TAG,
+                        "Failed to delete VTI with interface name: "
+                                + mInterfaceName
+                                + " and id: "
+                                + mResourceId);
+            }
+
+            getResourceTracker().give();
+            releaseNetId(mIkey);
+            releaseNetId(mOkey);
+        }
+
+        public String getInterfaceName() {
+            return mInterfaceName;
+        }
+
+        public Network getUnderlyingNetwork() {
+            return mUnderlyingNetwork;
+        }
+
+        /** Returns the local, outer address for the tunnelInterface */
+        public String getLocalAddress() {
+            return mLocalAddress;
+        }
+
+        /** Returns the remote, outer address for the tunnelInterface */
+        public String getRemoteAddress() {
+            return mRemoteAddress;
+        }
+
+        public int getIkey() {
+            return mIkey;
+        }
+
+        public int getOkey() {
+            return mOkey;
+        }
+
+        @Override
+        protected ResourceTracker getResourceTracker() {
+            return getUserRecord().mTunnelQuotaTracker;
+        }
+
+        @Override
+        public void invalidate() {
+            getUserRecord().removeTunnelInterfaceRecord(mResourceId);
+        }
+
+        @Override
+        public String toString() {
+            return new StringBuilder()
+                    .append("{super=")
+                    .append(super.toString())
+                    .append(", mInterfaceName=")
+                    .append(mInterfaceName)
+                    .append(", mUnderlyingNetwork=")
+                    .append(mUnderlyingNetwork)
+                    .append(", mLocalAddress=")
+                    .append(mLocalAddress)
+                    .append(", mRemoteAddress=")
+                    .append(mRemoteAddress)
+                    .append(", mIkey=")
+                    .append(mIkey)
+                    .append(", mOkey=")
+                    .append(mOkey)
+                    .append("}")
+                    .toString();
+        }
+    }
+
+    /**
+     * Tracks a UDP encap socket, and manages cleanup paths
+     *
+     * <p>While this class does not manage non-kernel resources, race conditions around socket
+     * binding require that the service creates the encap socket, binds it and applies the socket
+     * policy before handing it to a user.
+     */
+    private final class EncapSocketRecord extends OwnedResourceRecord {
         private FileDescriptor mSocket;
         private final int mPort;
 
@@ -772,14 +973,17 @@ public class IpSecService extends IIpSecService.Stub {
     /** @hide */
     @VisibleForTesting
     public IpSecService(Context context, IpSecServiceConfiguration config) {
-        this(context, config, (fd, uid) ->  {
-            try{
-                TrafficStats.setThreadStatsUid(uid);
-                TrafficStats.tagFileDescriptor(fd);
-            } finally {
-                TrafficStats.clearThreadStatsUid();
-            }
-        });
+        this(
+                context,
+                config,
+                (fd, uid) -> {
+                    try {
+                        TrafficStats.setThreadStatsUid(uid);
+                        TrafficStats.tagFileDescriptor(fd);
+                    } finally {
+                        TrafficStats.clearThreadStatsUid();
+                    }
+                });
     }
 
     /** @hide */
@@ -845,8 +1049,8 @@ public class IpSecService extends IIpSecService.Stub {
      */
     private static void checkDirection(int direction) {
         switch (direction) {
-            case IpSecTransform.DIRECTION_OUT:
-            case IpSecTransform.DIRECTION_IN:
+            case IpSecManager.DIRECTION_OUT:
+            case IpSecManager.DIRECTION_IN:
                 return;
         }
         throw new IllegalArgumentException("Invalid Direction: " + direction);
@@ -855,10 +1059,8 @@ public class IpSecService extends IIpSecService.Stub {
     /** Get a new SPI and maintain the reservation in the system server */
     @Override
     public synchronized IpSecSpiResponse allocateSecurityParameterIndex(
-            int direction, String remoteAddress, int requestedSpi, IBinder binder)
-            throws RemoteException {
-        checkDirection(direction);
-        checkInetAddress(remoteAddress);
+            String destinationAddress, int requestedSpi, IBinder binder) throws RemoteException {
+        checkInetAddress(destinationAddress);
         /* requestedSpi can be anything in the int range, so no check is needed. */
         checkNotNull(binder, "Null Binder passed to allocateSecurityParameterIndex");
 
@@ -866,28 +1068,21 @@ public class IpSecService extends IIpSecService.Stub {
         final int resourceId = mNextResourceId++;
 
         int spi = IpSecManager.INVALID_SECURITY_PARAMETER_INDEX;
-        String localAddress = "";
-
         try {
             if (!userRecord.mSpiQuotaTracker.isAvailable()) {
                 return new IpSecSpiResponse(
                         IpSecManager.Status.RESOURCE_UNAVAILABLE, INVALID_RESOURCE_ID, spi);
             }
+
             spi =
                     mSrvConfig
                             .getNetdInstance()
-                            .ipSecAllocateSpi(
-                                    resourceId,
-                                    direction,
-                                    localAddress,
-                                    remoteAddress,
-                                    requestedSpi);
+                            .ipSecAllocateSpi(resourceId, "", destinationAddress, requestedSpi);
             Log.d(TAG, "Allocated SPI " + spi);
             userRecord.mSpiRecords.put(
                     resourceId,
                     new RefcountedResource<SpiRecord>(
-                            new SpiRecord(resourceId, direction, localAddress, remoteAddress, spi),
-                            binder));
+                            new SpiRecord(resourceId, "", destinationAddress, spi), binder));
         } catch (ServiceSpecificException e) {
             // TODO: Add appropriate checks when other ServiceSpecificException types are supported
             return new IpSecSpiResponse(
@@ -1031,28 +1226,152 @@ public class IpSecService extends IIpSecService.Stub {
         releaseResource(userRecord.mEncapSocketRecords, resourceId);
     }
 
-    @VisibleForTesting
-    void validateAlgorithms(IpSecConfig config, int direction) throws IllegalArgumentException {
-            IpSecAlgorithm auth = config.getAuthentication(direction);
-            IpSecAlgorithm crypt = config.getEncryption(direction);
-            IpSecAlgorithm aead = config.getAuthenticatedEncryption(direction);
+    /**
+     * Create a tunnel interface for use in IPSec tunnel mode. The system server will cache the
+     * tunnel interface and a record of its owner so that it can and must be freed when no longer
+     * needed.
+     */
+    @Override
+    public synchronized IpSecTunnelInterfaceResponse createTunnelInterface(
+            String localAddr, String remoteAddr, Network underlyingNetwork, IBinder binder) {
+        checkNotNull(binder, "Null Binder passed to createTunnelInterface");
+        checkNotNull(underlyingNetwork, "No underlying network was specified");
+        checkInetAddress(localAddr);
+        checkInetAddress(remoteAddr);
 
-            // Validate the algorithm set
-            Preconditions.checkArgument(
-                    aead != null || crypt != null || auth != null,
-                    "No Encryption or Authentication algorithms specified");
-            Preconditions.checkArgument(
-                    auth == null || auth.isAuthentication(),
-                    "Unsupported algorithm for Authentication");
-            Preconditions.checkArgument(
+        // TODO: Check that underlying network exists, and IP addresses not assigned to a different
+        //       network (b/72316676).
+
+        UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
+        if (!userRecord.mTunnelQuotaTracker.isAvailable()) {
+            return new IpSecTunnelInterfaceResponse(IpSecManager.Status.RESOURCE_UNAVAILABLE);
+        }
+
+        final int resourceId = mNextResourceId++;
+        final int ikey = reserveNetId();
+        final int okey = reserveNetId();
+        String intfName = String.format("%s%d", TUNNEL_INTERFACE_PREFIX, resourceId);
+
+        try {
+            // Calls to netd:
+            //       Create VTI
+            //       Add inbound/outbound global policies
+            //              (use reqid = 0)
+            mSrvConfig
+                    .getNetdInstance()
+                    .addVirtualTunnelInterface(intfName, localAddr, remoteAddr, ikey, okey);
+
+            for (int direction : DIRECTIONS) {
+                int mark = (direction == IpSecManager.DIRECTION_OUT) ? okey : ikey;
+
+                mSrvConfig
+                        .getNetdInstance()
+                        .ipSecAddSecurityPolicy(
+                                0, // Use 0 for reqId
+                                direction,
+                                "",
+                                "",
+                                0,
+                                mark,
+                                0xffffffff);
+            }
+
+            userRecord.mTunnelInterfaceRecords.put(
+                    resourceId,
+                    new RefcountedResource<TunnelInterfaceRecord>(
+                            new TunnelInterfaceRecord(
+                                    resourceId,
+                                    intfName,
+                                    underlyingNetwork,
+                                    localAddr,
+                                    remoteAddr,
+                                    ikey,
+                                    okey),
+                            binder));
+            return new IpSecTunnelInterfaceResponse(IpSecManager.Status.OK, resourceId, intfName);
+        } catch (RemoteException e) {
+            // Release keys if we got an error.
+            releaseNetId(ikey);
+            releaseNetId(okey);
+            throw e.rethrowFromSystemServer();
+        } catch (ServiceSpecificException e) {
+            // FIXME: get the error code and throw is at an IOException from Errno Exception
+        }
+
+        // If we make it to here, then something has gone wrong and we couldn't create a VTI.
+        // Release the keys that we reserved, and return an error status.
+        releaseNetId(ikey);
+        releaseNetId(okey);
+        return new IpSecTunnelInterfaceResponse(IpSecManager.Status.RESOURCE_UNAVAILABLE);
+    }
+
+    /**
+     * Adds a new local address to the tunnel interface. This allows packets to be sent and received
+     * from multiple local IP addresses over the same tunnel.
+     */
+    @Override
+    public synchronized void addAddressToTunnelInterface(int tunnelResourceId, String localAddr) {
+        UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
+
+        // Get tunnelInterface record; if no such interface is found, will throw
+        // IllegalArgumentException
+        TunnelInterfaceRecord tunnelInterfaceInfo =
+                userRecord.mTunnelInterfaceRecords.getResourceOrThrow(tunnelResourceId);
+
+        // TODO: Add calls to netd:
+        //       Add address to TunnelInterface
+    }
+
+    /**
+     * Remove a new local address from the tunnel interface. After removal, the address will no
+     * longer be available to send from, or receive on.
+     */
+    @Override
+    public synchronized void removeAddressFromTunnelInterface(
+            int tunnelResourceId, String localAddr) {
+        UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
+
+        // Get tunnelInterface record; if no such interface is found, will throw
+        // IllegalArgumentException
+        TunnelInterfaceRecord tunnelInterfaceInfo =
+                userRecord.mTunnelInterfaceRecords.getResourceOrThrow(tunnelResourceId);
+
+        // TODO: Add calls to netd:
+        //       Remove address from TunnelInterface
+    }
+
+    /**
+     * Delete a TunnelInterface that has been been allocated by and registered with the system
+     * server
+     */
+    @Override
+    public synchronized void deleteTunnelInterface(int resourceId) throws RemoteException {
+        UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
+        releaseResource(userRecord.mTunnelInterfaceRecords, resourceId);
+    }
+
+    @VisibleForTesting
+    void validateAlgorithms(IpSecConfig config) throws IllegalArgumentException {
+        IpSecAlgorithm auth = config.getAuthentication();
+        IpSecAlgorithm crypt = config.getEncryption();
+        IpSecAlgorithm aead = config.getAuthenticatedEncryption();
+
+        // Validate the algorithm set
+        Preconditions.checkArgument(
+                aead != null || crypt != null || auth != null,
+                "No Encryption or Authentication algorithms specified");
+        Preconditions.checkArgument(
+                auth == null || auth.isAuthentication(),
+                "Unsupported algorithm for Authentication");
+        Preconditions.checkArgument(
                 crypt == null || crypt.isEncryption(), "Unsupported algorithm for Encryption");
-            Preconditions.checkArgument(
-                    aead == null || aead.isAead(),
-                    "Unsupported algorithm for Authenticated Encryption");
-            Preconditions.checkArgument(
-                    aead == null || (auth == null && crypt == null),
-                    "Authenticated Encryption is mutually exclusive with other Authentication "
-                                    + "or Encryption algorithms");
+        Preconditions.checkArgument(
+                aead == null || aead.isAead(),
+                "Unsupported algorithm for Authenticated Encryption");
+        Preconditions.checkArgument(
+                aead == null || (auth == null && crypt == null),
+                "Authenticated Encryption is mutually exclusive with other Authentication "
+                        + "or Encryption algorithms");
     }
 
     /**
@@ -1061,29 +1380,6 @@ public class IpSecService extends IIpSecService.Stub {
      */
     private void checkIpSecConfig(IpSecConfig config) {
         UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
-
-        if (config.getLocalAddress() == null) {
-            throw new IllegalArgumentException("Invalid null Local InetAddress");
-        }
-
-        if (config.getRemoteAddress() == null) {
-            throw new IllegalArgumentException("Invalid null Remote InetAddress");
-        }
-
-        switch (config.getMode()) {
-            case IpSecTransform.MODE_TRANSPORT:
-                if (!config.getLocalAddress().isEmpty()) {
-                    throw new IllegalArgumentException("Non-empty Local Address");
-                }
-                // Must be valid, and not a wildcard
-                checkInetAddress(config.getRemoteAddress());
-                break;
-            case IpSecTransform.MODE_TUNNEL:
-                break;
-            default:
-                throw new IllegalArgumentException(
-                        "Invalid IpSecTransform.mode: " + config.getMode());
-        }
 
         switch (config.getEncapType()) {
             case IpSecTransform.ENCAP_NONE:
@@ -1103,97 +1399,129 @@ public class IpSecService extends IIpSecService.Stub {
                 throw new IllegalArgumentException("Invalid Encap Type: " + config.getEncapType());
         }
 
-        for (int direction : DIRECTIONS) {
-            validateAlgorithms(config, direction);
+        validateAlgorithms(config);
 
-            // Retrieve SPI record; will throw IllegalArgumentException if not found
-            userRecord.mSpiRecords.getResourceOrThrow(config.getSpiResourceId(direction));
+        // Retrieve SPI record; will throw IllegalArgumentException if not found
+        SpiRecord s = userRecord.mSpiRecords.getResourceOrThrow(config.getSpiResourceId());
+
+        // Check to ensure that SPI has not already been used.
+        if (s.getOwnedByTransform()) {
+            throw new IllegalStateException("SPI already in use; cannot be used in new Transforms");
+        }
+
+        // If no remote address is supplied, then use one from the SPI.
+        if (TextUtils.isEmpty(config.getDestinationAddress())) {
+            config.setDestinationAddress(s.getDestinationAddress());
+        }
+
+        // All remote addresses must match
+        if (!config.getDestinationAddress().equals(s.getDestinationAddress())) {
+            throw new IllegalArgumentException("Mismatched remote addresseses.");
+        }
+
+        // This check is technically redundant due to the chain of custody between the SPI and
+        // the IpSecConfig, but in the future if the dest is allowed to be set explicitly in
+        // the transform, this will prevent us from messing up.
+        checkInetAddress(config.getDestinationAddress());
+
+        // Require a valid source address for all transforms.
+        checkInetAddress(config.getSourceAddress());
+
+        switch (config.getMode()) {
+            case IpSecTransform.MODE_TRANSPORT:
+            case IpSecTransform.MODE_TUNNEL:
+                break;
+            default:
+                throw new IllegalArgumentException(
+                        "Invalid IpSecTransform.mode: " + config.getMode());
         }
     }
 
-    /**
-     * Create a transport mode transform, which represent two security associations (one in each
-     * direction) in the kernel. The transform will be cached by the system server and must be freed
-     * when no longer needed. It is possible to free one, deleting the SA from underneath sockets
-     * that are using it, which will result in all of those sockets becoming unable to send or
-     * receive data.
-     */
-    @Override
-    public synchronized IpSecTransformResponse createTransportModeTransform(
-            IpSecConfig c, IBinder binder) throws RemoteException {
-        checkIpSecConfig(c);
-        checkNotNull(binder, "Null Binder passed to createTransportModeTransform");
-        final int resourceId = mNextResourceId++;
+    private void createOrUpdateTransform(
+            IpSecConfig c, int resourceId, SpiRecord spiRecord, EncapSocketRecord socketRecord)
+            throws RemoteException {
 
-        UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
-
-        // Avoid resizing by creating a dependency array of min-size 3 (1 UDP encap + 2 SPIs)
-        List<RefcountedResource> dependencies = new ArrayList<>(3);
-
-        if (!userRecord.mTransformQuotaTracker.isAvailable()) {
-            return new IpSecTransformResponse(IpSecManager.Status.RESOURCE_UNAVAILABLE);
-        }
-        SpiRecord[] spis = new SpiRecord[DIRECTIONS.length];
-
-        int encapType, encapLocalPort = 0, encapRemotePort = 0;
-        EncapSocketRecord socketRecord = null;
-        encapType = c.getEncapType();
+        int encapType = c.getEncapType(), encapLocalPort = 0, encapRemotePort = 0;
         if (encapType != IpSecTransform.ENCAP_NONE) {
-            RefcountedResource<EncapSocketRecord> refcountedSocketRecord =
-                    userRecord.mEncapSocketRecords.getRefcountedResourceOrThrow(
-                            c.getEncapSocketResourceId());
-            dependencies.add(refcountedSocketRecord);
-
-            socketRecord = refcountedSocketRecord.getResource();
             encapLocalPort = socketRecord.getPort();
             encapRemotePort = c.getEncapRemotePort();
         }
 
-        for (int direction : DIRECTIONS) {
-            IpSecAlgorithm auth = c.getAuthentication(direction);
-            IpSecAlgorithm crypt = c.getEncryption(direction);
-            IpSecAlgorithm authCrypt = c.getAuthenticatedEncryption(direction);
+        IpSecAlgorithm auth = c.getAuthentication();
+        IpSecAlgorithm crypt = c.getEncryption();
+        IpSecAlgorithm authCrypt = c.getAuthenticatedEncryption();
 
-            RefcountedResource<SpiRecord> refcountedSpiRecord =
-                    userRecord.mSpiRecords.getRefcountedResourceOrThrow(
-                            c.getSpiResourceId(direction));
-            dependencies.add(refcountedSpiRecord);
+        mSrvConfig
+                .getNetdInstance()
+                .ipSecAddSecurityAssociation(
+                        resourceId,
+                        c.getMode(),
+                        c.getSourceAddress(),
+                        c.getDestinationAddress(),
+                        (c.getNetwork() != null) ? c.getNetwork().netId : 0,
+                        spiRecord.getSpi(),
+                        c.getMarkValue(),
+                        c.getMarkMask(),
+                        (auth != null) ? auth.getName() : "",
+                        (auth != null) ? auth.getKey() : new byte[] {},
+                        (auth != null) ? auth.getTruncationLengthBits() : 0,
+                        (crypt != null) ? crypt.getName() : "",
+                        (crypt != null) ? crypt.getKey() : new byte[] {},
+                        (crypt != null) ? crypt.getTruncationLengthBits() : 0,
+                        (authCrypt != null) ? authCrypt.getName() : "",
+                        (authCrypt != null) ? authCrypt.getKey() : new byte[] {},
+                        (authCrypt != null) ? authCrypt.getTruncationLengthBits() : 0,
+                        encapType,
+                        encapLocalPort,
+                        encapRemotePort);
+    }
 
-            spis[direction] = refcountedSpiRecord.getResource();
-            int spi = spis[direction].getSpi();
-            try {
-                mSrvConfig
-                        .getNetdInstance()
-                        .ipSecAddSecurityAssociation(
-                                resourceId,
-                                c.getMode(),
-                                direction,
-                                c.getLocalAddress(),
-                                c.getRemoteAddress(),
-                                (c.getNetwork() != null) ? c.getNetwork().getNetworkHandle() : 0,
-                                spi,
-                                (auth != null) ? auth.getName() : "",
-                                (auth != null) ? auth.getKey() : new byte[] {},
-                                (auth != null) ? auth.getTruncationLengthBits() : 0,
-                                (crypt != null) ? crypt.getName() : "",
-                                (crypt != null) ? crypt.getKey() : new byte[] {},
-                                (crypt != null) ? crypt.getTruncationLengthBits() : 0,
-                                (authCrypt != null) ? authCrypt.getName() : "",
-                                (authCrypt != null) ? authCrypt.getKey() : new byte[] {},
-                                (authCrypt != null) ? authCrypt.getTruncationLengthBits() : 0,
-                                encapType,
-                                encapLocalPort,
-                                encapRemotePort);
-            } catch (ServiceSpecificException e) {
-                // FIXME: get the error code and throw is at an IOException from Errno Exception
-                return new IpSecTransformResponse(IpSecManager.Status.RESOURCE_UNAVAILABLE);
-            }
+    /**
+     * Create a IPsec transform, which represents a single security association in the kernel. The
+     * transform will be cached by the system server and must be freed when no longer needed. It is
+     * possible to free one, deleting the SA from underneath sockets that are using it, which will
+     * result in all of those sockets becoming unable to send or receive data.
+     */
+    @Override
+    public synchronized IpSecTransformResponse createTransform(IpSecConfig c, IBinder binder)
+            throws RemoteException {
+        checkIpSecConfig(c);
+        checkNotNull(binder, "Null Binder passed to createTransform");
+        final int resourceId = mNextResourceId++;
+
+        UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
+        List<RefcountedResource> dependencies = new ArrayList<>();
+
+        if (!userRecord.mTransformQuotaTracker.isAvailable()) {
+            return new IpSecTransformResponse(IpSecManager.Status.RESOURCE_UNAVAILABLE);
         }
-        // Both SAs were created successfully, time to construct a record and lock it away
+
+        EncapSocketRecord socketRecord = null;
+        if (c.getEncapType() != IpSecTransform.ENCAP_NONE) {
+            RefcountedResource<EncapSocketRecord> refcountedSocketRecord =
+                    userRecord.mEncapSocketRecords.getRefcountedResourceOrThrow(
+                            c.getEncapSocketResourceId());
+            dependencies.add(refcountedSocketRecord);
+            socketRecord = refcountedSocketRecord.getResource();
+        }
+
+        RefcountedResource<SpiRecord> refcountedSpiRecord =
+                userRecord.mSpiRecords.getRefcountedResourceOrThrow(c.getSpiResourceId());
+        dependencies.add(refcountedSpiRecord);
+        SpiRecord spiRecord = refcountedSpiRecord.getResource();
+
+        try {
+            createOrUpdateTransform(c, resourceId, spiRecord, socketRecord);
+        } catch (ServiceSpecificException e) {
+            // FIXME: get the error code and throw is at an IOException from Errno Exception
+            return new IpSecTransformResponse(IpSecManager.Status.RESOURCE_UNAVAILABLE);
+        }
+
+        // SA was created successfully, time to construct a record and lock it away
         userRecord.mTransformRecords.put(
                 resourceId,
                 new RefcountedResource<TransformRecord>(
-                        new TransformRecord(resourceId, c, spis, socketRecord),
+                        new TransformRecord(resourceId, c, spiRecord, socketRecord),
                         binder,
                         dependencies.toArray(new RefcountedResource[dependencies.size()])));
         return new IpSecTransformResponse(IpSecManager.Status.OK, resourceId);
@@ -1206,7 +1534,7 @@ public class IpSecService extends IIpSecService.Stub {
      * other reasons.
      */
     @Override
-    public synchronized void deleteTransportModeTransform(int resourceId) throws RemoteException {
+    public synchronized void deleteTransform(int resourceId) throws RemoteException {
         UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
         releaseResource(userRecord.mTransformRecords, resourceId);
     }
@@ -1217,9 +1545,9 @@ public class IpSecService extends IIpSecService.Stub {
      */
     @Override
     public synchronized void applyTransportModeTransform(
-            ParcelFileDescriptor socket, int resourceId) throws RemoteException {
+            ParcelFileDescriptor socket, int direction, int resourceId) throws RemoteException {
         UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
-
+        checkDirection(direction);
         // Get transform record; if no transform is found, will throw IllegalArgumentException
         TransformRecord info = userRecord.mTransformRecords.getResourceOrThrow(resourceId);
 
@@ -1228,19 +1556,22 @@ public class IpSecService extends IIpSecService.Stub {
             throw new SecurityException("Only the owner of an IpSec Transform may apply it!");
         }
 
+        // Get config and check that to-be-applied transform has the correct mode
         IpSecConfig c = info.getConfig();
+        Preconditions.checkArgument(
+                c.getMode() == IpSecTransform.MODE_TRANSPORT,
+                "Transform mode was not Transport mode; cannot be applied to a socket");
+
         try {
-            for (int direction : DIRECTIONS) {
-                mSrvConfig
-                        .getNetdInstance()
-                        .ipSecApplyTransportModeTransform(
-                                socket.getFileDescriptor(),
-                                resourceId,
-                                direction,
-                                c.getLocalAddress(),
-                                c.getRemoteAddress(),
-                                info.getSpiRecord(direction).getSpi());
-            }
+            mSrvConfig
+                    .getNetdInstance()
+                    .ipSecApplyTransportModeTransform(
+                            socket.getFileDescriptor(),
+                            resourceId,
+                            direction,
+                            c.getSourceAddress(),
+                            c.getDestinationAddress(),
+                            info.getSpiRecord().getSpi());
         } catch (ServiceSpecificException e) {
             if (e.errorCode == EINVAL) {
                 throw new IllegalArgumentException(e.toString());
@@ -1251,13 +1582,13 @@ public class IpSecService extends IIpSecService.Stub {
     }
 
     /**
-     * Remove a transport mode transform from a socket, applying the default (empty) policy. This
-     * will ensure that NO IPsec policy is applied to the socket (would be the equivalent of
-     * applying a policy that performs no IPsec). Today the resourceId parameter is passed but not
-     * used: reserved for future improved input validation.
+     * Remove transport mode transforms from a socket, applying the default (empty) policy. This
+     * ensures that NO IPsec policy is applied to the socket (would be the equivalent of applying a
+     * policy that performs no IPsec). Today the resourceId parameter is passed but not used:
+     * reserved for future improved input validation.
      */
     @Override
-    public synchronized void removeTransportModeTransform(ParcelFileDescriptor socket, int resourceId)
+    public synchronized void removeTransportModeTransforms(ParcelFileDescriptor socket)
             throws RemoteException {
         try {
             mSrvConfig
@@ -1265,6 +1596,76 @@ public class IpSecService extends IIpSecService.Stub {
                     .ipSecRemoveTransportModeTransform(socket.getFileDescriptor());
         } catch (ServiceSpecificException e) {
             // FIXME: get the error code and throw is at an IOException from Errno Exception
+        }
+    }
+
+    /**
+     * Apply an active tunnel mode transform to a TunnelInterface, which will apply the IPsec
+     * security association as a correspondent policy to the provided interface
+     */
+    @Override
+    public synchronized void applyTunnelModeTransform(
+            int tunnelResourceId, int direction, int transformResourceId) throws RemoteException {
+        checkDirection(direction);
+
+        UserRecord userRecord = mUserResourceTracker.getUserRecord(Binder.getCallingUid());
+
+        // Get transform record; if no transform is found, will throw IllegalArgumentException
+        TransformRecord transformInfo =
+                userRecord.mTransformRecords.getResourceOrThrow(transformResourceId);
+
+        // Get tunnelInterface record; if no such interface is found, will throw
+        // IllegalArgumentException
+        TunnelInterfaceRecord tunnelInterfaceInfo =
+                userRecord.mTunnelInterfaceRecords.getResourceOrThrow(tunnelResourceId);
+
+        // Get config and check that to-be-applied transform has the correct mode
+        IpSecConfig c = transformInfo.getConfig();
+        Preconditions.checkArgument(
+                c.getMode() == IpSecTransform.MODE_TUNNEL,
+                "Transform mode was not Tunnel mode; cannot be applied to a tunnel interface");
+
+        EncapSocketRecord socketRecord = null;
+        if (c.getEncapType() != IpSecTransform.ENCAP_NONE) {
+            socketRecord =
+                    userRecord.mEncapSocketRecords.getResourceOrThrow(c.getEncapSocketResourceId());
+        }
+        SpiRecord spiRecord = userRecord.mSpiRecords.getResourceOrThrow(c.getSpiResourceId());
+
+        int mark =
+                (direction == IpSecManager.DIRECTION_IN)
+                        ? tunnelInterfaceInfo.getIkey()
+                        : tunnelInterfaceInfo.getOkey();
+
+        try {
+            c.setMarkValue(mark);
+            c.setMarkMask(0xffffffff);
+
+            if (direction == IpSecManager.DIRECTION_OUT) {
+                // Set output mark via underlying network (output only)
+                c.setNetwork(tunnelInterfaceInfo.getUnderlyingNetwork());
+
+                // If outbound, also add SPI to the policy.
+                mSrvConfig
+                        .getNetdInstance()
+                        .ipSecUpdateSecurityPolicy(
+                                0, // Use 0 for reqId
+                                direction,
+                                "",
+                                "",
+                                transformInfo.getSpiRecord().getSpi(),
+                                mark,
+                                0xffffffff);
+            }
+
+            // Update SA with tunnel mark (ikey or okey based on direction)
+            createOrUpdateTransform(c, transformResourceId, spiRecord, socketRecord);
+        } catch (ServiceSpecificException e) {
+            if (e.errorCode == EINVAL) {
+                throw new IllegalArgumentException(e.toString());
+            } else {
+                throw e;
+            }
         }
     }
 

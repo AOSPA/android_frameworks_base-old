@@ -49,6 +49,8 @@ public:
     // The max number of old config stats we keep.
     const static int kMaxIceBoxSize = 20;
 
+    const static int kMaxLoggerErrors = 10;
+
     const static int kMaxTimestampCount = 20;
 
     const static int kMaxLogSourceCount = 50;
@@ -73,6 +75,15 @@ public:
 
     // Default cooldown time for a puller
     static const long kDefaultPullerCooldown = 1;
+
+    // Maximum age (30 days) that files on disk can exist in seconds.
+    static const int kMaxAgeSecond = 60 * 60 * 24 * 30;
+
+    // Maximum number of files (1000) that can be in stats directory on disk.
+    static const int kMaxFileNumber = 1000;
+
+    // Maximum size of all files that can be written to stats directory on disk.
+    static const int kMaxFileSize = 50 * 1024 * 1024;
 
     /**
      * Report a new config has been received and report the static stats about the config.
@@ -176,6 +187,11 @@ public:
     void notePullFromCache(int pullAtomId);
 
     /**
+     * Records statsd met an error while reading from logd.
+     */
+    void noteLoggerError(int error);
+
+    /**
      * Reset the historical stats. Including all stats in icebox, and the tracked stats about
      * metrics, matchers, and atoms. The active configs will be kept and StatsdStats will continue
      * to collect stats after reset() has been called.
@@ -188,6 +204,11 @@ public:
      * [reset]: whether to clear the historical stats after the call.
      */
     void dumpStats(std::vector<uint8_t>* buffer, bool reset);
+
+    /**
+     * Output statsd stats in human readable format to [out] file.
+     */
+    void dumpStats(FILE* out) const;
 
     typedef struct {
         long totalPull;
@@ -231,6 +252,9 @@ private:
 
     // Maps PullAtomId to its stats. The size is capped by the puller atom counts.
     std::map<int, PulledAtomStats> mPulledAtomStats;
+
+    // Logd errors. Size capped by kMaxLoggerErrors.
+    std::list<const std::pair<int, int>> mLoggerErrors;
 
     // Stores the number of times statsd modified the anomaly alarm registered with
     // StatsCompanionService.

@@ -24,6 +24,7 @@ import android.app.job.JobInfo;
 import android.app.job.JobWorkItem;
 import android.content.ClipData;
 import android.content.ComponentName;
+import android.content.pm.PackageManagerInternal;
 import android.net.Network;
 import android.net.Uri;
 import android.os.RemoteException;
@@ -45,6 +46,7 @@ import com.android.server.job.JobStatusShortInfoProto;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.function.Predicate;
 
 /**
  * Uniquely identifies a job internally.
@@ -96,6 +98,7 @@ public final class JobStatus {
     final JobInfo job;
     /** Uid of the package requesting this job. */
     final int callingUid;
+    final int targetSdkVersion;
     final String batteryName;
 
     final String sourcePackageName;
@@ -182,6 +185,21 @@ public final class JobStatus {
      */
     private int trackingControllers;
 
+    /**
+     * Flag for {@link #mInternalFlags}: this job was scheduled when the app that owns the job
+     * service (not necessarily the caller) was in the foreground and the job has no time
+     * constraints, which makes it exempted from the battery saver job restriction.
+     *
+     * @hide
+     */
+    public static final int INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION = 1 << 0;
+
+    /**
+     * Versatile, persistable flags for a job that's updated within the system server,
+     * as opposed to {@link JobInfo#flags} that's set by callers.
+     */
+    private int mInternalFlags;
+
     // These are filled in by controllers when preparing for execution.
     public ArraySet<Uri> changedUris;
     public ArraySet<String> changedAuthorities;
@@ -243,12 +261,13 @@ public final class JobStatus {
         return callingUid;
     }
 
-    private JobStatus(JobInfo job, int callingUid, String sourcePackageName,
+    private JobStatus(JobInfo job, int callingUid, int targetSdkVersion, String sourcePackageName,
             int sourceUserId, int standbyBucket, long heartbeat, String tag, int numFailures,
             long earliestRunTimeElapsedMillis, long latestRunTimeElapsedMillis,
-            long lastSuccessfulRunTime, long lastFailedRunTime) {
+            long lastSuccessfulRunTime, long lastFailedRunTime, int internalFlags) {
         this.job = job;
         this.callingUid = callingUid;
+        this.targetSdkVersion = targetSdkVersion;
         this.standbyBucket = standbyBucket;
         this.baseHeartbeat = heartbeat;
 
@@ -301,18 +320,21 @@ public final class JobStatus {
         mLastSuccessfulRunTime = lastSuccessfulRunTime;
         mLastFailedRunTime = lastFailedRunTime;
 
+        mInternalFlags = internalFlags;
+
         updateEstimatedNetworkBytesLocked();
     }
 
     /** Copy constructor: used specifically when cloning JobStatus objects for persistence,
      *   so we preserve RTC window bounds if the source object has them. */
     public JobStatus(JobStatus jobStatus) {
-        this(jobStatus.getJob(), jobStatus.getUid(),
+        this(jobStatus.getJob(), jobStatus.getUid(), jobStatus.targetSdkVersion,
                 jobStatus.getSourcePackageName(), jobStatus.getSourceUserId(),
                 jobStatus.getStandbyBucket(), jobStatus.getBaseHeartbeat(),
                 jobStatus.getSourceTag(), jobStatus.getNumFailures(),
                 jobStatus.getEarliestRunTime(), jobStatus.getLatestRunTimeElapsed(),
-                jobStatus.getLastSuccessfulRunTime(), jobStatus.getLastFailedRunTime());
+                jobStatus.getLastSuccessfulRunTime(), jobStatus.getLastFailedRunTime(),
+                jobStatus.getInternalFlags());
         mPersistedUtcTimes = jobStatus.mPersistedUtcTimes;
         if (jobStatus.mPersistedUtcTimes != null) {
             if (DEBUG) {
@@ -333,12 +355,13 @@ public final class JobStatus {
             int standbyBucket, long baseHeartbeat, String sourceTag,
             long earliestRunTimeElapsedMillis, long latestRunTimeElapsedMillis,
             long lastSuccessfulRunTime, long lastFailedRunTime,
-            Pair<Long, Long> persistedExecutionTimesUTC) {
-        this(job, callingUid, sourcePkgName, sourceUserId,
+            Pair<Long, Long> persistedExecutionTimesUTC,
+            int innerFlags) {
+        this(job, callingUid, resolveTargetSdkVersion(job), sourcePkgName, sourceUserId,
                 standbyBucket, baseHeartbeat,
                 sourceTag, 0,
                 earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis,
-                lastSuccessfulRunTime, lastFailedRunTime);
+                lastSuccessfulRunTime, lastFailedRunTime, innerFlags);
 
         // Only during initial inflation do we record the UTC-timebase execution bounds
         // read from the persistent store.  If we ever have to recreate the JobStatus on
@@ -357,12 +380,12 @@ public final class JobStatus {
             long newEarliestRuntimeElapsedMillis,
             long newLatestRuntimeElapsedMillis, int backoffAttempt,
             long lastSuccessfulRunTime, long lastFailedRunTime) {
-        this(rescheduling.job, rescheduling.getUid(),
+        this(rescheduling.job, rescheduling.getUid(), resolveTargetSdkVersion(rescheduling.job),
                 rescheduling.getSourcePackageName(), rescheduling.getSourceUserId(),
                 rescheduling.getStandbyBucket(), newBaseHeartbeat,
                 rescheduling.getSourceTag(), backoffAttempt, newEarliestRuntimeElapsedMillis,
                 newLatestRuntimeElapsedMillis,
-                lastSuccessfulRunTime, lastFailedRunTime);
+                lastSuccessfulRunTime, lastFailedRunTime, rescheduling.getInternalFlags());
     }
 
     /**
@@ -391,11 +414,14 @@ public final class JobStatus {
         int standbyBucket = JobSchedulerService.standbyBucketForPackage(jobPackage,
                 sourceUserId, elapsedNow);
         JobSchedulerInternal js = LocalServices.getService(JobSchedulerInternal.class);
-        long currentHeartbeat = js != null ? js.currentHeartbeat() : 0;
-        return new JobStatus(job, callingUid, sourcePkg, sourceUserId,
+        long currentHeartbeat = js != null
+                ? js.baseHeartbeatForApp(jobPackage, sourceUserId, standbyBucket)
+                : 0;
+        return new JobStatus(job, callingUid, resolveTargetSdkVersion(job), sourcePkg, sourceUserId,
                 standbyBucket, currentHeartbeat, tag, 0,
                 earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis,
-                0 /* lastSuccessfulRunTime */, 0 /* lastFailedRunTime */);
+                0 /* lastSuccessfulRunTime */, 0 /* lastFailedRunTime */,
+                /*innerFlags=*/ 0);
     }
 
     public void enqueueWorkLocked(IActivityManager am, JobWorkItem work) {
@@ -539,6 +565,10 @@ public final class JobStatus {
         return job.getId();
     }
 
+    public int getTargetSdkVersion() {
+        return targetSdkVersion;
+    }
+
     public void printUniqueId(PrintWriter pw) {
         UserHandle.formatUid(pw, callingUid);
         pw.print("/");
@@ -614,6 +644,28 @@ public final class JobStatus {
 
     public int getFlags() {
         return job.getFlags();
+    }
+
+    public int getInternalFlags() {
+        return mInternalFlags;
+    }
+
+    public void addInternalFlags(int flags) {
+        mInternalFlags |= flags;
+    }
+
+    public void maybeAddForegroundExemption(Predicate<Integer> uidForegroundChecker) {
+        // Jobs with time constraints shouldn't be exempted.
+        if (job.hasEarlyConstraint() || job.hasLateConstraint()) {
+            return;
+        }
+        // Already exempted, skip the foreground check.
+        if ((mInternalFlags & INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION) != 0) {
+            return;
+        }
+        if (uidForegroundChecker.test(getSourceUid())) {
+            addInternalFlags(INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION);
+        }
     }
 
     private void updateEstimatedNetworkBytesLocked() {
@@ -711,6 +763,37 @@ public final class JobStatus {
 
     public long getLatestRunTimeElapsed() {
         return latestRunTimeElapsedMillis;
+    }
+
+    /**
+     * Return the fractional position of "now" within the "run time" window of
+     * this job.
+     * <p>
+     * For example, if the earliest run time was 10 minutes ago, and the latest
+     * run time is 30 minutes from now, this would return 0.25.
+     * <p>
+     * If the job has no window defined, returns 1. When only an earliest or
+     * latest time is defined, it's treated as an infinitely small window at
+     * that time.
+     */
+    public float getFractionRunTime() {
+        final long now = JobSchedulerService.sElapsedRealtimeClock.millis();
+        if (earliestRunTimeElapsedMillis == 0 && latestRunTimeElapsedMillis == Long.MAX_VALUE) {
+            return 1;
+        } else if (earliestRunTimeElapsedMillis == 0) {
+            return now >= latestRunTimeElapsedMillis ? 1 : 0;
+        } else if (latestRunTimeElapsedMillis == Long.MAX_VALUE) {
+            return now >= earliestRunTimeElapsedMillis ? 1 : 0;
+        } else {
+            if (now <= earliestRunTimeElapsedMillis) {
+                return 0;
+            } else if (now >= latestRunTimeElapsedMillis) {
+                return 1;
+            } else {
+                return (float) (now - earliestRunTimeElapsedMillis)
+                        / (float) (latestRunTimeElapsedMillis - earliestRunTimeElapsedMillis);
+            }
+        }
     }
 
     public Pair<Long, Long> getPersistedUtcTimes() {
@@ -1016,6 +1099,14 @@ public final class JobStatus {
         if ((constraints&CONSTRAINT_DEVICE_NOT_DOZING) != 0) {
             pw.print(" DEVICE_NOT_DOZING");
         }
+        if ((constraints&CONSTRAINT_BACKGROUND_NOT_RESTRICTED) != 0) {
+            pw.print(" BACKGROUND_NOT_RESTRICTED");
+        }
+        if (constraints != 0) {
+            pw.print(" [0x");
+            pw.print(Integer.toHexString(constraints));
+            pw.print("]");
+        }
     }
 
     /** Writes constraints to the given repeating proto field. */
@@ -1091,6 +1182,11 @@ public final class JobStatus {
         }
     }
 
+    private static int resolveTargetSdkVersion(JobInfo job) {
+        return LocalServices.getService(PackageManagerInternal.class)
+                .getPackageTargetSdkVersion(job.getService().getPackageName());
+    }
+
     // Dumpsys infrastructure
     public void dump(PrintWriter pw, String prefix, boolean full, long elapsedRealtimeMillis) {
         pw.print(prefix); UserHandle.formatUid(pw, callingUid);
@@ -1118,6 +1214,15 @@ public final class JobStatus {
             if (job.getFlags() != 0) {
                 pw.print(prefix); pw.print("  Flags: ");
                 pw.println(Integer.toHexString(job.getFlags()));
+            }
+            if (getInternalFlags() != 0) {
+                pw.print(prefix); pw.print("  Internal flags: ");
+                pw.print(Integer.toHexString(getInternalFlags()));
+
+                if ((getInternalFlags()&INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION) != 0) {
+                    pw.print(" HAS_FOREGROUND_EXEMPTION");
+                }
+                pw.println();
             }
             pw.print(prefix); pw.print("  Requires: charging=");
             pw.print(job.isRequireCharging()); pw.print(" batteryNotLow=");
@@ -1274,6 +1379,7 @@ public final class JobStatus {
         proto.write(JobStatusDumpProto.SOURCE_UID, getSourceUid());
         proto.write(JobStatusDumpProto.SOURCE_USER_ID, getSourceUserId());
         proto.write(JobStatusDumpProto.SOURCE_PACKAGE_NAME, getSourcePackageName());
+        proto.write(JobStatusDumpProto.INTERNAL_FLAGS, getInternalFlags());
 
         if (full) {
             final long jiToken = proto.start(JobStatusDumpProto.JOB_INFO);

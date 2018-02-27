@@ -21,6 +21,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.hardware.radio.ITuner;
 import android.hardware.radio.ITunerCallback;
+import android.hardware.radio.ProgramList;
 import android.hardware.radio.ProgramSelector;
 import android.hardware.radio.RadioManager;
 import android.os.IBinder;
@@ -47,7 +48,7 @@ class Tuner extends ITuner.Stub {
 
     private boolean mIsClosed = false;
     private boolean mIsMuted = false;
-    private int mRegion;  // TODO(b/62710330): find better solution to handle regions
+    private int mRegion;
     private final boolean mWithAudio;
 
     Tuner(@NonNull ITunerCallback clientCallback, int halRev,
@@ -88,7 +89,6 @@ class Tuner extends ITuner.Stub {
 
     private native void nativeCancelAnnouncement(long nativeContext);
 
-    private native RadioManager.ProgramInfo nativeGetProgramInformation(long nativeContext);
     private native boolean nativeStartBackgroundScan(long nativeContext);
     private native List<RadioManager.ProgramInfo> nativeGetProgramList(long nativeContext,
             Map<String, String> vendorFilter);
@@ -101,8 +101,6 @@ class Tuner extends ITuner.Stub {
     private native Map<String, String> nativeSetParameters(long nativeContext,
             Map<String, String> parameters);
     private native Map<String, String> nativeGetParameters(long nativeContext, List<String> keys);
-
-    private native boolean nativeIsAntennaConnected(long nativeContext);
 
     @Override
     public void close() {
@@ -217,14 +215,6 @@ class Tuner extends ITuner.Stub {
     }
 
     @Override
-    public RadioManager.ProgramInfo getProgramInformation() {
-        synchronized (mLock) {
-            checkNotClosedLocked();
-            return nativeGetProgramInformation(mNativeContext);
-        }
-    }
-
-    @Override
     public Bitmap getImage(int id) {
         if (id == 0) {
             throw new IllegalArgumentException("Image ID is missing");
@@ -249,8 +239,7 @@ class Tuner extends ITuner.Stub {
         }
     }
 
-    @Override
-    public List<RadioManager.ProgramInfo> getProgramList(Map vendorFilter) {
+    List<RadioManager.ProgramInfo> getProgramList(Map vendorFilter) {
         Map<String, String> sFilter = vendorFilter;
         synchronized (mLock) {
             checkNotClosedLocked();
@@ -260,6 +249,16 @@ class Tuner extends ITuner.Stub {
             }
             return list;
         }
+    }
+
+    @Override
+    public void startProgramListUpdates(ProgramList.Filter filter) {
+        mTunerCallback.startProgramListUpdates(filter);
+    }
+
+    @Override
+    public void stopProgramListUpdates() {
+        mTunerCallback.stopProgramListUpdates();
     }
 
     @Override
@@ -313,13 +312,5 @@ class Tuner extends ITuner.Stub {
         }
         if (results == null) return Collections.emptyMap();
         return results;
-    }
-
-    @Override
-    public boolean isAntennaConnected() {
-        synchronized (mLock) {
-            checkNotClosedLocked();
-            return nativeIsAntennaConnected(mNativeContext);
-        }
     }
 }

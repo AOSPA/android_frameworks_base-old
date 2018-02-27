@@ -16,6 +16,7 @@
 
 package com.android.server.display;
 
+import android.app.ActivityThread;
 import android.content.res.Resources;
 import com.android.server.LocalServices;
 import com.android.server.lights.Light;
@@ -392,7 +393,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                             | DisplayDeviceInfo.FLAG_SUPPORTS_PROTECTED_BUFFERS;
                 }
 
-                final Resources res = getContext().getResources();
+                final Resources res = getOverlayContext().getResources();
                 if (mBuiltInDisplayId == SurfaceControl.BUILT_IN_DISPLAY_ID_MAIN) {
                     mInfo.name = res.getString(
                             com.android.internal.R.string.display_manager_built_in_display_name);
@@ -403,7 +404,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                             && SystemProperties.getBoolean(PROPERTY_EMULATOR_CIRCULAR, false))) {
                         mInfo.flags |= DisplayDeviceInfo.FLAG_ROUND;
                     }
-                    mInfo.displayCutout = parseDefaultDisplayCutout(res);
+                    mInfo.displayCutout = DisplayCutout.fromResources(res, mInfo.width);
                     mInfo.type = Display.TYPE_BUILT_IN;
                     mInfo.densityDpi = (int)(phys.density * 160 + 0.5f);
                     mInfo.xDpi = phys.xDpi;
@@ -437,15 +438,6 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                 }
             }
             return mInfo;
-        }
-
-        private DisplayCutout parseDefaultDisplayCutout(Resources res) {
-            String cutoutString = res.getString(
-                    com.android.internal.R.string.config_mainBuiltInDisplayCutout);
-            if (TextUtils.isEmpty(cutoutString)) {
-                return null;
-            }
-            return DisplayCutout.fromBounds(PathParser.createPathFromPathData(cutoutString));
         }
 
         @Override
@@ -599,6 +591,11 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             }
         }
 
+        @Override
+        public void onOverlayChangedLocked() {
+            updateDeviceInfoLocked();
+        }
+
         public boolean requestModeInTransactionLocked(int modeId) {
             if (modeId == 0) {
                 modeId = mDefaultModeId;
@@ -685,6 +682,11 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             mInfo = null;
             sendDisplayDeviceEventLocked(this, DISPLAY_DEVICE_EVENT_CHANGED);
         }
+    }
+
+    /** Supplies a context whose Resources apply runtime-overlays */
+    Context getOverlayContext() {
+        return ActivityThread.currentActivityThread().getSystemUiContext();
     }
 
     /**

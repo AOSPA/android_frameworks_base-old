@@ -16,27 +16,25 @@
 
 package android.hardware.camera2.impl;
 
-import static android.hardware.camera2.CameraAccessException.CAMERA_IN_USE;
+import static com.android.internal.util.function.pooled.PooledLambda.obtainRunnable;
 
-import android.graphics.ImageFormat;
+import android.hardware.ICameraService;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
-import android.hardware.camera2.CaptureFailure;
 import android.hardware.camera2.ICameraDeviceCallbacks;
 import android.hardware.camera2.ICameraDeviceUser;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.InputConfiguration;
 import android.hardware.camera2.params.OutputConfiguration;
-import android.hardware.camera2.params.ReprocessFormatsMap;
 import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.hardware.camera2.utils.SubmitInfo;
 import android.hardware.camera2.utils.SurfaceUtils;
-import android.hardware.ICameraService;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -51,16 +49,15 @@ import android.view.Surface;
 
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * HAL2.1+ implementation of CameraDevice. Use CameraManager#open to instantiate
@@ -715,6 +712,38 @@ public class CameraDeviceImpl extends CameraDevice
     }
 
     @Override
+    public CaptureRequest.Builder createCaptureRequest(int templateType,
+            Set<String> physicalCameraIdSet)
+            throws CameraAccessException {
+        synchronized(mInterfaceLock) {
+            checkIfCameraClosedOrInError();
+
+            for (String physicalId : physicalCameraIdSet) {
+                if (physicalId == getId()) {
+                    throw new IllegalStateException("Physical id matches the logical id!");
+                }
+            }
+
+            CameraMetadataNative templatedRequest = null;
+
+            templatedRequest = mRemoteDevice.createDefaultRequest(templateType);
+
+            // If app target SDK is older than O, or it's not a still capture template, enableZsl
+            // must be false in the default request.
+            if (mAppTargetSdkVersion < Build.VERSION_CODES.O ||
+                    templateType != TEMPLATE_STILL_CAPTURE) {
+                overrideEnableZsl(templatedRequest, false);
+            }
+
+            CaptureRequest.Builder builder = new CaptureRequest.Builder(
+                    templatedRequest, /*reprocess*/false, CameraCaptureSession.SESSION_ID_NONE,
+                    getId(), physicalCameraIdSet);
+
+            return builder;
+        }
+    }
+
+    @Override
     public CaptureRequest.Builder createCaptureRequest(int templateType)
             throws CameraAccessException {
         synchronized(mInterfaceLock) {
@@ -732,7 +761,8 @@ public class CameraDeviceImpl extends CameraDevice
             }
 
             CaptureRequest.Builder builder = new CaptureRequest.Builder(
-                    templatedRequest, /*reprocess*/false, CameraCaptureSession.SESSION_ID_NONE);
+                    templatedRequest, /*reprocess*/false, CameraCaptureSession.SESSION_ID_NONE,
+                    getId(), /*physicalCameraIdSet*/ null);
 
             return builder;
         }
@@ -748,7 +778,7 @@ public class CameraDeviceImpl extends CameraDevice
                     CameraMetadataNative(inputResult.getNativeCopy());
 
             return new CaptureRequest.Builder(resultMetadata, /*reprocess*/true,
-                    inputResult.getSessionId());
+                    inputResult.getSessionId(), getId(), /*physicalCameraIdSet*/ null);
         }
     }
 
@@ -958,7 +988,8 @@ public class CameraDeviceImpl extends CameraDevice
         // callback is valid
         handler = checkHandler(handler, callback);
 
-        // Make sure that there all requests have at least 1 surface; all surfaces are non-null
+        // Make sure that there all requests have at least 1 surface; all surfaces are non-null;
+        // the surface isn't a physical stream surface for reprocessing request
         for (CaptureRequest request : requestList) {
             if (request.getTargets().isEmpty()) {
                 throw new IllegalArgumentException(
@@ -968,6 +999,17 @@ public class CameraDeviceImpl extends CameraDevice
             for (Surface surface : request.getTargets()) {
                 if (surface == null) {
                     throw new IllegalArgumentException("Null Surface targets are not allowed");
+                }
+
+                for (int i = 0; i < mConfiguredOutputs.size(); i++) {
+                    OutputConfiguration configuration = mConfiguredOutputs.valueAt(i);
+                    if (configuration.isForPhysicalCamera()
+                            && configuration.getSurfaces().contains(surface)) {
+                        if (request.isReprocess()) {
+                            throw new IllegalArgumentException(
+                                    "Reprocess request on physical stream is not allowed");
+                        }
+                    }
                 }
             }
         }
@@ -1798,31 +1840,33 @@ public class CameraDeviceImpl extends CameraDevice
                     case ERROR_CAMERA_DISCONNECTED:
                         CameraDeviceImpl.this.mDeviceHandler.post(mCallOnDisconnected);
                         break;
-                    default:
-                        Log.e(TAG, "Unknown error from camera device: " + errorCode);
-                        // no break
-                    case ERROR_CAMERA_DEVICE:
-                    case ERROR_CAMERA_SERVICE:
-                        mInError = true;
-                        final int publicErrorCode = (errorCode == ERROR_CAMERA_DEVICE) ?
-                                StateCallback.ERROR_CAMERA_DEVICE :
-                                StateCallback.ERROR_CAMERA_SERVICE;
-                        Runnable r = new Runnable() {
-                            @Override
-                            public void run() {
-                                if (!CameraDeviceImpl.this.isClosed()) {
-                                    mDeviceCallback.onError(CameraDeviceImpl.this, publicErrorCode);
-                                }
-                            }
-                        };
-                        CameraDeviceImpl.this.mDeviceHandler.post(r);
-                        break;
                     case ERROR_CAMERA_REQUEST:
                     case ERROR_CAMERA_RESULT:
                     case ERROR_CAMERA_BUFFER:
                         onCaptureErrorLocked(errorCode, resultExtras);
                         break;
+                    case ERROR_CAMERA_DEVICE:
+                        scheduleNotifyError(StateCallback.ERROR_CAMERA_DEVICE);
+                        break;
+                    case ERROR_CAMERA_DISABLED:
+                        scheduleNotifyError(StateCallback.ERROR_CAMERA_DISABLED);
+                        break;
+                    default:
+                        Log.e(TAG, "Unknown error from camera device: " + errorCode);
+                        scheduleNotifyError(StateCallback.ERROR_CAMERA_SERVICE);
                 }
+            }
+        }
+
+        private void scheduleNotifyError(int code) {
+            mInError = true;
+            CameraDeviceImpl.this.mDeviceHandler.post(obtainRunnable(
+                    CameraDeviceCallbacks::notifyError, this, code));
+        }
+
+        private void notifyError(int code) {
+            if (!CameraDeviceImpl.this.isClosed()) {
+                mDeviceCallback.onError(CameraDeviceImpl.this, code);
             }
         }
 
@@ -1920,7 +1964,8 @@ public class CameraDeviceImpl extends CameraDevice
 
         @Override
         public void onResultReceived(CameraMetadataNative result,
-                CaptureResultExtras resultExtras) throws RemoteException {
+                CaptureResultExtras resultExtras, PhysicalCaptureResultInfo physicalResults[])
+                throws RemoteException {
 
             int requestId = resultExtras.getRequestId();
             long frameNumber = resultExtras.getFrameNumber();
@@ -2027,7 +2072,8 @@ public class CameraDeviceImpl extends CameraDevice
                             request.get(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE);
                     final int subsequenceId = resultExtras.getSubsequenceId();
                     final TotalCaptureResult resultAsCapture = new TotalCaptureResult(result,
-                            request, resultExtras, partialResults, holder.getSessionId());
+                            request, resultExtras, partialResults, holder.getSessionId(),
+                            physicalResults);
                     // Final capture result
                     resultDispatch = new Runnable() {
                         @Override
@@ -2042,9 +2088,11 @@ public class CameraDeviceImpl extends CameraDevice
                                                 NANO_PER_SECOND/fpsRange.getUpper());
                                         CameraMetadataNative resultLocal =
                                                 new CameraMetadataNative(resultCopy);
+                                        // No logical multi-camera support for batched output mode.
                                         TotalCaptureResult resultInBatch = new TotalCaptureResult(
                                             resultLocal, holder.getRequest(i), resultExtras,
-                                            partialResults, holder.getSessionId());
+                                            partialResults, holder.getSessionId(),
+                                            new PhysicalCaptureResultInfo[0]);
 
                                         holder.getCallback().onCaptureCompleted(
                                             CameraDeviceImpl.this,

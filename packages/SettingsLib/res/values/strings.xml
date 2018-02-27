@@ -498,10 +498,8 @@
     <string name="wifi_display_certification">Wireless display certification</string>
     <!-- Setting Checkbox title whether to enable WiFi Verbose Logging. [CHAR LIMIT=40] -->
     <string name="wifi_verbose_logging">Enable Wi\u2011Fi Verbose Logging</string>
-    <!-- Setting Checkbox title whether to enable WiFi Aggressive Handover (more actively switch from wifi to mobile data). [CHAR LIMIT=40] -->
-    <string name="wifi_aggressive_handover">Aggressive Wi\u2011Fi to mobile handover</string>
-    <!-- Setting Checkbox title whether to enable WiFi Scanning in the presence of traffic. [CHAR LIMIT=80] -->
-    <string name="wifi_allow_scan_with_traffic">Always allow Wi\u2011Fi Roam Scans</string>
+    <!-- Setting Checkbox title whether to enable connected MAC randomization -->
+    <string name="wifi_connected_mac_randomization">Connected MAC Randomization</string>
     <!-- Setting Checkbox title whether to always keep mobile data active. [CHAR LIMIT=80] -->
     <string name="mobile_data_always_on">Mobile data always active</string>
     <!-- Setting Checkbox title whether to enable hardware acceleration for tethering. [CHAR LIMIT=80] -->
@@ -556,10 +554,8 @@
     <string name="wifi_display_certification_summary">Show options for wireless display certification</string>
     <!-- Setting Checkbox summary whether to enable Wifi verbose Logging [CHAR LIMIT=80] -->
     <string name="wifi_verbose_logging_summary">Increase Wi\u2011Fi logging level, show per SSID RSSI in Wi\u2011Fi Picker</string>
-    <!-- Setting Checkbox summary whether to enable Wifi aggressive handover [CHAR LIMIT=130] -->
-    <string name="wifi_aggressive_handover_summary">When enabled, Wi\u2011Fi will be more aggressive in handing over the data connection to mobile, when Wi\u2011Fi signal is low</string>
-    <!-- Setting Checkbox summary whether to always allow WiFi Roam Scans [CHAR LIMIT=130] -->
-    <string name="wifi_allow_scan_with_traffic_summary">Allow/Disallow Wi\u2011Fi Roam Scans based on the amount of data traffic present at the interface</string>
+    <!-- Setting Checkbox title whether to enable connected MAC randomization -->
+    <string name="wifi_connected_mac_randomization_summary">Randomize MAC address when connecting to Wi\u2011Fi networks</string>
     <!-- UI debug setting: limit size of Android logger buffers -->
     <string name="select_logd_size_title">Logger buffer sizes</string>
     <!-- UI debug setting: limit size of Android logger buffers [CHAR LIMIT=59] -->
@@ -682,9 +678,6 @@
 
     <!-- UI debug setting: show the amount of overdraw in apps using the GPU [CHAR LIMIT=25] -->
     <string name="debug_hw_overdraw">Debug GPU overdraw</string>
-
-    <!-- UI debug setting: select the renderer to use by RenderThread [CHAR LIMIT=25] -->
-    <string name="debug_hw_renderer">Set GPU Renderer</string>
 
     <!-- UI debug setting: disable use of overlays? [CHAR LIMIT=25] -->
     <string name="disable_overlays">Disable HW overlays</string>
@@ -1022,5 +1015,29 @@
 
     <!-- About phone, status item value if the actual value is not available. -->
     <string name="status_unavailable">Unavailable</string>
+
+    <!-- Summary to show how many devices are connected in wifi hotspot [CHAR LIMIT=NONE] -->
+    <plurals name="wifi_tether_connected_summary">
+        <item quantity="one">%1$d device connected</item>
+        <item quantity="other">%1$d devices connected</item>
+    </plurals>
+
+    <!-- Content description of zen mode time condition plus button (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_manual_zen_more_time">More time.</string>
+    <!-- Content description of zen mode time condition minus button (not shown on the screen). [CHAR LIMIT=NONE] -->
+    <string name="accessibility_manual_zen_less_time">Less time.</string>
+
+    <!--  Do not disturb: Label for button in enable zen dialog that will turn on zen mode. [CHAR LIMIT=30] -->
+    <string name="zen_mode_enable_dialog_turn_on">Turn on</string>
+    <!-- Button label for generic cancel action [CHAR LIMIT=20] -->
+    <string name="cancel">Cancel</string>
+    <!-- Do not disturb: Title for the Do not Disturb dialog to turn on Do not disturb. [CHAR LIMIT=50]-->
+    <string name="zen_mode_settings_turn_on_dialog_title">Turn on Do Not Disturb</string>
+    <!-- Sound: Summary for the Do not Disturb option when there is no automatic rules turned on. [CHAR LIMIT=NONE]-->
+    <string name="zen_mode_settings_summary_off">Never</string>
+    <!--[CHAR LIMIT=40] Zen Interruption level: Priority.  -->
+    <string name="zen_interruption_level_priority">Priority only</string>
+    <!-- [CHAR LIMIT=20] Accessibility string for current zen mode and selected exit condition. A template that simply concatenates existing mode string and the current condition description.  -->
+    <string name="zen_mode_and_condition"><xliff:g id="zen_mode" example="Priority interruptions only">%1$s</xliff:g>. <xliff:g id="exit_condition" example="For one hour">%2$s</xliff:g></string>
 
 </resources>

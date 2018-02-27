@@ -22,6 +22,7 @@ import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.server.RescueParty;
 import com.android.server.Watchdog;
+import com.android.server.am.proto.AppErrorsProto;
 
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
@@ -33,6 +34,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Message;
 import android.os.Process;
@@ -48,6 +50,7 @@ import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
+import android.util.proto.ProtoOutputStream;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -103,8 +106,76 @@ class AppErrors {
         mContext = context;
     }
 
-    boolean dumpLocked(FileDescriptor fd, PrintWriter pw, boolean needSep,
-            String dumpPackage) {
+    void writeToProto(ProtoOutputStream proto, long fieldId, String dumpPackage) {
+        if (mProcessCrashTimes.getMap().isEmpty() && mBadProcesses.getMap().isEmpty()) {
+            return;
+        }
+
+        final long token = proto.start(fieldId);
+        final long now = SystemClock.uptimeMillis();
+        proto.write(AppErrorsProto.NOW_UPTIME_MS, now);
+
+        if (!mProcessCrashTimes.getMap().isEmpty()) {
+            final ArrayMap<String, SparseArray<Long>> pmap = mProcessCrashTimes.getMap();
+            final int procCount = pmap.size();
+            for (int ip = 0; ip < procCount; ip++) {
+                final long ctoken = proto.start(AppErrorsProto.PROCESS_CRASH_TIMES);
+                final String pname = pmap.keyAt(ip);
+                final SparseArray<Long> uids = pmap.valueAt(ip);
+                final int uidCount = uids.size();
+
+                proto.write(AppErrorsProto.ProcessCrashTime.PROCESS_NAME, pname);
+                for (int i = 0; i < uidCount; i++) {
+                    final int puid = uids.keyAt(i);
+                    final ProcessRecord r = mService.mProcessNames.get(pname, puid);
+                    if (dumpPackage != null && (r == null || !r.pkgList.containsKey(dumpPackage))) {
+                        continue;
+                    }
+                    final long etoken = proto.start(AppErrorsProto.ProcessCrashTime.ENTRIES);
+                    proto.write(AppErrorsProto.ProcessCrashTime.Entry.UID, puid);
+                    proto.write(AppErrorsProto.ProcessCrashTime.Entry.LAST_CRASHED_AT_MS,
+                            uids.valueAt(i));
+                    proto.end(etoken);
+                }
+                proto.end(ctoken);
+            }
+
+        }
+
+        if (!mBadProcesses.getMap().isEmpty()) {
+            final ArrayMap<String, SparseArray<BadProcessInfo>> pmap = mBadProcesses.getMap();
+            final int processCount = pmap.size();
+            for (int ip = 0; ip < processCount; ip++) {
+                final long btoken = proto.start(AppErrorsProto.BAD_PROCESSES);
+                final String pname = pmap.keyAt(ip);
+                final SparseArray<BadProcessInfo> uids = pmap.valueAt(ip);
+                final int uidCount = uids.size();
+
+                proto.write(AppErrorsProto.BadProcess.PROCESS_NAME, pname);
+                for (int i = 0; i < uidCount; i++) {
+                    final int puid = uids.keyAt(i);
+                    final ProcessRecord r = mService.mProcessNames.get(pname, puid);
+                    if (dumpPackage != null && (r == null
+                            || !r.pkgList.containsKey(dumpPackage))) {
+                        continue;
+                    }
+                    final BadProcessInfo info = uids.valueAt(i);
+                    final long etoken = proto.start(AppErrorsProto.BadProcess.ENTRIES);
+                    proto.write(AppErrorsProto.BadProcess.Entry.UID, puid);
+                    proto.write(AppErrorsProto.BadProcess.Entry.CRASHED_AT_MS, info.time);
+                    proto.write(AppErrorsProto.BadProcess.Entry.SHORT_MSG, info.shortMsg);
+                    proto.write(AppErrorsProto.BadProcess.Entry.LONG_MSG, info.longMsg);
+                    proto.write(AppErrorsProto.BadProcess.Entry.STACK, info.stack);
+                    proto.end(etoken);
+                }
+                proto.end(btoken);
+            }
+        }
+
+        proto.end(token);
+    }
+
+    boolean dumpLocked(FileDescriptor fd, PrintWriter pw, boolean needSep, String dumpPackage) {
         if (!mProcessCrashTimes.getMap().isEmpty()) {
             boolean printed = false;
             final long now = SystemClock.uptimeMillis();
@@ -408,9 +479,11 @@ class AppErrors {
                         final Set<String> cats = task.intent.getCategories();
                         if (cats != null && cats.contains(Intent.CATEGORY_LAUNCHER)) {
                             mService.getActivityStartController().startActivityInPackage(
-                                    task.mCallingUid, task.mCallingPackage, task.intent, null, null,
-                                    null, 0, 0, ActivityOptions.makeBasic().toBundle(), task.userId,
-                                    null, "AppErrors");
+                                    task.mCallingUid, callingPid, callingUid, task.mCallingPackage,
+                                    task.intent, null, null, null, 0, 0,
+                                    new SafeActivityOptions(ActivityOptions.makeBasic()),
+                                    task.userId, null,
+                                    "AppErrors");
                         }
                     }
                 }
@@ -427,6 +500,11 @@ class AppErrors {
                 } finally {
                     Binder.restoreCallingIdentity(orig);
                 }
+            }
+            if (res == AppErrorDialog.APP_INFO) {
+                appErrorIntent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                appErrorIntent.setData(Uri.parse("package:" + r.info.packageName));
+                appErrorIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             }
             if (res == AppErrorDialog.FORCE_QUIT_AND_REPORT) {
                 appErrorIntent = createAppErrorIntentLocked(r, timeMillis, crashInfo);
@@ -738,9 +816,18 @@ class AppErrors {
                 }
                 return;
             }
+            final boolean showFirstCrash = Settings.Global.getInt(
+                    mContext.getContentResolver(),
+                    Settings.Global.SHOW_FIRST_CRASH_DIALOG, 0) != 0;
+            final boolean showFirstCrashDevOption = Settings.Secure.getIntForUser(
+                    mContext.getContentResolver(),
+                    Settings.Secure.SHOW_FIRST_CRASH_DIALOG_DEV_OPTION,
+                    0,
+                    mService.mUserController.getCurrentUserId()) != 0;
             final boolean crashSilenced = mAppsNotReportingCrashes != null &&
                     mAppsNotReportingCrashes.contains(proc.info.packageName);
-            if ((mService.canShowErrorDialogs() || showBackground) && !crashSilenced) {
+            if ((mService.canShowErrorDialogs() || showBackground) && !crashSilenced
+                    && (showFirstCrash || showFirstCrashDevOption || data.repeating)) {
                 proc.crashDialog = new AppErrorDialog(mContext, mService, data);
             } else {
                 // The device is asleep, so just pretend that the user

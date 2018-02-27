@@ -60,6 +60,7 @@ public class MessagingGroup extends LinearLayout implements MessagingLinearLayou
     private boolean mFirstLayout;
     private boolean mIsHidingAnimated;
     private boolean mNeedsGeneratedAvatar;
+    private Notification.Person mSender;
 
     public MessagingGroup(@NonNull Context context) {
         super(context);
@@ -88,8 +89,12 @@ public class MessagingGroup extends LinearLayout implements MessagingLinearLayou
         mAvatarView = findViewById(R.id.message_icon);
     }
 
-    public void setSender(Notification.Person sender) {
-        mSenderName.setText(sender.getName());
+    public void setSender(Notification.Person sender, CharSequence nameOverride) {
+        mSender = sender;
+        if (nameOverride == null) {
+            nameOverride = sender.getName();
+        }
+        mSenderName.setText(nameOverride);
         mNeedsGeneratedAvatar = sender.getIcon() == null;
         if (!mNeedsGeneratedAvatar) {
             setAvatar(sender.getIcon());
@@ -355,7 +360,7 @@ public class MessagingGroup extends LinearLayout implements MessagingLinearLayou
         return 0;
     }
 
-    public View getSender() {
+    public View getSenderView() {
         return mSenderName;
     }
 
@@ -369,5 +374,9 @@ public class MessagingGroup extends LinearLayout implements MessagingLinearLayou
 
     public boolean needsGeneratedAvatar() {
         return mNeedsGeneratedAvatar;
+    }
+
+    public Notification.Person getSender() {
+        return mSender;
     }
 }

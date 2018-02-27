@@ -2862,6 +2862,10 @@
       <public name="appComponentFactory" />
       <public name="fallbackLineSpacing" />
       <public name="accessibilityPaneTitle" />
+      <public name="firstBaselineToTopHeight" />
+      <public name="lastBaselineToBottomHeight" />
+      <public name="lineHeight" />
+      <public name="accessibilityHeading" />
     </public-group>
 
     <public-group type="style" first-id="0x010302e0">
@@ -2870,10 +2874,15 @@
     </public-group>
 
     <public-group type="id" first-id="0x01020044">
+      <public name="accessibilityActionShowTooltip" />
+      <public name="accessibilityActionHideTooltip" />
     </public-group>
 
     <public-group type="string" first-id="0x0104001b">
     </public-group>
+
+    <!-- An interpolator which accelerates fast but decelerates extra slowly. -->
+    <public type="interpolator" name="fast_out_extra_slow_in" id="0x10c001a"/>
 
   <!-- ===============================================================
        DO NOT ADD UN-GROUPED ITEMS HERE

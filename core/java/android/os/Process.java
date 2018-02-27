@@ -143,13 +143,25 @@ public class Process {
      * Defines the UID/GID for the WebView zygote process.
      * @hide
      */
-    public static final int WEBVIEW_ZYGOTE_UID = 1051;
+    public static final int WEBVIEW_ZYGOTE_UID = 1053;
 
     /**
      * Defines the UID used for resource tracking for OTA updates.
      * @hide
      */
     public static final int OTA_UPDATE_UID = 1061;
+
+    /**
+     * Defines the UID used for incidentd.
+     * @hide
+     */
+    public static final int INCIDENTD_UID = 1067;
+
+    /**
+     * Defines the UID/GID for the Secure Element service process.
+     * @hide
+     */
+    public static final int SE_UID = 1068;
 
     /** {@hide} */
     public static final int NOBODY_UID = 9999;
@@ -267,6 +279,15 @@ public class Process {
      * {@link java.lang.Thread} class.
      */
     public static final int THREAD_PRIORITY_URGENT_DISPLAY = -8;
+
+    /**
+     * Standard priority of video threads.  Applications can not normally
+     * change to this priority.
+     * Use with {@link #setThreadPriority(int)} and
+     * {@link #setThreadPriority(int, int)}, <b>not</b> with the normal
+     * {@link java.lang.Thread} class.
+     */
+    public static final int THREAD_PRIORITY_VIDEO = -10;
 
     /**
      * Standard priority of audio threads.  Applications can not normally
@@ -556,6 +577,14 @@ public class Process {
      */
     public static UserHandle myUserHandle() {
         return UserHandle.of(UserHandle.getUserId(myUid()));
+    }
+
+    /**
+     * Returns whether the given uid belongs to a system core component or not.
+     * @hide
+     */
+    public static boolean isCoreUid(int uid) {
+        return UserHandle.isCore(uid);
     }
 
     /**

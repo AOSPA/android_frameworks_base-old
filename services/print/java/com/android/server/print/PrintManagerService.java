@@ -21,6 +21,8 @@ import static android.content.pm.PackageManager.MATCH_DEBUG_TRIAGED_MISSING;
 
 import android.annotation.NonNull;
 import android.app.ActivityManager;
+import android.app.admin.DevicePolicyManager;
+import android.app.admin.DevicePolicyManagerInternal;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -32,6 +34,7 @@ import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
+import android.os.Looper;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -54,11 +57,15 @@ import android.service.print.PrintServiceDumpProto;
 import android.util.Log;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
+import android.widget.Toast;
 
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.BackgroundThread;
+import com.android.internal.print.DualDumpOutputStream;
 import com.android.internal.util.DumpUtils;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.server.LocalServices;
 import com.android.server.SystemService;
 
 import java.io.FileDescriptor;
@@ -108,9 +115,12 @@ public final class PrintManagerService extends SystemService {
 
         private final SparseArray<UserState> mUserStates = new SparseArray<>();
 
+        private final DevicePolicyManager mDpm;
+
         PrintManagerImpl(Context context) {
             mContext = context;
             mUserManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
+            mDpm = (DevicePolicyManager) context.getSystemService(Context.DEVICE_POLICY_SERVICE);
             registerContentObservers();
             registerBroadcastReceivers();
         }
@@ -118,8 +128,35 @@ public final class PrintManagerService extends SystemService {
         @Override
         public Bundle print(String printJobName, IPrintDocumentAdapter adapter,
                 PrintAttributes attributes, String packageName, int appId, int userId) {
-            printJobName = Preconditions.checkStringNotEmpty(printJobName);
             adapter = Preconditions.checkNotNull(adapter);
+            if (!isPrintingEnabled()) {
+                CharSequence disabledMessage = null;
+                DevicePolicyManagerInternal dpmi =
+                        LocalServices.getService(DevicePolicyManagerInternal.class);
+                final int callingUserId = UserHandle.getCallingUserId();
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    disabledMessage = dpmi.getPrintingDisabledReasonForUser(callingUserId);
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+                if (disabledMessage != null) {
+                    Toast.makeText(mContext, Looper.getMainLooper(), disabledMessage,
+                            Toast.LENGTH_LONG).show();
+                }
+                try {
+                    adapter.start();
+                } catch (RemoteException re) {
+                    Log.e(LOG_TAG, "Error calling IPrintDocumentAdapter.start()");
+                }
+                try {
+                    adapter.finish();
+                } catch (RemoteException re) {
+                    Log.e(LOG_TAG, "Error calling IPrintDocumentAdapter.finish()");
+                }
+                return null;
+            }
+            printJobName = Preconditions.checkStringNotEmpty(printJobName);
             packageName = Preconditions.checkStringNotEmpty(packageName);
 
             final int resolvedUserId = resolveCallingUserEnforcingPermissions(userId);
@@ -238,7 +275,8 @@ public final class PrintManagerService extends SystemService {
 
         @Override
         public void restartPrintJob(PrintJobId printJobId, int appId, int userId) {
-            if (printJobId == null) {
+            if (printJobId == null || !isPrintingEnabled()) {
+                // if printing is disabled the state just remains "failed".
                 return;
             }
 
@@ -670,37 +708,33 @@ public final class PrintManagerService extends SystemService {
             final long identity = Binder.clearCallingIdentity();
             try {
                 if (dumpAsProto) {
-                    dump(new ProtoOutputStream(fd), userStatesToDump);
+                    dump(new DualDumpOutputStream(new ProtoOutputStream(fd), null),
+                            userStatesToDump);
                 } else {
-                    dump(fd, pw, userStatesToDump);
+                    pw.println("PRINT MANAGER STATE (dumpsys print)");
+
+                    dump(new DualDumpOutputStream(null, new IndentingPrintWriter(pw, "  ")),
+                            userStatesToDump);
                 }
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
         }
 
-        private void dump(@NonNull ProtoOutputStream proto,
-                @NonNull ArrayList<UserState> userStatesToDump) {
-            final int userStateCount = userStatesToDump.size();
-            for (int i = 0; i < userStateCount; i++) {
-                long token = proto.start(PrintServiceDumpProto.USER_STATES);
-                userStatesToDump.get(i).dump(proto);
-                proto.end(token);
-            }
-
-            proto.flush();
+        private boolean isPrintingEnabled() {
+            return mDpm == null || mDpm.isPrintingEnabled();
         }
 
-        private void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter pw,
+        private void dump(@NonNull DualDumpOutputStream dumpStream,
                 @NonNull ArrayList<UserState> userStatesToDump) {
-            pw = Preconditions.checkNotNull(pw);
-
-            pw.println("PRINT MANAGER STATE (dumpsys print)");
             final int userStateCount = userStatesToDump.size();
             for (int i = 0; i < userStateCount; i++) {
-                userStatesToDump.get(i).dump(fd, pw, "");
-                pw.println();
+                long token = dumpStream.start("user_states", PrintServiceDumpProto.USER_STATES);
+                userStatesToDump.get(i).dump(dumpStream);
+                dumpStream.end(token);
             }
+
+            dumpStream.flush();
         }
 
         private void registerContentObservers() {

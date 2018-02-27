@@ -16,12 +16,14 @@
 
 package android.app;
 
+import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
 import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.INVALID_DISPLAY;
 
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.TestApi;
 import android.content.ComponentName;
 import android.content.Context;
@@ -44,6 +46,7 @@ import android.util.Pair;
 import android.util.Slog;
 import android.view.AppTransitionAnimationSpec;
 import android.view.IAppTransitionAnimationSpecsFuture;
+import android.view.RemoteAnimationAdapter;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -204,6 +207,12 @@ public class ActivityOptions {
             "android.activity.taskOverlayCanResume";
 
     /**
+     * See {@link #setAvoidMoveToFront()}.
+     * @hide
+     */
+    private static final String KEY_AVOID_MOVE_TO_FRONT = "android.activity.avoidMoveToFront";
+
+    /**
      * Where the split-screen-primary stack should be positioned.
      * @hide
      */
@@ -241,6 +250,8 @@ public class ActivityOptions {
     private static final String KEY_INSTANT_APP_VERIFICATION_BUNDLE
             = "android:instantapps.installerbundle";
     private static final String KEY_SPECS_FUTURE = "android:activity.specsFuture";
+    private static final String KEY_REMOTE_ANIMATION_ADAPTER
+            = "android:activity.remoteAnimationAdapter";
 
     /** @hide */
     public static final int ANIM_NONE = 0;
@@ -268,6 +279,8 @@ public class ActivityOptions {
     public static final int ANIM_CLIP_REVEAL = 11;
     /** @hide */
     public static final int ANIM_OPEN_CROSS_PROFILE_APPS = 12;
+    /** @hide */
+    public static final int ANIM_REMOTE_ANIMATION = 13;
 
     private String mPackageName;
     private Rect mLaunchBounds;
@@ -300,10 +313,12 @@ public class ActivityOptions {
     private boolean mDisallowEnterPictureInPictureWhileLaunching;
     private boolean mTaskOverlay;
     private boolean mTaskOverlayCanResume;
+    private boolean mAvoidMoveToFront;
     private AppTransitionAnimationSpec mAnimSpecs[];
     private int mRotationAnimationHint = -1;
     private Bundle mAppVerificationBundle;
     private IAppTransitionAnimationSpecsFuture mSpecsFuture;
+    private RemoteAnimationAdapter mRemoteAnimationAdapter;
 
     /**
      * Create an ActivityOptions specifying a custom animation to run when
@@ -826,6 +841,20 @@ public class ActivityOptions {
         return opts;
     }
 
+    /**
+     * Create an {@link ActivityOptions} instance that lets the application control the entire
+     * animation using a {@link RemoteAnimationAdapter}.
+     * @hide
+     */
+    @RequiresPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS)
+    public static ActivityOptions makeRemoteAnimation(
+            RemoteAnimationAdapter remoteAnimationAdapter) {
+        final ActivityOptions opts = new ActivityOptions();
+        opts.mRemoteAnimationAdapter = remoteAnimationAdapter;
+        opts.mAnimationType = ANIM_REMOTE_ANIMATION;
+        return opts;
+    }
+
     /** @hide */
     public boolean getLaunchTaskBehind() {
         return mAnimationType == ANIM_LAUNCH_TASK_BEHIND;
@@ -901,6 +930,7 @@ public class ActivityOptions {
         mLaunchTaskId = opts.getInt(KEY_LAUNCH_TASK_ID, -1);
         mTaskOverlay = opts.getBoolean(KEY_TASK_OVERLAY, false);
         mTaskOverlayCanResume = opts.getBoolean(KEY_TASK_OVERLAY_CAN_RESUME, false);
+        mAvoidMoveToFront = opts.getBoolean(KEY_AVOID_MOVE_TO_FRONT, false);
         mSplitScreenCreateMode = opts.getInt(KEY_SPLIT_SCREEN_CREATE_MODE,
                 SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT);
         mDisallowEnterPictureInPictureWhileLaunching = opts.getBoolean(
@@ -922,6 +952,7 @@ public class ActivityOptions {
             mSpecsFuture = IAppTransitionAnimationSpecsFuture.Stub.asInterface(opts.getBinder(
                     KEY_SPECS_FUTURE));
         }
+        mRemoteAnimationAdapter = opts.getParcelable(KEY_REMOTE_ANIMATION_ADAPTER);
     }
 
     /**
@@ -1070,6 +1101,11 @@ public class ActivityOptions {
     }
 
     /** @hide */
+    public RemoteAnimationAdapter getRemoteAnimationAdapter() {
+        return mRemoteAnimationAdapter;
+    }
+
+    /** @hide */
     public static ActivityOptions fromBundle(Bundle bOptions) {
         return bOptions != null ? new ActivityOptions(bOptions) : null;
     }
@@ -1211,6 +1247,25 @@ public class ActivityOptions {
         return mTaskOverlayCanResume;
     }
 
+    /**
+     * Sets whether the activity launched should not cause the activity stack it is contained in to
+     * be moved to the front as a part of launching.
+     *
+     * @hide
+     */
+    public void setAvoidMoveToFront() {
+        mAvoidMoveToFront = true;
+    }
+
+    /**
+     * @return whether the activity launch should prevent moving the associated activity stack to
+     *         the front.
+     * @hide
+     */
+    public boolean getAvoidMoveToFront() {
+        return mAvoidMoveToFront;
+    }
+
     /** @hide */
     public int getSplitScreenCreateMode() {
         return mSplitScreenCreateMode;
@@ -1309,6 +1364,7 @@ public class ActivityOptions {
         mAnimSpecs = otherOptions.mAnimSpecs;
         mAnimationFinishedListener = otherOptions.mAnimationFinishedListener;
         mSpecsFuture = otherOptions.mSpecsFuture;
+        mRemoteAnimationAdapter = otherOptions.mRemoteAnimationAdapter;
     }
 
     /**
@@ -1387,6 +1443,7 @@ public class ActivityOptions {
         b.putInt(KEY_LAUNCH_TASK_ID, mLaunchTaskId);
         b.putBoolean(KEY_TASK_OVERLAY, mTaskOverlay);
         b.putBoolean(KEY_TASK_OVERLAY_CAN_RESUME, mTaskOverlayCanResume);
+        b.putBoolean(KEY_AVOID_MOVE_TO_FRONT, mAvoidMoveToFront);
         b.putInt(KEY_SPLIT_SCREEN_CREATE_MODE, mSplitScreenCreateMode);
         b.putBoolean(KEY_DISALLOW_ENTER_PICTURE_IN_PICTURE_WHILE_LAUNCHING,
                 mDisallowEnterPictureInPictureWhileLaunching);
@@ -1403,7 +1460,9 @@ public class ActivityOptions {
         if (mAppVerificationBundle != null) {
             b.putBundle(KEY_INSTANT_APP_VERIFICATION_BUNDLE, mAppVerificationBundle);
         }
-
+        if (mRemoteAnimationAdapter != null) {
+            b.putParcelable(KEY_REMOTE_ANIMATION_ADAPTER, mRemoteAnimationAdapter);
+        }
         return b;
     }
 

@@ -16,16 +16,13 @@
 
 package com.android.server.net.watchlist;
 
+import android.annotation.Nullable;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.net.IIpConnectivityMetrics;
 import android.net.INetdEventCallback;
-import android.net.NetworkWatchlistManager;
 import android.net.metrics.IpConnectivityLog;
 import android.os.Binder;
 import android.os.Process;
-import android.os.SharedMemory;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemProperties;
@@ -42,9 +39,7 @@ import com.android.server.ServiceThread;
 import com.android.server.SystemService;
 
 import java.io.FileDescriptor;
-import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.List;
 
 /**
  * Implementation of network watchlist service.
@@ -99,7 +94,7 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
     private volatile boolean mIsLoggingEnabled = false;
     private final Object mLoggingSwitchLock = new Object();
 
-    private final WatchlistSettings mSettings;
+    private final WatchlistConfig mConfig;
     private final Context mContext;
 
     // Separate thread to handle expensive watchlist logging work.
@@ -112,7 +107,7 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
 
     public NetworkWatchlistService(Context context) {
         mContext = context;
-        mSettings = WatchlistSettings.getInstance();
+        mConfig = WatchlistConfig.getInstance();
         mHandlerThread = new ServiceThread(TAG, Process.THREAD_PRIORITY_BACKGROUND,
                         /* allowIo */ false);
         mHandlerThread.start();
@@ -126,7 +121,7 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
     NetworkWatchlistService(Context context, ServiceThread handlerThread,
             WatchlistLoggingHandler handler, IIpConnectivityMetrics ipConnectivityMetrics) {
         mContext = context;
-        mSettings = WatchlistSettings.getInstance();
+        mConfig = WatchlistConfig.getInstance();
         mHandlerThread = handlerThread;
         mNetworkWatchlistHandler = handler;
         mIpConnectivityMetrics = ipConnectivityMetrics;
@@ -216,6 +211,12 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
         return stopWatchlistLoggingImpl();
     }
 
+    @Nullable
+    @Override
+    public byte[] getWatchlistConfigHash() {
+        return mConfig.getWatchlistConfigHash();
+    }
+
     private void enforceWatchlistLoggingPermission() {
         final int uid = Binder.getCallingUid();
         if (uid != Process.SYSTEM_UID) {
@@ -228,7 +229,7 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
     public void reloadWatchlist() throws RemoteException {
         enforceWatchlistLoggingPermission();
         Slog.i(TAG, "Reloading watchlist");
-        mSettings.reloadSettings();
+        mConfig.reloadConfig();
     }
 
     @Override
@@ -240,7 +241,7 @@ public class NetworkWatchlistService extends INetworkWatchlistManager.Stub {
     @Override
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
-        mSettings.dump(fd, pw, args);
+        mConfig.dump(fd, pw, args);
     }
 
 }

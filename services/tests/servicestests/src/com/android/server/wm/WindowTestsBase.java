@@ -84,6 +84,16 @@ class WindowTestsBase {
     WindowState mChildAppWindowBelow;
     HashSet<WindowState> mCommonWindows;
 
+    private final SurfaceAnimationRunner mSurfaceAnimationRunner;
+
+    public WindowTestsBase() {
+        this(new SurfaceAnimationRunner());
+    }
+
+    public WindowTestsBase(SurfaceAnimationRunner surfaceAnimationRunner) {
+        mSurfaceAnimationRunner = surfaceAnimationRunner;
+    }
+
     @Before
     public void setUp() throws Exception {
         if (!sOneTimeSetupDone) {
@@ -98,7 +108,7 @@ class WindowTestsBase {
         final Context context = InstrumentationRegistry.getTargetContext();
         AttributeCache.init(context);
 
-        sWm = TestWindowManagerPolicy.getWindowManagerService(context);
+        sWm = TestWindowManagerPolicy.getWindowManagerService(context, mSurfaceAnimationRunner);
         beforeCreateDisplay();
 
         context.getDisplay().getDisplayInfo(mDisplayInfo);
@@ -230,20 +240,22 @@ class WindowTestsBase {
             boolean ownerCanAddInternalSystemWindow) {
         final WindowToken token = createWindowToken(
                 dc, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, type);
-        return createWindow(parent, type, token, name, ownerCanAddInternalSystemWindow);
+        return createWindow(parent, type, token, name, 0 /* ownerId */,
+                ownerCanAddInternalSystemWindow);
     }
 
     static WindowState createWindow(WindowState parent, int type, WindowToken token, String name) {
-        return createWindow(parent, type, token, name, false /* ownerCanAddInternalSystemWindow */);
+        return createWindow(parent, type, token, name, 0 /* ownerId */,
+                false /* ownerCanAddInternalSystemWindow */);
     }
 
     static WindowState createWindow(WindowState parent, int type, WindowToken token, String name,
-            boolean ownerCanAddInternalSystemWindow) {
+            int ownerId, boolean ownerCanAddInternalSystemWindow) {
         final WindowManager.LayoutParams attrs = new WindowManager.LayoutParams(type);
         attrs.setTitle(name);
 
         final WindowState w = new WindowState(sWm, sMockSession, sIWindow, token, parent, OP_NONE,
-                0, attrs, VISIBLE, 0, ownerCanAddInternalSystemWindow);
+                0, attrs, VISIBLE, ownerId, ownerCanAddInternalSystemWindow);
         // TODO: Probably better to make this call in the WindowState ctor to avoid errors with
         // adding it to the token...
         token.addWindow(w);

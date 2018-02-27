@@ -29,4 +29,14 @@ interface ISystemUiProxy {
      */
     GraphicBufferCompat screenshot(in Rect sourceCrop, int width, int height, int minLayer,
             int maxLayer, boolean useIdentityTransform, int rotation);
+
+    /**
+     * Begins screen pinning on the provided {@param taskId}.
+     */
+    void startScreenPinning(int taskId);
+
+    /**
+     * Called when the overview service has started the recents animation.
+     */
+    void onRecentsAnimationStarted();
 }

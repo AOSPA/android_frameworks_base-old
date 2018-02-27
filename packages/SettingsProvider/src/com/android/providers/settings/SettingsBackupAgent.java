@@ -31,10 +31,13 @@ import android.net.NetworkPolicyManager;
 import android.net.Uri;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiManager;
+import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.provider.SettingsValidators.Validator;
 import android.util.ArrayMap;
+import android.util.ArraySet;
 import android.util.BackupUtils;
 import android.util.Log;
 
@@ -50,6 +53,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -147,6 +151,16 @@ public class SettingsBackupAgent extends BackupAgentHelper {
     // stored in the full-backup tarfile as well, so should not be changed.
     private static final String STAGE_FILE = "flattened-data";
 
+    // List of keys that support restore to lower version of the SDK, introduced in Android P
+    private static final ArraySet<String> RESTORE_FROM_HIGHER_SDK_INT_SUPPORTED_KEYS =
+            new ArraySet<String>(Arrays.asList(new String[] {
+                KEY_NETWORK_POLICIES,
+                KEY_WIFI_NEW_CONFIG,
+                KEY_SYSTEM,
+                KEY_SECURE,
+                KEY_GLOBAL,
+            }));
+
     private SettingsHelper mSettingsHelper;
 
     private WifiManager mWifiManager;
@@ -209,6 +223,19 @@ public class SettingsBackupAgent extends BackupAgentHelper {
     public void onRestore(BackupDataInput data, int appVersionCode,
             ParcelFileDescriptor newState) throws IOException {
 
+        if (DEBUG) {
+            Log.d(TAG, "onRestore(): appVersionCode: " + appVersionCode
+                    + "; Build.VERSION.SDK_INT: " + Build.VERSION.SDK_INT);
+        }
+
+        boolean overrideRestoreAnyVersion = Settings.Global.getInt(getContentResolver(),
+                Settings.Global.OVERRIDE_SETTINGS_PROVIDER_RESTORE_ANY_VERSION, 0) == 1;
+        if ((appVersionCode > Build.VERSION.SDK_INT) && overrideRestoreAnyVersion) {
+            Log.w(TAG, "Ignoring restore from API" + appVersionCode + " to API"
+                    + Build.VERSION.SDK_INT + " due to settings flag override.");
+            return;
+        }
+
         // versionCode of com.android.providers.settings corresponds to SDK_INT
         mRestoredFromSdkInt = appVersionCode;
 
@@ -221,6 +248,15 @@ public class SettingsBackupAgent extends BackupAgentHelper {
         while (data.readNextHeader()) {
             final String key = data.getKey();
             final int size = data.getDataSize();
+
+            // bail out of restoring from higher SDK_INT version for unsupported keys
+            if (appVersionCode > Build.VERSION.SDK_INT
+                    && !RESTORE_FROM_HIGHER_SDK_INT_SUPPORTED_KEYS.contains(key)) {
+                Log.w(TAG, "Not restoring unrecognized key '"
+                        + key + "' from future version " + appVersionCode);
+                continue;
+            }
+
             switch (key) {
                 case KEY_SYSTEM :
                     restoreSettings(data, Settings.System.CONTENT_URI, movedToGlobal);
@@ -548,15 +584,19 @@ public class SettingsBackupAgent extends BackupAgentHelper {
         // Figure out the white list and redirects to the global table.  We restore anything
         // in either the backup whitelist or the legacy-restore whitelist for this table.
         final String[] whitelist;
+        Map<String, Validator> validators = null;
         if (contentUri.equals(Settings.Secure.CONTENT_URI)) {
             whitelist = concat(Settings.Secure.SETTINGS_TO_BACKUP,
                     Settings.Secure.LEGACY_RESTORE_SETTINGS);
+            validators = Settings.Secure.VALIDATORS;
         } else if (contentUri.equals(Settings.System.CONTENT_URI)) {
             whitelist = concat(Settings.System.SETTINGS_TO_BACKUP,
                     Settings.System.LEGACY_RESTORE_SETTINGS);
+            validators = Settings.System.VALIDATORS;
         } else if (contentUri.equals(Settings.Global.CONTENT_URI)) {
             whitelist = concat(Settings.Global.SETTINGS_TO_BACKUP,
                     Settings.Global.LEGACY_RESTORE_SETTINGS);
+            validators = Settings.Global.VALIDATORS;
         } else {
             throw new IllegalArgumentException("Unknown URI: " + contentUri);
         }
@@ -604,6 +644,13 @@ public class SettingsBackupAgent extends BackupAgentHelper {
                 continue;
             }
 
+            // only restore the settings that have valid values
+            if (!isValidSettingValue(key, value, validators)) {
+                Log.w(TAG, "Attempted restore of " + key + " setting, but its value didn't pass"
+                        + " validation, value: " + value);
+                continue;
+            }
+
             final Uri destination = (movedToGlobal != null && movedToGlobal.contains(key))
                     ? Settings.Global.CONTENT_URI
                     : contentUri;
@@ -614,6 +661,15 @@ public class SettingsBackupAgent extends BackupAgentHelper {
                 Log.d(TAG, "Restored setting: " + destination + " : " + key + "=" + value);
             }
         }
+    }
+
+    private boolean isValidSettingValue(String key, String value,
+            Map<String, Validator> validators) {
+        if (key == null || validators == null) {
+            return false;
+        }
+        Validator validator = validators.get(key);
+        return (validator != null) && validator.validate(value);
     }
 
     private final String[] concat(String[] first, @Nullable String[] second) {

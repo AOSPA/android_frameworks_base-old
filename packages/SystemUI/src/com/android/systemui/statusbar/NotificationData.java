@@ -67,6 +67,7 @@ public class NotificationData {
 
     public static final class Entry {
         private static final long LAUNCH_COOLDOWN = 2000;
+        private static final long REMOTE_INPUT_COOLDOWN = 500;
         private static final long NOT_LAUNCHED_YET = -LAUNCH_COOLDOWN;
         private static final int COLOR_INVALID = 1;
         public String key;
@@ -86,10 +87,14 @@ public class NotificationData {
         public RemoteViews cachedAmbientContentView;
         public CharSequence remoteInputText;
         public List<SnoozeCriterion> snoozeCriteria;
+        public int userSentiment = Ranking.USER_SENTIMENT_NEUTRAL;
+
         private int mCachedContrastColor = COLOR_INVALID;
         private int mCachedContrastColorIsFor = COLOR_INVALID;
         private InflationTask mRunningTask = null;
         private Throwable mDebugThrowable;
+        public CharSequence remoteInputTextWhenReset;
+        public long lastRemoteInputSent = NOT_LAUNCHED_YET;
 
         public Entry(StatusBarNotification n) {
             this.key = n.getKey();
@@ -128,6 +133,10 @@ public class NotificationData {
 
         public boolean hasJustLaunchedFullScreenIntent() {
             return SystemClock.elapsedRealtime() < lastFullScreenIntentLaunchTime + LAUNCH_COOLDOWN;
+        }
+
+        public boolean hasJustSentRemoteInput() {
+            return SystemClock.elapsedRealtime() < lastRemoteInputSent + REMOTE_INPUT_COOLDOWN;
         }
 
         /**
@@ -262,6 +271,11 @@ public class NotificationData {
 
         public Throwable getDebugThrowable() {
             return mDebugThrowable;
+        }
+
+        public void onRemoteInputInserted() {
+            lastRemoteInputSent = NOT_LAUNCHED_YET;
+            remoteInputTextWhenReset = null;
         }
     }
 
@@ -463,6 +477,7 @@ public class NotificationData {
                     }
                     entry.channel = getChannel(entry.key);
                     entry.snoozeCriteria = getSnoozeCriteria(entry.key);
+                    entry.userSentiment = mTmpRanking.getUserSentiment();
                 }
             }
         }

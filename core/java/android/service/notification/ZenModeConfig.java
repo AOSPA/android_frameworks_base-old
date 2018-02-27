@@ -17,6 +17,7 @@
 package android.service.notification;
 
 import android.app.ActivityManager;
+import android.app.NotificationManager;
 import android.app.NotificationManager.Policy;
 import android.content.ComponentName;
 import android.content.Context;
@@ -33,6 +34,7 @@ import android.text.format.DateFormat;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Slog;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.R;
 
@@ -1262,6 +1264,30 @@ public class ZenModeConfig implements Parcelable {
                     .append(']').toString();
         }
 
+        /** @hide */
+        public void writeToProto(ProtoOutputStream proto, long fieldId) {
+            final long token = proto.start(fieldId);
+
+            proto.write(ZenRuleProto.ID, id);
+            proto.write(ZenRuleProto.NAME, name);
+            proto.write(ZenRuleProto.CREATION_TIME_MS, creationTime);
+            proto.write(ZenRuleProto.ENABLED, enabled);
+            proto.write(ZenRuleProto.ENABLER, enabler);
+            proto.write(ZenRuleProto.IS_SNOOZING, snoozing);
+            proto.write(ZenRuleProto.ZEN_MODE, zenMode);
+            if (conditionId != null) {
+                proto.write(ZenRuleProto.CONDITION_ID, conditionId.toString());
+            }
+            if (condition != null) {
+                condition.writeToProto(proto, ZenRuleProto.CONDITION);
+            }
+            if (component != null) {
+                component.writeToProto(proto, ZenRuleProto.COMPONENT);
+            }
+
+            proto.end(token);
+        }
+
         private static void appendDiff(Diff d, String item, ZenRule from, ZenRule to) {
             if (d == null) return;
             if (from == null) {
@@ -1385,4 +1411,38 @@ public class ZenModeConfig implements Parcelable {
         }
     }
 
+    /**
+     * Determines whether dnd behavior should mute all notification sounds
+     */
+    public static boolean areAllPriorityOnlyNotificationZenSoundsMuted(NotificationManager.Policy
+            policy) {
+        boolean allowReminders = (policy.priorityCategories
+                & NotificationManager.Policy.PRIORITY_CATEGORY_REMINDERS) != 0;
+        boolean allowCalls = (policy.priorityCategories
+                & NotificationManager.Policy.PRIORITY_CATEGORY_CALLS) != 0;
+        boolean allowMessages = (policy.priorityCategories
+                & NotificationManager.Policy.PRIORITY_CATEGORY_MESSAGES) != 0;
+        boolean allowEvents = (policy.priorityCategories
+                & NotificationManager.Policy.PRIORITY_CATEGORY_EVENTS) != 0;
+        boolean allowRepeatCallers = (policy.priorityCategories
+                & NotificationManager.Policy.PRIORITY_CATEGORY_REPEAT_CALLERS) != 0;
+        return !allowReminders && !allowCalls && !allowMessages && !allowEvents
+                && !allowRepeatCallers;
+    }
+
+    /**
+     * Determines whether dnd behavior should mute all notification sounds
+     */
+    public static boolean areAllPriorityOnlyNotificationZenSoundsMuted(ZenModeConfig config) {
+        return !config.allowReminders && !config.allowCalls && !config.allowMessages
+                && !config.allowEvents && !config.allowRepeatCallers;
+    }
+
+    /**
+     * Determines whether all dnd mutes all sounds
+     */
+    public static boolean areAllZenBehaviorSoundsMuted(ZenModeConfig config) {
+        return !config.allowAlarms  && !config.allowMediaSystemOther
+                && areAllPriorityOnlyNotificationZenSoundsMuted(config);
+    }
 }
