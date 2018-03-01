@@ -67,20 +67,23 @@ android::hash_t hashDimensionsValue(const DimensionsValue& value) {
     return hashDimensionsValue(0, value);
 }
 
-using std::string;
-
-
-string HashableDimensionKey::toString() const {
-    string flattened;
-    DimensionsValueToString(getDimensionsValue(), &flattened);
-    return flattened;
+android::hash_t hashMetricDimensionKey(int64_t seed, const MetricDimensionKey& dimensionKey) {
+    android::hash_t hash = seed;
+    hash = android::JenkinsHashMix(hash, std::hash<MetricDimensionKey>{}(dimensionKey));
+    return JenkinsHashWhiten(hash);
 }
 
-bool compareDimensionsValue(const DimensionsValue& s1, const DimensionsValue& s2) {
+using std::string;
+
+string HashableDimensionKey::toString() const {
+    return DimensionsValueToString(getDimensionsValue());
+}
+
+bool EqualsTo(const DimensionsValue& s1, const DimensionsValue& s2) {
     if (s1.field() != s2.field()) {
         return false;
     }
-    if (s1.value_case() != s1.value_case()) {
+    if (s1.value_case() != s2.value_case()) {
         return false;
     }
     switch (s1.value_case()) {
@@ -102,8 +105,8 @@ bool compareDimensionsValue(const DimensionsValue& s1, const DimensionsValue& s2
                 }
                 bool allMatched = true;
                 for (int i = 0; allMatched && i < s1.value_tuple().dimensions_value_size(); ++i) {
-                    allMatched &= compareDimensionsValue(s1.value_tuple().dimensions_value(i),
-                                                    s2.value_tuple().dimensions_value(i));
+                    allMatched &= EqualsTo(s1.value_tuple().dimensions_value(i),
+                                           s2.value_tuple().dimensions_value(i));
                 }
                 return allMatched;
             }
@@ -113,13 +116,71 @@ bool compareDimensionsValue(const DimensionsValue& s1, const DimensionsValue& s2
     }
 }
 
+bool LessThan(const DimensionsValue& s1, const DimensionsValue& s2) {
+    if (s1.field() != s2.field()) {
+        return s1.field() < s2.field();
+    }
+    if (s1.value_case() != s2.value_case()) {
+        return s1.value_case() < s2.value_case();
+    }
+    switch (s1.value_case()) {
+        case DimensionsValue::ValueCase::kValueStr:
+            return s1.value_str() < s2.value_str();
+        case DimensionsValue::ValueCase::kValueInt:
+            return s1.value_int() < s2.value_int();
+        case DimensionsValue::ValueCase::kValueLong:
+            return s1.value_long() < s2.value_long();
+        case DimensionsValue::ValueCase::kValueBool:
+            return (int)s1.value_bool() < (int)s2.value_bool();
+        case DimensionsValue::ValueCase::kValueFloat:
+            return s1.value_float() < s2.value_float();
+        case DimensionsValue::ValueCase::kValueTuple:
+            {
+                if (s1.value_tuple().dimensions_value_size() !=
+                        s2.value_tuple().dimensions_value_size()) {
+                    return s1.value_tuple().dimensions_value_size() <
+                        s2.value_tuple().dimensions_value_size();
+                }
+                for (int i = 0;  i < s1.value_tuple().dimensions_value_size(); ++i) {
+                    if (EqualsTo(s1.value_tuple().dimensions_value(i),
+                                 s2.value_tuple().dimensions_value(i))) {
+                        continue;
+                    } else {
+                        return LessThan(s1.value_tuple().dimensions_value(i),
+                                        s2.value_tuple().dimensions_value(i));
+                    }
+                }
+                return false;
+            }
+        case DimensionsValue::ValueCase::VALUE_NOT_SET:
+        default:
+            return false;
+    }
+}
+
 bool HashableDimensionKey::operator==(const HashableDimensionKey& that) const {
-    return compareDimensionsValue(getDimensionsValue(), that.getDimensionsValue());
+    return EqualsTo(getDimensionsValue(), that.getDimensionsValue());
 };
 
 bool HashableDimensionKey::operator<(const HashableDimensionKey& that) const {
+    return LessThan(getDimensionsValue(), that.getDimensionsValue());
+};
+
+string MetricDimensionKey::toString() const {
+    string flattened = mDimensionKeyInWhat.toString();
+    flattened += mDimensionKeyInCondition.toString();
+    return flattened;
+}
+
+bool MetricDimensionKey::operator==(const MetricDimensionKey& that) const {
+    return mDimensionKeyInWhat == that.getDimensionKeyInWhat() &&
+        mDimensionKeyInCondition == that.getDimensionKeyInCondition();
+};
+
+bool MetricDimensionKey::operator<(const MetricDimensionKey& that) const {
     return toString().compare(that.toString()) < 0;
 };
+
 
 }  // namespace statsd
 }  // namespace os

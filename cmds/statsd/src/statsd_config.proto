@@ -64,7 +64,7 @@ message FieldValueMatcher {
   oneof value_matcher {
     bool eq_bool = 3;
     string eq_string = 4;
-    int32 eq_int = 5;
+    int64 eq_int = 5;
 
     int64 lt_int = 6;
     int64 gt_int = 7;
@@ -222,6 +222,12 @@ message GaugeMetric {
   optional TimeUnit bucket = 6;
 
   repeated MetricConditionLink links = 7;
+
+  enum SamplingType {
+    RANDOM_ONE_SAMPLE = 1;
+    ALL_CONDITION_CHANGES = 2;
+  }
+  optional SamplingType sampling_type = 9 [default = RANDOM_ONE_SAMPLE] ;
 }
 
 message ValueMetric {

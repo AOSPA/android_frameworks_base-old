@@ -32,6 +32,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.media.audiopolicy.AudioPolicy;
+import android.media.audiopolicy.AudioPolicy.AudioPolicyFocusListener;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.MediaSessionLegacyHelper;
@@ -48,14 +49,19 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
 import android.view.KeyEvent;
 
+import com.android.internal.annotations.GuardedBy;
+
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -2336,6 +2342,20 @@ public class AudioManager {
                 }
             }
         }
+
+        @Override
+        public void dispatchFocusResultFromExtPolicy(int requestResult, String clientId) {
+            synchronized (mFocusRequestsLock) {
+                // TODO use generation counter as the key instead
+                final BlockingFocusResultReceiver focusReceiver =
+                        mFocusRequestsAwaitingResult.remove(clientId);
+                if (focusReceiver != null) {
+                    focusReceiver.notifyResult(requestResult);
+                } else {
+                    Log.e(TAG, "dispatchFocusResultFromExtPolicy found no result receiver");
+                }
+            }
+        }
     };
 
     private String getIdForAudioFocusListener(OnAudioFocusChangeListener l) {
@@ -2387,6 +2407,40 @@ public class AudioManager {
       * {@link AudioFocusRequest.Builder#setAcceptsDelayedFocusGain(boolean)}
       */
     public static final int AUDIOFOCUS_REQUEST_DELAYED = 2;
+
+    /** @hide */
+    @IntDef(flag = false, prefix = "AUDIOFOCUS_REQUEST", value = {
+            AUDIOFOCUS_REQUEST_FAILED,
+            AUDIOFOCUS_REQUEST_GRANTED,
+            AUDIOFOCUS_REQUEST_DELAYED }
+    )
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface FocusRequestResult {}
+
+    /**
+     * @hide
+     * code returned when a synchronous focus request on the client-side is to be blocked
+     * until the external audio focus policy decides on the response for the client
+     */
+    public static final int AUDIOFOCUS_REQUEST_WAITING_FOR_EXT_POLICY = 100;
+
+    /**
+     * Timeout duration in ms when waiting on an external focus policy for the result for a
+     * focus request
+     */
+    private static final int EXT_FOCUS_POLICY_TIMEOUT_MS = 200;
+
+    private static final String FOCUS_CLIENT_ID_STRING = "android_audio_focus_client_id";
+
+    private final Object mFocusRequestsLock = new Object();
+    /**
+     * Map of all receivers of focus request results, one per unresolved focus request.
+     * Receivers are added before sending the request to the external focus policy,
+     * and are removed either after receiving the result, or after the timeout.
+     * This variable is lazily initialized.
+     */
+    @GuardedBy("mFocusRequestsLock")
+    private HashMap<String, BlockingFocusResultReceiver> mFocusRequestsAwaitingResult;
 
 
     /**
@@ -2654,18 +2708,100 @@ public class AudioManager {
             // some tests don't have a Context
             sdk = Build.VERSION.SDK_INT;
         }
-        try {
-            status = service.requestAudioFocus(afr.getAudioAttributes(),
-                    afr.getFocusGain(), mICallBack,
-                    mAudioFocusDispatcher,
-                    getIdForAudioFocusListener(afr.getOnAudioFocusChangeListener()),
-                    getContext().getOpPackageName() /* package name */, afr.getFlags(),
-                    ap != null ? ap.cb() : null,
-                    sdk);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+
+        final String clientId = getIdForAudioFocusListener(afr.getOnAudioFocusChangeListener());
+        final BlockingFocusResultReceiver focusReceiver;
+        synchronized (mFocusRequestsLock) {
+            try {
+                // TODO status contains result and generation counter for ext policy
+                status = service.requestAudioFocus(afr.getAudioAttributes(),
+                        afr.getFocusGain(), mICallBack,
+                        mAudioFocusDispatcher,
+                        clientId,
+                        getContext().getOpPackageName() /* package name */, afr.getFlags(),
+                        ap != null ? ap.cb() : null,
+                        sdk);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+            if (status != AudioManager.AUDIOFOCUS_REQUEST_WAITING_FOR_EXT_POLICY) {
+                // default path with no external focus policy
+                return status;
+            }
+            if (mFocusRequestsAwaitingResult == null) {
+                mFocusRequestsAwaitingResult =
+                        new HashMap<String, BlockingFocusResultReceiver>(1);
+            }
+            focusReceiver = new BlockingFocusResultReceiver(clientId);
+            mFocusRequestsAwaitingResult.put(clientId, focusReceiver);
         }
-        return status;
+        focusReceiver.waitForResult(EXT_FOCUS_POLICY_TIMEOUT_MS);
+        if (DEBUG && !focusReceiver.receivedResult()) {
+            Log.e(TAG, "requestAudio response from ext policy timed out, denying request");
+        }
+        synchronized (mFocusRequestsLock) {
+            mFocusRequestsAwaitingResult.remove(clientId);
+        }
+        return focusReceiver.requestResult();
+    }
+
+    // helper class that abstracts out the handling of spurious wakeups in Object.wait()
+    private static final class SafeWaitObject {
+        private boolean mQuit = false;
+
+        public void safeNotify() {
+            synchronized (this) {
+                mQuit = true;
+                this.notify();
+            }
+        }
+
+        public void safeWait(long millis) throws InterruptedException {
+            final long timeOutTime = java.lang.System.currentTimeMillis() + millis;
+            synchronized (this) {
+                while (!mQuit) {
+                    final long timeToWait = timeOutTime - java.lang.System.currentTimeMillis();
+                    if (timeToWait < 0) { break; }
+                    this.wait(timeToWait);
+                }
+            }
+        }
+    }
+
+    private static final class BlockingFocusResultReceiver {
+        private final SafeWaitObject mLock = new SafeWaitObject();
+        @GuardedBy("mLock")
+        private boolean mResultReceived = false;
+        // request denied by default (e.g. timeout)
+        private int mFocusRequestResult = AudioManager.AUDIOFOCUS_REQUEST_FAILED;
+        private final String mFocusClientId;
+
+        BlockingFocusResultReceiver(String clientId) {
+            mFocusClientId = clientId;
+        }
+
+        boolean receivedResult() { return mResultReceived; }
+        int requestResult() { return mFocusRequestResult; }
+
+        void notifyResult(int requestResult) {
+            synchronized (mLock) {
+                mResultReceived = true;
+                mFocusRequestResult = requestResult;
+                mLock.safeNotify();
+            }
+        }
+
+        public void waitForResult(long timeOutMs) {
+            synchronized (mLock) {
+                if (mResultReceived) {
+                    // the result was received before waiting
+                    return;
+                }
+                try {
+                    mLock.safeWait(timeOutMs);
+                } catch (InterruptedException e) { }
+            }
+        }
     }
 
     /**
@@ -2705,6 +2841,32 @@ public class AudioManager {
         final IAudioService service = getService();
         try {
             return service.getFocusRampTimeMs(focusGain, attr);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     * Set the result to the audio focus request received through
+     * {@link AudioPolicyFocusListener#onAudioFocusRequest(AudioFocusInfo, int)}.
+     * @param afi the information about the focus requester
+     * @param requestResult the result to the focus request to be passed to the requester
+     * @param ap a valid registered {@link AudioPolicy} configured as a focus policy.
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
+    public void setFocusRequestResult(@NonNull AudioFocusInfo afi,
+            @FocusRequestResult int requestResult, @NonNull AudioPolicy ap) {
+        if (afi == null) {
+            throw new IllegalArgumentException("Illegal null AudioFocusInfo");
+        }
+        if (ap == null) {
+            throw new IllegalArgumentException("Illegal null AudioPolicy");
+        }
+        final IAudioService service = getService();
+        try {
+            service.setFocusRequestResultFromExtPolicy(afi, requestResult, ap.cb());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4576,6 +4738,51 @@ public class AudioManager {
                 }
             }
         }
+    }
+
+    /**
+     * Set port id for microphones by matching device type and address.
+     * @hide
+     */
+    public static void setPortIdForMicrophones(ArrayList<MicrophoneInfo> microphones) {
+        AudioDeviceInfo[] devices = getDevicesStatic(AudioManager.GET_DEVICES_INPUTS);
+        for (int i = microphones.size() - 1; i >= 0; i--) {
+            boolean foundPortId = false;
+            for (AudioDeviceInfo device : devices) {
+                if (device.getPort().type() == microphones.get(i).getInternalDeviceType()
+                        && TextUtils.equals(device.getAddress(), microphones.get(i).getAddress())) {
+                    microphones.get(i).setId(device.getId());
+                    foundPortId = true;
+                    break;
+                }
+            }
+            if (!foundPortId) {
+                Log.i(TAG, "Failed to find port id for device with type:"
+                        + microphones.get(i).getType() + " address:"
+                        + microphones.get(i).getAddress());
+                microphones.remove(i);
+            }
+        }
+    }
+
+    /**
+     * Returns a list of {@link MicrophoneInfo} that corresponds to the characteristics
+     * of all available microphones. The list is empty when no microphones are available
+     * on the device. An error during the query will result in an IOException being thrown.
+     *
+     * @return a list that contains all microphones' characteristics
+     * @throws IOException if an error occurs.
+     */
+    public List<MicrophoneInfo> getMicrophones() throws IOException {
+        ArrayList<MicrophoneInfo> microphones = new ArrayList<MicrophoneInfo>();
+        int status = AudioSystem.getMicrophones(microphones);
+        if (status != AudioManager.SUCCESS) {
+            // fail and bail!
+            Log.e(TAG, "getMicrophones failed:" + status);
+            return new ArrayList<MicrophoneInfo>(); // Always return a list.
+        }
+        setPortIdForMicrophones(microphones);
+        return microphones;
     }
 
     // Since we need to calculate the changes since THE LAST NOTIFICATION, and not since the

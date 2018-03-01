@@ -291,6 +291,7 @@ class PackageSignatures {
                     PackageManagerService.reportSettingsProblem(Log.WARN,
                             "<pastSigs> encountered multiple times under the same <sigs> at "
                                     + parser.getPositionDescription());
+                    XmlUtils.skipCurrentTag(parser);
                 }
             } else {
                 PackageManagerService.reportSettingsProblem(Log.WARN,
@@ -317,7 +318,7 @@ class PackageSignatures {
                         mSigningDetails.signatures[i].hashCode()));
             }
         }
-        buf.append("]}");
+        buf.append("]");
         buf.append(", past signatures:[");
         if (mSigningDetails.pastSigningCertificates != null) {
             for (int i = 0; i < mSigningDetails.pastSigningCertificates.length; i++) {
@@ -328,6 +329,7 @@ class PackageSignatures {
                 buf.append(Integer.toHexString(mSigningDetails.pastSigningCertificatesFlags[i]));
             }
         }
+        buf.append("]}");
         return buf.toString();
     }
 }

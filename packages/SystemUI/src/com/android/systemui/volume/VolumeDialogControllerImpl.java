@@ -59,7 +59,9 @@ import com.android.systemui.statusbar.phone.StatusBar;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -76,7 +78,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     private static final int DYNAMIC_STREAM_START_INDEX = 100;
     private static final int VIBRATE_HINT_DURATION = 50;
 
-    private static final ArrayMap<Integer, Integer> STREAMS = new ArrayMap<>();
+    static final ArrayMap<Integer, Integer> STREAMS = new ArrayMap<>();
     static {
         STREAMS.put(AudioSystem.STREAM_ALARM, R.string.stream_alarm);
         STREAMS.put(AudioSystem.STREAM_BLUETOOTH_SCO, R.string.stream_bluetooth_sco);
@@ -109,8 +111,10 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     private boolean mShowVolumeDialog;
     private boolean mShowSafetyWarning;
     private DeviceCallback mDeviceCallback = new DeviceCallback();
-    private AudioDeviceInfo mConnectedDevice;
     private final NotificationManager mNotificationManager;
+    @GuardedBy("mLock")
+    private List<AudioDeviceInfo> mConnectedDevices = new ArrayList<>();
+    private Object mLock = new Object();
 
     private boolean mDestroyed;
     private VolumePolicy mVolumePolicy;
@@ -358,12 +362,15 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
 
     private boolean shouldShowUI(int flags) {
         updateStatusBar();
-        return mStatusBar != null
-                && mStatusBar.getWakefulnessState() != WakefulnessLifecycle.WAKEFULNESS_ASLEEP
-                && mStatusBar.getWakefulnessState() != WakefulnessLifecycle.WAKEFULNESS_GOING_TO_SLEEP
+        // if status bar isn't null, check if phone is in AOD, else check flags
+        // since we could be using a different status bar
+        return mStatusBar != null ?
+                mStatusBar.getWakefulnessState() != WakefulnessLifecycle.WAKEFULNESS_ASLEEP
+                && mStatusBar.getWakefulnessState() !=
+                        WakefulnessLifecycle.WAKEFULNESS_GOING_TO_SLEEP
                 && mStatusBar.isDeviceInteractive()
-                && (flags & AudioManager.FLAG_SHOW_UI) != 0
-                && mShowVolumeDialog;
+                && (flags & AudioManager.FLAG_SHOW_UI) != 0 && mShowVolumeDialog
+                : mShowVolumeDialog && (flags & AudioManager.FLAG_SHOW_UI) != 0;
     }
 
     boolean onVolumeChangedW(int stream, int flags) {
@@ -1055,26 +1062,25 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
 
     protected final class DeviceCallback extends AudioDeviceCallback {
         public void onAudioDevicesAdded(AudioDeviceInfo[] addedDevices) {
-            for (AudioDeviceInfo info : addedDevices) {
-                if (info.isSink()
-                        && (info.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
-                        || info.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO)) {
-                    mConnectedDevice = info;
-                    mCallbacks.onConnectedDeviceChanged(info.getProductName().toString());
+            synchronized (mLock) {
+                for (AudioDeviceInfo info : addedDevices) {
+                    if (info.isSink()
+                            && (info.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
+                            || info.getType() == AudioDeviceInfo.TYPE_BLUETOOTH_SCO)) {
+                        mConnectedDevices.add(info);
+                        mCallbacks.onConnectedDeviceChanged(info.getProductName().toString());
+                    }
                 }
             }
         }
 
         public void onAudioDevicesRemoved(AudioDeviceInfo[] removedDevices) {
-            if (mConnectedDevice == null) {
-                mCallbacks.onConnectedDeviceChanged(null);
-                return;
-            }
-            for (AudioDeviceInfo info : removedDevices) {
-                if (info.isSink() == mConnectedDevice.isSink()
-                        && Objects.equals(info.getProductName(), mConnectedDevice.getProductName())
-                        && info.getType() == mConnectedDevice.getType()) {
-                    mConnectedDevice = null;
+            synchronized (mLock) {
+                for (AudioDeviceInfo info : removedDevices) {
+                    mConnectedDevices.remove(info);
+                }
+
+                if (mConnectedDevices.size() == 0) {
                     mCallbacks.onConnectedDeviceChanged(null);
                 }
             }

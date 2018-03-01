@@ -1903,7 +1903,7 @@ public final class Settings {
                 cp.call(cr.getPackageName(), mCallSetCommand, name, arg);
                 String newValue = getStringForUser(cr, name, userHandle);
                 StatsLog.write(StatsLog.SETTING_CHANGED, name, value, newValue, prevValue, tag,
-                        makeDefault ? 1 : 0, userHandle);
+                        makeDefault, userHandle);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't set key " + name + " in " + mUri, e);
                 return false;
@@ -2255,7 +2255,7 @@ public final class Settings {
          * @return the corresponding value, or null if not present
          */
         public static String getString(ContentResolver resolver, String name) {
-            return getStringForUser(resolver, name, UserHandle.myUserId());
+            return getStringForUser(resolver, name, resolver.getUserId());
         }
 
         /** @hide */
@@ -2282,7 +2282,7 @@ public final class Settings {
          * @return true if the value was set, false on database errors
          */
         public static boolean putString(ContentResolver resolver, String name, String value) {
-            return putStringForUser(resolver, name, value, UserHandle.myUserId());
+            return putStringForUser(resolver, name, value, resolver.getUserId());
         }
 
         /** @hide */
@@ -2336,7 +2336,7 @@ public final class Settings {
          * or not a valid integer.
          */
         public static int getInt(ContentResolver cr, String name, int def) {
-            return getIntForUser(cr, name, def, UserHandle.myUserId());
+            return getIntForUser(cr, name, def, cr.getUserId());
         }
 
         /** @hide */
@@ -2369,7 +2369,7 @@ public final class Settings {
          */
         public static int getInt(ContentResolver cr, String name)
                 throws SettingNotFoundException {
-            return getIntForUser(cr, name, UserHandle.myUserId());
+            return getIntForUser(cr, name, cr.getUserId());
         }
 
         /** @hide */
@@ -2397,7 +2397,7 @@ public final class Settings {
          * @return true if the value was set, false on database errors
          */
         public static boolean putInt(ContentResolver cr, String name, int value) {
-            return putIntForUser(cr, name, value, UserHandle.myUserId());
+            return putIntForUser(cr, name, value, cr.getUserId());
         }
 
         /** @hide */
@@ -2421,7 +2421,7 @@ public final class Settings {
          * or not a valid {@code long}.
          */
         public static long getLong(ContentResolver cr, String name, long def) {
-            return getLongForUser(cr, name, def, UserHandle.myUserId());
+            return getLongForUser(cr, name, def, cr.getUserId());
         }
 
         /** @hide */
@@ -2456,7 +2456,7 @@ public final class Settings {
          */
         public static long getLong(ContentResolver cr, String name)
                 throws SettingNotFoundException {
-            return getLongForUser(cr, name, UserHandle.myUserId());
+            return getLongForUser(cr, name, cr.getUserId());
         }
 
         /** @hide */
@@ -2484,7 +2484,7 @@ public final class Settings {
          * @return true if the value was set, false on database errors
          */
         public static boolean putLong(ContentResolver cr, String name, long value) {
-            return putLongForUser(cr, name, value, UserHandle.myUserId());
+            return putLongForUser(cr, name, value, cr.getUserId());
         }
 
         /** @hide */
@@ -2508,7 +2508,7 @@ public final class Settings {
          * or not a valid float.
          */
         public static float getFloat(ContentResolver cr, String name, float def) {
-            return getFloatForUser(cr, name, def, UserHandle.myUserId());
+            return getFloatForUser(cr, name, def, cr.getUserId());
         }
 
         /** @hide */
@@ -2542,7 +2542,7 @@ public final class Settings {
          */
         public static float getFloat(ContentResolver cr, String name)
                 throws SettingNotFoundException {
-            return getFloatForUser(cr, name, UserHandle.myUserId());
+            return getFloatForUser(cr, name, cr.getUserId());
         }
 
         /** @hide */
@@ -2573,7 +2573,7 @@ public final class Settings {
          * @return true if the value was set, false on database errors
          */
         public static boolean putFloat(ContentResolver cr, String name, float value) {
-            return putFloatForUser(cr, name, value, UserHandle.myUserId());
+            return putFloatForUser(cr, name, value, cr.getUserId());
         }
 
         /** @hide */
@@ -2591,7 +2591,7 @@ public final class Settings {
          * @param outConfig Where to place the configuration settings.
          */
         public static void getConfiguration(ContentResolver cr, Configuration outConfig) {
-            adjustConfigurationForUser(cr, outConfig, UserHandle.myUserId(),
+            adjustConfigurationForUser(cr, outConfig, cr.getUserId(),
                     false /* updateSettingsIfEmpty */);
         }
 
@@ -2644,7 +2644,7 @@ public final class Settings {
          * @return true if the values were set, false on database errors
          */
         public static boolean putConfiguration(ContentResolver cr, Configuration config) {
-            return putConfigurationForUser(cr, config, UserHandle.myUserId());
+            return putConfigurationForUser(cr, config, cr.getUserId());
         }
 
         /** @hide */
@@ -2664,7 +2664,7 @@ public final class Settings {
         /** @deprecated - Do not use */
         @Deprecated
         public static boolean getShowGTalkServiceStatus(ContentResolver cr) {
-            return getShowGTalkServiceStatusForUser(cr, UserHandle.myUserId());
+            return getShowGTalkServiceStatusForUser(cr, cr.getUserId());
         }
 
         /**
@@ -2680,7 +2680,7 @@ public final class Settings {
         /** @deprecated - Do not use */
         @Deprecated
         public static void setShowGTalkServiceStatus(ContentResolver cr, boolean flag) {
-            setShowGTalkServiceStatusForUser(cr, flag, UserHandle.myUserId());
+            setShowGTalkServiceStatusForUser(cr, flag, cr.getUserId());
         }
 
         /**
@@ -3692,6 +3692,20 @@ public final class Settings {
                 new SettingsValidators.InclusiveIntegerRangeValidator(0, 3);
 
         /**
+         * User-selected RTT mode
+         * 0 = OFF
+         * 1 = FULL
+         * 2 = VCO
+         * 3 = HCO
+         * Uses the same constants as TTY (e.g. {@link android.telecom.TelecomManager#TTY_MODE_OFF})
+         * @hide
+         */
+        public static final String RTT_CALLING_MODE = "rtt_calling_mode";
+
+        /** @hide */
+        public static final Validator RTT_CALLING_MODE_VALIDATOR = TTY_MODE_VALIDATOR;
+
+        /**
          * Whether the sounds effects (key clicks, lid open ...) are enabled. The value is
          * boolean (1 or 0).
          */
@@ -4016,6 +4030,7 @@ public final class Settings {
             DTMF_TONE_WHEN_DIALING,
             DTMF_TONE_TYPE_WHEN_DIALING,
             HEARING_AID,
+            RTT_CALLING_MODE,
             TTY_MODE,
             MASTER_MONO,
             SOUND_EFFECTS_ENABLED,
@@ -4214,6 +4229,7 @@ public final class Settings {
             VALIDATORS.put(DTMF_TONE_TYPE_WHEN_DIALING, DTMF_TONE_TYPE_WHEN_DIALING_VALIDATOR);
             VALIDATORS.put(HEARING_AID, HEARING_AID_VALIDATOR);
             VALIDATORS.put(TTY_MODE, TTY_MODE_VALIDATOR);
+            VALIDATORS.put(RTT_CALLING_MODE, RTT_CALLING_MODE_VALIDATOR);
             VALIDATORS.put(NOTIFICATION_LIGHT_PULSE, NOTIFICATION_LIGHT_PULSE_VALIDATOR);
             VALIDATORS.put(POINTER_LOCATION, POINTER_LOCATION_VALIDATOR);
             VALIDATORS.put(SHOW_TOUCHES, SHOW_TOUCHES_VALIDATOR);
@@ -4732,7 +4748,7 @@ public final class Settings {
          * @return the corresponding value, or null if not present
          */
         public static String getString(ContentResolver resolver, String name) {
-            return getStringForUser(resolver, name, UserHandle.myUserId());
+            return getStringForUser(resolver, name, resolver.getUserId());
         }
 
         /** @hide */
@@ -4786,7 +4802,7 @@ public final class Settings {
          * @return true if the value was set, false on database errors
          */
         public static boolean putString(ContentResolver resolver, String name, String value) {
-            return putStringForUser(resolver, name, value, UserHandle.myUserId());
+            return putStringForUser(resolver, name, value, resolver.getUserId());
         }
 
         /** @hide */
@@ -4859,7 +4875,7 @@ public final class Settings {
                 @NonNull String name, @Nullable String value, @Nullable String tag,
                 boolean makeDefault) {
             return putStringForUser(resolver, name, value, tag, makeDefault,
-                    UserHandle.myUserId());
+                    resolver.getUserId());
         }
 
         /**
@@ -4880,7 +4896,7 @@ public final class Settings {
         public static void resetToDefaults(@NonNull ContentResolver resolver,
                 @Nullable String tag) {
             resetToDefaultsAsUser(resolver, tag, RESET_MODE_PACKAGE_DEFAULTS,
-                    UserHandle.myUserId());
+                    resolver.getUserId());
         }
 
         /**
@@ -4947,7 +4963,7 @@ public final class Settings {
          * or not a valid integer.
          */
         public static int getInt(ContentResolver cr, String name, int def) {
-            return getIntForUser(cr, name, def, UserHandle.myUserId());
+            return getIntForUser(cr, name, def, cr.getUserId());
         }
 
         /** @hide */
@@ -4984,7 +5000,7 @@ public final class Settings {
          */
         public static int getInt(ContentResolver cr, String name)
                 throws SettingNotFoundException {
-            return getIntForUser(cr, name, UserHandle.myUserId());
+            return getIntForUser(cr, name, cr.getUserId());
         }
 
         /** @hide */
@@ -5016,7 +5032,7 @@ public final class Settings {
          * @return true if the value was set, false on database errors
          */
         public static boolean putInt(ContentResolver cr, String name, int value) {
-            return putIntForUser(cr, name, value, UserHandle.myUserId());
+            return putIntForUser(cr, name, value, cr.getUserId());
         }
 
         /** @hide */
@@ -5040,7 +5056,7 @@ public final class Settings {
          * or not a valid {@code long}.
          */
         public static long getLong(ContentResolver cr, String name, long def) {
-            return getLongForUser(cr, name, def, UserHandle.myUserId());
+            return getLongForUser(cr, name, def, cr.getUserId());
         }
 
         /** @hide */
@@ -5075,7 +5091,7 @@ public final class Settings {
          */
         public static long getLong(ContentResolver cr, String name)
                 throws SettingNotFoundException {
-            return getLongForUser(cr, name, UserHandle.myUserId());
+            return getLongForUser(cr, name, cr.getUserId());
         }
 
         /** @hide */
@@ -5103,7 +5119,7 @@ public final class Settings {
          * @return true if the value was set, false on database errors
          */
         public static boolean putLong(ContentResolver cr, String name, long value) {
-            return putLongForUser(cr, name, value, UserHandle.myUserId());
+            return putLongForUser(cr, name, value, cr.getUserId());
         }
 
         /** @hide */
@@ -5127,7 +5143,7 @@ public final class Settings {
          * or not a valid float.
          */
         public static float getFloat(ContentResolver cr, String name, float def) {
-            return getFloatForUser(cr, name, def, UserHandle.myUserId());
+            return getFloatForUser(cr, name, def, cr.getUserId());
         }
 
         /** @hide */
@@ -5161,7 +5177,7 @@ public final class Settings {
          */
         public static float getFloat(ContentResolver cr, String name)
                 throws SettingNotFoundException {
-            return getFloatForUser(cr, name, UserHandle.myUserId());
+            return getFloatForUser(cr, name, cr.getUserId());
         }
 
         /** @hide */
@@ -5192,7 +5208,7 @@ public final class Settings {
          * @return true if the value was set, false on database errors
          */
         public static boolean putFloat(ContentResolver cr, String name, float value) {
-            return putFloatForUser(cr, name, value, UserHandle.myUserId());
+            return putFloatForUser(cr, name, value, cr.getUserId());
         }
 
         /** @hide */
@@ -7999,7 +8015,7 @@ public final class Settings {
          */
         @Deprecated
         public static final boolean isLocationProviderEnabled(ContentResolver cr, String provider) {
-            return isLocationProviderEnabledForUser(cr, provider, UserHandle.myUserId());
+            return isLocationProviderEnabledForUser(cr, provider, cr.getUserId());
         }
 
         /**
@@ -8031,7 +8047,7 @@ public final class Settings {
         @Deprecated
         public static final void setLocationProviderEnabled(ContentResolver cr,
                 String provider, boolean enabled) {
-            setLocationProviderEnabledForUser(cr, provider, enabled, UserHandle.myUserId());
+            setLocationProviderEnabledForUser(cr, provider, enabled, cr.getUserId());
         }
 
         /**
@@ -9315,17 +9331,6 @@ public final class Settings {
         private static final Validator WIFI_WAKEUP_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
-         * Value to specify if Wi-Fi Wakeup is available.
-         *
-         * Wi-Fi Wakeup will only operate if it's available
-         * and {@link #WIFI_WAKEUP_ENABLED} is true.
-         *
-         * Type: int (0 for false, 1 for true)
-         * @hide
-         */
-        public static final String WIFI_WAKEUP_AVAILABLE = "wifi_wakeup_available";
-
-        /**
          * Value to specify whether network quality scores and badging should be shown in the UI.
          *
          * Type: int (0 for false, 1 for true)
@@ -10266,6 +10271,20 @@ public final class Settings {
         public static final String BATTERY_TIP_CONSTANTS = "battery_tip_constants";
 
         /**
+         * An integer to show the version of the anomaly config. Ex: 1, which means
+         * current version is 1.
+         * @hide
+         */
+        public static final String ANOMALY_CONFIG_VERSION = "anomaly_config_version";
+
+        /**
+         * A base64-encoded string represents anomaly stats config, used for
+         * {@link android.app.StatsManager}.
+         * @hide
+         */
+        public static final String ANOMALY_CONFIG = "anomaly_config";
+
+        /**
          * Always on display(AOD) specific settings
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -10302,6 +10321,15 @@ public final class Settings {
          * @hide
          */
         public static final String FPS_DEVISOR = "fps_divisor";
+
+        /**
+         * Flag to enable or disable display panel low power mode (lpm)
+         * false -> Display panel power saving mode is disabled.
+         * true  -> Display panel power saving mode is enabled.
+         *
+         * @hide
+         */
+        public static final String DISPLAY_PANEL_LPM = "display_panel_lpm";
 
         /**
          * App standby (app idle) specific settings.
@@ -10518,6 +10546,18 @@ public final class Settings {
          * @hide
          */
         public static final String NETWORK_WATCHLIST_ENABLED = "network_watchlist_enabled";
+
+        /**
+         * Flag to keep background restricted profiles running after exiting. If disabled,
+         * the restricted profile can be put into stopped state as soon as the user leaves it.
+         * Type: int (0 for false, 1 for true)
+         *
+         * Overridden by the system based on device information. If null, the value specified
+         * by {@code config_keepRestrictedProfilesInBackground} is used.
+         *
+         * @hide
+         */
+        public static final String KEEP_PROFILE_IN_BACKGROUND = "keep_profile_in_background";
 
         /**
          * Get the key that retrieves a bluetooth headset's priority.
@@ -10738,14 +10778,14 @@ public final class Settings {
         public static final String LOW_POWER_MODE = "low_power";
 
         /**
-         * Battery level [1-99] at which low power mode automatically turns on.
+         * Battery level [1-100] at which low power mode automatically turns on.
          * If 0, it will not automatically turn on.
          * @hide
          */
         public static final String LOW_POWER_MODE_TRIGGER_LEVEL = "low_power_trigger_level";
 
         private static final Validator LOW_POWER_MODE_TRIGGER_LEVEL_VALIDATOR =
-                new SettingsValidators.InclusiveIntegerRangeValidator(0, 99);
+                new SettingsValidators.InclusiveIntegerRangeValidator(0, 100);
 
          /**
          * If not 0, the activity manager will aggressively finish activities and
@@ -11332,6 +11372,15 @@ public final class Settings {
                 "chained_battery_attribution_enabled";
 
         /**
+         * The packages whitelisted to be run in autofill compatibility mode.
+         *
+         * @hide
+         */
+        @SystemApi
+        public static final String AUTOFILL_COMPAT_ALLOWED_PACKAGES =
+                "autofill_compat_allowed_packages";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
@@ -11466,7 +11515,7 @@ public final class Settings {
          * @return the corresponding value, or null if not present
          */
         public static String getString(ContentResolver resolver, String name) {
-            return getStringForUser(resolver, name, UserHandle.myUserId());
+            return getStringForUser(resolver, name, resolver.getUserId());
         }
 
         /** @hide */
@@ -11489,7 +11538,7 @@ public final class Settings {
          */
         public static boolean putString(ContentResolver resolver,
                 String name, String value) {
-            return putStringForUser(resolver, name, value, null, false, UserHandle.myUserId());
+            return putStringForUser(resolver, name, value, null, false, resolver.getUserId());
         }
 
         /**
@@ -11538,7 +11587,7 @@ public final class Settings {
                 @NonNull String name, @Nullable String value, @Nullable String tag,
                 boolean makeDefault) {
             return putStringForUser(resolver, name, value, tag, makeDefault,
-                    UserHandle.myUserId());
+                    resolver.getUserId());
         }
 
         /**
@@ -11559,7 +11608,7 @@ public final class Settings {
         public static void resetToDefaults(@NonNull ContentResolver resolver,
                 @Nullable String tag) {
             resetToDefaultsAsUser(resolver, tag, RESET_MODE_PACKAGE_DEFAULTS,
-                    UserHandle.myUserId());
+                    resolver.getUserId());
         }
 
         /**
@@ -11872,8 +11921,6 @@ public final class Settings {
           * @hide
           */
         public static final String MULTI_SIM_SMS_PROMPT = "multi_sim_sms_prompt";
-
-
 
         /** User preferred subscriptions setting.
           * This holds the details of the user selected subscription from the card and

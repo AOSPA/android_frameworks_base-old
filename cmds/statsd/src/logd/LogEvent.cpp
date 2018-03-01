@@ -62,13 +62,14 @@ void LogEvent::init() {
         const char* buffer;
         size_t len = android_log_write_list_buffer(mContext, &buffer);
         // turns to reader mode
-        mContext = create_android_log_parser(buffer, len);
-        init(mContext);
-        // destroy the context to save memory.
-        if (mContext) {
+        android_log_context contextForRead = create_android_log_parser(buffer, len);
+        if (contextForRead) {
+            init(contextForRead);
+            // destroy the context to save memory.
             // android_log_destroy will set mContext to NULL
-            android_log_destroy(&mContext);
+            android_log_destroy(&contextForRead);
         }
+        android_log_destroy(&mContext);
     }
 }
 
@@ -188,6 +189,9 @@ void increaseField(Field *field, bool is_child) {
  * of the elements that are written to the log.
  */
 void LogEvent::init(android_log_context context) {
+    if (!context) {
+        return;
+    }
     android_log_list_element elem;
     // TODO: The log is actually structured inside one list.  This is convenient
     // because we'll be able to use it to put the attribution (WorkSource) block first
@@ -198,7 +202,8 @@ void LogEvent::init(android_log_context context) {
 
     int seenListStart = 0;
 
-    Field field;
+    Field fieldTree;
+    Field* atomField = fieldTree.add_child();
     do {
         elem = android_log_read_next(context);
         switch ((int)elem.type) {
@@ -206,51 +211,37 @@ void LogEvent::init(android_log_context context) {
                 // elem at [0] is EVENT_TYPE_LIST, [1] is the tag id.
                 if (i == 1) {
                     mTagId = elem.data.int32;
+                    fieldTree.set_field(mTagId);
                 } else {
-                    increaseField(&field, seenListStart > 0/* is_child */);
-                    DimensionsValue dimensionsValue;
-                    dimensionsValue.set_value_int(elem.data.int32);
-                    setFieldInLeafValueProto(field, &dimensionsValue);
-                    mFieldValueMap.insert(
-                        std::make_pair(buildAtomField(mTagId, field), dimensionsValue));
+                    increaseField(atomField, seenListStart > 0/* is_child */);
+                    mFieldValueMap[fieldTree].set_value_int(elem.data.int32);
                 }
                 break;
             case EVENT_TYPE_FLOAT:
                 {
-                    increaseField(&field, seenListStart > 0/* is_child */);
-                    DimensionsValue dimensionsValue;
-                    dimensionsValue.set_value_float(elem.data.float32);
-                    setFieldInLeafValueProto(field, &dimensionsValue);
-                    mFieldValueMap.insert(
-                        std::make_pair(buildAtomField(mTagId, field), dimensionsValue));
+                    increaseField(atomField, seenListStart > 0/* is_child */);
+                    mFieldValueMap[fieldTree].set_value_float(elem.data.float32);
                 }
                 break;
             case EVENT_TYPE_STRING:
                 {
-                    increaseField(&field, seenListStart > 0/* is_child */);
-                    DimensionsValue dimensionsValue;
-                    dimensionsValue.set_value_str(string(elem.data.string, elem.len).c_str());
-                    setFieldInLeafValueProto(field, &dimensionsValue);
-                    mFieldValueMap.insert(
-                        std::make_pair(buildAtomField(mTagId, field), dimensionsValue));
+                    increaseField(atomField, seenListStart > 0/* is_child */);
+                    mFieldValueMap[fieldTree].set_value_str(
+                        string(elem.data.string, elem.len).c_str());
                 }
                 break;
             case EVENT_TYPE_LONG:
                 {
-                    increaseField(&field, seenListStart > 0 /* is_child */);
-                    DimensionsValue dimensionsValue;
-                    dimensionsValue.set_value_long(elem.data.int64);
-                    setFieldInLeafValueProto(field, &dimensionsValue);
-                    mFieldValueMap.insert(
-                        std::make_pair(buildAtomField(mTagId, field), dimensionsValue));
+                    increaseField(atomField, seenListStart > 0 /* is_child */);
+                    mFieldValueMap[fieldTree].set_value_long(elem.data.int64);
                 }
                 break;
             case EVENT_TYPE_LIST:
                 if (i >= 1) {
                     if (seenListStart > 0) {
-                       increasePosition(&field);
+                       increasePosition(atomField);
                     } else {
-                        increaseField(&field, false /* is_child */);
+                        increaseField(atomField, false /* is_child */);
                     }
                     seenListStart++;
                     if (seenListStart >= 3) {
@@ -262,10 +253,10 @@ void LogEvent::init(android_log_context context) {
             case EVENT_TYPE_LIST_STOP:
                 seenListStart--;
                 if (seenListStart == 0) {
-                    field.clear_position_index();
+                    atomField->clear_position_index();
                 } else {
-                    if (field.child_size() > 0) {
-                       field.mutable_child(0)->clear_field();
+                    if (atomField->child_size() > 0) {
+                       atomField->mutable_child(0)->clear_field();
                     }
                 }
                 break;
@@ -393,14 +384,9 @@ bool LogEvent::GetAtomDimensionsValueProto(const FieldMatcher& matcher,
 
 bool LogEvent::GetSimpleAtomDimensionsValueProto(size_t atomField,
                                                  DimensionsValue* dimensionsValue) const {
-    return GetAtomDimensionsValueProto(
-        buildSimpleAtomFieldMatcher(mTagId, atomField), dimensionsValue);
-}
-
-DimensionsValue LogEvent::GetSimpleAtomDimensionsValueProto(size_t atomField)  const {
-    DimensionsValue dimensionsValue;
-    GetSimpleAtomDimensionsValueProto(atomField, &dimensionsValue);
-    return dimensionsValue;
+    FieldMatcher matcher;
+    buildSimpleAtomFieldMatcher(mTagId, atomField, &matcher);
+    return GetAtomDimensionsValueProto(matcher, dimensionsValue);
 }
 
 DimensionsValue* LogEvent::findFieldValueOrNull(const Field& field) {

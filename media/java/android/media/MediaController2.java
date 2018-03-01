@@ -30,6 +30,7 @@ import android.media.MediaSession2.PlaylistParams;
 import android.media.session.MediaSessionManager;
 import android.media.update.ApiLoader;
 import android.media.update.MediaController2Provider;
+import android.media.update.PlaybackInfoProvider;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.ResultReceiver;
@@ -104,7 +105,7 @@ public class MediaController2 implements AutoCloseable {
          *
          * @param info new playback info
          */
-        public void onAudioInfoChanged(PlaybackInfo info) { }
+        public void onPlaybackInfoChanged(PlaybackInfo info) { }
 
         /**
          * Called when the allowed commands are changed by session.
@@ -131,7 +132,7 @@ public class MediaController2 implements AutoCloseable {
         public void onPlaylistChanged(@NonNull List<MediaItem2> playlist) { }
 
         /**
-         * Called when the playback state is changed, or connection success.
+         * Called when the playback state is changed.
          *
          * @param state latest playback state
          */
@@ -160,21 +161,22 @@ public class MediaController2 implements AutoCloseable {
          */
         public static final int PLAYBACK_TYPE_LOCAL = 1;
 
-        private final int mVolumeType;
-        private final int mVolumeControl;
-        private final int mMaxVolume;
-        private final int mCurrentVolume;
-        private final AudioAttributes mAudioAttrs;
+        private final PlaybackInfoProvider mProvider;
 
         /**
          * @hide
          */
-        public PlaybackInfo(int type, AudioAttributes attrs, int control, int max, int current) {
-            mVolumeType = type;
-            mAudioAttrs = attrs;
-            mVolumeControl = control;
-            mMaxVolume = max;
-            mCurrentVolume = current;
+        @SystemApi
+        public PlaybackInfo(PlaybackInfoProvider provider) {
+            mProvider = provider;
+        }
+
+        /**
+         * @hide
+         */
+        @SystemApi
+        public PlaybackInfoProvider getProvider() {
+            return mProvider;
         }
 
         /**
@@ -187,7 +189,7 @@ public class MediaController2 implements AutoCloseable {
          * @return The type of playback this session is using.
          */
         public int getPlaybackType() {
-            return mVolumeType;
+            return mProvider.getPlaybackType_impl();
         }
 
         /**
@@ -199,22 +201,21 @@ public class MediaController2 implements AutoCloseable {
          * @return The attributes for this session.
          */
         public AudioAttributes getAudioAttributes() {
-            return mAudioAttrs;
+            return mProvider.getAudioAttributes_impl();
         }
 
         /**
          * Get the type of volume control that can be used. One of:
          * <ul>
-         * <li>{@link VolumeProvider#VOLUME_CONTROL_ABSOLUTE}</li>
-         * <li>{@link VolumeProvider#VOLUME_CONTROL_RELATIVE}</li>
-         * <li>{@link VolumeProvider#VOLUME_CONTROL_FIXED}</li>
+         * <li>{@link VolumeProvider2#VOLUME_CONTROL_ABSOLUTE}</li>
+         * <li>{@link VolumeProvider2#VOLUME_CONTROL_RELATIVE}</li>
+         * <li>{@link VolumeProvider2#VOLUME_CONTROL_FIXED}</li>
          * </ul>
          *
-         * @return The type of volume control that may be used with this
-         *         session.
+         * @return The type of volume control that may be used with this session.
          */
-        public int getVolumeControl() {
-            return mVolumeControl;
+        public int getControlType() {
+            return mProvider.getControlType_impl();
         }
 
         /**
@@ -223,7 +224,7 @@ public class MediaController2 implements AutoCloseable {
          * @return The maximum allowed volume where this session is playing.
          */
         public int getMaxVolume() {
-            return mMaxVolume;
+            return mProvider.getMaxVolume_impl();
         }
 
         /**
@@ -232,7 +233,7 @@ public class MediaController2 implements AutoCloseable {
          * @return The current volume where this session is playing.
          */
         public int getCurrentVolume() {
-            return mCurrentVolume;
+            return mProvider.getCurrentVolume_impl();
         }
     }
 
@@ -277,6 +278,9 @@ public class MediaController2 implements AutoCloseable {
         mProvider.close_impl();
     }
 
+    /**
+     * @hide
+     */
     @SystemApi
     public MediaController2Provider getProvider() {
         return mProvider;
@@ -420,7 +424,7 @@ public class MediaController2 implements AutoCloseable {
      * @param extras Optional extras that can include extra information about the media item
      *               to be played.
      */
-    public void playFromUri(@NonNull String uri, @Nullable Bundle extras) {
+    public void playFromUri(@NonNull Uri uri, @Nullable Bundle extras) {
         mProvider.playFromUri_impl(uri, extras);
     }
 
@@ -476,7 +480,7 @@ public class MediaController2 implements AutoCloseable {
 
     /**
      * Set the volume of the output this session is playing on. The command will be ignored if it
-     * does not support {@link VolumeProvider#VOLUME_CONTROL_ABSOLUTE}.
+     * does not support {@link VolumeProvider2#VOLUME_CONTROL_ABSOLUTE}.
      * <p>
      * If the session is local playback, this changes the device's volume with the stream that
      * session's player is using. Flags will be specified for the {@link AudioManager}.
@@ -498,8 +502,8 @@ public class MediaController2 implements AutoCloseable {
      * must be one of {@link AudioManager#ADJUST_LOWER},
      * {@link AudioManager#ADJUST_RAISE}, or {@link AudioManager#ADJUST_SAME}.
      * The command will be ignored if the session does not support
-     * {@link VolumeProvider#VOLUME_CONTROL_RELATIVE} or
-     * {@link VolumeProvider#VOLUME_CONTROL_ABSOLUTE}.
+     * {@link VolumeProvider2#VOLUME_CONTROL_RELATIVE} or
+     * {@link VolumeProvider2#VOLUME_CONTROL_ABSOLUTE}.
      * <p>
      * If the session is local playback, this changes the device's volume with the stream that
      * session's player is using. Flags will be specified for the {@link AudioManager}.

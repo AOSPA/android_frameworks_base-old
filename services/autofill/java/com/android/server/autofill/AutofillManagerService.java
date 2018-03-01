@@ -24,8 +24,10 @@ import static com.android.server.autofill.Helper.sDebug;
 import static com.android.server.autofill.Helper.sPartitionMaxCount;
 import static com.android.server.autofill.Helper.sVerbose;
 
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.content.BroadcastReceiver;
@@ -508,6 +510,18 @@ public final class AutofillManagerService extends SystemService {
             if (sDebug) Slog.d(TAG, "onBackKeyPressed()");
             mUi.hideAll(null);
         }
+
+        @Override
+        public boolean isCompatibilityModeRequested(@NonNull String packageName,
+                long versionCode, @UserIdInt int userId) {
+            synchronized (mLock) {
+                final AutofillManagerServiceImpl service = getServiceForUserLocked(userId);
+                if (service != null) {
+                    return service.isCompatibilityModeRequestedLocked(packageName, versionCode);
+                }
+            }
+            return false;
+        }
     }
 
     final class AutoFillManagerServiceStub extends IAutoFillManager.Stub {
@@ -610,6 +624,23 @@ public final class AutofillManagerService extends SystemService {
                     return service.getUserData(getCallingUid());
                 } else if (sVerbose) {
                     Slog.v(TAG, "getUserData(): no service for " + userId);
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public String getUserDataId() throws RemoteException {
+            final int userId = UserHandle.getCallingUserId();
+
+            synchronized (mLock) {
+                final AutofillManagerServiceImpl service = peekServiceForUserLocked(userId);
+                if (service != null) {
+                    final UserData userData = service.getUserData(getCallingUid());
+                    return userData == null ? null : userData.getId();
+                } else if (sVerbose) {
+                    Slog.v(TAG, "getUserDataId(): no service for " + userId);
                 }
             }
 

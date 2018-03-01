@@ -16,6 +16,8 @@
 
 package android.graphics.drawable;
 
+import dalvik.annotation.optimization.FastNative;
+
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -60,7 +62,6 @@ public class AnimatedImageDrawable extends Drawable implements Animatable2 {
     private int mIntrinsicHeight;
 
     private boolean mStarting;
-    private boolean mRunning;
 
     private Handler mHandler;
 
@@ -80,12 +81,7 @@ public class AnimatedImageDrawable extends Drawable implements Animatable2 {
 
     private State mState;
 
-    private Runnable mRunnable = new Runnable() {
-        @Override
-        public void run() {
-            invalidateSelf();
-        }
-    };
+    private Runnable mRunnable;
 
     /**
      *  Pass this to {@link #setLoopCount} to loop infinitely.
@@ -222,8 +218,8 @@ public class AnimatedImageDrawable extends Drawable implements Animatable2 {
         return mIntrinsicHeight;
     }
 
-    // nDraw returns -2 if the animation is not running.
-    private static final int NOT_RUNNING = -2;
+    // nDraw returns -1 if the animation has finished.
+    private static final int FINISHED = -1;
 
     @Override
     public void draw(@NonNull Canvas canvas) {
@@ -235,21 +231,19 @@ public class AnimatedImageDrawable extends Drawable implements Animatable2 {
             mStarting = false;
 
             postOnAnimationStart();
-
-            mRunning = true;
         }
 
         long nextUpdate = nDraw(mState.mNativePtr, canvas.getNativeCanvasWrapper());
         // a value <= 0 indicates that the drawable is stopped or that renderThread
         // will manage the animation
         if (nextUpdate > 0) {
-            scheduleSelf(mRunnable, nextUpdate);
-        } else if (nextUpdate == NOT_RUNNING) {
-            // -2 means the animation ended, when drawn in software mode.
-            if (mRunning) {
-                postOnAnimationEnd();
-                mRunning = false;
+            if (mRunnable == null) {
+                mRunnable = this::invalidateSelf;
             }
+            scheduleSelf(mRunnable, nextUpdate);
+        } else if (nextUpdate == FINISHED) {
+            // This means the animation was drawn in software mode and ended.
+            postOnAnimationEnd();
         }
     }
 
@@ -292,6 +286,19 @@ public class AnimatedImageDrawable extends Drawable implements Animatable2 {
         return PixelFormat.TRANSLUCENT;
     }
 
+    @Override
+    public boolean setVisible(boolean visible, boolean restart) {
+        if (!super.setVisible(visible, restart)) {
+            return false;
+        }
+
+        if (!visible) {
+            nMarkInvisible(mState.mNativePtr);
+        }
+
+        return true;
+    }
+
     // Animatable overrides
     /**
      *  Return whether the animation is currently running.
@@ -301,13 +308,17 @@ public class AnimatedImageDrawable extends Drawable implements Animatable2 {
      */
     @Override
     public boolean isRunning() {
-        return mRunning;
+        if (mState == null) {
+            throw new IllegalStateException("called isRunning on empty AnimatedImageDrawable");
+        }
+        return nIsRunning(mState.mNativePtr);
     }
 
     /**
      *  Start the animation.
      *
-     *  <p>Does nothing if the animation is already running.
+     *  <p>Does nothing if the animation is already running. If the animation is stopped,
+     *  this will reset it.</p>
      *
      *  <p>If the animation starts, this will call
      *  {@link Animatable2.AnimationCallback#onAnimationStart}.</p>
@@ -335,8 +346,9 @@ public class AnimatedImageDrawable extends Drawable implements Animatable2 {
         if (mState == null) {
             throw new IllegalStateException("called stop on empty AnimatedImageDrawable");
         }
-        nStop(mState.mNativePtr);
-        mRunning = false;
+        if (nStop(mState.mNativePtr)) {
+            postOnAnimationEnd();
+        }
     }
 
     // Animatable2 overrides
@@ -353,21 +365,31 @@ public class AnimatedImageDrawable extends Drawable implements Animatable2 {
             nSetOnAnimationEndListener(mState.mNativePtr, this);
         }
 
-        mAnimationCallbacks.add(callback);
+        if (!mAnimationCallbacks.contains(callback)) {
+            mAnimationCallbacks.add(callback);
+        }
     }
 
     @Override
     public boolean unregisterAnimationCallback(@NonNull AnimationCallback callback) {
-        if (callback == null || mAnimationCallbacks == null) {
+        if (callback == null || mAnimationCallbacks == null
+                || !mAnimationCallbacks.remove(callback)) {
             return false;
         }
 
-        return mAnimationCallbacks.remove(callback);
+        if (mAnimationCallbacks.isEmpty()) {
+            clearAnimationCallbacks();
+        }
+
+        return true;
     }
 
     @Override
     public void clearAnimationCallbacks() {
-        mAnimationCallbacks = null;
+        if (mAnimationCallbacks != null) {
+            mAnimationCallbacks = null;
+            nSetOnAnimationEndListener(mState.mNativePtr, null);
+        }
     }
 
     private void postOnAnimationStart() {
@@ -401,22 +423,48 @@ public class AnimatedImageDrawable extends Drawable implements Animatable2 {
         return mHandler;
     }
 
+    /**
+     *  Called by JNI.
+     *
+     *  The JNI code has already posted this to the thread that created the
+     *  callback, so no need to post.
+     */
+    @SuppressWarnings("unused")
+    private void onAnimationEnd() {
+        if (mAnimationCallbacks != null) {
+            for (Animatable2.AnimationCallback callback : mAnimationCallbacks) {
+                callback.onAnimationEnd(this);
+            }
+        }
+    }
+
 
     private static native long nCreate(long nativeImageDecoder,
             @Nullable ImageDecoder decoder, int width, int height, Rect cropRect)
         throws IOException;
+    @FastNative
     private static native long nGetNativeFinalizer();
     private static native long nDraw(long nativePtr, long canvasNativePtr);
+    @FastNative
     private static native void nSetAlpha(long nativePtr, int alpha);
+    @FastNative
     private static native int nGetAlpha(long nativePtr);
+    @FastNative
     private static native void nSetColorFilter(long nativePtr, long nativeFilter);
+    @FastNative
     private static native boolean nIsRunning(long nativePtr);
     // Return whether the animation started.
+    @FastNative
     private static native boolean nStart(long nativePtr);
-    private static native void nStop(long nativePtr);
+    @FastNative
+    private static native boolean nStop(long nativePtr);
+    @FastNative
     private static native void nSetLoopCount(long nativePtr, int loopCount);
     // Pass the drawable down to native so it can call onAnimationEnd.
     private static native void nSetOnAnimationEndListener(long nativePtr,
             @Nullable AnimatedImageDrawable drawable);
+    @FastNative
     private static native long nNativeByteSize(long nativePtr);
+    @FastNative
+    private static native void nMarkInvisible(long nativePtr);
 }

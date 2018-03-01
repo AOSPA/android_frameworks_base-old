@@ -69,6 +69,7 @@ import android.os.Parcel;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
@@ -290,7 +291,8 @@ public class Tethering extends BaseNetworkObserver {
             if (up) {
                 maybeTrackNewInterfaceLocked(iface);
             } else {
-                if (ifaceNameToType(iface) == ConnectivityManager.TETHERING_BLUETOOTH) {
+                if (ifaceNameToType(iface) == ConnectivityManager.TETHERING_BLUETOOTH ||
+                    ifaceNameToType(iface) == ConnectivityManager.TETHERING_WIGIG) {
                     stopTrackingInterfaceLocked(iface);
                 } else {
                     // Ignore usb0 down after enabling RNDIS.
@@ -312,6 +314,10 @@ public class Tethering extends BaseNetworkObserver {
         final TetheringConfiguration cfg = mConfig;
 
         if (cfg.isWifi(iface)) {
+            String wigigIface = SystemProperties.get("vendor.wigig.interface", "wigig0");
+            if (wigigIface.equals(iface)) {
+                return ConnectivityManager.TETHERING_WIGIG;
+            }
             return ConnectivityManager.TETHERING_WIFI;
         } else if (cfg.isUsb(iface)) {
             return ConnectivityManager.TETHERING_USB;
@@ -1095,7 +1101,8 @@ public class Tethering extends BaseNetworkObserver {
         if (VDBG) Log.d(TAG, "setUsbTethering(" + enable + ")");
         UsbManager usbManager = (UsbManager) mContext.getSystemService(Context.USB_SERVICE);
         synchronized (mPublicSync) {
-            usbManager.setCurrentFunction(enable ? UsbManager.USB_FUNCTION_RNDIS : null, false);
+            usbManager.setCurrentFunctions(enable ? UsbManager.FUNCTION_RNDIS
+                    : UsbManager.FUNCTION_NONE);
         }
         return ConnectivityManager.TETHER_ERROR_NO_ERROR;
     }

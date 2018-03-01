@@ -227,9 +227,9 @@ interface IDevicePolicyManager {
     UserHandle createAndManageUser(in ComponentName who, in String name, in ComponentName profileOwner, in PersistableBundle adminExtras, in int flags);
     boolean removeUser(in ComponentName who, in UserHandle userHandle);
     boolean switchUser(in ComponentName who, in UserHandle userHandle);
-    boolean startUserInBackground(in ComponentName who, in UserHandle userHandle);
-    boolean stopUser(in ComponentName who, in UserHandle userHandle);
-    boolean logoutUser(in ComponentName who);
+    int startUserInBackground(in ComponentName who, in UserHandle userHandle);
+    int stopUser(in ComponentName who, in UserHandle userHandle);
+    int logoutUser(in ComponentName who);
     List<UserHandle> getSecondaryUsers(in ComponentName who);
 
     void enableSystemApp(in ComponentName admin, in String callerPackage, in String packageName);
@@ -349,6 +349,7 @@ interface IDevicePolicyManager {
     boolean isSecurityLoggingEnabled(in ComponentName admin);
     ParceledListSlice retrieveSecurityLogs(in ComponentName admin);
     ParceledListSlice retrievePreRebootSecurityLogs(in ComponentName admin);
+    long forceSecurityLogs();
 
     boolean isUninstallInQueue(String packageName);
     void uninstallPackageWithActiveAdmins(String packageName);

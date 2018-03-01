@@ -20,6 +20,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.telephony.Rlog;
 
+import java.util.Objects;
+
 /**
  * Signal strength related information.
  */
@@ -34,48 +36,14 @@ public final class CellSignalStrengthCdma extends CellSignalStrength implements 
     private int mEvdoEcio;  // This value is the EVDO Ec/Io
     private int mEvdoSnr;   // Valid values are 0-8.  8 is the highest signal to noise ratio
 
-    /**
-     * Empty constructor
-     *
-     * @hide
-     */
+    /** @hide */
     public CellSignalStrengthCdma() {
         setDefaultValues();
     }
 
-    /**
-     * Constructor
-     *
-     * @hide
-     */
+    /** @hide */
     public CellSignalStrengthCdma(int cdmaDbm, int cdmaEcio, int evdoDbm, int evdoEcio,
             int evdoSnr) {
-        initialize(cdmaDbm, cdmaEcio, evdoDbm, evdoEcio, evdoSnr);
-    }
-
-    /**
-     * Copy constructors
-     *
-     * @param s Source SignalStrength
-     *
-     * @hide
-     */
-    public CellSignalStrengthCdma(CellSignalStrengthCdma s) {
-        copyFrom(s);
-    }
-
-    /**
-     * Initialize all the values
-     *
-     * @param cdmaDbm
-     * @param cdmaEcio
-     * @param evdoDbm
-     * @param evdoEcio
-     * @param evdoSnr
-     *
-     * @hide
-     */
-    public void initialize(int cdmaDbm, int cdmaEcio, int evdoDbm, int evdoEcio, int evdoSnr) {
         mCdmaDbm = cdmaDbm;
         mCdmaEcio = cdmaEcio;
         mEvdoDbm = evdoDbm;
@@ -83,9 +51,12 @@ public final class CellSignalStrengthCdma extends CellSignalStrength implements 
         mEvdoSnr = evdoSnr;
     }
 
-    /**
-     * @hide
-     */
+    /** @hide */
+    public CellSignalStrengthCdma(CellSignalStrengthCdma s) {
+        copyFrom(s);
+    }
+
+    /** @hide */
     protected void copyFrom(CellSignalStrengthCdma s) {
         mCdmaDbm = s.mCdmaDbm;
         mCdmaEcio = s.mCdmaEcio;
@@ -94,9 +65,7 @@ public final class CellSignalStrengthCdma extends CellSignalStrength implements 
         mEvdoSnr = s.mEvdoSnr;
     }
 
-    /**
-     * @hide
-     */
+    /** @hide */
     @Override
     public CellSignalStrengthCdma copy() {
         return new CellSignalStrengthCdma(this);
@@ -293,9 +262,7 @@ public final class CellSignalStrengthCdma extends CellSignalStrength implements 
 
     @Override
     public int hashCode() {
-        int primeNum = 31;
-        return ((mCdmaDbm * primeNum) + (mCdmaEcio * primeNum)
-                + (mEvdoDbm * primeNum) + (mEvdoEcio * primeNum) + (mEvdoSnr * primeNum));
+        return Objects.hash(mCdmaDbm, mCdmaEcio, mEvdoDbm, mEvdoEcio, mEvdoSnr);
     }
 
     @Override
