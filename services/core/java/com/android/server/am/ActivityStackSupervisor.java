@@ -1011,7 +1011,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 final ActivityStack stack = display.getChildAt(stackNdx);
                 if (isFocusedStack(stack)) {
                     final ActivityRecord r = stack.mResumedActivity;
-                    if (r != null && r.state != RESUMED) {
+                    if (r != null && !r.isState(RESUMED)) {
                         return false;
                     }
                 }
@@ -1075,10 +1075,10 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
                 final ActivityStack stack = display.getChildAt(stackNdx);
                 final ActivityRecord r = stack.mPausingActivity;
-                if (r != null && r.state != PAUSED && r.state != STOPPED && r.state != STOPPING) {
+                if (r != null && !r.isState(PAUSED, STOPPED, STOPPING)) {
                     if (DEBUG_STATES) {
                         Slog.d(TAG_STATES,
-                                "allPausedActivitiesComplete: r=" + r + " state=" + r.state);
+                                "allPausedActivitiesComplete: r=" + r + " state=" + r.getState());
                         pausing = false;
                     } else {
                         return false;
@@ -1528,7 +1528,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             // current icicle and other state.
             if (DEBUG_STATES) Slog.v(TAG_STATES,
                     "Moving to PAUSED: " + r + " (starting in paused state)");
-            r.state = PAUSED;
+            r.setState(PAUSED, "realStartActivityLocked");
         }
 
         // Launch the new version setup screen if needed.  We do this -after-
@@ -2105,9 +2105,9 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         }
 
         final ActivityRecord r = mFocusedStack.topRunningActivityLocked();
-        if (r == null || r.state != RESUMED) {
+        if (r == null || !r.isState(RESUMED)) {
             mFocusedStack.resumeTopActivityUncheckedLocked(null, null);
-        } else if (r.state == RESUMED) {
+        } else if (r.isState(RESUMED)) {
             // Kick off any lingering app transitions form the MoveTaskToFront operation.
             mFocusedStack.executeAppTransition(targetOptions);
         }
@@ -2615,9 +2615,6 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 // resize when we remove task from it below and it is detached from the
                 // display because it no longer contains any tasks.
                 mAllowDockedStackResize = false;
-            } else if (inPinnedWindowingMode && onTop) {
-                // Log if we are expanding the PiP to fullscreen
-                MetricsLoggerWrapper.logPictureInPictureFullScreen(mService.mContext);
             }
 
             // If we are moving from the pinned stack, then the animation takes care of updating
@@ -2640,6 +2637,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                                 isTopTask /* animate */, DEFER_RESUME,
                                 schedulePictureInPictureModeChange,
                                 "moveTasksToFullscreenStack - onTop");
+                        MetricsLoggerWrapper.logPictureInPictureFullScreen(mService.mContext,
+                                task.effectiveUid, task.realActivity.flattenToString());
                     } else {
                         // Position the tasks in the fullscreen stack in order at the bottom of the
                         // stack. Also defer resume until all the tasks have been moved to the
@@ -3385,7 +3384,11 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     stack.goToSleepIfPossible(false /* shuttingDown */);
                 } else {
                     stack.awakeFromSleepingLocked();
-                    if (isFocusedStack(stack)) {
+                    if (isFocusedStack(stack)
+                            && !mKeyguardController.isKeyguardActive(display.mDisplayId)) {
+                        // If there is no keyguard on this display - resume immediately. Otherwise
+                        // we'll wait for keyguard visibility callback and resume while ensuring
+                        // activities visibility
                         resumeFocusedStackTopActivityLocked();
                     }
                 }
@@ -3580,14 +3583,14 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             // First, if we find an activity that is in the process of being destroyed,
             // then we just aren't going to do anything for now; we want things to settle
             // down before we try to prune more activities.
-            if (r.finishing || r.state == DESTROYING || r.state == DESTROYED) {
+            if (r.finishing || r.isState(DESTROYING, DESTROYED)) {
                 if (DEBUG_RELEASE) Slog.d(TAG_RELEASE, "Abort release; already destroying: " + r);
                 return;
             }
             // Don't consider any activies that are currently not in a state where they
             // can be destroyed.
-            if (r.visible || !r.stopped || !r.haveState || r.state == RESUMED || r.state == PAUSING
-                    || r.state == PAUSED || r.state == STOPPING) {
+            if (r.visible || !r.stopped || !r.haveState
+                    || r.isState(RESUMED, PAUSING, PAUSED, STOPPING)) {
                 if (DEBUG_RELEASE) Slog.d(TAG_RELEASE, "Not releasing in-use activity: " + r);
                 continue;
             }
@@ -3723,7 +3726,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                         ? stack.shouldSleepOrShutDownActivities()
                         : mService.isSleepingOrShuttingDownLocked();
                 if (!waitingVisible || shouldSleepOrShutDown) {
-                    if (!processPausingActivities && s.state == PAUSING) {
+                    if (!processPausingActivities && s.isState(PAUSING)) {
                         // Defer processing pausing activities in this iteration and reschedule
                         // a delayed idle to reprocess it again
                         removeTimeoutsForActivityLocked(idleActivity);
@@ -3750,7 +3753,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
                 final ActivityStack stack = display.getChildAt(stackNdx);
                 final ActivityRecord r = stack.topRunningActivityLocked();
-                final ActivityState state = r == null ? DESTROYED : r.state;
+                final ActivityState state = r == null ? DESTROYED : r.getState();
                 if (isFocusedStack(stack)) {
                     if (r == null) Slog.e(TAG,
                             "validateTop...: null top activity, stack=" + stack);

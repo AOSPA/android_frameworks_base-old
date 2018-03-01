@@ -1312,11 +1312,6 @@ public class NotificationManagerService extends SystemService {
         }
         mUsageStats = usageStats;
         mRankingHandler = new RankingHandlerWorker(mRankingThread.getLooper());
-        mRankingHelper = new RankingHelper(getContext(),
-                mPackageManagerClient,
-                mRankingHandler,
-                mUsageStats,
-                extractorNames);
         mConditionProviders = conditionProviders;
         mZenModeHelper = new ZenModeHelper(getContext(), mHandler.getLooper(), mConditionProviders);
         mZenModeHelper.addCallback(new ZenModeHelper.Callback() {
@@ -1335,6 +1330,7 @@ public class NotificationManagerService extends SystemService {
                 synchronized (mNotificationLock) {
                     updateInterruptionFilterLocked();
                 }
+                mRankingHandler.requestSort();
             }
 
             @Override
@@ -1342,6 +1338,12 @@ public class NotificationManagerService extends SystemService {
                 sendRegisteredOnlyBroadcast(NotificationManager.ACTION_NOTIFICATION_POLICY_CHANGED);
             }
         });
+        mRankingHelper = new RankingHelper(getContext(),
+                mPackageManagerClient,
+                mRankingHandler,
+                mZenModeHelper,
+                mUsageStats,
+                extractorNames);
         mSnoozeHelper = snoozeHelper;
         mGroupHelper = groupHelper;
 
@@ -3021,9 +3023,9 @@ public class NotificationManagerService extends SystemService {
 
         /**
          * Sets the notification policy.  Apps that target API levels below
-         * {@link android.os.Build.VERSION_CODES#P} cannot make DND silence
-         * {@link Policy#PRIORITY_CATEGORY_ALARMS} or
-         * {@link Policy#PRIORITY_CATEGORY_MEDIA_SYSTEM_OTHER}
+         * {@link android.os.Build.VERSION_CODES#P} cannot change user-designated values to
+         * allow or disallow {@link Policy#PRIORITY_CATEGORY_ALARMS} and
+         * {@link Policy#PRIORITY_CATEGORY_MEDIA_SYSTEM_OTHER} from bypassing dnd
          */
         @Override
         public void setNotificationPolicy(String pkg, Policy policy) {
@@ -3036,10 +3038,14 @@ public class NotificationManagerService extends SystemService {
                 if (applicationInfo.targetSdkVersion <= Build.VERSION_CODES.O_MR1) {
                     Policy currPolicy = mZenModeHelper.getNotificationPolicy();
 
-                    int priorityCategories = policy.priorityCategories
-                            | (currPolicy.priorityCategories & Policy.PRIORITY_CATEGORY_ALARMS)
-                            | (currPolicy.priorityCategories &
-                            Policy.PRIORITY_CATEGORY_MEDIA_SYSTEM_OTHER);
+                    int priorityCategories = policy.priorityCategories;
+                    // ignore alarm and media values from new policy
+                    priorityCategories &= ~Policy.PRIORITY_CATEGORY_ALARMS;
+                    priorityCategories &= ~Policy.PRIORITY_CATEGORY_MEDIA_SYSTEM_OTHER;
+                    // use user-designated values
+                    priorityCategories |= currPolicy.PRIORITY_CATEGORY_ALARMS;
+                    priorityCategories |= currPolicy.PRIORITY_CATEGORY_MEDIA_SYSTEM_OTHER;
+
                     policy = new Policy(priorityCategories,
                             policy.priorityCallSenders, policy.priorityMessageSenders,
                             policy.suppressedVisualEffects);
@@ -4730,6 +4736,7 @@ public class NotificationManagerService extends SystemService {
             ArrayList<ArrayList<String>> overridePeopleBefore = new ArrayList<>(N);
             ArrayList<ArrayList<SnoozeCriterion>> snoozeCriteriaBefore = new ArrayList<>(N);
             ArrayList<Integer> userSentimentBefore = new ArrayList<>(N);
+            ArrayList<Integer> suppressVisuallyBefore = new ArrayList<>(N);
             for (int i = 0; i < N; i++) {
                 final NotificationRecord r = mNotificationList.get(i);
                 orderBefore.add(r.getKey());
@@ -4740,6 +4747,7 @@ public class NotificationManagerService extends SystemService {
                 overridePeopleBefore.add(r.getPeopleOverride());
                 snoozeCriteriaBefore.add(r.getSnoozeCriteria());
                 userSentimentBefore.add(r.getUserSentiment());
+                suppressVisuallyBefore.add(r.getSuppressedVisualEffects());
                 mRankingHelper.extractSignals(r);
             }
             mRankingHelper.sort(mNotificationList);
@@ -4752,7 +4760,9 @@ public class NotificationManagerService extends SystemService {
                         || !Objects.equals(groupKeyBefore.get(i), r.getGroupKey())
                         || !Objects.equals(overridePeopleBefore.get(i), r.getPeopleOverride())
                         || !Objects.equals(snoozeCriteriaBefore.get(i), r.getSnoozeCriteria())
-                        || !Objects.equals(userSentimentBefore.get(i), r.getUserSentiment())) {
+                        || !Objects.equals(userSentimentBefore.get(i), r.getUserSentiment())
+                        || !Objects.equals(suppressVisuallyBefore.get(i),
+                        r.getSuppressedVisualEffects())) {
                     mHandler.scheduleSendRankingUpdate();
                     return;
                 }

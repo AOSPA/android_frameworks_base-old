@@ -204,9 +204,20 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
     }
 
     DisplayContent createDisplayContent(final Display display, DisplayWindowController controller) {
+        final int displayId = display.getDisplayId();
+
+        // In select scenarios, it is possible that a DisplayContent will be created on demand
+        // rather than waiting for the controller. In this case, associate the controller and return
+        // the existing display.
+        final DisplayContent existing = getDisplayContent(displayId);
+
+        if (existing != null) {
+            existing.setController(controller);
+            return existing;
+        }
+
         final DisplayContent dc =
                 new DisplayContent(display, mService, mWallpaperController, controller);
-        final int displayId = display.getDisplayId();
 
         if (DEBUG_DISPLAY) Slog.v(TAG_WM, "Adding display=" + display);
 
@@ -595,8 +606,11 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         // If we are ready to perform an app transition, check through all of the app tokens to be
         // shown and see if they are ready to go.
         if (mService.mAppTransition.isReady()) {
-            defaultDisplay.pendingLayoutChanges |=
-                    surfacePlacer.handleAppTransitionReadyLocked();
+            // This needs to be split into two expressions, as handleAppTransitionReadyLocked may
+            // modify dc.pendingLayoutChanges, which would get lost when writing
+            // defaultDisplay.pendingLayoutChanges |= handleAppTransitionReadyLocked()
+            final int layoutChanges = surfacePlacer.handleAppTransitionReadyLocked();
+            defaultDisplay.pendingLayoutChanges |= layoutChanges;
             if (DEBUG_LAYOUT_REPEATS)
                 surfacePlacer.debugLayoutRepeats("after handleAppTransitionReadyLocked",
                         defaultDisplay.pendingLayoutChanges);

@@ -15,6 +15,9 @@
  */
 package com.android.server;
 
+import static android.app.usage.UsageStatsManager.REASON_MAIN_DEFAULT;
+import static android.app.usage.UsageStatsManager.REASON_MAIN_USAGE;
+
 import static com.android.server.AppStateTracker.TARGET_OP;
 
 import static org.junit.Assert.assertEquals;
@@ -72,6 +75,7 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.stubbing.Answer;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -187,6 +191,9 @@ public class AppStateTrackerTest {
 
     private final HashMap<String, Integer> mGlobalSettings = new HashMap<>();
 
+    private Answer<List<PackageOps>> mGetPackagesForOps =
+            inv -> new ArrayList<PackageOps>();
+
     @Before
     public void setUp() {
         mMainHandler = new Handler(Looper.getMainLooper());
@@ -226,7 +233,7 @@ public class AppStateTrackerTest {
                 .thenAnswer(inv -> getPowerSaveState());
         when(mMockAppOpsManager.getPackagesForOps(
                 any(int[].class)
-                )).thenAnswer(inv -> new ArrayList<AppOpsManager.PackageOps>());
+                )).thenAnswer(mGetPackagesForOps);
 
         mMockContentResolver = new MockContentResolver();
         when(mMockContext.getContentResolver()).thenReturn(mMockContentResolver);
@@ -612,7 +619,7 @@ public class AppStateTrackerTest {
 
         // Exempt package 2 on user-10.
         mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_2, /*user=*/ 10, false,
-                UsageStatsManager.STANDBY_BUCKET_EXEMPTED);
+                UsageStatsManager.STANDBY_BUCKET_EXEMPTED, REASON_MAIN_DEFAULT);
 
         areRestricted(instance, UID_1, PACKAGE_1, JOBS_AND_ALARMS);
         areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
@@ -624,7 +631,7 @@ public class AppStateTrackerTest {
 
         // Exempt package 1 on user-0.
         mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_1, /*user=*/ 0, false,
-                UsageStatsManager.STANDBY_BUCKET_EXEMPTED);
+                UsageStatsManager.STANDBY_BUCKET_EXEMPTED, REASON_MAIN_DEFAULT);
 
         areRestricted(instance, UID_1, PACKAGE_1, NONE);
         areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
@@ -632,7 +639,7 @@ public class AppStateTrackerTest {
 
         // Unexempt package 2 on user-10.
         mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_2, /*user=*/ 10, false,
-                UsageStatsManager.STANDBY_BUCKET_ACTIVE);
+                UsageStatsManager.STANDBY_BUCKET_ACTIVE, REASON_MAIN_USAGE);
 
         areRestricted(instance, UID_1, PACKAGE_1, NONE);
         areRestricted(instance, UID_2, PACKAGE_2, JOBS_AND_ALARMS);
@@ -644,9 +651,9 @@ public class AppStateTrackerTest {
         mPowerSaveObserver.accept(getPowerSaveState());
 
         mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_1, /*user=*/ 0, false,
-                UsageStatsManager.STANDBY_BUCKET_EXEMPTED);
+                UsageStatsManager.STANDBY_BUCKET_EXEMPTED, REASON_MAIN_DEFAULT);
         mAppIdleStateChangeListener.onAppIdleStateChanged(PACKAGE_2, /*user=*/ 0, false,
-                UsageStatsManager.STANDBY_BUCKET_EXEMPTED);
+                UsageStatsManager.STANDBY_BUCKET_EXEMPTED, REASON_MAIN_DEFAULT);
 
         setAppOps(UID_1, PACKAGE_1, true);
 
@@ -657,6 +664,7 @@ public class AppStateTrackerTest {
         areRestrictedWithExemption(instance, UID_2, PACKAGE_2, NONE);
     }
 
+    @Test
     public void loadPersistedAppOps() throws Exception {
         final AppStateTrackerTestable instance = newInstance();
 
@@ -699,6 +707,13 @@ public class AppStateTrackerTest {
                 AppOpsManager.MODE_IGNORED, 0, 0, 0, 0, null));
 
         ops.add(new PackageOps(PACKAGE_3, UID_10_3, entries));
+
+        mGetPackagesForOps = inv -> {
+            final int[] arg = (int[]) inv.getArgument(0);
+            assertEquals(1, arg.length);
+            assertEquals(AppOpsManager.OP_RUN_ANY_IN_BACKGROUND, arg[0]);
+            return ops;
+        };
 
         callStart(instance);
 

@@ -34,6 +34,7 @@ import android.os.ServiceSpecificException;
 import android.os.UserHandle;
 import android.security.keystore.recovery.KeyChainProtectionParams;
 import android.security.keystore.recovery.KeyChainSnapshot;
+import android.security.keystore.recovery.RecoveryCertPath;
 import android.security.keystore.recovery.RecoveryController;
 import android.security.keystore.recovery.WrappedApplicationKey;
 import android.security.KeyStore;
@@ -57,7 +58,10 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertPath;
+import java.security.cert.Certificate;
 import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
@@ -277,42 +281,22 @@ public class RecoverableKeyStoreManager {
     }
 
     /**
-     * Updates recovery status for the application given its {@code packageName}.
-     *
-     * @param packageName which recoverable key statuses will be returned
-     * @param aliases - KeyStore aliases or {@code null} for all aliases of the app
-     * @param status - new status
+     * Sets the recovery status of key with {@code alias} to {@code status}.
      */
-    public void setRecoveryStatus(
-            @NonNull String packageName, @Nullable String[] aliases, int status)
-            throws RemoteException {
+    public void setRecoveryStatus(String alias, int status) throws RemoteException {
         checkRecoverKeyStorePermission();
-        int uid = Binder.getCallingUid();
-        if (packageName != null) {
-            // TODO: get uid for package name, when many apps are supported.
-        }
-        if (aliases == null) {
-            // Get all keys for the app.
-            Map<String, Integer> allKeys = mDatabase.getStatusForAllKeys(uid);
-            aliases = new String[allKeys.size()];
-            allKeys.keySet().toArray(aliases);
-        }
-        for (String alias: aliases) {
-            mDatabase.setRecoveryStatus(uid, alias, status);
-        }
+        mDatabase.setRecoveryStatus(Binder.getCallingUid(), alias, status);
     }
 
     /**
-     * Gets recovery status for caller or other application {@code packageName}.
-     * @param packageName which recoverable keys statuses will be returned.
+     * Returns recovery statuses for all keys belonging to the calling uid.
      *
-     * @return {@code Map} from KeyStore alias to recovery status.
+     * @return {@link Map} from key alias to recovery status. Recovery status is one of
+     *     {@link RecoveryController#RECOVERY_STATUS_SYNCED},
+     *     {@link RecoveryController#RECOVERY_STATUS_SYNC_IN_PROGRESS} or
+     *     {@link RecoveryController#RECOVERY_STATUS_PERMANENT_FAILURE}.
      */
-    public @NonNull Map<String, Integer> getRecoveryStatus(@Nullable String packageName)
-            throws RemoteException {
-        // Any application should be able to check status for its own keys.
-        // If caller is a recovery agent it can check statuses for other packages, but
-        // only for recoverable keys it manages.
+    public @NonNull Map<String, Integer> getRecoveryStatus() throws RemoteException {
         return mDatabase.getStatusForAllKeys(Binder.getCallingUid());
     }
 
@@ -369,7 +353,7 @@ public class RecoverableKeyStoreManager {
     }
 
     /**
-     * Initializes recovery session.
+     * Initializes recovery session given the X509-encoded public key of the recovery service.
      *
      * @param sessionId A unique ID to identify the recovery session.
      * @param verifierPublicKey X509-encoded public key.
@@ -377,6 +361,8 @@ public class RecoverableKeyStoreManager {
      * @param vaultChallenge Challenge issued by vault service.
      * @param secrets Lock-screen hashes. For now only a single secret is supported.
      * @return Encrypted bytes of recovery claim. This can then be issued to the vault service.
+     * @deprecated Use {@link #startRecoverySessionWithCertPath(String, RecoveryCertPath, byte[],
+     *         byte[], List)} instead.
      *
      * @hide
      */
@@ -398,11 +384,9 @@ public class RecoverableKeyStoreManager {
         PublicKey publicKey;
         try {
             publicKey = KeySyncUtils.deserializePublicKey(verifierPublicKey);
-        } catch (NoSuchAlgorithmException e) {
-            // Should never happen
-            throw new RuntimeException(e);
         } catch (InvalidKeySpecException e) {
-            throw new ServiceSpecificException(ERROR_BAD_CERTIFICATE_FORMAT, "Not a valid X509 key");
+            throw new ServiceSpecificException(ERROR_BAD_CERTIFICATE_FORMAT,
+                    "Not a valid X509 key");
         }
         // The raw public key bytes contained in vaultParams must match the ones given in
         // verifierPublicKey; otherwise, the user secret may be decrypted by a key that is not owned
@@ -432,6 +416,52 @@ public class RecoverableKeyStoreManager {
         } catch (InvalidKeyException e) {
             throw new ServiceSpecificException(ERROR_BAD_CERTIFICATE_FORMAT, e.getMessage());
         }
+    }
+
+    /**
+     * Initializes recovery session given the certificate path of the recovery service.
+     *
+     * @param sessionId A unique ID to identify the recovery session.
+     * @param verifierCertPath The certificate path of the recovery service.
+     * @param vaultParams Additional params associated with vault.
+     * @param vaultChallenge Challenge issued by vault service.
+     * @param secrets Lock-screen hashes. For now only a single secret is supported.
+     * @return Encrypted bytes of recovery claim. This can then be issued to the vault service.
+     *
+     * @hide
+     */
+    public @NonNull byte[] startRecoverySessionWithCertPath(
+            @NonNull String sessionId,
+            @NonNull RecoveryCertPath verifierCertPath,
+            @NonNull byte[] vaultParams,
+            @NonNull byte[] vaultChallenge,
+            @NonNull List<KeyChainProtectionParams> secrets)
+            throws RemoteException {
+        checkRecoverKeyStorePermission();
+
+        CertPath certPath;
+        try {
+            certPath = verifierCertPath.getCertPath();
+        } catch (CertificateException e) {
+            throw new ServiceSpecificException(ERROR_BAD_CERTIFICATE_FORMAT,
+                    "Failed decode the certificate path");
+        }
+
+        // TODO: Validate the cert path according to the root of trust
+
+        if (certPath.getCertificates().isEmpty()) {
+            throw new ServiceSpecificException(ERROR_BAD_CERTIFICATE_FORMAT,
+                    "The given CertPath is empty");
+        }
+        byte[] verifierPublicKey = certPath.getCertificates().get(0).getPublicKey().getEncoded();
+        if (verifierPublicKey == null) {
+            Log.e(TAG, "Failed to encode verifierPublicKey");
+            throw new ServiceSpecificException(ERROR_BAD_CERTIFICATE_FORMAT,
+                    "Failed to encode verifierPublicKey");
+        }
+
+        return startRecoverySession(
+                sessionId, verifierPublicKey, vaultParams, vaultChallenge, secrets);
     }
 
     /**
@@ -526,7 +556,7 @@ public class RecoverableKeyStoreManager {
      *
      * @return grant alias, which caller can use to access the key.
      */
-    public String generateKey(@NonNull String alias, byte[] account) throws RemoteException {
+    public String generateKey(@NonNull String alias) throws RemoteException {
         int uid = Binder.getCallingUid();
         int userId = UserHandle.getCallingUserId();
 
@@ -546,8 +576,7 @@ public class RecoverableKeyStoreManager {
             byte[] secretKey =
                     mRecoverableKeyGenerator.generateAndStoreKey(encryptionKey, userId, uid, alias);
             mApplicationKeyStorage.setSymmetricKeyEntry(userId, uid, alias, secretKey);
-            String grantAlias = mApplicationKeyStorage.getGrantAlias(userId, uid, alias);
-            return grantAlias;
+            return mApplicationKeyStorage.getGrantAlias(userId, uid, alias);
         } catch (KeyStoreException | InvalidKeyException | RecoverableKeyStorageException e) {
             throw new ServiceSpecificException(ERROR_SERVICE_INTERNAL_ERROR, e.getMessage());
         }
@@ -570,12 +599,6 @@ public class RecoverableKeyStoreManager {
             throws RemoteException, ServiceSpecificException {
         byte[] locallyEncryptedKey;
         try {
-            // TODO: Remove the extraneous logging here
-            Log.d(TAG, constructLoggingMessage("sessionEntry.getKeyClaimant()",
-                    sessionEntry.getKeyClaimant()));
-            Log.d(TAG, constructLoggingMessage("sessionEntry.getVaultParams()",
-                    sessionEntry.getVaultParams()));
-            Log.d(TAG, constructLoggingMessage("encryptedClaimResponse", encryptedClaimResponse));
             locallyEncryptedKey = KeySyncUtils.decryptRecoveryClaimResponse(
                     sessionEntry.getKeyClaimant(),
                     sessionEntry.getVaultParams(),
@@ -594,10 +617,6 @@ public class RecoverableKeyStoreManager {
         }
 
         try {
-            // TODO: Remove the extraneous logging here
-            Log.d(TAG, constructLoggingMessage("sessionEntry.getLskfHash()",
-                    sessionEntry.getLskfHash()));
-            Log.d(TAG, constructLoggingMessage("locallyEncryptedKey", locallyEncryptedKey));
             return KeySyncUtils.decryptRecoveryKey(sessionEntry.getLskfHash(), locallyEncryptedKey);
         } catch (InvalidKeyException e) {
             Log.e(TAG, "Got InvalidKeyException during decrypting recovery key", e);
@@ -636,9 +655,6 @@ public class RecoverableKeyStoreManager {
             byte[] encryptedKeyMaterial = applicationKey.getEncryptedKeyMaterial();
 
             try {
-                // TODO: Remove the extraneous logging here
-                Log.d(TAG, constructLoggingMessage("recoveryKey", recoveryKey));
-                Log.d(TAG, constructLoggingMessage("encryptedKeyMaterial", encryptedKeyMaterial));
                 byte[] keyMaterial =
                         KeySyncUtils.decryptApplicationKey(recoveryKey, encryptedKeyMaterial);
                 keyMaterialByAlias.put(alias, keyMaterial);

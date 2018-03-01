@@ -49,7 +49,6 @@ import static android.provider.Settings.Global.NETSTATS_DEV_ROTATE_AGE;
 import static android.provider.Settings.Global.NETSTATS_GLOBAL_ALERT_BYTES;
 import static android.provider.Settings.Global.NETSTATS_POLL_INTERVAL;
 import static android.provider.Settings.Global.NETSTATS_SAMPLE_ENABLED;
-import static android.provider.Settings.Global.NETSTATS_TIME_CACHE_MAX_AGE;
 import static android.provider.Settings.Global.NETSTATS_UID_BUCKET_DURATION;
 import static android.provider.Settings.Global.NETSTATS_UID_DELETE_AGE;
 import static android.provider.Settings.Global.NETSTATS_UID_PERSIST_BYTES;
@@ -95,10 +94,10 @@ import android.net.NetworkStats.NonMonotonicObserver;
 import android.net.NetworkStatsHistory;
 import android.net.NetworkTemplate;
 import android.net.TrafficStats;
+import android.os.BestClock;
 import android.os.Binder;
 import android.os.DropBoxManager;
 import android.os.Environment;
-import android.os.BestClock;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -134,6 +133,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FileRotator;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.EventLogTags;
+import com.android.server.LocalServices;
 import com.android.server.connectivity.Tethering;
 
 import java.io.File;
@@ -152,7 +152,8 @@ import java.util.List;
  */
 public class NetworkStatsService extends INetworkStatsService.Stub {
     static final String TAG = "NetworkStats";
-    static final boolean LOGV = false;
+    static final boolean LOGD = Log.isLoggable(TAG, Log.DEBUG);
+    static final boolean LOGV = Log.isLoggable(TAG, Log.VERBOSE);
 
     private static final int MSG_PERFORM_POLL = 1;
     private static final int MSG_UPDATE_IFACES = 2;
@@ -332,6 +333,9 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         mStatsObservers = checkNotNull(statsObservers, "missing NetworkStatsObservers");
         mSystemDir = checkNotNull(systemDir, "missing systemDir");
         mBaseDir = checkNotNull(baseDir, "missing baseDir");
+
+        LocalServices.addService(NetworkStatsManagerInternal.class,
+                new NetworkStatsManagerInternalImpl());
     }
 
     @VisibleForTesting
@@ -639,16 +643,16 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private SubscriptionPlan resolveSubscriptionPlan(NetworkTemplate template, int flags) {
         SubscriptionPlan plan = null;
         if ((flags & NetworkStatsManager.FLAG_AUGMENT_WITH_SUBSCRIPTION_PLAN) != 0
-                && (template.getMatchRule() == NetworkTemplate.MATCH_MOBILE_ALL)
+                && (template.getMatchRule() == NetworkTemplate.MATCH_MOBILE)
                 && mSettings.getAugmentEnabled()) {
-            Slog.d(TAG, "Resolving plan for " + template);
+            if (LOGD) Slog.d(TAG, "Resolving plan for " + template);
             final long token = Binder.clearCallingIdentity();
             try {
                 final SubscriptionManager sm = mContext.getSystemService(SubscriptionManager.class);
                 final TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
                 for (int subId : sm.getActiveSubscriptionIdList()) {
                     if (template.matchesSubscriberId(tm.getSubscriberId(subId))) {
-                        Slog.d(TAG, "Found active matching subId " + subId);
+                        if (LOGD) Slog.d(TAG, "Found active matching subId " + subId);
                         final List<SubscriptionPlan> plans = sm.getSubscriptionPlans(subId);
                         if (!plans.isEmpty()) {
                             plan = plans.get(0);
@@ -658,7 +662,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
-            Slog.d(TAG, "Resolved to plan " + plan);
+            if (LOGD) Slog.d(TAG, "Resolved to plan " + plan);
         }
         return plan;
     }
@@ -700,12 +704,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
-    @Override
-    public long getNetworkTotalBytes(NetworkTemplate template, long start, long end) {
-        // Special case - since this is for internal use only, don't worry about
-        // a full access level check and just require the signature/privileged
-        // permission.
-        mContext.enforceCallingOrSelfPermission(READ_NETWORK_USAGE_HISTORY, TAG);
+    private long getNetworkTotalBytes(NetworkTemplate template, long start, long end) {
+        assertSystemReady();
         assertBandwidthControlEnabled();
 
         // NOTE: if callers want to get non-augmented data, they should go
@@ -713,6 +713,18 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         return internalGetSummaryForNetwork(template,
                 NetworkStatsManager.FLAG_AUGMENT_WITH_SUBSCRIPTION_PLAN, start, end,
                 NetworkStatsAccess.Level.DEVICE, Binder.getCallingUid()).getTotalBytes();
+    }
+
+    private NetworkStats getNetworkUidBytes(NetworkTemplate template, long start, long end) {
+        assertSystemReady();
+        assertBandwidthControlEnabled();
+
+        final NetworkStatsCollection uidComplete;
+        synchronized (mStatsLock) {
+            uidComplete = mUidRecorder.getOrLoadCompleteLocked();
+        }
+        return uidComplete.getSummary(template, start, end, NetworkStatsAccess.Level.DEVICE,
+                android.os.Process.SYSTEM_UID);
     }
 
     @Override
@@ -776,10 +788,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
-    @Override
-    public void setUidForeground(int uid, boolean uidForeground) {
-        mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
-
+    @VisibleForTesting
+    void setUidForeground(int uid, boolean uidForeground) {
         synchronized (mStatsLock) {
             final int set = uidForeground ? SET_FOREGROUND : SET_DEFAULT;
             final int oldSet = mActiveUidCounterSet.get(uid, SET_DEFAULT);
@@ -816,9 +826,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
-    @Override
-    public void advisePersistThreshold(long thresholdBytes) {
-        mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
+    private void advisePersistThreshold(long thresholdBytes) {
         assertBandwidthControlEnabled();
 
         // clamp threshold into safe range
@@ -1329,6 +1337,33 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         removeUidsLocked(uids);
     }
 
+    private class NetworkStatsManagerInternalImpl extends NetworkStatsManagerInternal {
+        @Override
+        public long getNetworkTotalBytes(NetworkTemplate template, long start, long end) {
+            return NetworkStatsService.this.getNetworkTotalBytes(template, start, end);
+        }
+
+        @Override
+        public NetworkStats getNetworkUidBytes(NetworkTemplate template, long start, long end) {
+            return NetworkStatsService.this.getNetworkUidBytes(template, start, end);
+        }
+
+        @Override
+        public void setUidForeground(int uid, boolean uidForeground) {
+            NetworkStatsService.this.setUidForeground(uid, uidForeground);
+        }
+
+        @Override
+        public void advisePersistThreshold(long thresholdBytes) {
+            NetworkStatsService.this.advisePersistThreshold(thresholdBytes);
+        }
+
+        @Override
+        public void forceUpdate() {
+            NetworkStatsService.this.forceUpdate();
+        }
+    }
+
     @Override
     protected void dump(FileDescriptor fd, PrintWriter rawWriter, String[] args) {
         if (!DumpUtils.checkDumpPermission(mContext, TAG, rawWriter)) return;
@@ -1546,6 +1581,12 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                     return false;
                 }
             }
+        }
+    }
+
+    private void assertSystemReady() {
+        if (!mSystemReady) {
+            throw new IllegalStateException("System not ready");
         }
     }
 

@@ -88,7 +88,7 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
         @Override
         public void onRecentsAnimationStarted() {
             mRecentsAnimationStarted = true;
-            mQuickScrubController.cancelQuickSwitch();
+            mQuickScrubController.setRecentsAnimationStarted(true /* started */);
         }
     };
 
@@ -149,7 +149,7 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
     }
 
     public boolean onInterceptTouchEvent(MotionEvent event) {
-        if (mNavigationBarView.inScreenPinning()) {
+        if (mNavigationBarView.inScreenPinning() || mStatusBar.isKeyguardShowing()) {
             return false;
         }
 
@@ -163,6 +163,7 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
                 mNavigationBarView.transformMatrixToGlobal(mTransformGlobalMatrix);
                 mNavigationBarView.transformMatrixToLocal(mTransformLocalMatrix);
                 mRecentsAnimationStarted = false;
+                mQuickScrubController.setRecentsAnimationStarted(false /* started */);
                 break;
             }
         }
@@ -181,7 +182,7 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
     }
 
     public boolean onTouchEvent(MotionEvent event) {
-        if (mNavigationBarView.inScreenPinning()) {
+        if (mNavigationBarView.inScreenPinning() || mStatusBar.isKeyguardShowing()) {
             return false;
         }
 

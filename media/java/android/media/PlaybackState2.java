@@ -28,13 +28,14 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 /**
- * Playback state for a {@link MediaPlayerInterface}, to be shared between {@link MediaSession2} and
+ * Playback state for a {@link MediaPlayerBase}, to be shared between {@link MediaSession2} and
  * {@link MediaController2}. This includes a playback state {@link #STATE_PLAYING},
  * the current playback position and extra.
  * @hide
  */
+// TODO(jaewan): Remove this.
 public final class PlaybackState2 {
-    // Similar to the PlaybackState2 with following changes
+    // Similar to the PlaybackState with following changes
     //    - Not implement Parcelable and added from/toBundle()
     //    - Removed playback state that doesn't match with the MediaPlayer2
     //      Full list should be finalized when the MediaPlayer2 has getter for the playback state.
@@ -73,6 +74,7 @@ public final class PlaybackState2 {
     //         |    EventCallback.onBufferingUpdate()   |                                        |
     //         +----------------------------------------+----------------------------------------+
     //    - Removed actions and custom actions.
+    //    - Removed error string
     //    - Repeat mode / shuffle mode is now in the PlaylistParams
     // TODO(jaewan): Replace states from MediaPlayer2
     /**
@@ -110,8 +112,7 @@ public final class PlaybackState2 {
     public final static int STATE_BUFFERING = 4;
 
     /**
-     * State indicating this item is currently in an error state. The error
-     * message should also be set when entering this state.
+     * State indicating this item is currently in an error state.
      */
     public final static int STATE_ERROR = 5;
 
@@ -122,13 +123,10 @@ public final class PlaybackState2 {
 
     private final PlaybackState2Provider mProvider;
 
-    // TODO(jaewan): Better error handling?
-    //               E.g. media item at #2 has issue, but continue playing #3
-    //                    login error. fire intent xxx to login
     public PlaybackState2(@NonNull Context context, int state, long position, long updateTime,
-            float speed, long bufferedPosition, long activeItemId, CharSequence error) {
+            float speed, long bufferedPosition, long activeItemId) {
         mProvider = ApiLoader.getProvider(context).createPlaybackState2(context, this, state,
-                position, updateTime, speed, bufferedPosition, activeItemId, error);
+                position, updateTime, speed, bufferedPosition, activeItemId);
     }
 
     @Override
@@ -141,10 +139,8 @@ public final class PlaybackState2 {
      * <ul>
      * <li> {@link PlaybackState2#STATE_NONE}</li>
      * <li> {@link PlaybackState2#STATE_STOPPED}</li>
-     * <li> {@link PlaybackState2#STATE_PREPARED}</li>
      * <li> {@link PlaybackState2#STATE_PAUSED}</li>
      * <li> {@link PlaybackState2#STATE_PLAYING}</li>
-     * <li> {@link PlaybackState2#STATE_FINISH}</li>
      * <li> {@link PlaybackState2#STATE_BUFFERING}</li>
      * <li> {@link PlaybackState2#STATE_ERROR}</li>
      * </ul>
@@ -179,14 +175,6 @@ public final class PlaybackState2 {
      */
     public float getPlaybackSpeed() {
         return mProvider.getPlaybackSpeed_impl();
-    }
-
-    /**
-     * Get a user readable error message. This should be set when the state is
-     * {@link PlaybackState2#STATE_ERROR}.
-     */
-    public CharSequence getErrorMessage() {
-        return mProvider.getErrorMessage_impl();
     }
 
     /**

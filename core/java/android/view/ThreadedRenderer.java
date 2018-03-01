@@ -34,6 +34,7 @@ import android.os.Trace;
 import android.util.Log;
 import android.view.Surface.OutOfResourcesException;
 import android.view.View.AttachInfo;
+import android.view.animation.AnimationUtils;
 
 import com.android.internal.R;
 import com.android.internal.util.VirtualRefBasePtr;
@@ -833,9 +834,9 @@ public final class ThreadedRenderer {
      *
      * @return A hardware layer
      */
-    HardwareLayer createTextureLayer() {
+    TextureLayer createTextureLayer() {
         long layer = nCreateTextureLayer(mNativeProxy);
-        return HardwareLayer.adoptTextureLayer(this, layer);
+        return TextureLayer.adoptTextureLayer(this, layer);
     }
 
 
@@ -844,7 +845,7 @@ public final class ThreadedRenderer {
     }
 
 
-    boolean copyLayerInto(final HardwareLayer layer, final Bitmap bitmap) {
+    boolean copyLayerInto(final TextureLayer layer, final Bitmap bitmap) {
         return nCopyLayerInto(mNativeProxy,
                 layer.getDeferredLayerUpdater(), bitmap);
     }
@@ -855,7 +856,7 @@ public final class ThreadedRenderer {
      *
      * @param layer The hardware layer that needs an update
      */
-    void pushLayerUpdate(HardwareLayer layer) {
+    void pushLayerUpdate(TextureLayer layer) {
         nPushLayerUpdate(mNativeProxy, layer.getDeferredLayerUpdater());
     }
 
@@ -863,7 +864,7 @@ public final class ThreadedRenderer {
      * Tells the HardwareRenderer that the layer is destroyed. The renderer
      * should remove the layer from any update queues.
      */
-    void onLayerDestroyed(HardwareLayer layer) {
+    void onLayerDestroyed(TextureLayer layer) {
         nCancelLayerUpdate(mNativeProxy, layer.getDeferredLayerUpdater());
     }
 
@@ -941,6 +942,107 @@ public final class ThreadedRenderer {
         } finally {
             super.finalize();
         }
+    }
+
+    /**
+     * Basic synchronous renderer. Currently only used to render the Magnifier, so use with care.
+     * TODO: deduplicate against ThreadedRenderer.
+     *
+     * @hide
+     */
+    public static class SimpleRenderer {
+        private final RenderNode mRootNode;
+        private long mNativeProxy;
+        private final float mLightY, mLightZ;
+        private Surface mSurface;
+        private final FrameInfo mFrameInfo = new FrameInfo();
+
+        public SimpleRenderer(final Context context, final String name, final Surface surface) {
+            final TypedArray a = context.obtainStyledAttributes(null, R.styleable.Lighting, 0, 0);
+            mLightY = a.getDimension(R.styleable.Lighting_lightY, 0);
+            mLightZ = a.getDimension(R.styleable.Lighting_lightZ, 0);
+            final float lightRadius = a.getDimension(R.styleable.Lighting_lightRadius, 0);
+            final int ambientShadowAlpha =
+                    (int) (255 * a.getFloat(R.styleable.Lighting_ambientShadowAlpha, 0) + 0.5f);
+            final int spotShadowAlpha =
+                    (int) (255 * a.getFloat(R.styleable.Lighting_spotShadowAlpha, 0) + 0.5f);
+            a.recycle();
+
+            final long rootNodePtr = nCreateRootRenderNode();
+            mRootNode = RenderNode.adopt(rootNodePtr);
+            mRootNode.setClipToBounds(false);
+            mNativeProxy = nCreateProxy(true /* translucent */, rootNodePtr);
+            nSetName(mNativeProxy, name);
+
+            ProcessInitializer.sInstance.init(context, mNativeProxy);
+            nLoadSystemProperties(mNativeProxy);
+
+            nSetup(mNativeProxy, lightRadius, ambientShadowAlpha, spotShadowAlpha);
+
+            mSurface = surface;
+            nUpdateSurface(mNativeProxy, surface);
+        }
+
+        /**
+         * Set the light center.
+         */
+        public void setLightCenter(final Display display,
+                final int windowLeft, final int windowTop) {
+            // Adjust light position for window offsets.
+            final Point displaySize = new Point();
+            display.getRealSize(displaySize);
+            final float lightX = displaySize.x / 2f - windowLeft;
+            final float lightY = mLightY - windowTop;
+
+            nSetLightCenter(mNativeProxy, lightX, lightY, mLightZ);
+        }
+
+        public RenderNode getRootNode() {
+            return mRootNode;
+        }
+
+        /**
+         * Draw the surface.
+         */
+        public void draw(final FrameDrawingCallback callback) {
+            final long vsync = AnimationUtils.currentAnimationTimeMillis() * 1000000L;
+            mFrameInfo.setVsync(vsync, vsync);
+            mFrameInfo.addFlags(1 << 2 /* VSYNC */);
+            if (callback != null) {
+                nSetFrameCallback(mNativeProxy, callback);
+            }
+            nSyncAndDrawFrame(mNativeProxy, mFrameInfo.mFrameInfo, mFrameInfo.mFrameInfo.length);
+        }
+
+        /**
+         * Destroy the renderer.
+         */
+        public void destroy() {
+            mSurface = null;
+            nDestroy(mNativeProxy, mRootNode.mNativeRenderNode);
+        }
+
+        @Override
+        protected void finalize() throws Throwable {
+            try {
+                nDeleteProxy(mNativeProxy);
+                mNativeProxy = 0;
+            } finally {
+                super.finalize();
+            }
+        }
+    }
+
+    /**
+     * Interface used to receive callbacks when a frame is being drawn.
+     */
+    public interface FrameDrawingCallback {
+        /**
+         * Invoked during a frame drawing.
+         *
+         * @param frame The id of the frame being drawn.
+         */
+        void onFrameDraw(long frame);
     }
 
     private static class ProcessInitializer {
@@ -1080,6 +1182,7 @@ public final class ThreadedRenderer {
     private static native void nDrawRenderNode(long nativeProxy, long rootRenderNode);
     private static native void nSetContentDrawBounds(long nativeProxy, int left,
              int top, int right, int bottom);
+    private static native void nSetFrameCallback(long nativeProxy, FrameDrawingCallback callback);
 
     private static native long nAddFrameMetricsObserver(long nativeProxy, FrameMetricsObserver observer);
     private static native void nRemoveFrameMetricsObserver(long nativeProxy, long nativeObserver);

@@ -259,6 +259,8 @@
     <!-- Button name for "Cancel". [CHAR LIMIT=NONE] -->
     <string name="cancel">Cancel</string>
 
+    <!-- Message shown when the system-provided fingerprint dialog is shown, asking for authentication -->
+    <string name="fingerprint_dialog_touch_sensor">Touch the fingerprint sensor</string>
     <!-- Content description of the fingerprint icon when the system-provided fingerprint dialog is showing, for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_fingerprint_dialog_fingerprint_icon">Fingerprint icon</string>
     <!-- Content description of the application icon when the system-provided fingerprint dialog is showing, for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
@@ -666,6 +668,8 @@
     <!-- Textual description of Ethernet connections -->
     <string name="ethernet_label">Ethernet</string>
 
+    <!-- QuickSettings: Onboarding text that introduces users to long press on an option in order to view the option's menu in Settings [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_header_onboarding_text">Press &amp; hold on the icons for more options</string>
     <!-- QuickSettings: Do not disturb [CHAR LIMIT=NONE] -->
     <string name="quick_settings_dnd_label">Do not disturb</string>
     <!-- QuickSettings: Do not disturb - Priority only [CHAR LIMIT=NONE] -->
@@ -1341,6 +1345,10 @@
     <string name="volume_stream_content_description_mute_a11y">%1$s. Tap to mute.</string>
 
     <string name="volume_dialog_title">%s volume controls</string>
+
+    <string name="volume_dialog_ringer_guidance_vibrate">Calls and notifications will vibrate</string>
+    <string name="volume_dialog_ringer_guidance_silent">Calls and notifications will be muted</string>
+    <string name="volume_dialog_ringer_guidance_ring">Calls and notifications will ring</string>
 
     <string name="output_title">Media output</string>
     <string name="output_calls_title">Phone call output</string>

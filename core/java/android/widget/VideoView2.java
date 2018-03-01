@@ -22,7 +22,8 @@ import android.annotation.Nullable;
 import android.content.Context;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
-import android.media.MediaPlayerInterface;
+import android.media.MediaMetadata2;
+import android.media.MediaPlayerBase;
 import android.media.session.MediaController;
 import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
@@ -33,6 +34,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.util.AttributeSet;
 import android.view.View;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -166,6 +169,27 @@ public class VideoView2 extends ViewGroupHelper<VideoView2Provider> {
         return mProvider.getMediaControlView2_impl();
     }
 
+    /**
+     * Sets MediaMetadata2 instance. It will replace the previously assigned MediaMetadata2 instance
+     * if any.
+     *
+     * @param metadata a MediaMetadata2 instance.
+     * @hide
+     */
+    public void setMediaMetadata(MediaMetadata2 metadata) {
+        mProvider.setMediaMetadata_impl(metadata);
+    }
+
+    /**
+     * Returns MediaMetadata2 instance which is retrieved from MediaPlayer2 inside VideoView2 by
+     * default or by {@link #setMediaMetadata} method.
+     * @hide
+     */
+    public MediaMetadata2 getMediaMetadata() {
+        // TODO: add to Javadoc whether this value can be null or not when integrating with
+        // MediaSession2.
+        return mProvider.getMediaMetadata_impl();
+    }
 
     /**
      * Returns MediaController instance which is connected with MediaSession that VideoView2 is
@@ -253,7 +277,7 @@ public class VideoView2 extends ViewGroupHelper<VideoView2Provider> {
      * @hide
      */
     public void setRouteAttributes(@NonNull List<String> routeCategories,
-            @Nullable MediaPlayerInterface player) {
+            @Nullable MediaPlayerBase player) {
         mProvider.setRouteAttributes_impl(routeCategories, player);
     }
 
@@ -344,71 +368,31 @@ public class VideoView2 extends ViewGroupHelper<VideoView2Provider> {
     }
 
     /**
-     * Registers a callback to be invoked when the media file is loaded and ready to go.
-     *
-     * @param executor executor to run callbacks on.
-     * @param l the callback that will be run.
-     */
-    public void setOnPreparedListener(Executor executor, OnPreparedListener l) {
-        mProvider.setOnPreparedListener_impl(executor, l);
-    }
-
-    /**
-     * Registers a callback to be invoked when the end of a media file has been reached during
-     * playback.
-     *
-     * @param executor executor to run callbacks on.
-     * @param l the callback that will be run.
-     */
-    public void setOnCompletionListener(Executor executor, OnCompletionListener l) {
-        mProvider.setOnCompletionListener_impl(executor, l);
-    }
-
-    /**
-     * Registers a callback to be invoked when an error occurs during playback or setup.  If no
-     * listener is specified, or if the listener returned false, VideoView2 will inform the user of
-     * any errors.
-     *
-     * @param executor executor to run callbacks on.
-     * @param l The callback that will be run
-     */
-    public void setOnErrorListener(Executor executor, OnErrorListener l) {
-        mProvider.setOnErrorListener_impl(executor, l);
-    }
-
-    /**
-     * Registers a callback to be invoked when an informational event occurs during playback or
-     * setup.
-     *
-     * @param executor executor to run callbacks on.
-     * @param l The callback that will be run
-     */
-    public void setOnInfoListener(Executor executor, OnInfoListener l) {
-        mProvider.setOnInfoListener_impl(executor, l);
-    }
-
-    /**
      * Registers a callback to be invoked when a view type change is done.
      * {@see #setViewType(int)}
-     * @param executor executor to run callbacks on.
      * @param l The callback that will be run
+     *
+     * @hide
      */
-    public void setOnViewTypeChangedListener(Executor executor, OnViewTypeChangedListener l) {
-        mProvider.setOnViewTypeChangedListener_impl(executor, l);
+    @VisibleForTesting
+    public void setOnViewTypeChangedListener(OnViewTypeChangedListener l) {
+        mProvider.setOnViewTypeChangedListener_impl(l);
     }
 
     /**
      * Registers a callback to be invoked when the fullscreen mode should be changed.
-     * @param executor executor to run callbacks on.
      * @param l The callback that will be run
      */
-    public void setFullScreenRequestListener(Executor executor, OnFullScreenRequestListener l) {
-        mProvider.setFullScreenRequestListener_impl(executor, l);
+    public void setFullScreenRequestListener(OnFullScreenRequestListener l) {
+        mProvider.setFullScreenRequestListener_impl(l);
     }
 
     /**
      * Interface definition of a callback to be invoked when the view type has been changed.
+     *
+     * @hide
      */
+    @VisibleForTesting
     public interface OnViewTypeChangedListener {
         /**
          * Called when the view type has been changed.
@@ -421,58 +405,6 @@ public class VideoView2 extends ViewGroupHelper<VideoView2Provider> {
          * </ul>
          */
         void onViewTypeChanged(View view, @ViewType int viewType);
-    }
-
-    /**
-     * Interface definition of a callback to be invoked when the media source is ready for playback.
-     */
-    public interface OnPreparedListener {
-        /**
-         * Called when the media file is ready for playback.
-         */
-        void onPrepared(View view);
-    }
-
-    /**
-     * Interface definition for a callback to be invoked when playback of a media source has
-     * completed.
-     */
-    public interface OnCompletionListener {
-        /**
-         * Called when the end of a media source is reached during playback.
-         */
-        void onCompletion(View view);
-    }
-
-    /**
-     * Interface definition of a callback to be invoked when there has been an error during an
-     * asynchronous operation.
-     */
-    public interface OnErrorListener {
-        // TODO: Redefine error codes.
-        /**
-         * Called to indicate an error.
-         * @param what the type of error that has occurred
-         * @param extra an extra code, specific to the error.
-         * @return true if the method handled the error, false if it didn't.
-         * @see MediaPlayer#OnErrorListener
-         */
-        boolean onError(View view, int what, int extra);
-    }
-
-    /**
-     * Interface definition of a callback to be invoked to communicate some info and/or warning
-     * about the media or its playback.
-     */
-    public interface OnInfoListener {
-        /**
-         * Called to indicate an info or a warning.
-         * @param what the type of info or warning.
-         * @param extra an extra code, specific to the info.
-         *
-         * @see MediaPlayer#OnInfoListener
-         */
-        void onInfo(View view, int what, int extra);
     }
 
     /**
