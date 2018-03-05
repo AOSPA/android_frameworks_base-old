@@ -28,10 +28,14 @@ namespace statsd {
 class OringDurationTracker : public DurationTracker {
 public:
     OringDurationTracker(const ConfigKey& key, const int64_t& id,
-                         const HashableDimensionKey& eventKey, sp<ConditionWizard> wizard,
-                         int conditionIndex, bool nesting, uint64_t currentBucketStartNs,
-                         uint64_t bucketSizeNs, bool conditionSliced,
+                         const MetricDimensionKey& eventKey, sp<ConditionWizard> wizard,
+                         int conditionIndex, const FieldMatcher& dimensionInCondition, bool nesting,
+                         uint64_t currentBucketStartNs, uint64_t bucketSizeNs, bool conditionSliced,
                          const std::vector<sp<DurationAnomalyTracker>>& anomalyTrackers);
+
+    OringDurationTracker(const OringDurationTracker& tracker) = default;
+
+    unique_ptr<DurationTracker> clone(const uint64_t eventTime) override;
 
     void noteStart(const HashableDimensionKey& key, bool condition, const uint64_t eventTime,
                    const ConditionKey& conditionKey) override;
@@ -44,7 +48,7 @@ public:
 
     bool flushIfNeeded(
             uint64_t timestampNs,
-            std::unordered_map<HashableDimensionKey, std::vector<DurationBucket>>* output) override;
+            std::unordered_map<MetricDimensionKey, std::vector<DurationBucket>>* output) override;
 
     int64_t predictAnomalyTimestampNs(const DurationAnomalyTracker& anomalyTracker,
                                       const uint64_t currentTimestamp) const override;
@@ -56,10 +60,10 @@ private:
     // 2) which keys are paused (started but condition was false)
     // 3) whenever a key stops, we remove it from the started set. And if the set becomes empty,
     //    it means everything has stopped, we then record the end time.
-    std::map<HashableDimensionKey, int> mStarted;
-    std::map<HashableDimensionKey, int> mPaused;
+    std::unordered_map<HashableDimensionKey, int> mStarted;
+    std::unordered_map<HashableDimensionKey, int> mPaused;
     int64_t mLastStartTime;
-    std::map<HashableDimensionKey, ConditionKey> mConditionKeyMap;
+    std::unordered_map<HashableDimensionKey, ConditionKey> mConditionKeyMap;
 
     // return true if we should not allow newKey to be tracked because we are above the threshold
     bool hitGuardRail(const HashableDimensionKey& newKey);

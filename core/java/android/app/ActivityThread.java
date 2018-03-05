@@ -291,6 +291,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     boolean mJitEnabled = false;
     boolean mSomeActivitiesChanged = false;
     boolean mUpdatingSystemConfig = false;
+    /* package */ boolean mHiddenApiWarningShown = false;
 
     // These can be accessed by multiple threads; mResourcesManager is the lock.
     // XXX For now we keep around information about all packages we have
@@ -487,12 +488,14 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
         }
 
-        public boolean isPreHoneycomb() {
-            if (activity != null) {
-                return activity.getApplicationInfo().targetSdkVersion
-                        < android.os.Build.VERSION_CODES.HONEYCOMB;
-            }
-            return false;
+        private boolean isPreHoneycomb() {
+            return activity != null && activity.getApplicationInfo().targetSdkVersion
+                    < android.os.Build.VERSION_CODES.HONEYCOMB;
+        }
+
+        private boolean isPreP() {
+            return activity != null && activity.getApplicationInfo().targetSdkVersion
+                    < android.os.Build.VERSION_CODES.P;
         }
 
         public boolean isPersistable() {
@@ -633,6 +636,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         /** Initial values for {@link Profiler}. */
         ProfilerInfo initProfilerInfo;
+
+        boolean autofillCompatibilityEnabled;
 
         public String toString() {
             return "AppBindData{appInfo=" + appInfo + "}";
@@ -860,7 +865,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 boolean enableBinderTracking, boolean trackAllocation,
                 boolean isRestrictedBackupMode, boolean persistent, Configuration config,
                 CompatibilityInfo compatInfo, Map services, Bundle coreSettings,
-                String buildSerial) {
+                String buildSerial, boolean autofillCompatibilityEnabled) {
 
             if (services != null) {
                 // Setup the service cache in the ServiceManager
@@ -886,6 +891,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             data.compatInfo = compatInfo;
             data.initProfilerInfo = profilerInfo;
             data.buildSerial = buildSerial;
+            data.autofillCompatibilityEnabled = autofillCompatibilityEnabled;
             sendMessage(H.BIND_APPLICATION, data);
         }
 
@@ -3969,8 +3975,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
 
             r.activity.mConfigChangeFlags |= configChanges;
-            performPauseActivity(token, finished, r.isPreHoneycomb(), "handlePauseActivity",
-                    pendingActions);
+            performPauseActivity(r, finished, "handlePauseActivity", pendingActions);
 
             // Make sure any pending writes are now committed.
             if (r.isPreHoneycomb()) {
@@ -3993,16 +3998,18 @@ public final class ActivityThread extends ClientTransactionHandler {
         mInstrumentation.callActivityOnUserLeaving(r.activity);
     }
 
-    final Bundle performPauseActivity(IBinder token, boolean finished,
-            boolean saveState, String reason, PendingTransactionActions pendingActions) {
+    final Bundle performPauseActivity(IBinder token, boolean finished, String reason,
+            PendingTransactionActions pendingActions) {
         ActivityClientRecord r = mActivities.get(token);
-        return r != null
-                ? performPauseActivity(r, finished, saveState, reason, pendingActions)
-                : null;
+        return r != null ? performPauseActivity(r, finished, reason, pendingActions) : null;
     }
 
-    private Bundle performPauseActivity(ActivityClientRecord r, boolean finished, boolean saveState,
-            String reason, PendingTransactionActions pendingActions) {
+    /**
+     * Pause the activity.
+     * @return Saved instance state for pre-Honeycomb apps if it was saved, {@code null} otherwise.
+     */
+    private Bundle performPauseActivity(ActivityClientRecord r, boolean finished, String reason,
+            PendingTransactionActions pendingActions) {
         if (r.paused) {
             if (r.activity.mFinished) {
                 // If we are finishing, we won't call onResume() in certain cases.
@@ -4019,9 +4026,10 @@ public final class ActivityThread extends ClientTransactionHandler {
             r.activity.mFinished = true;
         }
 
-        // Next have the activity save its current state and managed dialogs...
-        if (!r.activity.mFinished && saveState) {
-            callCallActivityOnSaveInstanceState(r);
+        // Pre-Honeycomb apps always save their state before pausing
+        final boolean shouldSaveState = !r.activity.mFinished && r.isPreHoneycomb();
+        if (shouldSaveState) {
+            callActivityOnSaveInstanceState(r);
         }
 
         performPauseActivityIfNeeded(r, reason);
@@ -4048,7 +4056,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
         }
 
-        return !r.activity.mFinished && saveState ? r.state : null;
+        return shouldSaveState ? r.state : null;
     }
 
     private void performPauseActivityIfNeeded(ActivityClientRecord r, String reason) {
@@ -4149,29 +4157,46 @@ public final class ActivityThread extends ClientTransactionHandler {
                 }
             }
 
-            // Next have the activity save its current state and managed dialogs...
-            if (!r.activity.mFinished && saveState) {
-                if (r.state == null) {
-                    callCallActivityOnSaveInstanceState(r);
-                }
-            }
-
             if (!keepShown) {
-                try {
-                    // Now we are idle.
-                    r.activity.performStop(false /*preserveWindow*/);
-                } catch (Exception e) {
-                    if (!mInstrumentation.onException(r.activity, e)) {
-                        throw new RuntimeException(
-                                "Unable to stop activity "
+                callActivityOnStop(r, saveState, reason);
+            }
+        }
+    }
+
+    /**
+     * Calls {@link Activity#onStop()} and {@link Activity#onSaveInstanceState(Bundle)}, and updates
+     * the client record's state.
+     * All calls to stop an activity must be done through this method to make sure that
+     * {@link Activity#onSaveInstanceState(Bundle)} is also executed in the same call.
+     */
+    private void callActivityOnStop(ActivityClientRecord r, boolean saveState, String reason) {
+        // Before P onSaveInstanceState was called before onStop, starting with P it's
+        // called after. Before Honeycomb state was always saved before onPause.
+        final boolean shouldSaveState = saveState && !r.activity.mFinished && r.state == null
+                && !r.isPreHoneycomb();
+        final boolean isPreP = r.isPreP();
+        if (shouldSaveState && isPreP) {
+            callActivityOnSaveInstanceState(r);
+        }
+
+        try {
+            r.activity.performStop(false /*preserveWindow*/);
+        } catch (SuperNotCalledException e) {
+            throw e;
+        } catch (Exception e) {
+            if (!mInstrumentation.onException(r.activity, e)) {
+                throw new RuntimeException(
+                        "Unable to stop activity "
                                 + r.intent.getComponent().toShortString()
                                 + ": " + e.toString(), e);
-                    }
-                }
-                r.setState(ON_STOP);
-                EventLog.writeEvent(LOG_AM_ON_STOP_CALLED, UserHandle.myUserId(),
-                        r.activity.getComponentName().getClassName(), reason);
             }
+        }
+        r.setState(ON_STOP);
+        EventLog.writeEvent(LOG_AM_ON_STOP_CALLED, UserHandle.myUserId(),
+                r.activity.getComponentName().getClassName(), reason);
+
+        if (shouldSaveState && !isPreP) {
+            callActivityOnSaveInstanceState(r);
         }
     }
 
@@ -4292,24 +4317,7 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         if (sleeping) {
             if (!r.stopped && !r.isPreHoneycomb()) {
-                if (!r.activity.mFinished && r.state == null) {
-                    callCallActivityOnSaveInstanceState(r);
-                }
-
-                try {
-                    // Now we are idle.
-                    r.activity.performStop(false /*preserveWindow*/);
-                } catch (Exception e) {
-                    if (!mInstrumentation.onException(r.activity, e)) {
-                        throw new RuntimeException(
-                                "Unable to stop activity "
-                                + r.intent.getComponent().toShortString()
-                                + ": " + e.toString(), e);
-                    }
-                }
-                r.setState(ON_STOP);
-                EventLog.writeEvent(LOG_AM_ON_STOP_CALLED, UserHandle.myUserId(),
-                        r.activity.getComponentName().getClassName(), "sleeping");
+                callActivityOnStop(r, true /* saveState */, "sleeping");
             }
 
             // Make sure any pending writes are now committed.
@@ -4459,21 +4467,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             performPauseActivityIfNeeded(r, "destroy");
 
             if (!r.stopped) {
-                try {
-                    r.activity.performStop(r.mPreserveWindow);
-                } catch (SuperNotCalledException e) {
-                    throw e;
-                } catch (Exception e) {
-                    if (!mInstrumentation.onException(r.activity, e)) {
-                        throw new RuntimeException(
-                                "Unable to stop activity "
-                                + safeToComponentShortString(r.intent)
-                                + ": " + e.toString(), e);
-                    }
-                }
-                r.setState(ON_STOP);
-                EventLog.writeEvent(LOG_AM_ON_STOP_CALLED, UserHandle.myUserId(),
-                        r.activity.getComponentName().getClassName(), "destroy");
+                callActivityOnStop(r, false /* saveState */, "destroy");
             }
             if (getNonConfigInstance) {
                 try {
@@ -4779,11 +4773,11 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         // Need to ensure state is saved.
         if (!r.paused) {
-            performPauseActivity(r.token, false, r.isPreHoneycomb(), "handleRelaunchActivity",
+            performPauseActivity(r, false, "handleRelaunchActivity",
                     null /* pendingActions */);
         }
-        if (r.state == null && !r.stopped && !r.isPreHoneycomb()) {
-            callCallActivityOnSaveInstanceState(r);
+        if (!r.stopped) {
+            callActivityOnStop(r, true /* saveState */, "handleRelaunchActivity");
         }
 
         handleDestroyActivity(r.token, false, configChanges, true);
@@ -4816,8 +4810,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         handleStartActivity(r, pendingActions);
         handleResumeActivity(r.token, false /* clearHide */, r.isForward, "relaunch");
         if (r.startsNotResumed) {
-            performPauseActivity(r, false /* finished */, r.isPreHoneycomb(), "relaunch",
-                    pendingActions);
+            performPauseActivity(r, false /* finished */, "relaunch", pendingActions);
         }
 
         if (!tmp.onlyLocalRequest) {
@@ -4832,7 +4825,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
-    private void callCallActivityOnSaveInstanceState(ActivityClientRecord r) {
+    private void callActivityOnSaveInstanceState(ActivityClientRecord r) {
         r.state = new Bundle();
         r.state.setAllowFds(false);
         if (r.isPersistable()) {
@@ -5850,6 +5843,10 @@ public final class ActivityThread extends ClientTransactionHandler {
             // If the app is being launched for full backup or restore, bring it up in
             // a restricted environment with the base application class.
             app = data.info.makeApplication(data.restrictedBackupMode, null);
+
+            // Propagate autofill compat state
+            app.setAutofillCompatibilityEnabled(data.autofillCompatibilityEnabled);
+
             mInitialApplication = app;
 
             // don't bring up providers in restricted mode; they may depend on the

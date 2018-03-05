@@ -2294,7 +2294,9 @@ public class AudioService extends IAudioService.Stub
         // only mute for the current user
         if (getCurrentUserId() == userId) {
             final boolean currentMute = AudioSystem.isMicrophoneMuted();
+            final long identity = Binder.clearCallingIdentity();
             AudioSystem.muteMicrophone(on);
+            Binder.restoreCallingIdentity(identity);
             if (on != currentMute) {
                 mContext.sendBroadcast(new Intent(AudioManager.ACTION_MICROPHONE_MUTE_CHANGED)
                         .setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY));
@@ -2668,7 +2670,9 @@ public class AudioService extends IAudioService.Stub
             }
 
             if (actualMode != mMode) {
+                final long identity = Binder.clearCallingIdentity();
                 status = AudioSystem.setPhoneState(actualMode);
+                Binder.restoreCallingIdentity(identity);
                 if (status == AudioSystem.AUDIO_STATUS_OK) {
                     if (DEBUG_MODE) { Log.v(TAG, " mode successfully set to " + actualMode); }
                     mMode = actualMode;
@@ -7277,11 +7281,15 @@ public class AudioService extends IAudioService.Stub
             if (mHasFocusListener) {
                 mMediaFocusControl.removeFocusFollower(mPolicyCallback);
             }
+            final long identity = Binder.clearCallingIdentity();
             AudioSystem.registerPolicyMixes(mMixes, false);
+            Binder.restoreCallingIdentity(identity);
         }
 
         void connectMixes() {
+            final long identity = Binder.clearCallingIdentity();
             AudioSystem.registerPolicyMixes(mMixes, true);
+            Binder.restoreCallingIdentity(identity);
         }
     };
 
@@ -7290,6 +7298,12 @@ public class AudioService extends IAudioService.Stub
     //======================
     /**  */
     public int dispatchFocusChange(AudioFocusInfo afi, int focusChange, IAudioPolicyCallback pcb) {
+        if (afi == null) {
+            throw new IllegalArgumentException("Illegal null AudioFocusInfo");
+        }
+        if (pcb == null) {
+            throw new IllegalArgumentException("Illegal null AudioPolicy callback");
+        }
         synchronized (mAudioPolicies) {
             if (!mAudioPolicies.containsKey(pcb.asBinder())) {
                 throw new IllegalStateException("Unregistered AudioPolicy for focus dispatch");
@@ -7297,6 +7311,23 @@ public class AudioService extends IAudioService.Stub
             return mMediaFocusControl.dispatchFocusChange(afi, focusChange);
         }
     }
+
+    public void setFocusRequestResultFromExtPolicy(AudioFocusInfo afi, int requestResult,
+            IAudioPolicyCallback pcb) {
+        if (afi == null) {
+            throw new IllegalArgumentException("Illegal null AudioFocusInfo");
+        }
+        if (pcb == null) {
+            throw new IllegalArgumentException("Illegal null AudioPolicy callback");
+        }
+        synchronized (mAudioPolicies) {
+            if (!mAudioPolicies.containsKey(pcb.asBinder())) {
+                throw new IllegalStateException("Unregistered AudioPolicy for external focus");
+            }
+            mMediaFocusControl.setFocusRequestResultFromExtPolicy(afi, requestResult);
+        }
+    }
+
 
     //======================
     // misc

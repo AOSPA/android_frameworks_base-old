@@ -3036,6 +3036,28 @@
         <!-- The title this view should present to accessibility as a pane title.
              See {@link android.view.View#setAccessibilityPaneTitle(CharSequence)} -->
         <attr name="accessibilityPaneTitle" format="string" />
+
+        <!-- Sets the color of the spot shadow that is drawn when the view has a positive Z or
+             elevation value.
+             <p>
+             By default the shadow color is black. Generally, this color will be opaque so the
+             intensity of the shadow is consistent between different views with different colors.
+             <p>
+             The opacity of the final spot shadow is a function of the shadow caster height, the
+             alpha channel of the outlineSpotShadowColor (typically opaque), and the
+             {@link android.R.attr#spotShadowAlpha} theme attribute. -->
+        <attr name="outlineSpotShadowColor" format="color" />
+
+        <!-- Sets the color of the ambient shadow that is drawn when the view has a positive Z
+             or elevation value.
+             <p>
+             By default the shadow color is black. Generally, this color will be opaque so the
+             intensity of the shadow is consistent between different views with different colors.
+             <p>
+             The opacity of the final ambient shadow is a function of the shadow caster height,
+             the alpha channel of the outlineAmbientShadowColor (typically opaque), and the
+             {@link android.R.attr#ambientShadowAlpha} theme attribute. -->
+        <attr name="outlineAmbientShadowColor" format="color" />
     </declare-styleable>
 
     <!-- Attributes that can be assigned to a tag for a particular View. -->
@@ -7881,6 +7903,23 @@
         <attr name="settingsActivity" />
     </declare-styleable>
 
+    <!-- Use <code>compatibility-package</code> as a child tag of <code>autofill-service</code>
+         in the XML resource that describes an {@link android.service.autofill.AutofillService}
+         to specify a package and an optional max version code for which to request compatibility
+         mode. If no max version code is specified compatibility mode is requested for all package
+         versions. The max version code is useful to avoid requesting compatibility mode for newer
+         package versions that are known to natively support autofill.
+    -->
+    <declare-styleable name="AutofillService_CompatibilityPackage">
+        <!-- The package name for which compatibility mode is requested. -->
+        <attr name="name" />
+        <!-- The max version code of the package for which compatibility mode is
+             requested. This corresponds to the long value returned by {@link
+             android.content.pm.PackageInfo#getLongVersionCode()} for the target package.
+        -->
+        <attr name="maxLongVersionCode" format="string" />
+    </declare-styleable>
+
     <!-- =============================== -->
     <!-- Contacts meta-data attributes -->
     <!-- =============================== -->
@@ -8771,6 +8810,16 @@
         individual list represents one collection of signature hashes. Refer to your font provider's
         documentation for these values. -->
         <attr name="fontProviderCerts" format="reference" />
+    </declare-styleable>
+
+    <!-- Attributes that are read when parsing a  tag. -->
+    <declare-styleable name="VideoView2">
+        <attr name="enableControlView" format="boolean" />
+        <attr name="enableSubtitle" format="boolean" />
+        <attr name="viewType" format="enum">
+            <enum name="surfaceView" value="0" />
+            <enum name="textureView" value="1" />
+        </attr>
     </declare-styleable>
 
     <!-- @hide -->

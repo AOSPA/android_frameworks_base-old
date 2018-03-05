@@ -98,8 +98,8 @@ TEST(EventMetricProducerTest, TestEventsWithSlicedCondition) {
     metric.set_condition(StringToId("APP_IN_BACKGROUND_PER_UID_AND_SCREEN_ON"));
     MetricConditionLink* link = metric.add_links();
     link->set_condition(StringToId("APP_IN_BACKGROUND_PER_UID"));
-    *link->mutable_fields_in_what() = buildSimpleAtomFieldMatcher(tagId, 1);
-    *link->mutable_fields_in_condition() = buildSimpleAtomFieldMatcher(conditionTagId, 2);
+    buildSimpleAtomFieldMatcher(tagId, 1, link->mutable_fields_in_what());
+    buildSimpleAtomFieldMatcher(conditionTagId, 2, link->mutable_fields_in_condition());
 
     LogEvent event1(tagId, bucketStartTimeNs + 1);
     EXPECT_TRUE(event1.write("111"));
@@ -114,9 +114,9 @@ TEST(EventMetricProducerTest, TestEventsWithSlicedCondition) {
     key2[StringToId("APP_IN_BACKGROUND_PER_UID")] = {getMockedDimensionKey(conditionTagId, 2, "222")};
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    EXPECT_CALL(*wizard, query(_, key1)).WillOnce(Return(ConditionState::kFalse));
+    EXPECT_CALL(*wizard, query(_, key1, _, _)).WillOnce(Return(ConditionState::kFalse));
 
-    EXPECT_CALL(*wizard, query(_, key2)).WillOnce(Return(ConditionState::kTrue));
+    EXPECT_CALL(*wizard, query(_, key2, _, _)).WillOnce(Return(ConditionState::kTrue));
 
     EventMetricProducer eventProducer(kConfigKey, metric, 1, wizard, bucketStartTimeNs);
 

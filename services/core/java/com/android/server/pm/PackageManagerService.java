@@ -108,8 +108,6 @@ import static com.android.server.pm.PackageManagerServiceUtils.dumpCriticalInfo;
 import static com.android.server.pm.PackageManagerServiceUtils.getCompressedFiles;
 import static com.android.server.pm.PackageManagerServiceUtils.getLastModifiedTime;
 import static com.android.server.pm.PackageManagerServiceUtils.logCriticalInfo;
-import static com.android.server.pm.PackageManagerServiceUtils.signingDetailsHasCertificate;
-import static com.android.server.pm.PackageManagerServiceUtils.signingDetailsHasSha256Certificate;
 import static com.android.server.pm.PackageManagerServiceUtils.verifySignatures;
 import static com.android.server.pm.permission.PermissionsState.PERMISSION_OPERATION_FAILURE;
 import static com.android.server.pm.permission.PermissionsState.PERMISSION_OPERATION_SUCCESS;
@@ -246,6 +244,7 @@ import android.text.format.DateUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Base64;
+import android.util.ByteStringUtils;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.ExceptionUtils;
@@ -424,7 +423,7 @@ public class PackageManagerService extends IPackageManager.Stub
     public static final boolean DEBUG_DEXOPT = false;
 
     private static final boolean DEBUG_ABI_SELECTION = false;
-    private static final boolean DEBUG_EPHEMERAL = Build.IS_DEBUGGABLE;
+    private static final boolean DEBUG_INSTANT = Build.IS_DEBUGGABLE;
     private static final boolean DEBUG_TRIAGED_MISSING = false;
     private static final boolean DEBUG_APP_DATA = false;
 
@@ -583,6 +582,7 @@ public class PackageManagerService extends IPackageManager.Stub
         sBrowserIntent.setAction(Intent.ACTION_VIEW);
         sBrowserIntent.addCategory(Intent.CATEGORY_BROWSABLE);
         sBrowserIntent.setData(Uri.parse("http:"));
+        sBrowserIntent.addFlags(Intent.FLAG_IGNORE_EPHEMERAL);
     }
 
     /**
@@ -981,7 +981,7 @@ public class PackageManagerService extends IPackageManager.Stub
     private int mIntentFilterVerificationToken = 0;
 
     /** The service connection to the ephemeral resolver */
-    final EphemeralResolverConnection mInstantAppResolverConnection;
+    final InstantAppResolverConnection mInstantAppResolverConnection;
     /** Component used to show resolver settings for Instant Apps */
     final ComponentName mInstantAppResolverSettingsComponent;
 
@@ -2746,12 +2746,6 @@ public class PackageManagerService extends IPackageManager.Stub
                                 mSettings.getDisabledSystemPkgLPr(ps.name);
                         if (disabledPs.codePath == null || !disabledPs.codePath.exists()
                                 || disabledPs.pkg == null) {
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Possibly deleted app: " + ps.dumpState_temp()
-        + "; path: " + (disabledPs.codePath == null ? "<<NULL>>":disabledPs.codePath)
-        + "; pkg: " + (disabledPs.pkg==null?"<<NULL>>":disabledPs.pkg.toString()));
-}
                             possiblyDeletedUpdatedSystemApps.add(ps.name);
                         }
                     }
@@ -2803,10 +2797,6 @@ Slog.e("TODD",
                 for (String deletedAppName : possiblyDeletedUpdatedSystemApps) {
                     PackageParser.Package deletedPkg = mPackages.get(deletedAppName);
                     mSettings.removeDisabledSystemPackageLPw(deletedAppName);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "remove update; name: " + deletedAppName + ", exists? " + (deletedPkg != null));
-}
                     final String msg;
                     if (deletedPkg == null) {
                         // should have found an update, but, we didn't; remove everything
@@ -3149,10 +3139,10 @@ Slog.e("TODD",
             final Pair<ComponentName, String> instantAppResolverComponent =
                     getInstantAppResolverLPr();
             if (instantAppResolverComponent != null) {
-                if (DEBUG_EPHEMERAL) {
+                if (DEBUG_INSTANT) {
                     Slog.d(TAG, "Set ephemeral resolver: " + instantAppResolverComponent);
                 }
-                mInstantAppResolverConnection = new EphemeralResolverConnection(
+                mInstantAppResolverConnection = new InstantAppResolverConnection(
                         mContext, instantAppResolverComponent.first,
                         instantAppResolverComponent.second);
                 mInstantAppResolverSettingsComponent =
@@ -3532,7 +3522,7 @@ Slog.e("TODD",
         final String[] packageArray =
                 mContext.getResources().getStringArray(R.array.config_ephemeralResolverPackage);
         if (packageArray.length == 0 && !Build.IS_DEBUGGABLE) {
-            if (DEBUG_EPHEMERAL) {
+            if (DEBUG_INSTANT) {
                 Slog.d(TAG, "Ephemeral resolver NOT found; empty package list");
             }
             return null;
@@ -3547,19 +3537,9 @@ Slog.e("TODD",
         final Intent resolverIntent = new Intent(actionName);
         List<ResolveInfo> resolvers = queryIntentServicesInternal(resolverIntent, null,
                 resolveFlags, UserHandle.USER_SYSTEM, callingUid, false /*includeInstantApps*/);
-        // temporarily look for the old action
-        if (resolvers.size() == 0) {
-            if (DEBUG_EPHEMERAL) {
-                Slog.d(TAG, "Ephemeral resolver not found with new action; try old one");
-            }
-            actionName = Intent.ACTION_RESOLVE_EPHEMERAL_PACKAGE;
-            resolverIntent.setAction(actionName);
-            resolvers = queryIntentServicesInternal(resolverIntent, null,
-                    resolveFlags, UserHandle.USER_SYSTEM, callingUid, false /*includeInstantApps*/);
-        }
         final int N = resolvers.size();
         if (N == 0) {
-            if (DEBUG_EPHEMERAL) {
+            if (DEBUG_INSTANT) {
                 Slog.d(TAG, "Ephemeral resolver NOT found; no matching intent filters");
             }
             return null;
@@ -3575,20 +3555,20 @@ Slog.e("TODD",
 
             final String packageName = info.serviceInfo.packageName;
             if (!possiblePackages.contains(packageName) && !Build.IS_DEBUGGABLE) {
-                if (DEBUG_EPHEMERAL) {
+                if (DEBUG_INSTANT) {
                     Slog.d(TAG, "Ephemeral resolver not in allowed package list;"
                             + " pkg: " + packageName + ", info:" + info);
                 }
                 continue;
             }
 
-            if (DEBUG_EPHEMERAL) {
+            if (DEBUG_INSTANT) {
                 Slog.v(TAG, "Ephemeral resolver found;"
                         + " pkg: " + packageName + ", info:" + info);
             }
             return new Pair<>(new ComponentName(packageName, info.serviceInfo.name), actionName);
         }
-        if (DEBUG_EPHEMERAL) {
+        if (DEBUG_INSTANT) {
             Slog.v(TAG, "Ephemeral resolver NOT found");
         }
         return null;
@@ -3598,11 +3578,9 @@ Slog.e("TODD",
         String[] orderedActions = Build.IS_ENG
                 ? new String[]{
                         Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE + "_TEST",
-                        Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE,
-                        Intent.ACTION_INSTALL_EPHEMERAL_PACKAGE}
+                        Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE}
                 : new String[]{
-                        Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE,
-                        Intent.ACTION_INSTALL_EPHEMERAL_PACKAGE};
+                        Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE};
 
         final int resolveFlags =
                 MATCH_DIRECT_BOOT_AWARE
@@ -3618,7 +3596,7 @@ Slog.e("TODD",
             matches = queryIntentActivitiesInternal(intent, PACKAGE_MIME_TYPE,
                     resolveFlags, UserHandle.USER_SYSTEM);
             if (matches.isEmpty()) {
-                if (DEBUG_EPHEMERAL) {
+                if (DEBUG_INSTANT) {
                     Slog.d(TAG, "Instant App installer not found with " + action);
                 }
             } else {
@@ -3656,15 +3634,6 @@ Slog.e("TODD",
         final int resolveFlags = MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE;
         List<ResolveInfo> matches = queryIntentActivitiesInternal(intent, null, resolveFlags,
                 UserHandle.USER_SYSTEM);
-        // temporarily look for the old action
-        if (matches.isEmpty()) {
-            if (DEBUG_EPHEMERAL) {
-                Slog.d(TAG, "Ephemeral resolver settings not found with new action; try old one");
-            }
-            intent.setAction(Intent.ACTION_EPHEMERAL_RESOLVER_SETTINGS);
-            matches = queryIntentActivitiesInternal(intent, null, resolveFlags,
-                    UserHandle.USER_SYSTEM);
-        }
         if (matches.isEmpty()) {
             return null;
         }
@@ -3861,10 +3830,6 @@ Slog.e("TODD",
         if (ps == null) {
             return null;
         }
-        PackageParser.Package p = ps.pkg;
-        if (p == null) {
-            return null;
-        }
         final int callingUid = Binder.getCallingUid();
         // Filter out ephemeral app metadata:
         //   * The system/shell/root can see metadata for any app
@@ -3876,32 +3841,58 @@ Slog.e("TODD",
             return null;
         }
 
-        final PermissionsState permissionsState = ps.getPermissionsState();
-
-        // Compute GIDs only if requested
-        final int[] gids = (flags & PackageManager.GET_GIDS) == 0
-                ? EMPTY_INT_ARRAY : permissionsState.computeGids(userId);
-        // Compute granted permissions only if package has requested permissions
-        final Set<String> permissions = ArrayUtils.isEmpty(p.requestedPermissions)
-                ? Collections.<String>emptySet() : permissionsState.getPermissions(userId);
-        final PackageUserState state = ps.readUserState(userId);
-
         if ((flags & MATCH_UNINSTALLED_PACKAGES) != 0
                 && ps.isSystem()) {
             flags |= MATCH_ANY_USER;
         }
 
-        PackageInfo packageInfo = PackageParser.generatePackageInfo(p, gids, flags,
-                ps.firstInstallTime, ps.lastUpdateTime, permissions, state, userId);
+        final PackageUserState state = ps.readUserState(userId);
+        PackageParser.Package p = ps.pkg;
+        if (p != null) {
+            final PermissionsState permissionsState = ps.getPermissionsState();
 
-        if (packageInfo == null) {
+            // Compute GIDs only if requested
+            final int[] gids = (flags & PackageManager.GET_GIDS) == 0
+                    ? EMPTY_INT_ARRAY : permissionsState.computeGids(userId);
+            // Compute granted permissions only if package has requested permissions
+            final Set<String> permissions = ArrayUtils.isEmpty(p.requestedPermissions)
+                    ? Collections.<String>emptySet() : permissionsState.getPermissions(userId);
+
+            PackageInfo packageInfo = PackageParser.generatePackageInfo(p, gids, flags,
+                    ps.firstInstallTime, ps.lastUpdateTime, permissions, state, userId);
+
+            if (packageInfo == null) {
+                return null;
+            }
+
+            packageInfo.packageName = packageInfo.applicationInfo.packageName =
+                    resolveExternalPackageNameLPr(p);
+
+            return packageInfo;
+        } else if ((flags & MATCH_UNINSTALLED_PACKAGES) != 0 && state.isAvailable(flags)) {
+            PackageInfo pi = new PackageInfo();
+            pi.packageName = ps.name;
+            pi.setLongVersionCode(ps.versionCode);
+            pi.sharedUserId = (ps.sharedUser != null) ? ps.sharedUser.name : null;
+            pi.firstInstallTime = ps.firstInstallTime;
+            pi.lastUpdateTime = ps.lastUpdateTime;
+
+            ApplicationInfo ai = new ApplicationInfo();
+            ai.packageName = ps.name;
+            ai.uid = UserHandle.getUid(userId, ps.appId);
+            ai.primaryCpuAbi = ps.primaryCpuAbiString;
+            ai.secondaryCpuAbi = ps.secondaryCpuAbiString;
+            ai.versionCode = ps.versionCode;
+            ai.flags = ps.pkgFlags;
+            ai.privateFlags = ps.pkgPrivateFlags;
+            pi.applicationInfo = PackageParser.generateApplicationInfo(ai, flags, state, userId);
+
+            if (DEBUG_PACKAGE_INFO) Log.v(TAG, "ps.pkg is n/a for ["
+                    + ps.name + "]. Provides a minimum info.");
+            return pi;
+        } else {
             return null;
         }
-
-        packageInfo.packageName = packageInfo.applicationInfo.packageName =
-                resolveExternalPackageNameLPr(p);
-
-        return packageInfo;
     }
 
     @Override
@@ -5546,9 +5537,9 @@ Slog.e("TODD",
             }
             switch (type) {
                 case CERT_INPUT_RAW_X509:
-                    return signingDetailsHasCertificate(certificate, p.mSigningDetails);
+                    return p.mSigningDetails.hasCertificate(certificate);
                 case CERT_INPUT_SHA256:
-                    return signingDetailsHasSha256Certificate(certificate, p.mSigningDetails);
+                    return p.mSigningDetails.hasSha256Certificate(certificate);
                 default:
                     return false;
             }
@@ -5587,9 +5578,9 @@ Slog.e("TODD",
             }
             switch (type) {
                 case CERT_INPUT_RAW_X509:
-                    return signingDetailsHasCertificate(certificate, signingDetails);
+                    return signingDetails.hasCertificate(certificate);
                 case CERT_INPUT_SHA256:
-                    return signingDetailsHasSha256Certificate(certificate, signingDetails);
+                    return signingDetails.hasSha256Certificate(certificate);
                 default:
                     return false;
             }
@@ -5981,14 +5972,14 @@ Slog.e("TODD",
         if (!skipPackageCheck && intent.getPackage() != null) {
             return false;
         }
-        if (!intent.isBrowsableWebIntent()) {
+        if (!intent.isWebIntent()) {
             // for non web intents, we should not resolve externally if an app already exists to
             // handle it or if the caller didn't explicitly request it.
             if ((resolvedActivities != null && resolvedActivities.size() != 0)
                     || (intent.getFlags() & Intent.FLAG_ACTIVITY_MATCH_EXTERNAL) == 0) {
                 return false;
             }
-        } else if (intent.getData() == null) {
+        } else if (intent.getData() == null || TextUtils.isEmpty(intent.getData().getHost())) {
             return false;
         }
         // Deny ephemeral apps if the user chose _ALWAYS or _ALWAYS_ASK for intent resolution.
@@ -6007,7 +5998,7 @@ Slog.e("TODD",
                         final int status = (int) (packedStatus >> 32);
                         if (status == INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ALWAYS
                             || status == INTENT_FILTER_DOMAIN_VERIFICATION_STATUS_ALWAYS_ASK) {
-                            if (DEBUG_EPHEMERAL) {
+                            if (DEBUG_INSTANT) {
                                 Slog.v(TAG, "DENY instant app;"
                                     + " pkg: " + packageName + ", status: " + status);
                             }
@@ -6015,7 +6006,7 @@ Slog.e("TODD",
                         }
                     }
                     if (ps.getInstantApp(userId)) {
-                        if (DEBUG_EPHEMERAL) {
+                        if (DEBUG_INSTANT) {
                             Slog.v(TAG, "DENY instant app installed;"
                                     + " pkg: " + packageName);
                         }
@@ -6651,7 +6642,7 @@ Slog.e("TODD",
                         // there's a local instant application installed, but, the user has
                         // chosen to never use it; skip resolution and don't acknowledge
                         // an instant application is even available
-                        if (DEBUG_EPHEMERAL) {
+                        if (DEBUG_INSTANT) {
                             Slog.v(TAG, "Instant app marked to never run; pkg: " + packageName);
                         }
                         blockResolution = true;
@@ -6659,7 +6650,7 @@ Slog.e("TODD",
                     } else {
                         // we have a locally installed instant application; skip resolution
                         // but acknowledge there's an instant application available
-                        if (DEBUG_EPHEMERAL) {
+                        if (DEBUG_INSTANT) {
                             Slog.v(TAG, "Found installed instant app; pkg: " + packageName);
                         }
                         localInstantApp = info;
@@ -6692,7 +6683,7 @@ Slog.e("TODD",
                                         ai.packageName, ai.versionCode, null /* splitName */);
             }
         }
-        if (intent.isBrowsableWebIntent() && auxiliaryResponse == null) {
+        if (intent.isWebIntent() && auxiliaryResponse == null) {
             return result;
         }
         final PackageSetting ps = mSettings.mPackages.get(mInstantAppInstallerActivity.packageName);
@@ -6717,7 +6708,7 @@ Slog.e("TODD",
         // make sure this resolver is the default
         ephemeralInstaller.isDefault = true;
         ephemeralInstaller.auxiliaryInfo = auxiliaryResponse;
-        if (DEBUG_EPHEMERAL) {
+        if (DEBUG_INSTANT) {
             Slog.v(TAG, "Adding ephemeral installer to the ResolveInfo list");
         }
 
@@ -7604,7 +7595,7 @@ Slog.e("TODD",
                                 info.serviceInfo.splitName)) {
                     // requested service is defined in a split that hasn't been installed yet.
                     // add the installer to the resolve list
-                    if (DEBUG_EPHEMERAL) {
+                    if (DEBUG_INSTANT) {
                         Slog.v(TAG, "Adding ephemeral installer to the ResolveInfo list");
                     }
                     final ResolveInfo installerInfo = new ResolveInfo(
@@ -7726,7 +7717,7 @@ Slog.e("TODD",
                                 info.providerInfo.splitName)) {
                     // requested provider is defined in a split that hasn't been installed yet.
                     // add the installer to the resolve list
-                    if (DEBUG_EPHEMERAL) {
+                    if (DEBUG_INSTANT) {
                         Slog.v(TAG, "Adding ephemeral installer to the ResolveInfo list");
                     }
                     final ResolveInfo installerInfo = new ResolveInfo(
@@ -8367,13 +8358,11 @@ Slog.e("TODD",
     }
 
     private void collectCertificatesLI(PackageSetting ps, PackageParser.Package pkg,
-            boolean forceCollect) throws PackageManagerException {
+            boolean forceCollect, boolean skipVerify) throws PackageManagerException {
         // When upgrading from pre-N MR1, verify the package time stamp using the package
         // directory and not the APK file.
         final long lastModifiedTime = mIsPreNMR1Upgrade
                 ? new File(pkg.codePath).lastModified() : getLastModifiedTime(pkg);
-        // Note that currently skipVerify skips verification on both base and splits for simplicity.
-        final boolean skipVerify = forceCollect && canSkipFullPackageVerification(pkg);
         if (ps != null && !forceCollect
                 && ps.codePathString.equals(pkg.codePath)
                 && ps.timeStamp == lastModifiedTime
@@ -8535,8 +8524,6 @@ Slog.e("TODD",
         return false;
     }
 
-    // Temporary to catch potential issues with refactoring
-    private static boolean REFACTOR_DEBUG = true;
     /**
      * Adds a new package to the internal data structures during platform initialization.
      * <p>After adding, the package is known to the system and available for querying.
@@ -8577,10 +8564,6 @@ Slog.e("TODD",
         synchronized (mPackages) {
             renamedPkgName = mSettings.getRenamedPackageLPr(pkg.mRealPackage);
             final String realPkgName = getRealPackageName(pkg, renamedPkgName);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Add pkg: " + pkg.packageName + (realPkgName==null?"":", realName: " + realPkgName));
-}
             if (realPkgName != null) {
                 ensurePackageRenamed(pkg, renamedPkgName);
             }
@@ -8595,12 +8578,6 @@ Slog.e("TODD",
             if (DEBUG_INSTALL && isSystemPkgUpdated) {
                 Slog.d(TAG, "updatedPkg = " + disabledPkgSetting);
             }
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "SSP? " + scanSystemPartition
-        + ", exists? " + pkgAlreadyExists + (pkgAlreadyExists?" "+pkgSetting.toString():"")
-        + ", upgraded? " + isSystemPkgUpdated + (isSystemPkgUpdated?" "+disabledPkgSetting.toString():""));
-}
 
             final SharedUserSetting sharedUserSetting = (pkg.mSharedUserId != null)
                     ? mSettings.getSharedUserLPw(pkg.mSharedUserId,
@@ -8612,12 +8589,6 @@ Slog.e("TODD",
                 Log.d(TAG, "Shared UserID " + pkg.mSharedUserId
                         + " (uid=" + sharedUserSetting.userId + "):"
                         + " packages=" + sharedUserSetting.packages);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Shared UserID " + pkg.mSharedUserId
-        + " (uid=" + sharedUserSetting.userId + "):"
-        + " packages=" + sharedUserSetting.packages);
-}
             }
 
             if (scanSystemPartition) {
@@ -8626,10 +8597,6 @@ Slog.e("TODD",
                 // version on /data, cycle through all of its children packages and
                 // remove children that are no longer defined.
                 if (isSystemPkgUpdated) {
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Disable child packages");
-}
                     final int scannedChildCount = (pkg.childPackages != null)
                             ? pkg.childPackages.size() : 0;
                     final int disabledChildCount = disabledPkgSetting.childPackageNames != null
@@ -8641,19 +8608,11 @@ Slog.e("TODD",
                         for (int j = 0; j < scannedChildCount; j++) {
                             PackageParser.Package childPkg = pkg.childPackages.get(j);
                             if (childPkg.packageName.equals(disabledChildPackageName)) {
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Ignore " + disabledChildPackageName);
-}
                                 disabledPackageAvailable = true;
                                 break;
                             }
                         }
                         if (!disabledPackageAvailable) {
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Disable " + disabledChildPackageName);
-}
                             mSettings.removeDisabledSystemPackageLPw(disabledChildPackageName);
                         }
                     }
@@ -8662,44 +8621,17 @@ Slog.e("TODD",
                             disabledPkgSetting /* pkgSetting */, null /* disabledPkgSetting */,
                             null /* originalPkgSetting */, null, parseFlags, scanFlags,
                             (pkg == mPlatformPackage), user);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Scan disabled system package");
-Slog.e("TODD",
-        "Pre: " + request.pkgSetting.dumpState_temp());
-}
-final ScanResult result =
                     scanPackageOnlyLI(request, mFactoryTest, -1L);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Post: " + (result.success?result.pkgSetting.dumpState_temp():"FAILED scan"));
-}
                 }
             }
         }
 
         final boolean newPkgChangedPaths =
                 pkgAlreadyExists && !pkgSetting.codePathString.equals(pkg.codePath);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "paths changed? " + newPkgChangedPaths
-        + "; old: " + pkg.codePath
-        + ", new: " + (pkgSetting==null?"<<NULL>>":pkgSetting.codePathString));
-}
         final boolean newPkgVersionGreater =
                 pkgAlreadyExists && pkg.getLongVersionCode() > pkgSetting.versionCode;
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "version greater? " + newPkgVersionGreater
-        + "; old: " + pkg.getLongVersionCode()
-        + ", new: " + (pkgSetting==null?"<<NULL>>":pkgSetting.versionCode));
-}
         final boolean isSystemPkgBetter = scanSystemPartition && isSystemPkgUpdated
                 && newPkgChangedPaths && newPkgVersionGreater;
-if (REFACTOR_DEBUG) {
-    Slog.e("TODD",
-            "system better? " + isSystemPkgBetter);
-}
         if (isSystemPkgBetter) {
             // The version of the application on /system is greater than the version on
             // /data. Switch back to the application on /system.
@@ -8715,13 +8647,6 @@ if (REFACTOR_DEBUG) {
                     + " name: " + pkgSetting.name
                     + "; " + pkgSetting.versionCode + " --> " + pkg.getLongVersionCode()
                     + "; " + pkgSetting.codePathString + " --> " + pkg.codePath);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "System package changed;"
-        + " name: " + pkgSetting.name
-        + "; " + pkgSetting.versionCode + " --> " + pkg.getLongVersionCode()
-        + "; " + pkgSetting.codePathString + " --> " + pkg.codePath);
-}
 
             final InstallArgs args = createInstallArgsForExisting(
                     packageFlagsToInstallFlags(pkgSetting), pkgSetting.codePathString,
@@ -8733,10 +8658,6 @@ Slog.e("TODD",
         }
 
         if (scanSystemPartition && isSystemPkgUpdated && !isSystemPkgBetter) {
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "THROW exception; system pkg version not good enough");
-}
             // The version of the application on the /system partition is less than or
             // equal to the version on the /data partition. Throw an exception and use
             // the application already installed on the /data partition.
@@ -8746,29 +8667,27 @@ Slog.e("TODD",
         }
 
         // Verify certificates against what was last scanned. If it is an updated priv app, we will
-        // force re-collecting certificate. Full apk verification will happen unless apk verity is
-        // set up for the file. In that case, only small part of the apk is verified upfront.
+        // force re-collecting certificate.
         final boolean forceCollect = PackageManagerServiceUtils.isApkVerificationForced(
                 disabledPkgSetting);
-        collectCertificatesLI(pkgSetting, pkg, forceCollect);
+        // Full APK verification can be skipped during certificate collection, only if the file is
+        // in verified partition, or can be verified on access (when apk verity is enabled). In both
+        // cases, only data in Signing Block is verified instead of the whole file.
+        final boolean skipVerify = ((parseFlags & PackageParser.PARSE_IS_SYSTEM_DIR) != 0) ||
+                (forceCollect && canSkipFullPackageVerification(pkg));
+        collectCertificatesLI(pkgSetting, pkg, forceCollect, skipVerify);
 
         boolean shouldHideSystemApp = false;
         // A new application appeared on /system, but, we already have a copy of
         // the application installed on /data.
         if (scanSystemPartition && !isSystemPkgUpdated && pkgAlreadyExists
                 && !pkgSetting.isSystem()) {
-            // if the signatures don't match, wipe the installed application and its data
-            if (compareSignatures(pkgSetting.signatures.mSigningDetails.signatures,
-                    pkg.mSigningDetails.signatures)
-                            != PackageManager.SIGNATURE_MATCH) {
+
+            if (!pkg.mSigningDetails.checkCapability(pkgSetting.signatures.mSigningDetails,
+                    PackageParser.SigningDetails.CertCapabilities.INSTALLED_DATA)) {
                 logCriticalInfo(Log.WARN,
                         "System package signature mismatch;"
                         + " name: " + pkgSetting.name);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "System package signature mismatch;"
-        + " name: " + pkgSetting.name);
-}
                 try (PackageFreezer freezer = freezePackage(pkg.packageName,
                         "scanPackageInternalLI")) {
                     deletePackageLIF(pkg.packageName, null, true, null, 0, null, false, null);
@@ -8783,13 +8702,6 @@ Slog.e("TODD",
                         + " name: " + pkgSetting.name
                         + "; " + pkgSetting.versionCode + " --> " + pkg.getLongVersionCode()
                         + "; " + pkgSetting.codePathString + " --> " + pkg.codePath);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "System package enabled;"
-        + " name: " + pkgSetting.name
-        + "; " + pkgSetting.versionCode + " --> " + pkg.getLongVersionCode()
-        + "; " + pkgSetting.codePathString + " --> " + pkg.codePath);
-}
                 InstallArgs args = createInstallArgsForExisting(
                         packageFlagsToInstallFlags(pkgSetting), pkgSetting.codePathString,
                         pkgSetting.resourcePathString, getAppDexInstructionSets(pkgSetting));
@@ -8806,35 +8718,13 @@ Slog.e("TODD",
                         + " name: " + pkgSetting.name
                         + "; old: " + pkgSetting.codePathString + " @ " + pkgSetting.versionCode
                         + "; new: " + pkg.codePath + " @ " + pkg.codePath);
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "System package disabled;"
-        + " name: " + pkgSetting.name
-        + "; old: " + pkgSetting.codePathString + " @ " + pkgSetting.versionCode
-        + "; new: " + pkg.codePath + " @ " + pkg.codePath);
-}
             }
         }
 
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Scan package");
-Slog.e("TODD",
-        "Pre: " + (pkgSetting==null?"<<NONE>>":pkgSetting.dumpState_temp()));
-}
         final PackageParser.Package scannedPkg = scanPackageNewLI(pkg, parseFlags, scanFlags
                 | SCAN_UPDATE_SIGNATURE, currentTime, user);
-if (REFACTOR_DEBUG) {
-pkgSetting = mSettings.getPackageLPr(pkg.packageName);
-Slog.e("TODD",
-        "Post: " + (pkgSetting==null?"<<NONE>>":pkgSetting.dumpState_temp()));
-}
 
         if (shouldHideSystemApp) {
-if (REFACTOR_DEBUG) {
-Slog.e("TODD",
-        "Disable package: " + pkg.packageName);
-}
             synchronized (mPackages) {
                 mSettings.disableSystemPackageLPw(pkg.packageName, true);
             }
@@ -9725,31 +9615,48 @@ Slog.e("TODD",
                     }
 
                     final String[] expectedCertDigests = requiredCertDigests[i];
-                    // For apps targeting O MR1 we require explicit enumeration of all certs.
-                    final String[] libCertDigests = (targetSdk > Build.VERSION_CODES.O)
-                            ? PackageUtils.computeSignaturesSha256Digests(
-                            libPkg.mSigningDetails.signatures)
-                            : PackageUtils.computeSignaturesSha256Digests(
-                                    new Signature[]{libPkg.mSigningDetails.signatures[0]});
 
-                    // Take a shortcut if sizes don't match. Note that if an app doesn't
-                    // target O we don't parse the "additional-certificate" tags similarly
-                    // how we only consider all certs only for apps targeting O (see above).
-                    // Therefore, the size check is safe to make.
-                    if (expectedCertDigests.length != libCertDigests.length) {
-                        throw new PackageManagerException(INSTALL_FAILED_MISSING_SHARED_LIBRARY,
-                                "Package " + packageName + " requires differently signed" +
-                                        " static shared library; failing!");
-                    }
 
-                    // Use a predictable order as signature order may vary
-                    Arrays.sort(libCertDigests);
-                    Arrays.sort(expectedCertDigests);
+                    if (expectedCertDigests.length > 1) {
 
-                    final int certCount = libCertDigests.length;
-                    for (int j = 0; j < certCount; j++) {
-                        if (!libCertDigests[j].equalsIgnoreCase(expectedCertDigests[j])) {
+                        // For apps targeting O MR1 we require explicit enumeration of all certs.
+                        final String[] libCertDigests = (targetSdk > Build.VERSION_CODES.O)
+                                ? PackageUtils.computeSignaturesSha256Digests(
+                                libPkg.mSigningDetails.signatures)
+                                : PackageUtils.computeSignaturesSha256Digests(
+                                        new Signature[]{libPkg.mSigningDetails.signatures[0]});
+
+                        // Take a shortcut if sizes don't match. Note that if an app doesn't
+                        // target O we don't parse the "additional-certificate" tags similarly
+                        // how we only consider all certs only for apps targeting O (see above).
+                        // Therefore, the size check is safe to make.
+                        if (expectedCertDigests.length != libCertDigests.length) {
                             throw new PackageManagerException(INSTALL_FAILED_MISSING_SHARED_LIBRARY,
+                                    "Package " + packageName + " requires differently signed" +
+                                            " static shared library; failing!");
+                        }
+
+                        // Use a predictable order as signature order may vary
+                        Arrays.sort(libCertDigests);
+                        Arrays.sort(expectedCertDigests);
+
+                        final int certCount = libCertDigests.length;
+                        for (int j = 0; j < certCount; j++) {
+                            if (!libCertDigests[j].equalsIgnoreCase(expectedCertDigests[j])) {
+                                throw new PackageManagerException(
+                                        INSTALL_FAILED_MISSING_SHARED_LIBRARY,
+                                        "Package " + packageName + " requires differently signed" +
+                                                " static shared library; failing!");
+                            }
+                        }
+                    } else {
+
+                        // lib signing cert could have rotated beyond the one expected, check to see
+                        // if the new one has been blessed by the old
+                        if (!libPkg.mSigningDetails.hasSha256Certificate(
+                                ByteStringUtils.fromHexToByteArray(expectedCertDigests[0]))) {
+                            throw new PackageManagerException(
+                                    INSTALL_FAILED_MISSING_SHARED_LIBRARY,
                                     "Package " + packageName + " requires differently signed" +
                                             " static shared library; failing!");
                         }
@@ -9988,8 +9895,7 @@ Slog.e("TODD",
                 // priv-apps.
                 synchronized (mPackages) {
                     PackageSetting platformPkgSetting = mSettings.mPackages.get("android");
-                    if (!pkg.packageName.equals("android")
-                            && (compareSignatures(platformPkgSetting.signatures.mSigningDetails.signatures,
+                    if ((compareSignatures(platformPkgSetting.signatures.mSigningDetails.signatures,
                                 pkg.mSigningDetails.signatures) != PackageManager.SIGNATURE_MATCH)) {
                         scanFlags |= SCAN_AS_PRIVILEGED;
                     }
@@ -10169,6 +10075,15 @@ Slog.e("TODD",
                 // We just determined the app is signed correctly, so bring
                 // over the latest parsed certs.
                 pkgSetting.signatures.mSigningDetails = pkg.mSigningDetails;
+
+
+                // if this is is a sharedUser, check to see if the new package is signed by a newer
+                // signing certificate than the existing one, and if so, copy over the new details
+                if (signatureCheckPs.sharedUser != null
+                        && pkg.mSigningDetails.hasAncestor(
+                                signatureCheckPs.sharedUser.signatures.mSigningDetails)) {
+                    signatureCheckPs.sharedUser.signatures.mSigningDetails = pkg.mSigningDetails;
+                }
             } catch (PackageManagerException e) {
                 if ((parseFlags & PackageParser.PARSE_IS_SYSTEM_DIR) == 0) {
                     throw e;
@@ -10195,6 +10110,13 @@ Slog.e("TODD",
                 String msg = "System package " + pkg.packageName
                         + " signature changed; retaining data.";
                 reportSettingsProblem(Log.WARN, msg);
+            } catch (IllegalArgumentException e) {
+
+                // should never happen: certs matched when checking, but not when comparing
+                // old to new for sharedUser
+                throw new PackageManagerException(INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES,
+                        "Signing certificates comparison made on incomparable signing details"
+                        + " but somehow passed verifySignatures!");
             }
         }
 
@@ -10440,7 +10362,20 @@ Slog.e("TODD",
             pkg.applicationInfo.flags |= ApplicationInfo.FLAG_UPDATED_SYSTEM_APP;
         }
 
-        SELinuxMMAC.assignSeInfoValue(pkg);
+        // SELinux sandboxes become more restrictive as targetSdkVersion increases.
+        // To ensure that apps with sharedUserId are placed in the same selinux domain
+        // without breaking any assumptions about access, put them into the least
+        // restrictive targetSdkVersion=25 domain.
+        // TODO(b/72290969): Base this on the actual targetSdkVersion(s) of the apps within the
+        // sharedUserSetting, instead of defaulting to the least restrictive domain.
+        final int targetSdk = (sharedUserSetting != null) ? 25
+                : pkg.applicationInfo.targetSdkVersion;
+        // TODO(b/71593002): isPrivileged for sharedUser and appInfo should never be out of sync.
+        // They currently can be if the sharedUser apps are signed with the platform key.
+        final boolean isPrivileged = (sharedUserSetting != null) ?
+            sharedUserSetting.isPrivileged() | pkg.isPrivileged() : pkg.isPrivileged();
+
+        SELinuxMMAC.assignSeInfoValue(pkg, isPrivileged, targetSdk);
 
         pkg.mExtras = pkgSetting;
         pkg.applicationInfo.processName = fixProcessName(
@@ -11757,14 +11692,14 @@ Slog.e("TODD",
 
     private void setUpInstantAppInstallerActivityLP(ActivityInfo installerActivity) {
         if (installerActivity == null) {
-            if (DEBUG_EPHEMERAL) {
+            if (DEBUG_INSTANT) {
                 Slog.d(TAG, "Clear ephemeral installer activity");
             }
             mInstantAppInstallerActivity = null;
             return;
         }
 
-        if (DEBUG_EPHEMERAL) {
+        if (DEBUG_INSTANT) {
             Slog.d(TAG, "Set ephemeral installer activity: "
                     + installerActivity.getComponentName());
         }
@@ -13224,7 +13159,7 @@ Slog.e("TODD",
         private int mFlags;
     }
 
-    static final class EphemeralIntentResolver
+    static final class InstantAppIntentResolver
             extends IntentResolver<AuxiliaryResolveInfo.AuxiliaryFilter,
             AuxiliaryResolveInfo.AuxiliaryFilter> {
         /**
@@ -13594,7 +13529,7 @@ Slog.e("TODD",
             IPackageInstallObserver2 observer, PackageInstaller.SessionParams sessionParams,
             String installerPackageName, int installerUid, UserHandle user,
             PackageParser.SigningDetails signingDetails) {
-        if (DEBUG_EPHEMERAL) {
+        if (DEBUG_INSTANT) {
             if ((sessionParams.installFlags & PackageManager.INSTALL_INSTANT_APP) != 0) {
                 Slog.d(TAG, "Ephemeral install of " + packageName);
             }
@@ -15078,7 +15013,7 @@ Slog.e("TODD",
                 pkgLite = mContainerService.getMinimalPackageInfo(origin.resolvedPath, installFlags,
                         packageAbiOverride);
 
-                if (DEBUG_EPHEMERAL && ephemeral) {
+                if (DEBUG_INSTANT && ephemeral) {
                     Slog.v(TAG, "pkgLite for install: " + pkgLite);
                 }
 
@@ -15145,7 +15080,7 @@ Slog.e("TODD",
                             installFlags |= PackageManager.INSTALL_EXTERNAL;
                             installFlags &= ~PackageManager.INSTALL_INTERNAL;
                         } else if (loc == PackageHelper.RECOMMEND_INSTALL_EPHEMERAL) {
-                            if (DEBUG_EPHEMERAL) {
+                            if (DEBUG_INSTANT) {
                                 Slog.v(TAG, "...setting INSTALL_EPHEMERAL install flag");
                             }
                             installFlags |= PackageManager.INSTALL_INSTANT_APP;
@@ -16061,10 +15996,10 @@ Slog.e("TODD",
                     return;
                 }
             } else {
+
                 // default to original signature matching
-                if (compareSignatures(oldPackage.mSigningDetails.signatures,
-                        pkg.mSigningDetails.signatures)
-                        != PackageManager.SIGNATURE_MATCH) {
+                if (!pkg.mSigningDetails.checkCapability(oldPackage.mSigningDetails,
+                        PackageParser.SigningDetails.CertCapabilities.INSTALLED_DATA)) {
                     res.setError(INSTALL_FAILED_UPDATE_INCOMPATIBLE,
                             "New package has a different signature: " + pkgName);
                     return;
@@ -17058,9 +16993,25 @@ Slog.e("TODD",
                                     sourcePackageSetting, scanFlags))) {
                         sigsOk = ksms.checkUpgradeKeySetLocked(sourcePackageSetting, pkg);
                     } else {
-                        sigsOk = compareSignatures(
-                                sourcePackageSetting.signatures.mSigningDetails.signatures,
-                                pkg.mSigningDetails.signatures) == PackageManager.SIGNATURE_MATCH;
+
+                        // in the event of signing certificate rotation, we need to see if the
+                        // package's certificate has rotated from the current one, or if it is an
+                        // older certificate with which the current is ok with sharing permissions
+                        if (sourcePackageSetting.signatures.mSigningDetails.checkCapability(
+                                        pkg.mSigningDetails,
+                                        PackageParser.SigningDetails.CertCapabilities.PERMISSION)) {
+                            sigsOk = true;
+                        } else if (pkg.mSigningDetails.checkCapability(
+                                        sourcePackageSetting.signatures.mSigningDetails,
+                                        PackageParser.SigningDetails.CertCapabilities.PERMISSION)) {
+
+                            // the scanned package checks out, has signing certificate rotation
+                            // history, and is newer; bring it over
+                            sourcePackageSetting.signatures.mSigningDetails = pkg.mSigningDetails;
+                            sigsOk = true;
+                        } else {
+                            sigsOk = false;
+                        }
                     }
                     if (!sigsOk) {
                         // If the owning package is the system itself, we log but allow
@@ -17268,7 +17219,8 @@ Slog.e("TODD",
             // Also, don't fail application installs if the dexopt step fails.
             DexoptOptions dexoptOptions = new DexoptOptions(pkg.packageName,
                     REASON_INSTALL,
-                    DexoptOptions.DEXOPT_BOOT_COMPLETE);
+                    DexoptOptions.DEXOPT_BOOT_COMPLETE |
+                    DexoptOptions.DEXOPT_INSTALL_WITH_DEX_METADATA_FILE);
             mPackageDexOptimizer.performDexOpt(pkg, pkg.usesLibraryFiles,
                     null /* instructionSets */,
                     getOrCreateCompilerPackageStats(pkg),
@@ -20871,9 +20823,6 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             public int getMountMode(int uid, String packageName) {
                 if (Process.isIsolated(uid)) {
                     return Zygote.MOUNT_EXTERNAL_NONE;
-                }
-                if (checkUidPermission(WRITE_MEDIA_STORAGE, uid) == PERMISSION_GRANTED) {
-                    return Zygote.MOUNT_EXTERNAL_DEFAULT;
                 }
                 if (checkUidPermission(READ_EXTERNAL_STORAGE, uid) == PERMISSION_DENIED) {
                     return Zygote.MOUNT_EXTERNAL_DEFAULT;

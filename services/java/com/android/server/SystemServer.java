@@ -34,6 +34,7 @@ import android.os.Environment;
 import android.os.FactoryTest;
 import android.os.FileUtils;
 import android.os.IIncidentManager;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Parcel;
@@ -111,6 +112,7 @@ import com.android.server.stats.StatsCompanionService;
 import com.android.server.statusbar.StatusBarManagerService;
 import com.android.server.storage.DeviceStorageMonitorService;
 import com.android.server.telecom.TelecomLoaderService;
+import com.android.server.textclassifier.TextClassificationManagerService;
 import com.android.server.trust.TrustManagerService;
 import com.android.server.tv.TvInputManagerService;
 import com.android.server.tv.TvRemoteService;
@@ -121,6 +123,9 @@ import com.android.server.webkit.WebViewUpdateService;
 import com.android.server.wm.WindowManagerService;
 
 import dalvik.system.VMRuntime;
+import dalvik.system.PathClassLoader;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 
 import java.io.File;
 import java.io.IOException;
@@ -721,26 +726,22 @@ public final class SystemServer {
         ConsumerIrService consumerIr = null;
         MmsServiceBroker mmsService = null;
         HardwarePropertiesManagerService hardwarePropertiesService = null;
+        Object wigigP2pService = null;
+        Object wigigService = null;
 
-        boolean disableSystemUI = SystemProperties.getBoolean("config.disable_systemui", false);
         boolean disableRtt = SystemProperties.getBoolean("config.disable_rtt", false);
-        boolean disableMediaProjection = SystemProperties.getBoolean("config.disable_mediaproj",
-                false);
-        boolean disableSerial = SystemProperties.getBoolean("config.disable_serial", false);
-        boolean disableSearchManager = SystemProperties.getBoolean("config.disable_searchmanager",
-                false);
-        boolean disableTrustManager = SystemProperties.getBoolean("config.disable_trustmanager",
-                false);
-        boolean disableTextServices = SystemProperties.getBoolean("config.disable_textservices",
-                false);
-        boolean disableConsumerIr = SystemProperties.getBoolean("config.disable_consumerir", false);
-        boolean disableVrManager = SystemProperties.getBoolean("config.disable_vrmanager", false);
+        boolean disableSystemTextClassifier = SystemProperties.getBoolean(
+                "config.disable_systemtextclassifier", false);
         boolean disableCameraService = SystemProperties.getBoolean("config.disable_cameraservice",
                 false);
         boolean disableSlices = SystemProperties.getBoolean("config.disable_slices", false);
         boolean enableLeftyService = SystemProperties.getBoolean("config.enable_lefty", false);
 
         boolean isEmulator = SystemProperties.get("ro.kernel.qemu").equals("1");
+        boolean enableWigig = SystemProperties.getBoolean("persist.vendor.wigig.enable", false);
+
+        boolean isWatch = context.getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_WATCH);
 
         // For debugging RescueParty
         if (Build.IS_DEBUGGABLE && SystemProperties.getBoolean("debug.crash_system", false)) {
@@ -816,7 +817,7 @@ public final class SystemServer {
             ServiceManager.addService("vibrator", vibrator);
             traceEnd();
 
-            if (!disableConsumerIr) {
+            if (!isWatch) {
                 traceBeginAndSlog("StartConsumerIrService");
                 consumerIr = new ConsumerIrService(context);
                 ServiceManager.addService(Context.CONSUMER_IR_SERVICE, consumerIr);
@@ -859,7 +860,7 @@ public final class SystemServer {
                 traceLog.traceEnd();
             }, START_HIDL_SERVICES);
 
-            if (!disableVrManager) {
+            if (!isWatch) {
                 traceBeginAndSlog("StartVrManagerService");
                 mSystemServiceManager.startService(VrManagerService.class);
                 traceEnd();
@@ -1027,7 +1028,7 @@ public final class SystemServer {
             mSystemServiceManager.startService(DevicePolicyManagerService.Lifecycle.class);
             traceEnd();
 
-            if (!disableSystemUI) {
+            if (!isWatch) {
                 traceBeginAndSlog("StartStatusBarManagerService");
                 try {
                     statusBar = new StatusBarManagerService(context, wm);
@@ -1060,9 +1061,13 @@ public final class SystemServer {
             }
             traceEnd();
 
-            if (!disableTextServices) {
-                traceBeginAndSlog("StartTextServicesManager");
-                mSystemServiceManager.startService(TextServicesManagerService.Lifecycle.class);
+            traceBeginAndSlog("StartTextServicesManager");
+            mSystemServiceManager.startService(TextServicesManagerService.Lifecycle.class);
+            traceEnd();
+
+            if (!disableSystemTextClassifier) {
+                traceBeginAndSlog("StartTextClassificationManagerService");
+                mSystemServiceManager.startService(TextClassificationManagerService.Lifecycle.class);
                 traceEnd();
             }
 
@@ -1141,6 +1146,30 @@ public final class SystemServer {
                 traceEnd();
             }
 
+            if (enableWigig) {
+                try {
+                    Slog.i(TAG, "Wigig Service");
+                    PathClassLoader wigigClassLoader =
+                            new PathClassLoader("/system/framework/wigig-service.jar",
+                                    getClass().getClassLoader());
+                    Class wigigP2pClass = wigigClassLoader.loadClass(
+                        "com.qualcomm.qti.server.wigig.p2p.WigigP2pServiceImpl");
+                    Constructor<Class> ctor = wigigP2pClass.getConstructor(Context.class);
+                    wigigP2pService = ctor.newInstance(context);
+                    Slog.i(TAG, "Successfully loaded WigigP2pServiceImpl class");
+                    ServiceManager.addService("wigigp2p", (IBinder) wigigP2pService);
+
+                    Class wigigClass = wigigClassLoader.loadClass(
+                        "com.qualcomm.qti.server.wigig.WigigService");
+                    ctor = wigigClass.getConstructor(Context.class);
+                    wigigService = ctor.newInstance(context);
+                    Slog.i(TAG, "Successfully loaded WigigService class");
+                    ServiceManager.addService("wigig", (IBinder) wigigService);
+                } catch (Throwable e) {
+                    reportWtf("starting WigigService", e);
+                }
+            }
+
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_ETHERNET) ||
                 mPackageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)) {
                 traceBeginAndSlog("StartEthernet");
@@ -1195,7 +1224,6 @@ public final class SystemServer {
             SystemNotificationChannels.createAll(context);
             notification = INotificationManager.Stub.asInterface(
                     ServiceManager.getService(Context.NOTIFICATION_SERVICE));
-            networkPolicy.bindNotificationManager(notification);
             traceEnd();
 
             traceBeginAndSlog("StartDeviceMonitor");
@@ -1220,7 +1248,7 @@ public final class SystemServer {
             }
             traceEnd();
 
-            if (!disableSearchManager) {
+            if (!isWatch) {
                 traceBeginAndSlog("StartSearchManagerService");
                 try {
                     mSystemServiceManager.startService(SEARCH_MANAGER_SERVICE_CLASS);
@@ -1250,7 +1278,7 @@ public final class SystemServer {
             mSystemServiceManager.startService(DockObserver.class);
             traceEnd();
 
-            if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH)) {
+            if (isWatch) {
                 traceBeginAndSlog("StartThermalObserver");
                 mSystemServiceManager.startService(THERMAL_OBSERVER_CLASS);
                 traceEnd();
@@ -1282,7 +1310,7 @@ public final class SystemServer {
                 traceEnd();
             }
 
-            if (!disableSerial) {
+            if (!isWatch) {
                 traceBeginAndSlog("StartSerialService");
                 try {
                     // Serial port support
@@ -1322,11 +1350,9 @@ public final class SystemServer {
             mSystemServiceManager.startService(SoundTriggerService.class);
             traceEnd();
 
-            if (!disableTrustManager) {
-                traceBeginAndSlog("StartTrustManager");
-                mSystemServiceManager.startService(TrustManagerService.class);
-                traceEnd();
-            }
+            traceBeginAndSlog("StartTrustManager");
+            mSystemServiceManager.startService(TrustManagerService.class);
+            traceEnd();
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_BACKUP)) {
                 traceBeginAndSlog("StartBackupManager");
@@ -1383,14 +1409,16 @@ public final class SystemServer {
                 traceEnd();
             }
 
-            traceBeginAndSlog("StartNetworkTimeUpdateService");
-            try {
-                networkTimeUpdater = new NetworkTimeUpdateService(context);
-                ServiceManager.addService("network_time_update_service", networkTimeUpdater);
-            } catch (Throwable e) {
-                reportWtf("starting NetworkTimeUpdate service", e);
+            if (!isWatch) {
+                traceBeginAndSlog("StartNetworkTimeUpdateService");
+                try {
+                    networkTimeUpdater = new NetworkTimeUpdateService(context);
+                    ServiceManager.addService("network_time_update_service", networkTimeUpdater);
+                } catch (Throwable e) {
+                    reportWtf("starting NetworkTimeUpdate service", e);
+                }
+                traceEnd();
             }
-            traceEnd();
 
             traceBeginAndSlog("StartCommonTimeManagementService");
             try {
@@ -1526,13 +1554,13 @@ public final class SystemServer {
             traceEnd();
         }
 
-        if (!disableMediaProjection) {
+        if (!isWatch) {
             traceBeginAndSlog("StartMediaProjectionManager");
             mSystemServiceManager.startService(MediaProjectionManagerService.class);
             traceEnd();
         }
 
-        if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_WATCH)) {
+        if (isWatch) {
             traceBeginAndSlog("StartWearConnectivityService");
             mSystemServiceManager.startService(WEAR_CONNECTIVITY_SERVICE_CLASS);
             traceEnd();
@@ -1628,7 +1656,27 @@ public final class SystemServer {
         mSystemServiceManager.startBootPhase(SystemService.PHASE_SYSTEM_SERVICES_READY);
         traceEnd();
 
+        // Wigig services are not registered as system services because of class loader
+        // limitations, send boot phase notification separately
+        if (enableWigig) {
+            try {
+                Slog.i(TAG, "calling onBootPhase for Wigig Services");
+                Class wigigP2pClass = wigigP2pService.getClass();
+                Method m = wigigP2pClass.getMethod("onBootPhase", int.class);
+                m.invoke(wigigP2pService, new Integer(
+                    SystemService.PHASE_SYSTEM_SERVICES_READY));
+
+                Class wigigClass = wigigService.getClass();
+                m = wigigClass.getMethod("onBootPhase", int.class);
+                m.invoke(wigigService, new Integer(
+                    SystemService.PHASE_SYSTEM_SERVICES_READY));
+            } catch (Throwable e) {
+                reportWtf("Wigig services ready", e);
+            }
+        }
+
         traceBeginAndSlog("MakeWindowManagerServiceReady");
+
         try {
             wm.systemReady();
         } catch (Throwable e) {

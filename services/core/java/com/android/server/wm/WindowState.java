@@ -1758,7 +1758,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * listeners and optionally animate it. Simply checking a change of position is not enough,
      * because being move due to dock divider is not a trigger for animation.
      */
-    void handleWindowMovedIfNeeded(Transaction t) {
+    void handleWindowMovedIfNeeded() {
         if (!hasMoved()) {
             return;
         }
@@ -1776,7 +1776,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 && !isDragResizing() && !adjustedForMinimizedDockOrIme
                 && getWindowConfiguration().hasMovementAnimations()
                 && !mWinAnimator.mLastHidden) {
-            startMoveAnimation(t, left, top);
+            startMoveAnimation(left, top);
         }
 
         //TODO (multidisplay): Accessibility supported only for the default display.
@@ -4360,7 +4360,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         commitPendingTransaction();
     }
 
-    private void startMoveAnimation(Transaction t, int left, int top) {
+    private void startMoveAnimation(int left, int top) {
         if (DEBUG_ANIM) Slog.v(TAG, "Setting move animation on " + this);
         final Point oldPosition = new Point();
         final Point newPosition = new Point();
@@ -4369,7 +4369,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final AnimationAdapter adapter = new LocalAnimationAdapter(
                 new MoveAnimationSpec(oldPosition.x, oldPosition.y, newPosition.x, newPosition.y),
                 mService.mSurfaceAnimationRunner);
-        startAnimation(t, adapter);
+        startAnimation(getPendingTransaction(), adapter);
     }
 
     private void startAnimation(Transaction t, AnimationAdapter adapter) {
@@ -4505,8 +4505,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (!mAnimatingExit && mAppDied) {
             mIsDimming = true;
             dimmer.dimAbove(getPendingTransaction(), this, DEFAULT_DIM_AMOUNT_DEAD_WINDOW);
-        } else if ((mAttrs.flags & FLAG_DIM_BEHIND) != 0
-                && !mAnimatingExit && isVisible() && !mWinAnimator.mLastHidden) {
+        } else if ((mAttrs.flags & FLAG_DIM_BEHIND) != 0 && isVisibleNow()
+                && !mWinAnimator.mLastHidden) {
+            // Only show a dim behind when the following is satisfied:
+            // 1. The window has the flag FLAG_DIM_BEHIND
+            // 2. The WindowToken is not hidden so dims aren't shown when the window is exiting.
+            // 3. The WS is considered visible according to the isVisible() method
+            // 4. The WSA is not hidden.
             mIsDimming = true;
             dimmer.dimBelow(getPendingTransaction(), this, mAttrs.dimAmount);
         }
@@ -4519,7 +4524,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (dimmer != null) {
             applyDims(dimmer);
         }
-        updateSurfacePosition(mPendingTransaction);
+        updateSurfacePosition();
 
         mWinAnimator.prepareSurfaceLocked(true);
         super.prepareSurfaces();
@@ -4541,7 +4546,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     @Override
-    void updateSurfacePosition(Transaction t) {
+    void updateSurfacePosition() {
+        updateSurfacePosition(getPendingTransaction());
+    }
+
+    private void updateSurfacePosition(Transaction t) {
         if (mSurfaceControl == null) {
             return;
         }
@@ -4570,6 +4579,17 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         } else if (parentWindowContainer != null) {
             final Rect parentBounds = parentWindowContainer.getBounds();
             outPoint.offset(-parentBounds.left, -parentBounds.top);
+        }
+
+        TaskStack stack = getStack();
+
+        // If we have stack outsets, that means the top-left
+        // will be outset, and we need to inset ourselves
+        // to account for it. If we actually have shadows we will
+        // then un-inset ourselves by the surfaceInsets.
+        if (stack != null) {
+            final int outset = stack.getStackOutset();
+            outPoint.offset(outset, outset);
         }
 
         // Expand for surface insets. See WindowState.expandForSurfaceInsets.

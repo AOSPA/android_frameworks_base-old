@@ -18,6 +18,7 @@ package android.media.update;
 
 import android.annotation.SystemApi;
 import android.media.session.MediaController;
+import android.util.AttributeSet;
 import android.view.View;
 
 /**
@@ -34,11 +35,10 @@ import android.view.View;
  * @hide
  */
 // TODO @SystemApi
-public interface MediaControlView2Provider extends ViewProvider {
+public interface MediaControlView2Provider extends ViewGroupProvider {
+    void initialize(AttributeSet attrs, int defStyleAttr, int defStyleRes);
+
     void setController_impl(MediaController controller);
-    void show_impl();
-    void show_impl(long timeout);
-    boolean isShowing_impl();
-    void hide_impl();
     void setButtonVisibility_impl(int button, int visibility);
+    void requestPlayButtonFocus_impl();
 }

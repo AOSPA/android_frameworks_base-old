@@ -43,7 +43,7 @@ import java.util.List;
  */
 @SystemApi
 public abstract class InstantAppResolverService extends Service {
-    private static final boolean DEBUG_EPHEMERAL = Build.IS_DEBUGGABLE;
+    private static final boolean DEBUG_INSTANT = Build.IS_DEBUGGABLE;
     private static final String TAG = "PackageManager";
 
     /** @hide */
@@ -88,7 +88,7 @@ public abstract class InstantAppResolverService extends Service {
     public void onGetInstantAppResolveInfo(Intent sanitizedIntent, int[] hostDigestPrefix,
             String token, InstantAppResolutionCallback callback) {
         // if not overridden, forward to old methods and filter out non-web intents
-        if (sanitizedIntent.isBrowsableWebIntent()) {
+        if (sanitizedIntent.isWebIntent()) {
             onGetInstantAppResolveInfo(hostDigestPrefix, token, callback);
         } else {
             callback.onInstantAppResolveInfo(Collections.emptyList());
@@ -107,7 +107,7 @@ public abstract class InstantAppResolverService extends Service {
             String token, InstantAppResolutionCallback callback) {
         Log.e(TAG, "New onGetInstantAppIntentFilter is not overridden");
         // if not overridden, forward to old methods and filter out non-web intents
-        if (sanitizedIntent.isBrowsableWebIntent()) {
+        if (sanitizedIntent.isWebIntent()) {
             onGetInstantAppIntentFilter(hostDigestPrefix, token, callback);
         } else {
             callback.onInstantAppResolveInfo(Collections.emptyList());
@@ -133,7 +133,7 @@ public abstract class InstantAppResolverService extends Service {
             @Override
             public void getInstantAppResolveInfoList(Intent sanitizedIntent, int[] digestPrefix,
                     String token, int sequence, IRemoteCallback callback) {
-                if (DEBUG_EPHEMERAL) {
+                if (DEBUG_INSTANT) {
                     Slog.v(TAG, "[" + token + "] Phase1 called; posting");
                 }
                 final SomeArgs args = SomeArgs.obtain();
@@ -148,7 +148,7 @@ public abstract class InstantAppResolverService extends Service {
             @Override
             public void getInstantAppIntentFilterList(Intent sanitizedIntent,
                     int[] digestPrefix, String token, IRemoteCallback callback) {
-                if (DEBUG_EPHEMERAL) {
+                if (DEBUG_INSTANT) {
                     Slog.v(TAG, "[" + token + "] Phase2 called; posting");
                 }
                 final SomeArgs args = SomeArgs.obtain();
@@ -203,7 +203,7 @@ public abstract class InstantAppResolverService extends Service {
                     final String token = (String) args.arg3;
                     final Intent intent = (Intent) args.arg4;
                     final int sequence = message.arg1;
-                    if (DEBUG_EPHEMERAL) {
+                    if (DEBUG_INSTANT) {
                         Slog.d(TAG, "[" + token + "] Phase1 request;"
                                 + " prefix: " + Arrays.toString(digestPrefix));
                     }
@@ -217,7 +217,7 @@ public abstract class InstantAppResolverService extends Service {
                     final int[] digestPrefix = (int[]) args.arg2;
                     final String token = (String) args.arg3;
                     final Intent intent = (Intent) args.arg4;
-                    if (DEBUG_EPHEMERAL) {
+                    if (DEBUG_INSTANT) {
                         Slog.d(TAG, "[" + token + "] Phase2 request;"
                                 + " prefix: " + Arrays.toString(digestPrefix));
                     }

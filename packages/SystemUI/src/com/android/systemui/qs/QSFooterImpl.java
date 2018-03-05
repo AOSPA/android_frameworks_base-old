@@ -21,7 +21,6 @@ import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
-import android.content.res.Resources;
 import android.graphics.PorterDuff.Mode;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.RippleDrawable;
@@ -47,7 +46,6 @@ import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.qs.TouchAnimator.Builder;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.phone.ExpandableIndicator;
 import com.android.systemui.statusbar.phone.MultiUserSwitch;
 import com.android.systemui.statusbar.phone.SettingsButton;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
@@ -61,6 +59,7 @@ import com.android.systemui.tuner.TunerService;
 public class QSFooterImpl extends FrameLayout implements QSFooter,
         OnClickListener, OnUserInfoChangedListener, EmergencyListener,
         SignalCallback, CommandQueue.Callbacks {
+
     private ActivityStarter mActivityStarter;
     private UserInfoController mUserInfoController;
     private SettingsButton mSettingsButton;
@@ -75,24 +74,34 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     private boolean mListening;
 
     private boolean mShowEmergencyCallsOnly;
+    private View mDivider;
     protected MultiUserSwitch mMultiUserSwitch;
     private ImageView mMultiUserAvatar;
 
-    protected TouchAnimator mSettingsAlpha;
+    protected TouchAnimator mFooterAnimator;
     private float mExpansionAmount;
 
     protected View mEdit;
-    private TouchAnimator mAnimator;
+    private TouchAnimator mSettingsCogAnimator;
+
+    private View mActionsContainer;
+    private View mDragHandle;
+    private final int mDragHandleExpandOffset;
+    private View mBackground;
 
     public QSFooterImpl(Context context, AttributeSet attrs) {
         super(context, attrs);
+
+        mDragHandleExpandOffset = getResources().
+                getDimensionPixelSize(R.dimen.qs_footer_drag_handle_offset);
+
     }
 
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        Resources res = getResources();
-
+        mBackground = findViewById(R.id.qs_footer_background);
+        mDivider = findViewById(R.id.qs_footer_divider);
         mEdit = findViewById(android.R.id.edit);
         mEdit.setOnClickListener(view ->
                 Dependency.get(ActivityStarter.class).postQSRunnableDismissingKeyguard(() ->
@@ -106,6 +115,9 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
 
         mMultiUserSwitch = findViewById(R.id.multi_user_switch);
         mMultiUserAvatar = mMultiUserSwitch.findViewById(R.id.multi_user_avatar);
+
+        mDragHandle = findViewById(R.id.qs_drag_handle_view);
+        mActionsContainer = findViewById(R.id.qs_footer_actions_container);
 
         // RenderThread is doing more harm than good when touching the header (to expand quick
         // settings), so disable it for this view
@@ -126,7 +138,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         int remaining = (width - numTiles * size) / (numTiles - 1);
         int defSpace = mContext.getResources().getDimensionPixelOffset(R.dimen.default_gear_space);
 
-        mAnimator = new Builder()
+        mSettingsCogAnimator = new Builder()
                 .addFloat(mSettingsContainer, "translationX",
                         isLayoutRtl() ? (remaining - defSpace) : -(remaining - defSpace), 0)
                 .addFloat(mSettingsButton, "rotation", -120, 0)
@@ -148,20 +160,21 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     }
 
     private void updateResources() {
-        updateSettingsAnimator();
+        updateFooterAnimator();
     }
 
-    private void updateSettingsAnimator() {
-        mSettingsAlpha = createSettingsAlphaAnimator();
+    private void updateFooterAnimator() {
+        mFooterAnimator = createFooterAnimator();
     }
 
     @Nullable
-    private TouchAnimator createSettingsAlphaAnimator() {
+    private TouchAnimator createFooterAnimator() {
         return new TouchAnimator.Builder()
-                .addFloat(mEdit, "alpha", 0, 1)
-                .addFloat(mMultiUserSwitch, "alpha", 0, 1)
+                .addFloat(mBackground, "alpha", 0, 0.90f)
+                .addFloat(mDivider, "alpha", 0, 1)
                 .addFloat(mCarrierText, "alpha", 0, 1)
-                .addFloat(mSettingsButton, "alpha", 0, 1)
+                .addFloat(mActionsContainer, "alpha", 0, 1)
+                .addFloat(mDragHandle, "translationY", 0, -mDragHandleExpandOffset)
                 .build();
     }
 
@@ -180,10 +193,10 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     @Override
     public void setExpansion(float headerExpansionFraction) {
         mExpansionAmount = headerExpansionFraction;
-        if (mAnimator != null) mAnimator.setPosition(headerExpansionFraction);
+        if (mSettingsCogAnimator != null) mSettingsCogAnimator.setPosition(headerExpansionFraction);
 
-        if (mSettingsAlpha != null) {
-            mSettingsAlpha.setPosition(headerExpansionFraction);
+        if (mFooterAnimator != null) {
+            mFooterAnimator.setPosition(headerExpansionFraction);
         }
     }
 
@@ -269,6 +282,11 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
 
     @Override
     public void onClick(View v) {
+        // Don't do anything until view are unhidden
+        if (!mExpanded) {
+            return;
+        }
+
         if (v == mSettingsButton) {
             if (!Dependency.get(DeviceProvisionedController.class).isCurrentUserSetup()) {
                 // If user isn't setup just unlock the device and dump them back at SUW.

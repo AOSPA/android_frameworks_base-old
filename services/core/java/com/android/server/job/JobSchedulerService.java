@@ -862,7 +862,8 @@ public final class JobSchedulerService extends com.android.server.SystemService
             }
             startTrackingJobLocked(jobStatus, toCancel);
             StatsLog.write_non_chained(StatsLog.SCHEDULED_JOB_STATE_CHANGED,
-                    uId, null, jobStatus.getBatteryName(), 2);
+                    uId, null, jobStatus.getBatteryName(),
+                    StatsLog.SCHEDULED_JOB_STATE_CHANGED__STATE__SCHEDULED);
 
             // If the job is immediately ready to run, then we can just immediately
             // put it in the pending list and try to schedule it.  This is especially
@@ -2206,12 +2207,7 @@ public final class JobSchedulerService extends com.android.server.SystemService
                     Slog.i(TAG, "Moving uid " + uid + " to bucketIndex " + bucketIndex);
                 }
                 synchronized (mLock) {
-                    // TODO: update to be more efficient once we can slice by source UID
-                    mJobs.forEachJob((JobStatus job) -> {
-                        if (job.getSourceUid() == uid) {
-                            job.setStandbyBucket(bucketIndex);
-                        }
-                    });
+                    mJobs.forEachJobForSourceUid(uid, job -> job.setStandbyBucket(bucketIndex));
                     onControllerStateChanged();
                 }
             });

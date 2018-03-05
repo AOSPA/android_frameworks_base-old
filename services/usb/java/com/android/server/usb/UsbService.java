@@ -37,17 +37,22 @@ import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.service.usb.UsbServiceDumpProto;
+import android.util.ArraySet;
 import android.util.Slog;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.dump.DualDumpOutputStream;
 import com.android.server.SystemService;
 
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.Collections;
 
 /**
  * UsbService manages all USB related state, including both host and device support.
@@ -382,59 +387,44 @@ public class UsbService extends IUsbManager.Stub {
     }
 
     @Override
+    public void setCurrentFunctions(long functions) {
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
+        Preconditions.checkArgument(UsbManager.areSettableFunctions(functions));
+        Preconditions.checkState(mDeviceManager != null);
+        mDeviceManager.setCurrentFunctions(functions);
+    }
+
+    @Override
+    public void setCurrentFunction(String functions, boolean usbDataUnlocked) {
+        setCurrentFunctions(UsbManager.usbFunctionsFromString(functions));
+    }
+
+    @Override
     public boolean isFunctionEnabled(String function) {
-        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
-        return mDeviceManager != null && mDeviceManager.isFunctionEnabled(function);
+        return (getCurrentFunctions() & UsbManager.usbFunctionsFromString(function)) != 0;
     }
 
     @Override
-    public void setCurrentFunction(String function, boolean usbDataUnlocked) {
+    public long getCurrentFunctions() {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
-
-        if (!isSupportedCurrentFunction(function)) {
-            Slog.w(TAG, "Caller of setCurrentFunction() requested unsupported USB function: "
-                    + function);
-            function = UsbManager.USB_FUNCTION_NONE;
-        }
-
-        if (mDeviceManager != null) {
-            mDeviceManager.setCurrentFunctions(function, usbDataUnlocked);
-        } else {
-            throw new IllegalStateException("USB device mode not supported");
-        }
+        Preconditions.checkState(mDeviceManager != null);
+        return mDeviceManager.getCurrentFunctions();
     }
 
     @Override
-    public void setScreenUnlockedFunctions(String function) {
+    public void setScreenUnlockedFunctions(long functions) {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
+        Preconditions.checkArgument(UsbManager.areSettableFunctions(functions));
+        Preconditions.checkState(mDeviceManager != null);
 
-        if (!isSupportedCurrentFunction(function)) {
-            Slog.w(TAG, "Caller of setScreenUnlockedFunctions() requested unsupported USB function:"
-                    + function);
-            function = UsbManager.USB_FUNCTION_NONE;
-        }
-
-        if (mDeviceManager != null) {
-            mDeviceManager.setScreenUnlockedFunctions(function);
-        } else {
-            throw new IllegalStateException("USB device mode not supported");
-        }
+        mDeviceManager.setScreenUnlockedFunctions(functions);
     }
 
-    private static boolean isSupportedCurrentFunction(String function) {
-        if (function == null) return true;
-
-        switch (function) {
-            case UsbManager.USB_FUNCTION_NONE:
-            case UsbManager.USB_FUNCTION_AUDIO_SOURCE:
-            case UsbManager.USB_FUNCTION_MIDI:
-            case UsbManager.USB_FUNCTION_MTP:
-            case UsbManager.USB_FUNCTION_PTP:
-            case UsbManager.USB_FUNCTION_RNDIS:
-                return true;
-        }
-
-        return false;
+    @Override
+    public long getScreenUnlockedFunctions() {
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.MANAGE_USB, null);
+        Preconditions.checkState(mDeviceManager != null);
+        return mDeviceManager.getScreenUnlockedFunctions();
     }
 
     @Override
@@ -518,21 +508,38 @@ public class UsbService extends IUsbManager.Stub {
         final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
         final long ident = Binder.clearCallingIdentity();
         try {
-            if (args == null || args.length == 0 || "-a".equals(args[0])) {
-                pw.println("USB Manager State:");
-                pw.increaseIndent();
+            ArraySet<String> argsSet = new ArraySet<>();
+            Collections.addAll(argsSet, args);
+
+            boolean dumpAsProto = false;
+            if (argsSet.contains("--proto")) {
+                dumpAsProto = true;
+            }
+
+            if (args == null || args.length == 0 || args[0].equals("-a") || dumpAsProto) {
+                DualDumpOutputStream dump;
+                if (dumpAsProto) {
+                    dump = new DualDumpOutputStream(new ProtoOutputStream(fd));
+                } else {
+                    pw.println("USB MANAGER STATE (dumpsys usb):");
+
+                    dump = new DualDumpOutputStream(new IndentingPrintWriter(pw, "  "));
+                }
+
                 if (mDeviceManager != null) {
-                    mDeviceManager.dump(pw);
+                    mDeviceManager.dump(dump, "device_manager", UsbServiceDumpProto.DEVICE_MANAGER);
                 }
                 if (mHostManager != null) {
-                    mHostManager.dump(pw, args);
+                    mHostManager.dump(dump, "host_manager", UsbServiceDumpProto.HOST_MANAGER);
                 }
                 if (mPortManager != null) {
-                    mPortManager.dump(pw);
+                    mPortManager.dump(dump, "port_manager", UsbServiceDumpProto.PORT_MANAGER);
                 }
-                mAlsaManager.dump(pw);
+                mAlsaManager.dump(dump, "alsa_manager", UsbServiceDumpProto.ALSA_MANAGER);
 
-                mSettingsManager.dump(pw);
+                mSettingsManager.dump(dump, "settings_manager",
+                        UsbServiceDumpProto.SETTINGS_MANAGER);
+                dump.flush();
             } else if ("set-port-roles".equals(args[0]) && args.length == 4) {
                 final String portId = args[1];
                 final int powerRole;
@@ -573,7 +580,8 @@ public class UsbService extends IUsbManager.Stub {
                     // during debugging, it might be worth adding a sleep here before
                     // dumping the new state.
                     pw.println();
-                    mPortManager.dump(pw);
+                    mPortManager.dump(new DualDumpOutputStream(new IndentingPrintWriter(pw, "  ")),
+                            "", 0);
                 }
             } else if ("add-port".equals(args[0]) && args.length == 3) {
                 final String portId = args[1];
@@ -598,7 +606,8 @@ public class UsbService extends IUsbManager.Stub {
                 if (mPortManager != null) {
                     mPortManager.addSimulatedPort(portId, supportedModes, pw);
                     pw.println();
-                    mPortManager.dump(pw);
+                    mPortManager.dump(new DualDumpOutputStream(new IndentingPrintWriter(pw, "  ")),
+                            "", 0);
                 }
             } else if ("connect-port".equals(args[0]) && args.length == 5) {
                 final String portId = args[1];
@@ -645,31 +654,36 @@ public class UsbService extends IUsbManager.Stub {
                     mPortManager.connectSimulatedPort(portId, mode, canChangeMode,
                             powerRole, canChangePowerRole, dataRole, canChangeDataRole, pw);
                     pw.println();
-                    mPortManager.dump(pw);
+                    mPortManager.dump(new DualDumpOutputStream(new IndentingPrintWriter(pw, "  ")),
+                            "", 0);
                 }
             } else if ("disconnect-port".equals(args[0]) && args.length == 2) {
                 final String portId = args[1];
                 if (mPortManager != null) {
                     mPortManager.disconnectSimulatedPort(portId, pw);
                     pw.println();
-                    mPortManager.dump(pw);
+                    mPortManager.dump(new DualDumpOutputStream(new IndentingPrintWriter(pw, "  ")),
+                            "", 0);
                 }
             } else if ("remove-port".equals(args[0]) && args.length == 2) {
                 final String portId = args[1];
                 if (mPortManager != null) {
                     mPortManager.removeSimulatedPort(portId, pw);
                     pw.println();
-                    mPortManager.dump(pw);
+                    mPortManager.dump(new DualDumpOutputStream(new IndentingPrintWriter(pw, "  ")),
+                            "", 0);
                 }
             } else if ("reset".equals(args[0]) && args.length == 1) {
                 if (mPortManager != null) {
                     mPortManager.resetSimulation(pw);
                     pw.println();
-                    mPortManager.dump(pw);
+                    mPortManager.dump(new DualDumpOutputStream(new IndentingPrintWriter(pw, "  ")),
+                            "", 0);
                 }
             } else if ("ports".equals(args[0]) && args.length == 1) {
                 if (mPortManager != null) {
-                    mPortManager.dump(pw);
+                    mPortManager.dump(new DualDumpOutputStream(new IndentingPrintWriter(pw, "  ")),
+                            "", 0);
                 }
             } else if ("dump-descriptors".equals(args[0])) {
                 mHostManager.dumpDescriptors(pw, args);

@@ -17,17 +17,25 @@
 package android.media.update;
 
 import android.annotation.SystemApi;
+import android.media.MediaLibraryService2.MediaLibrarySession;
+import android.media.MediaLibraryService2.MediaLibrarySessionCallback;
 import android.media.MediaSession2.ControllerInfo;
 import android.os.Bundle;
 
 /**
  * @hide
  */
+// TODO: @SystemApi
 public interface MediaLibraryService2Provider extends MediaSessionService2Provider {
     // Nothing new for now
 
     interface MediaLibrarySessionProvider extends MediaSession2Provider {
         void notifyChildrenChanged_impl(ControllerInfo controller, String parentId, Bundle options);
         void notifyChildrenChanged_impl(String parentId, Bundle options);
+    }
+
+    interface LibraryRootProvider {
+        String getRootId_impl();
+        Bundle getExtras_impl();
     }
 }

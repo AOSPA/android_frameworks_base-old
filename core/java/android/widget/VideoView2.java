@@ -28,11 +28,10 @@ import android.media.session.MediaSession;
 import android.media.session.PlaybackState;
 import android.media.update.ApiLoader;
 import android.media.update.VideoView2Provider;
-import android.media.update.ViewProvider;
+import android.media.update.ViewGroupHelper;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.AttributeSet;
-import android.view.MotionEvent;
 import android.view.View;
 
 import java.lang.annotation.Retention;
@@ -102,7 +101,7 @@ import java.util.concurrent.Executor;
  *
  * @hide
  */
-public class VideoView2 extends FrameLayout {
+public class VideoView2 extends ViewGroupHelper<VideoView2Provider> {
     /** @hide */
     @IntDef({
             VIEW_TYPE_TEXTUREVIEW,
@@ -112,20 +111,18 @@ public class VideoView2 extends FrameLayout {
     public @interface ViewType {}
 
     /**
-     * Indicates video is rendering on SurfaceView
+     * Indicates video is rendering on SurfaceView.
      *
      * @see #setViewType
      */
     public static final int VIEW_TYPE_SURFACEVIEW = 1;
 
     /**
-     * Indicates video is rendering on TextureView
+     * Indicates video is rendering on TextureView.
      *
      * @see #setViewType
      */
     public static final int VIEW_TYPE_TEXTUREVIEW = 2;
-
-    private final VideoView2Provider mProvider;
 
     public VideoView2(@NonNull Context context) {
         this(context, null);
@@ -142,17 +139,12 @@ public class VideoView2 extends FrameLayout {
     public VideoView2(
             @NonNull Context context, @Nullable AttributeSet attrs,
             int defStyleAttr, int defStyleRes) {
-        super(context, attrs, defStyleAttr, defStyleRes);
-
-        mProvider = ApiLoader.getProvider(context).createVideoView2(this, new SuperProvider(),
-                attrs, defStyleAttr, defStyleRes);
-    }
-
-    /**
-     * @hide
-     */
-    public VideoView2Provider getProvider() {
-        return mProvider;
+        super((instance, superProvider, privateProvider) ->
+                ApiLoader.getProvider(context).createVideoView2(
+                        (VideoView2) instance, superProvider, privateProvider,
+                        attrs, defStyleAttr, defStyleRes),
+                context, attrs, defStyleAttr, defStyleRes);
+        mProvider.initialize(attrs, defStyleAttr, defStyleRes);
     }
 
     /**
@@ -160,9 +152,10 @@ public class VideoView2 extends FrameLayout {
      * instance if any.
      *
      * @param mediaControlView a media control view2 instance.
+     * @param intervalMs a time interval in milliseconds until VideoView2 hides MediaControlView2.
      */
-    public void setMediaControlView2(MediaControlView2 mediaControlView) {
-        mProvider.setMediaControlView2_impl(mediaControlView);
+    public void setMediaControlView2(MediaControlView2 mediaControlView, long intervalMs) {
+        mProvider.setMediaControlView2_impl(mediaControlView, intervalMs);
     }
 
     /**
@@ -188,18 +181,22 @@ public class VideoView2 extends FrameLayout {
     }
 
     /**
-     * Starts rendering closed caption or subtitles if there is any. The first subtitle track will
-     * be chosen by default if there multiple subtitle tracks exist.
+     * Shows or hides closed caption or subtitles if there is any.
+     * The first subtitle track will be chosen if there multiple subtitle tracks exist.
+     * Default behavior of VideoView2 is not showing subtitle.
+     * @param enable shows closed caption or subtitles if this value is true, or hides.
      */
-    public void showSubtitle() {
-        mProvider.showSubtitle_impl();
+    public void setSubtitleEnabled(boolean enable) {
+        mProvider.setSubtitleEnabled_impl(enable);
     }
 
     /**
-     * Stops showing closed captions or subtitles.
+     * Returns true if showing subtitle feature is enabled or returns false.
+     * Although there is no subtitle track or closed caption, it can return true, if the feature
+     * has been enabled by {@link #setSubtitleEnabled}.
      */
-    public void hideSubtitle() {
-        mProvider.hideSubtitle_impl();
+    public boolean isSubtitleEnabled() {
+        return mProvider.isSubtitleEnabled_impl();
     }
 
     /**
@@ -505,74 +502,7 @@ public class VideoView2 extends FrameLayout {
     }
 
     @Override
-    protected void onAttachedToWindow() {
-        mProvider.onAttachedToWindow_impl();
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        mProvider.onDetachedFromWindow_impl();
-    }
-
-    @Override
-    public CharSequence getAccessibilityClassName() {
-        return mProvider.getAccessibilityClassName_impl();
-    }
-
-    @Override
-    public boolean onTouchEvent(MotionEvent ev) {
-        return mProvider.onTouchEvent_impl(ev);
-    }
-
-    @Override
-    public boolean onTrackballEvent(MotionEvent ev) {
-        return mProvider.onTrackballEvent_impl(ev);
-    }
-
-    @Override
-    public void onFinishInflate() {
-        mProvider.onFinishInflate_impl();
-    }
-
-    @Override
-    public void setEnabled(boolean enabled) {
-        mProvider.setEnabled_impl(enabled);
-    }
-
-    private class SuperProvider implements ViewProvider {
-        @Override
-        public void onAttachedToWindow_impl() {
-            VideoView2.super.onAttachedToWindow();
-        }
-
-        @Override
-        public void onDetachedFromWindow_impl() {
-            VideoView2.super.onDetachedFromWindow();
-        }
-
-        @Override
-        public CharSequence getAccessibilityClassName_impl() {
-            return VideoView2.super.getAccessibilityClassName();
-        }
-
-        @Override
-        public boolean onTouchEvent_impl(MotionEvent ev) {
-            return VideoView2.super.onTouchEvent(ev);
-        }
-
-        @Override
-        public boolean onTrackballEvent_impl(MotionEvent ev) {
-            return VideoView2.super.onTrackballEvent(ev);
-        }
-
-        @Override
-        public void onFinishInflate_impl() {
-            VideoView2.super.onFinishInflate();
-        }
-
-        @Override
-        public void setEnabled_impl(boolean enabled) {
-            VideoView2.super.setEnabled(enabled);
-        }
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        mProvider.onLayout_impl(changed, l, t, r, b);
     }
 }

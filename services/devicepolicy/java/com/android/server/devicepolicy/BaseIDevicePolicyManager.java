@@ -19,12 +19,10 @@ import android.annotation.UserIdInt;
 import android.app.admin.IDevicePolicyManager;
 import android.content.ComponentName;
 import android.os.PersistableBundle;
-import android.os.UserHandle;
 import android.security.keymaster.KeymasterCertificateChain;
 import android.security.keystore.ParcelableKeyGenParameterSpec;
 import android.telephony.data.ApnSetting;
 
-import com.android.internal.R;
 import com.android.server.SystemService;
 
 import java.util.ArrayList;
@@ -107,11 +105,6 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     }
 
     @Override
-    public boolean startUserInBackground(ComponentName who, UserHandle userHandle) {
-        return false;
-    }
-
-    @Override
     public void setStartUserSessionMessage(
             ComponentName admin, CharSequence startUserSessionMessage) {}
 
@@ -183,5 +176,10 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     public boolean isMeteredDataDisabledForUser(ComponentName admin,
             String packageName, int userId) {
         return false;
+    }
+
+    @Override
+    public long forceSecurityLogs() {
+        return 0;
     }
 }

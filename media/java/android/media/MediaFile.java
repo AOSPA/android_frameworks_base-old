@@ -70,8 +70,10 @@ public class MediaFile {
     // More video file types
     public static final int FILE_TYPE_MP2PS   = 200;
     public static final int FILE_TYPE_QT      = 201;
+    public static final int FILE_TYPE_DIVX    = 202;
+    public static final int FILE_TYPE_FLV = 203;
     private static final int FIRST_VIDEO_FILE_TYPE2 = FILE_TYPE_MP2PS;
-    private static final int LAST_VIDEO_FILE_TYPE2 = FILE_TYPE_QT;
+    private static final int LAST_VIDEO_FILE_TYPE2 = FILE_TYPE_FLV;
 
     // Image file types
     public static final int FILE_TYPE_JPEG    = 31;
@@ -275,6 +277,8 @@ public class MediaFile {
         addFileType("ZIP", FILE_TYPE_ZIP, "application/zip");
         addFileType("MPG", FILE_TYPE_MP2PS, "video/mp2p");
         addFileType("MPEG", FILE_TYPE_MP2PS, "video/mp2p");
+        addFileType("DIVX", FILE_TYPE_DIVX, "video/divx");
+        addFileType("FLV", FILE_TYPE_FLV, "video/flv");
     }
 
     public static boolean isAudioFileType(int fileType) {

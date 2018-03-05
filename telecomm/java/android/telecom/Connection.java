@@ -328,8 +328,16 @@ public abstract class Connection extends Conferenceable {
      */
     public static final int CAPABILITY_CAN_PULL_CALL = 0x01000000;
 
+    /**
+     * Add participant in an active or conference call option
+     *
+     * @hide
+     */
+    public static final int CAPABILITY_ADD_PARTICIPANT = 0x02000000;
+
+
     //**********************************************************************************************
-    // Next CAPABILITY value: 0x02000000
+    // Next CAPABILITY value: 0x04000000
     //**********************************************************************************************
 
     /**
@@ -785,6 +793,10 @@ public abstract class Connection extends Conferenceable {
 
         if (can(properties, PROPERTY_HAS_CDMA_VOICE_PRIVACY)) {
             builder.append(isLong ? " PROPERTY_HAS_CDMA_VOICE_PRIVACY" : " priv");
+        }
+
+        if (can(properties, PROPERTY_IS_RTT)) {
+            builder.append(isLong ? " PROPERTY_IS_RTT" : " rtt");
         }
 
         builder.append("]");
@@ -2646,6 +2658,7 @@ public abstract class Connection extends Conferenceable {
      * side of the coll.
      */
     public final void sendRttSessionRemotelyTerminated() {
+        unsetRttProperty();
         mListeners.forEach((l) -> l.onRttSessionRemotelyTerminated(Connection.this));
     }
 

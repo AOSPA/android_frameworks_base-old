@@ -17,7 +17,6 @@
 package android.view;
 
 import static android.view.accessibility.AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED;
-
 import static java.lang.Math.max;
 
 import android.animation.AnimatorInflater;
@@ -75,6 +74,7 @@ import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.FloatProperty;
@@ -726,6 +726,8 @@ import java.util.function.Predicate;
  * @attr ref android.R.styleable#View_nextFocusRight
  * @attr ref android.R.styleable#View_nextFocusUp
  * @attr ref android.R.styleable#View_onClick
+ * @attr ref android.R.styleable#View_outlineSpotShadowColor
+ * @attr ref android.R.styleable#View_outlineAmbientShadowColor
  * @attr ref android.R.styleable#View_padding
  * @attr ref android.R.styleable#View_paddingHorizontal
  * @attr ref android.R.styleable#View_paddingVertical
@@ -3975,6 +3977,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Current clip bounds. to which all drawing of this view are constrained.
      */
+    @ViewDebug.ExportedProperty(category = "drawing")
     Rect mClipBounds = null;
 
     private boolean mLastIsOpaque;
@@ -5445,6 +5448,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     if (a.peekValue(attr) != null) {
                         setAccessibilityPaneTitle(a.getString(attr));
                     }
+                    break;
+                case R.styleable.View_outlineSpotShadowColor:
+                    setOutlineSpotShadowColor(a.getColor(attr, Color.BLACK));
+                    break;
+                case R.styleable.View_outlineAmbientShadowColor:
+                    setOutlineAmbientShadowColor(a.getColor(attr, Color.BLACK));
                     break;
             }
         }
@@ -7932,12 +7941,22 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * optimal implementation providing this data.
      */
     public void onProvideVirtualStructure(ViewStructure structure) {
-        AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
+        onProvideVirtualStructureCompat(structure, false);
+    }
+
+    /**
+     * Fallback implementation to populate a ViewStructure from accessibility state.
+     *
+     * @param structure The structure to populate.
+     * @param forAutofill Whether the structure is needed for autofill.
+     */
+    private void onProvideVirtualStructureCompat(ViewStructure structure, boolean forAutofill) {
+        final AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
         if (provider != null) {
-            AccessibilityNodeInfo info = createAccessibilityNodeInfo();
+            final AccessibilityNodeInfo info = createAccessibilityNodeInfo();
             structure.setChildCount(1);
-            ViewStructure root = structure.newChild(0);
-            populateVirtualStructure(root, provider, info);
+            final ViewStructure root = structure.newChild(0);
+            populateVirtualStructure(root, provider, info, forAutofill);
             info.recycle();
         }
     }
@@ -7966,6 +7985,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *   <li>Call {@link android.view.autofill.AutofillManager#notifyViewEntered(View, int, Rect)}
      *       and/or {@link android.view.autofill.AutofillManager#notifyViewExited(View, int)}
      *       when the focused virtual child changed.
+     *   <li>Override {@link #isVisibleToUserForAutofill(int)} to allow the platform to query
+     *       whether a given virtual view is visible to the user in order to support triggering
+     *       save when all views of interest go away.
      *   <li>Call
      *    {@link android.view.autofill.AutofillManager#notifyValueChanged(View, int, AutofillValue)}
      *       when the value of a virtual child changed.
@@ -8001,6 +8023,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #AUTOFILL_FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
      */
     public void onProvideAutofillVirtualStructure(ViewStructure structure, int flags) {
+        if (mContext.isAutofillCompatibilityEnabled()) {
+            onProvideVirtualStructureCompat(structure, true);
+        }
     }
 
     /**
@@ -8078,6 +8103,25 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @attr ref android.R.styleable#Theme_autofilledHighlight
      */
     public void autofill(@NonNull @SuppressWarnings("unused") SparseArray<AutofillValue> values) {
+        if (!mContext.isAutofillCompatibilityEnabled()) {
+            return;
+        }
+        final AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
+        if (provider == null) {
+            return;
+        }
+        final int valueCount = values.size();
+        for (int i = 0; i < valueCount; i++) {
+            final AutofillValue value = values.valueAt(i);
+            if (value.isText()) {
+                final int virtualId = values.keyAt(i);
+                final CharSequence text = value.getTextValue();
+                final Bundle arguments = new Bundle();
+                arguments.putCharSequence(
+                        AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+                provider.performAction(virtualId, AccessibilityNodeInfo.ACTION_SET_TEXT, arguments);
+            }
+        }
     }
 
     /**
@@ -8331,7 +8375,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private void populateVirtualStructure(ViewStructure structure,
-            AccessibilityNodeProvider provider, AccessibilityNodeInfo info) {
+            AccessibilityNodeProvider provider, AccessibilityNodeInfo info,
+            boolean forAutofill) {
         structure.setId(AccessibilityNodeInfo.getVirtualDescendantId(info.getSourceNodeId()),
                 null, null, null);
         Rect rect = structure.getTempRect();
@@ -8366,21 +8411,43 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (info.isContextClickable()) {
             structure.setContextClickable(true);
         }
+        if (forAutofill) {
+            structure.setAutofillId(new AutofillId(getAutofillId(),
+                    AccessibilityNodeInfo.getVirtualDescendantId(info.getSourceNodeId())));
+        }
         CharSequence cname = info.getClassName();
         structure.setClassName(cname != null ? cname.toString() : null);
         structure.setContentDescription(info.getContentDescription());
         if ((info.getText() != null || info.getError() != null)) {
             structure.setText(info.getText(), info.getTextSelectionStart(),
                     info.getTextSelectionEnd());
+            if (forAutofill) {
+                if (info.isEditable()) {
+                    structure.setDataIsSensitive(true);
+                    structure.setAutofillType(AUTOFILL_TYPE_TEXT);
+                    final AutofillValue autofillValue = AutofillValue.forText(structure.getText());
+                    structure.setAutofillValue(autofillValue);
+                    if (info.isPassword()) {
+                        structure.setInputType(InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                    }
+                } else {
+                    structure.setDataIsSensitive(false);
+                }
+            }
         }
         final int NCHILDREN = info.getChildCount();
         if (NCHILDREN > 0) {
             structure.setChildCount(NCHILDREN);
             for (int i=0; i<NCHILDREN; i++) {
+                if (AccessibilityNodeInfo.getVirtualDescendantId(info.getChildNodeIds().get(i))
+                        == AccessibilityNodeProvider.HOST_VIEW_ID) {
+                    Log.e(VIEW_LOG_TAG, "Virtual view pointing to its host. Ignoring");
+                    continue;
+                }
                 AccessibilityNodeInfo cinfo = provider.createAccessibilityNodeInfo(
                         AccessibilityNodeInfo.getVirtualDescendantId(info.getChildId(i)));
                 ViewStructure child = structure.newChild(i);
-                populateVirtualStructure(child, provider, cinfo);
+                populateVirtualStructure(child, provider, cinfo, forAutofill);
                 cinfo.recycle();
             }
         }
@@ -8709,6 +8776,24 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Computes whether this virtual autofill view is visible to the user.
+     *
+     * @return Whether the view is visible on the screen.
+     */
+    public boolean isVisibleToUserForAutofill(int virtualId) {
+        if (mContext.isAutofillCompatibilityEnabled()) {
+            final AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
+            if (provider != null) {
+                final AccessibilityNodeInfo node = provider.createAccessibilityNodeInfo(virtualId);
+                if (node != null) {
+                    return node.isVisibleToUser();
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * Computes whether this view is visible to the user. Such a view is
      * attached, visible, all its predecessors are visible, it is not clipped
      * entirely by its predecessors, and has an alpha greater than zero.
@@ -8717,7 +8802,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @hide
      */
-    protected boolean isVisibleToUser() {
+    public boolean isVisibleToUser() {
         return isVisibleToUser(null);
     }
 
@@ -15481,12 +15566,59 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * @hide
+     * Sets the color of the spot shadow that is drawn when the view has a positive Z or
+     * elevation value.
+     * <p>
+     * By default the shadow color is black. Generally, this color will be opaque so the intensity
+     * of the shadow is consistent between different views with different colors.
+     * <p>
+     * The opacity of the final spot shadow is a function of the shadow caster height, the
+     * alpha channel of the outlineSpotShadowColor (typically opaque), and the
+     * {@link android.R.attr#spotShadowAlpha} theme attribute.
+     *
+     * @attr ref android.R.styleable#View_outlineSpotShadowColor
+     * @param color The color this View will cast for its elevation spot shadow.
      */
-    public void setShadowColor(@ColorInt int color) {
-        if (mRenderNode.setShadowColor(color)) {
+    public void setOutlineSpotShadowColor(@ColorInt int color) {
+        if (mRenderNode.setSpotShadowColor(color)) {
             invalidateViewProperty(true, true);
         }
+    }
+
+    /**
+     * @return The shadow color set by {@link #setOutlineSpotShadowColor(int)}, or black if nothing
+     * was set
+     */
+    public @ColorInt int getOutlineSpotShadowColor() {
+        return mRenderNode.getSpotShadowColor();
+    }
+
+    /**
+     * Sets the color of the ambient shadow that is drawn when the view has a positive Z or
+     * elevation value.
+     * <p>
+     * By default the shadow color is black. Generally, this color will be opaque so the intensity
+     * of the shadow is consistent between different views with different colors.
+     * <p>
+     * The opacity of the final ambient shadow is a function of the shadow caster height, the
+     * alpha channel of the outlineAmbientShadowColor (typically opaque), and the
+     * {@link android.R.attr#ambientShadowAlpha} theme attribute.
+     *
+     * @attr ref android.R.styleable#View_outlineAmbientShadowColor
+     * @param color The color this View will cast for its elevation shadow.
+     */
+    public void setOutlineAmbientShadowColor(@ColorInt int color) {
+        if (mRenderNode.setAmbientShadowColor(color)) {
+            invalidateViewProperty(true, true);
+        }
+    }
+
+    /**
+     * @return The shadow color set by {@link #setOutlineAmbientShadowColor(int)}, or black if
+     * nothing was set
+     */
+    public @ColorInt int getOutlineAmbientShadowColor() {
+        return mRenderNode.getAmbientShadowColor();
     }
 
 
@@ -23634,9 +23766,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         Point shadowTouchPoint = new Point();
         shadowBuilder.onProvideShadowMetrics(shadowSize, shadowTouchPoint);
 
-        if ((shadowSize.x <= 0) || (shadowSize.y <= 0)
+        if ((shadowSize.x < 0) || (shadowSize.y < 0)
                 || (shadowTouchPoint.x < 0) || (shadowTouchPoint.y < 0)) {
-            throw new IllegalStateException("Drag shadow dimensions must be positive");
+            throw new IllegalStateException("Drag shadow dimensions must not be negative");
+        }
+
+        // Create 1x1 surface when zero surface size is specified because SurfaceControl.Builder
+        // does not accept zero size surface.
+        if (shadowSize.x == 0  || shadowSize.y == 0) {
+            shadowSize.x = 1;
+            shadowSize.y = 1;
         }
 
         if (ViewDebug.DEBUG_DRAG) {
@@ -26979,6 +27118,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         stream.addProperty("drawing:scaleY", getScaleY());
         stream.addProperty("drawing:pivotX", getPivotX());
         stream.addProperty("drawing:pivotY", getPivotY());
+        stream.addProperty("drawing:clipBounds",
+                mClipBounds == null ? null : mClipBounds.toString());
         stream.addProperty("drawing:opaque", isOpaque());
         stream.addProperty("drawing:alpha", getAlpha());
         stream.addProperty("drawing:transitionAlpha", getTransitionAlpha());
@@ -26990,6 +27131,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         stream.addProperty("drawing:willNotCacheDrawing", willNotCacheDrawing());
         stream.addProperty("drawing:drawingCacheEnabled", isDrawingCacheEnabled());
         stream.addProperty("drawing:overlappingRendering", hasOverlappingRendering());
+        stream.addProperty("drawing:outlineAmbientShadowColor", getOutlineAmbientShadowColor());
+        stream.addProperty("drawing:outlineSpotShadowColor", getOutlineSpotShadowColor());
 
         // focus
         stream.addProperty("focus:hasFocus", hasFocus());

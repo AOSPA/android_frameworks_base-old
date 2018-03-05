@@ -19,13 +19,14 @@ package android.media;
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.media.MediaSession2.BuilderBase;
 import android.media.MediaSession2.ControllerInfo;
 import android.media.update.ApiLoader;
+import android.media.update.MediaLibraryService2Provider.LibraryRootProvider;
 import android.media.update.MediaLibraryService2Provider.MediaLibrarySessionProvider;
-import android.media.update.MediaSession2Provider;
 import android.media.update.MediaSessionService2Provider;
 import android.os.Bundle;
 
@@ -61,28 +62,19 @@ public abstract class MediaLibraryService2 extends MediaSessionService2 {
     public static final String SERVICE_INTERFACE = "android.media.MediaLibraryService2";
 
     /**
-     * Session for the media library service.
+     * Session for the {@link MediaLibraryService2}. Build this object with
+     * {@link MediaLibrarySessionBuilder} and return in {@link #onCreateSession(String)}.
      */
-    public class MediaLibrarySession extends MediaSession2 {
+    public static class MediaLibrarySession extends MediaSession2 {
         private final MediaLibrarySessionProvider mProvider;
 
-        MediaLibrarySession(Context context, MediaPlayerInterface player, String id,
-                VolumeProvider volumeProvider, int ratingType, PendingIntent sessionActivity,
-                Executor callbackExecutor, SessionCallback callback) {
-            super(context, player, id, volumeProvider, ratingType, sessionActivity,
-                    callbackExecutor, callback);
-            mProvider = (MediaLibrarySessionProvider) getProvider();
-        }
-
-        @Override
-        MediaSession2Provider createProvider(Context context, MediaPlayerInterface player,
-                String id, VolumeProvider volumeProvider, int ratingType,
-                PendingIntent sessionActivity, Executor callbackExecutor,
-                SessionCallback callback) {
-            return ApiLoader.getProvider(context)
-                    .createMediaLibraryService2MediaLibrarySession(context, this, player, id,
-                            volumeProvider, ratingType, sessionActivity,
-                            callbackExecutor, (MediaLibrarySessionCallback) callback);
+        /**
+         * @hide
+         */
+        @SystemApi
+        public MediaLibrarySession(MediaLibrarySessionProvider provider) {
+            super(provider);
+            mProvider = provider;
         }
 
         /**
@@ -109,6 +101,9 @@ public abstract class MediaLibraryService2 extends MediaSessionService2 {
         }
     }
 
+    /**
+     * Callback for the {@link MediaLibrarySession}.
+     */
     public static class MediaLibrarySessionCallback extends MediaSession2.SessionCallback {
 
         public MediaLibrarySessionCallback(Context context) {
@@ -125,15 +120,15 @@ public abstract class MediaLibraryService2 extends MediaSessionService2 {
          *
          * @param controllerInfo information of the controller requesting access to browse media.
          * @param rootHints An optional bundle of service-specific arguments to send
-         * to the media browser service when connecting and retrieving the
+         * to the media library service when connecting and retrieving the
          * root id for browsing, or null if none. The contents of this
          * bundle may affect the information returned when browsing.
-         * @return The {@link BrowserRoot} for accessing this app's content or null.
-         * @see BrowserRoot#EXTRA_RECENT
-         * @see BrowserRoot#EXTRA_OFFLINE
-         * @see BrowserRoot#EXTRA_SUGGESTED
+         * @return The {@link LibraryRoot} for accessing this app's content or null.
+         * @see LibraryRoot#EXTRA_RECENT
+         * @see LibraryRoot#EXTRA_OFFLINE
+         * @see LibraryRoot#EXTRA_SUGGESTED
          */
-        public @Nullable BrowserRoot onGetRoot(@NonNull ControllerInfo controllerInfo,
+        public @Nullable LibraryRoot onGetRoot(@NonNull ControllerInfo controllerInfo,
                 @Nullable Bundle rootHints) {
             return null;
         }
@@ -208,31 +203,49 @@ public abstract class MediaLibraryService2 extends MediaSessionService2 {
     /**
      * Builder for {@link MediaLibrarySession}.
      */
-    // TODO(jaewan): Move this to updatable.
-    public class MediaLibrarySessionBuilder
-            extends BuilderBase<MediaLibrarySessionBuilder, MediaLibrarySessionCallback> {
+    // Override all methods just to show them with the type instead of generics in Javadoc.
+    // This workarounds javadoc issue described in the MediaSession2.BuilderBase.
+    public class MediaLibrarySessionBuilder extends BuilderBase<MediaLibrarySession,
+            MediaLibrarySessionBuilder, MediaLibrarySessionCallback> {
         public MediaLibrarySessionBuilder(
                 @NonNull Context context, @NonNull MediaPlayerInterface player,
                 @NonNull @CallbackExecutor Executor callbackExecutor,
                 @NonNull MediaLibrarySessionCallback callback) {
-            super(context, player);
-            setSessionCallback(callbackExecutor, callback);
+            super((instance) -> ApiLoader.getProvider(context).createMediaLibraryService2Builder(
+                    context, (MediaLibrarySessionBuilder) instance, player, callbackExecutor,
+                    callback));
+        }
+
+        @Override
+        public MediaLibrarySessionBuilder setVolumeProvider(
+                @Nullable VolumeProvider2 volumeProvider) {
+            return super.setVolumeProvider(volumeProvider);
+        }
+
+        @Override
+        public MediaLibrarySessionBuilder setRatingType(int type) {
+            return super.setRatingType(type);
+        }
+
+        @Override
+        public MediaLibrarySessionBuilder setSessionActivity(@Nullable PendingIntent pi) {
+            return super.setSessionActivity(pi);
+        }
+
+        @Override
+        public MediaLibrarySessionBuilder setId(String id) {
+            return super.setId(id);
         }
 
         @Override
         public MediaLibrarySessionBuilder setSessionCallback(
-                @NonNull @CallbackExecutor Executor callbackExecutor,
-                @NonNull MediaLibrarySessionCallback callback) {
-            if (callback == null) {
-                throw new IllegalArgumentException("MediaLibrarySessionCallback cannot be null");
-            }
-            return super.setSessionCallback(callbackExecutor, callback);
+                @NonNull Executor executor, @NonNull MediaLibrarySessionCallback callback) {
+            return super.setSessionCallback(executor, callback);
         }
 
         @Override
         public MediaLibrarySession build() {
-            return new MediaLibrarySession(mContext, mPlayer, mId, mVolumeProvider, mRatingType,
-                    mSessionActivity, mCallbackExecutor, mCallback);
+            return super.build();
         }
     }
 
@@ -253,7 +266,7 @@ public abstract class MediaLibraryService2 extends MediaSessionService2 {
      * This method will be called on the main thread.
      *
      * @param sessionId session id written in the AndroidManifest.xml.
-     * @return a new browser session
+     * @return a new library session
      * @see MediaLibrarySessionBuilder
      * @see #getSession()
      * @throws RuntimeException if returned session is invalid
@@ -262,17 +275,17 @@ public abstract class MediaLibraryService2 extends MediaSessionService2 {
     public @NonNull abstract MediaLibrarySession onCreateSession(String sessionId);
 
     /**
-     * Contains information that the browser service needs to send to the client
-     * when first connected.
+     * Contains information that the library service needs to send to the client when
+     * {@link MediaBrowser2#getLibraryRoot(Bundle)} is called.
      */
-    public static final class BrowserRoot {
+    public static final class LibraryRoot {
         /**
-         * The lookup key for a boolean that indicates whether the browser service should return a
-         * browser root for recently played media items.
+         * The lookup key for a boolean that indicates whether the library service should return a
+         * librar root for recently played media items.
          *
-         * <p>When creating a media browser for a given media browser service, this key can be
+         * <p>When creating a media browser for a given media library service, this key can be
          * supplied as a root hint for retrieving media items that are recently played.
-         * If the media browser service can provide such media items, the implementation must return
+         * If the media library service can provide such media items, the implementation must return
          * the key in the root hint when
          * {@link MediaLibrarySessionCallback#onGetRoot(ControllerInfo, Bundle)} is called back.
          *
@@ -284,13 +297,13 @@ public abstract class MediaLibraryService2 extends MediaSessionService2 {
         public static final String EXTRA_RECENT = "android.media.extra.RECENT";
 
         /**
-         * The lookup key for a boolean that indicates whether the browser service should return a
-         * browser root for offline media items.
+         * The lookup key for a boolean that indicates whether the library service should return a
+         * library root for offline media items.
          *
-         * <p>When creating a media browser for a given media browser service, this key can be
+         * <p>When creating a media browser for a given media library service, this key can be
          * supplied as a root hint for retrieving media items that are can be played without an
          * internet connection.
-         * If the media browser service can provide such media items, the implementation must return
+         * If the media library service can provide such media items, the implementation must return
          * the key in the root hint when
          * {@link MediaLibrarySessionCallback#onGetRoot(ControllerInfo, Bundle)} is called back.
          *
@@ -302,14 +315,14 @@ public abstract class MediaLibraryService2 extends MediaSessionService2 {
         public static final String EXTRA_OFFLINE = "android.media.extra.OFFLINE";
 
         /**
-         * The lookup key for a boolean that indicates whether the browser service should return a
-         * browser root for suggested media items.
+         * The lookup key for a boolean that indicates whether the library service should return a
+         * library root for suggested media items.
          *
-         * <p>When creating a media browser for a given media browser service, this key can be
-         * supplied as a root hint for retrieving the media items suggested by the media browser
+         * <p>When creating a media browser for a given media library service, this key can be
+         * supplied as a root hint for retrieving the media items suggested by the media library
          * service. The list of media items is considered ordered by relevance, first being the top
          * suggestion.
-         * If the media browser service can provide such media items, the implementation must return
+         * If the media library service can provide such media items, the implementation must return
          * the key in the root hint when
          * {@link MediaLibrarySessionCallback#onGetRoot(ControllerInfo, Bundle)} is called back.
          *
@@ -320,35 +333,31 @@ public abstract class MediaLibraryService2 extends MediaSessionService2 {
          */
         public static final String EXTRA_SUGGESTED = "android.media.extra.SUGGESTED";
 
-        final private String mRootId;
-        final private Bundle mExtras;
+        private final LibraryRootProvider mProvider;
 
         /**
-         * Constructs a browser root.
+         * Constructs a library root.
          * @param rootId The root id for browsing.
-         * @param extras Any extras about the browser service.
+         * @param extras Any extras about the library service.
          */
-        public BrowserRoot(@NonNull String rootId, @Nullable Bundle extras) {
-            if (rootId == null) {
-                throw new IllegalArgumentException("The root id in BrowserRoot cannot be null. " +
-                        "Use null for BrowserRoot instead.");
-            }
-            mRootId = rootId;
-            mExtras = extras;
+        public LibraryRoot(@NonNull Context context,
+                @NonNull String rootId, @Nullable Bundle extras) {
+            mProvider = ApiLoader.getProvider(context).createMediaLibraryService2LibraryRoot(
+                    context, this, rootId, extras);
         }
 
         /**
          * Gets the root id for browsing.
          */
         public String getRootId() {
-            return mRootId;
+            return mProvider.getRootId_impl();
         }
 
         /**
-         * Gets any extras about the browser service.
+         * Gets any extras about the library service.
          */
         public Bundle getExtras() {
-            return mExtras;
+            return mProvider.getExtras_impl();
         }
     }
 }

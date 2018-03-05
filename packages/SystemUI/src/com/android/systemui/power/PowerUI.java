@@ -44,6 +44,7 @@ import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
+import com.android.settingslib.utils.ThreadUtils;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.SystemUI;
@@ -141,8 +142,12 @@ public class PowerUI extends SystemUI {
         final int lowPowerModeTriggerLevel = Settings.Global.getInt(resolver,
                 Settings.Global.LOW_POWER_MODE_TRIGGER_LEVEL, defWarnLevel);
 
-        // NOTE: Keep the logic in sync with BatteryService.
-        // TODO: Propagate this value from BatteryService to system UI, really.
+        // Note LOW_POWER_MODE_TRIGGER_LEVEL can take any value between 0 and 100, but
+        // for the UI purposes, let's cap it at 15% -- i.e. even if the trigger level is higher
+        // like 50%, let's not show the "low battery" notification until it hits
+        // config_lowBatteryWarningLevel, which is 15% by default.
+        // LOW_POWER_MODE_TRIGGER_LEVEL is still used in other places as-is. For example, if it's
+        // 50, then battery saver kicks in when the battery level hits 50%.
         int warnLevel =  Math.min(defWarnLevel, lowPowerModeTriggerLevel);
 
         if (warnLevel == 0) {
@@ -242,7 +247,9 @@ public class PowerUI extends SystemUI {
                 }
 
                 // Show the correct version of low battery warning if needed
-                maybeShowBatteryWarning(plugged, oldPlugged, oldBucket, bucket);
+                ThreadUtils.postOnBackgroundThread(() -> {
+                    maybeShowBatteryWarning(plugged, oldPlugged, oldBucket, bucket);
+                });
 
             } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 mScreenOffTime = SystemClock.elapsedRealtime();
