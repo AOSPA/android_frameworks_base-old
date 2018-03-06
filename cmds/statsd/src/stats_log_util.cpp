@@ -183,6 +183,8 @@ void writeFieldValueTreeToStreamHelper(const std::vector<FieldValue>& dims, size
                 case STRING:
                     protoOutput->write(FIELD_TYPE_STRING | fieldNum, dim.mValue.str_value);
                     break;
+                default:
+                    break;
             }
             (*index)++;
         } else if (valueDepth > depth && valuePrefix == prefix) {
@@ -288,6 +290,10 @@ int64_t getWallClockSec() {
 
 int64_t getWallClockMillis() {
     return time(nullptr) * MS_PER_SEC;
+}
+
+int64_t truncateTimestampNsToFiveMinutes(int64_t timestampNs) {
+    return timestampNs / NS_PER_SEC / (5 * 60) * NS_PER_SEC * (5 * 60);
 }
 
 }  // namespace statsd

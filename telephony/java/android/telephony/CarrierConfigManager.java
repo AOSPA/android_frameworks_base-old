@@ -1704,13 +1704,6 @@ public class CarrierConfigManager {
             "roaming_operator_string_array";
 
     /**
-     * Controls whether Assisted Dialing is enabled and the preference is shown. This feature
-     * transforms numbers when the user is roaming.
-     */
-    public static final String KEY_ASSISTED_DIALING_ENABLED_BOOL =
-            "assisted_dialing_enabled_bool";
-
-    /**
      * URL from which the proto containing the public key of the Carrier used for
      * IMSI encryption will be downloaded.
      * @hide
@@ -1878,7 +1871,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CARRIER_FORCE_DISABLE_ETWS_CMAS_TEST_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_OVERRIDE_WFC_PROVISIONING_BOOL, false);
-        sDefaults.putBoolean(KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL, true);
+        sDefaults.putBoolean(KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_ALLOW_TURNOFF_IMS_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_IMS_GBA_REQUIRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_INSTANT_LETTERING_AVAILABLE_BOOL, false);
@@ -2131,7 +2124,6 @@ public class CarrierConfigManager {
                 false);
         sDefaults.putStringArray(KEY_NON_ROAMING_OPERATOR_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_ROAMING_OPERATOR_STRING_ARRAY, null);
-        sDefaults.putBoolean(KEY_ASSISTED_DIALING_ENABLED_BOOL, true);
         sDefaults.putBoolean(KEY_SHOW_IMS_REGISTRATION_STATUS_BOOL, false);
         sDefaults.putBoolean(KEY_RTT_SUPPORTED_BOOL, false);
         sDefaults.putBoolean(KEY_DISABLE_CHARGE_INDICATION_BOOL, false);

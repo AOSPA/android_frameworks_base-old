@@ -28,10 +28,9 @@ import android.media.MediaItem2;
 import android.media.MediaLibraryService2;
 import android.media.MediaLibraryService2.LibraryRoot;
 import android.media.MediaLibraryService2.MediaLibrarySession;
-import android.media.MediaLibraryService2.MediaLibrarySessionBuilder;
-import android.media.MediaLibraryService2.MediaLibrarySessionCallback;
+import android.media.MediaLibraryService2.MediaLibrarySession.MediaLibrarySessionCallback;
 import android.media.MediaMetadata2;
-import android.media.MediaPlayerInterface;
+import android.media.MediaPlayerBase;
 import android.media.MediaSession2;
 import android.media.MediaSession2.CommandButton.Builder;
 import android.media.MediaSession2.PlaylistParams;
@@ -40,12 +39,11 @@ import android.media.MediaSessionService2;
 import android.media.MediaSessionService2.MediaNotification;
 import android.media.PlaybackState2;
 import android.media.Rating2;
-import android.media.SessionPlayer2;
 import android.media.SessionToken2;
 import android.media.VolumeProvider2;
 import android.media.update.MediaLibraryService2Provider.LibraryRootProvider;
 import android.media.update.MediaSession2Provider.BuilderBaseProvider;
-import android.media.update.MediaSession2Provider.CommandButtonProvider.BuilderProvider;
+import android.media.update.MediaSession2Provider.CommandButtonProvider;
 import android.media.update.MediaSession2Provider.CommandGroupProvider;
 import android.media.update.MediaSession2Provider.CommandProvider;
 import android.media.update.MediaSession2Provider.ControllerInfoProvider;
@@ -87,9 +85,10 @@ public interface StaticProvider {
             PlaylistParams playlistParams, int repeatMode, int shuffleMode,
             MediaMetadata2 playlistMetadata);
     PlaylistParams fromBundle_PlaylistParams(Context context, Bundle bundle);
-    BuilderProvider createMediaSession2CommandButtonBuilder(Context context, Builder builder);
+    CommandButtonProvider.BuilderProvider createMediaSession2CommandButtonBuilder(Context context,
+            MediaSession2.CommandButton.Builder builder);
     BuilderBaseProvider<MediaSession2, SessionCallback> createMediaSession2Builder(
-            Context context, MediaSession2.Builder instance, MediaPlayerInterface player);
+            Context context, MediaSession2.Builder instance, MediaPlayerBase player);
 
     MediaController2Provider createMediaController2(Context context, MediaController2 instance,
             SessionToken2 token, Executor executor, ControllerCallback callback);
@@ -104,16 +103,15 @@ public interface StaticProvider {
     MediaSessionService2Provider createMediaLibraryService2(MediaLibraryService2 instance);
     BuilderBaseProvider<MediaLibrarySession, MediaLibrarySessionCallback>
         createMediaLibraryService2Builder(
-            Context context, MediaLibrarySessionBuilder instance, MediaPlayerInterface player,
-            Executor callbackExecutor, MediaLibrarySessionCallback callback);
+            MediaLibraryService2 service, MediaLibrarySession.Builder instance,
+            MediaPlayerBase player, Executor callbackExecutor,
+            MediaLibrarySessionCallback callback);
     LibraryRootProvider createMediaLibraryService2LibraryRoot(Context context, LibraryRoot instance,
             String rootId, Bundle extras);
 
     SessionToken2Provider createSessionToken2(Context context, SessionToken2 instance,
             String packageName, String serviceName, int uid);
-    SessionToken2 SessionToken2_fromBundle(Context context, Bundle bundle);
-
-    SessionPlayer2Provider createSessionPlayer2(Context context, SessionPlayer2 instance);
+    SessionToken2 fromBundle_SessionToken2(Context context, Bundle bundle);
 
     MediaItem2Provider createMediaItem2(Context context, MediaItem2 mediaItem2,
             String mediaId, DataSourceDesc dsd, MediaMetadata2 metadata, int flags);
@@ -136,7 +134,6 @@ public interface StaticProvider {
     Rating2 newPercentageRating_Rating2(Context context, float percent);
 
     PlaybackState2Provider createPlaybackState2(Context context, PlaybackState2 instance, int state,
-            long position, long updateTime, float speed, long bufferedPosition, long activeItemId,
-            CharSequence error);
+            long position, long updateTime, float speed, long bufferedPosition, long activeItemId);
     PlaybackState2 fromBundle_PlaybackState2(Context context, Bundle bundle);
 }

@@ -1104,8 +1104,8 @@ public final class SystemServer {
 
             traceBeginAndSlog("StartNetworkPolicyManagerService");
             try {
-                networkPolicy = new NetworkPolicyManagerService(context,
-                    mActivityManagerService, networkStats, networkManagement);
+                networkPolicy = new NetworkPolicyManagerService(context, mActivityManagerService,
+                        networkManagement);
                 ServiceManager.addService(Context.NETWORK_POLICY_SERVICE, networkPolicy);
             } catch (Throwable e) {
                 reportWtf("starting NetworkPolicy Service", e);
@@ -1313,7 +1313,8 @@ public final class SystemServer {
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)
                 || mPackageManager.hasSystemFeature(
-                PackageManager.FEATURE_USB_ACCESSORY)) {
+                PackageManager.FEATURE_USB_ACCESSORY)
+                || isEmulator) {
                 // Manage USB host and device support
                 traceBeginAndSlog("StartUsbService");
                 mSystemServiceManager.startService(USB_SERVICE_CLASS);

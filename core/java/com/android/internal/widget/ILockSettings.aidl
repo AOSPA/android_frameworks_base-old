@@ -22,6 +22,7 @@ import android.os.Bundle;
 import android.security.keystore.recovery.WrappedApplicationKey;
 import android.security.keystore.recovery.KeyChainSnapshot;
 import android.security.keystore.recovery.KeyChainProtectionParams;
+import android.security.keystore.recovery.RecoveryCertPath;
 import com.android.internal.widget.ICheckCredentialProgressCallback;
 import com.android.internal.widget.VerifyCredentialResponse;
 
@@ -66,20 +67,23 @@ interface ILockSettings {
     void initRecoveryService(in String rootCertificateAlias, in byte[] signedPublicKeyList);
     KeyChainSnapshot getKeyChainSnapshot();
     byte[] generateAndStoreKey(String alias);
-    String generateKey(String alias, in byte[] account);
+    String generateKey(String alias);
     String getKey(String alias);
     void removeKey(String alias);
     void setSnapshotCreatedPendingIntent(in PendingIntent intent);
     Map getRecoverySnapshotVersions();
     void setServerParams(in byte[] serverParams);
-    void setRecoveryStatus(in String packageName, in String[] aliases, int status);
-    Map getRecoveryStatus(in String packageName);
+    void setRecoveryStatus(in String alias, int status);
+    Map getRecoveryStatus();
     void setRecoverySecretTypes(in int[] secretTypes);
     int[] getRecoverySecretTypes();
     int[] getPendingRecoverySecretTypes();
     void recoverySecretAvailable(in KeyChainProtectionParams recoverySecret);
     byte[] startRecoverySession(in String sessionId,
             in byte[] verifierPublicKey, in byte[] vaultParams, in byte[] vaultChallenge,
+            in List<KeyChainProtectionParams> secrets);
+    byte[] startRecoverySessionWithCertPath(in String sessionId,
+            in RecoveryCertPath verifierCertPath, in byte[] vaultParams, in byte[] vaultChallenge,
             in List<KeyChainProtectionParams> secrets);
     Map/*<String, byte[]>*/ recoverKeys(in String sessionId, in byte[] recoveryKeyBlob,
             in List<WrappedApplicationKey> applicationKeys);

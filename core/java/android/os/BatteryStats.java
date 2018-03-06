@@ -240,8 +240,11 @@ public abstract class BatteryStats implements Parcelable {
      * New in version 30:
      *   - Uid.PROCESS_STATE_FOREGROUND_SERVICE only tracks
      *   ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE.
+     * New in version 31:
+     *   - New cellular network types.
+     *   - Deferred job metrics.
      */
-    static final int CHECKIN_VERSION = 30;
+    static final int CHECKIN_VERSION = 31;
 
     /**
      * Old version, we hit 9 and ran out of room, need to remove.
@@ -287,6 +290,16 @@ public abstract class BatteryStats implements Parcelable {
     private static final String SYNC_DATA = "sy";
     private static final String JOB_DATA = "jb";
     private static final String JOB_COMPLETION_DATA = "jbc";
+
+    /**
+     * jbd line is:
+     * BATTERY_STATS_CHECKIN_VERSION, uid, which, "jbd",
+     * jobsDeferredEventCount, jobsDeferredCount, averageLatencyMillis,
+     * count at latency < 1 hr, count at latency < 2 hrs, count at latency < 6 hrs, beyond 6 hrs
+     * <p>
+     * @see #JOB_FRESHNESS_BUCKETS
+     */
+    private static final String JOBS_DEFERRED_DATA = "jbd";
     private static final String KERNEL_WAKELOCK_DATA = "kwl";
     private static final String WAKEUP_REASON_DATA = "wr";
     private static final String NETWORK_DATA = "nt";
@@ -347,6 +360,19 @@ public abstract class BatteryStats implements Parcelable {
      */
     @VisibleForTesting
     public static final String UID_TIMES_TYPE_ALL = "A";
+
+    /**
+     * These are the thresholds for bucketing last time since a job was run for an app
+     * that just moved to ACTIVE due to a launch. So if the last time a job ran was less
+     * than 30 minutes ago, then it's reasonably fresh, 2 hours ago, not so fresh and so
+     * on.
+     */
+    public static final long[] JOB_FRESHNESS_BUCKETS = {
+            1 * 60 * 60 * 1000L,
+            2 * 60 * 60 * 1000L,
+            6 * 60 * 60 * 1000L,
+            Long.MAX_VALUE
+    };
 
     /**
      * State for keeping track of counting information.
@@ -421,6 +447,11 @@ public abstract class BatteryStats implements Parcelable {
          */
         public abstract LongCounter getScanTimeCounter();
 
+        /**
+         * @return a non-null {@link LongCounter} representing time spent (milliseconds) in the
+         * sleep state.
+         */
+        public abstract LongCounter getSleepTimeCounter();
 
         /**
          * @return a non-null {@link LongCounter} representing time spent (milliseconds) in the
@@ -845,6 +876,20 @@ public abstract class BatteryStats implements Parcelable {
          * @param which one of STATS_SINCE_CHARGED, STATS_SINCE_UNPLUGGED, or STATS_CURRENT.
          */
         public abstract long getWifiRadioApWakeupCount(int which);
+
+        /**
+         * Appends the deferred jobs data to the StringBuilder passed in, in checkin format
+         * @param sb StringBuilder that can be overwritten with the deferred jobs data
+         * @param which one of STATS_*
+         */
+        public abstract void getDeferredJobsCheckinLineLocked(StringBuilder sb, int which);
+
+        /**
+         * Appends the deferred jobs data to the StringBuilder passed in
+         * @param sb StringBuilder that can be overwritten with the deferred jobs data
+         * @param which one of STATS_*
+         */
+        public abstract void getDeferredJobsLineLocked(StringBuilder sb, int which);
 
         public static abstract class Sensor {
             /*
@@ -3368,8 +3413,6 @@ public abstract class BatteryStats implements Parcelable {
         for (LongCounter txState : counter.getTxTimeCounters()) {
             totalTxTimeMs += txState.getCountLocked(which);
         }
-        final long sleepTimeMs
-            = totalControllerActivityTimeMs - (idleTimeMs + rxTimeMs + totalTxTimeMs);
 
         if (controllerName.equals(WIFI_CONTROLLER_NAME)) {
             final long scanTimeMs = counter.getScanTimeCounter().getCountLocked(which);
@@ -3383,18 +3426,34 @@ public abstract class BatteryStats implements Parcelable {
             sb.append(formatRatioLocked(scanTimeMs, totalControllerActivityTimeMs));
             sb.append(")");
             pw.println(sb.toString());
+
+            final long sleepTimeMs
+                = totalControllerActivityTimeMs - (idleTimeMs + rxTimeMs + totalTxTimeMs);
+            sb.setLength(0);
+            sb.append(prefix);
+            sb.append("     ");
+            sb.append(controllerName);
+            sb.append(" Sleep time:  ");
+            formatTimeMs(sb, sleepTimeMs);
+            sb.append("(");
+            sb.append(formatRatioLocked(sleepTimeMs, totalControllerActivityTimeMs));
+            sb.append(")");
+            pw.println(sb.toString());
         }
 
-        sb.setLength(0);
-        sb.append(prefix);
-        sb.append("     ");
-        sb.append(controllerName);
-        sb.append(" Sleep time:  ");
-        formatTimeMs(sb, sleepTimeMs);
-        sb.append("(");
-        sb.append(formatRatioLocked(sleepTimeMs, totalControllerActivityTimeMs));
-        sb.append(")");
-        pw.println(sb.toString());
+        if (controllerName.equals(CELLULAR_CONTROLLER_NAME)) {
+            final long sleepTimeMs = counter.getSleepTimeCounter().getCountLocked(which);
+            sb.setLength(0);
+            sb.append(prefix);
+            sb.append("     ");
+            sb.append(controllerName);
+            sb.append(" Sleep time:  ");
+            formatTimeMs(sb, sleepTimeMs);
+            sb.append("(");
+            sb.append(formatRatioLocked(sleepTimeMs, totalControllerActivityTimeMs));
+            sb.append(")");
+            pw.println(sb.toString());
+        }
 
         sb.setLength(0);
         sb.append(prefix);
@@ -4068,6 +4127,12 @@ public abstract class BatteryStats implements Parcelable {
                             types.get(JobParameters.REASON_TIMEOUT, 0),
                             types.get(JobParameters.REASON_DEVICE_IDLE, 0));
                 }
+            }
+
+            // Dump deferred jobs stats
+            u.getDeferredJobsCheckinLineLocked(sb, which);
+            if (sb.length() > 0) {
+                dumpLine(pw, uid, category, JOBS_DEFERRED_DATA, sb.toString());
             }
 
             dumpTimer(pw, uid, category, FLASHLIGHT_DATA, u.getFlashlightTurnedOnTimer(),
@@ -5696,6 +5761,11 @@ public abstract class BatteryStats implements Parcelable {
                     }
                     pw.println();
                 }
+            }
+
+            u.getDeferredJobsLineLocked(sb, which);
+            if (sb.length() > 0) {
+                pw.print("    Jobs deferred on launch "); pw.println(sb.toString());
             }
 
             uidActivity |= printTimer(pw, sb, u.getFlashlightTurnedOnTimer(), rawRealtime, which,

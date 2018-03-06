@@ -46,11 +46,11 @@ import java.util.Map;
  * <p>The RecoveryController must be paired with a recovery agent. The recovery agent is responsible
  * for transporting the keychain to remote trusted hardware. This hardware must prevent brute force
  * attempts against the user's lock screen by limiting the number of allowed guesses (to, e.g., 10).
- * After  that number of incorrect guesses, the trusted hardware no longer allows access to the
+ * After that number of incorrect guesses, the trusted hardware no longer allows access to the
  * key chain.
  *
- * <p>For now only the recovery agent itself is able to create keys, so it is expected that the
- * recovery agent is itself the system app.
+ * <p>Only the recovery agent itself is able to create keys, so it is expected that the recovery
+ * agent is itself the system app.
  *
  * <p>A recovery agent requires the privileged permission
  * {@code android.Manifest.permission#RECOVER_KEYSTORE}.
@@ -65,8 +65,6 @@ public class RecoveryController {
     public static final int RECOVERY_STATUS_SYNCED = 0;
     /** Waiting for recovery agent to sync the key. */
     public static final int RECOVERY_STATUS_SYNC_IN_PROGRESS = 1;
-    /** Recovery account is not available. */
-    public static final int RECOVERY_STATUS_MISSING_ACCOUNT = 2;
     /** Key cannot be synced. */
     public static final int RECOVERY_STATUS_PERMANENT_FAILURE = 3;
 
@@ -177,28 +175,13 @@ public class RecoveryController {
     }
 
     /**
-     * Deprecated - use getKeyChainSnapshot.
-     *
-     * Returns data necessary to store all recoverable keys. Key material is
-     * encrypted with user secret and recovery public key.
-     *
-     * @return Data necessary to recover keystore.
-     * @throws InternalRecoveryServiceException if an unexpected error occurred in the recovery
-     *     service.
+     * @deprecated Use {@link #getKeyChainSnapshot()}
+     * @removed
      */
+    @Deprecated
     @RequiresPermission(android.Manifest.permission.RECOVER_KEYSTORE)
-    public @Nullable KeyChainSnapshot getRecoveryData()
-            throws InternalRecoveryServiceException {
-        try {
-            return mBinder.getKeyChainSnapshot();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        } catch (ServiceSpecificException e) {
-            if (e.errorCode == ERROR_NO_SNAPSHOT_PENDING) {
-                return null;
-            }
-            throw wrapUnexpectedServiceSpecificException(e);
-        }
+    public @Nullable KeyChainSnapshot getRecoveryData() throws InternalRecoveryServiceException {
+        return getKeyChainSnapshot();
     }
 
     /**
@@ -270,17 +253,21 @@ public class RecoveryController {
     }
 
     /**
-     * Gets aliases of recoverable keys for the application.
-     *
-     * @param packageName which recoverable keys' aliases will be returned.
-     *
-     * @return {@code List} of all aliases.
+     * @deprecated Use {@link #getAliases()}.
+     * @removed
      */
+    @Deprecated
     public List<String> getAliases(@Nullable String packageName)
             throws InternalRecoveryServiceException {
+        return getAliases();
+    }
+
+    /**
+     * Returns a list of aliases of keys belonging to the application.
+     */
+    public List<String> getAliases() throws InternalRecoveryServiceException {
         try {
-            // TODO: update aidl
-            Map<String, Integer> allStatuses = mBinder.getRecoveryStatus(packageName);
+            Map<String, Integer> allStatuses = mBinder.getRecoveryStatus();
             return new ArrayList<>(allStatuses.keySet());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -290,24 +277,33 @@ public class RecoveryController {
     }
 
     /**
-     * Updates recovery status for given key. It is used to notify keystore that key was
-     * successfully stored on the server or there were an error. Application can check this value
-     * using {@code getRecoveyStatus}.
-     *
-     * @param packageName Application whose recoverable key's status are to be updated.
-     * @param alias Application-specific key alias.
-     * @param status Status specific to recovery agent.
-     * @throws InternalRecoveryServiceException if an unexpected error occurred in the recovery
-     *     service.
+     * @deprecated Use {@link #setRecoveryStatus(String, int)}
+     * @removed
      */
+    @Deprecated
     @RequiresPermission(android.Manifest.permission.RECOVER_KEYSTORE)
     public void setRecoveryStatus(
             @NonNull String packageName, String alias, int status)
             throws NameNotFoundException, InternalRecoveryServiceException {
+        setRecoveryStatus(alias, status);
+    }
+
+    /**
+     * Sets the recovery status for given key. It is used to notify the keystore that the key was
+     * successfully stored on the server or that there was an error. An application can check this
+     * value using {@link #getRecoveryStatus(String, String)}.
+     *
+     * @param alias The alias of the key whose status to set.
+     * @param status The status of the key. One of {@link #RECOVERY_STATUS_SYNCED},
+     *     {@link #RECOVERY_STATUS_SYNC_IN_PROGRESS} or {@link #RECOVERY_STATUS_PERMANENT_FAILURE}.
+     * @throws InternalRecoveryServiceException if an unexpected error occurred in the recovery
+     *     service.
+     */
+    @RequiresPermission(android.Manifest.permission.RECOVER_KEYSTORE)
+    public void setRecoveryStatus(String alias, int status)
+            throws InternalRecoveryServiceException {
         try {
-            // TODO: update aidl
-            String[] aliases = alias == null ? null : new String[]{alias};
-            mBinder.setRecoveryStatus(packageName, aliases, status);
+            mBinder.setRecoveryStatus(alias, status);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         } catch (ServiceSpecificException e) {
@@ -316,28 +312,31 @@ public class RecoveryController {
     }
 
     /**
-     * Returns recovery status for Application's KeyStore key.
-     * Negative status values are reserved for recovery agent specific codes. List of common codes:
+     * @deprecated Use {@link #getRecoveryStatus(String)}.
+     * @removed
+     */
+    @Deprecated
+    public int getRecoveryStatus(String packageName, String alias)
+            throws InternalRecoveryServiceException {
+        return getRecoveryStatus(alias);
+    }
+
+    /**
+     * Returns the recovery status for the key with the given {@code alias}.
      *
      * <ul>
      *   <li>{@link #RECOVERY_STATUS_SYNCED}
      *   <li>{@link #RECOVERY_STATUS_SYNC_IN_PROGRESS}
-     *   <li>{@link #RECOVERY_STATUS_MISSING_ACCOUNT}
      *   <li>{@link #RECOVERY_STATUS_PERMANENT_FAILURE}
      * </ul>
      *
-     * @param packageName Application whose recoverable key status is returned.
-     * @param alias Application-specific key alias.
-     * @return Recovery status.
-     * @see #setRecoveryStatus
+     * @see #setRecoveryStatus(String, int)
      * @throws InternalRecoveryServiceException if an unexpected error occurred in the recovery
      *     service.
      */
-    public int getRecoveryStatus(String packageName, String alias)
-            throws InternalRecoveryServiceException {
+    public int getRecoveryStatus(String alias) throws InternalRecoveryServiceException {
         try {
-            // TODO: update aidl
-            Map<String, Integer> allStatuses = mBinder.getRecoveryStatus(packageName);
+            Map<String, Integer> allStatuses = mBinder.getRecoveryStatus();
             Integer status = allStatuses.get(alias);
             if (status == null) {
                 return RecoveryController.RECOVERY_STATUS_PERMANENT_FAILURE;
@@ -463,35 +462,38 @@ public class RecoveryController {
     }
 
     /**
-     * Generates a AES256/GCM/NoPADDING key called {@code alias} and loads it into the recoverable
-     * key store. Returns {@link javax.crypto.SecretKey}.
-     *
-     * @param alias The key alias.
-     * @param account The account associated with the key.
-     * @throws InternalRecoveryServiceException if an unexpected error occurred in the recovery
-     *     service.
-     * @throws LockScreenRequiredException if the user has not set a lock screen. This is required
-     *     to generate recoverable keys, as the snapshots are encrypted using a key derived from the
-     *     lock screen.
-     * @hide
+     * @deprecated Use {@link #generateKey(String)}.
+     * @removed
      */
+    @Deprecated
     public Key generateKey(@NonNull String alias, byte[] account)
             throws InternalRecoveryServiceException, LockScreenRequiredException {
-        // TODO: update RecoverySession.recoverKeys
+        return generateKey(alias);
+    }
+
+    /**
+     * Generates a recoverable key with the given {@code alias}.
+     *
+     * @throws InternalRecoveryServiceException if an unexpected error occurred in the recovery
+     *     service.
+     * @throws LockScreenRequiredException if the user does not have a lock screen set. A lock
+     *     screen is required to generate recoverable keys.
+     */
+    public Key generateKey(@NonNull String alias) throws InternalRecoveryServiceException,
+            LockScreenRequiredException {
         try {
-            String grantAlias = mBinder.generateKey(alias, account);
+            String grantAlias = mBinder.generateKey(alias);
             if (grantAlias == null) {
-                return null;
+                throw new InternalRecoveryServiceException("null grant alias");
             }
-            Key result = AndroidKeyStoreProvider.loadAndroidKeyStoreKeyFromKeystore(
+            return AndroidKeyStoreProvider.loadAndroidKeyStoreKeyFromKeystore(
                     mKeyStore,
                     grantAlias,
                     KeyStore.UID_SELF);
-            return result;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         } catch (UnrecoverableKeyException e) {
-            throw new InternalRecoveryServiceException("Access to newly generated key failed for");
+            throw new InternalRecoveryServiceException("Failed to get key from keystore", e);
         } catch (ServiceSpecificException e) {
             if (e.errorCode == ERROR_INSECURE_USER) {
                 throw new LockScreenRequiredException(e.getMessage());
@@ -543,6 +545,15 @@ public class RecoveryController {
         } catch (ServiceSpecificException e) {
             throw wrapUnexpectedServiceSpecificException(e);
         }
+    }
+
+    /**
+     * Returns a new {@link RecoverySession}.
+     *
+     * <p>A recovery session is required to restore keys from a remote store.
+     */
+    public RecoverySession createRecoverySession() {
+        return RecoverySession.newInstance(this);
     }
 
     InternalRecoveryServiceException wrapUnexpectedServiceSpecificException(

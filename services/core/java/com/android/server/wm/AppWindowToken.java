@@ -367,6 +367,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (mClientHidden == hideClient || (hideClient && mDeferHidingClient)) {
             return;
         }
+        if (DEBUG_APP_TRANSITIONS) Slog.v(TAG_WM, "setClientHidden: " + this
+                + " clientHidden=" + hideClient + " Callers=" + Debug.getCallers(5));
         mClientHidden = hideClient;
         sendAppVisibilityToClients();
     }
@@ -469,7 +471,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             // never gets updated.
             // If we're becoming invisible, update the client visibility if we are not running an
             // animation. Otherwise, we'll update client visibility in onAnimationFinished.
-            if (visible || !delayed) {
+            if (visible || !isReallyAnimating()) {
                 setClientHidden(!visible);
             }
 
@@ -1668,6 +1670,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             }
             if (adapter != null) {
                 startAnimation(getPendingTransaction(), adapter, !isVisible());
+                if (adapter.getShowWallpaper()) {
+                    mDisplayContent.pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
+                }
             }
         } else {
             cancelAnimation();
@@ -1793,7 +1798,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 "AppWindowToken");
 
         clearThumbnail();
-        setClientHidden(isHidden());
+        setClientHidden(hiddenRequested);
 
         if (mService.mInputMethodTarget != null && mService.mInputMethodTarget.mAppToken == this) {
             getDisplayContent().computeImeTarget(true /* updateImeTarget */);

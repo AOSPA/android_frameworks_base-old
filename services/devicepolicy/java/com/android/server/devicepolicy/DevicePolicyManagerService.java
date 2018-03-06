@@ -50,6 +50,8 @@ import static android.app.admin.DevicePolicyManager.ID_TYPE_IMEI;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_MEID;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_SERIAL;
 import static android.app.admin.DevicePolicyManager.LEAVE_ALL_SYSTEM_APPS_ENABLED;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_HOME;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_OVERVIEW;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_COMPLEX;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED;
 import static android.app.admin.DevicePolicyManager.PROFILE_KEYGUARD_FEATURES_AFFECT_OWNER;
@@ -9817,6 +9819,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @Override
     public void setLockTaskFeatures(ComponentName who, int flags) {
         Preconditions.checkNotNull(who, "ComponentName is null");
+
+        // Throw if Overview is used without Home.
+        boolean hasHome = (flags & LOCK_TASK_FEATURE_HOME) != 0;
+        boolean hasOverview = (flags & LOCK_TASK_FEATURE_OVERVIEW) != 0;
+        Preconditions.checkArgument(hasHome || !hasOverview,
+                "Cannot use LOCK_TASK_FEATURE_OVERVIEW without LOCK_TASK_FEATURE_HOME");
+
         final int userHandle = mInjector.userHandleGetCallingUserId();
         synchronized (this) {
             enforceCanCallLockTaskLocked(who);
@@ -10410,7 +10419,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         public CharSequence getPrintingDisabledReasonForUser(@UserIdInt int userId) {
             synchronized (DevicePolicyManagerService.this) {
                 DevicePolicyData policy = getUserData(userId);
-                if (!mUserManager.hasUserRestriction(UserManager.DISALLOW_PRINTING)) {
+                if (!mUserManager.hasUserRestriction(UserManager.DISALLOW_PRINTING,
+                        UserHandle.of(userId))) {
                     Log.e(LOG_TAG, "printing is enabled");
                     return null;
                 }

@@ -50,6 +50,7 @@ import static android.view.WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHA
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
@@ -1140,7 +1141,18 @@ public class WindowManagerService extends IWindowManager.Stub
                 throw new IllegalStateException("Display has not been initialialized");
             }
 
-            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+
+            // Adding a window is an exception where the WindowManagerService can create the
+            // display instead of waiting for the ActivityManagerService to drive creation.
+            if (displayContent == null) {
+                final Display display = mDisplayManager.getDisplay(displayId);
+
+                if (display != null) {
+                    displayContent = mRoot.createDisplayContent(display, null /* controller */);
+                }
+            }
+
             if (displayContent == null) {
                 Slog.w(TAG_WM, "Attempted to add window to a display that does not exist: "
                         + displayId + ".  Aborting.");
@@ -1911,6 +1923,11 @@ public class WindowManagerService extends IWindowManager.Stub
                     // No move or resize, but the controller checks for title changes as well
                     mAccessibilityController.onSomeWindowResizedOrMovedLocked();
                 }
+
+                if ((flagChanges & PRIVATE_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS) != 0) {
+                    updateNonSystemOverlayWindowsVisibilityIfNeeded(
+                            win, win.mWinAnimator.getShown());
+                }
             }
 
             if (DEBUG_LAYOUT) Slog.v(TAG_WM, "Relayout " + win + ": viewVisibility=" + viewVisibility
@@ -1958,15 +1975,36 @@ public class WindowManagerService extends IWindowManager.Stub
             win.setDisplayLayoutNeeded();
             win.mGivenInsetsPending = (flags & WindowManagerGlobal.RELAYOUT_INSETS_PENDING) != 0;
 
-            // We may be deferring layout passes at the moment, but since the client is interested
-            // in the new out values right now we need to force a layout.
-            mWindowPlacerLocked.performSurfacePlacement(true /* force */);
-
             // We should only relayout if the view is visible, it is a starting window, or the
             // associated appToken is not hidden.
             final boolean shouldRelayout = viewVisibility == View.VISIBLE &&
-                (win.mAppToken == null || win.mAttrs.type == TYPE_APPLICATION_STARTING
-                    || !win.mAppToken.isClientHidden());
+                    (win.mAppToken == null || win.mAttrs.type == TYPE_APPLICATION_STARTING
+                            || !win.mAppToken.isClientHidden());
+
+            // If we are not currently running the exit animation, we need to see about starting
+            // one.
+            // We don't want to animate visibility of windows which are pending replacement.
+            // In the case of activity relaunch child windows could request visibility changes as
+            // they are detached from the main application window during the tear down process.
+            // If we satisfied these visibility changes though, we would cause a visual glitch
+            // hiding the window before it's replacement was available. So we just do nothing on
+            // our side.
+            // This must be called before the call to performSurfacePlacement.
+            if (!shouldRelayout && winAnimator.hasSurface() && !win.mAnimatingExit) {
+                if (DEBUG_VISIBILITY) {
+                    Slog.i(TAG_WM,
+                            "Relayout invis " + win + ": mAnimatingExit=" + win.mAnimatingExit);
+                }
+                result |= RELAYOUT_RES_SURFACE_CHANGED;
+                if (!win.mWillReplaceWindow) {
+                    focusMayChange = tryStartExitingAnimation(win, winAnimator, isDefaultDisplay,
+                            focusMayChange);
+                }
+            }
+
+            // We may be deferring layout passes at the moment, but since the client is interested
+            // in the new out values right now we need to force a layout.
+            mWindowPlacerLocked.performSurfacePlacement(true /* force */);
 
             if (shouldRelayout) {
                 Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "relayoutWindow: viewVisibility_1");
@@ -1999,24 +2037,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 winAnimator.mEnterAnimationPending = false;
                 winAnimator.mEnteringAnimation = false;
 
-                if (winAnimator.hasSurface() && !win.mAnimatingExit) {
-                    if (DEBUG_VISIBILITY) Slog.i(TAG_WM, "Relayout invis " + win
-                            + ": mAnimatingExit=" + win.mAnimatingExit);
-                    // If we are not currently running the exit animation, we
-                    // need to see about starting one.
-                    // We don't want to animate visibility of windows which are pending
-                    // replacement. In the case of activity relaunch child windows
-                    // could request visibility changes as they are detached from the main
-                    // application window during the tear down process. If we satisfied
-                    // these visibility changes though, we would cause a visual glitch
-                    // hiding the window before it's replacement was available.
-                    // So we just do nothing on our side.
-                    if (!win.mWillReplaceWindow) {
-                        focusMayChange = tryStartExitingAnimation(
-                                win, winAnimator, isDefaultDisplay, focusMayChange);
-                    }
-                    result |= RELAYOUT_RES_SURFACE_CHANGED;
-                }
                 if (viewVisibility == View.VISIBLE && winAnimator.hasSurface()) {
                     // We already told the client to go invisible, but the message may not be
                     // handled yet, or it might want to draw a last frame. If we already have a
@@ -2113,6 +2133,10 @@ public class WindowManagerService extends IWindowManager.Stub
             }
 
             win.setLastReportedMergedConfiguration(mergedConfiguration);
+
+            // Update the last inset values here because the values are sent back to the client.
+            // The last inset values represent the last client state.
+            win.updateLastInsetValues();
 
             outFrame.set(win.mCompatFrame);
             outOverscanInsets.set(win.mOverscanInsets);
@@ -6908,7 +6932,8 @@ public class WindowManagerService extends IWindowManager.Stub
         final DisplayContent dc = mRoot.getDisplayContent(displayId);
         if (dc != null) {
             final DisplayInfo di = dc.getDisplayInfo();
-            mPolicy.getStableInsetsLw(di.rotation, di.logicalWidth, di.logicalHeight, outInsets);
+            mPolicy.getStableInsetsLw(di.rotation, di.logicalWidth, di.logicalHeight,
+                    di.displayCutout, outInsets);
         }
     }
 
@@ -7420,7 +7445,8 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     void updateNonSystemOverlayWindowsVisibilityIfNeeded(WindowState win, boolean surfaceShown) {
-        if (!win.hideNonSystemOverlayWindowsWhenVisible()) {
+        if (!win.hideNonSystemOverlayWindowsWhenVisible()
+                && !mHidingNonSystemOverlayWindows.contains(win)) {
             return;
         }
         final boolean systemAlertWindowsHidden = !mHidingNonSystemOverlayWindows.isEmpty();

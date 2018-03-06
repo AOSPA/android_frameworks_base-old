@@ -37,6 +37,7 @@ import android.widget.LinearLayout;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -46,7 +47,7 @@ import org.junit.runner.RunWith;
 @SmallTest
 public class SmartReplyViewTest extends SysuiTestCase {
     private static final String TEST_RESULT_KEY = "test_result_key";
-    private static final String TEST_ACTION = "com.android.ACTION";
+    private static final String TEST_ACTION = "com.android.SMART_REPLY_VIEW_ACTION";
 
     private static final String[] TEST_CHOICES = new String[]{"Hello", "What's up?", "I'm here"};
 
@@ -74,6 +75,11 @@ public class SmartReplyViewTest extends SysuiTestCase {
         mDoubleLinePaddingHorizontal = res.getDimensionPixelSize(
                 R.dimen.smart_reply_button_padding_horizontal_double_line);
         mSpacing = res.getDimensionPixelSize(R.dimen.smart_reply_button_spacing);
+    }
+
+    @After
+    public void tearDown() {
+        mContext.unregisterReceiver(mReceiver);
     }
 
     @Test

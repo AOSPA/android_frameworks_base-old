@@ -109,7 +109,6 @@
   <java-symbol type="id" name="no_permissions" />
   <java-symbol type="id" name="numberpicker_input" />
   <java-symbol type="id" name="old_app_action" />
-  <java-symbol type="id" name="old_app_description" />
   <java-symbol type="id" name="old_app_icon" />
   <java-symbol type="id" name="overlay_display_window_texture" />
   <java-symbol type="id" name="overlay_display_window_title" />
@@ -453,6 +452,7 @@
   <java-symbol type="integer" name="config_multiuserMaximumUsers" />
   <java-symbol type="integer" name="config_multiuserMaxRunningUsers" />
   <java-symbol type="integer" name="config_safe_media_volume_index" />
+  <java-symbol type="integer" name="config_safe_media_volume_usb_mB" />
   <java-symbol type="integer" name="config_mobile_mtu" />
   <java-symbol type="array"   name="config_mobile_tcp_buffers" />
   <java-symbol type="integer" name="config_volte_replacement_rat"/>
@@ -808,7 +808,6 @@
   <java-symbol type="string" name="number_picker_increment_scroll_action" />
   <java-symbol type="string" name="number_picker_increment_scroll_mode" />
   <java-symbol type="string" name="old_app_action" />
-  <java-symbol type="string" name="old_app_description" />
   <java-symbol type="string" name="older" />
   <java-symbol type="string" name="open_permission_deny" />
   <java-symbol type="string" name="orgTypeCustom" />
@@ -1222,6 +1221,7 @@
   <java-symbol type="array" name="config_disabledUntilUsedPreinstalledCarrierApps" />
   <java-symbol type="array" name="config_callBarringMMI" />
   <java-symbol type="array" name="config_globalActionsList" />
+  <java-symbol type="array" name="config_telephonyEuiccDeviceCapabilities" />
   <java-symbol type="array" name="config_telephonyHardware" />
   <java-symbol type="array" name="config_keySystemUuidMapping" />
   <java-symbol type="array" name="config_gpsParameters" />
@@ -1970,10 +1970,6 @@
   <java-symbol type="string" name="config_wimaxServiceClassname" />
   <java-symbol type="string" name="config_wimaxServiceJarLocation" />
   <java-symbol type="string" name="config_wimaxStateTrackerClassname" />
-  <java-symbol type="string" name="data_usage_3g_limit_snoozed_title" />
-  <java-symbol type="string" name="data_usage_3g_limit_title" />
-  <java-symbol type="string" name="data_usage_4g_limit_snoozed_title" />
-  <java-symbol type="string" name="data_usage_4g_limit_title" />
   <java-symbol type="string" name="data_usage_limit_body" />
   <java-symbol type="string" name="data_usage_limit_snoozed_body" />
   <java-symbol type="string" name="data_usage_mobile_limit_snoozed_title" />
@@ -1986,6 +1982,7 @@
   <java-symbol type="string" name="data_usage_wifi_limit_title" />
   <java-symbol type="string" name="data_usage_rapid_title" />
   <java-symbol type="string" name="data_usage_rapid_body" />
+  <java-symbol type="string" name="data_usage_rapid_app_body" />
   <java-symbol type="string" name="default_wallpaper_component" />
   <java-symbol type="string" name="device_storage_monitor_notification_channel" />
   <java-symbol type="string" name="dlg_ok" />
@@ -2646,7 +2643,7 @@
   <java-symbol type="dimen" name="notification_content_margin_end" />
   <java-symbol type="dimen" name="notification_content_picture_margin" />
   <java-symbol type="dimen" name="notification_content_margin_top" />
-  <java-symbol type="dimen" name="notification_content_margin_bottom" />
+  <java-symbol type="dimen" name="notification_content_margin" />
   <java-symbol type="dimen" name="notification_header_background_height" />
   <java-symbol type="dimen" name="notification_header_height" />
   <java-symbol type="dimen" name="notification_header_expand_icon_size" />
@@ -2776,6 +2773,7 @@
 
   <java-symbol type="string" name="install_carrier_app_notification_title" />
   <java-symbol type="string" name="install_carrier_app_notification_text" />
+  <java-symbol type="string" name="install_carrier_app_notification_text_app_name" />
   <java-symbol type="string" name="install_carrier_app_notification_button" />
   <java-symbol type="string" name="carrier_app_notification_title" />
   <java-symbol type="string" name="carrier_app_notification_text" />
@@ -3111,7 +3109,7 @@
   <java-symbol type="string" name="notification_channel_heavy_weight_app" />
   <java-symbol type="string" name="notification_channel_system_changes" />
   <java-symbol type="string" name="config_defaultAutofillService" />
-  <java-symbol type="string" name="config_defaultTextClassifierService" />
+  <java-symbol type="string" name="config_defaultTextClassifierPackage" />
 
   <java-symbol type="string" name="notification_channel_foreground_service" />
   <java-symbol type="string" name="foreground_service_app_in_background" />
@@ -3233,6 +3231,11 @@
   <java-symbol type="string" name="unsupported_compile_sdk_check_update" />
 
   <java-symbol type="string" name="battery_saver_warning_title" />
+  <java-symbol type="string" name="keyguard_accessibility_pattern_unlock" />
+  <java-symbol type="string" name="keyguard_accessibility_pin_unlock" />
+  <java-symbol type="string" name="keyguard_accessibility_sim_pin_unlock" />
+  <java-symbol type="string" name="keyguard_accessibility_sim_puk_unlock" />
+  <java-symbol type="string" name="keyguard_accessibility_password_unlock" />
 
   <java-symbol type="string" name="global_action_logout" />
   <java-symbol type="string" name="config_mainBuiltInDisplayCutout" />

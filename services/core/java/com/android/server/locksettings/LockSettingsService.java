@@ -80,6 +80,7 @@ import android.security.keystore.KeyProperties;
 import android.security.keystore.KeyProtection;
 import android.security.keystore.UserNotAuthenticatedException;
 import android.security.keystore.recovery.KeyChainProtectionParams;
+import android.security.keystore.recovery.RecoveryCertPath;
 import android.security.keystore.recovery.WrappedApplicationKey;
 import android.security.keystore.recovery.KeyChainSnapshot;
 import android.service.gatekeeper.GateKeeperResponse;
@@ -2001,13 +2002,12 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     @Override
-    public void setRecoveryStatus(@NonNull String packageName, @Nullable String[] aliases,
-            int status) throws RemoteException {
-        mRecoverableKeyStoreManager.setRecoveryStatus(packageName, aliases, status);
+    public void setRecoveryStatus(String alias, int status) throws RemoteException {
+        mRecoverableKeyStoreManager.setRecoveryStatus(alias, status);
     }
 
-    public Map getRecoveryStatus(@Nullable String packageName) throws RemoteException {
-        return mRecoverableKeyStoreManager.getRecoveryStatus(packageName);
+    public Map getRecoveryStatus() throws RemoteException {
+        return mRecoverableKeyStoreManager.getRecoveryStatus();
     }
 
     @Override
@@ -2042,6 +2042,15 @@ public class LockSettingsService extends ILockSettings.Stub {
                 vaultParams, vaultChallenge, secrets);
     }
 
+    @Override
+    public byte[] startRecoverySessionWithCertPath(@NonNull String sessionId,
+            @NonNull RecoveryCertPath verifierCertPath, @NonNull byte[] vaultParams,
+            @NonNull byte[] vaultChallenge, @NonNull List<KeyChainProtectionParams> secrets)
+            throws RemoteException {
+        return mRecoverableKeyStoreManager.startRecoverySessionWithCertPath(
+                sessionId, verifierCertPath, vaultParams, vaultChallenge, secrets);
+    }
+
     public void closeSession(@NonNull String sessionId) throws RemoteException {
         mRecoverableKeyStoreManager.closeSession(sessionId);
     }
@@ -2065,8 +2074,8 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     @Override
-    public String generateKey(@NonNull String alias, byte[] account) throws RemoteException {
-        return mRecoverableKeyStoreManager.generateKey(alias, account);
+    public String generateKey(@NonNull String alias) throws RemoteException {
+        return mRecoverableKeyStoreManager.generateKey(alias);
     }
 
     @Override

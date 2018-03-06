@@ -493,7 +493,7 @@ status_t StatsService::cmd_dump_report(FILE* out, FILE* err, const Vector<String
         }
         if (good) {
             vector<uint8_t> data;
-            mProcessor->onDumpReport(ConfigKey(uid, StrToInt64(name)), time(nullptr) * NS_PER_SEC,
+            mProcessor->onDumpReport(ConfigKey(uid, StrToInt64(name)), getElapsedRealtimeNs(),
                                      &data);
             // TODO: print the returned StatsLogReport to file instead of printing to logcat.
             if (proto) {
@@ -659,6 +659,7 @@ Status StatsService::informOnePackageRemoved(const String16& app, int32_t uid) {
                                          "Only system uid can call informOnePackageRemoved");
     }
     mUidMap->removeApp(app, uid);
+    mConfigManager->RemoveConfigs(uid);
     return Status::ok();
 }
 
@@ -785,7 +786,7 @@ Status StatsService::getData(int64_t key, vector<uint8_t>* output) {
     VLOG("StatsService::getData with Pid %i, Uid %i", ipc->getCallingPid(), ipc->getCallingUid());
     if (checkCallingPermission(String16(kPermissionDump))) {
         ConfigKey configKey(ipc->getCallingUid(), key);
-        mProcessor->onDumpReport(configKey, time(nullptr) * NS_PER_SEC, output);
+        mProcessor->onDumpReport(configKey, getElapsedRealtimeNs(), output);
         return Status::ok();
     } else {
         return Status::fromExceptionCode(binder::Status::EX_SECURITY);

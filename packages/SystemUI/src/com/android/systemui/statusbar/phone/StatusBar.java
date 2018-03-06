@@ -2804,6 +2804,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                     public void setRemoteInputActive(NotificationData.Entry entry,
                             boolean remoteInputActive) {
                         mHeadsUpManager.setRemoteInputActive(entry, remoteInputActive);
+                        entry.row.updateMaxHeights();
                     }
                     public void lockScrollTo(NotificationData.Entry entry) {
                         mStackScroller.lockScrollTo(entry.row);
@@ -4519,6 +4520,9 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
             if (isScreenTurningOnOrOn()) {
                 if (DEBUG_CAMERA_LIFT) Slog.d(TAG, "Launching camera");
+                if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
+                    mStatusBarKeyguardViewManager.hideBouncer(false /* destroyView */);
+                }
                 mNotificationPanel.launchCamera(mDeviceInteractive /* animate */, source);
                 updateScrimController();
             } else {
@@ -4981,7 +4985,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                                     notificationKey)) {
                                 // Show work challenge, do not run PendingIntent and
                                 // remove notification
-                                collapsePanel();
+                                collapseOnMainThread();
                                 return;
                             }
                         }
@@ -5022,11 +5026,7 @@ public class StatusBar extends SystemUI implements DemoMode,
                     }
                 }
                 if (shouldCollapse()) {
-                    if (Looper.getMainLooper().isCurrentThread()) {
-                        collapsePanel();
-                    } else {
-                        mStackScroller.post(this::collapsePanel);
-                    }
+                    collapseOnMainThread();
                 }
 
                 try {
@@ -5052,6 +5052,14 @@ public class StatusBar extends SystemUI implements DemoMode,
 
             return !mNotificationPanel.isFullyCollapsed();
         }, afterKeyguardGone);
+    }
+
+    private void collapseOnMainThread() {
+        if (Looper.getMainLooper().isCurrentThread()) {
+            collapsePanel();
+        } else {
+            mStackScroller.post(this::collapsePanel);
+        }
     }
 
     private boolean shouldCollapse() {
