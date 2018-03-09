@@ -350,7 +350,7 @@ public abstract class PanelView extends FrameLayout {
                     onTrackingStarted();
                 }
                 if (isFullyCollapsed() && !mHeadsUpManager.hasPinnedHeadsUp()) {
-                    startOpening();
+                    startOpening(event);
                 }
                 break;
 
@@ -425,7 +425,7 @@ public abstract class PanelView extends FrameLayout {
         return !mGestureWaitForTouchSlop || mTracking;
     }
 
-    private void startOpening() {;
+    private void startOpening(MotionEvent event) {
         runPeekAnimation(INITIAL_OPENING_PEEK_DURATION, getOpeningHeight(),
                 false /* collapseWhenFinished */);
         notifyBarPanelExpansionChanged();
@@ -433,6 +433,18 @@ public abstract class PanelView extends FrameLayout {
             AsyncTask.execute(() ->
                     mVibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_TICK, false)));
         }
+
+        //TODO: keyguard opens QS a different way; log that too?
+
+        // Log the position of the swipe that opened the panel
+        float width = mStatusBar.getDisplayWidth();
+        float height = mStatusBar.getDisplayHeight();
+        int rot = mStatusBar.getRotation();
+
+        mLockscreenGestureLogger.writeAtFractionalPosition(MetricsEvent.ACTION_PANEL_VIEW_EXPAND,
+                (int) (event.getX() / width * 100),
+                (int) (event.getY() / height * 100),
+                rot);
     }
 
     protected abstract float getOpeningHeight();

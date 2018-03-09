@@ -232,14 +232,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
         public Rect getFrameLw();
 
         /**
-         * Retrieve the current position of the window that is actually shown.
-         * Must be called with the window manager lock held.
-         *
-         * @return Point The point holding the shown window position.
-         */
-        public Point getShownPositionLw();
-
-        /**
          * Retrieve the frame of the display that this window was last
          * laid out in.  Must be called with the
          * window manager lock held.
@@ -1537,6 +1529,11 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * Called by System UI to notify of changes to the visibility of PIP.
      */
     void setPipVisibilityLw(boolean visible);
+
+    /**
+     * Called by System UI to enable or disable haptic feedback on the navigation bar buttons.
+     */
+    void setNavBarVirtualKeyHapticFeedbackEnabledLw(boolean enabled);
 
     /**
      * Specifies whether there is an on-screen navigation bar separate from the status bar.

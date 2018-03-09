@@ -36,6 +36,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
 import android.content.pm.UserInfo;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -691,14 +692,13 @@ public class UserManager {
     /**
      * Specifies that system error dialogs for crashed or unresponsive apps should not be shown.
      * In this case, the system will force-stop the app as if the user chooses the "close app"
-     * option on the UI. No feedback report will be collected as there is no way for the user to
-     * provide explicit consent.
+     * option on the UI. A feedback report isn't collected as there is no way for the user to
+     * provide explicit consent. The default value is <code>false</code>.
      *
-     * When this user restriction is set by device owners, it's applied to all users; when it's set
-     * by profile owners, it's only applied to the relevant profiles.
-     * The default value is <code>false</code>.
+     * <p>When this user restriction is set by device owners, it's applied to all users. When set by
+     * the profile owner of the primary user or a secondary user, the restriction affects only the
+     * calling user. This user restriction has no effect on managed profiles.
      *
-     * <p>This user restriction has no effect on managed profiles.
      * <p>Key for user restrictions.
      * <p>Type: Boolean
      * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
@@ -913,6 +913,9 @@ public class UserManager {
      * Specifies if user switching is blocked on the current user.
      *
      * <p> This restriction can only be set by the device owner, it will be applied to all users.
+     * Device owner can still switch user via
+     * {@link DevicePolicyManager#switchUser(ComponentName, UserHandle)} when this restriction is
+     * set.
      *
      * <p>The default value is <code>false</code>.
      *
@@ -1038,6 +1041,85 @@ public class UserManager {
      * {@link #createUserCreationIntent(String, String, String, PersistableBundle)}.
      */
     public static final int USER_CREATION_FAILED_NO_MORE_USERS = Activity.RESULT_FIRST_USER + 1;
+
+    /**
+     * Indicates user operation is successful.
+     */
+    public static final int USER_OPERATION_SUCCESS = 0;
+
+    /**
+     * Indicates user operation failed for unknown reason.
+     */
+    public static final int USER_OPERATION_ERROR_UNKNOWN = 1;
+
+    /**
+     * Indicates user operation failed because target user is a managed profile.
+     */
+    public static final int USER_OPERATION_ERROR_MANAGED_PROFILE = 2;
+
+    /**
+     * Indicates user operation failed because maximum running user limit has been reached.
+     */
+    public static final int USER_OPERATION_ERROR_MAX_RUNNING_USERS = 3;
+
+    /**
+     * Indicates user operation failed because the target user is in the foreground.
+     */
+    public static final int USER_OPERATION_ERROR_CURRENT_USER = 4;
+
+    /**
+     * Indicates user operation failed because device has low data storage.
+     */
+    public static final int USER_OPERATION_ERROR_LOW_STORAGE = 5;
+
+    /**
+     * Indicates user operation failed because maximum user limit has been reached.
+     */
+    public static final int USER_OPERATION_ERROR_MAX_USERS = 6;
+
+    /**
+     * Result returned from various user operations.
+     *
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = { "USER_OPERATION_" }, value = {
+            USER_OPERATION_SUCCESS,
+            USER_OPERATION_ERROR_UNKNOWN,
+            USER_OPERATION_ERROR_MANAGED_PROFILE,
+            USER_OPERATION_ERROR_MAX_RUNNING_USERS,
+            USER_OPERATION_ERROR_CURRENT_USER,
+            USER_OPERATION_ERROR_LOW_STORAGE,
+            USER_OPERATION_ERROR_MAX_USERS
+    })
+    public @interface UserOperationResult {}
+
+    /**
+     * Thrown to indicate user operation failed.
+     */
+    public static class UserOperationException extends RuntimeException {
+        private final @UserOperationResult int mUserOperationResult;
+
+        /**
+         * Constructs a UserOperationException with specific result code.
+         *
+         * @param message the detail message
+         * @param userOperationResult the result code
+         * @hide
+         */
+        public UserOperationException(String message,
+                @UserOperationResult int userOperationResult) {
+            super(message);
+            mUserOperationResult = userOperationResult;
+        }
+
+        /**
+         * Returns the operation result code.
+         */
+        public @UserOperationResult int getUserOperationResult() {
+            return mUserOperationResult;
+        }
+    }
 
     /** @hide */
     public static UserManager get(Context context) {
@@ -2530,8 +2612,13 @@ public class UserManager {
     public static int getMaxSupportedUsers() {
         // Don't allow multiple users on certain builds
         if (android.os.Build.ID.startsWith("JVP")) return 1;
-        // Svelte devices don't get multi-user.
-        if (ActivityManager.isLowRamDeviceStatic()) return 1;
+        if (ActivityManager.isLowRamDeviceStatic()) {
+            // Low-ram devices are Svelte. Most of the time they don't get multi-user.
+            if ((Resources.getSystem().getConfiguration().uiMode & Configuration.UI_MODE_TYPE_MASK)
+                    != Configuration.UI_MODE_TYPE_TELEVISION) {
+                return 1;
+            }
+        }
         return SystemProperties.getInt("fw.max_users",
                 Resources.getSystem().getInteger(R.integer.config_multiuserMaximumUsers));
     }

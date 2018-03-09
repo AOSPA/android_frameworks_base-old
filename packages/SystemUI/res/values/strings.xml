@@ -468,7 +468,7 @@
     <string name="accessibility_casting">@string/quick_settings_casting</string>
 
     <!-- Content description of the work mode icon in the notification panel for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
-    <string name="accessibility_work_mode">@string/quick_settings_work_mode_on_label</string>
+    <string name="accessibility_work_mode">@string/quick_settings_work_mode_label</string>
 
     <!-- Content description to tell the user that this button will remove an application from recents -->
     <string name="accessibility_recents_item_will_be_dismissed">Dismiss <xliff:g id="app" example="Calendar">%s</xliff:g>.</string>
@@ -694,7 +694,8 @@
     <string name="quick_settings_bluetooth_secondary_label_headset">Headset</string>
     <!-- QuickSettings: Bluetooth secondary label for an input/IO device being connected [CHAR LIMIT=20]-->
     <string name="quick_settings_bluetooth_secondary_label_input">Input</string>
-
+    <!-- QuickSettings: Bluetooth secondary label shown when bluetooth is being enabled [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_bluetooth_secondary_label_transient">Turning on&#8230;</string>
     <!-- QuickSettings: Brightness [CHAR LIMIT=NONE] -->
     <string name="quick_settings_brightness_label">Brightness</string>
     <!-- QuickSettings: Rotation Unlocked [CHAR LIMIT=NONE] -->
@@ -743,8 +744,8 @@
     <string name="quick_settings_wifi_on_label">Wi-Fi On</string>
     <!-- QuickSettings: Wifi detail panel, text when there are no items [CHAR LIMIT=NONE] -->
     <string name="quick_settings_wifi_detail_empty_text">No Wi-Fi networks available</string>
-    <!-- QuickSettings: Alarm title [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_alarm_title">Alarm</string>
+    <!-- QuickSettings: Wifi secondary label shown when the wifi is being enabled [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_wifi_secondary_label_transient">Turning on&#8230;</string>
     <!-- QuickSettings: Cast title [CHAR LIMIT=NONE] -->
     <string name="quick_settings_cast_title">Cast</string>
     <!-- QuickSettings: Cast detail panel, status text when casting [CHAR LIMIT=NONE] -->
@@ -778,7 +779,7 @@
     <!-- QuickSettings: Hotspot. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_hotspot_label">Hotspot</string>
     <!-- QuickSettings: Hotspot. Secondary label shown when the hotspot is being enabled [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_hotspot_secondary_label_transient">Turning on...</string>
+    <string name="quick_settings_hotspot_secondary_label_transient">Turning on&#8230;</string>
     <!-- QuickSettings: Hotspot: Secondary label for how many devices are connected to the hotspot [CHAR LIMIT=NONE] -->
     <plurals name="quick_settings_hotspot_secondary_label_num_devices">
         <item quantity="one">%d device</item>
@@ -806,10 +807,7 @@
     the top of their phone's screen. This is a label for a toggle to turn the work profile on and
     off. "Work profile" means a separate profile on a user's phone that's specifically for their
     work apps and managed by their company. "Work" is used as an adjective. [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_work_mode_on_label">Work profile</string>
-    <!-- QuickSettings: This is a label for a toggle to turn the work profile on and off and this is
-         shown when work profile is off. [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_work_mode_off_label">Notifications &amp; apps are off</string>
+    <string name="quick_settings_work_mode_label">Work profile</string>
     <!-- QuickSettings: Label for the toggle to activate Night display (renamed "Night Light" with title caps). [CHAR LIMIT=20] -->
     <string name="quick_settings_night_display_label">Night Light</string>
     <!-- QuickSettings: Secondary text for when the Night Light will be enabled at sunset. [CHAR LIMIT=20] -->
@@ -949,13 +947,13 @@
     <string name="interruption_level_alarms_twoline">Alarms\nonly</string>
 
     <!-- Indication on the keyguard that is shown when the device is charging. [CHAR LIMIT=40]-->
-    <string name="keyguard_indication_charging_time">Charging (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%s</xliff:g> until full)</string>
+    <string name="keyguard_indication_charging_time"><xliff:g id="percentage">%2$s</xliff:g> • Charging (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%s</xliff:g> until full)</string>
 
     <!-- Indication on the keyguard that is shown when the device is charging rapidly. Should match keyguard_plugged_in_charging_fast [CHAR LIMIT=40]-->
-    <string name="keyguard_indication_charging_time_fast">Charging rapidly (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%s</xliff:g> until full)</string>
+    <string name="keyguard_indication_charging_time_fast"><xliff:g id="percentage">%2$s</xliff:g> • Charging rapidly (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%s</xliff:g> until full)</string>
 
     <!-- Indication on the keyguard that is shown when the device is charging slowly. Should match keyguard_plugged_in_charging_slowly [CHAR LIMIT=40]-->
-    <string name="keyguard_indication_charging_time_slowly">Charging slowly (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%s</xliff:g> until full)</string>
+    <string name="keyguard_indication_charging_time_slowly"><xliff:g id="percentage">%2$s</xliff:g> • Charging slowly (<xliff:g id="charging_time_left" example="4 hours and 2 minutes">%s</xliff:g> until full)</string>
 
     <!-- Related to user switcher --><skip/>
 
@@ -2141,10 +2139,14 @@
     <!-- Option to grant the slice permission request on the screen [CHAR LIMIT=15] -->
     <string name="slice_permission_deny">Deny</string>
 
-
     <!-- Carrier Name -->
     <string name="China_Mobile">China Mobile</string>
     <string name="China_Unicom">China Unicom</string>
     <string name="China_Telecom">China Telecom</string>
     <string name="China_Mobile_HD">China Mobile (HD)</string>
+
+    <!-- List of packages for which we don't want to show recents onboarding, add into overlay as needed. -->
+    <string-array name="recents_onboarding_blacklisted_packages" translatable="false">
+    </string-array>
+
 </resources>

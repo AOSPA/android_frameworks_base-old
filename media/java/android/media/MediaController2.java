@@ -51,9 +51,9 @@ import java.util.concurrent.Executor;
  * <p>
  * When controlling {@link MediaSessionService2}, the {@link MediaController2} would be
  * available only if the session service allows this controller by
- * {@link MediaSession2.SessionCallback#onConnect(ControllerInfo)} for the service. Wait
- * {@link ControllerCallback#onConnected(CommandGroup)} or
- * {@link ControllerCallback#onDisconnected()} for the result.
+ * {@link MediaSession2.SessionCallback#onConnect(MediaSession2, ControllerInfo)} for the service.
+ * Wait {@link ControllerCallback#onConnected(MediaController2, CommandGroup)} or
+ * {@link ControllerCallback#onDisconnected(MediaController2)} for the result.
  * <p>
  * A controller can be created through token from {@link MediaSessionManager} if you hold the
  * signature|privileged permission "android.permission.MEDIA_CONTENT_CONTROL" permission or are
@@ -75,9 +75,11 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
          * Called when the controller is successfully connected to the session. The controller
          * becomes available afterwards.
          *
+         * @param controller the controller for this event
          * @param allowedCommands commands that's allowed by the session.
          */
-        public void onConnected(CommandGroup allowedCommands) { }
+        public void onConnected(@NonNull MediaController2 controller,
+                @NonNull CommandGroup allowedCommands) { }
 
         /**
          * Called when the session refuses the controller or the controller is disconnected from
@@ -86,41 +88,52 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
          * <p>
          * It will be also called after the {@link #close()}, so you can put clean up code here.
          * You don't need to call {@link #close()} after this.
+         *
+         * @param controller the controller for this event
+         * @param controller controller for this event
          */
-        public void onDisconnected() { }
+        public void onDisconnected(@NonNull MediaController2 controller) { }
 
         /**
          * Called when the session set the custom layout through the
          * {@link MediaSession2#setCustomLayout(ControllerInfo, List)}.
          * <p>
-         * Can be called before {@link #onConnected(CommandGroup)} is called.
+         * Can be called before {@link #onConnected(MediaController2, CommandGroup)} is called.
          *
+         * @param controller the controller for this event
          * @param layout
          */
-        public void onCustomLayoutChanged(List<CommandButton> layout) { }
+        public void onCustomLayoutChanged(@NonNull MediaController2 controller,
+                @NonNull List<CommandButton> layout) { }
 
         /**
          * Called when the session has changed anything related with the {@link PlaybackInfo}.
          *
+         * @param controller the controller for this event
          * @param info new playback info
          */
-        public void onPlaybackInfoChanged(PlaybackInfo info) { }
+        public void onPlaybackInfoChanged(@NonNull MediaController2 controller,
+                @NonNull PlaybackInfo info) { }
 
         /**
          * Called when the allowed commands are changed by session.
          *
+         * @param controller the controller for this event
          * @param commands newly allowed commands
          */
-        public void onAllowedCommandsChanged(CommandGroup commands) { }
+        public void onAllowedCommandsChanged(@NonNull MediaController2 controller,
+                @NonNull CommandGroup commands) { }
 
         /**
          * Called when the session sent a custom command.
          *
+         * @param controller the controller for this event
          * @param command
          * @param args
          * @param receiver
          */
-        public void onCustomCommand(Command command, @Nullable Bundle args,
+        public void onCustomCommand(@NonNull MediaController2 controller,
+                @NonNull Command command, @Nullable Bundle args,
                 @Nullable ResultReceiver receiver) { }
 
         /**
@@ -129,70 +142,87 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
          * When it's called, you should invalidate previous playback information such as position,
          * player state, current item, etc.
          *
+         * @param controller the controller for this event
          * @param playlist A new playlist set by the session.
          */
         // TODO(jaewan): Enhance doc
-        public void onPlaylistChanged(@NonNull List<MediaItem2> playlist) { }
+        public void onPlaylistChanged(@NonNull MediaController2 controller,
+                @NonNull List<MediaItem2> playlist) { }
 
         /**
          * Called when the playback state is changed.
          *
+         * @param controller the controller for this event
          * @param state latest playback state
          * @hide
          */
         // TODo(jaewan): Remove
-        public void onPlaybackStateChanged(@NonNull PlaybackState2 state) { }
+        public void onPlaybackStateChanged(@NonNull MediaController2 controller,
+                @NonNull PlaybackState2 state) { }
 
         /**
          * Called when the player state is changed.
          *
+         * @param controller the controller for this event
          * @param state
          */
-        public void onPlayerStateChanged(int state) { }
+        public void onPlayerStateChanged(@NonNull MediaController2 controller, int state) { }
 
         /**
          * Called when the player's position is changed
          *
-         * @param updateTimeMs timestamp when the position information is sent from the session
+         * @param controller the controller for this event
+         * @param eventTimeMs timestamp when the position information is sent from the session
          * @param positionMs position in millis
          */
-        public void onPositionUpdated(long updateTimeMs, long positionMs) { }
+        public void onPositionChanged(@NonNull MediaController2 controller,
+                long eventTimeMs, long positionMs) { }
 
         /**
          * Called when playback speed is changed.
          *
+         * @param controller the controller for this event
          * @param speed speed
          */
-        public void onPlaybackSpeedChanged(float speed) { }
+        public void onPlaybackSpeedChanged(@NonNull MediaController2 controller,
+                float speed) { }
 
         /**
          * Called when the player's buffering position
          *
+         * @param controller the controller for this event
          * @param positionMs buffering position in millis
          */
-        public void onBufferedPositionChanged(long positionMs) { }
+        public void onBufferedPositionChanged(@NonNull MediaController2 controller,
+                long positionMs) { }
 
         /**
          * Called when a error from
          *
+         * @param controller the controller for this event
          * @param errorCode error code
-         * @param extra extra information
+         * @param extras extra information
          */
-        public void onError(@ErrorCode int errorCode, int extra) { }
+        public void onError(@NonNull MediaController2 controller, @ErrorCode int errorCode,
+                @Nullable Bundle extras) { }
 
         /**
          * Called when the player's current playing item is changed
          *
+         * @param controller the controller for this event
          * @param item new item
          */
-        public void onCurrentPlaylistItemChanged(MediaItem2 item) { }
+        public void onCurrentPlaylistItemChanged(@NonNull MediaController2 controller,
+                @NonNull MediaItem2 item) { }
 
         /**
          * Called when the playlist parameters are changed.
          *
+         * @param controller the controller for this event
          * @param params The new play list parameters.
          */
-        public void onPlaylistParamsChanged(@NonNull PlaylistParams params) { }
+        public void onPlaylistParamsChanged(@NonNull MediaController2 controller,
+                @NonNull PlaylistParams params) { }
     }
 
     /**
@@ -371,7 +401,7 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
      * Request that the player prepare its playback. In other words, other sessions can continue
      * to play during the preparation of this session. This method can be used to speed up the
      * start of the playback. Once the preparation is done, the session will change its playback
-     * state to {@link MediaPlayerBase#STATE_PAUSED}. Afterwards, {@link #play} can be called to
+     * state to {@link MediaPlayerBase#PLAYER_STATE_PAUSED}. Afterwards, {@link #play} can be called to
      * start playback.
      */
     public void prepare() {
@@ -479,7 +509,7 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
      * Request that the player prepare playback for a specific media id. In other words, other
      * sessions can continue to play during the preparation of this session. This method can be
      * used to speed up the start of the playback. Once the preparation is done, the session
-     * will change its playback state to {@link MediaPlayerBase#STATE_PAUSED}. Afterwards,
+     * will change its playback state to {@link MediaPlayerBase#PLAYER_STATE_PAUSED}. Afterwards,
      * {@link #play} can be called to start playback. If the preparation is not needed,
      * {@link #playFromMediaId} can be directly called without this method.
      *
@@ -496,7 +526,7 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
      * query should be treated as a request to prepare any music. In other words, other sessions
      * can continue to play during the preparation of this session. This method can be used to
      * speed up the start of the playback. Once the preparation is done, the session will
-     * change its playback state to {@link MediaPlayerBase#STATE_PAUSED}. Afterwards,
+     * change its playback state to {@link MediaPlayerBase#PLAYER_STATE_PAUSED}. Afterwards,
      * {@link #play} can be called to start playback. If the preparation is not needed,
      * {@link #playFromSearch} can be directly called without this method.
      *
@@ -512,7 +542,7 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
      * Request that the player prepare playback for a specific {@link Uri}. In other words,
      * other sessions can continue to play during the preparation of this session. This method
      * can be used to speed up the start of the playback. Once the preparation is done, the
-     * session will change its playback state to {@link MediaPlayerBase#STATE_PAUSED}. Afterwards,
+     * session will change its playback state to {@link MediaPlayerBase#PLAYER_STATE_PAUSED}. Afterwards,
      * {@link #play} can be called to start playback. If the preparation is not needed,
      * {@link #playFromUri} can be directly called without this method.
      *
@@ -577,7 +607,7 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
 
     /**
      * Get the lastly cached {@link PlaybackState2} from
-     * {@link ControllerCallback#onPlaybackStateChanged(PlaybackState2)}.
+     * {@link ControllerCallback#onPlaybackStateChanged(MediaController2, PlaybackState2)}.
      * <p>
      * It may return {@code null} before the first callback or session has sent {@code null}
      * playback state.
@@ -590,7 +620,8 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
     }
 
     /**
-     * Get the lastly cached player state from {@link ControllerCallback#onPlayerStateChanged(int)}.
+     * Get the lastly cached player state from
+     * {@link ControllerCallback#onPlayerStateChanged(MediaController2, int)}.
      *
      * @return player state
      */
@@ -599,7 +630,8 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
     }
 
     /**
-     * Get the lastly cached position from {@link ControllerCallback#onPositionUpdated(long, long)}.
+     * Get the lastly cached position from
+     * {@link ControllerCallback#onPositionChanged(MediaController2, long, long)}.
      * <p>
      * This returns the calculated value of the position, based on the difference between the
      * update time and current time.
@@ -612,7 +644,7 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
 
     /**
      * Get the lastly cached playback speed from
-     * {@link ControllerCallback#onPlaybackSpeedChanged(float)}.
+     * {@link ControllerCallback#onPlaybackSpeedChanged(MediaController2, float)}.
      *
      * @return speed
      */
@@ -621,8 +653,15 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
     }
 
     /**
+     * Set the playback speed.
+     */
+    public void setPlaybackSpeed(float speed) {
+        // TODO: implement this
+    }
+
+    /**
      * Get the lastly cached buffered position from
-     * {@link ControllerCallback#onBufferedPositionChanged(long)}.
+     * {@link ControllerCallback#onBufferedPositionChanged(MediaController2, long)}.
      *
      * @return buffering position in millis
      */
@@ -632,7 +671,7 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
 
     /**
      * Get the lastly cached current item from
-     * {@link ControllerCallback#onCurrentPlaylistItemChanged(MediaItem2)}.
+     * {@link ControllerCallback#onCurrentPlaylistItemChanged(MediaController2, MediaItem2)}.
      *
      * @return index of the current item
      */
@@ -698,17 +737,24 @@ public class MediaController2 implements AutoCloseable, MediaPlaylistController 
     }
 
     /**
-     * Removes the media item at index in the play list.
+     * Removes the media item at index in the playlist.
      *<p>
-     * If index is same as the current index of the playlist, current playback
+     * If the item is the currently playing item of the playlist, current playback
      * will be stopped and playback moves to next source in the list.
-     *
-     * @throws IllegalArgumentException if the play list is null
-     * @throws IndexOutOfBoundsException if index is outside play list range
      */
     @Override
     public void removePlaylistItem(@NonNull MediaItem2 item) {
         mProvider.removePlaylistItem_impl(item);
+    }
+
+    /**
+     * Replace the media item at index in the playlist.
+     * @param index the index of the item to replace
+     * @param item the new item
+     */
+    @Override
+    public void replacePlaylistItem(int index, @NonNull MediaItem2 item) {
+        mProvider.replacePlaylistItem_impl(index, item);
     }
 
     /**

@@ -32,7 +32,11 @@
 
     <dimen name="toast_y_offset">24dp</dimen>
     <!-- Height of the status bar -->
-    <dimen name="status_bar_height">24dp</dimen>
+    <dimen name="status_bar_height">@dimen/status_bar_height_portrait</dimen>
+    <!-- Height of the status bar in portrait -->
+    <dimen name="status_bar_height_portrait">24dp</dimen>
+    <!-- Height of the status bar in landscape -->
+    <dimen name="status_bar_height_landscape">@dimen/status_bar_height_portrait</dimen>
     <!-- Height of area above QQS where battery/time go -->
     <dimen name="quick_qs_offset_height">48dp</dimen>
     <!-- Total height of QQS (quick_qs_offset_height + 128) -->
@@ -541,7 +545,7 @@
     <!-- Magnifier dimensions -->
     <dimen name="magnifier_width">100dp</dimen>
     <dimen name="magnifier_height">48dp</dimen>
-    <dimen name="magnifier_elevation">2dp</dimen>
+    <dimen name="magnifier_elevation">4dp</dimen>
     <dimen name="magnifier_offset">42dp</dimen>
     <item type="dimen" format="float" name="magnifier_zoom_scale">1.25</item>
 

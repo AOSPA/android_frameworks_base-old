@@ -1636,6 +1636,9 @@
     <!-- Operating volatage for bluetooth controller. 0 by default-->
     <integer translatable="false" name="config_bluetooth_operating_voltage_mv">0</integer>
 
+    <!-- Max number of connected audio devices supported by Bluetooth stack -->
+    <integer name="config_bluetooth_max_connected_audio_devices">1</integer>
+
     <!-- Whether supported profiles should be reloaded upon enabling bluetooth -->
     <bool name="config_bluetooth_reload_supported_profiles_when_enabled">false</bool>
 
@@ -2159,6 +2162,9 @@
 
     <!-- Whether UI for multi user should be shown -->
     <bool name="config_enableMultiUserUI">false</bool>
+
+    <!-- Whether the new Auto Selection Network UI should be shown -->
+    <bool name="config_enableNewAutoSelectNetworkUI">false</bool>
 
     <!-- If true, then we do not ask user for permission for apps to connect to USB devices.
          Do not set this to true for production devices. Doing so will cause you to fail CTS. -->
@@ -3328,6 +3334,8 @@
     <dimen name="config_dialogCornerRadius">2dp</dimen>
     <!-- Corner radius of system buttons -->
     <dimen name="config_buttonCornerRadius">@dimen/control_corner_material</dimen>
+    <!-- Corner radius of system progress bars -->
+    <dimen name="config_progressBarCornerRadius">@dimen/progress_bar_corner_material</dimen>
     <!-- Controls whether system buttons use all caps for text -->
     <bool name="config_buttonTextAllCaps">true</bool>
     <!-- Name of the font family used for system surfaces where the font should use medium weight -->

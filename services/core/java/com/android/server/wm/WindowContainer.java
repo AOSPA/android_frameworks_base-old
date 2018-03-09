@@ -109,8 +109,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     WindowContainer(WindowManagerService service) {
         mService = service;
         mPendingTransaction = service.mTransactionFactory.make();
-        mSurfaceAnimator = new SurfaceAnimator(this, this::onAnimationFinished,
-                service.mAnimator::addAfterPrepareSurfacesRunnable, service);
+        mSurfaceAnimator = new SurfaceAnimator(this, this::onAnimationFinished, service);
     }
 
     @Override
@@ -286,8 +285,9 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         if (mSurfaceControl != null) {
-            destroyAfterPendingTransaction(mSurfaceControl);
+            getPendingTransaction().destroy(mSurfaceControl);
             mSurfaceControl = null;
+            scheduleAnimation();
         }
 
         if (mParent != null) {
@@ -406,6 +406,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                 }
                 break;
             default:
+                // TODO: Removing the child before reinserting requires the caller to provide a
+                //       position that takes into account the removed child (if the index of the
+                //       child < position, then the position should be adjusted). We should consider
+                //       doing this adjustment here and remove any adjustments in the callers.
                 mChildren.remove(child);
                 mChildren.add(position, child);
         }
@@ -1073,19 +1077,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     @Override
     public SurfaceControl getSurfaceControl() {
         return mSurfaceControl;
-    }
-
-    /**
-     * Destroy a given surface after executing mPendingTransaction. This is
-     * largely a workaround for destroy not being part of transactions
-     * rather than an intentional design, so please take care when
-     * expanding use.
-     */
-    @Override
-    public void destroyAfterPendingTransaction(SurfaceControl surface) {
-        if (mParent != null) {
-            mParent.destroyAfterPendingTransaction(surface);
-        }
     }
 
     @Override

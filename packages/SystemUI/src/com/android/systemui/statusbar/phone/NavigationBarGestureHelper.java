@@ -43,6 +43,7 @@ import com.android.systemui.RecentsComponent;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.plugins.statusbar.phone.NavGesture.GestureHelper;
 import com.android.systemui.shared.recents.IOverviewProxy;
+import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.tuner.TunerService;
 
@@ -149,7 +150,8 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
     }
 
     public boolean onInterceptTouchEvent(MotionEvent event) {
-        if (mNavigationBarView.inScreenPinning() || mStatusBar.isKeyguardShowing()) {
+        if (mNavigationBarView.inScreenPinning() || mStatusBar.isKeyguardShowing()
+                || !mStatusBar.isPresenterFullyCollapsed()) {
             return false;
         }
 
@@ -168,7 +170,7 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
             }
         }
         boolean handledByQuickscrub = mQuickScrubController.onInterceptTouchEvent(event);
-        if (mStatusBar.isPresenterFullyCollapsed() && !handledByQuickscrub) {
+        if (!handledByQuickscrub) {
             // Proxy motion events until we start intercepting for quickscrub
             proxyMotionEvents(event);
         }
@@ -182,17 +184,17 @@ public class NavigationBarGestureHelper implements TunerService.Tunable, Gesture
     }
 
     public boolean onTouchEvent(MotionEvent event) {
-        if (mNavigationBarView.inScreenPinning() || mStatusBar.isKeyguardShowing()) {
+        if (mNavigationBarView.inScreenPinning() || mStatusBar.isKeyguardShowing()
+                || !mStatusBar.isPresenterFullyCollapsed()) {
             return false;
         }
 
         // The same down event was just sent on intercept and therefore can be ignored here
         boolean ignoreProxyDownEvent = event.getAction() == MotionEvent.ACTION_DOWN
                 && mOverviewProxyService.getProxy() != null;
-        boolean result = mStatusBar.isPresenterFullyCollapsed()
-                && (mQuickScrubController.onTouchEvent(event)
+        boolean result = mQuickScrubController.onTouchEvent(event)
                 || ignoreProxyDownEvent
-                || proxyMotionEvents(event));
+                || proxyMotionEvents(event);
         result |= mRecentsAnimationStarted;
         if (mDockWindowEnabled) {
             result |= handleDockWindowEvent(event);

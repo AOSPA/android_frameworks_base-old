@@ -382,11 +382,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      */
     private int mSurfaceSize;
 
-    /**
-     * A list of surfaces to be destroyed after {@link #mPendingTransaction} is applied.
-     */
-    private final ArrayList<SurfaceControl> mPendingDestroyingSurfaces = new ArrayList<>();
-
     /** Temporary float array to retrieve 3x3 matrix values. */
     private final float[] mTmpFloats = new float[9];
 
@@ -747,7 +742,14 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mDividerControllerLocked = new DockedStackDividerController(service, this);
         mPinnedStackControllerLocked = new PinnedStackController(service, this);
 
-        mSurfaceSize = Math.max(mBaseDisplayHeight, mBaseDisplayWidth);
+        // We use this as our arbitrary surface size for buffer-less parents
+        // that don't impose cropping on their children. It may need to be larger
+        // than the display size because fullscreen windows can be shifted offscreen
+        // due to surfaceInsets. 2 times the largest display dimension feels like an
+        // appropriately arbitrary number. Eventually we would like to give SurfaceFlinger
+        // layers the ability to match their parent sizes and be able to skip
+        // such arbitrary size settings.
+        mSurfaceSize = Math.max(mBaseDisplayHeight, mBaseDisplayWidth) * 2;
 
         final SurfaceControl.Builder b = mService.makeSurfaceBuilder(mSession)
                 .setSize(mSurfaceSize, mSurfaceSize)
@@ -1954,10 +1956,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 }
             }
             mService.mAnimator.removeDisplayLocked(mDisplayId);
-
-            // The pending transaction won't be applied so we should
-            // just clean up any surfaces pending destruction.
-            onPendingTransactionApplied();
         } finally {
             mRemovingDisplay = false;
         }
@@ -2598,18 +2596,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             pw.println(subPrefix + "Window #" + index[0] + ": " + wAnim);
             index[0] = index[0] + 1;
         }, false /* traverseTopToBottom */);
-    }
-
-    void enableSurfaceTrace(FileDescriptor fd) {
-        forAllWindows(w -> {
-            w.mWinAnimator.enableSurfaceTrace(fd);
-        }, true /* traverseTopToBottom */);
-    }
-
-    void disableSurfaceTrace() {
-        forAllWindows(w -> {
-            w.mWinAnimator.disableSurfaceTrace();
-        }, true /* traverseTopToBottom */);
     }
 
     /**
@@ -3583,7 +3569,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     if (s.inSplitScreenWindowingMode() && mSplitScreenDividerAnchor != null) {
                         t.setLayer(mSplitScreenDividerAnchor, layer++);
                     }
-                    if (s.isSelfOrChildAnimating()) {
+                    if (s.isAppAnimating() && state != ALWAYS_ON_TOP_STATE) {
                         // Ensure the animation layer ends up above the
                         // highest animating stack and no higher.
                         layerForAnimationLayer = layer++;
@@ -3630,6 +3616,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     private final class AboveAppWindowContainers extends NonAppWindowContainers {
         AboveAppWindowContainers(String name, WindowManagerService service) {
             super(name, service);
+        }
+
+        @Override
+        void assignChildLayers(SurfaceControl.Transaction t) {
+            assignChildLayers(t, null /* imeContainer */);
         }
 
         void assignChildLayers(SurfaceControl.Transaction t, WindowContainer imeContainer) {
@@ -3874,22 +3865,6 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     }
 
     @Override
-    public void destroyAfterPendingTransaction(SurfaceControl surface) {
-        mPendingDestroyingSurfaces.add(surface);
-    }
-
-    /**
-     * Destroys any surfaces that have been put into the pending list with
-     * {@link #destroyAfterPendingTransaction}.
-     */
-    void onPendingTransactionApplied() {
-        for (int i = mPendingDestroyingSurfaces.size() - 1; i >= 0; i--) {
-            mPendingDestroyingSurfaces.get(i).destroy();
-        }
-        mPendingDestroyingSurfaces.clear();
-    }
-
-    @Override
     void prepareSurfaces() {
         final ScreenRotationAnimation screenRotationAnimation =
                 mService.mAnimator.getScreenRotationAnimationLocked(mDisplayId);
@@ -3903,6 +3878,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mPendingTransaction.setAlpha(mWindowingLayer,
                     screenRotationAnimation.getEnterTransformation().getAlpha());
         }
+
         super.prepareSurfaces();
     }
 

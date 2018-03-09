@@ -124,7 +124,8 @@ public:
     }
 
     /* If alert is valid, adds an AnomalyTracker and returns it. If invalid, returns nullptr. */
-    virtual sp<AnomalyTracker> addAnomalyTracker(const Alert &alert) {
+    virtual sp<AnomalyTracker> addAnomalyTracker(const Alert &alert,
+                                                 const sp<AlarmMonitor>& anomalyAlarmMonitor) {
         std::lock_guard<std::mutex> lock(mMutex);
         sp<AnomalyTracker> anomalyTracker = new AnomalyTracker(alert, mConfigKey);
         if (anomalyTracker != nullptr) {
@@ -145,6 +146,15 @@ public:
 
     inline const int64_t& getMetricId() {
         return mMetricId;
+    }
+
+    // Let MetricProducer drop in-memory data to save memory.
+    // We still need to keep future data valid and anomaly tracking work, which means we will
+    // have to flush old data, informing anomaly trackers then safely drop old data.
+    // We still keep current bucket data for future metrics' validity.
+    void dropData(const uint64_t dropTimeNs) {
+        std::lock_guard<std::mutex> lock(mMutex);
+        dropDataLocked(dropTimeNs);
     }
 
 protected:
@@ -177,6 +187,8 @@ protected:
     uint64_t getCurrentBucketEndTimeNs() {
         return mStartTimeNs + (mCurrentBucketNum + 1) * mBucketSizeNs;
     }
+
+    virtual void dropDataLocked(const uint64_t dropTimeNs) = 0;
 
     const int64_t mMetricId;
 
@@ -232,7 +244,7 @@ protected:
             const LogEvent& event) = 0;
 
     // Consume the parsed stats log entry that already matched the "what" of the metric.
-    void onMatchedLogEventLocked(const size_t matcherIndex, const LogEvent& event);
+    virtual void onMatchedLogEventLocked(const size_t matcherIndex, const LogEvent& event);
 
     mutable std::mutex mMutex;
 };

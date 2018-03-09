@@ -66,6 +66,7 @@ import android.provider.Settings;
 import android.system.Os;
 import android.text.TextUtils;
 import android.text.format.DateFormat;
+import android.text.format.DateUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.KeyValueListParser;
@@ -268,6 +269,7 @@ class AlarmManagerService extends SystemService {
         // Key names stored in the settings value.
         private static final String KEY_MIN_FUTURITY = "min_futurity";
         private static final String KEY_MIN_INTERVAL = "min_interval";
+        private static final String KEY_MAX_INTERVAL = "max_interval";
         private static final String KEY_ALLOW_WHILE_IDLE_SHORT_TIME = "allow_while_idle_short_time";
         private static final String KEY_ALLOW_WHILE_IDLE_LONG_TIME = "allow_while_idle_long_time";
         private static final String KEY_ALLOW_WHILE_IDLE_WHITELIST_DURATION
@@ -285,6 +287,7 @@ class AlarmManagerService extends SystemService {
 
         private static final long DEFAULT_MIN_FUTURITY = 5 * 1000;
         private static final long DEFAULT_MIN_INTERVAL = 60 * 1000;
+        private static final long DEFAULT_MAX_INTERVAL = 365 * DateUtils.DAY_IN_MILLIS;
         private static final long DEFAULT_ALLOW_WHILE_IDLE_SHORT_TIME = DEFAULT_MIN_FUTURITY;
         private static final long DEFAULT_ALLOW_WHILE_IDLE_LONG_TIME = 9*60*1000;
         private static final long DEFAULT_ALLOW_WHILE_IDLE_WHITELIST_DURATION = 10*1000;
@@ -302,6 +305,9 @@ class AlarmManagerService extends SystemService {
 
         // Minimum alarm recurrence interval
         public long MIN_INTERVAL = DEFAULT_MIN_INTERVAL;
+
+        // Maximum alarm recurrence interval
+        public long MAX_INTERVAL = DEFAULT_MAX_INTERVAL;
 
         // Minimum time between ALLOW_WHILE_IDLE alarms when system is not idle.
         public long ALLOW_WHILE_IDLE_SHORT_TIME = DEFAULT_ALLOW_WHILE_IDLE_SHORT_TIME;
@@ -361,6 +367,7 @@ class AlarmManagerService extends SystemService {
 
                 MIN_FUTURITY = mParser.getLong(KEY_MIN_FUTURITY, DEFAULT_MIN_FUTURITY);
                 MIN_INTERVAL = mParser.getLong(KEY_MIN_INTERVAL, DEFAULT_MIN_INTERVAL);
+                MAX_INTERVAL = mParser.getLong(KEY_MAX_INTERVAL, DEFAULT_MAX_INTERVAL);
                 ALLOW_WHILE_IDLE_SHORT_TIME = mParser.getLong(KEY_ALLOW_WHILE_IDLE_SHORT_TIME,
                         DEFAULT_ALLOW_WHILE_IDLE_SHORT_TIME);
                 ALLOW_WHILE_IDLE_LONG_TIME = mParser.getLong(KEY_ALLOW_WHILE_IDLE_LONG_TIME,
@@ -391,6 +398,10 @@ class AlarmManagerService extends SystemService {
             TimeUtils.formatDuration(MIN_INTERVAL, pw);
             pw.println();
 
+            pw.print("    "); pw.print(KEY_MAX_INTERVAL); pw.print("=");
+            TimeUtils.formatDuration(MAX_INTERVAL, pw);
+            pw.println();
+
             pw.print("    "); pw.print(KEY_LISTENER_TIMEOUT); pw.print("=");
             TimeUtils.formatDuration(LISTENER_TIMEOUT, pw);
             pw.println();
@@ -419,6 +430,7 @@ class AlarmManagerService extends SystemService {
 
             proto.write(ConstantsProto.MIN_FUTURITY_DURATION_MS, MIN_FUTURITY);
             proto.write(ConstantsProto.MIN_INTERVAL_DURATION_MS, MIN_INTERVAL);
+            proto.write(ConstantsProto.MAX_INTERVAL_DURATION_MS, MAX_INTERVAL);
             proto.write(ConstantsProto.LISTENER_TIMEOUT_DURATION_MS, LISTENER_TIMEOUT);
             proto.write(ConstantsProto.ALLOW_WHILE_IDLE_SHORT_DURATION_MS,
                     ALLOW_WHILE_IDLE_SHORT_TIME);
@@ -481,7 +493,7 @@ class AlarmManagerService extends SystemService {
 
         Batch(Alarm seed) {
             start = seed.whenElapsed;
-            end = seed.maxWhenElapsed;
+            end = clampPositive(seed.maxWhenElapsed);
             flags = seed.flags;
             alarms.add(seed);
             if (seed.operation == mTimeTickSender) {
@@ -737,7 +749,7 @@ class AlarmManagerService extends SystemService {
         if (futurity < MIN_FUZZABLE_INTERVAL) {
             futurity = 0;
         }
-        return triggerAtTime + (long)(.75 * futurity);
+        return clampPositive(triggerAtTime + (long)(.75 * futurity));
     }
 
     // returns true if the batch was added at the head
@@ -913,12 +925,16 @@ class AlarmManagerService extends SystemService {
             // the window based on the alarm's new futurity.  Note that this
             // reflects a policy of preferring timely to deferred delivery.
             maxElapsed = (a.windowLength > 0)
-                    ? (whenElapsed + a.windowLength)
+                    ? clampPositive(whenElapsed + a.windowLength)
                     : maxTriggerTime(nowElapsed, whenElapsed, a.repeatInterval);
         }
         a.whenElapsed = whenElapsed;
         a.maxWhenElapsed = maxElapsed;
         setImplLocked(a, true, doValidate);
+    }
+
+    static long clampPositive(long val) {
+        return (val >= 0) ? val : Long.MAX_VALUE;
     }
 
     /**
@@ -1421,13 +1437,18 @@ class AlarmManagerService extends SystemService {
         }
 
         // Sanity check the recurrence interval.  This will catch people who supply
-        // seconds when the API expects milliseconds.
+        // seconds when the API expects milliseconds, or apps trying shenanigans
+        // around intentional period overflow, etc.
         final long minInterval = mConstants.MIN_INTERVAL;
         if (interval > 0 && interval < minInterval) {
             Slog.w(TAG, "Suspiciously short interval " + interval
                     + " millis; expanding to " + (minInterval/1000)
                     + " seconds");
             interval = minInterval;
+        } else if (interval > mConstants.MAX_INTERVAL) {
+            Slog.w(TAG, "Suspiciously long interval " + interval
+                    + " millis; clamping");
+            interval = mConstants.MAX_INTERVAL;
         }
 
         if (type < RTC_WAKEUP || type > ELAPSED_REALTIME) {
@@ -2170,42 +2191,42 @@ class AlarmManagerService extends SystemService {
         synchronized (mLock) {
             final long nowRTC = System.currentTimeMillis();
             final long nowElapsed = SystemClock.elapsedRealtime();
-            proto.write(AlarmManagerServiceProto.CURRENT_TIME, nowRTC);
-            proto.write(AlarmManagerServiceProto.ELAPSED_REALTIME, nowElapsed);
-            proto.write(AlarmManagerServiceProto.LAST_TIME_CHANGE_CLOCK_TIME,
+            proto.write(AlarmManagerServiceDumpProto.CURRENT_TIME, nowRTC);
+            proto.write(AlarmManagerServiceDumpProto.ELAPSED_REALTIME, nowElapsed);
+            proto.write(AlarmManagerServiceDumpProto.LAST_TIME_CHANGE_CLOCK_TIME,
                     mLastTimeChangeClockTime);
-            proto.write(AlarmManagerServiceProto.LAST_TIME_CHANGE_REALTIME,
+            proto.write(AlarmManagerServiceDumpProto.LAST_TIME_CHANGE_REALTIME,
                     mLastTimeChangeRealtime);
 
-            mConstants.dumpProto(proto, AlarmManagerServiceProto.SETTINGS);
+            mConstants.dumpProto(proto, AlarmManagerServiceDumpProto.SETTINGS);
 
             if (mAppStateTracker != null) {
                 mAppStateTracker.dumpProto(proto,
-                        AlarmManagerServiceProto.FORCE_APP_STANDBY_TRACKER);
+                        AlarmManagerServiceDumpProto.FORCE_APP_STANDBY_TRACKER);
             }
 
-            proto.write(AlarmManagerServiceProto.IS_INTERACTIVE, mInteractive);
+            proto.write(AlarmManagerServiceDumpProto.IS_INTERACTIVE, mInteractive);
             if (!mInteractive) {
                 // Durations
-                proto.write(AlarmManagerServiceProto.TIME_SINCE_NON_INTERACTIVE_MS,
+                proto.write(AlarmManagerServiceDumpProto.TIME_SINCE_NON_INTERACTIVE_MS,
                         nowElapsed - mNonInteractiveStartTime);
-                proto.write(AlarmManagerServiceProto.MAX_WAKEUP_DELAY_MS,
+                proto.write(AlarmManagerServiceDumpProto.MAX_WAKEUP_DELAY_MS,
                         currentNonWakeupFuzzLocked(nowElapsed));
-                proto.write(AlarmManagerServiceProto.TIME_SINCE_LAST_DISPATCH_MS,
+                proto.write(AlarmManagerServiceDumpProto.TIME_SINCE_LAST_DISPATCH_MS,
                         nowElapsed - mLastAlarmDeliveryTime);
-                proto.write(AlarmManagerServiceProto.TIME_UNTIL_NEXT_NON_WAKEUP_DELIVERY_MS,
+                proto.write(AlarmManagerServiceDumpProto.TIME_UNTIL_NEXT_NON_WAKEUP_DELIVERY_MS,
                         nowElapsed - mNextNonWakeupDeliveryTime);
             }
 
-            proto.write(AlarmManagerServiceProto.TIME_UNTIL_NEXT_NON_WAKEUP_ALARM_MS,
+            proto.write(AlarmManagerServiceDumpProto.TIME_UNTIL_NEXT_NON_WAKEUP_ALARM_MS,
                     mNextNonWakeup - nowElapsed);
-            proto.write(AlarmManagerServiceProto.TIME_UNTIL_NEXT_WAKEUP_MS,
+            proto.write(AlarmManagerServiceDumpProto.TIME_UNTIL_NEXT_WAKEUP_MS,
                     mNextWakeup - nowElapsed);
-            proto.write(AlarmManagerServiceProto.TIME_SINCE_LAST_WAKEUP_MS,
+            proto.write(AlarmManagerServiceDumpProto.TIME_SINCE_LAST_WAKEUP_MS,
                     nowElapsed - mLastWakeup);
-            proto.write(AlarmManagerServiceProto.TIME_SINCE_LAST_WAKEUP_SET_MS,
+            proto.write(AlarmManagerServiceDumpProto.TIME_SINCE_LAST_WAKEUP_SET_MS,
                     nowElapsed - mLastWakeupSet);
-            proto.write(AlarmManagerServiceProto.TIME_CHANGE_EVENT_COUNT, mNumTimeChanged);
+            proto.write(AlarmManagerServiceDumpProto.TIME_CHANGE_EVENT_COUNT, mNumTimeChanged);
 
             final TreeSet<Integer> users = new TreeSet<>();
             final int nextAlarmClockForUserSize = mNextAlarmClockForUser.size();
@@ -2221,14 +2242,14 @@ class AlarmManagerService extends SystemService {
                 final AlarmManager.AlarmClockInfo next = mNextAlarmClockForUser.get(user);
                 final long time = next != null ? next.getTriggerTime() : 0;
                 final boolean pendingSend = mPendingSendNextAlarmClockChangedForUser.get(user);
-                final long aToken = proto.start(AlarmManagerServiceProto.NEXT_ALARM_CLOCK_METADATA);
+                final long aToken = proto.start(AlarmManagerServiceDumpProto.NEXT_ALARM_CLOCK_METADATA);
                 proto.write(AlarmClockMetadataProto.USER, user);
                 proto.write(AlarmClockMetadataProto.IS_PENDING_SEND, pendingSend);
                 proto.write(AlarmClockMetadataProto.TRIGGER_TIME_MS, time);
                 proto.end(aToken);
             }
             for (Batch b : mAlarmBatches) {
-                b.writeToProto(proto, AlarmManagerServiceProto.PENDING_ALARM_BATCHES,
+                b.writeToProto(proto, AlarmManagerServiceDumpProto.PENDING_ALARM_BATCHES,
                         nowElapsed, nowRTC);
             }
             for (int i = 0; i < mPendingBackgroundAlarms.size(); i++) {
@@ -2236,66 +2257,66 @@ class AlarmManagerService extends SystemService {
                 if (blockedAlarms != null) {
                     for (Alarm a : blockedAlarms) {
                         a.writeToProto(proto,
-                                AlarmManagerServiceProto.PENDING_USER_BLOCKED_BACKGROUND_ALARMS,
+                                AlarmManagerServiceDumpProto.PENDING_USER_BLOCKED_BACKGROUND_ALARMS,
                                 nowElapsed, nowRTC);
                     }
                 }
             }
             if (mPendingIdleUntil != null) {
                 mPendingIdleUntil.writeToProto(
-                        proto, AlarmManagerServiceProto.PENDING_IDLE_UNTIL, nowElapsed, nowRTC);
+                        proto, AlarmManagerServiceDumpProto.PENDING_IDLE_UNTIL, nowElapsed, nowRTC);
             }
             for (Alarm a : mPendingWhileIdleAlarms) {
-                a.writeToProto(proto, AlarmManagerServiceProto.PENDING_WHILE_IDLE_ALARMS,
+                a.writeToProto(proto, AlarmManagerServiceDumpProto.PENDING_WHILE_IDLE_ALARMS,
                         nowElapsed, nowRTC);
             }
             if (mNextWakeFromIdle != null) {
-                mNextWakeFromIdle.writeToProto(proto, AlarmManagerServiceProto.NEXT_WAKE_FROM_IDLE,
+                mNextWakeFromIdle.writeToProto(proto, AlarmManagerServiceDumpProto.NEXT_WAKE_FROM_IDLE,
                         nowElapsed, nowRTC);
             }
 
             for (Alarm a : mPendingNonWakeupAlarms) {
-                a.writeToProto(proto, AlarmManagerServiceProto.PAST_DUE_NON_WAKEUP_ALARMS,
+                a.writeToProto(proto, AlarmManagerServiceDumpProto.PAST_DUE_NON_WAKEUP_ALARMS,
                         nowElapsed, nowRTC);
             }
 
-            proto.write(AlarmManagerServiceProto.DELAYED_ALARM_COUNT, mNumDelayedAlarms);
-            proto.write(AlarmManagerServiceProto.TOTAL_DELAY_TIME_MS, mTotalDelayTime);
-            proto.write(AlarmManagerServiceProto.MAX_DELAY_DURATION_MS, mMaxDelayTime);
-            proto.write(AlarmManagerServiceProto.MAX_NON_INTERACTIVE_DURATION_MS,
+            proto.write(AlarmManagerServiceDumpProto.DELAYED_ALARM_COUNT, mNumDelayedAlarms);
+            proto.write(AlarmManagerServiceDumpProto.TOTAL_DELAY_TIME_MS, mTotalDelayTime);
+            proto.write(AlarmManagerServiceDumpProto.MAX_DELAY_DURATION_MS, mMaxDelayTime);
+            proto.write(AlarmManagerServiceDumpProto.MAX_NON_INTERACTIVE_DURATION_MS,
                     mNonInteractiveTime);
 
-            proto.write(AlarmManagerServiceProto.BROADCAST_REF_COUNT, mBroadcastRefCount);
-            proto.write(AlarmManagerServiceProto.PENDING_INTENT_SEND_COUNT, mSendCount);
-            proto.write(AlarmManagerServiceProto.PENDING_INTENT_FINISH_COUNT, mSendFinishCount);
-            proto.write(AlarmManagerServiceProto.LISTENER_SEND_COUNT, mListenerCount);
-            proto.write(AlarmManagerServiceProto.LISTENER_FINISH_COUNT, mListenerFinishCount);
+            proto.write(AlarmManagerServiceDumpProto.BROADCAST_REF_COUNT, mBroadcastRefCount);
+            proto.write(AlarmManagerServiceDumpProto.PENDING_INTENT_SEND_COUNT, mSendCount);
+            proto.write(AlarmManagerServiceDumpProto.PENDING_INTENT_FINISH_COUNT, mSendFinishCount);
+            proto.write(AlarmManagerServiceDumpProto.LISTENER_SEND_COUNT, mListenerCount);
+            proto.write(AlarmManagerServiceDumpProto.LISTENER_FINISH_COUNT, mListenerFinishCount);
 
             for (InFlight f : mInFlight) {
-                f.writeToProto(proto, AlarmManagerServiceProto.OUTSTANDING_DELIVERIES);
+                f.writeToProto(proto, AlarmManagerServiceDumpProto.OUTSTANDING_DELIVERIES);
             }
 
             for (int i = 0; i < mLastAllowWhileIdleDispatch.size(); ++i) {
                 final long token = proto.start(
-                        AlarmManagerServiceProto.LAST_ALLOW_WHILE_IDLE_DISPATCH_TIMES);
+                        AlarmManagerServiceDumpProto.LAST_ALLOW_WHILE_IDLE_DISPATCH_TIMES);
                 final int uid = mLastAllowWhileIdleDispatch.keyAt(i);
                 final long lastTime = mLastAllowWhileIdleDispatch.valueAt(i);
 
-                proto.write(AlarmManagerServiceProto.LastAllowWhileIdleDispatch.UID, uid);
-                proto.write(AlarmManagerServiceProto.LastAllowWhileIdleDispatch.TIME_MS, lastTime);
-                proto.write(AlarmManagerServiceProto.LastAllowWhileIdleDispatch.NEXT_ALLOWED_MS,
+                proto.write(AlarmManagerServiceDumpProto.LastAllowWhileIdleDispatch.UID, uid);
+                proto.write(AlarmManagerServiceDumpProto.LastAllowWhileIdleDispatch.TIME_MS, lastTime);
+                proto.write(AlarmManagerServiceDumpProto.LastAllowWhileIdleDispatch.NEXT_ALLOWED_MS,
                         lastTime + getWhileIdleMinIntervalLocked(uid));
                 proto.end(token);
             }
 
             for (int i = 0; i < mUseAllowWhileIdleShortTime.size(); i++) {
                 if (mUseAllowWhileIdleShortTime.valueAt(i)) {
-                    proto.write(AlarmManagerServiceProto.USE_ALLOW_WHILE_IDLE_SHORT_TIME,
+                    proto.write(AlarmManagerServiceDumpProto.USE_ALLOW_WHILE_IDLE_SHORT_TIME,
                             mUseAllowWhileIdleShortTime.keyAt(i));
                 }
             }
 
-            mLog.writeToProto(proto, AlarmManagerServiceProto.RECENT_PROBLEMS);
+            mLog.writeToProto(proto, AlarmManagerServiceDumpProto.RECENT_PROBLEMS);
 
             final FilterStats[] topFilters = new FilterStats[10];
             final Comparator<FilterStats> comparator = new Comparator<FilterStats>() {
@@ -2336,13 +2357,13 @@ class AlarmManagerService extends SystemService {
                 }
             }
             for (int i = 0; i < len; ++i) {
-                final long token = proto.start(AlarmManagerServiceProto.TOP_ALARMS);
+                final long token = proto.start(AlarmManagerServiceDumpProto.TOP_ALARMS);
                 FilterStats fs = topFilters[i];
 
-                proto.write(AlarmManagerServiceProto.TopAlarm.UID, fs.mBroadcastStats.mUid);
-                proto.write(AlarmManagerServiceProto.TopAlarm.PACKAGE_NAME,
+                proto.write(AlarmManagerServiceDumpProto.TopAlarm.UID, fs.mBroadcastStats.mUid);
+                proto.write(AlarmManagerServiceDumpProto.TopAlarm.PACKAGE_NAME,
                         fs.mBroadcastStats.mPackageName);
-                fs.writeToProto(proto, AlarmManagerServiceProto.TopAlarm.FILTER);
+                fs.writeToProto(proto, AlarmManagerServiceDumpProto.TopAlarm.FILTER);
 
                 proto.end(token);
             }
@@ -2351,10 +2372,10 @@ class AlarmManagerService extends SystemService {
             for (int iu = 0; iu < mBroadcastStats.size(); ++iu) {
                 ArrayMap<String, BroadcastStats> uidStats = mBroadcastStats.valueAt(iu);
                 for (int ip = 0; ip < uidStats.size(); ++ip) {
-                    final long token = proto.start(AlarmManagerServiceProto.ALARM_STATS);
+                    final long token = proto.start(AlarmManagerServiceDumpProto.ALARM_STATS);
 
                     BroadcastStats bs = uidStats.valueAt(ip);
-                    bs.writeToProto(proto, AlarmManagerServiceProto.AlarmStat.BROADCAST);
+                    bs.writeToProto(proto, AlarmManagerServiceDumpProto.AlarmStat.BROADCAST);
 
                     // uidStats is an ArrayMap, which we can't sort.
                     tmpFilters.clear();
@@ -2363,7 +2384,7 @@ class AlarmManagerService extends SystemService {
                     }
                     Collections.sort(tmpFilters, comparator);
                     for (FilterStats fs : tmpFilters) {
-                        fs.writeToProto(proto, AlarmManagerServiceProto.AlarmStat.FILTERS);
+                        fs.writeToProto(proto, AlarmManagerServiceDumpProto.AlarmStat.FILTERS);
                     }
 
                     proto.end(token);
@@ -2374,7 +2395,7 @@ class AlarmManagerService extends SystemService {
                 for (int i = 0; i < mAllowWhileIdleDispatches.size(); i++) {
                     IdleDispatchEntry ent = mAllowWhileIdleDispatches.get(i);
                     final long token = proto.start(
-                            AlarmManagerServiceProto.ALLOW_WHILE_IDLE_DISPATCHES);
+                            AlarmManagerServiceDumpProto.ALLOW_WHILE_IDLE_DISPATCHES);
 
                     proto.write(IdleDispatchEntryProto.UID, ent.uid);
                     proto.write(IdleDispatchEntryProto.PKG, ent.pkg);
@@ -2390,7 +2411,7 @@ class AlarmManagerService extends SystemService {
 
             if (WAKEUP_STATS) {
                 for (WakeupEvent event : mRecentWakeups) {
-                    final long token = proto.start(AlarmManagerServiceProto.RECENT_WAKEUP_HISTORY);
+                    final long token = proto.start(AlarmManagerServiceDumpProto.RECENT_WAKEUP_HISTORY);
                     proto.write(WakeupEventProto.UID, event.uid);
                     proto.write(WakeupEventProto.ACTION, event.action);
                     proto.write(WakeupEventProto.WHEN, event.when);
@@ -3175,8 +3196,7 @@ class AlarmManagerService extends SystemService {
             whenElapsed = _whenElapsed;
             expectedWhenElapsed = _whenElapsed;
             windowLength = _windowLength;
-            maxWhenElapsed = _maxWhen;
-            expectedMaxWhenElapsed = _maxWhen;
+            maxWhenElapsed = expectedMaxWhenElapsed = clampPositive(_maxWhen);
             repeatInterval = _interval;
             operation = _op;
             listener = _rec;

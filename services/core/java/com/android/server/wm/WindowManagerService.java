@@ -100,15 +100,15 @@ import static com.android.server.wm.WindowManagerDebugConfig.SHOW_VERBOSE_TRANSA
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_KEEP_SCREEN_ON;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-import static com.android.server.wm.proto.WindowManagerServiceProto.APP_TRANSITION;
-import static com.android.server.wm.proto.WindowManagerServiceProto.DISPLAY_FROZEN;
-import static com.android.server.wm.proto.WindowManagerServiceProto.FOCUSED_APP;
-import static com.android.server.wm.proto.WindowManagerServiceProto.FOCUSED_WINDOW;
-import static com.android.server.wm.proto.WindowManagerServiceProto.INPUT_METHOD_WINDOW;
-import static com.android.server.wm.proto.WindowManagerServiceProto.LAST_ORIENTATION;
-import static com.android.server.wm.proto.WindowManagerServiceProto.POLICY;
-import static com.android.server.wm.proto.WindowManagerServiceProto.ROOT_WINDOW_CONTAINER;
-import static com.android.server.wm.proto.WindowManagerServiceProto.ROTATION;
+import static com.android.server.wm.proto.WindowManagerServiceDumpProto.APP_TRANSITION;
+import static com.android.server.wm.proto.WindowManagerServiceDumpProto.DISPLAY_FROZEN;
+import static com.android.server.wm.proto.WindowManagerServiceDumpProto.FOCUSED_APP;
+import static com.android.server.wm.proto.WindowManagerServiceDumpProto.FOCUSED_WINDOW;
+import static com.android.server.wm.proto.WindowManagerServiceDumpProto.INPUT_METHOD_WINDOW;
+import static com.android.server.wm.proto.WindowManagerServiceDumpProto.LAST_ORIENTATION;
+import static com.android.server.wm.proto.WindowManagerServiceDumpProto.POLICY;
+import static com.android.server.wm.proto.WindowManagerServiceDumpProto.ROOT_WINDOW_CONTAINER;
+import static com.android.server.wm.proto.WindowManagerServiceDumpProto.ROTATION;
 
 import android.Manifest;
 import android.Manifest.permission;
@@ -829,9 +829,6 @@ public class WindowManagerService extends IWindowManager.Stub
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "openSurfaceTransaction");
             synchronized (mWindowMap) {
-                if (mRoot.mSurfaceTraceEnabled) {
-                    mRoot.mRemoteEventTrace.openSurfaceTransaction();
-                }
                 SurfaceControl.openTransaction();
             }
         } finally {
@@ -850,9 +847,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 try {
                     traceStateLocked(where);
                 } finally {
-                    if (mRoot.mSurfaceTraceEnabled) {
-                        mRoot.mRemoteEventTrace.closeSurfaceTransaction();
-                    }
                     SurfaceControl.closeTransaction();
                 }
             }
@@ -1393,14 +1387,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
             win.attach();
             mWindowMap.put(client.asBinder(), win);
-            if (win.mAppOp != AppOpsManager.OP_NONE) {
-                int startOpResult = mAppOps.startOpNoThrow(win.mAppOp, win.getOwningUid(),
-                        win.getOwningPackage());
-                if ((startOpResult != AppOpsManager.MODE_ALLOWED) &&
-                        (startOpResult != AppOpsManager.MODE_DEFAULT)) {
-                    win.setAppOpVisibilityLw(false);
-                }
-            }
+
+            win.initAppOpsState();
 
             final boolean hideSystemAlertWindows = !mHidingNonSystemOverlayWindows.isEmpty();
             win.setForceHideNonSystemOverlayWindowIfNeeded(hideSystemAlertWindows);
@@ -1604,30 +1592,6 @@ public class WindowManagerService extends IWindowManager.Stub
         return false;
     }
 
-    @Override
-    public void enableSurfaceTrace(ParcelFileDescriptor pfd) {
-        final int callingUid = Binder.getCallingUid();
-        if (callingUid != SHELL_UID && callingUid != ROOT_UID) {
-            throw new SecurityException("Only shell can call enableSurfaceTrace");
-        }
-
-        synchronized (mWindowMap) {
-            mRoot.enableSurfaceTrace(pfd);
-        }
-    }
-
-    @Override
-    public void disableSurfaceTrace() {
-        final int callingUid = Binder.getCallingUid();
-        if (callingUid != SHELL_UID && callingUid != ROOT_UID &&
-            callingUid != SYSTEM_UID) {
-            throw new SecurityException("Only shell can call disableSurfaceTrace");
-        }
-        synchronized (mWindowMap) {
-            mRoot.disableSurfaceTrace();
-        }
-    }
-
     /**
      * Set mScreenCaptureDisabled for specific user
      */
@@ -1665,9 +1629,8 @@ public class WindowManagerService extends IWindowManager.Stub
     void postWindowRemoveCleanupLocked(WindowState win) {
         if (DEBUG_ADD_REMOVE) Slog.v(TAG_WM, "postWindowRemoveCleanupLocked: " + win);
         mWindowMap.remove(win.mClient.asBinder());
-        if (win.mAppOp != AppOpsManager.OP_NONE) {
-            mAppOps.finishOp(win.mAppOp, win.getOwningUid(), win.getOwningPackage());
-        }
+
+        win.resetAppOpsState();
 
         if (mCurrentFocus == null) {
             mWinRemovedSinceNullFocus.add(win);
@@ -2710,7 +2673,6 @@ public class WindowManagerService extends IWindowManager.Stub
             IRecentsAnimationRunner recentsAnimationRunner,
             RecentsAnimationController.RecentsAnimationCallbacks callbacks, int displayId) {
         synchronized (mWindowMap) {
-            cancelRecentsAnimation();
             mRecentsAnimationController = new RecentsAnimationController(this,
                     recentsAnimationRunner, callbacks, displayId);
             mRecentsAnimationController.initialize();
@@ -2735,12 +2697,12 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     public void cancelRecentsAnimation() {
-        synchronized (mWindowMap) {
-            if (mRecentsAnimationController != null) {
-                // This call will call through to cleanupAnimation() below after the animation is
-                // canceled
-                mRecentsAnimationController.cancelAnimation();
-            }
+        // Note: Do not hold the WM lock, this will lock appropriately in the call which also
+        // calls through to AM/RecentsAnimation.onAnimationFinished()
+        if (mRecentsAnimationController != null) {
+            // This call will call through to cleanupAnimation() below after the animation is
+            // canceled
+            mRecentsAnimationController.cancelAnimation();
         }
     }
 
@@ -2789,6 +2751,13 @@ public class WindowManagerService extends IWindowManager.Stub
     void setDockedStackCreateStateLocked(int mode, Rect bounds) {
         mDockedStackCreateMode = mode;
         mDockedStackCreateBounds = bounds;
+    }
+
+    public void checkSplitScreenMinimizedChanged(boolean animate) {
+        synchronized (mWindowMap) {
+            final DisplayContent displayContent = getDefaultDisplayContentLocked();
+            displayContent.getDockedDividerController().checkMinimizeChanged(animate);
+        }
     }
 
     public boolean isValidPictureInPictureAspectRatio(int displayId, float aspectRatio) {
@@ -5988,6 +5957,18 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
+    public void setNavBarVirtualKeyHapticFeedbackEnabled(boolean enabled) {
+        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.STATUS_BAR)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Caller does not hold permission "
+                    + android.Manifest.permission.STATUS_BAR);
+        }
+
+        synchronized (mWindowMap) {
+            mPolicy.setNavBarVirtualKeyHapticFeedbackEnabledLw(enabled);
+        }
+    }
+
     // TODO(multidisplay): StatusBar on multiple screens?
     private boolean updateStatusBarVisibilityLocked(int visibility) {
         if (mLastDispatchedSystemUiVisibility == visibility) {
@@ -6223,7 +6204,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     /**
      * Write to a protocol buffer output stream. Protocol buffer message definition is at
-     * {@link com.android.server.wm.proto.WindowManagerServiceProto}.
+     * {@link com.android.server.wm.proto.WindowManagerServiceDumpProto}.
      *
      * @param proto     Stream to write the WindowContainer object to.
      * @param trim      If true, reduce the amount of data written.

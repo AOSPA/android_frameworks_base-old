@@ -192,7 +192,8 @@ import static com.android.server.am.ActivityStackSupervisor.MATCH_TASK_IN_STACKS
 import static com.android.server.am.ActivityStackSupervisor.ON_TOP;
 import static com.android.server.am.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.am.ActivityStackSupervisor.REMOVE_FROM_RECENTS;
-import static com.android.server.am.MemoryStatUtil.readMemoryStatFromMemcg;
+import static com.android.server.am.MemoryStatUtil.readMemoryStatFromFilesystem;
+import static com.android.server.am.MemoryStatUtil.hasMemcg;
 import static com.android.server.am.TaskRecord.INVALID_TASK_ID;
 import static com.android.server.am.TaskRecord.LOCK_TASK_AUTH_DONT_LOCK;
 import static com.android.server.am.TaskRecord.REPARENT_KEEP_STACK_AT_FRONT;
@@ -444,15 +445,17 @@ import com.android.server.Watchdog;
 import com.android.server.am.ActivityStack.ActivityState;
 import com.android.server.am.MemoryStatUtil.MemoryStat;
 import com.android.server.am.proto.ActivityManagerServiceProto;
-import com.android.server.am.proto.BroadcastProto;
+import com.android.server.am.proto.ActivityManagerServiceDumpActivitiesProto;
+import com.android.server.am.proto.ActivityManagerServiceDumpBroadcastsProto;
+import com.android.server.am.proto.ActivityManagerServiceDumpProcessesProto;
+import com.android.server.am.proto.ActivityManagerServiceDumpProcessesProto.UidObserverRegistrationProto;
+import com.android.server.am.proto.ActivityManagerServiceDumpServicesProto;
 import com.android.server.am.proto.GrantUriProto;
 import com.android.server.am.proto.ImportanceTokenProto;
-import com.android.server.am.proto.MemInfoProto;
+import com.android.server.am.proto.MemInfoDumpProto;
 import com.android.server.am.proto.NeededUriGrantsProto;
 import com.android.server.am.proto.ProcessOomProto;
 import com.android.server.am.proto.ProcessToGcProto;
-import com.android.server.am.proto.ProcessesProto;
-import com.android.server.am.proto.ProcessesProto.UidObserverRegistrationProto;
 import com.android.server.am.proto.StickyBroadcastProto;
 import com.android.server.firewall.IntentFirewall;
 import com.android.server.job.JobSchedulerInternal;
@@ -559,6 +562,9 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final int STOCK_PM_FLAGS = PackageManager.GET_SHARED_LIBRARY_FILES;
 
     static final String SYSTEM_DEBUGGABLE = "ro.debuggable";
+
+    // Maximum number of receivers an app can register.
+    private static final int MAX_RECEIVERS_ALLOWED_PER_APP = 1000;
 
     // Amount of time after a call to stopAppSwitches() during which we will
     // prevent further untrusted switches from happening.
@@ -693,7 +699,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private final ActivityStartController mActivityStartController;
 
-    final ClientLifecycleManager mLifecycleManager;
+    private final ClientLifecycleManager mLifecycleManager;
 
     final TaskChangeNotificationController mTaskChangeNotificationController;
 
@@ -715,6 +721,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     // Whether we should use SCHED_FIFO for UI and RenderThreads.
     private boolean mUseFifoUiScheduling = false;
+
+    private static final String SYSUI_COMPONENT_NAME = "com.android.systemui/.SystemUIService";
 
     BroadcastQueue mFgBroadcastQueue;
     BroadcastQueue mBgBroadcastQueue;
@@ -815,6 +823,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 boolean asProto) {
             if (asProto) return;
             doDump(fd, pw, new String[]{"activities"}, asProto);
+            doDump(fd, pw, new String[]{"service", SYSUI_COMPONENT_NAME}, asProto);
         }
 
         @Override
@@ -1389,9 +1398,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         void writeToProto(ProtoOutputStream proto, long fieldId) {
             final long token = proto.start(fieldId);
-            proto.write(ProcessesProto.PendingTempWhitelist.TARGET_UID, targetUid);
-            proto.write(ProcessesProto.PendingTempWhitelist.DURATION_MS, duration);
-            proto.write(ProcessesProto.PendingTempWhitelist.TAG, tag);
+            proto.write(ActivityManagerServiceDumpProcessesProto.PendingTempWhitelist.TARGET_UID, targetUid);
+            proto.write(ActivityManagerServiceDumpProcessesProto.PendingTempWhitelist.DURATION_MS, duration);
+            proto.write(ActivityManagerServiceDumpProcessesProto.PendingTempWhitelist.TAG, tag);
             proto.end(token);
         }
     }
@@ -5990,6 +5999,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             Slog.d(TAG_PROCESSES, "Received spurious death notification for thread "
                     + thread.asBinder());
         }
+
+        // On the device which doesn't have Cgroup, log LmkStateChanged which is used as a signal
+        // for pulling memory stats of other running processes when this process died.
+        if (!hasMemcg()) {
+            StatsLog.write(StatsLog.APP_DIED, SystemClock.elapsedRealtime());
+        }
     }
 
     /**
@@ -6563,22 +6578,27 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         userId = mUserController.handleIncomingUser(Binder.getCallingPid(), Binder.getCallingUid(),
                 userId, true, ALLOW_FULL_ONLY, "killBackgroundProcesses", null);
+        final int[] userIds = mUserController.expandUserId(userId);
+
         long callingId = Binder.clearCallingIdentity();
         try {
             IPackageManager pm = AppGlobals.getPackageManager();
-            synchronized(this) {
+            for (int targetUserId : userIds) {
                 int appId = -1;
                 try {
                     appId = UserHandle.getAppId(
-                            pm.getPackageUid(packageName, MATCH_DEBUG_TRIAGED_MISSING, userId));
+                            pm.getPackageUid(packageName, MATCH_DEBUG_TRIAGED_MISSING,
+                                    targetUserId));
                 } catch (RemoteException e) {
                 }
                 if (appId == -1) {
                     Slog.w(TAG, "Invalid packageName: " + packageName);
                     return;
                 }
-                killPackageProcessesLocked(packageName, appId, userId,
-                        ProcessList.SERVICE_ADJ, false, true, true, false, "kill background");
+                synchronized (this) {
+                    killPackageProcessesLocked(packageName, appId, targetUserId,
+                            ProcessList.SERVICE_ADJ, false, true, true, false, "kill background");
+                }
             }
         } finally {
             Binder.restoreCallingIdentity(callingId);
@@ -9519,6 +9539,25 @@ public class ActivityManagerService extends IActivityManager.Stub
                     allowed = false;
                 }
             }
+            if (pi.pathPermissions != null) {
+                final int N = pi.pathPermissions.length;
+                for (int i=0; i<N; i++) {
+                    if (pi.pathPermissions[i] != null
+                            && pi.pathPermissions[i].match(grantUri.uri.getPath())) {
+                        if ((modeFlags&Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+                            if (pi.pathPermissions[i].getReadPermission() != null) {
+                                allowed = false;
+                            }
+                        }
+                        if ((modeFlags&Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0) {
+                            if (pi.pathPermissions[i].getWritePermission() != null) {
+                                allowed = false;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
             if (allowed) {
                 return -1;
             }
@@ -10233,92 +10272,33 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     /**
-     * Updates (grants or revokes) a persitable URI permission.
-     *
-     * @param uri URI to be granted or revoked.
-     * @param prefix if {@code false}, permission apply to this specific URI; if {@code true}, it
-     * applies to all URIs that are prefixed by this URI.
-     * @param packageName target package.
-     * @param grant if {@code true} a new permission will be granted, otherwise an existing
-     * permission will be revoked.
-     * @param userId user handle
-     *
-     * @return whether or not the requested succeeded.
-     *
-     * @deprecated TODO(b/72055774): caller should use takePersistableUriPermission() or
-     * releasePersistableUriPermission() instead, but such change will be made in a separate CL
-     * so it can be easily reverted if it breaks existing functionality.
-     */
-    @Deprecated // STOPSHIP if not removed
-    @Override
-    public boolean updatePersistableUriPermission(Uri uri, boolean prefix, String packageName,
-            boolean grant, int userId) {
-        enforceCallingPermission(android.Manifest.permission.GET_APP_GRANTED_URI_PERMISSIONS,
-                "updatePersistableUriPermission");
-        final int uid = mPackageManagerInt.getPackageUid(packageName, 0, userId);
-
-        final GrantUri grantUri = new GrantUri(userId, uri, prefix);
-
-        boolean persistChanged = false;
-        synchronized (this) {
-            if (grant) { // Grant
-                final String authority = uri.getAuthority();
-                final ProviderInfo pi = getProviderInfoLocked(authority, userId, 0);
-                if (pi == null) {
-                    Slog.w(TAG, "No content provider found for authority " + authority);
-                    return false;
-                }
-                final UriPermission permission = findOrCreateUriPermissionLocked(pi.packageName,
-                        packageName, uid, grantUri);
-                if (permission.isNew()) {
-                    final int modeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
-                    permission.initPersistedModes(modeFlags, System.currentTimeMillis());
-                    persistChanged = true;
-                } else {
-                    // Caller should not try to grant permission that is already granted.
-                    Slog.w(TAG_URI_PERMISSION,
-                            "permission already granted for " + grantUri.toSafeString());
-                    return false;
-                }
-                persistChanged |= maybePrunePersistedUriGrantsLocked(uid);
-            } else { // Revoke
-                final UriPermission permission = findUriPermissionLocked(uid, grantUri);
-                if (permission == null) {
-                    // Caller should not try to revoke permission that is not granted.
-                    Slog.v(TAG_URI_PERMISSION, "no permission for " + grantUri.toSafeString());
-                    return false;
-                } else {
-                    permission.modeFlags = 0;
-                    removeUriPermissionIfNeededLocked(permission);
-                    persistChanged = true;
-                }
-            }
-            if (persistChanged) {
-                schedulePersistUriGrants();
-            }
-        }
-        return true;
-    }
-
-    /**
      * @param uri This uri must NOT contain an embedded userId.
+     * @param toPackage Name of package whose uri is being granted to (if {@code null}, uses
+     * calling uid)
      * @param userId The userId in which the uri is to be resolved.
      */
     @Override
-    public void takePersistableUriPermission(Uri uri, final int modeFlags, int userId) {
-        enforceNotIsolatedCaller("takePersistableUriPermission");
+    public void takePersistableUriPermission(Uri uri, final int modeFlags,
+            @Nullable String toPackage, int userId) {
+        final int uid;
+        if (toPackage != null) {
+            enforceCallingPermission(android.Manifest.permission.FORCE_PERSISTABLE_URI_PERMISSIONS,
+                    "takePersistableUriPermission");
+            uid = mPackageManagerInt.getPackageUid(toPackage, 0, userId);
+        } else {
+            enforceNotIsolatedCaller("takePersistableUriPermission");
+            uid = Binder.getCallingUid();
+        }
 
         Preconditions.checkFlagsArgument(modeFlags,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
         synchronized (this) {
-            final int callingUid = Binder.getCallingUid();
             boolean persistChanged = false;
             GrantUri grantUri = new GrantUri(userId, uri, false);
 
-            UriPermission exactPerm = findUriPermissionLocked(callingUid, grantUri);
-            UriPermission prefixPerm = findUriPermissionLocked(callingUid,
+            UriPermission exactPerm = findUriPermissionLocked(uid, grantUri);
+            UriPermission prefixPerm = findUriPermissionLocked(uid,
                     new GrantUri(userId, uri, true));
 
             final boolean exactValid = (exactPerm != null)
@@ -10328,7 +10308,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             if (!(exactValid || prefixValid)) {
                 throw new SecurityException("No persistable permission grants found for UID "
-                        + callingUid + " and Uri " + grantUri.toSafeString());
+                        + uid + " and Uri " + grantUri.toSafeString());
             }
 
             if (exactValid) {
@@ -10338,7 +10318,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 persistChanged |= prefixPerm.takePersistableModes(modeFlags);
             }
 
-            persistChanged |= maybePrunePersistedUriGrantsLocked(callingUid);
+            persistChanged |= maybePrunePersistedUriGrantsLocked(uid);
 
             if (persistChanged) {
                 schedulePersistUriGrants();
@@ -10348,25 +10328,36 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     /**
      * @param uri This uri must NOT contain an embedded userId.
+     * @param toPackage Name of the target package whose uri is being released (if {@code null},
+     * uses calling uid)
      * @param userId The userId in which the uri is to be resolved.
      */
     @Override
-    public void releasePersistableUriPermission(Uri uri, final int modeFlags, int userId) {
-        enforceNotIsolatedCaller("releasePersistableUriPermission");
+    public void releasePersistableUriPermission(Uri uri, final int modeFlags,
+            @Nullable String toPackage, int userId) {
+
+        final int uid;
+        if (toPackage != null) {
+            enforceCallingPermission(android.Manifest.permission.FORCE_PERSISTABLE_URI_PERMISSIONS,
+                    "releasePersistableUriPermission");
+            uid = mPackageManagerInt.getPackageUid(toPackage, 0, userId);
+        } else {
+            enforceNotIsolatedCaller("releasePersistableUriPermission");
+            uid = Binder.getCallingUid();
+        }
 
         Preconditions.checkFlagsArgument(modeFlags,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
         synchronized (this) {
-            final int callingUid = Binder.getCallingUid();
             boolean persistChanged = false;
 
-            UriPermission exactPerm = findUriPermissionLocked(callingUid,
+            UriPermission exactPerm = findUriPermissionLocked(uid,
                     new GrantUri(userId, uri, false));
-            UriPermission prefixPerm = findUriPermissionLocked(callingUid,
+            UriPermission prefixPerm = findUriPermissionLocked(uid,
                     new GrantUri(userId, uri, true));
-            if (exactPerm == null && prefixPerm == null) {
-                throw new SecurityException("No permission grants found for UID " + callingUid
+            if (exactPerm == null && prefixPerm == null && toPackage == null) {
+                throw new SecurityException("No permission grants found for UID " + uid
                         + " and Uri " + uri.toSafeString());
             }
 
@@ -12429,6 +12420,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         return mActivityStartController;
     }
 
+    ClientLifecycleManager getLifecycleManager() {
+        return mLifecycleManager;
+    }
+
     PackageManagerInternal getPackageManagerInternalLocked() {
         if (mPackageManagerInt == null) {
             mPackageManagerInt = LocalServices.getService(PackageManagerInternal.class);
@@ -12962,6 +12957,25 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
         return false;
+    }
+
+    @Override
+    public boolean isBackgroundRestricted(String packageName) {
+        final int callingUid = Binder.getCallingUid();
+        final IPackageManager pm = AppGlobals.getPackageManager();
+        try {
+            final int packageUid = pm.getPackageUid(packageName, MATCH_DEBUG_TRIAGED_MISSING,
+                    UserHandle.getUserId(callingUid));
+            if (packageUid != callingUid) {
+                throw new IllegalArgumentException("Uid " + callingUid
+                        + " cannot query restriction state for package " + packageName);
+            }
+        } catch (RemoteException exc) {
+            // Ignore.
+        }
+        final int mode = mAppOpsService.checkOperation(AppOpsManager.OP_RUN_ANY_IN_BACKGROUND,
+                callingUid, packageName);
+        return (mode != AppOpsManager.MODE_ALLOWED);
     }
 
     @Override
@@ -15849,12 +15863,12 @@ public class ActivityManagerService extends IActivityManager.Stub
             opti++;
 
             if ("activities".equals(cmd) || "a".equals(cmd)) {
-                // output proto is ActivityStackSupervisorProto
+                // output proto is ActivityManagerServiceDumpActivitiesProto
                 synchronized (this) {
                     writeActivitiesToProtoLocked(proto);
                 }
             } else if ("broadcasts".equals(cmd) || "b".equals(cmd)) {
-                // output proto is BroadcastProto
+                // output proto is ActivityManagerServiceDumpBroadcastsProto
                 synchronized (this) {
                     writeBroadcastsToProtoLocked(proto);
                 }
@@ -15876,7 +15890,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                     pw.println("Use -h for help.");
                 }
             } else if ("service".equals(cmd)) {
-                mServices.writeToProto(proto);
+                // output proto is ActivityManagerServiceDumpServicesProto
+                mServices.writeToProto(proto, ActivityManagerServiceDumpServicesProto.ACTIVE_SERVICES);
             } else if ("processes".equals(cmd) || "p".equals(cmd)) {
                 if (opti < args.length) {
                     dumpPackage = args[opti];
@@ -15898,7 +15913,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     proto.end(broadcastToken);
 
                     long serviceToken = proto.start(ActivityManagerServiceProto.SERVICES);
-                    mServices.writeToProto(proto);
+                    mServices.writeToProto(proto, ActivityManagerServiceDumpServicesProto.ACTIVE_SERVICES);
                     proto.end(serviceToken);
 
                     long processToken = proto.start(ActivityManagerServiceProto.PROCESSES);
@@ -16261,8 +16276,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     private void writeActivitiesToProtoLocked(ProtoOutputStream proto) {
-        // The output proto of "activity --proto activities" is ActivityStackSupervisorProto
-        mStackSupervisor.writeToProto(proto);
+        // The output proto of "activity --proto activities" is ActivityManagerServiceDumpActivitiesProto
+        mStackSupervisor.writeToProto(proto, ActivityManagerServiceDumpActivitiesProto.ACTIVITY_STACK_SUPERVISOR);
     }
 
     private void dumpLastANRLocked(PrintWriter pw) {
@@ -16959,7 +16974,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 if (dumpPackage != null && !r.pkgList.containsKey(dumpPackage)) {
                     continue;
                 }
-                r.writeToProto(proto, ProcessesProto.PROCS);
+                r.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.PROCS);
                 if (r.persistent) {
                     numPers++;
                 }
@@ -16971,7 +16986,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (dumpPackage != null && !r.pkgList.containsKey(dumpPackage)) {
                 continue;
             }
-            r.writeToProto(proto, ProcessesProto.ISOLATED_PROCS);
+            r.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.ISOLATED_PROCS);
         }
 
         for (int i=0; i<mActiveInstrumentation.size(); i++) {
@@ -16980,7 +16995,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     && !ai.mTargetInfo.packageName.equals(dumpPackage)) {
                 continue;
             }
-            ai.writeToProto(proto, ProcessesProto.ACTIVE_INSTRUMENTATIONS);
+            ai.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.ACTIVE_INSTRUMENTATIONS);
         }
 
         int whichAppId = getAppId(dumpPackage);
@@ -16989,7 +17004,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (dumpPackage != null && UserHandle.getAppId(uidRec.uid) != whichAppId) {
                 continue;
             }
-            uidRec.writeToProto(proto, ProcessesProto.ACTIVE_UIDS);
+            uidRec.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.ACTIVE_UIDS);
         }
 
         for (int i=0; i<mValidateUids.size(); i++) {
@@ -16997,16 +17012,16 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (dumpPackage != null && UserHandle.getAppId(uidRec.uid) != whichAppId) {
                 continue;
             }
-            uidRec.writeToProto(proto, ProcessesProto.VALIDATE_UIDS);
+            uidRec.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.VALIDATE_UIDS);
         }
 
         if (mLruProcesses.size() > 0) {
-            long lruToken = proto.start(ProcessesProto.LRU_PROCS);
+            long lruToken = proto.start(ActivityManagerServiceDumpProcessesProto.LRU_PROCS);
             int total = mLruProcesses.size();
-            proto.write(ProcessesProto.LruProcesses.SIZE, total);
-            proto.write(ProcessesProto.LruProcesses.NON_ACT_AT, total-mLruProcessActivityStart);
-            proto.write(ProcessesProto.LruProcesses.NON_SVC_AT, total-mLruProcessServiceStart);
-            writeProcessOomListToProto(proto, ProcessesProto.LruProcesses.LIST, this,
+            proto.write(ActivityManagerServiceDumpProcessesProto.LruProcesses.SIZE, total);
+            proto.write(ActivityManagerServiceDumpProcessesProto.LruProcesses.NON_ACT_AT, total-mLruProcessActivityStart);
+            proto.write(ActivityManagerServiceDumpProcessesProto.LruProcesses.NON_SVC_AT, total-mLruProcessServiceStart);
+            writeProcessOomListToProto(proto, ActivityManagerServiceDumpProcessesProto.LruProcesses.LIST, this,
                     mLruProcesses,false, dumpPackage);
             proto.end(lruToken);
         }
@@ -17018,7 +17033,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     if (!r.pkgList.containsKey(dumpPackage)) {
                         continue;
                     }
-                    r.writeToProto(proto, ProcessesProto.PIDS_SELF_LOCKED);
+                    r.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.PIDS_SELF_LOCKED);
                 }
             }
         }
@@ -17032,7 +17047,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             || !r.pkgList.containsKey(dumpPackage))) {
                         continue;
                     }
-                    it.writeToProto(proto, ProcessesProto.IMPORTANT_PROCS);
+                    it.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.IMPORTANT_PROCS);
                 }
             }
         }
@@ -17042,7 +17057,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (dumpPackage != null && !dumpPackage.equals(r.info.packageName)) {
                 continue;
             }
-            r.writeToProto(proto, ProcessesProto.PERSISTENT_STARTING_PROCS);
+            r.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.PERSISTENT_STARTING_PROCS);
         }
 
         for (int i=0; i<mRemovedProcesses.size(); i++) {
@@ -17050,7 +17065,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (dumpPackage != null && !dumpPackage.equals(r.info.packageName)) {
                 continue;
             }
-            r.writeToProto(proto, ProcessesProto.REMOVED_PROCS);
+            r.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.REMOVED_PROCS);
         }
 
         for (int i=0; i<mProcessesOnHold.size(); i++) {
@@ -17058,41 +17073,41 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (dumpPackage != null && !dumpPackage.equals(r.info.packageName)) {
                 continue;
             }
-            r.writeToProto(proto, ProcessesProto.ON_HOLD_PROCS);
+            r.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.ON_HOLD_PROCS);
         }
 
-        writeProcessesToGcToProto(proto, ProcessesProto.GC_PROCS, dumpPackage);
-        mAppErrors.writeToProto(proto, ProcessesProto.APP_ERRORS, dumpPackage);
+        writeProcessesToGcToProto(proto, ActivityManagerServiceDumpProcessesProto.GC_PROCS, dumpPackage);
+        mAppErrors.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.APP_ERRORS, dumpPackage);
 
         if (dumpPackage == null) {
-            mUserController.writeToProto(proto, ProcessesProto.USER_CONTROLLER);
-            getGlobalConfiguration().writeToProto(proto, ProcessesProto.GLOBAL_CONFIGURATION);
-            proto.write(ProcessesProto.CONFIG_WILL_CHANGE, getFocusedStack().mConfigWillChange);
+            mUserController.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.USER_CONTROLLER);
+            getGlobalConfiguration().writeToProto(proto, ActivityManagerServiceDumpProcessesProto.GLOBAL_CONFIGURATION);
+            proto.write(ActivityManagerServiceDumpProcessesProto.CONFIG_WILL_CHANGE, getFocusedStack().mConfigWillChange);
         }
 
         if (mHomeProcess != null && (dumpPackage == null
                 || mHomeProcess.pkgList.containsKey(dumpPackage))) {
-            mHomeProcess.writeToProto(proto, ProcessesProto.HOME_PROC);
+            mHomeProcess.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.HOME_PROC);
         }
 
         if (mPreviousProcess != null && (dumpPackage == null
                 || mPreviousProcess.pkgList.containsKey(dumpPackage))) {
-            mPreviousProcess.writeToProto(proto, ProcessesProto.PREVIOUS_PROC);
-            proto.write(ProcessesProto.PREVIOUS_PROC_VISIBLE_TIME_MS, mPreviousProcessVisibleTime);
+            mPreviousProcess.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.PREVIOUS_PROC);
+            proto.write(ActivityManagerServiceDumpProcessesProto.PREVIOUS_PROC_VISIBLE_TIME_MS, mPreviousProcessVisibleTime);
         }
 
         if (mHeavyWeightProcess != null && (dumpPackage == null
                 || mHeavyWeightProcess.pkgList.containsKey(dumpPackage))) {
-            mHeavyWeightProcess.writeToProto(proto, ProcessesProto.HEAVY_WEIGHT_PROC);
+            mHeavyWeightProcess.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.HEAVY_WEIGHT_PROC);
         }
 
         for (Map.Entry<String, Integer> entry : mCompatModePackages.getPackages().entrySet()) {
             String pkg = entry.getKey();
             int mode = entry.getValue();
             if (dumpPackage == null || dumpPackage.equals(pkg)) {
-                long compatToken = proto.start(ProcessesProto.SCREEN_COMPAT_PACKAGES);
-                proto.write(ProcessesProto.ScreenCompatPackage.PACKAGE, pkg);
-                proto.write(ProcessesProto.ScreenCompatPackage.MODE, mode);
+                long compatToken = proto.start(ActivityManagerServiceDumpProcessesProto.SCREEN_COMPAT_PACKAGES);
+                proto.write(ActivityManagerServiceDumpProcessesProto.ScreenCompatPackage.PACKAGE, pkg);
+                proto.write(ActivityManagerServiceDumpProcessesProto.ScreenCompatPackage.MODE, mode);
                 proto.end(compatToken);
             }
         }
@@ -17102,89 +17117,89 @@ public class ActivityManagerService extends IActivityManager.Stub
             final UidObserverRegistration reg = (UidObserverRegistration)
                     mUidObservers.getRegisteredCallbackCookie(i);
             if (dumpPackage == null || dumpPackage.equals(reg.pkg)) {
-                reg.writeToProto(proto, ProcessesProto.UID_OBSERVERS);
+                reg.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.UID_OBSERVERS);
             }
         }
 
         for (int v : mDeviceIdleWhitelist) {
-            proto.write(ProcessesProto.DEVICE_IDLE_WHITELIST, v);
+            proto.write(ActivityManagerServiceDumpProcessesProto.DEVICE_IDLE_WHITELIST, v);
         }
 
         for (int v : mDeviceIdleTempWhitelist) {
-            proto.write(ProcessesProto.DEVICE_IDLE_TEMP_WHITELIST, v);
+            proto.write(ActivityManagerServiceDumpProcessesProto.DEVICE_IDLE_TEMP_WHITELIST, v);
         }
 
         if (mPendingTempWhitelist.size() > 0) {
             for (int i=0; i < mPendingTempWhitelist.size(); i++) {
                 mPendingTempWhitelist.valueAt(i).writeToProto(proto,
-                        ProcessesProto.PENDING_TEMP_WHITELIST);
+                        ActivityManagerServiceDumpProcessesProto.PENDING_TEMP_WHITELIST);
             }
         }
 
         if (dumpPackage == null) {
-            final long sleepToken = proto.start(ProcessesProto.SLEEP_STATUS);
-            proto.write(ProcessesProto.SleepStatus.WAKEFULNESS,
+            final long sleepToken = proto.start(ActivityManagerServiceDumpProcessesProto.SLEEP_STATUS);
+            proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.WAKEFULNESS,
                     PowerManagerInternal.wakefulnessToProtoEnum(mWakefulness));
             for (SleepToken st : mStackSupervisor.mSleepTokens) {
-                proto.write(ProcessesProto.SleepStatus.SLEEP_TOKENS, st.toString());
+                proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.SLEEP_TOKENS, st.toString());
             }
-            proto.write(ProcessesProto.SleepStatus.SLEEPING, mSleeping);
-            proto.write(ProcessesProto.SleepStatus.SHUTTING_DOWN, mShuttingDown);
-            proto.write(ProcessesProto.SleepStatus.TEST_PSS_MODE, mTestPssMode);
+            proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.SLEEPING, mSleeping);
+            proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.SHUTTING_DOWN, mShuttingDown);
+            proto.write(ActivityManagerServiceDumpProcessesProto.SleepStatus.TEST_PSS_MODE, mTestPssMode);
             proto.end(sleepToken);
 
             if (mRunningVoice != null) {
-                final long vrToken = proto.start(ProcessesProto.RUNNING_VOICE);
-                proto.write(ProcessesProto.VoiceProto.SESSION, mRunningVoice.toString());
-                mVoiceWakeLock.writeToProto(proto, ProcessesProto.VoiceProto.WAKELOCK);
+                final long vrToken = proto.start(ActivityManagerServiceDumpProcessesProto.RUNNING_VOICE);
+                proto.write(ActivityManagerServiceDumpProcessesProto.VoiceProto.SESSION, mRunningVoice.toString());
+                mVoiceWakeLock.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.VoiceProto.WAKELOCK);
                 proto.end(vrToken);
             }
 
-            mVrController.writeToProto(proto, ProcessesProto.VR_CONTROLLER);
+            mVrController.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.VR_CONTROLLER);
         }
 
         if (mDebugApp != null || mOrigDebugApp != null || mDebugTransient
                 || mOrigWaitForDebugger) {
             if (dumpPackage == null || dumpPackage.equals(mDebugApp)
                     || dumpPackage.equals(mOrigDebugApp)) {
-                final long debugAppToken = proto.start(ProcessesProto.DEBUG);
-                proto.write(ProcessesProto.DebugApp.DEBUG_APP, mDebugApp);
-                proto.write(ProcessesProto.DebugApp.ORIG_DEBUG_APP, mOrigDebugApp);
-                proto.write(ProcessesProto.DebugApp.DEBUG_TRANSIENT, mDebugTransient);
-                proto.write(ProcessesProto.DebugApp.ORIG_WAIT_FOR_DEBUGGER, mOrigWaitForDebugger);
+                final long debugAppToken = proto.start(ActivityManagerServiceDumpProcessesProto.DEBUG);
+                proto.write(ActivityManagerServiceDumpProcessesProto.DebugApp.DEBUG_APP, mDebugApp);
+                proto.write(ActivityManagerServiceDumpProcessesProto.DebugApp.ORIG_DEBUG_APP, mOrigDebugApp);
+                proto.write(ActivityManagerServiceDumpProcessesProto.DebugApp.DEBUG_TRANSIENT, mDebugTransient);
+                proto.write(ActivityManagerServiceDumpProcessesProto.DebugApp.ORIG_WAIT_FOR_DEBUGGER, mOrigWaitForDebugger);
                 proto.end(debugAppToken);
             }
         }
 
         if (mCurAppTimeTracker != null) {
-            mCurAppTimeTracker.writeToProto(proto, ProcessesProto.CURRENT_TRACKER, true);
+            mCurAppTimeTracker.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.CURRENT_TRACKER, true);
         }
 
         if (mMemWatchProcesses.getMap().size() > 0) {
-            final long token = proto.start(ProcessesProto.MEM_WATCH_PROCESSES);
+            final long token = proto.start(ActivityManagerServiceDumpProcessesProto.MEM_WATCH_PROCESSES);
             ArrayMap<String, SparseArray<Pair<Long, String>>> procs = mMemWatchProcesses.getMap();
             for (int i=0; i<procs.size(); i++) {
                 final String proc = procs.keyAt(i);
                 final SparseArray<Pair<Long, String>> uids = procs.valueAt(i);
-                final long ptoken = proto.start(ProcessesProto.MemWatchProcess.PROCS);
-                proto.write(ProcessesProto.MemWatchProcess.Process.NAME, proc);
+                final long ptoken = proto.start(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.PROCS);
+                proto.write(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.Process.NAME, proc);
                 for (int j=0; j<uids.size(); j++) {
-                    final long utoken = proto.start(ProcessesProto.MemWatchProcess.Process.MEM_STATS);
+                    final long utoken = proto.start(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.Process.MEM_STATS);
                     Pair<Long, String> val = uids.valueAt(j);
-                    proto.write(ProcessesProto.MemWatchProcess.Process.MemStats.UID, uids.keyAt(j));
-                    proto.write(ProcessesProto.MemWatchProcess.Process.MemStats.SIZE,
+                    proto.write(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.Process.MemStats.UID, uids.keyAt(j));
+                    proto.write(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.Process.MemStats.SIZE,
                             DebugUtils.sizeValueToString(val.first, new StringBuilder()));
-                    proto.write(ProcessesProto.MemWatchProcess.Process.MemStats.REPORT_TO, val.second);
+                    proto.write(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.Process.MemStats.REPORT_TO, val.second);
                     proto.end(utoken);
                 }
                 proto.end(ptoken);
             }
 
-            final long dtoken = proto.start(ProcessesProto.MemWatchProcess.DUMP);
-            proto.write(ProcessesProto.MemWatchProcess.Dump.PROC_NAME, mMemWatchDumpProcName);
-            proto.write(ProcessesProto.MemWatchProcess.Dump.FILE, mMemWatchDumpFile);
-            proto.write(ProcessesProto.MemWatchProcess.Dump.PID, mMemWatchDumpPid);
-            proto.write(ProcessesProto.MemWatchProcess.Dump.UID, mMemWatchDumpUid);
+            final long dtoken = proto.start(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.DUMP);
+            proto.write(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.Dump.PROC_NAME, mMemWatchDumpProcName);
+            proto.write(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.Dump.FILE, mMemWatchDumpFile);
+            proto.write(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.Dump.PID, mMemWatchDumpPid);
+            proto.write(ActivityManagerServiceDumpProcessesProto.MemWatchProcess.Dump.UID, mMemWatchDumpUid);
             proto.end(dtoken);
 
             proto.end(token);
@@ -17192,58 +17207,58 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         if (mTrackAllocationApp != null) {
             if (dumpPackage == null || dumpPackage.equals(mTrackAllocationApp)) {
-                proto.write(ProcessesProto.TRACK_ALLOCATION_APP, mTrackAllocationApp);
+                proto.write(ActivityManagerServiceDumpProcessesProto.TRACK_ALLOCATION_APP, mTrackAllocationApp);
             }
         }
 
         if (mProfileApp != null || mProfileProc != null || (mProfilerInfo != null &&
                 (mProfilerInfo.profileFile != null || mProfilerInfo.profileFd != null))) {
             if (dumpPackage == null || dumpPackage.equals(mProfileApp)) {
-                final long token = proto.start(ProcessesProto.PROFILE);
-                proto.write(ProcessesProto.Profile.APP_NAME, mProfileApp);
-                mProfileProc.writeToProto(proto,ProcessesProto.Profile.PROC);
+                final long token = proto.start(ActivityManagerServiceDumpProcessesProto.PROFILE);
+                proto.write(ActivityManagerServiceDumpProcessesProto.Profile.APP_NAME, mProfileApp);
+                mProfileProc.writeToProto(proto,ActivityManagerServiceDumpProcessesProto.Profile.PROC);
                 if (mProfilerInfo != null) {
-                    mProfilerInfo.writeToProto(proto, ProcessesProto.Profile.INFO);
-                    proto.write(ProcessesProto.Profile.TYPE, mProfileType);
+                    mProfilerInfo.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.Profile.INFO);
+                    proto.write(ActivityManagerServiceDumpProcessesProto.Profile.TYPE, mProfileType);
                 }
                 proto.end(token);
             }
         }
 
         if (dumpPackage == null || dumpPackage.equals(mNativeDebuggingApp)) {
-            proto.write(ProcessesProto.NATIVE_DEBUGGING_APP, mNativeDebuggingApp);
+            proto.write(ActivityManagerServiceDumpProcessesProto.NATIVE_DEBUGGING_APP, mNativeDebuggingApp);
         }
 
         if (dumpPackage == null) {
-            proto.write(ProcessesProto.ALWAYS_FINISH_ACTIVITIES, mAlwaysFinishActivities);
+            proto.write(ActivityManagerServiceDumpProcessesProto.ALWAYS_FINISH_ACTIVITIES, mAlwaysFinishActivities);
             if (mController != null) {
-                final long token = proto.start(ProcessesProto.CONTROLLER);
-                proto.write(ProcessesProto.Controller.CONTROLLER, mController.toString());
-                proto.write(ProcessesProto.Controller.IS_A_MONKEY, mControllerIsAMonkey);
+                final long token = proto.start(ActivityManagerServiceDumpProcessesProto.CONTROLLER);
+                proto.write(ActivityManagerServiceDumpProcessesProto.Controller.CONTROLLER, mController.toString());
+                proto.write(ActivityManagerServiceDumpProcessesProto.Controller.IS_A_MONKEY, mControllerIsAMonkey);
                 proto.end(token);
             }
-            proto.write(ProcessesProto.TOTAL_PERSISTENT_PROCS, numPers);
-            proto.write(ProcessesProto.PROCESSES_READY, mProcessesReady);
-            proto.write(ProcessesProto.SYSTEM_READY, mSystemReady);
-            proto.write(ProcessesProto.BOOTED, mBooted);
-            proto.write(ProcessesProto.FACTORY_TEST, mFactoryTest);
-            proto.write(ProcessesProto.BOOTING, mBooting);
-            proto.write(ProcessesProto.CALL_FINISH_BOOTING, mCallFinishBooting);
-            proto.write(ProcessesProto.BOOT_ANIMATION_COMPLETE, mBootAnimationComplete);
-            proto.write(ProcessesProto.LAST_POWER_CHECK_UPTIME_MS, mLastPowerCheckUptime);
-            mStackSupervisor.mGoingToSleep.writeToProto(proto, ProcessesProto.GOING_TO_SLEEP);
-            mStackSupervisor.mLaunchingActivity.writeToProto(proto, ProcessesProto.LAUNCHING_ACTIVITY);
-            proto.write(ProcessesProto.ADJ_SEQ, mAdjSeq);
-            proto.write(ProcessesProto.LRU_SEQ, mLruSeq);
-            proto.write(ProcessesProto.NUM_NON_CACHED_PROCS, mNumNonCachedProcs);
-            proto.write(ProcessesProto.NUM_SERVICE_PROCS, mNumServiceProcs);
-            proto.write(ProcessesProto.NEW_NUM_SERVICE_PROCS, mNewNumServiceProcs);
-            proto.write(ProcessesProto.ALLOW_LOWER_MEM_LEVEL, mAllowLowerMemLevel);
-            proto.write(ProcessesProto.LAST_MEMORY_LEVEL, mLastMemoryLevel);
-            proto.write(ProcessesProto.LAST_NUM_PROCESSES, mLastNumProcesses);
+            proto.write(ActivityManagerServiceDumpProcessesProto.TOTAL_PERSISTENT_PROCS, numPers);
+            proto.write(ActivityManagerServiceDumpProcessesProto.PROCESSES_READY, mProcessesReady);
+            proto.write(ActivityManagerServiceDumpProcessesProto.SYSTEM_READY, mSystemReady);
+            proto.write(ActivityManagerServiceDumpProcessesProto.BOOTED, mBooted);
+            proto.write(ActivityManagerServiceDumpProcessesProto.FACTORY_TEST, mFactoryTest);
+            proto.write(ActivityManagerServiceDumpProcessesProto.BOOTING, mBooting);
+            proto.write(ActivityManagerServiceDumpProcessesProto.CALL_FINISH_BOOTING, mCallFinishBooting);
+            proto.write(ActivityManagerServiceDumpProcessesProto.BOOT_ANIMATION_COMPLETE, mBootAnimationComplete);
+            proto.write(ActivityManagerServiceDumpProcessesProto.LAST_POWER_CHECK_UPTIME_MS, mLastPowerCheckUptime);
+            mStackSupervisor.mGoingToSleep.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.GOING_TO_SLEEP);
+            mStackSupervisor.mLaunchingActivity.writeToProto(proto, ActivityManagerServiceDumpProcessesProto.LAUNCHING_ACTIVITY);
+            proto.write(ActivityManagerServiceDumpProcessesProto.ADJ_SEQ, mAdjSeq);
+            proto.write(ActivityManagerServiceDumpProcessesProto.LRU_SEQ, mLruSeq);
+            proto.write(ActivityManagerServiceDumpProcessesProto.NUM_NON_CACHED_PROCS, mNumNonCachedProcs);
+            proto.write(ActivityManagerServiceDumpProcessesProto.NUM_SERVICE_PROCS, mNumServiceProcs);
+            proto.write(ActivityManagerServiceDumpProcessesProto.NEW_NUM_SERVICE_PROCS, mNewNumServiceProcs);
+            proto.write(ActivityManagerServiceDumpProcessesProto.ALLOW_LOWER_MEM_LEVEL, mAllowLowerMemLevel);
+            proto.write(ActivityManagerServiceDumpProcessesProto.LAST_MEMORY_LEVEL, mLastMemoryLevel);
+            proto.write(ActivityManagerServiceDumpProcessesProto.LAST_NUM_PROCESSES, mLastNumProcesses);
             long now = SystemClock.uptimeMillis();
-            ProtoUtils.toDuration(proto, ProcessesProto.LAST_IDLE_TIME, mLastIdleTime, now);
-            proto.write(ProcessesProto.LOW_RAM_SINCE_LAST_IDLE_MS, getLowRamTimeSinceIdle(now));
+            ProtoUtils.toDuration(proto, ActivityManagerServiceDumpProcessesProto.LAST_IDLE_TIME, mLastIdleTime, now);
+            proto.write(ActivityManagerServiceDumpProcessesProto.LOW_RAM_SINCE_LAST_IDLE_MS, getLowRamTimeSinceIdle(now));
         }
 
     }
@@ -17553,15 +17568,15 @@ public class ActivityManagerService extends IActivityManager.Stub
             Iterator it = mRegisteredReceivers.values().iterator();
             while (it.hasNext()) {
                 ReceiverList r = (ReceiverList)it.next();
-                r.writeToProto(proto, BroadcastProto.RECEIVER_LIST);
+                r.writeToProto(proto, ActivityManagerServiceDumpBroadcastsProto.RECEIVER_LIST);
             }
         }
-        mReceiverResolver.writeToProto(proto, BroadcastProto.RECEIVER_RESOLVER);
+        mReceiverResolver.writeToProto(proto, ActivityManagerServiceDumpBroadcastsProto.RECEIVER_RESOLVER);
         for (BroadcastQueue q : mBroadcastQueues) {
-            q.writeToProto(proto, BroadcastProto.BROADCAST_QUEUE);
+            q.writeToProto(proto, ActivityManagerServiceDumpBroadcastsProto.BROADCAST_QUEUE);
         }
         for (int user=0; user<mStickyBroadcasts.size(); user++) {
-            long token = proto.start(BroadcastProto.STICKY_BROADCASTS);
+            long token = proto.start(ActivityManagerServiceDumpBroadcastsProto.STICKY_BROADCASTS);
             proto.write(StickyBroadcastProto.USER, mStickyBroadcasts.keyAt(user));
             for (Map.Entry<String, ArrayList<Intent>> ent
                     : mStickyBroadcasts.valueAt(user).entrySet()) {
@@ -17576,9 +17591,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             proto.end(token);
         }
 
-        long handlerToken = proto.start(BroadcastProto.HANDLER);
-        proto.write(BroadcastProto.MainHandler.HANDLER, mHandler.toString());
-        mHandler.getLooper().writeToProto(proto, BroadcastProto.MainHandler.LOOPER);
+        long handlerToken = proto.start(ActivityManagerServiceDumpBroadcastsProto.HANDLER);
+        proto.write(ActivityManagerServiceDumpBroadcastsProto.MainHandler.HANDLER, mHandler.toString());
+        mHandler.getLooper().writeToProto(proto,
+            ActivityManagerServiceDumpBroadcastsProto.MainHandler.LOOPER);
         proto.end(handlerToken);
     }
 
@@ -18340,17 +18356,17 @@ public class ActivityManagerService extends IActivityManager.Stub
             MemItem mi = items.get(i);
             final long token = proto.start(fieldId);
 
-            proto.write(MemInfoProto.MemItem.TAG, tag);
-            proto.write(MemInfoProto.MemItem.LABEL, mi.shortLabel);
-            proto.write(MemInfoProto.MemItem.IS_PROC, mi.isProc);
-            proto.write(MemInfoProto.MemItem.ID, mi.id);
-            proto.write(MemInfoProto.MemItem.HAS_ACTIVITIES, mi.hasActivities);
-            proto.write(MemInfoProto.MemItem.PSS_KB, mi.pss);
+            proto.write(MemInfoDumpProto.MemItem.TAG, tag);
+            proto.write(MemInfoDumpProto.MemItem.LABEL, mi.shortLabel);
+            proto.write(MemInfoDumpProto.MemItem.IS_PROC, mi.isProc);
+            proto.write(MemInfoDumpProto.MemItem.ID, mi.id);
+            proto.write(MemInfoDumpProto.MemItem.HAS_ACTIVITIES, mi.hasActivities);
+            proto.write(MemInfoDumpProto.MemItem.PSS_KB, mi.pss);
             if (dumpSwapPss) {
-                proto.write(MemInfoProto.MemItem.SWAP_PSS_KB, mi.swapPss);
+                proto.write(MemInfoDumpProto.MemItem.SWAP_PSS_KB, mi.swapPss);
             }
             if (mi.subitems != null) {
-                dumpMemItems(proto, MemInfoProto.MemItem.SUB_ITEMS, mi.shortLabel, mi.subitems,
+                dumpMemItems(proto, MemInfoDumpProto.MemItem.SUB_ITEMS, mi.shortLabel, mi.subitems,
                         true, dumpSwapPss);
             }
             proto.end(token);
@@ -19104,16 +19120,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                     if (nativeProcs.size() > 0) {
                         ProtoOutputStream proto = new ProtoOutputStream(fd);
 
-                        proto.write(MemInfoProto.UPTIME_DURATION_MS, uptimeMs);
-                        proto.write(MemInfoProto.ELAPSED_REALTIME_MS, realtimeMs);
+                        proto.write(MemInfoDumpProto.UPTIME_DURATION_MS, uptimeMs);
+                        proto.write(MemInfoDumpProto.ELAPSED_REALTIME_MS, realtimeMs);
                         Debug.MemoryInfo mi = null;
                         for (int i = nativeProcs.size() - 1 ; i >= 0 ; i--) {
                             final ProcessCpuTracker.Stats r = nativeProcs.get(i);
                             final int pid = r.pid;
-                            final long nToken = proto.start(MemInfoProto.NATIVE_PROCESSES);
+                            final long nToken = proto.start(MemInfoDumpProto.NATIVE_PROCESSES);
 
-                            proto.write(MemInfoProto.ProcessMemory.PID, pid);
-                            proto.write(MemInfoProto.ProcessMemory.PROCESS_NAME, r.baseName);
+                            proto.write(MemInfoDumpProto.ProcessMemory.PID, pid);
+                            proto.write(MemInfoDumpProto.ProcessMemory.PROCESS_NAME, r.baseName);
 
                             if (mi == null) {
                                 mi = new Debug.MemoryInfo();
@@ -19145,8 +19161,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         ProtoOutputStream proto = new ProtoOutputStream(fd);
 
-        proto.write(MemInfoProto.UPTIME_DURATION_MS, uptimeMs);
-        proto.write(MemInfoProto.ELAPSED_REALTIME_MS, realtimeMs);
+        proto.write(MemInfoDumpProto.UPTIME_DURATION_MS, uptimeMs);
+        proto.write(MemInfoDumpProto.ELAPSED_REALTIME_MS, realtimeMs);
 
         ArrayList<MemItem> procMems = new ArrayList<MemItem>();
         final SparseArray<MemItem> procMemsMap = new SparseArray<MemItem>();
@@ -19211,10 +19227,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             if (opts.dumpDetails) {
                 if (opts.localOnly) {
-                    final long aToken = proto.start(MemInfoProto.APP_PROCESSES);
-                    final long mToken = proto.start(MemInfoProto.AppData.PROCESS_MEMORY);
-                    proto.write(MemInfoProto.ProcessMemory.PID, pid);
-                    proto.write(MemInfoProto.ProcessMemory.PROCESS_NAME, r.processName);
+                    final long aToken = proto.start(MemInfoDumpProto.APP_PROCESSES);
+                    final long mToken = proto.start(MemInfoDumpProto.AppData.PROCESS_MEMORY);
+                    proto.write(MemInfoDumpProto.ProcessMemory.PID, pid);
+                    proto.write(MemInfoDumpProto.ProcessMemory.PROCESS_NAME, r.processName);
                     ActivityThread.dumpMemInfoTable(proto, mi, opts.dumpDalvik,
                             opts.dumpSummaryOnly, 0, 0, 0, 0, 0, 0);
                     proto.end(mToken);
@@ -19226,7 +19242,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             thread.dumpMemInfoProto(tp.getWriteFd(),
                                 mi, opts.dumpFullDetails, opts.dumpDalvik, opts.dumpSummaryOnly,
                                 opts.dumpUnreachable, innerArgs);
-                            proto.write(MemInfoProto.APP_PROCESSES, tp.get());
+                            proto.write(MemInfoDumpProto.APP_PROCESSES, tp.get());
                         } finally {
                             tp.kill();
                         }
@@ -19414,13 +19430,13 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             opts.dumpSwapPss = opts.dumpSwapPss && hasSwapPss && totalSwapPss != 0;
             if (!opts.oomOnly) {
-                dumpMemItems(proto, MemInfoProto.TOTAL_PSS_BY_PROCESS, "proc",
+                dumpMemItems(proto, MemInfoDumpProto.TOTAL_PSS_BY_PROCESS, "proc",
                         procMems, true, opts.dumpSwapPss);
             }
-            dumpMemItems(proto, MemInfoProto.TOTAL_PSS_BY_OOM_ADJUSTMENT, "oom",
+            dumpMemItems(proto, MemInfoDumpProto.TOTAL_PSS_BY_OOM_ADJUSTMENT, "oom",
                     oomMems, false, opts.dumpSwapPss);
             if (!brief && !opts.oomOnly) {
-                dumpMemItems(proto, MemInfoProto.TOTAL_PSS_BY_CATEGORY, "cat",
+                dumpMemItems(proto, MemInfoDumpProto.TOTAL_PSS_BY_CATEGORY, "cat",
                         catMems, true, opts.dumpSwapPss);
             }
             MemInfoReader memInfo = new MemInfoReader();
@@ -19438,40 +19454,40 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             if (!brief) {
-                proto.write(MemInfoProto.TOTAL_RAM_KB, memInfo.getTotalSizeKb());
-                proto.write(MemInfoProto.STATUS, mLastMemoryLevel);
-                proto.write(MemInfoProto.CACHED_PSS_KB, cachedPss);
-                proto.write(MemInfoProto.CACHED_KERNEL_KB, memInfo.getCachedSizeKb());
-                proto.write(MemInfoProto.FREE_KB, memInfo.getFreeSizeKb());
+                proto.write(MemInfoDumpProto.TOTAL_RAM_KB, memInfo.getTotalSizeKb());
+                proto.write(MemInfoDumpProto.STATUS, mLastMemoryLevel);
+                proto.write(MemInfoDumpProto.CACHED_PSS_KB, cachedPss);
+                proto.write(MemInfoDumpProto.CACHED_KERNEL_KB, memInfo.getCachedSizeKb());
+                proto.write(MemInfoDumpProto.FREE_KB, memInfo.getFreeSizeKb());
             }
             long lostRAM = memInfo.getTotalSizeKb() - (totalPss - totalSwapPss)
                     - memInfo.getFreeSizeKb() - memInfo.getCachedSizeKb()
                     - memInfo.getKernelUsedSizeKb() - memInfo.getZramTotalSizeKb();
-            proto.write(MemInfoProto.USED_PSS_KB, totalPss - cachedPss);
-            proto.write(MemInfoProto.USED_KERNEL_KB, memInfo.getKernelUsedSizeKb());
-            proto.write(MemInfoProto.LOST_RAM_KB, lostRAM);
+            proto.write(MemInfoDumpProto.USED_PSS_KB, totalPss - cachedPss);
+            proto.write(MemInfoDumpProto.USED_KERNEL_KB, memInfo.getKernelUsedSizeKb());
+            proto.write(MemInfoDumpProto.LOST_RAM_KB, lostRAM);
             if (!brief) {
                 if (memInfo.getZramTotalSizeKb() != 0) {
-                    proto.write(MemInfoProto.TOTAL_ZRAM_KB, memInfo.getZramTotalSizeKb());
-                    proto.write(MemInfoProto.ZRAM_PHYSICAL_USED_IN_SWAP_KB,
+                    proto.write(MemInfoDumpProto.TOTAL_ZRAM_KB, memInfo.getZramTotalSizeKb());
+                    proto.write(MemInfoDumpProto.ZRAM_PHYSICAL_USED_IN_SWAP_KB,
                             memInfo.getSwapTotalSizeKb() - memInfo.getSwapFreeSizeKb());
-                    proto.write(MemInfoProto.TOTAL_ZRAM_SWAP_KB, memInfo.getSwapTotalSizeKb());
+                    proto.write(MemInfoDumpProto.TOTAL_ZRAM_SWAP_KB, memInfo.getSwapTotalSizeKb());
                 }
                 final long[] ksm = getKsmInfo();
-                proto.write(MemInfoProto.KSM_SHARING_KB, ksm[KSM_SHARING]);
-                proto.write(MemInfoProto.KSM_SHARED_KB, ksm[KSM_SHARED]);
-                proto.write(MemInfoProto.KSM_UNSHARED_KB, ksm[KSM_UNSHARED]);
-                proto.write(MemInfoProto.KSM_VOLATILE_KB, ksm[KSM_VOLATILE]);
+                proto.write(MemInfoDumpProto.KSM_SHARING_KB, ksm[KSM_SHARING]);
+                proto.write(MemInfoDumpProto.KSM_SHARED_KB, ksm[KSM_SHARED]);
+                proto.write(MemInfoDumpProto.KSM_UNSHARED_KB, ksm[KSM_UNSHARED]);
+                proto.write(MemInfoDumpProto.KSM_VOLATILE_KB, ksm[KSM_VOLATILE]);
 
-                proto.write(MemInfoProto.TUNING_MB, ActivityManager.staticGetMemoryClass());
-                proto.write(MemInfoProto.TUNING_LARGE_MB, ActivityManager.staticGetLargeMemoryClass());
-                proto.write(MemInfoProto.OOM_KB,
+                proto.write(MemInfoDumpProto.TUNING_MB, ActivityManager.staticGetMemoryClass());
+                proto.write(MemInfoDumpProto.TUNING_LARGE_MB, ActivityManager.staticGetLargeMemoryClass());
+                proto.write(MemInfoDumpProto.OOM_KB,
                         mProcessList.getMemLevel(ProcessList.CACHED_APP_MAX_ADJ) / 1024);
-                proto.write(MemInfoProto.RESTORE_LIMIT_KB,
+                proto.write(MemInfoDumpProto.RESTORE_LIMIT_KB,
                         mProcessList.getCachedRestoreThresholdKb());
 
-                proto.write(MemInfoProto.IS_LOW_RAM_DEVICE, ActivityManager.isLowRamDeviceStatic());
-                proto.write(MemInfoProto.IS_HIGH_END_GFX, ActivityManager.isHighEndGfx());
+                proto.write(MemInfoDumpProto.IS_LOW_RAM_DEVICE, ActivityManager.isLowRamDeviceStatic());
+                proto.write(MemInfoDumpProto.IS_HIGH_END_GFX, ActivityManager.isHighEndGfx());
             }
         }
 
@@ -20659,6 +20675,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                 rl = new ReceiverList(this, callerApp, callingPid, callingUid,
                         userId, receiver);
                 if (rl.app != null) {
+                    final int totalReceiversForApp = rl.app.receivers.size();
+                    if (totalReceiversForApp >= MAX_RECEIVERS_ALLOWED_PER_APP) {
+                        throw new IllegalStateException("Too many receivers, total of "
+                                + totalReceiversForApp + ", registered for pid: "
+                                + rl.pid + ", callerPackage: " + callerPackage);
+                    }
                     rl.app.receivers.add(rl);
                 } else {
                     try {
@@ -20687,11 +20709,18 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             BroadcastFilter bf = new BroadcastFilter(filter, rl, callerPackage,
                     permission, callingUid, userId, instantApp, visibleToInstantApps);
-            rl.add(bf);
-            if (!bf.debugCheck()) {
-                Slog.w(TAG, "==> For Dynamic broadcast");
+            if (rl.containsFilter(filter)) {
+                // STOPSHIP: To track if apps are doing this a lot for b/70677313. Change to Slog.w
+                Slog.wtf(TAG, "Receiver with filter " + filter
+                        + " already registered for pid " + rl.pid
+                        + ", callerPackage is " + callerPackage);
+            } else {
+                rl.add(bf);
+                if (!bf.debugCheck()) {
+                    Slog.w(TAG, "==> For Dynamic broadcast");
+                }
+                mReceiverResolver.addFilter(bf);
             }
-            mReceiverResolver.addFilter(bf);
 
             // Enqueue broadcasts for all existing stickies that match
             // this filter.
@@ -26275,6 +26304,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             return getRecentTasks().isCallerRecents(callingUid);
         }
 
+        public boolean isRecentsComponentHomeActivity(int userId) {
+            return getRecentTasks().isRecentsComponentHomeActivity(userId);
+        }
+
         @Override
         public boolean isUidActive(int uid) {
             synchronized (ActivityManagerService.this) {
@@ -26291,7 +26324,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     final ProcessRecord r = mPidsSelfLocked.valueAt(i);
                     final int pid = r.pid;
                     final int uid = r.uid;
-                    final MemoryStat memoryStat = readMemoryStatFromMemcg(uid, pid);
+                    final MemoryStat memoryStat = readMemoryStatFromFilesystem(uid, pid);
                     if (memoryStat == null) {
                         continue;
                     }

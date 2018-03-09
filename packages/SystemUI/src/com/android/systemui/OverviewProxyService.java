@@ -34,6 +34,9 @@ import android.util.Log;
 import android.view.SurfaceControl;
 
 import com.android.systemui.OverviewProxyService.OverviewProxyListener;
+import com.android.systemui.recents.events.EventBus;
+import com.android.systemui.recents.events.activity.DockedFirstAnimationFrameEvent;
+import com.android.systemui.recents.misc.SystemServicesProxy;
 import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.recents.ISystemUiProxy;
 import com.android.systemui.shared.system.GraphicBufferCompat;
@@ -103,6 +106,15 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             long token = Binder.clearCallingIdentity();
             try {
                 mHandler.post(OverviewProxyService.this::notifyRecentsAnimationStarted);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        public void onSplitScreenInvoked() {
+            long token = Binder.clearCallingIdentity();
+            try {
+                EventBus.getDefault().post(new DockedFirstAnimationFrameEvent());
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -190,15 +202,18 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         mConnectionBackoffAttempts = 0;
         mLauncherComponentName = ComponentName
                 .unflattenFromString(context.getString(R.string.config_overviewServiceComponent));
-        mDeviceProvisionedController.addCallback(mDeviceProvisionedCallback);
 
         // Listen for the package update changes.
-        IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
-        filter.addDataScheme("package");
-        filter.addDataSchemeSpecificPart(mLauncherComponentName.getPackageName(),
-                PatternMatcher.PATTERN_LITERAL);
-        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
-        mContext.registerReceiver(mLauncherAddedReceiver, filter);
+        if (SystemServicesProxy.getInstance(context)
+                .isSystemUser(mDeviceProvisionedController.getCurrentUser())) {
+            mDeviceProvisionedController.addCallback(mDeviceProvisionedCallback);
+            IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
+            filter.addDataScheme("package");
+            filter.addDataSchemeSpecificPart(mLauncherComponentName.getPackageName(),
+                    PatternMatcher.PATTERN_LITERAL);
+            filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+            mContext.registerReceiver(mLauncherAddedReceiver, filter);
+        }
     }
 
     public void startConnectionToCurrentUser() {

@@ -219,7 +219,7 @@ public class RecentsAnimationController {
     private void addAnimation(Task task) {
         if (DEBUG) Log.d(TAG, "addAnimation(" + task.getName() + ")");
         final SurfaceAnimator anim = new SurfaceAnimator(task, null /* animationFinishedCallback */,
-                mService.mAnimator::addAfterPrepareSurfacesRunnable, mService);
+                mService);
         final TaskAnimationAdapter taskAdapter = new TaskAnimationAdapter(task);
         anim.startAnimation(task.getPendingTransaction(), taskAdapter, false /* hidden */);
         task.commitPendingTransaction();
@@ -256,18 +256,20 @@ public class RecentsAnimationController {
 
     void cancelAnimation() {
         if (DEBUG) Log.d(TAG, "cancelAnimation()");
-        if (mCanceled) {
-            // We've already canceled the animation
-            return;
+        synchronized (mService.getWindowManagerLock()) {
+            if (mCanceled) {
+                // We've already canceled the animation
+                return;
+            }
+            mCanceled = true;
+            try {
+                mRunner.onAnimationCanceled();
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to cancel recents animation", e);
+            }
         }
-        mCanceled = true;
-        try {
-            mRunner.onAnimationCanceled();
-        } catch (RemoteException e) {
-            Slog.e(TAG, "Failed to cancel recents animation", e);
-        }
-
         // Clean up and return to the previous app
+        // Don't hold the WM lock here as it calls back to AM/RecentsAnimation
         mCallbacks.onAnimationFinished(false /* moveHomeToTop */);
     }
 

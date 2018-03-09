@@ -21,13 +21,16 @@ statsd_common_src := \
     src/statsd_config.proto \
     src/FieldValue.cpp \
     src/stats_log_util.cpp \
-    src/anomaly/AnomalyMonitor.cpp \
+    src/anomaly/AlarmMonitor.cpp \
+    src/anomaly/AlarmTracker.cpp \
     src/anomaly/AnomalyTracker.cpp \
     src/anomaly/DurationAnomalyTracker.cpp \
+    src/anomaly/subscriber_util.cpp \
     src/condition/CombinationConditionTracker.cpp \
     src/condition/condition_util.cpp \
     src/condition/SimpleConditionTracker.cpp \
     src/condition/ConditionWizard.cpp \
+    src/condition/StateTracker.cpp \
     src/config/ConfigKey.cpp \
     src/config/ConfigListener.cpp \
     src/config/ConfigManager.cpp \
@@ -36,6 +39,7 @@ statsd_common_src := \
     src/external/StatsCompanionServicePuller.cpp \
     src/external/SubsystemSleepStatePuller.cpp \
     src/external/ResourceHealthManagerPuller.cpp \
+    src/external/ResourceThermalManagerPuller.cpp \
     src/external/CpuTimePerUidPuller.cpp \
     src/external/CpuTimePerUidFreqPuller.cpp \
     src/external/KernelUidCpuActiveTimeReader.cpp \
@@ -66,7 +70,6 @@ statsd_common_src := \
     src/subscriber/IncidentdReporter.cpp \
     src/subscriber/SubscriberReporter.cpp \
     src/HashableDimensionKey.cpp \
-    src/guardrail/MemoryLeakTrackUtil.cpp \
     src/guardrail/StatsdStats.cpp
 
 statsd_common_c_includes := \
@@ -99,7 +102,7 @@ statsd_common_shared_libraries := \
     android.hardware.health@2.0 \
     android.hardware.power@1.0 \
     android.hardware.power@1.1 \
-    libmemunreachable
+    android.hardware.thermal@1.0
 
 # =========
 # statsd
@@ -127,7 +130,7 @@ else
     LOCAL_CFLAGS += \
             -Os
 endif
-LOCAL_PROTOC_OPTIMIZE_TYPE := lite-static
+LOCAL_PROTOC_OPTIMIZE_TYPE := lite
 
 LOCAL_AIDL_INCLUDES := $(statsd_common_aidl_includes)
 LOCAL_C_INCLUDES += $(statsd_common_c_includes)
@@ -170,7 +173,8 @@ LOCAL_SRC_FILES := \
     src/atom_field_options.proto \
     src/atoms.proto \
     src/stats_log.proto \
-    tests/AnomalyMonitor_test.cpp \
+    tests/AlarmMonitor_test.cpp \
+    tests/anomaly/AlarmTracker_test.cpp \
     tests/anomaly/AnomalyTracker_test.cpp \
     tests/ConfigManager_test.cpp \
     tests/external/puller_util_test.cpp \
@@ -184,6 +188,7 @@ LOCAL_SRC_FILES := \
     tests/FieldValue_test.cpp \
     tests/condition/CombinationConditionTracker_test.cpp \
     tests/condition/SimpleConditionTracker_test.cpp \
+    tests/condition/StateTracker_test.cpp \
     tests/metrics/OringDurationTracker_test.cpp \
     tests/metrics/MaxDurationTracker_test.cpp \
     tests/metrics/CountMetricProducer_test.cpp \

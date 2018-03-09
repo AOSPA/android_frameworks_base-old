@@ -30,7 +30,6 @@ import android.media.MediaLibraryService2.LibraryRoot;
 import android.media.MediaLibraryService2.MediaLibrarySession;
 import android.media.MediaLibraryService2.MediaLibrarySession.MediaLibrarySessionCallback;
 import android.media.MediaMetadata2;
-import android.media.MediaPlayerBase;
 import android.media.MediaSession2;
 import android.media.MediaSession2.CommandButton.Builder;
 import android.media.MediaSession2.PlaylistParams;
@@ -86,9 +85,9 @@ public interface StaticProvider {
             MediaMetadata2 playlistMetadata);
     PlaylistParams fromBundle_PlaylistParams(Context context, Bundle bundle);
     CommandButtonProvider.BuilderProvider createMediaSession2CommandButtonBuilder(Context context,
-            MediaSession2.CommandButton.Builder builder);
+            MediaSession2.CommandButton.Builder instance);
     BuilderBaseProvider<MediaSession2, SessionCallback> createMediaSession2Builder(
-            Context context, MediaSession2.Builder instance, MediaPlayerBase player);
+            Context context, MediaSession2.Builder instance);
 
     MediaController2Provider createMediaController2(Context context, MediaController2 instance,
             SessionToken2 token, Executor executor, ControllerCallback callback);
@@ -104,8 +103,7 @@ public interface StaticProvider {
     BuilderBaseProvider<MediaLibrarySession, MediaLibrarySessionCallback>
         createMediaLibraryService2Builder(
             MediaLibraryService2 service, MediaLibrarySession.Builder instance,
-            MediaPlayerBase player, Executor callbackExecutor,
-            MediaLibrarySessionCallback callback);
+            Executor callbackExecutor, MediaLibrarySessionCallback callback);
     LibraryRootProvider createMediaLibraryService2LibraryRoot(Context context, LibraryRoot instance,
             String rootId, Bundle extras);
 
@@ -113,8 +111,8 @@ public interface StaticProvider {
             String packageName, String serviceName, int uid);
     SessionToken2 fromBundle_SessionToken2(Context context, Bundle bundle);
 
-    MediaItem2Provider createMediaItem2(Context context, MediaItem2 mediaItem2,
-            String mediaId, DataSourceDesc dsd, MediaMetadata2 metadata, int flags);
+    MediaItem2Provider.BuilderProvider createMediaItem2Builder(
+            Context context, MediaItem2.Builder instance, int flags);
     MediaItem2 fromBundle_MediaItem2(Context context, Bundle bundle);
 
     VolumeProvider2Provider createVolumeProvider2(Context context, VolumeProvider2 instance,
@@ -122,9 +120,9 @@ public interface StaticProvider {
 
     MediaMetadata2 fromBundle_MediaMetadata2(Context context, Bundle bundle);
     MediaMetadata2Provider.BuilderProvider createMediaMetadata2Builder(
-            Context context, MediaMetadata2.Builder builder);
+            Context context, MediaMetadata2.Builder instance);
     MediaMetadata2Provider.BuilderProvider createMediaMetadata2Builder(
-            Context context, MediaMetadata2.Builder builder, MediaMetadata2 source);
+            Context context, MediaMetadata2.Builder instance, MediaMetadata2 source);
 
     Rating2 newUnratedRating_Rating2(Context context, int ratingStyle);
     Rating2 fromBundle_Rating2(Context context, Bundle bundle);

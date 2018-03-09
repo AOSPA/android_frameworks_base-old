@@ -20,8 +20,11 @@ import android.annotation.Nullable;
 import android.annotation.SystemService;
 import android.content.Context;
 import android.os.ServiceManager;
+import android.provider.Settings;
 import android.service.textclassifier.TextClassifierService;
+import android.view.textclassifier.TextClassifier.TextClassifierType;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 
 /**
@@ -30,55 +33,41 @@ import com.android.internal.util.Preconditions;
 @SystemService(Context.TEXT_CLASSIFICATION_SERVICE)
 public final class TextClassificationManager {
 
-    // TODO: Make this a configurable flag.
-    private static final boolean SYSTEM_TEXT_CLASSIFIER_ENABLED = true;
-
     private static final String LOG_TAG = "TextClassificationManager";
 
     private final Object mLock = new Object();
 
     private final Context mContext;
+    private final TextClassificationConstants mSettings;
+
+    @GuardedBy("mLock")
     private TextClassifier mTextClassifier;
+    @GuardedBy("mLock")
+    private TextClassifier mLocalTextClassifier;
+    @GuardedBy("mLock")
     private TextClassifier mSystemTextClassifier;
 
     /** @hide */
     public TextClassificationManager(Context context) {
         mContext = Preconditions.checkNotNull(context);
+        mSettings = TextClassificationConstants.loadFromString(Settings.Global.getString(
+                context.getContentResolver(), Settings.Global.TEXT_CLASSIFIER_CONSTANTS));
     }
 
     /**
-     * Returns the system's default TextClassifier.
-     * @hide
-     */
-    // TODO: Unhide when this is ready.
-    public TextClassifier getSystemDefaultTextClassifier() {
-        synchronized (mLock) {
-            if (mSystemTextClassifier == null && isSystemTextClassifierEnabled()) {
-                try {
-                    Log.d(LOG_TAG, "Initialized SystemTextClassifier");
-                    mSystemTextClassifier = new SystemTextClassifier(mContext);
-                } catch (ServiceManager.ServiceNotFoundException e) {
-                    Log.e(LOG_TAG, "Could not initialize SystemTextClassifier", e);
-                }
-            }
-            if (mSystemTextClassifier == null) {
-                Log.d(LOG_TAG, "Using an in-process TextClassifier as the system default");
-                mSystemTextClassifier = new TextClassifierImpl(mContext);
-            }
-        }
-        return mSystemTextClassifier;
-    }
-
-    /**
-     * Returns the text classifier.
+     * Returns the text classifier that was set via {@link #setTextClassifier(TextClassifier)}.
+     * If this is null, this method returns a default text classifier (i.e. either the system text
+     * classifier if one exists, or a local text classifier running in this app.)
+     *
+     * @see #setTextClassifier(TextClassifier)
      */
     public TextClassifier getTextClassifier() {
         synchronized (mLock) {
             if (mTextClassifier == null) {
                 if (isSystemTextClassifierEnabled()) {
-                    mTextClassifier = getSystemDefaultTextClassifier();
+                    mTextClassifier = getSystemTextClassifier();
                 } else {
-                    mTextClassifier = new TextClassifierImpl(mContext);
+                    mTextClassifier = getLocalTextClassifier();
                 }
             }
             return mTextClassifier;
@@ -96,8 +85,75 @@ public final class TextClassificationManager {
         }
     }
 
+    /**
+     * Returns a specific type of text classifier.
+     * If the specified text classifier cannot be found, this returns {@link TextClassifier#NO_OP}.
+     *
+     * @see TextClassifier#LOCAL
+     * @see TextClassifier#SYSTEM
+     * @hide
+     */
+    // TODO: Expose as system API.
+    public TextClassifier getTextClassifier(@TextClassifierType int type) {
+        switch (type) {
+            case TextClassifier.LOCAL:
+                return getLocalTextClassifier();
+            default:
+                return getSystemTextClassifier();
+        }
+    }
+
+    /** @hide */
+    public TextClassificationConstants getSettings() {
+        return mSettings;
+    }
+
+    private TextClassifier getSystemTextClassifier() {
+        synchronized (mLock) {
+            if (mSystemTextClassifier == null && isSystemTextClassifierEnabled()) {
+                try {
+                    mSystemTextClassifier = new SystemTextClassifier(mContext, mSettings);
+                    Log.d(LOG_TAG, "Initialized SystemTextClassifier");
+                } catch (ServiceManager.ServiceNotFoundException e) {
+                    Log.e(LOG_TAG, "Could not initialize SystemTextClassifier", e);
+                }
+            }
+        }
+        if (mSystemTextClassifier != null) {
+            return mSystemTextClassifier;
+        }
+        return TextClassifier.NO_OP;
+    }
+
+    private TextClassifier getLocalTextClassifier() {
+        synchronized (mLock) {
+            if (mLocalTextClassifier == null) {
+                if (mSettings.isLocalTextClassifierEnabled()) {
+                    mLocalTextClassifier = new TextClassifierImpl(mContext, mSettings);
+                } else {
+                    Log.d(LOG_TAG, "Local TextClassifier disabled");
+                    mLocalTextClassifier = TextClassifierImpl.NO_OP;
+                }
+            }
+            return mLocalTextClassifier;
+        }
+    }
+
     private boolean isSystemTextClassifierEnabled() {
-        return SYSTEM_TEXT_CLASSIFIER_ENABLED
+        return mSettings.isSystemTextClassifierEnabled()
                 && TextClassifierService.getServiceComponentName(mContext) != null;
+    }
+
+    /** @hide */
+    public static TextClassificationConstants getSettings(Context context) {
+        Preconditions.checkNotNull(context);
+        final TextClassificationManager tcm =
+                context.getSystemService(TextClassificationManager.class);
+        if (tcm != null) {
+            return tcm.mSettings;
+        } else {
+            return TextClassificationConstants.loadFromString(Settings.Global.getString(
+                    context.getContentResolver(), Settings.Global.TEXT_CLASSIFIER_CONSTANTS));
+        }
     }
 }

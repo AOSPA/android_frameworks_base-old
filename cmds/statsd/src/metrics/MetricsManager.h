@@ -16,7 +16,8 @@
 
 #pragma once
 
-#include "anomaly/AnomalyMonitor.h"
+#include "anomaly/AlarmMonitor.h"
+#include "anomaly/AlarmTracker.h"
 #include "anomaly/AnomalyTracker.h"
 #include "condition/ConditionTracker.h"
 #include "config/ConfigKey.h"
@@ -36,7 +37,8 @@ namespace statsd {
 class MetricsManager : public PackageInfoListener {
 public:
     MetricsManager(const ConfigKey& configKey, const StatsdConfig& config, const long timeBaseSec,
-                   sp<UidMap> uidMap);
+                   const sp<UidMap>& uidMap, const sp<AlarmMonitor>& anomalyAlarmMonitor,
+                   const sp<AlarmMonitor>& periodicAlarmMonitor);
 
     virtual ~MetricsManager();
 
@@ -47,9 +49,11 @@ public:
 
     void onAnomalyAlarmFired(
         const uint64_t timestampNs,
-        unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>>& anomalySet);
+        unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>>& alarmSet);
 
-    void setAnomalyMonitor(const sp<AnomalyMonitor>& anomalyMonitor);
+    void onPeriodicAlarmFired(
+        const uint64_t timestampNs,
+        unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>>& alarmSet);
 
     void notifyAppUpgrade(const uint64_t& eventTimeNs, const string& apk, const int uid,
                           const int64_t version) override;
@@ -68,6 +72,8 @@ public:
     uint64_t getLastReportTimeNs() {
         return mLastReportTimeNs;
     };
+
+    virtual void dropData(const uint64_t dropTimeNs);
 
     // Config source owner can call onDumpReport() to get all the metrics collected.
     virtual void onDumpReport(const uint64_t dumpTimeNs,
@@ -119,6 +125,9 @@ private:
 
     // Hold all alert trackers.
     std::vector<sp<AnomalyTracker>> mAllAnomalyTrackers;
+
+    // Hold all periodic alarm trackers.
+    std::vector<sp<AlarmTracker>> mAllPeriodicAlarmTrackers;
 
     // To make the log processing more efficient, we want to do as much filtering as possible
     // before we go into individual trackers and conditions to match.

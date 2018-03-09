@@ -73,7 +73,6 @@ public class RecoverySession implements AutoCloseable {
 
     /**
      * @deprecated Use {@link #start(CertPath, byte[], byte[], List)} instead.
-     * @removed
      */
     @Deprecated
     @RequiresPermission(android.Manifest.permission.RECOVER_KEYSTORE)
@@ -95,7 +94,8 @@ public class RecoverySession implements AutoCloseable {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         } catch (ServiceSpecificException e) {
-            if (e.errorCode == RecoveryController.ERROR_BAD_CERTIFICATE_FORMAT) {
+            if (e.errorCode == RecoveryController.ERROR_BAD_CERTIFICATE_FORMAT
+                    || e.errorCode == RecoveryController.ERROR_INVALID_CERTIFICATE) {
                 throw new CertificateException(e.getMessage());
             }
             throw mRecoveryController.wrapUnexpectedServiceSpecificException(e);
@@ -144,7 +144,8 @@ public class RecoverySession implements AutoCloseable {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         } catch (ServiceSpecificException e) {
-            if (e.errorCode == RecoveryController.ERROR_BAD_CERTIFICATE_FORMAT) {
+            if (e.errorCode == RecoveryController.ERROR_BAD_CERTIFICATE_FORMAT
+                    || e.errorCode == RecoveryController.ERROR_INVALID_CERTIFICATE) {
                 throw new CertificateException(e.getMessage());
             }
             throw mRecoveryController.wrapUnexpectedServiceSpecificException(e);

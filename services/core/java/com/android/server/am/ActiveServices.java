@@ -3930,8 +3930,9 @@ public final class ActiveServices {
         return new ServiceDumper(fd, pw, args, opti, dumpAll, dumpPackage);
     }
 
-    protected void writeToProto(ProtoOutputStream proto) {
+    protected void writeToProto(ProtoOutputStream proto, long fieldId) {
         synchronized (mAm) {
+            final long outterToken = proto.start(fieldId);
             int[] users = mAm.mUserController.getUsers();
             for (int user : users) {
                 ServiceMap smap = mServiceMap.get(user);
@@ -3947,6 +3948,7 @@ public final class ActiveServices {
                 }
                 proto.end(token);
             }
+            proto.end(outterToken);
         }
     }
 

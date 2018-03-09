@@ -152,6 +152,7 @@ public class SurfaceControl implements Parcelable {
     private static native void nativeSeverChildren(long transactionObj, long nativeObject);
     private static native void nativeSetOverrideScalingMode(long transactionObj, long nativeObject,
             int scalingMode);
+    private static native void nativeDestroy(long transactionObj, long nativeObject);
     private static native IBinder nativeGetHandle(long nativeObject);
     private static native boolean nativeGetTransformToDisplayInverse(long nativeObject);
 
@@ -763,18 +764,14 @@ public class SurfaceControl implements Parcelable {
     }
 
     public void deferTransactionUntil(IBinder handle, long frame) {
-        if (frame > 0) {
-            synchronized(SurfaceControl.class) {
-                sGlobalTransaction.deferTransactionUntil(this, handle, frame);
-            }
+        synchronized(SurfaceControl.class) {
+            sGlobalTransaction.deferTransactionUntil(this, handle, frame);
         }
     }
 
     public void deferTransactionUntil(Surface barrier, long frame) {
-        if (frame > 0) {
-            synchronized(SurfaceControl.class) {
-                sGlobalTransaction.deferTransactionUntilSurface(this, barrier, frame);
-            }
+        synchronized(SurfaceControl.class) {
+            sGlobalTransaction.deferTransactionUntilSurface(this, barrier, frame);
         }
     }
 
@@ -1479,6 +1476,9 @@ public class SurfaceControl implements Parcelable {
 
         public Transaction deferTransactionUntil(SurfaceControl sc, IBinder handle,
                 long frameNumber) {
+            if (frameNumber < 0) {
+                return this;
+            }
             sc.checkNotReleased();
             nativeDeferTransactionUntil(mNativeObject, sc.mNativeObject, handle, frameNumber);
             return this;
@@ -1486,6 +1486,9 @@ public class SurfaceControl implements Parcelable {
 
         public Transaction deferTransactionUntilSurface(SurfaceControl sc, Surface barrierSurface,
                 long frameNumber) {
+            if (frameNumber < 0) {
+                return this;
+            }
             sc.checkNotReleased();
             nativeDeferTransactionUntilSurface(mNativeObject, sc.mNativeObject,
                     barrierSurface.mNativeObject, frameNumber);
@@ -1567,6 +1570,16 @@ public class SurfaceControl implements Parcelable {
             } else {
                 nativeSetFlags(mNativeObject, sc.mNativeObject, 0, SURFACE_OPAQUE);
             }
+            return this;
+        }
+
+        /**
+         * Same as {@link #destroy()} except this is invoked in a transaction instead of
+         * immediately.
+         */
+        public Transaction destroy(SurfaceControl sc) {
+            sc.checkNotReleased();
+            nativeDestroy(mNativeObject, sc.mNativeObject);
             return this;
         }
 

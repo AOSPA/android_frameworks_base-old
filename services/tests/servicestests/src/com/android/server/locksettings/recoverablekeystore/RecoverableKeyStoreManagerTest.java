@@ -132,6 +132,7 @@ public class RecoverableKeyStoreManagerTest {
     private static final String TEST_ALIAS = "nick";
     private static final String TEST_ALIAS2 = "bob";
     private static final int RECOVERABLE_KEY_SIZE_BYTES = 32;
+    private static final int APPLICATION_KEY_SIZE_BYTES = 32;
     private static final int GENERATION_ID = 1;
     private static final byte[] NONCE = getUtf8Bytes("nonce");
     private static final byte[] KEY_MATERIAL = getUtf8Bytes("keymaterial");
@@ -209,6 +210,39 @@ public class RecoverableKeyStoreManagerTest {
     }
 
     @Test
+    public void importKey_storesTheKey() throws Exception {
+        int uid = Binder.getCallingUid();
+        int userId = UserHandle.getCallingUserId();
+        byte[] keyMaterial = randomBytes(APPLICATION_KEY_SIZE_BYTES);
+
+        mRecoverableKeyStoreManager.importKey(TEST_ALIAS, keyMaterial);
+
+        assertThat(mRecoverableKeyStoreDb.getKey(uid, TEST_ALIAS)).isNotNull();
+        assertThat(mRecoverableKeyStoreDb.getShouldCreateSnapshot(userId, uid)).isTrue();
+    }
+
+    @Test
+    public void importKey_throwsIfInvalidLength() throws Exception {
+        byte[] keyMaterial = randomBytes(APPLICATION_KEY_SIZE_BYTES - 1);
+        try {
+            mRecoverableKeyStoreManager.importKey(TEST_ALIAS, keyMaterial);
+            fail("should have thrown");
+        } catch (ServiceSpecificException e) {
+            assertThat(e.getMessage()).contains("not contain 256 bits");
+        }
+    }
+
+    @Test
+    public void importKey_throwsIfNullKey() throws Exception {
+        try {
+            mRecoverableKeyStoreManager.importKey(TEST_ALIAS, /*keyBytes=*/ null);
+            fail("should have thrown");
+        } catch (ServiceSpecificException e) {
+            assertThat(e.getMessage()).contains("not contain 256 bits");
+        }
+    }
+
+    @Test
     public void removeKey_removesAKey() throws Exception {
         int uid = Binder.getCallingUid();
         mRecoverableKeyStoreManager.generateAndStoreKey(TEST_ALIAS);
@@ -243,7 +277,7 @@ public class RecoverableKeyStoreManagerTest {
     }
 
     @Test
-    public void initRecoveryService_succeeds() throws Exception {
+    public void initRecoveryService_succeedsWithCertFile() throws Exception {
         int uid = Binder.getCallingUid();
         int userId = UserHandle.getCallingUserId();
         long certSerial = 1000L;
@@ -258,6 +292,18 @@ public class RecoverableKeyStoreManagerTest {
         assertThat(mRecoverableKeyStoreDb.getRecoveryServiceCertSerial(userId, uid)).isEqualTo(
                 certSerial);
         assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isNull();
+    }
+
+    @Test
+    public void initRecoveryService_throwsIfInvalidCert() throws Exception {
+        byte[] modifiedCertXml = TestData.getCertXml();
+        modifiedCertXml[modifiedCertXml.length - 50] ^= 1;  // Flip a bit in the certificate
+        try {
+            mRecoverableKeyStoreManager.initRecoveryService(ROOT_CERTIFICATE_ALIAS, modifiedCertXml);
+            fail("should have thrown");
+        } catch (ServiceSpecificException e) {
+            assertThat(e.getMessage()).contains("validate cert");
+        }
     }
 
     @Test
@@ -318,6 +364,70 @@ public class RecoverableKeyStoreManagerTest {
         assertThat(mRecoverableKeyStoreDb.getRecoveryServiceCertPath(userId, uid)).isNull();
         assertThat(mRecoverableKeyStoreDb.getRecoveryServiceCertSerial(userId, uid)).isNull();
         assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isNotNull();
+    }
+
+    @Test
+    public void initRecoveryServiceWithSigFile_succeeds() throws Exception {
+        int uid = Binder.getCallingUid();
+        int userId = UserHandle.getCallingUserId();
+        mRecoverableKeyStoreDb.setShouldCreateSnapshot(userId, uid, false);
+
+        mRecoverableKeyStoreManager.initRecoveryServiceWithSigFile(
+                ROOT_CERTIFICATE_ALIAS, TestData.getCertXml(), TestData.getSigXml());
+
+        assertThat(mRecoverableKeyStoreDb.getShouldCreateSnapshot(userId, uid)).isTrue();
+        assertThat(mRecoverableKeyStoreDb.getRecoveryServiceCertPath(userId, uid)).isEqualTo(
+                TestData.CERT_PATH_1);
+        assertThat(mRecoverableKeyStoreDb.getRecoveryServicePublicKey(userId, uid)).isNull();
+    }
+
+    @Test
+    public void initRecoveryServiceWithSigFile_throwsIfNullCertFile() throws Exception {
+        try {
+            mRecoverableKeyStoreManager.initRecoveryServiceWithSigFile(
+                    ROOT_CERTIFICATE_ALIAS, /*recoveryServiceCertFile=*/ null,
+                    TestData.getSigXml());
+            fail("should have thrown");
+        } catch (ServiceSpecificException e) {
+            assertThat(e.getMessage()).contains("is null");
+        }
+    }
+
+    @Test
+    public void initRecoveryServiceWithSigFile_throwsIfNullSigFile() throws Exception {
+        try {
+            mRecoverableKeyStoreManager.initRecoveryServiceWithSigFile(
+                    ROOT_CERTIFICATE_ALIAS, TestData.getCertXml(),
+                    /*recoveryServiceSigFile=*/ null);
+            fail("should have thrown");
+        } catch (ServiceSpecificException e) {
+            assertThat(e.getMessage()).contains("is null");
+        }
+    }
+
+    @Test
+    public void initRecoveryServiceWithSigFile_throwsIfWrongSigFileFormat() throws Exception {
+        try {
+            mRecoverableKeyStoreManager.initRecoveryServiceWithSigFile(
+                    ROOT_CERTIFICATE_ALIAS, TestData.getCertXml(),
+                    getUtf8Bytes("wrong-sig-file-format"));
+            fail("should have thrown");
+        } catch (ServiceSpecificException e) {
+            assertThat(e.getMessage()).contains("parse the sig file");
+        }
+    }
+
+    @Test
+    public void initRecoveryServiceWithSigFile_throwsIfInvalidFileSignature() throws Exception {
+        byte[] modifiedCertXml = TestData.getCertXml();
+        modifiedCertXml[modifiedCertXml.length - 1] = 0;  // Change the last new line char to a zero
+        try {
+            mRecoverableKeyStoreManager.initRecoveryServiceWithSigFile(
+                    ROOT_CERTIFICATE_ALIAS, modifiedCertXml, TestData.getSigXml());
+            fail("should have thrown");
+        } catch (ServiceSpecificException e) {
+            assertThat(e.getMessage()).contains("is invalid");
+        }
     }
 
     @Test
@@ -532,7 +642,31 @@ public class RecoverableKeyStoreManagerTest {
                                     TEST_SECRET)));
             fail("should have thrown");
         } catch (ServiceSpecificException e) {
-            assertThat(e.getMessage()).contains("CertPath is empty");
+            assertThat(e.getMessage()).contains("empty");
+        }
+    }
+
+    @Test
+    public void startRecoverySessionWithCertPath_throwsIfInvalidCertPath() throws Exception {
+        CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+        CertPath shortCertPath = certFactory.generateCertPath(
+                TestData.CERT_PATH_1.getCertificates()
+                        .subList(0, TestData.CERT_PATH_1.getCertificates().size() - 1));
+        try {
+            mRecoverableKeyStoreManager.startRecoverySessionWithCertPath(
+                    TEST_SESSION_ID,
+                    RecoveryCertPath.createRecoveryCertPath(shortCertPath),
+                    TEST_VAULT_PARAMS,
+                    TEST_VAULT_CHALLENGE,
+                    ImmutableList.of(
+                            new KeyChainProtectionParams(
+                                    TYPE_LOCKSCREEN,
+                                    UI_FORMAT_PASSWORD,
+                                    KeyDerivationParams.createSha256Params(TEST_SALT),
+                                    TEST_SECRET)));
+            fail("should have thrown");
+        } catch (ServiceSpecificException e) {
+            // expected
         }
     }
 

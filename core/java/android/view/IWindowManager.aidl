@@ -185,13 +185,6 @@ interface IWindowManager
      */
     void setScreenCaptureDisabled(int userId, boolean disabled);
 
-    /**
-     * Testing and debugging infrastructure for writing surface events
-     * to given FD. See RemoteSurfaceTrace.java or Wm.java for format.
-     */
-    void enableSurfaceTrace(in ParcelFileDescriptor fd);
-    void disableSurfaceTrace();
-
     // These can only be called with the SET_ORIENTATION permission.
     /**
      * Update the current screen rotation based on the current state of
@@ -289,6 +282,11 @@ interface IWindowManager
      * Called by System UI to notify of changes to the visibility of PIP.
      */
     oneway void setPipVisibility(boolean visible);
+
+   /**
+     * Called by System UI to enable or disable haptic feedback on the navigation bar buttons.
+     */
+    void setNavBarVirtualKeyHapticFeedbackEnabled(boolean enabled);
 
     /**
      * Device has a software navigation bar (separate from the status bar).

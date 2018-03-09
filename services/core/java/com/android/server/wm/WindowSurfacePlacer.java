@@ -21,6 +21,7 @@ import static android.app.ActivityManagerInternal.APP_TRANSITION_SNAPSHOT;
 import static android.app.ActivityManagerInternal.APP_TRANSITION_SPLASH_SCREEN;
 import static android.app.ActivityManagerInternal.APP_TRANSITION_WINDOWS_DRAWN;
 
+import static android.view.WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_CONFIG;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_LAYOUT;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_CLOSE;
@@ -102,7 +103,6 @@ class WindowSurfacePlacer {
     }
     private final LayerAndToken mTmpLayerAndToken = new LayerAndToken();
 
-    private final ArrayList<SurfaceControl> mPendingDestroyingSurfaces = new ArrayList<>();
     private final SparseIntArray mTempTransitionReasons = new SparseIntArray();
 
     private final Runnable mPerformSurfacePlacement;
@@ -608,6 +608,10 @@ class WindowSurfacePlacer {
         if (transit == TRANSIT_NONE) {
             return TRANSIT_NONE;
         }
+        // Never update the transition for the wallpaper if we are just docking from recents
+        if (transit == TRANSIT_DOCK_TASK_FROM_RECENTS) {
+            return TRANSIT_DOCK_TASK_FROM_RECENTS;
+        }
 
         // if wallpaper is animating in or out set oldWallpaper to null else to wallpaper
         final WindowState wallpaperTarget = mWallpaperControllerLocked.getWallpaperTarget();
@@ -695,25 +699,6 @@ class WindowSurfacePlacer {
             mTraversalScheduled = true;
             mService.mAnimationHandler.post(mPerformSurfacePlacement);
         }
-    }
-
-    /**
-     * Puts the {@param surface} into a pending list to be destroyed after the current transaction
-     * has been committed.
-     */
-    void destroyAfterTransaction(SurfaceControl surface) {
-        mPendingDestroyingSurfaces.add(surface);
-    }
-
-    /**
-     * Destroys any surfaces that have been put into the pending list with
-     * {@link #destroyAfterTransaction}.
-     */
-    void destroyPendingSurfaces() {
-        for (int i = mPendingDestroyingSurfaces.size() - 1; i >= 0; i--) {
-            mPendingDestroyingSurfaces.get(i).destroy();
-        }
-        mPendingDestroyingSurfaces.clear();
     }
 
     public void dump(PrintWriter pw, String prefix) {

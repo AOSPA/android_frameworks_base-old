@@ -18,6 +18,7 @@
 #include "Log.h"
 
 #include "AnomalyTracker.h"
+#include "subscriber_util.h"
 #include "external/Perfetto.h"
 #include "guardrail/StatsdStats.h"
 #include "subscriber/IncidentdReporter.h"
@@ -192,7 +193,8 @@ void AnomalyTracker::declareAnomaly(const uint64_t& timestampNs, const MetricDim
 
     if (!mSubscriptions.empty()) {
         if (mAlert.has_id()) {
-            ALOGI("An anomaly (%lld) has occurred! Informing subscribers.", mAlert.id());
+            ALOGI("An anomaly (%lld) %s has occurred! Informing subscribers.", mAlert.id(),
+                  key.toString().c_str());
             informSubscribers(key);
         } else {
             ALOGI("An anomaly (with no id) has occurred! Not informing any subscribers.");
@@ -231,40 +233,7 @@ bool AnomalyTracker::isInRefractoryPeriod(const uint64_t& timestampNs,
 }
 
 void AnomalyTracker::informSubscribers(const MetricDimensionKey& key) {
-    VLOG("informSubscribers called.");
-    if (mSubscriptions.empty()) {
-        // The config just wanted to log the anomaly. That's fine.
-        VLOG("No Subscriptions were associated with the alert.");
-        return;
-    }
-
-    for (const Subscription& subscription : mSubscriptions) {
-        if (subscription.probability_of_informing() < 1
-                && ((float)rand() / RAND_MAX) >= subscription.probability_of_informing()) {
-            // Note that due to float imprecision, 0.0 and 1.0 might not truly mean never/always.
-            // The config writer was advised to use -0.1 and 1.1 for never/always.
-            ALOGI("Fate decided that a subscriber would not be informed.");
-            continue;
-        }
-        switch (subscription.subscriber_information_case()) {
-            case Subscription::SubscriberInformationCase::kIncidentdDetails:
-                if (!GenerateIncidentReport(subscription.incidentd_details(), mAlert, mConfigKey)) {
-                    ALOGW("Failed to generate incident report.");
-                }
-                break;
-            case Subscription::SubscriberInformationCase::kPerfettoDetails:
-                if (!CollectPerfettoTraceAndUploadToDropbox(subscription.perfetto_details())) {
-                    ALOGW("Failed to generate prefetto traces.");
-                }
-                break;
-            case Subscription::SubscriberInformationCase::kBroadcastSubscriberDetails:
-                SubscriberReporter::getInstance().alertBroadcastSubscriber(mConfigKey, subscription,
-                                                                           key);
-                break;
-            default:
-                break;
-        }
-    }
+    triggerSubscribers(mAlert.id(), key, mConfigKey, mSubscriptions);
 }
 
 }  // namespace statsd

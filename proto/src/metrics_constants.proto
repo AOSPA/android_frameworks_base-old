@@ -5328,6 +5328,47 @@ message MetricsEvent {
     // OS: P
     PACKAGE_OPTIMIZATION_COMPILATION_REASON = 1321;
 
+    // FIELD: The camera API level used.
+    // CATEGORY: CAMERA
+    // OS: P
+    FIELD_CAMERA_API_LEVEL = 1322;
+
+    // OPEN: Settings > Battery > Battery tip > Battery tip Dialog
+    // CATEGORY: SETTINGS
+    // OS: P
+    FUELGAUGE_BATTERY_TIP_DIALOG = 1323;
+
+    // OPEN: Settings > Battery > Battery tip
+    // CATEGORY: SETTINGS
+    // OS: P
+    ACTION_BATTERY_TIP_SHOWN = 1324;
+
+    // OPEN: Settings > Security & Location > Location > See all
+    // CATEGORY: SETTINGS
+    // OS: P
+    RECENT_LOCATION_REQUESTS_ALL = 1325;
+
+    // FIELD: The x-location of a swipe gesture, conveyed as percent of total width
+    // CATEGORY: GLOBAL_SYSTEM_UI
+    // OS: P
+    FIELD_GESTURE_X_PERCENT = 1326;
+
+    // FIELD: The y-location of a swipe gesture, conveyed as percent of total width
+    // CATEGORY: GLOBAL_SYSTEM_UI
+    // OS: P
+    FIELD_GESTURE_Y_PERCENT = 1327;
+
+    // ACTION: Expand the notification panel while unlocked
+    // CATEGORY: GLOBAL_SYSTEM_UI
+    // OS: P
+    ACTION_PANEL_VIEW_EXPAND = 1328;
+
+
+    // FIELD: Rotation of the device
+    // CATEGORY: GLOBAL_SYSTEM_UI
+    // OS: P
+    FIELD_DEVICE_ROTATION = 1329;
+
     // ---- End P Constants, all P constants go above this line ----
     // Add new aosp constants above this line.
     // END OF AOSP CONSTANTS
