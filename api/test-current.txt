@@ -167,6 +167,17 @@ package android.app.admin {
 
 }
 
+package android.app.backup {
+
+  public class BackupManager {
+    method public android.content.Intent getConfigurationIntent(java.lang.String);
+    method public android.content.Intent getDataManagementIntent(java.lang.String);
+    method public java.lang.String getDataManagementLabel(java.lang.String);
+    method public java.lang.String getDestinationString(java.lang.String);
+  }
+
+}
+
 package android.app.usage {
 
   public class StorageStatsManager {
@@ -185,6 +196,7 @@ package android.content {
   public abstract class Context {
     method public android.os.UserHandle getUser();
     method public int getUserId();
+    method public void setAutofillCompatibilityEnabled(boolean);
   }
 
 }
@@ -215,6 +227,7 @@ package android.content.pm {
   }
 
   public class PermissionInfo extends android.content.pm.PackageItemInfo implements android.os.Parcelable {
+    field public static final int PROTECTION_FLAG_SYSTEM_TEXT_CLASSIFIER = 65536; // 0x10000
     field public static final int PROTECTION_FLAG_VENDOR_PRIVILEGED = 32768; // 0x8000
   }
 
@@ -532,6 +545,7 @@ package android.provider {
   }
 
   public static final class Settings.Global extends android.provider.Settings.NameValueTable {
+    field public static final java.lang.String AUTOFILL_COMPAT_ALLOWED_PACKAGES = "autofill_compat_allowed_packages";
     field public static final java.lang.String LOCATION_GLOBAL_KILL_SWITCH = "location_global_kill_switch";
     field public static final java.lang.String LOW_POWER_MODE = "low_power";
     field public static final java.lang.String USE_OPEN_WIFI_PACKAGE = "use_open_wifi_package";
@@ -541,6 +555,7 @@ package android.provider {
     field public static final java.lang.String ACCESSIBILITY_DISPLAY_MAGNIFICATION_ENABLED = "accessibility_display_magnification_enabled";
     field public static final java.lang.String AUTOFILL_FEATURE_FIELD_CLASSIFICATION = "autofill_field_classification";
     field public static final java.lang.String AUTOFILL_SERVICE = "autofill_service";
+    field public static final java.lang.String AUTOFILL_USER_DATA_MAX_CATEGORY_COUNT = "autofill_user_data_max_category_count";
     field public static final java.lang.String AUTOFILL_USER_DATA_MAX_FIELD_CLASSIFICATION_IDS_SIZE = "autofill_user_data_max_field_classification_size";
     field public static final java.lang.String AUTOFILL_USER_DATA_MAX_USER_DATA_SIZE = "autofill_user_data_max_user_data_size";
     field public static final java.lang.String AUTOFILL_USER_DATA_MAX_VALUE_LENGTH = "autofill_user_data_max_value_length";
@@ -715,6 +730,10 @@ package android.telephony {
 
   public class MbmsStreamingSession implements java.lang.AutoCloseable {
     field public static final java.lang.String MBMS_STREAMING_SERVICE_OVERRIDE_METADATA = "mbms-streaming-service-override";
+  }
+
+  public class ServiceState implements android.os.Parcelable {
+    method public void setSystemAndNetworkId(int, int);
   }
 
 }
@@ -1038,6 +1057,7 @@ package android.view.accessibility {
 
   public class AccessibilityNodeInfo implements android.os.Parcelable {
     method public static void setNumInstancesInUseCounter(java.util.concurrent.atomic.AtomicInteger);
+    method public void writeToParcelNoRecycle(android.os.Parcel, int);
   }
 
   public final class AccessibilityWindowInfo implements android.os.Parcelable {
@@ -1046,10 +1066,20 @@ package android.view.accessibility {
 
 }
 
+package android.view.animation {
+
+  public class AnimationUtils {
+    method public static void lockAnimationClock(long);
+    method public static void unlockAnimationClock();
+  }
+
+}
+
 package android.view.autofill {
 
   public final class AutofillId implements android.os.Parcelable {
     ctor public AutofillId(int);
+    ctor public AutofillId(android.view.autofill.AutofillId, int);
   }
 
 }
@@ -1076,6 +1106,17 @@ package android.widget {
     method public int getMode();
     field public static final int MODE_CALENDAR = 2; // 0x2
     field public static final int MODE_SPINNER = 1; // 0x1
+  }
+
+  public final class Magnifier {
+    method public android.graphics.Bitmap getContent();
+    method public static android.graphics.PointF getMagnifierDefaultSize();
+    method public android.graphics.Rect getWindowPositionOnScreen();
+    method public void setOnOperationCompleteCallback(android.widget.Magnifier.Callback);
+  }
+
+  public static abstract interface Magnifier.Callback {
+    method public abstract void onOperationComplete();
   }
 
   public class NumberPicker extends android.widget.LinearLayout {

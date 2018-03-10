@@ -42,6 +42,7 @@ class GlobalSettingsToPropertiesMapper {
         {Settings.Global.SYS_VDSO, "sys.vdso"},
         {Settings.Global.FPS_DEVISOR, ThreadedRenderer.DEBUG_FPS_DIVISOR},
         {Settings.Global.DISPLAY_PANEL_LPM, "sys.display_panel_lpm"},
+        {Settings.Global.SYS_UIDCPUPOWER, "sys.uidcpupower"},
     };
 
 
@@ -93,7 +94,7 @@ class GlobalSettingsToPropertiesMapper {
         }
         try {
             systemPropertiesSet(key, value);
-        } catch (IllegalArgumentException e) {
+        } catch (Exception e) {
             Slog.e(TAG, "Unable to set property " + key + " value '" + value + "'", e);
         }
     }

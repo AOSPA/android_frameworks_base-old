@@ -2070,6 +2070,15 @@ public abstract class PackageManager {
             "android.hardware.sensor.hifi_sensors";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * The device supports a hardware mechanism for invoking an assist gesture.
+     * @see android.provider.Settings.Secure#ASSIST_GESTURE_ENABLED
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_ASSIST_GESTURE = "android.hardware.sensor.assist";
+
+    /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device has a telephony radio with data
      * communication support.
@@ -2108,8 +2117,6 @@ public abstract class PackageManager {
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device
      * supports embedded subscriptions on eUICCs.
-     * TODO(b/35851809): Make this public.
-     * @hide
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_TELEPHONY_EUICC = "android.hardware.telephony.euicc";
@@ -5067,6 +5074,7 @@ public abstract class PackageManager {
      * which market the package came from.
      *
      * @param packageName The name of the package to query
+     * @throws IllegalArgumentException if the given package name is not installed
      */
     public abstract String getInstallerPackageName(String packageName);
 
@@ -6013,5 +6021,15 @@ public abstract class PackageManager {
             int uid, byte[] certificate, @CertificateInputType int type) {
         throw new UnsupportedOperationException(
                 "hasSigningCertificate not implemented in subclass");
+    }
+
+    /**
+     * @return the system defined text classifier package name, or null if there's none.
+     *
+     * @hide
+     */
+    public String getSystemTextClassifierPackageName() {
+        throw new UnsupportedOperationException(
+                "getSystemTextClassifierPackageName not implemented in subclass");
     }
 }

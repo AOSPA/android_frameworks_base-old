@@ -50,7 +50,8 @@ import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.policy.HeadsUpManager;
+import android.util.BoostFramework;
+import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -75,7 +76,7 @@ public abstract class PanelView extends FrameLayout {
     }
 
     protected StatusBar mStatusBar;
-    protected HeadsUpManager mHeadsUpManager;
+    protected HeadsUpManagerPhone mHeadsUpManager;
 
     private float mPeekHeight;
     private float mHintDistance;
@@ -117,6 +118,11 @@ public abstract class PanelView extends FrameLayout {
             updateHapticFeedBackEnabled();
         }
     };
+
+    /**
+     * For PanelView fling perflock call
+     */
+    private BoostFramework mPerf = null;
 
     /**
      * Whether an instant expand request is currently pending and we are just waiting for layout.
@@ -225,6 +231,8 @@ public abstract class PanelView extends FrameLayout {
                 Settings.System.getUriFor(Settings.System.HAPTIC_FEEDBACK_ENABLED), true,
                 mVibrationObserver);
         mVibrationObserver.onChange(false /* selfChange */);
+
+        mPerf = new BoostFramework();
     }
 
     public void updateHapticFeedBackEnabled() {
@@ -792,16 +800,26 @@ public abstract class PanelView extends FrameLayout {
                 animator.setDuration(mFixedDuration);
             }
         }
+        if (mPerf != null) {
+            String currentPackage = mContext.getPackageName();
+            mPerf.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST, currentPackage, -1, BoostFramework.Scroll.PANEL_VIEW);
+        }
         animator.addListener(new AnimatorListenerAdapter() {
             private boolean mCancelled;
 
             @Override
             public void onAnimationCancel(Animator animation) {
+                if (mPerf != null) {
+                    mPerf.perfLockRelease();
+                }
                 mCancelled = true;
             }
 
             @Override
             public void onAnimationEnd(Animator animation) {
+                if (mPerf != null) {
+                    mPerf.perfLockRelease();
+                }
                 if (clearAllExpandHack && !mCancelled) {
                     setExpandedHeightInternal(getMaxPanelHeight());
                 }
@@ -1252,7 +1270,7 @@ public abstract class PanelView extends FrameLayout {
      */
     protected abstract int getClearAllHeight();
 
-    public void setHeadsUpManager(HeadsUpManager headsUpManager) {
+    public void setHeadsUpManager(HeadsUpManagerPhone headsUpManager) {
         mHeadsUpManager = headsUpManager;
     }
 

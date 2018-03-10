@@ -285,7 +285,6 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
         int delta = add ? +1 : -1;
         switch (request.type) {
             case REQUEST:
-            case TRACK_DEFAULT:
                 mNumRequestNetworkRequests += delta;
                 break;
 
@@ -294,6 +293,7 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
                 mNumBackgroundNetworkRequests += delta;
                 break;
 
+            case TRACK_DEFAULT:
             case LISTEN:
                 break;
 
@@ -384,12 +384,24 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
 
     /**
      * Returns whether the network is a background network. A network is a background network if it
-     * is satisfying no foreground requests and at least one background request. (If it did not have
-     * a background request, it would be a speculative network that is only being kept up because
-     * it might satisfy a request if it validated).
+     * does not have the NET_CAPABILITY_FOREGROUND capability, which implies it is satisfying no
+     * foreground request, is not lingering (i.e. kept for a while after being outscored), and is
+     * not a speculative network (i.e. kept pending validation when validation would have it
+     * outscore another foreground network). That implies it is being kept up by some background
+     * request (otherwise it would be torn down), maybe the mobile always-on request.
      */
     public boolean isBackgroundNetwork() {
-        return !isVPN() && numForegroundNetworkRequests() == 0 && mNumBackgroundNetworkRequests > 0;
+        return !isVPN() && numForegroundNetworkRequests() == 0 && mNumBackgroundNetworkRequests > 0
+                && !isLingering();
+    }
+
+    /**
+     * Returns whether this network is currently suspended. A network is suspended if it is still
+     * connected but data temporarily fails to transfer. See {@link NetworkInfo.State#SUSPENDED}
+     * and {@link NetworkCapabilities#NET_CAPABILITY_NOT_SUSPENDED}.
+     */
+    public boolean isSuspended() {
+        return networkInfo.getState() == NetworkInfo.State.SUSPENDED;
     }
 
     // Does this network satisfy request?
@@ -458,7 +470,7 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo> {
 
     public NetworkState getNetworkState() {
         synchronized (this) {
-            // Network objects are outwardly immutable so there is no point to duplicating.
+            // Network objects are outwardly immutable so there is no point in duplicating.
             // Duplicating also precludes sharing socket factories and connection pools.
             final String subscriberId = (networkMisc != null) ? networkMisc.subscriberId : null;
             return new NetworkState(new NetworkInfo(networkInfo),

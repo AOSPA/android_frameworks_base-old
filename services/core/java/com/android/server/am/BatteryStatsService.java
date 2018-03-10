@@ -202,6 +202,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         public String[] getMobileIfaces() {
             return mStats.getMobileIfaces().clone();
         }
+
+        @Override
+        public void noteJobsDeferred(int uid, int numDeferred, long sinceLast) {
+            if (DBG) Slog.d(TAG, "Jobs deferred " + uid + ": " + numDeferred + " " + sinceLast);
+            BatteryStatsService.this.noteJobsDeferred(uid, numDeferred, sinceLast);
+        }
     }
 
     private static void awaitUninterruptibly(Future<?> future) {
@@ -453,6 +459,13 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         enforceCallingPermission();
         synchronized (mStats) {
             mStats.noteJobFinishLocked(name, uid, stopReason);
+        }
+    }
+
+    void noteJobsDeferred(int uid, int numDeferred, long sinceLast) {
+        // No need to enforce calling permission, as it is called from an internal interface
+        synchronized (mStats) {
+            mStats.noteJobsDeferredLocked(uid, numDeferred, sinceLast);
         }
     }
 
@@ -1057,7 +1070,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         // to block such a low level service like BatteryService on external stats like WiFi.
         mWorker.scheduleRunnable(() -> {
             synchronized (mStats) {
-                final boolean onBattery = plugType == BatteryStatsImpl.BATTERY_PLUGGED_NONE;
+                final boolean onBattery = BatteryStatsImpl.isOnBattery(plugType, status);
                 if (mStats.isOnBattery() == onBattery) {
                     // The battery state has not changed, so we don't need to sync external
                     // stats immediately.

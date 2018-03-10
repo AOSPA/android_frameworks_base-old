@@ -37,7 +37,7 @@ public class DestroyActivityItem extends ActivityLifecycleItem {
             PendingTransactionActions pendingActions) {
         Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "activityDestroy");
         client.handleDestroyActivity(token, mFinished, mConfigChanges,
-                false /* getNonConfigInstance */);
+                false /* getNonConfigInstance */, getDescription());
         Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
     }
 
@@ -65,6 +65,7 @@ public class DestroyActivityItem extends ActivityLifecycleItem {
 
     @Override
     public void recycle() {
+        super.recycle();
         mFinished = false;
         mConfigChanges = 0;
         ObjectPool.recycle(this);

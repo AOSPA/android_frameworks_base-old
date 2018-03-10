@@ -46,17 +46,11 @@ import "frameworks/base/core/proto/android/service/usb.proto";
 import "frameworks/base/core/proto/android/util/event_log_tags.proto";
 import "frameworks/base/core/proto/android/util/log.proto";
 import "frameworks/base/libs/incident/proto/android/os/header.proto";
+import "frameworks/base/libs/incident/proto/android/os/metadata.proto";
 import "frameworks/base/libs/incident/proto/android/privacy.proto";
 import "frameworks/base/libs/incident/proto/android/section.proto";
 
 package android.os;
-
-// This field contains internal metadata associated with an incident report,
-// such as the section ids and privacy policy specs from caller as well as how long
-// and how many bytes a section takes, etc.
-message IncidentMetadata {
-
-}
 
 // privacy field options must not be set at this level because all
 // the sections are able to be controlled and configured by section ids.
@@ -122,32 +116,32 @@ message IncidentProto {
     ];
 
     // Linux services
-    optional Procrank procrank = 2000 [
+    optional ProcrankProto procrank = 2000 [
         (section).type = SECTION_NONE, // disable procrank until figure out permission
         (section).args = "/system/xbin/procrank"
     ];
 
-    optional PageTypeInfo page_type_info = 2001 [
+    optional PageTypeInfoProto page_type_info = 2001 [
         (section).type = SECTION_FILE,
         (section).args = "/proc/pagetypeinfo"
     ];
 
-    optional KernelWakeSources kernel_wake_sources = 2002 [
+    optional KernelWakeSourcesProto kernel_wake_sources = 2002 [
         (section).type = SECTION_FILE,
         (section).args = "/d/wakeup_sources"
     ];
 
-    optional CpuInfo cpu_info = 2003 [
+    optional CpuInfoProto cpu_info = 2003 [
         (section).type = SECTION_COMMAND,
         (section).args = "top -b -n 1 -H -s 6 -o pid,tid,user,pr,ni,%cpu,s,virt,res,pcy,cmd,name"
     ];
 
-    optional CpuFreq cpu_freq = 2004 [
+    optional CpuFreqProto cpu_freq = 2004 [
         (section).type = SECTION_FILE,
         (section).args = "/sys/devices/system/cpu/cpufreq/all_time_in_state"
     ];
 
-    optional PsDumpProto processes_and_threads = 2005 [
+    optional PsProto processes_and_threads = 2005 [
         (section).type = SECTION_COMMAND,
         (section).args = "ps -A -T -Z -O pri,nice,rtprio,sched,pcy,time"
     ];
@@ -204,7 +198,10 @@ message IncidentProto {
         (section).args = "power --proto"
     ];
 
-    optional android.service.print.PrintServiceDumpProto print = 3010;
+    optional android.service.print.PrintServiceDumpProto print = 3010 [
+        (section).type = SECTION_DUMPSYS,
+        (section).args = "print --proto"
+    ];
 
     optional android.service.procstats.ProcessStatsServiceDumpProto procstats = 3011 [
         (section).type = SECTION_DUMPSYS,

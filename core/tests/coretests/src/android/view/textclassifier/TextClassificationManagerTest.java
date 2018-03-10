@@ -19,6 +19,7 @@ package android.view.textclassifier;
 import static org.hamcrest.CoreMatchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 
 import android.os.LocaleList;
@@ -33,11 +34,14 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.Arrays;
+import java.util.Collections;
+
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class TextClassificationManagerTest {
 
-    private static final LocaleList LOCALES = LocaleList.forLanguageTags("en");
+    private static final LocaleList LOCALES = LocaleList.forLanguageTags("en-US");
     private static final String NO_TYPE = null;
 
     private TextClassificationManager mTcm;
@@ -145,6 +149,20 @@ public class TextClassificationManagerTest {
     }
 
     @Test
+    public void testTextClassifyText_address() {
+        if (isTextClassifierDisabled()) return;
+
+        String text = "Brandschenkestrasse 110, Zürich, Switzerland";
+        TextClassification classification = mClassifier.classifyText(
+                text, 0, text.length(), mClassificationOptions);
+        assertThat(classification,
+                isTextClassification(
+                        text,
+                        TextClassifier.TYPE_ADDRESS,
+                        "geo:0,0?q=Brandschenkestrasse+110%2C+Z%C3%BCrich%2C+Switzerland"));
+    }
+
+    @Test
     public void testTextClassifyText_url_inCaps() {
         if (isTextClassifierDisabled()) return;
 
@@ -163,6 +181,42 @@ public class TextClassificationManagerTest {
     }
 
     @Test
+    public void testTextClassifyText_date() {
+        if (isTextClassifierDisabled()) return;
+
+        String text = "Let's meet on January 9, 2018.";
+        String classifiedText = "January 9, 2018";
+        int startIndex = text.indexOf(classifiedText);
+        int endIndex = startIndex + classifiedText.length();
+
+        TextClassification classification = mClassifier.classifyText(
+                text, startIndex, endIndex, mClassificationOptions);
+        assertThat(classification,
+                isTextClassification(
+                        classifiedText,
+                        TextClassifier.TYPE_DATE,
+                        null));
+    }
+
+    @Test
+    public void testTextClassifyText_datetime() {
+        if (isTextClassifierDisabled()) return;
+
+        String text = "Let's meet 2018/01/01 10:30:20.";
+        String classifiedText = "2018/01/01 10:30:20";
+        int startIndex = text.indexOf(classifiedText);
+        int endIndex = startIndex + classifiedText.length();
+
+        TextClassification classification = mClassifier.classifyText(
+                text, startIndex, endIndex, mClassificationOptions);
+        assertThat(classification,
+                isTextClassification(
+                        classifiedText,
+                        TextClassifier.TYPE_DATE_TIME,
+                        null));
+    }
+
+    @Test
     public void testGenerateLinks_phone() {
         if (isTextClassifierDisabled()) return;
         String text = "The number is +12122537077. See you tonight!";
@@ -175,38 +229,50 @@ public class TextClassificationManagerTest {
         if (isTextClassifierDisabled()) return;
         String text = "The number is +12122537077. See you tonight!";
         assertThat(mClassifier.generateLinks(text, mLinksOptions.setEntityConfig(
-                new TextClassifier.EntityConfig(TextClassifier.ENTITY_PRESET_ALL)
-                        .excludeEntities(TextClassifier.TYPE_PHONE))),
+                TextClassifier.EntityConfig.create(Collections.EMPTY_LIST,
+                        Collections.EMPTY_LIST, Arrays.asList(TextClassifier.TYPE_PHONE)))),
                 not(isTextLinksContaining(text, "+12122537077", TextClassifier.TYPE_PHONE)));
     }
 
     @Test
-    public void testGenerateLinks_none_config() {
+    public void testGenerateLinks_explicit_address() {
+        if (isTextClassifierDisabled()) return;
+        String text = "The address is 1600 Amphitheater Parkway, Mountain View, CA. See you!";
+        assertThat(mClassifier.generateLinks(text, mLinksOptions.setEntityConfig(
+                TextClassifier.EntityConfig.createWithEntityList(
+                        Arrays.asList(TextClassifier.TYPE_ADDRESS)))),
+                isTextLinksContaining(text, "1600 Amphitheater Parkway, Mountain View, CA",
+                        TextClassifier.TYPE_ADDRESS));
+    }
+
+    @Test
+    public void testGenerateLinks_exclude_override() {
         if (isTextClassifierDisabled()) return;
         String text = "The number is +12122537077. See you tonight!";
         assertThat(mClassifier.generateLinks(text, mLinksOptions.setEntityConfig(
-                new TextClassifier.EntityConfig(TextClassifier.ENTITY_PRESET_NONE))),
+                TextClassifier.EntityConfig.create(Collections.EMPTY_LIST,
+                        Arrays.asList(TextClassifier.TYPE_PHONE),
+                        Arrays.asList(TextClassifier.TYPE_PHONE)))),
                 not(isTextLinksContaining(text, "+12122537077", TextClassifier.TYPE_PHONE)));
     }
 
     @Test
-    public void testGenerateLinks_address() {
+    public void testGenerateLinks_maxLength() {
         if (isTextClassifierDisabled()) return;
-        String text = "The address is 1600 Amphitheater Parkway, Mountain View, CA. See you!";
-        assertThat(mClassifier.generateLinks(text, null),
-                isTextLinksContaining(text, "1600 Amphitheater Parkway, Mountain View, CA",
-                        TextClassifier.TYPE_ADDRESS));
+        char[] manySpaces = new char[mClassifier.getMaxGenerateLinksTextLength()];
+        Arrays.fill(manySpaces, ' ');
+        TextLinks links = mClassifier.generateLinks(new String(manySpaces), null);
+        assertTrue(links.getLinks().isEmpty());
     }
 
-    @Test
-    public void testGenerateLinks_include() {
-        if (isTextClassifierDisabled()) return;
-        String text = "The address is 1600 Amphitheater Parkway, Mountain View, CA. See you!";
-        assertThat(mClassifier.generateLinks(text, mLinksOptions.setEntityConfig(
-                new TextClassifier.EntityConfig(TextClassifier.ENTITY_PRESET_NONE)
-                        .includeEntities(TextClassifier.TYPE_ADDRESS))),
-                isTextLinksContaining(text, "1600 Amphitheater Parkway, Mountain View, CA",
-                        TextClassifier.TYPE_ADDRESS));
+    @Test(expected = IllegalArgumentException.class)
+    public void testGenerateLinks_tooLong() {
+        if (isTextClassifierDisabled()) {
+            throw new IllegalArgumentException("pass if disabled");
+        }
+        char[] manySpaces = new char[mClassifier.getMaxGenerateLinksTextLength() + 1];
+        Arrays.fill(manySpaces, ' ');
+        mClassifier.generateLinks(new String(manySpaces), null);
     }
 
     @Test
@@ -292,6 +358,10 @@ public class TextClassificationManagerTest {
                             typeRequirementSatisfied = "http".equals(scheme)
                                     || "https".equals(scheme);
                             break;
+                        case TextClassifier.TYPE_ADDRESS:
+                            scheme = result.getIntent().getData().getScheme();
+                            typeRequirementSatisfied = "geo".equals(scheme);
+                            break;
                         default:
                             typeRequirementSatisfied = true;
                     }
@@ -300,7 +370,8 @@ public class TextClassificationManagerTest {
                             && text.equals(result.getText())
                             && result.getEntityCount() > 0
                             && type.equals(result.getEntity(0))
-                            && intentUri.equals(result.getIntent().getDataString());
+                            && (intentUri == null
+                                || intentUri.equals(result.getIntent().getDataString()));
                     // TODO: Include other properties.
                 }
                 return false;

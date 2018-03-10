@@ -101,7 +101,6 @@ import com.android.server.am.UserState;
 import com.android.server.storage.DeviceStorageMonitorInternal;
 
 import libcore.io.IoUtils;
-import libcore.util.Objects;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -122,6 +121,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Service for {@link UserManager}.
@@ -604,7 +604,7 @@ public class UserManagerService extends IUserManager.Stub {
                     return;
                 }
                 String currentAccount = userData.account;
-                if (!Objects.equal(currentAccount, accountName)) {
+                if (!Objects.equals(currentAccount, accountName)) {
                     userData.account = accountName;
                     userToUpdate = userData;
                 }
@@ -1486,6 +1486,23 @@ public class UserManagerService extends IUserManager.Stub {
         return restrictions != null && restrictions.getBoolean(restrictionKey);
     }
 
+    /** @return if any user has the given restriction. */
+    @Override
+    public boolean hasUserRestrictionOnAnyUser(String restrictionKey) {
+        if (!UserRestrictionsUtils.isValidRestriction(restrictionKey)) {
+            return false;
+        }
+        final List<UserInfo> users = getUsers(/* excludeDying= */ true);
+        for (int i = 0; i < users.size(); i++) {
+            final int userId = users.get(i).id;
+            Bundle restrictions = getEffectiveUserRestrictions(userId);
+            if (restrictions != null && restrictions.getBoolean(restrictionKey)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * @hide
      *
@@ -1547,6 +1564,7 @@ public class UserManagerService extends IUserManager.Stub {
         return result;
     }
 
+    @GuardedBy("mRestrictionsLock")
     private EnforcingUser getEnforcingUserLocked(@UserIdInt int userId) {
         int source = mDeviceOwnerUserId == userId ? UserManager.RESTRICTION_SOURCE_DEVICE_OWNER
                 : UserManager.RESTRICTION_SOURCE_PROFILE_OWNER;
@@ -2896,6 +2914,7 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
+    @GuardedBy("mUsersLock")
     @VisibleForTesting
     void addRemovingUserIdLocked(int userId) {
         // We remember deleted user IDs to prevent them from being
@@ -3405,6 +3424,7 @@ public class UserManagerService extends IUserManager.Stub {
         return nextId;
     }
 
+    @GuardedBy("mUsersLock")
     private int scanNextAvailableIdLocked() {
         for (int i = MIN_USER_ID; i < MAX_USER_ID; i++) {
             if (mUsers.indexOfKey(i) < 0 && !mRemovingUserIds.get(i)) {

@@ -86,8 +86,16 @@ class KeyguardController {
      *         display, false otherwise
      */
     boolean isKeyguardShowing(int displayId) {
-        return mKeyguardShowing && !mKeyguardGoingAway &&
-                (displayId == DEFAULT_DISPLAY ? !mOccluded : displayId == mSecondaryDisplayShowing);
+        return isKeyguardActive(displayId) && !mKeyguardGoingAway;
+    }
+
+    /**
+     * @return true if Keyguard is showing and not occluded. We ignore whether it is going away or
+     *         not here.
+     */
+    boolean isKeyguardActive(int displayId) {
+        return mKeyguardShowing && (displayId == DEFAULT_DISPLAY ? !mOccluded
+                : displayId == mSecondaryDisplayShowing);
     }
 
     /**
@@ -109,8 +117,8 @@ class KeyguardController {
         mSecondaryDisplayShowing = secondaryDisplayShowing;
         if (showingChanged) {
             dismissDockedStackIfNeeded();
+            setKeyguardGoingAway(false);
             if (showing) {
-                setKeyguardGoingAway(false);
                 mDismissalRequested = false;
             }
         }
@@ -138,6 +146,7 @@ class KeyguardController {
             updateKeyguardSleepToken();
 
             // Some stack visibility might change (e.g. docked stack)
+            mStackSupervisor.resumeFocusedStackTopActivityLocked();
             mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
             mStackSupervisor.addStartingWindowsForVisibleActivities(true /* taskSwitch */);
             mWindowManager.executeAppTransition();
@@ -383,9 +392,5 @@ class KeyguardController {
         proto.write(KEYGUARD_SHOWING, mKeyguardShowing);
         proto.write(KEYGUARD_OCCLUDED, mOccluded);
         proto.end(token);
-    }
-
-    public void notifyAppTransitionDone() {
-        setKeyguardGoingAway(false);
     }
 }

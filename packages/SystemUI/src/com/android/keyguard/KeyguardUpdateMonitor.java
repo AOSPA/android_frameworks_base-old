@@ -141,6 +141,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private static final int MSG_USER_UNLOCKED = 334;
     private static final int MSG_ASSISTANT_STACK_CHANGED = 335;
     private static final int MSG_FINGERPRINT_AUTHENTICATION_CONTINUE = 336;
+    private static final int MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED = 337;
     private static final int MSG_LOCALE_CHANGED = 500;
 
     /** Fingerprint state: Not listening to fingerprint. */
@@ -226,6 +227,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private LockPatternUtils mLockPatternUtils;
     private final IDreamManager mDreamManager;
     private boolean mIsDreaming;
+    private final DevicePolicyManager mDevicePolicyManager;
+    private boolean mLogoutEnabled;
 
     /**
      * Short delay before restarting fingerprint authentication after a successful try
@@ -333,6 +336,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                     break;
                 case MSG_LOCALE_CHANGED:
                     handleLocaleChanged();
+                   break;
+                case MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED:
+                    updateLogoutEnabled();
                     break;
             }
         }
@@ -734,7 +740,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
     private DisplayClientState mDisplayClientState = new DisplayClientState();
 
-    private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
+    @VisibleForTesting
+    final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
 
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -771,6 +778,13 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                                 maxChargingMicroWatt));
                 mHandler.sendMessage(msg);
             } else if (TelephonyIntents.ACTION_SIM_STATE_CHANGED.equals(action)) {
+                // ACTION_SIM_STATE_CHANGED is rebroadcast after unlocking the device to
+                // keep compatibility with apps that aren't direct boot aware.
+                // SysUI should just ignore this broadcast because it was already received
+                // and processed previously.
+                if (intent.getBooleanExtra(TelephonyIntents.EXTRA_REBROADCAST_ON_UNLOCK, false)) {
+                    return;
+                }
                 SimData args = SimData.fromIntent(intent);
                 if (DEBUG_SIM_STATES) {
                     Log.v(TAG, "action " + action
@@ -801,6 +815,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                         mHandler.obtainMessage(MSG_SERVICE_STATE_CHANGE, subId, 0, serviceState));
             } else if (Intent.ACTION_LOCALE_CHANGED.equals(action)) {
                 mHandler.sendEmptyMessage(MSG_LOCALE_CHANGED);
+            } else if (DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED.equals(
+                    action)) {
+                mHandler.sendEmptyMessage(MSG_DEVICE_POLICY_MANAGER_STATE_CHANGED);
             }
         }
     };
@@ -1166,6 +1183,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         filter.addAction(TelephonyIntents.ACTION_SERVICE_STATE_CHANGED);
         filter.addAction(TelephonyManager.ACTION_PHONE_STATE_CHANGED);
         filter.addAction(AudioManager.RINGER_MODE_CHANGED_ACTION);
+        filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
         context.registerReceiver(mBroadcastReceiver, filter);
 
         final IntentFilter bootCompleteFilter = new IntentFilter();
@@ -1220,6 +1238,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
 
         ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
         mUserManager = context.getSystemService(UserManager.class);
+        mDevicePolicyManager = context.getSystemService(DevicePolicyManager.class);
+        mLogoutEnabled = mDevicePolicyManager.isLogoutEnabled();
     }
 
     private void updateFingerprintListeningState() {
@@ -1515,7 +1535,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     /**
      * Handle {@link #MSG_SIM_STATE_CHANGE}
      */
-    private void handleSimStateChange(int subId, int slotId, State state) {
+    @VisibleForTesting
+    protected void handleSimStateChange(int subId, int slotId, State state) {
 
         if (DEBUG_SIM_STATES) {
             Log.d(TAG, "handleSimStateChange(subId=" + subId + ", slotId="
@@ -1984,6 +2005,26 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             if (subId == info.getSubscriptionId()) return info;
         }
         return null; // not found
+    }
+
+    /**
+     * @return a cached version of DevicePolicyManager.isLogoutEnabled()
+     */
+    public boolean isLogoutEnabled() {
+        return mLogoutEnabled;
+    }
+
+    private void updateLogoutEnabled() {
+        boolean logoutEnabled = mDevicePolicyManager.isLogoutEnabled();
+        if (mLogoutEnabled != logoutEnabled) {
+            mLogoutEnabled = logoutEnabled;
+            for (int i = 0; i < mCallbacks.size(); i++) {
+                KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
+                if (cb != null) {
+                    cb.onLogoutEnabledChanged();
+                }
+            }
+        }
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {

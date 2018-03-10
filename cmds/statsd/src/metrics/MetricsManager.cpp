@@ -26,9 +26,11 @@
 #include "matchers/SimpleLogMatchingTracker.h"
 #include "metrics_manager_util.h"
 #include "stats_util.h"
+#include "stats_log_util.h"
 
 #include <log/logprint.h>
 #include <private/android_filesystem_config.h>
+#include <utils/SystemClock.h>
 
 using android::util::FIELD_COUNT_REPEATED;
 using android::util::FIELD_TYPE_MESSAGE;
@@ -48,9 +50,10 @@ const int FIELD_ID_METRICS = 1;
 
 MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
                                const long timeBaseSec, sp<UidMap> uidMap)
-    : mConfigKey(key), mUidMap(uidMap) {
+    : mConfigKey(key), mUidMap(uidMap), mLastReportTimeNs(timeBaseSec * NS_PER_SEC) {
     mConfigValid =
-            initStatsdConfig(key, config, *uidMap, timeBaseSec, mTagIds, mAllAtomMatchers, mAllConditionTrackers,
+            initStatsdConfig(key, config, *uidMap, timeBaseSec, mTagIds, mAllAtomMatchers,
+                             mAllConditionTrackers,
                              mAllMetricProducers, mAllAnomalyTrackers, mConditionToMetricMap,
                              mTrackerToMetricMap, mTrackerToConditionMap, mNoReportMetricIds);
 
@@ -89,8 +92,10 @@ MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
         ALOGE("This config is too big! Reject!");
         mConfigValid = false;
     }
-
-    // TODO: add alert size.
+    if (mAllAnomalyTrackers.size() > StatsdStats::kMaxAlertCountPerConfig) {
+        ALOGE("This config has too many alerts! Reject!");
+        mConfigValid = false;
+    }
     // no matter whether this config is valid, log it in the stats.
     StatsdStats::getInstance().noteConfigReceived(key, mAllMetricProducers.size(),
                                                   mAllConditionTrackers.size(),
@@ -121,7 +126,8 @@ bool MetricsManager::isConfigValid() const {
     return mConfigValid;
 }
 
-void MetricsManager::notifyAppUpgrade(const string& apk, const int uid, const int64_t version) {
+void MetricsManager::notifyAppUpgrade(const uint64_t& eventTimeNs, const string& apk, const int uid,
+                                      const int64_t version) {
     // check if we care this package
     if (std::find(mAllowedPkg.begin(), mAllowedPkg.end(), apk) == mAllowedPkg.end()) {
         return;
@@ -131,7 +137,8 @@ void MetricsManager::notifyAppUpgrade(const string& apk, const int uid, const in
     initLogSourceWhiteList();
 }
 
-void MetricsManager::notifyAppRemoved(const string& apk, const int uid) {
+void MetricsManager::notifyAppRemoved(const uint64_t& eventTimeNs, const string& apk,
+                                      const int uid) {
     // check if we care this package
     if (std::find(mAllowedPkg.begin(), mAllowedPkg.end(), apk) == mAllowedPkg.end()) {
         return;
@@ -141,19 +148,11 @@ void MetricsManager::notifyAppRemoved(const string& apk, const int uid) {
     initLogSourceWhiteList();
 }
 
-void MetricsManager::onUidMapReceived() {
+void MetricsManager::onUidMapReceived(const uint64_t& eventTimeNs) {
     if (mAllowedPkg.size() == 0) {
         return;
     }
     initLogSourceWhiteList();
-}
-
-void MetricsManager::onDumpReport(const uint64_t& dumpTimeStampNs, ConfigMetricsReport* report) {
-    for (const auto& producer : mAllMetricProducers) {
-        if (mNoReportMetricIds.find(producer->getMetricId()) == mNoReportMetricIds.end()) {
-            producer->onDumpReport(dumpTimeStampNs, report->add_metrics());
-        }
-    }
 }
 
 void MetricsManager::dumpStates(FILE* out, bool verbose) {
@@ -170,9 +169,8 @@ void MetricsManager::dumpStates(FILE* out, bool verbose) {
     }
 }
 
-void MetricsManager::onDumpReport(ProtoOutputStream* protoOutput) {
+void MetricsManager::onDumpReport(const uint64_t dumpTimeStampNs, ProtoOutputStream* protoOutput) {
     VLOG("=========================Metric Reports Start==========================");
-    uint64_t dumpTimeStampNs = time(nullptr) * NS_PER_SEC;
     // one StatsLogReport per MetricProduer
     for (const auto& producer : mAllMetricProducers) {
         if (mNoReportMetricIds.find(producer->getMetricId()) == mNoReportMetricIds.end()) {
@@ -182,6 +180,7 @@ void MetricsManager::onDumpReport(ProtoOutputStream* protoOutput) {
             protoOutput->end(token);
         }
     }
+    mLastReportTimeNs = dumpTimeStampNs;
     VLOG("=========================Metric Reports End==========================");
 }
 
@@ -191,8 +190,9 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
         return;
     }
 
-    if (event.GetTagId() == android::util::APP_HOOK) { // Check that app hook fields are valid.
-        // TODO: Find a way to make these checks easier to maintain if the app hooks get changed.
+    if (event.GetTagId() == android::util::APP_BREADCRUMB_REPORTED) {
+        // Check that app breadcrumb reported fields are valid.
+        // TODO: Find a way to make these checks easier to maintain.
         status_t err = NO_ERROR;
 
         // Uid is 3rd from last field and must match the caller's uid,
@@ -235,7 +235,7 @@ void MetricsManager::onLogEvent(const LogEvent& event) {
     }
 
     int tagId = event.GetTagId();
-    uint64_t eventTime = event.GetTimestampNs();
+    uint64_t eventTime = event.GetElapsedTimestampNs();
     if (mTagIds.find(tagId) == mTagIds.end()) {
         // not interesting...
         return;

@@ -1591,6 +1591,7 @@ public class SettingsProvider extends ContentProvider {
     private boolean isGlobalOrSecureSettingRestrictedForUser(String setting, int userId,
             String value, int callingUid) {
         String restriction;
+        boolean checkAllUser = false;
         switch (setting) {
             case Settings.Secure.LOCATION_MODE:
                 // Note LOCATION_MODE will be converted into LOCATION_PROVIDERS_ALLOWED
@@ -1656,6 +1657,12 @@ public class SettingsProvider extends ContentProvider {
                 restriction = UserManager.DISALLOW_AMBIENT_DISPLAY;
                 break;
 
+            case Global.LOCATION_GLOBAL_KILL_SWITCH:
+                if ("0".equals(value)) return false;
+                restriction = UserManager.DISALLOW_CONFIG_LOCATION;
+                checkAllUser = true;
+                break;
+
             default:
                 if (setting != null && setting.startsWith(Settings.Global.DATA_ROAMING)) {
                     if ("0".equals(value)) return false;
@@ -1665,7 +1672,11 @@ public class SettingsProvider extends ContentProvider {
                 return false;
         }
 
-        return mUserManager.hasUserRestriction(restriction, UserHandle.of(userId));
+        if (checkAllUser) {
+            return mUserManager.hasUserRestrictionOnAnyUser(restriction);
+        } else {
+            return mUserManager.hasUserRestriction(restriction, UserHandle.of(userId));
+        }
     }
 
     private int resolveOwningUserIdForSecureSettingLocked(int userId, String setting) {
@@ -3017,7 +3028,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 154;
+            private static final int SETTINGS_VERSION = 155;
 
             private final int mUserId;
 
@@ -3642,6 +3653,24 @@ public class SettingsProvider extends ContentProvider {
                                 null, true, SettingsState.SYSTEM_PACKAGE_NAME);
                     }
                     currentVersion = 154;
+                }
+
+                if (currentVersion == 154) {
+                    // Version 155: Set the default value for BACKUP_LOCAL_TRANSPORT_PARAMETERS.
+                    final SettingsState systemSecureSettings = getSecureSettingsLocked(userId);
+                    final String oldValue = systemSecureSettings.getSettingLocked(
+                            Settings.Secure.BACKUP_LOCAL_TRANSPORT_PARAMETERS).getValue();
+                    if (TextUtils.equals(null, oldValue)) {
+                        final String defaultValue = getContext().getResources().getString(
+                                R.string.def_backup_local_transport_parameters);
+                        if (!TextUtils.isEmpty(defaultValue)) {
+                            systemSecureSettings.insertSettingLocked(
+                                    Settings.Secure.BACKUP_LOCAL_TRANSPORT_PARAMETERS, defaultValue,
+                                    null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                        }
+
+                    }
+                    currentVersion = 155;
                 }
 
                 // vXXX: Add new settings above this point.

@@ -1055,11 +1055,10 @@ public class Notification implements Parcelable
     /**
      * {@link #extras} key: A
      * {@link android.content.ContentUris content URI} pointing to an image that can be displayed
-     * in the background when the notification is selected. The URI must point to an image stream
-     * suitable for passing into
+     * in the background when the notification is selected. Used on television platforms.
+     * The URI must point to an image stream suitable for passing into
      * {@link android.graphics.BitmapFactory#decodeStream(java.io.InputStream)
-     * BitmapFactory.decodeStream}; all other content types will be ignored. The content provider
-     * URI used for this purpose must require no permissions to read the image data.
+     * BitmapFactory.decodeStream}; all other content types will be ignored.
      */
     public static final String EXTRA_BACKGROUND_IMAGE_URI = "android.backgroundImageUri";
 
@@ -1333,6 +1332,10 @@ public class Notification implements Parcelable
          */
         public static final int SEMANTIC_ACTION_THUMBS_DOWN = 9;
 
+        /**
+         * {@code SemanticAction}: Call a contact, group, etc.
+         */
+        public static final int SEMANTIC_ACTION_CALL = 10;
 
         private final Bundle mExtras;
         private Icon mIcon;
@@ -1822,6 +1825,7 @@ public class Notification implements Parcelable
              * @param label the label to display while the action is being prepared to execute
              * @return this object for method chaining
              */
+            @Deprecated
             public WearableExtender setInProgressLabel(CharSequence label) {
                 mInProgressLabel = label;
                 return this;
@@ -1833,6 +1837,7 @@ public class Notification implements Parcelable
              *
              * @return the label to display while the action is being prepared to execute
              */
+            @Deprecated
             public CharSequence getInProgressLabel() {
                 return mInProgressLabel;
             }
@@ -1844,6 +1849,7 @@ public class Notification implements Parcelable
              * @param label the label to confirm the action should be executed
              * @return this object for method chaining
              */
+            @Deprecated
             public WearableExtender setConfirmLabel(CharSequence label) {
                 mConfirmLabel = label;
                 return this;
@@ -1855,6 +1861,7 @@ public class Notification implements Parcelable
              *
              * @return the label to confirm the action should be executed
              */
+            @Deprecated
             public CharSequence getConfirmLabel() {
                 return mConfirmLabel;
             }
@@ -1866,6 +1873,7 @@ public class Notification implements Parcelable
              * @param label the label to display to cancel the action
              * @return this object for method chaining
              */
+            @Deprecated
             public WearableExtender setCancelLabel(CharSequence label) {
                 mCancelLabel = label;
                 return this;
@@ -1877,6 +1885,7 @@ public class Notification implements Parcelable
              *
              * @return the label to display to cancel the action
              */
+            @Deprecated
             public CharSequence getCancelLabel() {
                 return mCancelLabel;
             }
@@ -1947,7 +1956,8 @@ public class Notification implements Parcelable
                 SEMANTIC_ACTION_MUTE,
                 SEMANTIC_ACTION_UNMUTE,
                 SEMANTIC_ACTION_THUMBS_UP,
-                SEMANTIC_ACTION_THUMBS_DOWN
+                SEMANTIC_ACTION_THUMBS_DOWN,
+                SEMANTIC_ACTION_CALL
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface SemanticAction {}
@@ -4583,7 +4593,8 @@ public class Notification implements Parcelable
             big.setViewVisibility(R.id.notification_material_reply_text_3, View.GONE);
             big.setTextViewText(R.id.notification_material_reply_text_3, null);
 
-            big.setViewLayoutMarginBottomDimen(R.id.notification_action_list_margin_target, 0);
+            big.setViewLayoutMarginBottomDimen(R.id.notification_action_list_margin_target,
+                    R.dimen.notification_content_margin);
         }
 
         private RemoteViews applyStandardTemplateWithActions(int layoutId) {
@@ -4604,23 +4615,19 @@ public class Notification implements Parcelable
             if (N > 0) {
                 big.setViewVisibility(R.id.actions_container, View.VISIBLE);
                 big.setViewVisibility(R.id.actions, View.VISIBLE);
-                if (p.ambient) {
-                    big.setInt(R.id.actions, "setBackgroundColor", Color.TRANSPARENT);
-                } else if (isColorized()) {
-                    big.setInt(R.id.actions, "setBackgroundColor", getActionBarColor());
-                } else {
-                    big.setInt(R.id.actions, "setBackgroundColor", mContext.getColor(
-                            R.color.notification_action_list));
-                }
-                big.setViewLayoutMarginBottomDimen(R.id.notification_action_list_margin_target,
-                        R.dimen.notification_action_list_height);
+                big.setViewLayoutMarginBottomDimen(R.id.notification_action_list_margin_target, 0);
                 if (N>MAX_ACTION_BUTTONS) N=MAX_ACTION_BUTTONS;
                 for (int i=0; i<N; i++) {
                     Action action = mActions.get(i);
-                    validRemoteInput |= hasValidRemoteInput(action);
+                    boolean actionHasValidInput = hasValidRemoteInput(action);
+                    validRemoteInput |= actionHasValidInput;
 
                     final RemoteViews button = generateActionButton(action, emphazisedMode,
                             i % 2 != 0, p.ambient);
+                    if (actionHasValidInput) {
+                        // Clear the drawable
+                        button.setInt(R.id.action0, "setBackgroundResource", 0);
+                    }
                     big.addView(R.id.actions, button);
                 }
             } else {
@@ -5217,6 +5224,7 @@ public class Notification implements Parcelable
             if (mStyle != null) {
                 mStyle.reduceImageSizes(mContext);
                 mStyle.purgeResources();
+                mStyle.validate(mContext);
                 mStyle.buildStyled(mN);
             }
             mN.reduceImageSizes(mContext);
@@ -5786,6 +5794,13 @@ public class Notification implements Parcelable
          */
         public void reduceImageSizes(Context context) {
         }
+
+        /**
+         * Validate that this style was properly composed. This is called at build time.
+         * @hide
+         */
+        public void validate(Context context) {
+        }
     }
 
     /**
@@ -6176,12 +6191,23 @@ public class Notification implements Parcelable
          * @param user Required - The person displayed for any messages that are sent by the
          * user. Any messages added with {@link #addMessage(Notification.MessagingStyle.Message)}
          * who don't have a Person associated with it will be displayed as if they were sent
-         * by this user. The user also needs to have a valid name associated with it.
+         * by this user. The user also needs to have a valid name associated with it, which will
+         * be enforced starting in Android P.
          */
         public MessagingStyle(@NonNull Person user) {
             mUser = user;
-            if (user == null || user.getName() == null) {
-                throw new RuntimeException("user must be valid and have a name");
+        }
+
+        /**
+         * Validate that this style was properly composed. This is called at build time.
+         * @hide
+         */
+        @Override
+        public void validate(Context context) {
+            super.validate(context);
+            if (context.getApplicationInfo().targetSdkVersion
+                    >= Build.VERSION_CODES.P && (mUser == null || mUser.getName() == null)) {
+                throw new RuntimeException("User must be valid and have a name.");
             }
         }
 
@@ -6435,7 +6461,7 @@ public class Notification implements Parcelable
         public RemoteViews makeContentView(boolean increasedHeight) {
             mBuilder.mOriginalActions = mBuilder.mActions;
             mBuilder.mActions = new ArrayList<>();
-            RemoteViews remoteViews = makeBigContentView(true /* showRightIcon */);
+            RemoteViews remoteViews = makeMessagingView(true /* isCollapsed */);
             mBuilder.mActions = mBuilder.mOriginalActions;
             mBuilder.mOriginalActions = null;
             return remoteViews;
@@ -6470,11 +6496,11 @@ public class Notification implements Parcelable
          */
         @Override
         public RemoteViews makeBigContentView() {
-            return makeBigContentView(false /* showRightIcon */);
+            return makeMessagingView(false /* isCollapsed */);
         }
 
         @NonNull
-        private RemoteViews makeBigContentView(boolean showRightIcon) {
+        private RemoteViews makeMessagingView(boolean isCollapsed) {
             CharSequence conversationTitle = !TextUtils.isEmpty(super.mBigContentTitle)
                     ? super.mBigContentTitle
                     : mConversationTitle;
@@ -6485,21 +6511,24 @@ public class Notification implements Parcelable
                 nameReplacement = conversationTitle;
                 conversationTitle = null;
             }
+            boolean hideLargeIcon = !isCollapsed || isOneToOne;
             RemoteViews contentView = mBuilder.applyStandardTemplateWithActions(
                     mBuilder.getMessagingLayoutResource(),
                     mBuilder.mParams.reset().hasProgress(false).title(conversationTitle).text(null)
-                            .hideLargeIcon(!showRightIcon || isOneToOne)
+                            .hideLargeIcon(hideLargeIcon)
                             .headerTextSecondary(conversationTitle)
-                            .alwaysShowReply(showRightIcon));
+                            .alwaysShowReply(isCollapsed));
             addExtras(mBuilder.mN.extras);
             // also update the end margin if there is an image
             int endMargin = R.dimen.notification_content_margin_end;
-            if (mBuilder.mN.hasLargeIcon() && showRightIcon) {
+            if (isCollapsed) {
                 endMargin = R.dimen.notification_content_plus_picture_margin_end;
             }
             contentView.setViewLayoutMarginEndDimen(R.id.notification_main_column, endMargin);
             contentView.setInt(R.id.status_bar_latest_event_content, "setLayoutColor",
                     mBuilder.resolveContrastColor());
+            contentView.setBoolean(R.id.status_bar_latest_event_content, "setIsCollapsed",
+                    isCollapsed);
             contentView.setIcon(R.id.status_bar_latest_event_content, "setLargeIcon",
                     mBuilder.mN.mLargeIcon);
             contentView.setCharSequence(R.id.status_bar_latest_event_content, "setNameReplacement",
@@ -6566,7 +6595,7 @@ public class Notification implements Parcelable
          */
         @Override
         public RemoteViews makeHeadsUpContentView(boolean increasedHeight) {
-            RemoteViews remoteViews = makeBigContentView(true /* showRightIcon */);
+            RemoteViews remoteViews = makeMessagingView(true /* isCollapsed */);
             remoteViews.setInt(R.id.notification_messaging, "setMaxDisplayedLines", 1);
             return remoteViews;
         }
@@ -8059,6 +8088,7 @@ public class Notification implements Parcelable
         /**
          * Set an icon that goes with the content of this notification.
          */
+        @Deprecated
         public WearableExtender setContentIcon(int icon) {
             mContentIcon = icon;
             return this;
@@ -8067,6 +8097,7 @@ public class Notification implements Parcelable
         /**
          * Get an icon that goes with the content of this notification.
          */
+        @Deprecated
         public int getContentIcon() {
             return mContentIcon;
         }
@@ -8077,6 +8108,7 @@ public class Notification implements Parcelable
          * {@link android.view.Gravity#END}. The default value is {@link android.view.Gravity#END}.
          * @see #setContentIcon
          */
+        @Deprecated
         public WearableExtender setContentIconGravity(int contentIconGravity) {
             mContentIconGravity = contentIconGravity;
             return this;
@@ -8088,6 +8120,7 @@ public class Notification implements Parcelable
          * {@link android.view.Gravity#END}. The default value is {@link android.view.Gravity#END}.
          * @see #getContentIcon
          */
+        @Deprecated
         public int getContentIconGravity() {
             return mContentIconGravity;
         }
@@ -8135,6 +8168,7 @@ public class Notification implements Parcelable
          * {@link android.view.Gravity#CENTER_VERTICAL} and {@link android.view.Gravity#BOTTOM}.
          * The default value is {@link android.view.Gravity#BOTTOM}.
          */
+        @Deprecated
         public WearableExtender setGravity(int gravity) {
             mGravity = gravity;
             return this;
@@ -8146,6 +8180,7 @@ public class Notification implements Parcelable
          * {@link android.view.Gravity#CENTER_VERTICAL} and {@link android.view.Gravity#BOTTOM}.
          * The default value is {@link android.view.Gravity#BOTTOM}.
          */
+        @Deprecated
         public int getGravity() {
             return mGravity;
         }
@@ -8159,6 +8194,7 @@ public class Notification implements Parcelable
          * documentation for the preset in question. See also
          * {@link #setCustomContentHeight} and {@link #getCustomSizePreset}.
          */
+        @Deprecated
         public WearableExtender setCustomSizePreset(int sizePreset) {
             mCustomSizePreset = sizePreset;
             return this;
@@ -8172,6 +8208,7 @@ public class Notification implements Parcelable
          * using {@link #setDisplayIntent}. Check the documentation for the preset in question.
          * See also {@link #setCustomContentHeight} and {@link #setCustomSizePreset}.
          */
+        @Deprecated
         public int getCustomSizePreset() {
             return mCustomSizePreset;
         }
@@ -8183,6 +8220,7 @@ public class Notification implements Parcelable
          * {@link android.app.Notification.WearableExtender#setCustomSizePreset} and
          * {@link #getCustomContentHeight}.
          */
+        @Deprecated
         public WearableExtender setCustomContentHeight(int height) {
             mCustomContentHeight = height;
             return this;
@@ -8194,6 +8232,7 @@ public class Notification implements Parcelable
          * using {@link #setDisplayIntent}. See also {@link #setCustomSizePreset} and
          * {@link #setCustomContentHeight}.
          */
+        @Deprecated
         public int getCustomContentHeight() {
             return mCustomContentHeight;
         }
@@ -8244,6 +8283,7 @@ public class Notification implements Parcelable
          * @param hintHideIcon {@code true} to hide the icon, {@code false} otherwise.
          * @return this object for method chaining
          */
+        @Deprecated
         public WearableExtender setHintHideIcon(boolean hintHideIcon) {
             setFlag(FLAG_HINT_HIDE_ICON, hintHideIcon);
             return this;
@@ -8254,6 +8294,7 @@ public class Notification implements Parcelable
          * @return {@code true} if this icon should not be displayed, false otherwise.
          * The default value is {@code false} if this was never set.
          */
+        @Deprecated
         public boolean getHintHideIcon() {
             return (mFlags & FLAG_HINT_HIDE_ICON) != 0;
         }
@@ -8263,6 +8304,7 @@ public class Notification implements Parcelable
          * displayed, and other semantic content should be hidden. This hint is only applicable
          * to sub-pages added using {@link #addPage}.
          */
+        @Deprecated
         public WearableExtender setHintShowBackgroundOnly(boolean hintShowBackgroundOnly) {
             setFlag(FLAG_HINT_SHOW_BACKGROUND_ONLY, hintShowBackgroundOnly);
             return this;
@@ -8273,6 +8315,7 @@ public class Notification implements Parcelable
          * displayed, and other semantic content should be hidden. This hint is only applicable
          * to sub-pages added using {@link android.app.Notification.WearableExtender#addPage}.
          */
+        @Deprecated
         public boolean getHintShowBackgroundOnly() {
             return (mFlags & FLAG_HINT_SHOW_BACKGROUND_ONLY) != 0;
         }
@@ -8284,6 +8327,7 @@ public class Notification implements Parcelable
          * @param hintAvoidBackgroundClipping {@code true} to avoid clipping if possible.
          * @return this object for method chaining
          */
+        @Deprecated
         public WearableExtender setHintAvoidBackgroundClipping(
                 boolean hintAvoidBackgroundClipping) {
             setFlag(FLAG_HINT_AVOID_BACKGROUND_CLIPPING, hintAvoidBackgroundClipping);
@@ -8297,6 +8341,7 @@ public class Notification implements Parcelable
          * @return {@code true} if it's ok if the background is clipped on the screen, false
          * otherwise. The default value is {@code false} if this was never set.
          */
+        @Deprecated
         public boolean getHintAvoidBackgroundClipping() {
             return (mFlags & FLAG_HINT_AVOID_BACKGROUND_CLIPPING) != 0;
         }
@@ -8308,6 +8353,7 @@ public class Notification implements Parcelable
          *     {@link #SCREEN_TIMEOUT_SHORT} or {@link #SCREEN_TIMEOUT_LONG}.
          * @return this object for method chaining
          */
+        @Deprecated
         public WearableExtender setHintScreenTimeout(int timeout) {
             mHintScreenTimeout = timeout;
             return this;
@@ -8319,6 +8365,7 @@ public class Notification implements Parcelable
          * @return the duration in milliseconds if > 0, or either one of the sentinel values
          *     {@link #SCREEN_TIMEOUT_SHORT} or {@link #SCREEN_TIMEOUT_LONG}.
          */
+        @Deprecated
         public int getHintScreenTimeout() {
             return mHintScreenTimeout;
         }
@@ -8855,6 +8902,7 @@ public class Notification implements Parcelable
         private static final String EXTRA_CONTENT_INTENT = "content_intent";
         private static final String EXTRA_DELETE_INTENT = "delete_intent";
         private static final String EXTRA_CHANNEL_ID = "channel_id";
+        private static final String EXTRA_SUPPRESS_SHOW_OVER_APPS = "suppressShowOverApps";
 
         // Flags bitwise-ored to mFlags
         private static final int FLAG_AVAILABLE_ON_TV = 0x1;
@@ -8863,6 +8911,7 @@ public class Notification implements Parcelable
         private String mChannelId;
         private PendingIntent mContentIntent;
         private PendingIntent mDeleteIntent;
+        private boolean mSuppressShowOverApps;
 
         /**
          * Create a {@link TvExtender} with default options.
@@ -8882,6 +8931,7 @@ public class Notification implements Parcelable
             if (bundle != null) {
                 mFlags = bundle.getInt(EXTRA_FLAGS);
                 mChannelId = bundle.getString(EXTRA_CHANNEL_ID);
+                mSuppressShowOverApps = bundle.getBoolean(EXTRA_SUPPRESS_SHOW_OVER_APPS);
                 mContentIntent = bundle.getParcelable(EXTRA_CONTENT_INTENT);
                 mDeleteIntent = bundle.getParcelable(EXTRA_DELETE_INTENT);
             }
@@ -8898,6 +8948,7 @@ public class Notification implements Parcelable
 
             bundle.putInt(EXTRA_FLAGS, mFlags);
             bundle.putString(EXTRA_CHANNEL_ID, mChannelId);
+            bundle.putBoolean(EXTRA_SUPPRESS_SHOW_OVER_APPS, mSuppressShowOverApps);
             if (mContentIntent != null) {
                 bundle.putParcelable(EXTRA_CONTENT_INTENT, mContentIntent);
             }
@@ -8989,6 +9040,23 @@ public class Notification implements Parcelable
          */
         public PendingIntent getDeleteIntent() {
             return mDeleteIntent;
+        }
+
+        /**
+         * Specifies whether this notification should suppress showing a message over top of apps
+         * outside of the launcher.
+         */
+        public TvExtender setSuppressShowOverApps(boolean suppress) {
+            mSuppressShowOverApps = suppress;
+            return this;
+        }
+
+        /**
+         * Returns true if this notification should not show messages over top of apps
+         * outside of the launcher.
+         */
+        public boolean getSuppressShowOverApps() {
+            return mSuppressShowOverApps;
         }
     }
 

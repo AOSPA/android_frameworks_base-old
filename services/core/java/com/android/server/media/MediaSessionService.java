@@ -29,6 +29,7 @@ import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
@@ -41,6 +42,7 @@ import android.media.AudioSystem;
 import android.media.IAudioService;
 import android.media.IRemoteVolumeController;
 import android.media.ISessionTokensListener;
+import android.media.MediaController2;
 import android.media.MediaLibraryService2;
 import android.media.MediaSessionService2;
 import android.media.SessionToken2;
@@ -69,6 +71,7 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.speech.RecognizerIntent;
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -76,6 +79,7 @@ import android.util.SparseIntArray;
 import android.view.KeyEvent;
 import android.view.ViewConfiguration;
 
+import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.DumpUtils;
 import com.android.server.SystemService;
 import com.android.server.Watchdog;
@@ -84,7 +88,10 @@ import com.android.server.Watchdog.Monitor;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * System implementation of MediaSessionManager
@@ -130,14 +137,7 @@ public class MediaSessionService extends SystemService implements Monitor {
     // MediaSession2 support
     // TODO(jaewan): Support multi-user and managed profile.
     // TODO(jaewan): Make it priority list for handling volume/media key.
-    private final List<MediaSession2Record> mSessions = new ArrayList<>();
-
-    private final MediaSession2Record.SessionDestroyedListener mSessionDestroyedListener =
-            (record) -> {
-                synchronized (mLock) {
-                    destroySessionLocked(record);
-                }
-            };
+    private final Map<SessionToken2, MediaController2> mSessionRecords = new ArrayMap<>();
 
     public MediaSessionService(Context context) {
         super(context);
@@ -180,9 +180,8 @@ public class MediaSessionService extends SystemService implements Monitor {
 
         updateUser();
 
+        registerPackageBroadcastReceivers();
         // TODO(jaewan): Query per users
-        // TODO(jaewan): Add listener to know changes in list of services.
-        //               Refer TvInputManagerService.registerBroadcastReceivers()
         buildMediaSessionService2List();
     }
 
@@ -437,12 +436,74 @@ public class MediaSessionService extends SystemService implements Monitor {
         mHandler.postSessionsChanged(session.getUserId());
     }
 
+    private void registerPackageBroadcastReceivers() {
+        // TODO(jaewan): Only consider changed packages when building session service list
+        //               when we make this multi-user aware. At that time,
+        //               use PackageMonitor.getChangingUserId() to know which user has changed.
+        IntentFilter filter = new IntentFilter();
+        filter.addDataScheme("package");
+        filter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        filter.addAction(Intent.ACTION_PACKAGE_CHANGED);
+        filter.addAction(Intent.ACTION_PACKAGES_SUSPENDED);
+        filter.addAction(Intent.ACTION_PACKAGES_UNSUSPENDED);
+        filter.addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_AVAILABLE);
+        filter.addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE);
+        filter.addAction(Intent.ACTION_PACKAGE_REPLACED);
+
+        getContext().registerReceiverAsUser(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                final int changeUserId = intent.getIntExtra(
+                        Intent.EXTRA_USER_HANDLE, UserHandle.USER_NULL);
+                if (changeUserId == UserHandle.USER_NULL) {
+                    Log.w(TAG, "Intent broadcast does not contain user handle: "+ intent);
+                    return;
+                }
+                // Check if the package is replacing (i.e. reinstalling)
+                final boolean isReplacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false);
+                // TODO(jaewan): Add multi-user support with this.
+                // final int uid = intent.getIntExtra(Intent.EXTRA_UID, 0);
+
+                if (DEBUG) {
+                    Log.d(TAG, "Received change in packages, intent=" + intent);
+                }
+                switch (intent.getAction()) {
+                    case Intent.ACTION_PACKAGE_ADDED:
+                    case Intent.ACTION_PACKAGE_REMOVED:
+                    case Intent.ACTION_EXTERNAL_APPLICATIONS_AVAILABLE:
+                    case Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE:
+                        if (isReplacing) {
+                            // Ignore if the package(s) are replacing. In that case, followings will
+                            // happen in order.
+                            //    1. ACTION_PACKAGE_REMOVED with isReplacing=true
+                            //    2. ACTION_PACKAGE_ADDED with isReplacing=true
+                            //    3. ACTION_PACKAGE_REPLACED
+                            //    (Note that ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE and
+                            //     ACTION_EXTERNAL_APPLICATIONS_AVAILABLE will be also called with
+                            //     isReplacing=true for both ASEC hosted packages and packages in
+                            //     external storage)
+                            // Since we only want to update session service list once, ignore
+                            // actions above when replacing.
+                            // Replacing will be handled only once with the ACTION_PACKAGE_REPLACED.
+                            break;
+                        }
+                        // pass-through
+                    case Intent.ACTION_PACKAGE_CHANGED:
+                    case Intent.ACTION_PACKAGES_SUSPENDED:
+                    case Intent.ACTION_PACKAGES_UNSUSPENDED:
+                    case Intent.ACTION_PACKAGE_REPLACED:
+                        buildMediaSessionService2List();
+                }
+            }
+        }, UserHandle.ALL, filter, null, BackgroundThread.getHandler());
+    }
+
     private void buildMediaSessionService2List() {
         if (DEBUG) {
             Log.d(TAG, "buildMediaSessionService2List");
         }
-
-        // TODO(jaewan): Query per users.
+        // TODO(jaewan): Also query for managed profile users.
         // TODO(jaewan): Similar codes are also at the updatable. Can't we share codes?
         PackageManager manager = getContext().getPackageManager();
         List<ResolveInfo> services = new ArrayList<>();
@@ -458,10 +519,15 @@ public class MediaSessionService extends SystemService implements Monitor {
             services.addAll(sessionServices);
         }
         synchronized (mLock) {
-            mSessions.clear();
-            if (services == null) {
-                return;
+            // List to keep the session services that need be removed because they don't exist
+            // in the 'services' above.
+            Set<SessionToken2> sessionTokensToRemove = new HashSet<>();
+            for (SessionToken2 token : mSessionRecords.keySet()) {
+                if (token.getType() != TYPE_SESSION) {
+                    sessionTokensToRemove.add(token);
+                }
             }
+
             for (int i = 0; i < services.size(); i++) {
                 if (services.get(i) == null || services.get(i).serviceInfo == null) {
                     continue;
@@ -475,44 +541,30 @@ public class MediaSessionService extends SystemService implements Monitor {
                 } catch (NameNotFoundException e) {
                     continue;
                 }
-
+                SessionToken2 token;
                 try {
-                    SessionToken2 token = new SessionToken2(getContext(),
+                    token = new SessionToken2(getContext(),
                             serviceInfo.packageName, serviceInfo.name, uid);
-                    MediaSession2Record record = new MediaSession2Record(getContext(),
-                            token, mSessionDestroyedListener);
-                    mSessions.add(record);
                 } catch (IllegalArgumentException e) {
-                    Log.d(TAG, "Invalid session service", e);
+                    Log.w(TAG, "Invalid session service", e);
+                    continue;
+                }
+                // If the token already exists, keep it in the mSessions by removing from
+                // sessionTokensToRemove.
+                if (!sessionTokensToRemove.remove(token)) {
+                    // New session service is found.
+                    mSessionRecords.put(token, null);
                 }
             }
-        }
-        if (DEBUG) {
-            Log.d(TAG, "Found " + mSessions.size() + " session services");
-            for (int i = 0; i < mSessions.size(); i++) {
-                Log.d(TAG, "   " + mSessions.get(i).getToken());
+            for (SessionToken2 token : sessionTokensToRemove) {
+                mSessionRecords.remove(token);
             }
         }
-    }
-
-    private MediaSession2Record getSessionRecordLocked(int uid, String packageName, String id) {
-        for (int i = 0; i < mSessions.size(); i++) {
-            SessionToken2 token = mSessions.get(i).getToken();
-            if (token.getUid() == uid && token.getPackageName().equals(packageName)
-                    && token.getId().equals(id)) {
-                return mSessions.get(i);
-            }
-        }
-        return null;
-    }
-
-    private void destroySessionLocked(MediaSession2Record record) {
         if (DEBUG) {
-            Log.d(TAG, record.toString() + " becomes inactive");
-        }
-        record.onSessionDestroyed();
-        if (record.getToken().getType() == TYPE_SESSION) {
-            mSessions.remove(record);
+            Log.d(TAG, "Found " + mSessionRecords.size() + " session services");
+            for (SessionToken2 token : mSessionRecords.keySet()) {
+                Log.d(TAG, "   " + token);
+            }
         }
     }
 
@@ -724,6 +776,16 @@ public class MediaSessionService extends SystemService implements Monitor {
             return null;
         }
         return mUserRecords.get(fullUserId);
+    }
+
+    void destroySession2Internal(SessionToken2 token) {
+        synchronized (mLock) {
+            if (token.getType() == SessionToken2.TYPE_SESSION) {
+                mSessionRecords.remove(token);
+            } else {
+                mSessionRecords.put(token, null);
+            }
+        }
     }
 
     /**
@@ -1417,66 +1479,75 @@ public class MediaSessionService extends SystemService implements Monitor {
 
                 // TODO(jaewan): Remove this debug command before ship.
                 if (args != null && args.length > 0 && "--purge".equals(args[0])) {
-                    mSessions.clear();
+                    mSessionRecords.clear();
                 }
                 pw.println();
-                pw.println("Session2: size=" + mSessions.size());
-                for (int i = 0; i < mSessions.size(); i++) {
-                    pw.println("  " + mSessions.get(i));
+                pw.println("Session2: size=" + mSessionRecords.size());
+                for (SessionToken2 token : mSessionRecords.keySet()) {
+                    pw.println("  " + token);
                 }
             }
         }
 
+        /**
+         * Called when a {@link android.media.MediaSession2} instance is created.
+         * <p>
+         * This does two things.
+         *   1. Keep the newly created session in the service
+         *   2. Do sanity check to ensure unique id per package, and return result
+         *
+         * @param sessionToken SessionToken2 object in bundled form
+         * @return {@code true} if the session's id isn't used by the package now. {@code false}
+         *     otherwise.
+         */
         @Override
-        public boolean onSessionCreated(Bundle sessionToken) {
+        public boolean createSession2(Bundle sessionToken) {
             final int uid = Binder.getCallingUid();
-            final int pid = Binder.getCallingPid();
             final SessionToken2 token = SessionToken2.fromBundle(getContext(), sessionToken);
             if (token == null || token.getUid() != uid) {
                 Log.w(TAG, "onSessionCreated failed, expected caller uid=" + token.getUid()
                         + " but from uid=" + uid);
             }
             if (DEBUG) {
-                Log.d(TAG, "onSessionCreated " + token);
+                Log.d(TAG, "createSession2: " + token);
             }
             synchronized (mLock) {
-                MediaSession2Record record = getSessionRecordLocked(
-                        uid, token.getPackageName(), token.getId());
-                if (record != null) {
-                    return record.onSessionCreated(token);
-                } else {
-                    record = new MediaSession2Record(
-                            getContext(), token, mSessionDestroyedListener);
-                    mSessions.add(record);
-                    return record.onSessionCreated(token);
+                MediaController2 controller = mSessionRecords.get(token);
+                if (controller != null && controller.isConnected()) {
+                    return false;
                 }
+                Context context = getContext();
+                mSessionRecords.put(token, new MediaController2(context, token,
+                        context.getMainExecutor(), new ControllerCallback(token)));
+                return true;
             }
         }
 
+        /**
+         * Called when a {@link android.media.MediaSession2} instance is closed. (i.e. destroyed)
+         * <p>
+         * Ideally service should know that a session is destroyed through the
+         * {@link android.media.MediaController2.ControllerCallback#onDisconnected()}, which is
+         * asynchronous call. However, we also need synchronous way together to address timing
+         * issue. If the package recreates the session almost immediately, which happens commonly
+         * for tests, service will reject the creation through {@link #onSessionCreated(Bundle)}
+         * if the service hasn't notified previous destroy yet. This synchronous API will address
+         * the issue.
+         *
+         * @param sessionToken SessionToken2 object in bundled form
+         */
         @Override
-        public void onSessionDestroyed(Bundle sessionToken) {
+        public void destroySession2(Bundle sessionToken) {
             final int uid = Binder.getCallingUid();
-            final int pid = Binder.getCallingPid();
             final SessionToken2 token = SessionToken2.fromBundle(getContext(), sessionToken);
             if (token == null || token.getUid() != uid) {
                 Log.w(TAG, "onSessionDestroyed failed, expected caller uid=" + token.getUid()
                         + " but from uid=" + uid);
             }
             if (DEBUG) {
-                Log.d(TAG, "onSessionDestroyed " + token);
+                Log.d(TAG, "destroySession2 " + token);
             }
-            synchronized (mLock) {
-                MediaSession2Record record = getSessionRecordLocked(
-                        uid, token.getPackageName(), token.getId());
-                if (record != null) {
-                    record.onSessionDestroyed();
-                } else {
-                    if (DEBUG) {
-                        Log.d(TAG, "Cannot find a session record to destroy. uid=" + uid
-                                + ", pkg=" + token.getPackageName() + ", id=" + token.getId());
-                    }
-                }
-            }
+            destroySession2Internal(token);
         }
 
         // TODO(jaewan): Protect this API with permission
@@ -1485,30 +1556,28 @@ public class MediaSessionService extends SystemService implements Monitor {
                 boolean sessionServiceOnly) throws RemoteException {
             List<Bundle> tokens = new ArrayList<>();
             synchronized (mLock) {
-                for (int i = 0; i < mSessions.size(); i++) {
-                    MediaSession2Record record = mSessions.get(i);
-                    boolean isSessionService = (record.getToken().getType() != TYPE_SESSION);
-                    boolean isActive = record.getController() != null;
-                    if ((!activeSessionOnly && isSessionService)
-                            || (!sessionServiceOnly && isActive)) {
-                        SessionToken2 token = record.getToken();
-                        if (token != null) {
-                            tokens.add(token.toBundle());
-                        } else {
-                            Log.wtf(TAG, "Null token for record=" + record);
-                        }
+                for (Map.Entry<SessionToken2, MediaController2> record
+                        : mSessionRecords.entrySet()) {
+                    boolean isSessionService = (record.getKey().getType() != TYPE_SESSION);
+                    boolean isActive = record.getValue() != null;
+                    if ((activeSessionOnly && !isActive)
+                            || (sessionServiceOnly && !isSessionService) ){
+                        continue;
                     }
+                    tokens.add(record.getKey().toBundle());
                 }
             }
             return tokens;
         }
 
+        // TODO(jaewan): Protect this API with permission
         @Override
         public void addSessionTokensListener(ISessionTokensListener listener, int userId,
                 String packageName) {
             // TODO(jaewan): Implement.
         }
 
+        // TODO(jaewan): Protect this API with permission
         @Override
         public void removeSessionTokensListener(ISessionTokensListener listener) {
             // TODO(jaewan): Implement
@@ -1907,4 +1976,18 @@ public class MediaSessionService extends SystemService implements Monitor {
             obtainMessage(MSG_SESSIONS_CHANGED, userIdInteger).sendToTarget();
         }
     }
+
+    private class ControllerCallback extends MediaController2.ControllerCallback {
+
+        private final SessionToken2 mToken;
+
+        ControllerCallback(SessionToken2 token) {
+            mToken = token;
+        }
+
+        @Override
+        public void onDisconnected() {
+            destroySession2Internal(mToken);
+        }
+    };
 }

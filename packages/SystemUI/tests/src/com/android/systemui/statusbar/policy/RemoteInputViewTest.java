@@ -24,6 +24,7 @@ import android.content.pm.ShortcutManager;
 import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
+import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageButton;
 
@@ -33,6 +34,7 @@ import com.android.systemui.statusbar.ExpandableNotificationRow;
 import com.android.systemui.statusbar.NotificationTestHelper;
 import com.android.systemui.statusbar.RemoteInputController;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -46,7 +48,7 @@ public class RemoteInputViewTest extends SysuiTestCase {
 
     private static final String TEST_RESULT_KEY = "test_result_key";
     private static final String TEST_REPLY = "hello";
-    private static final String TEST_ACTION = "com.android.ACTION";
+    private static final String TEST_ACTION = "com.android.REMOTE_INPUT_VIEW_ACTION";
 
     @Mock private RemoteInputController mController;
     @Mock private ShortcutManager mShortcutManager;
@@ -65,6 +67,11 @@ public class RemoteInputViewTest extends SysuiTestCase {
 
         ExpandableNotificationRow row = new NotificationTestHelper(mContext).createRow();
         mView = RemoteInputView.inflate(mContext, null, row.getEntry(), mController);
+    }
+
+    @After
+    public void tearDown() {
+        mContext.unregisterReceiver(mReceiver);
     }
 
     @Test
@@ -87,5 +94,12 @@ public class RemoteInputViewTest extends SysuiTestCase {
                 RemoteInput.getResultsFromIntent(resultIntent).get(TEST_RESULT_KEY));
         assertEquals(RemoteInput.SOURCE_FREE_FORM_INPUT,
                 RemoteInput.getResultsSource(resultIntent));
+    }
+
+    @Test
+    public void testNoCrashWithoutVisibilityListener() {
+        mView.setOnVisibilityChangedListener(null);
+        mView.setVisibility(View.INVISIBLE);
+        mView.setVisibility(View.VISIBLE);
     }
 }

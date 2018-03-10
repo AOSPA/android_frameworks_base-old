@@ -186,15 +186,17 @@ public class TransactionExecutor {
                 case ON_PAUSE:
                     mTransactionHandler.handlePauseActivity(r.token, false /* finished */,
                             false /* userLeaving */, 0 /* configChanges */,
-                            true /* dontReport */, mPendingActions);
+                            true /* dontReport */, mPendingActions, "LIFECYCLER_PAUSE_ACTIVITY");
                     break;
                 case ON_STOP:
                     mTransactionHandler.handleStopActivity(r.token, false /* show */,
-                            0 /* configChanges */, mPendingActions);
+                            0 /* configChanges */, mPendingActions, "LIFECYCLER_STOP_ACTIVITY");
                     break;
                 case ON_DESTROY:
                     mTransactionHandler.handleDestroyActivity(r.token, false /* finishing */,
-                            0 /* configChanges */, false /* getNonConfigInstance */);
+                            0 /* configChanges */, false /* getNonConfigInstance */,
+                            "performLifecycleSequence. cycling to:"
+                                    + mLifecycleSequence.get(size - 1));
                     break;
                 case ON_RESTART:
                     mTransactionHandler.performRestartActivity(r.token, false /* start */);

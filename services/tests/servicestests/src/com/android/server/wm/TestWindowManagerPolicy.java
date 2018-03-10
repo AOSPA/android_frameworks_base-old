@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 
@@ -44,6 +45,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.view.Display;
+import android.view.DisplayCutout;
 import android.view.IWindowManager;
 import android.view.InputChannel;
 import android.view.KeyEvent;
@@ -107,6 +109,13 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
 
             sWm = WindowManagerService.main(context, ims, true, false,
                     false, new TestWindowManagerPolicy());
+
+            sWm.onInitReady();
+
+            // Display creation is driven by the ActivityManagerService via ActivityStackSupervisor.
+            // We emulate those steps here.
+            sWm.mRoot.createDisplayContent(sWm.mDisplayManager.getDisplay(DEFAULT_DISPLAY),
+                    mock(DisplayWindowController.class));
         }
         return sWm;
     }
@@ -161,25 +170,25 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
 
     @Override
     public int getNonDecorDisplayWidth(int fullWidth, int fullHeight, int rotation, int uiMode,
-            int displayId) {
+            int displayId, DisplayCutout displayCutout) {
         return 0;
     }
 
     @Override
     public int getNonDecorDisplayHeight(int fullWidth, int fullHeight, int rotation, int uiMode,
-            int displayId) {
+            int displayId, DisplayCutout displayCutout) {
         return 0;
     }
 
     @Override
     public int getConfigDisplayWidth(int fullWidth, int fullHeight, int rotation, int uiMode,
-            int displayId) {
+            int displayId, DisplayCutout displayCutout) {
         return 0;
     }
 
     @Override
     public int getConfigDisplayHeight(int fullWidth, int fullHeight, int rotation, int uiMode,
-            int displayId) {
+            int displayId, DisplayCutout displayCutout) {
         return 0;
     }
 
@@ -581,7 +590,7 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
 
     @Override
     public void getStableInsetsLw(int displayRotation, int displayWidth, int displayHeight,
-            Rect outInsets) {
+            DisplayCutout cutout, Rect outInsets) {
 
     }
 
@@ -598,7 +607,7 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
 
     @Override
     public void getNonDecorInsetsLw(int displayRotation, int displayWidth, int displayHeight,
-            Rect outInsets) {
+            DisplayCutout cutout, Rect outInsets) {
 
     }
 
@@ -634,5 +643,9 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     @Override
     public boolean canDismissBootAnimation() {
         return true;
+    }
+
+    @Override
+    public void onScreenMagnificationStateChanged(boolean active) {
     }
 }

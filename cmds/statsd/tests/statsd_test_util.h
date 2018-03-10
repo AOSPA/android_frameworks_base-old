@@ -15,10 +15,11 @@
 #pragma once
 
 #include <gtest/gtest.h>
+#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
-#include "statslog.h"
-#include "src/logd/LogEvent.h"
 #include "src/StatsLogProcessor.h"
+#include "src/logd/LogEvent.h"
+#include "statslog.h"
 
 namespace android {
 namespace os {
@@ -119,11 +120,13 @@ std::unique_ptr<LogEvent> CreateMoveToForegroundEvent(const int uid, uint64_t ti
 
 // Create log event when the app sync starts.
 std::unique_ptr<LogEvent> CreateSyncStartEvent(
-    const std::vector<AttributionNode>& attributions, const string& name, uint64_t timestampNs);
+        const std::vector<AttributionNodeInternal>& attributions, const string& name,
+        uint64_t timestampNs);
 
 // Create log event when the app sync ends.
 std::unique_ptr<LogEvent> CreateSyncEndEvent(
-    const std::vector<AttributionNode>& attributions, const string& name, uint64_t timestampNs);
+        const std::vector<AttributionNodeInternal>& attributions, const string& name,
+        uint64_t timestampNs);
 
 // Create log event when the app sync ends.
 std::unique_ptr<LogEvent> CreateAppCrashEvent(
@@ -131,20 +134,20 @@ std::unique_ptr<LogEvent> CreateAppCrashEvent(
 
 // Create log event for acquiring wakelock.
 std::unique_ptr<LogEvent> CreateAcquireWakelockEvent(
-    const std::vector<AttributionNode>& attributions,
-    const string& wakelockName, uint64_t timestampNs);
+        const std::vector<AttributionNodeInternal>& attributions, const string& wakelockName,
+        uint64_t timestampNs);
 
 // Create log event for releasing wakelock.
 std::unique_ptr<LogEvent> CreateReleaseWakelockEvent(
-    const std::vector<AttributionNode>& attributions,
-    const string& wakelockName, uint64_t timestampNs);
+        const std::vector<AttributionNodeInternal>& attributions, const string& wakelockName,
+        uint64_t timestampNs);
 
 // Create log event for releasing wakelock.
 std::unique_ptr<LogEvent> CreateIsolatedUidChangedEvent(
     int isolatedUid, int hostUid, bool is_create, uint64_t timestampNs);
 
-// Helper function to create an AttributionNode proto.
-AttributionNode CreateAttribution(const int& uid, const string& tag);
+// Helper function to create an AttributionNodeInternal proto.
+AttributionNodeInternal CreateAttribution(const int& uid, const string& tag);
 
 // Create a statsd log event processor upon the start time in seconds, config and key.
 sp<StatsLogProcessor> CreateStatsLogProcessor(const long timeBaseSec, const StatsdConfig& config,
@@ -159,14 +162,30 @@ void ValidateAttributionUidDimension(const DimensionsValue& value, int atomId, i
 void ValidateAttributionUidAndTagDimension(
     const DimensionsValue& value, int atomId, int uid, const std::string& tag);
 
+struct DimensionsPair {
+    DimensionsPair(DimensionsValue m1, DimensionsValue m2) : dimInWhat(m1), dimInCondition(m2){};
+
+    DimensionsValue dimInWhat;
+    DimensionsValue dimInCondition;
+};
+
+bool LessThan(const DimensionsValue& s1, const DimensionsValue& s2);
+bool LessThan(const DimensionsPair& s1, const DimensionsPair& s2);
+
+struct DimensionCompare {
+    bool operator()(const DimensionsPair& s1, const DimensionsPair& s2) const {
+        return LessThan(s1, s2);
+    }
+};
+
 template <typename T>
 void sortMetricDataByDimensionsValue(const T& metricData, T* sortedMetricData) {
-    std::map<MetricDimensionKey, int> dimensionIndexMap;
+    std::map<DimensionsPair, int, DimensionCompare> dimensionIndexMap;
     for (int i = 0; i < metricData.data_size(); ++i) {
-        dimensionIndexMap.insert(std::make_pair(
-            MetricDimensionKey(HashableDimensionKey(metricData.data(i).dimensions_in_what()),
-            HashableDimensionKey(metricData.data(i).dimensions_in_condition())),
-            i));
+        dimensionIndexMap.insert(
+                std::make_pair(DimensionsPair(metricData.data(i).dimensions_in_what(),
+                                              metricData.data(i).dimensions_in_condition()),
+                               i));
     }
     for (const auto& itr : dimensionIndexMap) {
         *sortedMetricData->add_data() = metricData.data(itr.second);

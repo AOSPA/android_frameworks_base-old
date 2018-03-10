@@ -20,6 +20,7 @@ import android.Manifest;
 import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.IUidObserver;
+import android.app.usage.AppStandbyInfo;
 import android.app.usage.ConfigurationStats;
 import android.app.usage.IUsageStatsManager;
 import android.app.usage.UsageEvents;
@@ -98,6 +99,7 @@ public class UsageStatsService extends SystemService implements
     static final int MSG_REPORT_EVENT = 0;
     static final int MSG_FLUSH_TO_DISK = 1;
     static final int MSG_REMOVE_USER = 2;
+    static final int MSG_UID_STATE_CHANGED = 3;
 
     private final Object mLock = new Object();
     Handler mHandler;
@@ -119,10 +121,10 @@ public class UsageStatsService extends SystemService implements
             new UsageStatsManagerInternal.AppIdleStateChangeListener() {
                 @Override
                 public void onAppIdleStateChanged(String packageName, int userId, boolean idle,
-                        int bucket) {
+                        int bucket, int reason) {
                     Event event = new Event();
                     event.mEventType = Event.STANDBY_BUCKET_CHANGED;
-                    event.mBucket = bucket;
+                    event.mBucketAndReason = (bucket << 16) | (reason & 0xFFFF);
                     event.mPackage = packageName;
                     // This will later be converted to system time.
                     event.mTimeStamp = SystemClock.elapsedRealtime();
@@ -219,18 +221,7 @@ public class UsageStatsService extends SystemService implements
     private final IUidObserver mUidObserver = new IUidObserver.Stub() {
         @Override
         public void onUidStateChanged(int uid, int procState, long procStateSeq) {
-            final int newCounter = (procState <= ActivityManager.PROCESS_STATE_TOP) ? 0 : 1;
-            synchronized (mUidToKernelCounter) {
-                final int oldCounter = mUidToKernelCounter.get(uid, 0);
-                if (newCounter != oldCounter) {
-                    mUidToKernelCounter.put(uid, newCounter);
-                    try {
-                        FileUtils.stringToFile(KERNEL_COUNTER_FILE, uid + " " + newCounter);
-                    } catch (IOException e) {
-                        Slog.w(TAG, "Failed to update counter set: " + e);
-                    }
-                }
-            }
+            mHandler.obtainMessage(MSG_UID_STATE_CHANGED, uid, procState).sendToTarget();
         }
 
         @Override
@@ -560,6 +551,25 @@ public class UsageStatsService extends SystemService implements
                     onUserRemoved(msg.arg1);
                     break;
 
+                case MSG_UID_STATE_CHANGED: {
+                    final int uid = msg.arg1;
+                    final int procState = msg.arg2;
+
+                    final int newCounter = (procState <= ActivityManager.PROCESS_STATE_TOP) ? 0 : 1;
+                    synchronized (mUidToKernelCounter) {
+                        final int oldCounter = mUidToKernelCounter.get(uid, 0);
+                        if (newCounter != oldCounter) {
+                            mUidToKernelCounter.put(uid, newCounter);
+                            try {
+                                FileUtils.stringToFile(KERNEL_COUNTER_FILE, uid + " " + newCounter);
+                            } catch (IOException e) {
+                                Slog.w(TAG, "Failed to update counter set: " + e);
+                            }
+                        }
+                    }
+                    break;
+                }
+
                 default:
                     super.handleMessage(msg);
                     break;
@@ -740,9 +750,9 @@ public class UsageStatsService extends SystemService implements
                 throw re.rethrowFromSystemServer();
             }
             final boolean shellCaller = callingUid == 0 || callingUid == Process.SHELL_UID;
-            final String reason = shellCaller
-                    ? UsageStatsManager.REASON_FORCED
-                    : UsageStatsManager.REASON_PREDICTED + ":" + callingUid;
+            final int reason = shellCaller
+                    ? UsageStatsManager.REASON_MAIN_FORCED
+                    : UsageStatsManager.REASON_MAIN_PREDICTED;
             final long token = Binder.clearCallingIdentity();
             try {
                 // Caller cannot set their own standby state
@@ -758,7 +768,8 @@ public class UsageStatsService extends SystemService implements
         }
 
         @Override
-        public Map getAppStandbyBuckets(String callingPackageName, int userId) {
+        public ParceledListSlice<AppStandbyInfo> getAppStandbyBuckets(String callingPackageName,
+                int userId) {
             final int callingUid = Binder.getCallingUid();
             try {
                 userId = ActivityManager.getService().handleIncomingUser(
@@ -773,15 +784,17 @@ public class UsageStatsService extends SystemService implements
             }
             final long token = Binder.clearCallingIdentity();
             try {
-                return mAppStandby.getAppStandbyBuckets(userId,
-                        SystemClock.elapsedRealtime());
+                final List<AppStandbyInfo> standbyBucketList =
+                        mAppStandby.getAppStandbyBuckets(userId);
+                return (standbyBucketList == null) ? ParceledListSlice.emptyList()
+                        : new ParceledListSlice<>(standbyBucketList);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
         }
 
         @Override
-        public void setAppStandbyBuckets(Map appBuckets, int userId) {
+        public void setAppStandbyBuckets(ParceledListSlice appBuckets, int userId) {
             getContext().enforceCallingPermission(Manifest.permission.CHANGE_APP_IDLE_STATE,
                     "No permission to change app standby state");
 
@@ -794,16 +807,16 @@ public class UsageStatsService extends SystemService implements
                 throw re.rethrowFromSystemServer();
             }
             final boolean shellCaller = callingUid == 0 || callingUid == Process.SHELL_UID;
-            final String reason = shellCaller
-                    ? UsageStatsManager.REASON_FORCED
-                    : UsageStatsManager.REASON_PREDICTED + ":" + callingUid;
+            final int reason = shellCaller
+                    ? UsageStatsManager.REASON_MAIN_FORCED
+                    : UsageStatsManager.REASON_MAIN_PREDICTED;
             final long token = Binder.clearCallingIdentity();
             try {
                 final long elapsedRealtime = SystemClock.elapsedRealtime();
-                Map<String, Integer> buckets = (Map<String, Integer>) appBuckets;
-                for (Map.Entry<String, Integer> entry: buckets.entrySet()) {
-                    String packageName = entry.getKey();
-                    int bucket = entry.getValue();
+                List<AppStandbyInfo> bucketList = appBuckets.getList();
+                for (AppStandbyInfo bucketInfo : bucketList) {
+                    final String packageName = bucketInfo.mPackageName;
+                    final int bucket = bucketInfo.mStandbyBucket;
                     if (bucket < UsageStatsManager.STANDBY_BUCKET_ACTIVE
                             || bucket > UsageStatsManager.STANDBY_BUCKET_NEVER) {
                         throw new IllegalArgumentException(

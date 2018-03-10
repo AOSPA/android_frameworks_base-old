@@ -548,7 +548,11 @@
     <string name="config_rat_3g" translatable="false">3G</string>
     <string name="config_rat_4g" translatable="false">4G</string>
 
-    <!-- Show indicator for Wifi on but not connected. -->
-    <bool name="config_showWifiIndicatorWhenEnabled">false</bool>
 
+    <!-- Smart replies in notifications: Whether smart replies in notifications are enabled. -->
+    <bool name="config_smart_replies_in_notifications_enabled">true</bool>
+
+    <!-- Smart replies in notifications: Maximum number of times SmartReplyView will try to find a
+         better (narrower) line-break for a double-line smart reply button. -->
+    <integer name="config_smart_replies_in_notifications_max_squeeze_remeasure_attempts">3</integer>
 </resources>

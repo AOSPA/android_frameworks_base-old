@@ -35,12 +35,13 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
-import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.ArraySet;
 import android.view.Surface;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -333,8 +334,10 @@ public abstract class Connection extends Conferenceable {
      *
      * @hide
      */
-    public static final int CAPABILITY_ADD_PARTICIPANT = 0x02000000;
+    public static final int CAPABILITY_ADD_PARTICIPANT = 0x04000000;
 
+    /** Call supports the deflect feature. */
+    public static final int CAPABILITY_SUPPORT_DEFLECT = 0x02000000;
 
     //**********************************************************************************************
     // Next CAPABILITY value: 0x04000000
@@ -410,6 +413,7 @@ public abstract class Connection extends Conferenceable {
 
     /**
      * Set by the framework to indicate that a connection is using assisted dialing.
+     * @hide
      */
     public static final int PROPERTY_ASSISTED_DIALING_USED = 1 << 9;
 
@@ -734,6 +738,9 @@ public abstract class Connection extends Conferenceable {
         if (can(capabilities, CAPABILITY_CAN_PULL_CALL)) {
             builder.append(isLong ? " CAPABILITY_CAN_PULL_CALL" : " pull");
         }
+        if (can(capabilities, CAPABILITY_SUPPORT_DEFLECT)) {
+            builder.append(isLong ? " CAPABILITY_SUPPORT_DEFLECT" : " sup_def");
+        }
 
         builder.append("]");
         return builder.toString();
@@ -862,18 +869,19 @@ public abstract class Connection extends Conferenceable {
             mFdFromInCall = fromInCall;
             mFdToInCall = toInCall;
             mPipeFromInCall = new InputStreamReader(
-                    new ParcelFileDescriptor.AutoCloseInputStream(fromInCall));
+                    new FileInputStream(fromInCall.getFileDescriptor()));
             mPipeToInCall = new OutputStreamWriter(
-                    new ParcelFileDescriptor.AutoCloseOutputStream(toInCall));
+                    new FileOutputStream(toInCall.getFileDescriptor()));
         }
 
         /**
          * Writes the string {@param input} into the text stream to the UI for this RTT call. Since
          * RTT transmits text in real-time, this method should be called as often as text snippets
          * are received from the remote user, even if it is only one character.
-         *
+         * <p>
          * This method is not thread-safe -- calling it from multiple threads simultaneously may
          * lead to interleaved text.
+         *
          * @param input The message to send to the in-call app.
          */
         public void write(String input) throws IOException {
@@ -886,9 +894,10 @@ public abstract class Connection extends Conferenceable {
          * Reads a string from the in-call app, blocking if there is no data available. Returns
          * {@code null} if the RTT conversation has been terminated and there is no further data
          * to read.
-         *
+         * <p>
          * This method is not thread-safe -- calling it from multiple threads simultaneously may
          * lead to interleaved text.
+         *
          * @return A string containing text entered by the user, or {@code null} if the
          * conversation has been terminated or if there was an error while reading.
          */
@@ -903,6 +912,7 @@ public abstract class Connection extends Conferenceable {
         /**
          * Non-blocking version of {@link #read()}. Returns {@code null} if there is nothing to
          * be read.
+         *
          * @return A string containing text entered by the user, or {@code null} if the user has
          * not entered any new text yet.
          */
@@ -2301,7 +2311,7 @@ public abstract class Connection extends Conferenceable {
      *
      * @hide
      */
-    public final void setConnectElapsedTimeMillis(long connectElapsedTimeMillis) {
+    public final void setConnectionStartElapsedRealTime(long connectElapsedTimeMillis) {
         mConnectElapsedTimeMillis = connectElapsedTimeMillis;
     }
 
@@ -2550,19 +2560,6 @@ public abstract class Connection extends Conferenceable {
     }
 
     /**
-     * Adds a parcelable extra to this {@code Connection}.
-     *
-     * @param key The extra key.
-     * @param value The value.
-     * @hide
-     */
-    public final void putExtra(@NonNull String key, @NonNull Parcelable value) {
-        Bundle newExtras = new Bundle();
-        newExtras.putParcelable(key, value);
-        putExtras(newExtras);
-    }
-
-    /**
      * Removes extras from this {@code Connection}.
      *
      * @param keys The keys of the extras to remove.
@@ -2637,7 +2634,6 @@ public abstract class Connection extends Conferenceable {
      * {@link #onStartRtt(RttTextStream)} has succeeded.
      */
     public final void sendRttInitiationSuccess() {
-        setRttProperty();
         mListeners.forEach((l) -> l.onRttInitiationSuccess(Connection.this));
     }
 
@@ -2649,7 +2645,6 @@ public abstract class Connection extends Conferenceable {
      *               exception of {@link RttModifyStatus#SESSION_MODIFY_REQUEST_SUCCESS}.
      */
     public final void sendRttInitiationFailure(int reason) {
-        unsetRttProperty();
         mListeners.forEach((l) -> l.onRttInitiationFailure(Connection.this, reason));
     }
 
@@ -2658,7 +2653,6 @@ public abstract class Connection extends Conferenceable {
      * side of the coll.
      */
     public final void sendRttSessionRemotelyTerminated() {
-        unsetRttProperty();
         mListeners.forEach((l) -> l.onRttSessionRemotelyTerminated(Connection.this));
     }
 
@@ -2745,7 +2739,20 @@ public abstract class Connection extends Conferenceable {
     /**
      * Notifies this Connection, which is in {@link #STATE_RINGING}, of
      * a request to accept.
-     *
+     * <p>
+     * For managed {@link ConnectionService}s, this will be called when the user answers a call via
+     * the default dialer's {@link InCallService}.
+     * <p>
+     * Although a self-managed {@link ConnectionService} provides its own incoming call UI, the
+     * Telecom framework may request that the call is answered in the following circumstances:
+     * <ul>
+     *     <li>The user chooses to answer an incoming call via a Bluetooth device.</li>
+     *     <li>A car mode {@link InCallService} is in use which has declared
+     *     {@link TelecomManager#METADATA_INCLUDE_SELF_MANAGED_CALLS} in its manifest.  Such an
+     *     {@link InCallService} will be able to see calls from self-managed
+     *     {@link ConnectionService}s, and will be able to display an incoming call UI on their
+     *     behalf.</li>
+     * </ul>
      * @param videoState The video state in which to answer the connection.
      */
     public void onAnswer(int videoState) {}
@@ -2753,6 +2760,20 @@ public abstract class Connection extends Conferenceable {
     /**
      * Notifies this Connection, which is in {@link #STATE_RINGING}, of
      * a request to accept.
+     * <p>
+     * For managed {@link ConnectionService}s, this will be called when the user answers a call via
+     * the default dialer's {@link InCallService}.
+     * <p>
+     * Although a self-managed {@link ConnectionService} provides its own incoming call UI, the
+     * Telecom framework may request that the call is answered in the following circumstances:
+     * <ul>
+     *     <li>The user chooses to answer an incoming call via a Bluetooth device.</li>
+     *     <li>A car mode {@link InCallService} is in use which has declared
+     *     {@link TelecomManager#METADATA_INCLUDE_SELF_MANAGED_CALLS} in its manifest.  Such an
+     *     {@link InCallService} will be able to see calls from self-managed
+     *     {@link ConnectionService}s, and will be able to display an incoming call UI on their
+     *     behalf.</li>
+     * </ul>
      */
     public void onAnswer() {
         onAnswer(VideoProfile.STATE_AUDIO_ONLY);
@@ -2760,7 +2781,27 @@ public abstract class Connection extends Conferenceable {
 
     /**
      * Notifies this Connection, which is in {@link #STATE_RINGING}, of
+     * a request to deflect.
+     */
+    public void onDeflect(Uri address) {}
+
+    /**
+     * Notifies this Connection, which is in {@link #STATE_RINGING}, of
      * a request to reject.
+     * <p>
+     * For managed {@link ConnectionService}s, this will be called when the user rejects a call via
+     * the default dialer's {@link InCallService}.
+     * <p>
+     * Although a self-managed {@link ConnectionService} provides its own incoming call UI, the
+     * Telecom framework may request that the call is rejected in the following circumstances:
+     * <ul>
+     *     <li>The user chooses to reject an incoming call via a Bluetooth device.</li>
+     *     <li>A car mode {@link InCallService} is in use which has declared
+     *     {@link TelecomManager#METADATA_INCLUDE_SELF_MANAGED_CALLS} in its manifest.  Such an
+     *     {@link InCallService} will be able to see calls from self-managed
+     *     {@link ConnectionService}s, and will be able to display an incoming call UI on their
+     *     behalf.</li>
+     * </ul>
      */
     public void onReject() {}
 
@@ -2843,9 +2884,10 @@ public abstract class Connection extends Conferenceable {
      * should show its own incoming call user interface.
      * <p>
      * Where there are ongoing calls in other self-managed {@link ConnectionService}s, or in a
-     * regular {@link ConnectionService}, the Telecom framework will display its own incoming call
-     * user interface to allow the user to choose whether to answer the new incoming call and
-     * disconnect other ongoing calls, or to reject the new incoming call.
+     * regular {@link ConnectionService}, and it is not possible to hold these other calls, the
+     * Telecom framework will display its own incoming call user interface to allow the user to
+     * choose whether to answer the new incoming call and disconnect other ongoing calls, or to
+     * reject the new incoming call.
      * <p>
      * You should trigger the display of the incoming call user interface for your application by
      * showing a {@link Notification} with a full-screen {@link Intent} specified.
@@ -2909,22 +2951,6 @@ public abstract class Connection extends Conferenceable {
      *                      the in-call app.
      */
     public void handleRttUpgradeResponse(@Nullable RttTextStream rttTextStream) {}
-
-    /**
-     * Internal method to set {@link #PROPERTY_IS_RTT}.
-     * @hide
-     */
-    void setRttProperty() {
-        setConnectionProperties(getConnectionProperties() | PROPERTY_IS_RTT);
-    }
-
-    /**
-     * Internal method to un-set {@link #PROPERTY_IS_RTT}.
-     * @hide
-     */
-    void unsetRttProperty() {
-        setConnectionProperties(getConnectionProperties() & (~PROPERTY_IS_RTT));
-    }
 
     static String toLogSafePhoneNumber(String number) {
         // For unknown number, log empty string.

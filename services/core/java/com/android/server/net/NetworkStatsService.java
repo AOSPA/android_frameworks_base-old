@@ -49,7 +49,6 @@ import static android.provider.Settings.Global.NETSTATS_DEV_ROTATE_AGE;
 import static android.provider.Settings.Global.NETSTATS_GLOBAL_ALERT_BYTES;
 import static android.provider.Settings.Global.NETSTATS_POLL_INTERVAL;
 import static android.provider.Settings.Global.NETSTATS_SAMPLE_ENABLED;
-import static android.provider.Settings.Global.NETSTATS_TIME_CACHE_MAX_AGE;
 import static android.provider.Settings.Global.NETSTATS_UID_BUCKET_DURATION;
 import static android.provider.Settings.Global.NETSTATS_UID_DELETE_AGE;
 import static android.provider.Settings.Global.NETSTATS_UID_PERSIST_BYTES;
@@ -68,6 +67,7 @@ import static com.android.server.NetworkManagementService.LIMIT_GLOBAL_ALERT;
 import static com.android.server.NetworkManagementSocketTagger.resetKernelUidStats;
 import static com.android.server.NetworkManagementSocketTagger.setKernelCounterSet;
 
+import android.annotation.NonNull;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.usage.NetworkStatsManager;
@@ -94,6 +94,7 @@ import android.net.NetworkStats.NonMonotonicObserver;
 import android.net.NetworkStatsHistory;
 import android.net.NetworkTemplate;
 import android.net.TrafficStats;
+import android.os.BestClock;
 import android.os.Binder;
 import android.os.DropBoxManager;
 import android.os.Environment;
@@ -120,10 +121,8 @@ import android.util.ArraySet;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.MathUtils;
-import android.util.NtpTrustedTime;
 import android.util.Slog;
 import android.util.SparseIntArray;
-import android.util.TrustedTime;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
@@ -134,12 +133,15 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FileRotator;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.EventLogTags;
+import com.android.server.LocalServices;
 import com.android.server.connectivity.Tethering;
 
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -150,7 +152,8 @@ import java.util.List;
  */
 public class NetworkStatsService extends INetworkStatsService.Stub {
     static final String TAG = "NetworkStats";
-    static final boolean LOGV = false;
+    static final boolean LOGD = Log.isLoggable(TAG, Log.DEBUG);
+    static final boolean LOGV = Log.isLoggable(TAG, Log.VERBOSE);
 
     private static final int MSG_PERFORM_POLL = 1;
     private static final int MSG_UPDATE_IFACES = 2;
@@ -167,7 +170,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private final Context mContext;
     private final INetworkManagementService mNetworkManager;
     private final AlarmManager mAlarmManager;
-    private final TrustedTime mTime;
+    private final Clock mClock;
     private final TelephonyManager mTeleManager;
     private final NetworkStatsSettings mSettings;
     private final NetworkStatsObservers mStatsObservers;
@@ -202,7 +205,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      */
     public interface NetworkStatsSettings {
         public long getPollInterval();
-        public long getTimeCacheMaxAge();
         public boolean getSampleEnabled();
         public boolean getAugmentEnabled();
 
@@ -281,14 +283,19 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private long mPersistThreshold = 2 * MB_IN_BYTES;
     private long mGlobalAlertBytes;
 
-    private static File getDefaultSystemDir() {
+    private static @NonNull File getDefaultSystemDir() {
         return new File(Environment.getDataDirectory(), "system");
     }
 
-    private static File getDefaultBaseDir() {
+    private static @NonNull File getDefaultBaseDir() {
         File baseDir = new File(getDefaultSystemDir(), "netstats");
         baseDir.mkdirs();
         return baseDir;
+    }
+
+    private static @NonNull Clock getDefaultClock() {
+        return new BestClock(ZoneOffset.UTC, SystemClock.currentNetworkTimeClock(),
+                Clock.systemUTC());
     }
 
     public static NetworkStatsService create(Context context,
@@ -299,7 +306,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
 
         NetworkStatsService service = new NetworkStatsService(context, networkManager, alarmManager,
-                wakeLock, NtpTrustedTime.getInstance(context), TelephonyManager.getDefault(),
+                wakeLock, getDefaultClock(), TelephonyManager.getDefault(),
                 new DefaultNetworkStatsSettings(context), new NetworkStatsObservers(),
                 getDefaultSystemDir(), getDefaultBaseDir());
 
@@ -313,19 +320,22 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
     @VisibleForTesting
     NetworkStatsService(Context context, INetworkManagementService networkManager,
-            AlarmManager alarmManager, PowerManager.WakeLock wakeLock, TrustedTime time,
+            AlarmManager alarmManager, PowerManager.WakeLock wakeLock, Clock clock,
             TelephonyManager teleManager, NetworkStatsSettings settings,
             NetworkStatsObservers statsObservers, File systemDir, File baseDir) {
         mContext = checkNotNull(context, "missing Context");
         mNetworkManager = checkNotNull(networkManager, "missing INetworkManagementService");
         mAlarmManager = checkNotNull(alarmManager, "missing AlarmManager");
-        mTime = checkNotNull(time, "missing TrustedTime");
+        mClock = checkNotNull(clock, "missing Clock");
         mSettings = checkNotNull(settings, "missing NetworkStatsSettings");
         mTeleManager = checkNotNull(teleManager, "missing TelephonyManager");
         mWakeLock = checkNotNull(wakeLock, "missing WakeLock");
         mStatsObservers = checkNotNull(statsObservers, "missing NetworkStatsObservers");
         mSystemDir = checkNotNull(systemDir, "missing systemDir");
         mBaseDir = checkNotNull(baseDir, "missing baseDir");
+
+        LocalServices.addService(NetworkStatsManagerInternal.class,
+                new NetworkStatsManagerInternalImpl());
     }
 
     @VisibleForTesting
@@ -405,6 +415,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 mNonMonotonicObserver, dropBox, prefix, config.bucketDuration, includeTags);
     }
 
+    @GuardedBy("mStatsLock")
     private void shutdownLocked() {
         mContext.unregisterReceiver(mTetherReceiver);
         mContext.unregisterReceiver(mPollReceiver);
@@ -412,8 +423,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         mContext.unregisterReceiver(mUserReceiver);
         mContext.unregisterReceiver(mShutdownReceiver);
 
-        final long currentTime = mTime.hasCache() ? mTime.currentTimeMillis()
-                : System.currentTimeMillis();
+        final long currentTime = mClock.millis();
 
         // persist any pending stats
         mDevRecorder.forcePersistLocked(currentTime);
@@ -421,16 +431,10 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         mUidRecorder.forcePersistLocked(currentTime);
         mUidTagRecorder.forcePersistLocked(currentTime);
 
-        mDevRecorder = null;
-        mXtRecorder = null;
-        mUidRecorder = null;
-        mUidTagRecorder = null;
-
-        mXtStatsCached = null;
-
         mSystemReady = false;
     }
 
+    @GuardedBy("mStatsLock")
     private void maybeUpgradeLegacyStatsLocked() {
         File file;
         try {
@@ -639,16 +643,16 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private SubscriptionPlan resolveSubscriptionPlan(NetworkTemplate template, int flags) {
         SubscriptionPlan plan = null;
         if ((flags & NetworkStatsManager.FLAG_AUGMENT_WITH_SUBSCRIPTION_PLAN) != 0
-                && (template.getMatchRule() == NetworkTemplate.MATCH_MOBILE_ALL)
+                && (template.getMatchRule() == NetworkTemplate.MATCH_MOBILE)
                 && mSettings.getAugmentEnabled()) {
-            Slog.d(TAG, "Resolving plan for " + template);
+            if (LOGD) Slog.d(TAG, "Resolving plan for " + template);
             final long token = Binder.clearCallingIdentity();
             try {
                 final SubscriptionManager sm = mContext.getSystemService(SubscriptionManager.class);
                 final TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
                 for (int subId : sm.getActiveSubscriptionIdList()) {
                     if (template.matchesSubscriberId(tm.getSubscriberId(subId))) {
-                        Slog.d(TAG, "Found active matching subId " + subId);
+                        if (LOGD) Slog.d(TAG, "Found active matching subId " + subId);
                         final List<SubscriptionPlan> plans = sm.getSubscriptionPlans(subId);
                         if (!plans.isEmpty()) {
                             plan = plans.get(0);
@@ -658,7 +662,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
-            Slog.d(TAG, "Resolved to plan " + plan);
+            if (LOGD) Slog.d(TAG, "Resolved to plan " + plan);
         }
         return plan;
     }
@@ -700,12 +704,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
-    @Override
-    public long getNetworkTotalBytes(NetworkTemplate template, long start, long end) {
-        // Special case - since this is for internal use only, don't worry about
-        // a full access level check and just require the signature/privileged
-        // permission.
-        mContext.enforceCallingOrSelfPermission(READ_NETWORK_USAGE_HISTORY, TAG);
+    private long getNetworkTotalBytes(NetworkTemplate template, long start, long end) {
+        assertSystemReady();
         assertBandwidthControlEnabled();
 
         // NOTE: if callers want to get non-augmented data, they should go
@@ -713,6 +713,18 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         return internalGetSummaryForNetwork(template,
                 NetworkStatsManager.FLAG_AUGMENT_WITH_SUBSCRIPTION_PLAN, start, end,
                 NetworkStatsAccess.Level.DEVICE, Binder.getCallingUid()).getTotalBytes();
+    }
+
+    private NetworkStats getNetworkUidBytes(NetworkTemplate template, long start, long end) {
+        assertSystemReady();
+        assertBandwidthControlEnabled();
+
+        final NetworkStatsCollection uidComplete;
+        synchronized (mStatsLock) {
+            uidComplete = mUidRecorder.getOrLoadCompleteLocked();
+        }
+        return uidComplete.getSummary(template, start, end, NetworkStatsAccess.Level.DEVICE,
+                android.os.Process.SYSTEM_UID);
     }
 
     @Override
@@ -776,10 +788,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
-    @Override
-    public void setUidForeground(int uid, boolean uidForeground) {
-        mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
-
+    @VisibleForTesting
+    void setUidForeground(int uid, boolean uidForeground) {
         synchronized (mStatsLock) {
             final int set = uidForeground ? SET_FOREGROUND : SET_DEFAULT;
             final int oldSet = mActiveUidCounterSet.get(uid, SET_DEFAULT);
@@ -816,9 +826,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
-    @Override
-    public void advisePersistThreshold(long thresholdBytes) {
-        mContext.enforceCallingOrSelfPermission(CONNECTIVITY_INTERNAL, TAG);
+    private void advisePersistThreshold(long thresholdBytes) {
         assertBandwidthControlEnabled();
 
         // clamp threshold into safe range
@@ -829,8 +837,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
 
         // update and persist if beyond new thresholds
-        final long currentTime = mTime.hasCache() ? mTime.currentTimeMillis()
-                : System.currentTimeMillis();
+        final long currentTime = mClock.millis();
         synchronized (mStatsLock) {
             if (!mSystemReady) return;
 
@@ -909,6 +916,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * reflect current {@link #mPersistThreshold} value. Always defers to
      * {@link Global} values when defined.
      */
+    @GuardedBy("mStatsLock")
     private void updatePersistThresholdsLocked() {
         mDevRecorder.setPersistThreshold(mSettings.getDevPersistBytes(mPersistThreshold));
         mXtRecorder.setPersistThreshold(mSettings.getXtPersistBytes(mPersistThreshold));
@@ -1029,6 +1037,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * are active on a single {@code iface}, they are combined under a single
      * {@link NetworkIdentitySet}.
      */
+    @GuardedBy("mStatsLock")
     private void updateIfacesLocked(Network[] defaultNetworks) {
         if (!mSystemReady) return;
         if (LOGV) Slog.v(TAG, "updateIfacesLocked()");
@@ -1128,6 +1137,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         return ident;
     }
 
+    @GuardedBy("mStatsLock")
     private void recordSnapshotLocked(long currentTime) throws RemoteException {
         // snapshot and record current counters; read UID stats first to
         // avoid over counting dev stats.
@@ -1163,9 +1173,9 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * Bootstrap initial stats snapshot, usually during {@link #systemReady()}
      * so we have baseline values without double-counting.
      */
+    @GuardedBy("mStatsLock")
     private void bootstrapStatsLocked() {
-        final long currentTime = mTime.hasCache() ? mTime.currentTimeMillis()
-                : System.currentTimeMillis();
+        final long currentTime = mClock.millis();
 
         try {
             recordSnapshotLocked(currentTime);
@@ -1177,11 +1187,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     }
 
     private void performPoll(int flags) {
-        // try refreshing time source when stale
-        if (mTime.getCacheAge() > mSettings.getTimeCacheMaxAge()) {
-            mTime.forceRefresh();
-        }
-
         synchronized (mStatsLock) {
             mWakeLock.acquire();
 
@@ -1197,6 +1202,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * Periodic poll operation, reading current statistics and recording into
      * {@link NetworkStatsHistory}.
      */
+    @GuardedBy("mStatsLock")
     private void performPollLocked(int flags) {
         if (!mSystemReady) return;
         if (LOGV) Slog.v(TAG, "performPollLocked(flags=0x" + Integer.toHexString(flags) + ")");
@@ -1208,8 +1214,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         final boolean persistForce = (flags & FLAG_PERSIST_FORCE) != 0;
 
         // TODO: consider marking "untrusted" times in historical stats
-        final long currentTime = mTime.hasCache() ? mTime.currentTimeMillis()
-                : System.currentTimeMillis();
+        final long currentTime = mClock.millis();
 
         try {
             recordSnapshotLocked(currentTime);
@@ -1258,9 +1263,10 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     /**
      * Sample recent statistics summary into {@link EventLog}.
      */
+    @GuardedBy("mStatsLock")
     private void performSampleLocked() {
         // TODO: migrate trustedtime fixes to separate binary log events
-        final long trustedTime = mTime.hasCache() ? mTime.currentTimeMillis() : -1;
+        final long currentTime = mClock.millis();
 
         NetworkTemplate template;
         NetworkStats.Entry devTotal;
@@ -1277,7 +1283,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 devTotal.rxBytes, devTotal.rxPackets, devTotal.txBytes, devTotal.txPackets,
                 xtTotal.rxBytes, xtTotal.rxPackets, xtTotal.txBytes, xtTotal.txPackets,
                 uidTotal.rxBytes, uidTotal.rxPackets, uidTotal.txBytes, uidTotal.txPackets,
-                trustedTime);
+                currentTime);
 
         // collect wifi sample
         template = buildTemplateWifiWildcard();
@@ -1289,12 +1295,13 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 devTotal.rxBytes, devTotal.rxPackets, devTotal.txBytes, devTotal.txPackets,
                 xtTotal.rxBytes, xtTotal.rxPackets, xtTotal.txBytes, xtTotal.txPackets,
                 uidTotal.rxBytes, uidTotal.rxPackets, uidTotal.txBytes, uidTotal.txPackets,
-                trustedTime);
+                currentTime);
     }
 
     /**
      * Clean up {@link #mUidRecorder} after UID is removed.
      */
+    @GuardedBy("mStatsLock")
     private void removeUidsLocked(int... uids) {
         if (LOGV) Slog.v(TAG, "removeUidsLocked() for UIDs " + Arrays.toString(uids));
 
@@ -1313,6 +1320,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     /**
      * Clean up {@link #mUidRecorder} after user is removed.
      */
+    @GuardedBy("mStatsLock")
     private void removeUserLocked(int userId) {
         if (LOGV) Slog.v(TAG, "removeUserLocked() for userId=" + userId);
 
@@ -1327,6 +1335,33 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
 
         removeUidsLocked(uids);
+    }
+
+    private class NetworkStatsManagerInternalImpl extends NetworkStatsManagerInternal {
+        @Override
+        public long getNetworkTotalBytes(NetworkTemplate template, long start, long end) {
+            return NetworkStatsService.this.getNetworkTotalBytes(template, start, end);
+        }
+
+        @Override
+        public NetworkStats getNetworkUidBytes(NetworkTemplate template, long start, long end) {
+            return NetworkStatsService.this.getNetworkUidBytes(template, start, end);
+        }
+
+        @Override
+        public void setUidForeground(int uid, boolean uidForeground) {
+            NetworkStatsService.this.setUidForeground(uid, uidForeground);
+        }
+
+        @Override
+        public void advisePersistThreshold(long thresholdBytes) {
+            NetworkStatsService.this.advisePersistThreshold(thresholdBytes);
+        }
+
+        @Override
+        public void forceUpdate() {
+            NetworkStatsService.this.forceUpdate();
+        }
     }
 
     @Override
@@ -1434,6 +1469,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
+    @GuardedBy("mStatsLock")
     private void dumpProtoLocked(FileDescriptor fd) {
         final ProtoOutputStream proto = new ProtoOutputStream(fd);
 
@@ -1548,6 +1584,12 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
+    private void assertSystemReady() {
+        if (!mSystemReady) {
+            throw new IllegalStateException("System not ready");
+        }
+    }
+
     private void assertBandwidthControlEnabled() {
         if (!isBandwidthControlEnabled()) {
             throw new IllegalStateException("Bandwidth module disabled");
@@ -1608,10 +1650,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         @Override
         public long getPollInterval() {
             return getGlobalLong(NETSTATS_POLL_INTERVAL, 30 * MINUTE_IN_MILLIS);
-        }
-        @Override
-        public long getTimeCacheMaxAge() {
-            return getGlobalLong(NETSTATS_TIME_CACHE_MAX_AGE, DAY_IN_MILLIS);
         }
         @Override
         public long getGlobalAlertBytes(long def) {

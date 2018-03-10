@@ -17,6 +17,7 @@
 package android.view;
 
 import static android.view.accessibility.AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED;
+
 import static java.lang.Math.max;
 
 import android.animation.AnimatorInflater;
@@ -905,6 +906,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * these bogus values.
      */
     private static boolean sThrowOnInvalidFloatProperties;
+
+    /**
+     * Prior to P, {@code #startDragAndDrop} accepts a builder which produces an empty drag shadow.
+     * Currently zero size SurfaceControl cannot be created thus we create a dummy 1x1 surface
+     * instead.
+     */
+    private static boolean sAcceptZeroSizeDragShadow;
 
     /** @hide */
     @IntDef({NOT_FOCUSABLE, FOCUSABLE, FOCUSABLE_AUTO})
@@ -4798,6 +4806,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
             Canvas.sCompatibilityRestore = targetSdkVersion < Build.VERSION_CODES.M;
             Canvas.sCompatibilitySetBitmap = targetSdkVersion < Build.VERSION_CODES.O;
+            Canvas.setCompatibilityVersion(targetSdkVersion);
 
             // In M and newer, our widgets can pass a "hint" value in the size
             // for UNSPECIFIED MeasureSpecs. This lets child views of scrolling containers
@@ -4839,6 +4848,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             sCanFocusZeroSized = targetSdkVersion < Build.VERSION_CODES.P;
 
             sAlwaysAssignFocus = targetSdkVersion < Build.VERSION_CODES.P;
+
+            sAcceptZeroSizeDragShadow = targetSdkVersion < Build.VERSION_CODES.P;
 
             sCompatibilityDone = true;
         }
@@ -7261,7 +7272,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                         // becomes true where it should issue notifyViewEntered().
                         afm.notifyViewEntered(this);
                     }
-                } else if (!isFocused()) {
+                } else if (!enter && !isFocused()) {
                     afm.notifyViewExited(this);
                 }
             }
@@ -7295,6 +7306,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public CharSequence getAccessibilityPaneTitle() {
         return mAccessibilityPaneTitle;
+    }
+
+    private boolean isAccessibilityPane() {
+        return mAccessibilityPaneTitle != null;
     }
 
     /**
@@ -7860,6 +7875,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 structure.setAutofillHints(getAutofillHints());
                 structure.setAutofillValue(getAutofillValue());
             }
+            structure.setImportantForAutofill(getImportantForAutofill());
         }
 
         int ignoredParentLeft = 0;
@@ -7994,6 +8010,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *   <li>Call {@link
      *    android.view.autofill.AutofillManager#notifyViewVisibilityChanged(View, int, boolean)}
      *       when the visibility of a virtual child changed.
+     *   <li>Call
+     *    {@link android.view.autofill.AutofillManager#notifyViewClicked(View, int)} when a virtual
+     *       child is clicked.
      *   <li>Call {@link AutofillManager#commit()} when the autofill context of the view structure
      *       changed and the current context should be committed (for example, when the user tapped
      *       a {@code SUBMIT} button in an HTML page).
@@ -8125,7 +8144,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Gets the unique identifier of this view in the screen, for autofill purposes.
+     * Gets the unique, logical identifier of this view in the activity, for autofill purposes.
+     *
+     * <p>The autofill id is created on demand, unless it is explicitly set by
+     * {@link #setAutofillId(AutofillId)}.
+     *
+     * <p>See {@link #setAutofillId(AutofillId)} for more info.
      *
      * @return The View's autofill id.
      */
@@ -8136,6 +8160,61 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             mAutofillId = new AutofillId(getAutofillViewId());
         }
         return mAutofillId;
+    }
+
+    /**
+     * Sets the unique, logical identifier of this view in the activity, for autofill purposes.
+     *
+     * <p>The autofill id is created on demand, and this method should only be called when a view is
+     * reused after {@link #dispatchProvideAutofillStructure(ViewStructure, int)} is called, as
+     * that method creates a snapshot of the view that is passed along to the autofill service.
+     *
+     * <p>This method is typically used when view subtrees are recycled to represent different
+     * content* &mdash;in this case, the autofill id can be saved before the view content is swapped
+     * out, and restored later when it's swapped back in. For example:
+     *
+     * <pre>
+     * EditText reusableView = ...;
+     * ViewGroup parentView = ...;
+     * AutofillManager afm = ...;
+     *
+     * // Swap out the view and change its contents
+     * AutofillId oldId = reusableView.getAutofillId();
+     * CharSequence oldText = reusableView.getText();
+     * parentView.removeView(reusableView);
+     * AutofillId newId = afm.getNextAutofillId();
+     * reusableView.setText("New I am");
+     * reusableView.setAutofillId(newId);
+     * parentView.addView(reusableView);
+     *
+     * // Later, swap the old content back in
+     * parentView.removeView(reusableView);
+     * reusableView.setAutofillId(oldId);
+     * reusableView.setText(oldText);
+     * parentView.addView(reusableView);
+     * </pre>
+     *
+     * @param id an autofill ID that is unique in the {@link android.app.Activity} hosting the view,
+     * or {@code null} to reset it. Usually it's an id previously allocated to another view (and
+     * obtained through {@link #getAutofillId()}), or a new value obtained through
+     * {@link AutofillManager#getNextAutofillId()}.
+     *
+     * @throws IllegalStateException if the view is already {@link #isAttachedToWindow() attached to
+     * a window}.
+     *
+     * @throws IllegalArgumentException if the id is an autofill id associated with a virtual view.
+     */
+    public void setAutofillId(@Nullable AutofillId id) {
+        if (android.view.autofill.Helper.sVerbose) {
+            Log.v(VIEW_LOG_TAG, "setAutofill(): from " + mAutofillId + " to " + id);
+        }
+        if (isAttachedToWindow()) {
+            throw new IllegalStateException("Cannot set autofill id when view is attached");
+        }
+        if (id.isVirtual()) {
+            throw new IllegalStateException("Cannot set autofill id assigned to virtual views");
+        }
+        mAutofillId = id;
     }
 
     /**
@@ -8355,6 +8434,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             }
         }
 
+        // If the app developer explicitly set hints for it, it's important.
+        if (getAutofillHints() != null) {
+            return true;
+        }
+
         // Otherwise, assume it's not important...
         return false;
     }
@@ -8378,7 +8462,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             AccessibilityNodeProvider provider, AccessibilityNodeInfo info,
             boolean forAutofill) {
         structure.setId(AccessibilityNodeInfo.getVirtualDescendantId(info.getSourceNodeId()),
-                null, null, null);
+                null, null, info.getViewIdResourceName());
         Rect rect = structure.getTempRect();
         info.getBoundsInParent(rect);
         structure.setDimens(rect.left, rect.top, 0, 0, rect.width(), rect.height());
@@ -8418,6 +8502,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         CharSequence cname = info.getClassName();
         structure.setClassName(cname != null ? cname.toString() : null);
         structure.setContentDescription(info.getContentDescription());
+        if (forAutofill) {
+            final int maxTextLength = info.getMaxTextLength();
+            if (maxTextLength != -1) {
+                structure.setMaxTextLength(maxTextLength);
+            }
+            structure.setHint(info.getHintText());
+        }
         if ((info.getText() != null || info.getError() != null)) {
             structure.setText(info.getText(), info.getTextSelectionStart(),
                     info.getTextSelectionEnd());
@@ -8428,7 +8519,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     final AutofillValue autofillValue = AutofillValue.forText(structure.getText());
                     structure.setAutofillValue(autofillValue);
                     if (info.isPassword()) {
-                        structure.setInputType(InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                        structure.setInputType(InputType.TYPE_CLASS_TEXT
+                                | InputType.TYPE_TEXT_VARIATION_PASSWORD);
                     }
                 } else {
                     structure.setDataIsSensitive(false);
@@ -8778,6 +8870,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Computes whether this virtual autofill view is visible to the user.
      *
+     * <p><b>Note: </b>By default it returns {@code true}, but views providing a virtual hierarchy
+     * view must override it.
+     *
      * @return Whether the view is visible on the screen.
      */
     public boolean isVisibleToUserForAutofill(int virtualId) {
@@ -8790,7 +8885,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 }
             }
         }
-        return false;
+        return true;
     }
 
     /**
@@ -11612,7 +11707,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         return mode == IMPORTANT_FOR_ACCESSIBILITY_YES || isActionableForAccessibility()
                 || hasListenersForAccessibility() || getAccessibilityNodeProvider() != null
                 || getAccessibilityLiveRegion() != ACCESSIBILITY_LIVE_REGION_NONE
-                || (mAccessibilityPaneTitle != null);
+                || isAccessibilityPane();
     }
 
     /**
@@ -11709,18 +11804,26 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         // Changes to views with a pane title count as window state changes, as the pane title
         // marks them as significant parts of the UI.
-        if (!TextUtils.isEmpty(getAccessibilityPaneTitle())) {
-            final AccessibilityEvent event = AccessibilityEvent.obtain();
-            event.setEventType(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
-            event.setContentChangeTypes(changeType);
-            onPopulateAccessibilityEvent(event);
-            if (mParent != null) {
-                try {
-                    mParent.requestSendAccessibilityEvent(this, event);
-                } catch (AbstractMethodError e) {
-                    Log.e(VIEW_LOG_TAG, mParent.getClass().getSimpleName()
-                            + " does not fully implement ViewParent", e);
+        if ((changeType != AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE)
+                && isAccessibilityPane()) {
+            // If the pane isn't visible, content changed events are sufficient unless we're
+            // reporting that the view just disappeared
+            if ((getVisibility() == VISIBLE)
+                    || (changeType == AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED)) {
+                final AccessibilityEvent event = AccessibilityEvent.obtain();
+                event.setEventType(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
+                event.setContentChangeTypes(changeType);
+                event.setSource(this);
+                onPopulateAccessibilityEvent(event);
+                if (mParent != null) {
+                    try {
+                        mParent.requestSendAccessibilityEvent(this, event);
+                    } catch (AbstractMethodError e) {
+                        Log.e(VIEW_LOG_TAG, mParent.getClass().getSimpleName()
+                                + " does not fully implement ViewParent", e);
+                    }
                 }
+                return;
             }
         }
 
@@ -14010,6 +14113,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         if (accessibilityEnabled) {
+            // If we're an accessibility pane and the visibility changed, we already have sent
+            // a state change, so we really don't need to report other changes.
+            if (isAccessibilityPane()) {
+                changed &= ~VISIBILITY_MASK;
+            }
             if ((changed & FOCUSABLE) != 0 || (changed & VISIBILITY_MASK) != 0
                     || (changed & CLICKABLE) != 0 || (changed & LONG_CLICKABLE) != 0
                     || (changed & CONTEXT_CLICKABLE) != 0) {
@@ -18007,19 +18115,20 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * currently attached to.
      */
     public WindowId getWindowId() {
-        if (mAttachInfo == null) {
+        AttachInfo ai = mAttachInfo;
+        if (ai == null) {
             return null;
         }
-        if (mAttachInfo.mWindowId == null) {
+        if (ai.mWindowId == null) {
             try {
-                mAttachInfo.mIWindowId = mAttachInfo.mSession.getWindowId(
-                        mAttachInfo.mWindowToken);
-                mAttachInfo.mWindowId = new WindowId(
-                        mAttachInfo.mIWindowId);
+                ai.mIWindowId = ai.mSession.getWindowId(ai.mWindowToken);
+                if (ai.mIWindowId != null) {
+                    ai.mWindowId = new WindowId(ai.mIWindowId);
+                }
             } catch (RemoteException e) {
             }
         }
-        return mAttachInfo.mWindowId;
+        return ai.mWindowId;
     }
 
     /**
@@ -23619,8 +23728,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * constructor variant is only useful when the {@link #onProvideShadowMetrics(Point, Point)}
          * and {@link #onDrawShadow(Canvas)} methods are also overridden in order
          * to supply the drag shadow's dimensions and appearance without
-         * reference to any View object. If they are not overridden, then the result is an
-         * invisible drag shadow.
+         * reference to any View object.
          */
         public DragShadowBuilder() {
             mView = new WeakReference<View>(null);
@@ -23774,6 +23882,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // Create 1x1 surface when zero surface size is specified because SurfaceControl.Builder
         // does not accept zero size surface.
         if (shadowSize.x == 0  || shadowSize.y == 0) {
+            if (!sAcceptZeroSizeDragShadow) {
+                throw new IllegalStateException("Drag shadow dimensions must be positive");
+            }
             shadowSize.x = 1;
             shadowSize.y = 1;
         }

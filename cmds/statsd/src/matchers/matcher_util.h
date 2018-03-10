@@ -24,10 +24,10 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
+#include "frameworks/base/cmds/statsd/src/stats_log_common.pb.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
-#include "stats_util.h"
 #include "packages/UidMap.h"
+#include "stats_util.h"
 
 namespace android {
 namespace os {
@@ -44,9 +44,6 @@ bool combinationMatch(const std::vector<int>& children, const LogicalOperation& 
 
 bool matchesSimple(const UidMap& uidMap,
     const SimpleAtomMatcher& simpleMatcher, const LogEvent& wrapper);
-
-void getDimensionKeys(const LogEvent& event, const FieldMatcher& matcher,
-                      std::vector<DimensionsValue> *dimensionKeys);
 
 }  // namespace statsd
 }  // namespace os

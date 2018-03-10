@@ -29,6 +29,7 @@ import static android.view.WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_TASK_CLOSE;
+import static android.view.WindowManager.TRANSIT_TASK_IN_PLACE;
 import static android.view.WindowManager.TRANSIT_TASK_OPEN;
 import static android.view.WindowManager.TRANSIT_TASK_OPEN_BEHIND;
 import static android.view.WindowManager.TRANSIT_TASK_TO_BACK;
@@ -78,9 +79,12 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.GraphicBuffer;
 import android.graphics.Path;
+import android.graphics.Picture;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Binder;
@@ -96,11 +100,8 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 import android.view.AppTransitionAnimationSpec;
-import android.view.DisplayListCanvas;
 import android.view.IAppTransitionAnimationSpecsFuture;
 import android.view.RemoteAnimationAdapter;
-import android.view.RenderNode;
-import android.view.ThreadedRenderer;
 import android.view.WindowManager.TransitionFlags;
 import android.view.WindowManager.TransitionType;
 import android.view.animation.AlphaAnimation;
@@ -973,11 +974,8 @@ public class AppTransition implements Dump {
         final int width = frame.width();
         final int height = frame.height();
 
-        final RenderNode node = RenderNode.create("CrossProfileAppsThumbnail", null);
-        node.setLeftTopRightBottom(0, 0, width, height);
-        node.setClipToBounds(false);
-
-        final DisplayListCanvas canvas = node.start(width, height);
+        final Picture picture = new Picture();
+        final Canvas canvas = picture.beginRecording(width, height);
         canvas.drawColor(Color.argb(0.6f, 0, 0, 0));
         final int thumbnailSize = mService.mContext.getResources().getDimensionPixelSize(
                 com.android.internal.R.dimen.cross_profile_apps_thumbnail_size);
@@ -988,10 +986,9 @@ public class AppTransition implements Dump {
                 (width + thumbnailSize) / 2,
                 (height + thumbnailSize) / 2);
         drawable.draw(canvas);
-        node.end(canvas);
+        picture.endRecording();
 
-        return ThreadedRenderer.createHardwareBitmap(node, width, height)
-                .createGraphicBufferHandle();
+        return Bitmap.createBitmap(picture).createGraphicBufferHandle();
     }
 
     Animation createCrossProfileAppsThumbnailAnimationLocked(Rect appRect) {
@@ -2142,6 +2139,10 @@ public class AppTransition implements Dump {
                     && isTransitionEqual(TRANSIT_ACTIVITY_CLOSE)) {
                 // Opening a new activity always supersedes a close for the anim.
                 setAppTransition(transit, flags);
+            } else if (isTaskTransit(transit) && isActivityTransit(mNextAppTransition)) {
+                // Task animations always supersede activity animations, because if we have both, it
+                // usually means that activity transition were just trampoline activities.
+                setAppTransition(transit, flags);
             }
         }
         boolean prepared = prepare();
@@ -2164,6 +2165,21 @@ public class AppTransition implements Dump {
     private static boolean isKeyguardTransit(int transit) {
         return isKeyguardGoingAwayTransit(transit) || transit == TRANSIT_KEYGUARD_OCCLUDE
                 || transit == TRANSIT_KEYGUARD_UNOCCLUDE;
+    }
+
+    private static boolean isTaskTransit(int transit) {
+        return transit == TRANSIT_TASK_OPEN
+                || transit == TRANSIT_TASK_CLOSE
+                || transit == TRANSIT_TASK_OPEN_BEHIND
+                || transit == TRANSIT_TASK_TO_BACK
+                || transit == TRANSIT_TASK_TO_FRONT
+                || transit == TRANSIT_TASK_IN_PLACE;
+    }
+
+    private static boolean isActivityTransit(int transit) {
+        return transit == TRANSIT_ACTIVITY_OPEN
+                || transit == TRANSIT_ACTIVITY_CLOSE
+                || transit == TRANSIT_ACTIVITY_RELAUNCH;
     }
 
     /**

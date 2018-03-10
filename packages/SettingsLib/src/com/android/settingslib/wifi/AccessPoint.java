@@ -17,6 +17,7 @@
 package com.android.settingslib.wifi;
 
 import android.annotation.IntDef;
+import android.annotation.MainThread;
 import android.annotation.Nullable;
 import android.app.AppGlobals;
 import android.content.Context;
@@ -42,6 +43,8 @@ import android.net.wifi.WifiManager;
 import android.net.wifi.WifiNetworkScoreCache;
 import android.net.wifi.hotspot2.PasspointConfiguration;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -57,6 +60,7 @@ import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.R;
+import com.android.settingslib.utils.ThreadUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -68,7 +72,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
-
+/**
+ * Represents a selectable Wifi Network for use in various wifi selection menus backed by
+ * {@link WifiTracker}.
+ *
+ * <p>An AccessPoint, which would be more fittingly named "WifiNetwork", is an aggregation of
+ * {@link ScanResult ScanResults} along with pertinent metadata (e.g. current connection info,
+ * network scores) required to successfully render the network to the user.
+ */
 public class AccessPoint implements Comparable<AccessPoint> {
     static final String TAG = "SettingsLib.AccessPoint";
 
@@ -288,11 +299,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
         mId = sLastId.incrementAndGet();
     }
 
-    AccessPoint(Context context, AccessPoint other) {
-        mContext = context;
-        copyFrom(other);
-    }
-
     AccessPoint(Context context, Collection<ScanResult> results) {
         mContext = context;
 
@@ -343,33 +349,6 @@ public class AccessPoint implements Comparable<AccessPoint> {
 
         builder.append(',').append(getSecurity());
         mKey = builder.toString();
-    }
-
-    /**
-     * Copy accesspoint information. NOTE: We do not copy tag information because that is never
-     * set on the internal copy.
-     */
-    void copyFrom(AccessPoint that) {
-        this.ssid = that.ssid;
-        this.bssid = that.bssid;
-        this.security = that.security;
-        this.mKey = that.mKey;
-        this.networkId = that.networkId;
-        this.pskType = that.pskType;
-        this.mConfig = that.mConfig; //TODO: Watch out, this object is mutated.
-        this.mRssi = that.mRssi;
-        this.mInfo = that.mInfo;
-        this.mNetworkInfo = that.mNetworkInfo;
-        this.mScanResults.clear();
-        this.mScanResults.addAll(that.mScanResults);
-        this.mScoredNetworkCache.clear();
-        this.mScoredNetworkCache.putAll(that.mScoredNetworkCache);
-        this.mId = that.mId;
-        this.mSpeed = that.mSpeed;
-        this.mIsScoredNetworkMetered = that.mIsScoredNetworkMetered;
-        this.mIsCarrierAp = that.mIsCarrierAp;
-        this.mCarrierApEapType = that.mCarrierApEapType;
-        this.mCarrierName = that.mCarrierName;
     }
 
     /**
@@ -467,7 +446,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         }
         builder.append(",metered=").append(isMetered());
 
-        if (WifiTracker.sVerboseLogging) {
+        if (isVerboseLoggingEnabled()) {
             builder.append(",rssi=").append(mRssi);
             builder.append(",scan cache size=").append(mScanResults.size());
         }
@@ -546,7 +525,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
         mSpeed = generateAverageSpeedForSsid();
 
         boolean changed = oldSpeed != mSpeed;
-        if(WifiTracker.sVerboseLogging && changed) {
+        if(isVerboseLoggingEnabled() && changed) {
             Log.i(TAG, String.format("%s: Set speed to %d", ssid, mSpeed));
         }
         return changed;
@@ -577,7 +556,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
             }
         }
         int speed = count == 0 ? Speed.NONE : totalSpeed / count;
-        if (WifiTracker.sVerboseLogging) {
+        if (isVerboseLoggingEnabled()) {
             Log.i(TAG, String.format("%s generated fallback speed is: %d", getSsidStr(), speed));
         }
         return roundToClosestSpeedEnum(speed);
@@ -913,7 +892,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
             }
         }
 
-        if (WifiTracker.sVerboseLogging) {
+        if (isVerboseLoggingEnabled()) {
             summary.append(WifiUtils.buildLoggingSummary(this, config));
         }
 
@@ -1069,14 +1048,19 @@ public class AccessPoint implements Comparable<AccessPoint> {
         if (newLevel > 0 && newLevel != oldLevel) {
             // Only update labels on visible rssi changes
             updateSpeed();
-            if (mAccessPointListener != null) {
-                mAccessPointListener.onLevelChanged(this);
-            }
+            ThreadUtils.postOnMainThread(() -> {
+                if (mAccessPointListener != null) {
+                    mAccessPointListener.onLevelChanged(this);
+                }
+            });
+
         }
 
-        if (mAccessPointListener != null) {
-            mAccessPointListener.onAccessPointChanged(this);
-        }
+        ThreadUtils.postOnMainThread(() -> {
+            if (mAccessPointListener != null) {
+                mAccessPointListener.onAccessPointChanged(this);
+            }
+        });
 
         if (!scanResults.isEmpty()) {
             ScanResult result = scanResults.iterator().next();
@@ -1123,10 +1107,18 @@ public class AccessPoint implements Comparable<AccessPoint> {
             mNetworkInfo = null;
         }
         if (updated && mAccessPointListener != null) {
-            mAccessPointListener.onAccessPointChanged(this);
+            ThreadUtils.postOnMainThread(() -> {
+                if (mAccessPointListener != null) {
+                    mAccessPointListener.onAccessPointChanged(this);
+                }
+            });
 
             if (oldLevel != getLevel() /* current level */) {
-                mAccessPointListener.onLevelChanged(this);
+                ThreadUtils.postOnMainThread(() -> {
+                    if (mAccessPointListener != null) {
+                        mAccessPointListener.onLevelChanged(this);
+                    }
+                });
             }
         }
 
@@ -1136,9 +1128,11 @@ public class AccessPoint implements Comparable<AccessPoint> {
     void update(@Nullable WifiConfiguration config) {
         mConfig = config;
         networkId = config != null ? config.networkId : WifiConfiguration.INVALID_NETWORK_ID;
-        if (mAccessPointListener != null) {
-            mAccessPointListener.onAccessPointChanged(this);
-        }
+        ThreadUtils.postOnMainThread(() -> {
+            if (mAccessPointListener != null) {
+                mAccessPointListener.onAccessPointChanged(this);
+            }
+        });
     }
 
     @VisibleForTesting
@@ -1333,8 +1327,44 @@ public class AccessPoint implements Comparable<AccessPoint> {
         return string;
     }
 
+    /**
+     * Callbacks relaying changes to the AccessPoint representation.
+     *
+     * <p>All methods are invoked on the Main Thread.
+     */
     public interface AccessPointListener {
-        void onAccessPointChanged(AccessPoint accessPoint);
-        void onLevelChanged(AccessPoint accessPoint);
+        /**
+         * Indicates a change to the externally visible state of the AccessPoint trigger by an
+         * update of ScanResults, saved configuration state, connection state, or score
+         * (labels/metered) state.
+         *
+         * <p>Clients should refresh their view of the AccessPoint to match the updated state when
+         * this is invoked. Overall this method is extraneous if clients are listening to
+         * {@link WifiTracker.WifiListener#onAccessPointsChanged()} callbacks.
+         *
+         * <p>Examples of changes include signal strength, connection state, speed label, and
+         * generally anything that would impact the summary string.
+         *
+         * @param accessPoint The accessPoint object the listener was registered on which has
+         *                    changed
+         */
+        @MainThread void onAccessPointChanged(AccessPoint accessPoint);
+
+        /**
+         * Indicates the "wifi pie signal level" has changed, retrieved via calls to
+         * {@link AccessPoint#getLevel()}.
+         *
+         * <p>This call is a subset of {@link #onAccessPointChanged(AccessPoint)} , hence is also
+         * extraneous if the client is already reacting to that or the
+         * {@link WifiTracker.WifiListener#onAccessPointsChanged()} callbacks.
+         *
+         * @param accessPoint The accessPoint object the listener was registered on whose level has
+         *                    changed
+         */
+        @MainThread void onLevelChanged(AccessPoint accessPoint);
+    }
+
+    private static boolean isVerboseLoggingEnabled() {
+        return WifiTracker.sVerboseLogging || Log.isLoggable(TAG, Log.VERBOSE);
     }
 }

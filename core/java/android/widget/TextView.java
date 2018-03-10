@@ -80,8 +80,8 @@ import android.text.GraphicsOperations;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.text.Layout;
-import android.text.MeasuredText;
 import android.text.ParcelableSpan;
+import android.text.PrecomputedText;
 import android.text.Selection;
 import android.text.SpanWatcher;
 import android.text.Spannable;
@@ -791,11 +791,18 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     // mAutoSizeStepGranularityInPx.
     private boolean mHasPresetAutoSizeValues = false;
 
+    // Autofill-related attributes
+    //
     // Indicates whether the text was set statically or dynamically, so it can be used to
     // sanitize autofill requests.
     private boolean mTextSetFromXmlOrResourceId = false;
-    // Resource id used to set the text - used for autofill purposes.
+    // Resource id used to set the text.
     private @StringRes int mTextId = ResourceId.ID_NULL;
+    // Last value used on AFM.notifyValueChanged(), used to optimize autofill workflow by avoiding
+    // calls when the value did not change
+    private CharSequence mLastValueSentToAutofillManager;
+    //
+    // End of autofill-related attributes
 
     /**
      * Kick-start the font cache for the zygote process (to pay the cost of
@@ -4085,6 +4092,35 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
+     * Gets the parameters for text layout precomputation, for use with {@link PrecomputedText}.
+     *
+     * @return a current {@link PrecomputedText.Params}
+     * @see PrecomputedText
+     */
+    public @NonNull PrecomputedText.Params getTextMetricsParams() {
+        return new PrecomputedText.Params(new TextPaint(mTextPaint), getTextDirectionHeuristic(),
+                mBreakStrategy, mHyphenationFrequency);
+    }
+
+    /**
+     * Apply the text layout parameter.
+     *
+     * Update the TextView parameters to be compatible with {@link PrecomputedText.Params}.
+     * @see PrecomputedText
+     */
+    public void setTextMetricsParams(@NonNull PrecomputedText.Params params) {
+        mTextPaint.set(params.getTextPaint());
+        mTextDir = params.getTextDirection();
+        mBreakStrategy = params.getBreakStrategy();
+        mHyphenationFrequency = params.getHyphenationFrequency();
+        if (mLayout != null) {
+            nullLayouts();
+            requestLayout();
+            invalidate();
+        }
+    }
+
+    /**
      * Set justification mode. The default value is {@link Layout#JUSTIFICATION_MODE_NONE}. If the
      * last line is too short for justification, the last line will be displayed with the
      * alignment set by {@link android.view.View#setTextAlignment}.
@@ -5577,7 +5613,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (imm != null) imm.restartInput(this);
         } else if (type == BufferType.SPANNABLE || mMovement != null) {
             text = mSpannableFactory.newSpannable(text);
-        } else if (!(text instanceof MeasuredText || text instanceof CharWrapper)) {
+        } else if (!(text instanceof PrecomputedText || text instanceof CharWrapper)) {
             text = TextUtils.stringOrSpannedString(text);
         }
 
@@ -5665,7 +5701,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (needEditableForNotification) {
             sendAfterTextChanged((Editable) text);
         } else {
-            // Always notify AutoFillManager - it will return right away if autofill is disabled.
             notifyAutoFillManagerAfterTextChangedIfNeeded();
         }
 
@@ -6959,9 +6994,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         final int selEnd = getSelectionEnd();
         if (mMovement != null && (isFocused() || isPressed()) && selStart >= 0) {
             if (selStart == selEnd) {
-                if (mEditor != null && mEditor.isCursorVisible()
-                        && (SystemClock.uptimeMillis() - mEditor.mShowCursor)
-                        % (2 * Editor.BLINK) < Editor.BLINK) {
+                if (mEditor != null && mEditor.shouldRenderCursor()) {
                     if (mHighlightPathBogus) {
                         if (mHighlightPath == null) mHighlightPath = new Path();
                         mHighlightPath.reset();
@@ -9697,11 +9730,21 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             return;
         }
         final AutofillManager afm = mContext.getSystemService(AutofillManager.class);
-        if (afm != null) {
+        if (afm == null) {
+            return;
+        }
+
+        if (mLastValueSentToAutofillManager == null
+                || !mLastValueSentToAutofillManager.equals(mText)) {
             if (android.view.autofill.Helper.sVerbose) {
-                Log.v(LOG_TAG, "sendAfterTextChanged(): notify AFM for text=" + mText);
+                Log.v(LOG_TAG, "notifying AFM after text changed");
             }
             afm.notifyValueChanged(TextView.this);
+            mLastValueSentToAutofillManager = mText;
+        } else {
+            if (android.view.autofill.Helper.sVerbose) {
+                Log.v(LOG_TAG, "not notifying AFM on unchanged text");
+            }
         }
     }
 
@@ -10834,7 +10877,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             final boolean ltrLine =
                     mLayout.getParagraphDirection(line) == Layout.DIR_LEFT_TO_RIGHT;
             final float[] widths = new float[offsetEnd - offsetStart];
-            mLayout.getPaint().getTextWidths(mText, offsetStart, offsetEnd, widths);
+            mLayout.getPaint().getTextWidths(mTransformed, offsetStart, offsetEnd, widths);
             final float top = mLayout.getLineTop(line);
             final float bottom = mLayout.getLineBottom(line);
             for (int offset = offsetStart; offset < offsetEnd; ++offset) {
@@ -11696,6 +11739,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
+     * Returns the current {@link TextDirectionHeuristic}.
+     *
+     * @return the current {@link TextDirectionHeuristic}.
      * @hide
      */
     protected TextDirectionHeuristic getTextDirectionHeuristic() {

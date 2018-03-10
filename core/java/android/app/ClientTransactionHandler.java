@@ -21,6 +21,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.os.IBinder;
+import android.util.MergedConfiguration;
 
 import com.android.internal.content.ReferrerIntent;
 
@@ -60,11 +61,12 @@ public abstract class ClientTransactionHandler {
 
     /** Destroy the activity. */
     public abstract void handleDestroyActivity(IBinder token, boolean finishing, int configChanges,
-            boolean getNonConfigInstance);
+            boolean getNonConfigInstance, String reason);
 
     /** Pause the activity. */
     public abstract void handlePauseActivity(IBinder token, boolean finished, boolean userLeaving,
-            int configChanges, boolean dontReport, PendingTransactionActions pendingActions);
+            int configChanges, boolean dontReport, PendingTransactionActions pendingActions,
+            String reason);
 
     /** Resume the activity. */
     public abstract void handleResumeActivity(IBinder token, boolean clearHide, boolean isForward,
@@ -72,7 +74,7 @@ public abstract class ClientTransactionHandler {
 
     /** Stop the activity. */
     public abstract void handleStopActivity(IBinder token, boolean show, int configChanges,
-            PendingTransactionActions pendingActions);
+            PendingTransactionActions pendingActions, String reason);
 
     /** Report that activity was stopped to server. */
     public abstract void reportStop(PendingTransactionActions pendingActions);
@@ -122,6 +124,39 @@ public abstract class ClientTransactionHandler {
      * provided token.
      */
     public abstract ActivityThread.ActivityClientRecord getActivityClient(IBinder token);
+
+    /**
+     * Prepare activity relaunch to update internal bookkeeping. This is used to track multiple
+     * relaunch and config update requests.
+     * @param token Activity token.
+     * @param pendingResults Activity results to be delivered.
+     * @param pendingNewIntents New intent messages to be delivered.
+     * @param configChanges Mask of configuration changes that have occurred.
+     * @param config New configuration applied to the activity.
+     * @param preserveWindow Whether the activity should try to reuse the window it created,
+     *                        including the decor view after the relaunch.
+     * @return An initialized instance of {@link ActivityThread.ActivityClientRecord} to use during
+     *         relaunch, or {@code null} if relaunch cancelled.
+     */
+    public abstract ActivityThread.ActivityClientRecord prepareRelaunchActivity(IBinder token,
+            List<ResultInfo> pendingResults, List<ReferrerIntent> pendingNewIntents,
+            int configChanges, MergedConfiguration config, boolean preserveWindow);
+
+    /**
+     * Perform activity relaunch.
+     * @param r Activity client record prepared for relaunch.
+     * @param pendingActions Pending actions to be used on later stages of activity transaction.
+     * */
+    public abstract void handleRelaunchActivity(ActivityThread.ActivityClientRecord r,
+            PendingTransactionActions pendingActions);
+
+    /**
+     * Report that relaunch request was handled.
+     * @param token Target activity token.
+     * @param pendingActions Pending actions initialized on earlier stages of activity transaction.
+     *                       Used to check if we should report relaunch to WM.
+     * */
+    public abstract void reportRelaunch(IBinder token, PendingTransactionActions pendingActions);
 
     /**
      * Debugging output.

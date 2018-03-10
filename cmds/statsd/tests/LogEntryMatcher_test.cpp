@@ -14,6 +14,7 @@
 
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 #include "matchers/matcher_util.h"
+#include "stats_log_util.h"
 #include "stats_util.h"
 
 #include <gtest/gtest.h>
@@ -35,8 +36,6 @@ const int FIELD_ID_3 = 2;
 const int ATTRIBUTION_UID_FIELD_ID = 1;
 const int ATTRIBUTION_TAG_FIELD_ID = 2;
 
-// Private API from liblog.
-extern "C" void android_log_rewind(android_log_context ctx);
 
 #ifdef __ANDROID__
 TEST(AtomMatcherTest, TestSimpleMatcher) {
@@ -61,19 +60,19 @@ TEST(AtomMatcherTest, TestSimpleMatcher) {
 
 TEST(AtomMatcherTest, TestAttributionMatcher) {
     UidMap uidMap;
-    AttributionNode attribution_node1;
+    AttributionNodeInternal attribution_node1;
     attribution_node1.set_uid(1111);
     attribution_node1.set_tag("location1");
 
-    AttributionNode attribution_node2;
+    AttributionNodeInternal attribution_node2;
     attribution_node2.set_uid(2222);
     attribution_node2.set_tag("location2");
 
-    AttributionNode attribution_node3;
+    AttributionNodeInternal attribution_node3;
     attribution_node3.set_uid(3333);
     attribution_node3.set_tag("location3");
-    std::vector<AttributionNode> attribution_nodes =
-        { attribution_node1, attribution_node2, attribution_node3 };
+    std::vector<AttributionNodeInternal> attribution_nodes = {attribution_node1, attribution_node2,
+                                                              attribution_node3};
 
     // Set up the event
     LogEvent event(TAG_ID, 0);
@@ -597,7 +596,6 @@ TEST(AtomMatcherTest, TestNorMatcher) {
     matcherResults.push_back(MatchingState::kMatched);
     EXPECT_FALSE(combinationMatch(children, operation, matcherResults));
 }
-
 #else
 GTEST_LOG_(INFO) << "This test does nothing.\n";
 #endif

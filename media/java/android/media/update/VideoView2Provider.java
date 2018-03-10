@@ -18,7 +18,8 @@ package android.media.update;
 
 import android.annotation.SystemApi;
 import android.media.AudioAttributes;
-import android.media.MediaPlayerInterface;
+import android.media.MediaMetadata2;
+import android.media.MediaPlayerBase;
 import android.media.session.MediaController;
 import android.media.session.PlaybackState;
 import android.media.session.MediaSession;
@@ -26,6 +27,8 @@ import android.net.Uri;
 import android.util.AttributeSet;
 import android.widget.MediaControlView2;
 import android.widget.VideoView2;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.List;
 import java.util.Map;
@@ -49,8 +52,10 @@ public interface VideoView2Provider extends ViewGroupProvider {
     void initialize(AttributeSet attrs, int defStyleAttr, int defStyleRes);
 
     void setMediaControlView2_impl(MediaControlView2 mediaControlView, long intervalMs);
+    void setMediaMetadata_impl(MediaMetadata2 metadata);
     MediaController getMediaController_impl();
     MediaControlView2 getMediaControlView2_impl();
+    MediaMetadata2 getMediaMetadata_impl();
     void setSubtitleEnabled_impl(boolean enable);
     boolean isSubtitleEnabled_impl();
     // TODO: remove setSpeed_impl once MediaController2 is ready.
@@ -60,7 +65,7 @@ public interface VideoView2Provider extends ViewGroupProvider {
     /**
      * @hide
      */
-    void setRouteAttributes_impl(List<String> routeCategories, MediaPlayerInterface player);
+    void setRouteAttributes_impl(List<String> routeCategories, MediaPlayerBase player);
     // TODO: remove setRouteAttributes_impl with MediaSession.Callback once MediaSession2 is ready.
     void setRouteAttributes_impl(List<String> routeCategories, MediaSession.Callback sessionPlayer);
     void setVideoPath_impl(String path);
@@ -70,12 +75,10 @@ public interface VideoView2Provider extends ViewGroupProvider {
     int getViewType_impl();
     void setCustomActions_impl(List<PlaybackState.CustomAction> actionList,
             Executor executor, VideoView2.OnCustomActionListener listener);
-    void setOnPreparedListener_impl(Executor executor, VideoView2.OnPreparedListener l);
-    void setOnCompletionListener_impl(Executor executor, VideoView2.OnCompletionListener l);
-    void setOnErrorListener_impl(Executor executor, VideoView2.OnErrorListener l);
-    void setOnInfoListener_impl(Executor executor, VideoView2.OnInfoListener l);
-    void setOnViewTypeChangedListener_impl(
-            Executor executor, VideoView2.OnViewTypeChangedListener l);
-    void setFullScreenRequestListener_impl(
-            Executor executor, VideoView2.OnFullScreenRequestListener l);
+    /**
+     * @hide
+     */
+    @VisibleForTesting
+    void setOnViewTypeChangedListener_impl(VideoView2.OnViewTypeChangedListener l);
+    void setFullScreenRequestListener_impl(VideoView2.OnFullScreenRequestListener l);
 }

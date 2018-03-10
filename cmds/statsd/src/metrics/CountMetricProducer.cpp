@@ -21,7 +21,6 @@
 #include "guardrail/StatsdStats.h"
 #include "stats_util.h"
 #include "stats_log_util.h"
-#include "dimension.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -45,8 +44,6 @@ namespace statsd {
 
 // for StatsLogReport
 const int FIELD_ID_ID = 1;
-const int FIELD_ID_START_REPORT_NANOS = 2;
-const int FIELD_ID_END_REPORT_NANOS = 3;
 const int FIELD_ID_COUNT_METRICS = 5;
 // for CountMetricDataWrapper
 const int FIELD_ID_DATA = 1;
@@ -55,8 +52,8 @@ const int FIELD_ID_DIMENSION_IN_WHAT = 1;
 const int FIELD_ID_DIMENSION_IN_CONDITION = 2;
 const int FIELD_ID_BUCKET_INFO = 3;
 // for CountBucketInfo
-const int FIELD_ID_START_BUCKET_NANOS = 1;
-const int FIELD_ID_END_BUCKET_NANOS = 2;
+const int FIELD_ID_START_BUCKET_ELAPSED_NANOS = 1;
+const int FIELD_ID_END_BUCKET_ELAPSED_NANOS = 2;
 const int FIELD_ID_COUNT = 3;
 
 CountMetricProducer::CountMetricProducer(const ConfigKey& key, const CountMetric& metric,
@@ -66,21 +63,32 @@ CountMetricProducer::CountMetricProducer(const ConfigKey& key, const CountMetric
     : MetricProducer(metric.id(), key, startTimeNs, conditionIndex, wizard) {
     // TODO: evaluate initial conditions. and set mConditionMet.
     if (metric.has_bucket()) {
-        mBucketSizeNs = TimeUnitToBucketSizeInMillis(metric.bucket()) * 1000000;
+        mBucketSizeNs =
+                TimeUnitToBucketSizeInMillisGuardrailed(key.GetUid(), metric.bucket()) * 1000000;
     } else {
         mBucketSizeNs = LLONG_MAX;
     }
 
-    // TODO: use UidMap if uid->pkg_name is required
-    mDimensionsInWhat = metric.dimensions_in_what();
-    mDimensionsInCondition = metric.dimensions_in_condition();
+    if (metric.has_dimensions_in_what()) {
+        translateFieldMatcher(metric.dimensions_in_what(), &mDimensionsInWhat);
+    }
+
+    if (metric.has_dimensions_in_condition()) {
+        translateFieldMatcher(metric.dimensions_in_condition(), &mDimensionsInCondition);
+    }
 
     if (metric.links().size() > 0) {
-        mConditionLinks.insert(mConditionLinks.begin(), metric.links().begin(),
-                               metric.links().end());
+        for (const auto& link : metric.links()) {
+            Metric2Condition mc;
+            mc.conditionId = link.condition();
+            translateFieldMatcher(link.fields_in_what(), &mc.metricFields);
+            translateFieldMatcher(link.fields_in_condition(), &mc.conditionFields);
+            mMetric2ConditionLinks.push_back(mc);
+        }
+        mConditionSliced = true;
     }
-    mConditionSliced = (metric.links().size() > 0)||
-        (mDimensionsInCondition.has_field() && mDimensionsInCondition.child_size() > 0);
+
+    mConditionSliced = (metric.links().size() > 0) || (mDimensionsInCondition.size() > 0);
 
     VLOG("metric %lld created. bucket size %lld start_time: %lld", (long long)metric.id(),
          (long long)mBucketSizeNs, (long long)mStartTimeNs);
@@ -94,39 +102,14 @@ void CountMetricProducer::onSlicedConditionMayChangeLocked(const uint64_t eventT
     VLOG("Metric %lld onSlicedConditionMayChange", (long long)mMetricId);
 }
 
-void CountMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs, StatsLogReport* report) {
-    flushIfNeededLocked(dumpTimeNs);
-    report->set_metric_id(mMetricId);
-    report->set_start_report_nanos(mStartTimeNs);
-
-    auto count_metrics = report->mutable_count_metrics();
-    for (const auto& counter : mPastBuckets) {
-        CountMetricData* metricData = count_metrics->add_data();
-        *metricData->mutable_dimensions_in_what() =
-            counter.first.getDimensionKeyInWhat().getDimensionsValue();
-        *metricData->mutable_dimensions_in_condition() =
-            counter.first.getDimensionKeyInCondition().getDimensionsValue();
-        for (const auto& bucket : counter.second) {
-            CountBucketInfo* bucketInfo = metricData->add_bucket_info();
-            bucketInfo->set_start_bucket_nanos(bucket.mBucketStartNs);
-            bucketInfo->set_end_bucket_nanos(bucket.mBucketEndNs);
-            bucketInfo->set_count(bucket.mCount);
-        }
-    }
-}
-
 void CountMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
                                              ProtoOutputStream* protoOutput) {
     flushIfNeededLocked(dumpTimeNs);
     if (mPastBuckets.empty()) {
         return;
     }
-
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)mMetricId);
-    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_START_REPORT_NANOS, (long long)mStartTimeNs);
     long long protoToken = protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_ID_COUNT_METRICS);
-
-    VLOG("metric %lld dump report now...",(long long)mMetricId);
 
     for (const auto& counter : mPastBuckets) {
         const MetricDimensionKey& dimensionKey = counter.first;
@@ -138,25 +121,24 @@ void CountMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
         // First fill dimension.
         long long dimensionInWhatToken = protoOutput->start(
                 FIELD_TYPE_MESSAGE | FIELD_ID_DIMENSION_IN_WHAT);
-        writeDimensionsValueProtoToStream(
-            dimensionKey.getDimensionKeyInWhat().getDimensionsValue(), protoOutput);
+        writeDimensionToProto(dimensionKey.getDimensionKeyInWhat(), protoOutput);
         protoOutput->end(dimensionInWhatToken);
 
         if (dimensionKey.hasDimensionKeyInCondition()) {
             long long dimensionInConditionToken = protoOutput->start(
                     FIELD_TYPE_MESSAGE | FIELD_ID_DIMENSION_IN_CONDITION);
-            writeDimensionsValueProtoToStream(
-                dimensionKey.getDimensionKeyInCondition().getDimensionsValue(), protoOutput);
+            writeDimensionToProto(dimensionKey.getDimensionKeyInCondition(), protoOutput);
             protoOutput->end(dimensionInConditionToken);
         }
 
         // Then fill bucket_info (CountBucketInfo).
+
         for (const auto& bucket : counter.second) {
             long long bucketInfoToken = protoOutput->start(
                     FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_BUCKET_INFO);
-            protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_START_BUCKET_NANOS,
+            protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_START_BUCKET_ELAPSED_NANOS,
                                (long long)bucket.mBucketStartNs);
-            protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_END_BUCKET_NANOS,
+            protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_END_BUCKET_ELAPSED_NANOS,
                                (long long)bucket.mBucketEndNs);
             protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_COUNT, (long long)bucket.mCount);
             protoOutput->end(bucketInfoToken);
@@ -167,10 +149,8 @@ void CountMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
     }
 
     protoOutput->end(protoToken);
-    protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_END_REPORT_NANOS, (long long)dumpTimeNs);
 
     mPastBuckets.clear();
-    mStartTimeNs = mCurrentBucketStartTimeNs;
 
     // TODO: Clear mDimensionKeyMap once the report is dumped.
 }
@@ -205,8 +185,7 @@ void CountMetricProducer::onMatchedLogEventInternalLocked(
         const size_t matcherIndex, const MetricDimensionKey& eventKey,
         const ConditionKey& conditionKey, bool condition,
         const LogEvent& event) {
-    uint64_t eventTimeNs = event.GetTimestampNs();
-
+    uint64_t eventTimeNs = event.GetElapsedTimestampNs();
     flushIfNeededLocked(eventTimeNs);
 
     if (condition == false) {
@@ -214,13 +193,11 @@ void CountMetricProducer::onMatchedLogEventInternalLocked(
     }
 
     auto it = mCurrentSlicedCounter->find(eventKey);
-
     if (it == mCurrentSlicedCounter->end()) {
         // ===========GuardRail==============
         if (hitGuardRailLocked(eventKey)) {
             return;
         }
-
         // create a counter for the new key
         (*mCurrentSlicedCounter)[eventKey] = 1;
     } else {
@@ -228,10 +205,14 @@ void CountMetricProducer::onMatchedLogEventInternalLocked(
         auto& count = it->second;
         count++;
     }
-
     for (auto& tracker : mAnomalyTrackers) {
+        int64_t countWholeBucket = mCurrentSlicedCounter->find(eventKey)->second;
+        auto prev = mCurrentFullCounters->find(eventKey);
+        if (prev != mCurrentFullCounters->end()) {
+            countWholeBucket += prev->second;
+        }
         tracker->detectAndDeclareAnomaly(eventTimeNs, mCurrentBucketNum, eventKey,
-                                         mCurrentSlicedCounter->find(eventKey)->second);
+                                         countWholeBucket);
     }
 
     VLOG("metric %lld %s->%lld", (long long)mMetricId, eventKey.c_str(),
@@ -241,33 +222,65 @@ void CountMetricProducer::onMatchedLogEventInternalLocked(
 // When a new matched event comes in, we check if event falls into the current
 // bucket. If not, flush the old counter to past buckets and initialize the new bucket.
 void CountMetricProducer::flushIfNeededLocked(const uint64_t& eventTimeNs) {
-    if (eventTimeNs < mCurrentBucketStartTimeNs + mBucketSizeNs) {
+    uint64_t currentBucketEndTimeNs = getCurrentBucketEndTimeNs();
+    if (eventTimeNs < currentBucketEndTimeNs) {
         return;
     }
 
+    flushCurrentBucketLocked(eventTimeNs);
+    // Setup the bucket start time and number.
+    uint64_t numBucketsForward = 1 + (eventTimeNs - currentBucketEndTimeNs) / mBucketSizeNs;
+    mCurrentBucketStartTimeNs = currentBucketEndTimeNs + (numBucketsForward - 1) * mBucketSizeNs;
+    mCurrentBucketNum += numBucketsForward;
+    VLOG("metric %lld: new bucket start time: %lld", (long long)mMetricId,
+         (long long)mCurrentBucketStartTimeNs);
+}
+
+void CountMetricProducer::flushCurrentBucketLocked(const uint64_t& eventTimeNs) {
+    uint64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();
     CountBucket info;
     info.mBucketStartNs = mCurrentBucketStartTimeNs;
-    info.mBucketEndNs = mCurrentBucketStartTimeNs + mBucketSizeNs;
+    if (eventTimeNs < fullBucketEndTimeNs) {
+        info.mBucketEndNs = eventTimeNs;
+    } else {
+        info.mBucketEndNs = fullBucketEndTimeNs;
+    }
     info.mBucketNum = mCurrentBucketNum;
     for (const auto& counter : *mCurrentSlicedCounter) {
         info.mCount = counter.second;
         auto& bucketList = mPastBuckets[counter.first];
         bucketList.push_back(info);
-        VLOG("metric %lld, dump key value: %s -> %lld",
-            (long long)mMetricId, counter.first.c_str(), (long long)counter.second);
+        VLOG("metric %lld, dump key value: %s -> %lld", (long long)mMetricId, counter.first.c_str(),
+             (long long)counter.second);
     }
 
-    for (auto& tracker : mAnomalyTrackers) {
-        tracker->addPastBucket(mCurrentSlicedCounter, mCurrentBucketNum);
+    // If we have finished a full bucket, then send this to anomaly tracker.
+    if (eventTimeNs > fullBucketEndTimeNs) {
+        // Accumulate partial buckets with current value and then send to anomaly tracker.
+        if (mCurrentFullCounters->size() > 0) {
+            for (const auto& keyValuePair : *mCurrentSlicedCounter) {
+                (*mCurrentFullCounters)[keyValuePair.first] += keyValuePair.second;
+            }
+            for (auto& tracker : mAnomalyTrackers) {
+                tracker->addPastBucket(mCurrentFullCounters, mCurrentBucketNum);
+            }
+            mCurrentFullCounters = std::make_shared<DimToValMap>();
+        } else {
+            // Skip aggregating the partial buckets since there's no previous partial bucket.
+            for (auto& tracker : mAnomalyTrackers) {
+                tracker->addPastBucket(mCurrentSlicedCounter, mCurrentBucketNum);
+            }
+        }
+    } else {
+        // Accumulate partial bucket.
+        for (const auto& keyValuePair : *mCurrentSlicedCounter) {
+            (*mCurrentFullCounters)[keyValuePair.first] += keyValuePair.second;
+        }
     }
 
-    // Reset counters (do not clear, since the old one is still referenced in mAnomalyTrackers).
+    // Only resets the counters, but doesn't setup the times nor numbers.
+    // (Do not clear since the old one is still referenced in mAnomalyTrackers).
     mCurrentSlicedCounter = std::make_shared<DimToValMap>();
-    uint64_t numBucketsForward = (eventTimeNs - mCurrentBucketStartTimeNs) / mBucketSizeNs;
-    mCurrentBucketStartTimeNs = mCurrentBucketStartTimeNs + numBucketsForward * mBucketSizeNs;
-    mCurrentBucketNum += numBucketsForward;
-    VLOG("metric %lld: new bucket start time: %lld", (long long)mMetricId,
-         (long long)mCurrentBucketStartTimeNs);
 }
 
 // Rough estimate of CountMetricProducer buffer stored. This number will be

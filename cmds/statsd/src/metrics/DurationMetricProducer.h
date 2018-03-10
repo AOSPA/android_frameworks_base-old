@@ -57,7 +57,6 @@ protected:
 private:
     void onDumpReportLocked(const uint64_t dumpTimeNs,
                             android::util::ProtoOutputStream* protoOutput) override;
-    void onDumpReportLocked(const uint64_t dumpTimeNs, StatsLogReport* report) override;
 
     // Internal interface to handle condition change.
     void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
@@ -72,6 +71,8 @@ private:
 
     // Util function to flush the old packet.
     void flushIfNeededLocked(const uint64_t& eventTime);
+
+    void flushCurrentBucketLocked(const uint64_t& eventTimeNs) override;
 
     const DurationMetric_AggregationType mAggregationType;
 
@@ -88,7 +89,7 @@ private:
     const bool mNested;
 
     // The dimension from the atom predicate. e.g., uid, wakelock name.
-    const FieldMatcher mInternalDimensions;
+    vector<Matcher> mInternalDimensions;
 
     // Save the past buckets and we can clear when the StatsLogReport is dumped.
     // TODO: Add a lock to mPastBuckets.
@@ -112,6 +113,10 @@ private:
 
     FRIEND_TEST(DurationMetricTrackerTest, TestNoCondition);
     FRIEND_TEST(DurationMetricTrackerTest, TestNonSlicedCondition);
+    FRIEND_TEST(DurationMetricTrackerTest, TestSumDurationWithUpgrade);
+    FRIEND_TEST(DurationMetricTrackerTest, TestSumDurationWithUpgradeInFollowingBucket);
+    FRIEND_TEST(DurationMetricTrackerTest, TestMaxDurationWithUpgrade);
+    FRIEND_TEST(DurationMetricTrackerTest, TestMaxDurationWithUpgradeInNextBucket);
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicates);
 };
 

@@ -16,53 +16,37 @@
 
 package com.android.server.job.controllers;
 
-import android.content.Context;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.util.Log;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
-import com.android.server.ForceAppStandbyTracker;
-import com.android.server.ForceAppStandbyTracker.Listener;
+import com.android.internal.util.IndentingPrintWriter;
+import com.android.internal.util.Preconditions;
+import com.android.server.AppStateTracker;
+import com.android.server.AppStateTracker.Listener;
+import com.android.server.LocalServices;
 import com.android.server.job.JobSchedulerService;
-import com.android.server.job.JobStore;
 import com.android.server.job.StateControllerProto;
 import com.android.server.job.StateControllerProto.BackgroundJobsController.TrackedJob;
 
-import java.io.PrintWriter;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 public final class BackgroundJobsController extends StateController {
+    private static final String TAG = "JobScheduler.Background";
+    private static final boolean DEBUG = JobSchedulerService.DEBUG
+            || Log.isLoggable(TAG, Log.DEBUG);
 
-    private static final String LOG_TAG = "BackgroundJobsController";
-    private static final boolean DEBUG = JobSchedulerService.DEBUG;
+    private final AppStateTracker mAppStateTracker;
 
-    // Singleton factory
-    private static final Object sCreationLock = new Object();
-    private static volatile BackgroundJobsController sController;
+    public BackgroundJobsController(JobSchedulerService service) {
+        super(service);
 
-    private final JobSchedulerService mJobSchedulerService;
-
-    private final ForceAppStandbyTracker mForceAppStandbyTracker;
-
-
-    public static BackgroundJobsController get(JobSchedulerService service) {
-        synchronized (sCreationLock) {
-            if (sController == null) {
-                sController = new BackgroundJobsController(service, service.getContext(),
-                        service.getLock());
-            }
-            return sController;
-        }
-    }
-
-    private BackgroundJobsController(JobSchedulerService service, Context context, Object lock) {
-        super(service, context, lock);
-        mJobSchedulerService = service;
-
-        mForceAppStandbyTracker = ForceAppStandbyTracker.getInstance(context);
-
-        mForceAppStandbyTracker.addListener(mForceAppStandbyListener);
-        mForceAppStandbyTracker.start();
+        mAppStateTracker = Preconditions.checkNotNull(
+                LocalServices.getService(AppStateTracker.class));
+        mAppStateTracker.addListener(mForceAppStandbyListener);
     }
 
     @Override
@@ -76,32 +60,28 @@ public final class BackgroundJobsController extends StateController {
     }
 
     @Override
-    public void dumpControllerStateLocked(final PrintWriter pw, final int filterUid) {
-        pw.println("BackgroundJobsController");
+    public void dumpControllerStateLocked(final IndentingPrintWriter pw,
+            final Predicate<JobStatus> predicate) {
+        mAppStateTracker.dump(pw);
+        pw.println();
 
-        mForceAppStandbyTracker.dump(pw, "");
-
-        pw.println("Job state:");
-        mJobSchedulerService.getJobStore().forEachJob((jobStatus) -> {
-            if (!jobStatus.shouldDump(filterUid)) {
-                return;
-            }
+        mService.getJobStore().forEachJob(predicate, (jobStatus) -> {
             final int uid = jobStatus.getSourceUid();
             final String sourcePkg = jobStatus.getSourcePackageName();
-            pw.print("  #");
+            pw.print("#");
             jobStatus.printUniqueId(pw);
             pw.print(" from ");
             UserHandle.formatUid(pw, uid);
-            pw.print(mForceAppStandbyTracker.isUidActive(uid) ? " active" : " idle");
-            if (mForceAppStandbyTracker.isUidPowerSaveWhitelisted(uid) ||
-                    mForceAppStandbyTracker.isUidTempPowerSaveWhitelisted(uid)) {
+            pw.print(mAppStateTracker.isUidActive(uid) ? " active" : " idle");
+            if (mAppStateTracker.isUidPowerSaveWhitelisted(uid) ||
+                    mAppStateTracker.isUidTempPowerSaveWhitelisted(uid)) {
                 pw.print(", whitelisted");
             }
             pw.print(": ");
             pw.print(sourcePkg);
 
             pw.print(" [RUN_ANY_IN_BACKGROUND ");
-            pw.print(mForceAppStandbyTracker.isRunAnyInBackgroundAppOpsAllowed(uid, sourcePkg)
+            pw.print(mAppStateTracker.isRunAnyInBackgroundAppOpsAllowed(uid, sourcePkg)
                     ? "allowed]" : "disallowed]");
 
             if ((jobStatus.satisfiedConstraints
@@ -114,17 +94,15 @@ public final class BackgroundJobsController extends StateController {
     }
 
     @Override
-    public void dumpControllerStateLocked(ProtoOutputStream proto, long fieldId, int filterUid) {
+    public void dumpControllerStateLocked(ProtoOutputStream proto, long fieldId,
+            Predicate<JobStatus> predicate) {
         final long token = proto.start(fieldId);
         final long mToken = proto.start(StateControllerProto.BACKGROUND);
 
-        mForceAppStandbyTracker.dumpProto(proto,
+        mAppStateTracker.dumpProto(proto,
                 StateControllerProto.BackgroundJobsController.FORCE_APP_STANDBY_TRACKER);
 
-        mJobSchedulerService.getJobStore().forEachJob((jobStatus) -> {
-            if (!jobStatus.shouldDump(filterUid)) {
-                return;
-            }
+        mService.getJobStore().forEachJob(predicate, (jobStatus) -> {
             final long jsToken =
                     proto.start(StateControllerProto.BackgroundJobsController.TRACKED_JOBS);
 
@@ -136,14 +114,14 @@ public final class BackgroundJobsController extends StateController {
             proto.write(TrackedJob.SOURCE_PACKAGE_NAME, sourcePkg);
 
             proto.write(TrackedJob.IS_IN_FOREGROUND,
-                    mForceAppStandbyTracker.isUidActive(sourceUid));
+                    mAppStateTracker.isUidActive(sourceUid));
             proto.write(TrackedJob.IS_WHITELISTED,
-                    mForceAppStandbyTracker.isUidPowerSaveWhitelisted(sourceUid) ||
-                    mForceAppStandbyTracker.isUidTempPowerSaveWhitelisted(sourceUid));
+                    mAppStateTracker.isUidPowerSaveWhitelisted(sourceUid) ||
+                    mAppStateTracker.isUidTempPowerSaveWhitelisted(sourceUid));
 
             proto.write(
                     TrackedJob.CAN_RUN_ANY_IN_BACKGROUND,
-                    mForceAppStandbyTracker.isRunAnyInBackgroundAppOpsAllowed(
+                    mAppStateTracker.isRunAnyInBackgroundAppOpsAllowed(
                             sourceUid, sourcePkg));
 
             proto.write(
@@ -175,11 +153,11 @@ public final class BackgroundJobsController extends StateController {
 
         final long start = DEBUG ? SystemClock.elapsedRealtimeNanos() : 0;
 
-        mJobSchedulerService.getJobStore().forEachJob(updateTrackedJobs);
+        mService.getJobStore().forEachJob(updateTrackedJobs);
 
         final long time = DEBUG ? (SystemClock.elapsedRealtimeNanos() - start) : 0;
         if (DEBUG) {
-            Slog.d(LOG_TAG, String.format(
+            Slog.d(TAG, String.format(
                     "Job status updated: %d/%d checked/total jobs, %d us",
                     updateTrackedJobs.mCheckedCount,
                     updateTrackedJobs.mTotalCount,
@@ -197,14 +175,14 @@ public final class BackgroundJobsController extends StateController {
         final int uid = jobStatus.getSourceUid();
         final String packageName = jobStatus.getSourcePackageName();
 
-        final boolean canRun = !mForceAppStandbyTracker.areJobsRestricted(uid, packageName,
+        final boolean canRun = !mAppStateTracker.areJobsRestricted(uid, packageName,
                 (jobStatus.getInternalFlags() & JobStatus.INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION)
                         != 0);
 
         return jobStatus.setBackgroundNotRestrictedConstraintSatisfied(canRun);
     }
 
-    private final class UpdateJobFunctor implements JobStore.JobStatusFunctor {
+    private final class UpdateJobFunctor implements Consumer<JobStatus> {
         private final int mFilterUid;
 
         boolean mChanged = false;
@@ -216,7 +194,7 @@ public final class BackgroundJobsController extends StateController {
         }
 
         @Override
-        public void process(JobStatus jobStatus) {
+        public void accept(JobStatus jobStatus) {
             mTotalCount++;
             if ((mFilterUid > 0) && (mFilterUid != jobStatus.getSourceUid())) {
                 return;

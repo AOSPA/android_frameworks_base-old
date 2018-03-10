@@ -156,14 +156,17 @@
 
     <color name="zen_introduction">#ffffffff</color>
 
-
-    <color name="smart_reply_button_text">#ff4285f4</color><!-- blue 500 -->
-    <color name="smart_reply_button_background">#fff7f7f7</color>
+    <color name="smart_reply_button_text">#de000000</color> <!-- 87% black -->
+    <color name="smart_reply_button_background">#fff2f2f2</color>
 
     <!-- Fingerprint dialog colors -->
     <color name="fingerprint_dialog_bg_color">#f4ffffff</color> <!-- 96% white -->
-    <color name="fingerprint_dialog_text_color">#ff424242</color> <!-- gray 800-->
+    <color name="fingerprint_dialog_text_dark_color">#ff212121</color>
+    <color name="fingerprint_dialog_text_light_color">#ff757575</color>
     <color name="fingerprint_dialog_dim_color">#80000000</color> <!-- 50% black -->
-    <color name="fingerprint_error_message_color">#ff5722</color>
+    <color name="fingerprint_dialog_error_message_color">#ffff5722</color>
+    <color name="fingerprint_dialog_fingerprint_color">#ff009688</color>
 
+    <!-- Logout button -->
+    <color name="logout_button_bg_color">#ccffffff</color>
 </resources>

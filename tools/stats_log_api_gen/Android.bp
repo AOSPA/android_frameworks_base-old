@@ -62,10 +62,14 @@ cc_test_host {
 
     shared_libs: [
         "libstats_proto_host",
+        "libprotobuf-cpp-full",
     ],
 
     proto: {
         type: "full",
+        include_dirs: [
+            "external/protobuf/src",
+        ],
     },
 }
 
@@ -102,6 +106,7 @@ cc_library_shared {
     export_generated_headers: ["statslog.h"],
     shared_libs: [
         "liblog",
+        "libutils",
     ],
 }
 

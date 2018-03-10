@@ -362,6 +362,13 @@ public class PackageInfo implements Parcelable {
      */
     public String overlayTarget;
 
+    /**
+     * The overlay category, if any, of this package
+     *
+     * @hide
+     */
+    public String overlayCategory;
+
     /** @hide */
     public int overlayPriority;
 
@@ -464,10 +471,23 @@ public class PackageInfo implements Parcelable {
         dest.writeString(restrictedAccountType);
         dest.writeString(requiredAccountType);
         dest.writeString(overlayTarget);
+        dest.writeString(overlayCategory);
         dest.writeInt(overlayPriority);
         dest.writeBoolean(mOverlayIsStatic);
         dest.writeInt(compileSdkVersion);
         dest.writeString(compileSdkVersionCodename);
+        writeSigningCertificateHistoryToParcel(dest, parcelableFlags);
+    }
+
+    private void writeSigningCertificateHistoryToParcel(Parcel dest, int parcelableFlags) {
+        if (signingCertificateHistory != null) {
+            dest.writeInt(signingCertificateHistory.length);
+            for (int i = 0; i < signingCertificateHistory.length; i++) {
+                dest.writeTypedArray(signingCertificateHistory[i], parcelableFlags);
+            }
+        } else {
+            dest.writeInt(-1);
+        }
     }
 
     public static final Parcelable.Creator<PackageInfo> CREATOR
@@ -519,10 +539,12 @@ public class PackageInfo implements Parcelable {
         restrictedAccountType = source.readString();
         requiredAccountType = source.readString();
         overlayTarget = source.readString();
+        overlayCategory = source.readString();
         overlayPriority = source.readInt();
         mOverlayIsStatic = source.readBoolean();
         compileSdkVersion = source.readInt();
         compileSdkVersionCodename = source.readString();
+        readSigningCertificateHistoryFromParcel(source);
 
         // The component lists were flattened with the redundant ApplicationInfo
         // instances omitted.  Distribute the canonical one here as appropriate.
@@ -531,6 +553,16 @@ public class PackageInfo implements Parcelable {
             propagateApplicationInfo(applicationInfo, receivers);
             propagateApplicationInfo(applicationInfo, services);
             propagateApplicationInfo(applicationInfo, providers);
+        }
+    }
+
+    private void readSigningCertificateHistoryFromParcel(Parcel source) {
+        int len = source.readInt();
+        if (len != -1) {
+            signingCertificateHistory = new Signature[len][];
+            for (int i = 0; i < len; i++) {
+                signingCertificateHistory[i] = source.createTypedArray(Signature.CREATOR);
+            }
         }
     }
 

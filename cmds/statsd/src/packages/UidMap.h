@@ -18,7 +18,7 @@
 
 #include "config/ConfigKey.h"
 #include "config/ConfigListener.h"
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
+#include "frameworks/base/cmds/statsd/src/stats_log_common.pb.h"
 #include "packages/PackageInfoListener.h"
 
 #include <binder/IResultReceiver.h>
@@ -91,7 +91,7 @@ public:
     void removeIsolatedUid(int isolatedUid, int parentUid);
 
     // Returns the host uid if it exists. Otherwise, returns the same uid that was passed-in.
-    int getHostUidOrSelf(int uid) const;
+    virtual int getHostUidOrSelf(int uid) const;
 
     // Gets the output. If every config key has received the output, then the output is cleared.
     UidMapping getOutput(const ConfigKey& key);

@@ -128,27 +128,27 @@
      <!-- Bluetooth settings.  Message when connecting to a device -->
     <string name="bluetooth_connecting">Connecting\u2026</string>
     <!-- Bluetooth settings.  Message when connected to a device. [CHAR LIMIT=40] -->
-    <string name="bluetooth_connected">Connected</string>
+    <string name="bluetooth_connected">Connected<xliff:g id="active_device">%1$s</xliff:g></string>
     <!--Bluetooth settings screen, summary text under individual Bluetooth devices when pairing -->
     <string name="bluetooth_pairing">Pairing\u2026</string>
 
     <!-- Bluetooth settings.  Message when connected to a device, except for phone audio. [CHAR LIMIT=40] -->
-    <string name="bluetooth_connected_no_headset">Connected (no phone)</string>
+    <string name="bluetooth_connected_no_headset">Connected (no phone)<xliff:g id="active_device">%1$s</xliff:g></string>
     <!-- Bluetooth settings.  Message when connected to a device, except for media audio. [CHAR LIMIT=40] -->
-    <string name="bluetooth_connected_no_a2dp">Connected (no media)</string>
+    <string name="bluetooth_connected_no_a2dp">Connected (no media)<xliff:g id="active_device">%1$s</xliff:g></string>
     <!-- Bluetooth settings.  Message when connected to a device, except for map. [CHAR LIMIT=40] -->
-    <string name="bluetooth_connected_no_map">Connected (no message access)</string>
+    <string name="bluetooth_connected_no_map">Connected (no message access)<xliff:g id="active_device">%1$s</xliff:g></string>
     <!-- Bluetooth settings.  Message when connected to a device, except for phone/media audio. [CHAR LIMIT=40] -->
-    <string name="bluetooth_connected_no_headset_no_a2dp">Connected (no phone or media)</string>
+    <string name="bluetooth_connected_no_headset_no_a2dp">Connected (no phone or media)<xliff:g id="active_device">%1$s</xliff:g></string>
 
     <!-- Bluetooth settings.  Message when connected to a device, showing remote device battery level. [CHAR LIMIT=NONE] -->
-    <string name="bluetooth_connected_battery_level">Connected, battery <xliff:g id="battery_level_as_percentage">%1$s</xliff:g></string>
+    <string name="bluetooth_connected_battery_level">Connected, battery <xliff:g id="battery_level_as_percentage">%1$s</xliff:g><xliff:g id="active_device">%2$s</xliff:g></string>
     <!-- Bluetooth settings.  Message when connected to a device, except for phone audio, showing remote device battery level. [CHAR LIMIT=NONE] -->
-    <string name="bluetooth_connected_no_headset_battery_level">Connected (no phone), battery <xliff:g id="battery_level_as_percentage">%1$s</xliff:g></string>
+    <string name="bluetooth_connected_no_headset_battery_level">Connected (no phone), battery <xliff:g id="battery_level_as_percentage">%1$s</xliff:g><xliff:g id="active_device">%2$s</xliff:g></string>
     <!-- Bluetooth settings.  Message when connected to a device, except for media audio, showing remote device battery level. [CHAR LIMIT=NONE] -->
-    <string name="bluetooth_connected_no_a2dp_battery_level">Connected (no media), battery <xliff:g id="battery_level_as_percentage">%1$s</xliff:g></string>
+    <string name="bluetooth_connected_no_a2dp_battery_level">Connected (no media), battery <xliff:g id="battery_level_as_percentage">%1$s</xliff:g><xliff:g id="active_device">%2$s</xliff:g></string>
     <!-- Bluetooth settings.  Message when connected to a device, except for phone/media audio, showing remote device battery level. [CHAR LIMIT=NONE] -->
-    <string name="bluetooth_connected_no_headset_no_a2dp_battery_level">Connected (no phone or media), battery <xliff:g id="battery_level_as_percentage">%1$s</xliff:g></string>
+    <string name="bluetooth_connected_no_headset_no_a2dp_battery_level">Connected (no phone or media), battery <xliff:g id="battery_level_as_percentage">%1$s</xliff:g><xliff:g id="active_device">%2$s</xliff:g></string>
 
     <!-- Bluetooth settings.  The user-visible string that is used whenever referring to the A2DP profile. -->
     <string name="bluetooth_profile_a2dp">Media audio</string>
@@ -176,6 +176,11 @@
 
     <!-- Bluetooth settings. Similar to bluetooth_profile_a2dp_high_quality, but used when the device supports high quality audio but we don't know which codec that will be used. -->
     <string name="bluetooth_profile_a2dp_high_quality_unknown_codec">HD audio</string>
+
+    <!-- Bluetooth settings.  The user-visible string that is used whenever referring to the Hearing Aid profile. -->
+    <string name="bluetooth_profile_hearing_aid">Hearing Aid</string>
+    <!-- Bluetooth settings.  Connection options screen.  The summary for the Hearing Aid checkbox preference when Hearing Aid is connected. -->
+    <string name="bluetooth_hearing_aid_profile_summary_connected">Connected to Hearing Aid</string>
 
     <!-- Bluetooth settings.  Connection options screen.  The summary for the A2DP checkbox preference when A2DP is connected. -->
     <string name="bluetooth_a2dp_profile_summary_connected">Connected to media audio</string>
@@ -214,6 +219,8 @@
          for the HID checkbox preference that describes how checking it
          will set the HID profile as preferred. -->
     <string name="bluetooth_hid_profile_summary_use_for">Use for input</string>
+    <!-- Bluetooth settings.  Connection options screen.  The summary for the Hearing Aid checkbox preference that describes how checking it will set the Hearing Aid profile as preferred. -->
+    <string name="bluetooth_hearing_aid_profile_summary_use_for">Use for Hearing Aid</string>
 
     <!-- Button text for accepting an incoming pairing request. [CHAR LIMIT=20] -->
     <string name="bluetooth_pairing_accept">Pair</string>
@@ -805,12 +812,16 @@
         <item>Colors optimized for digital content</item>
     </string-array>
 
-    <!-- Settings item title for inactive apps [CHAR LIMIT=35] -->
-    <string name="inactive_apps_title">Inactive apps</string>
+    <!-- Settings item title for apps in standby (limiting background activity) [CHAR LIMIT=35] -->
+    <string name="inactive_apps_title">Standby apps</string>
     <!-- Settings item summary for inactive app [CHAR LIMIT=100] -->
     <string name="inactive_app_inactive_summary">Inactive. Tap to toggle.</string>
     <!-- Settings item summary for active app [CHAR LIMIT=100] -->
     <string name="inactive_app_active_summary">Active. Tap to toggle.</string>
+
+    <!-- Settings item summary for standby bucket value of an app. [CHAR LIMIT=100] -->
+    <string name="standby_bucket_summary">App standby
+        state:<xliff:g id="bucket"> %s</xliff:g></string>
 
     <!-- Services settings screen, setting option name for the user to go to the screen to view running services -->
     <string name="runningservices_settings_title">Running services</string>
@@ -865,30 +876,49 @@
     <!-- Summary shown for color space correction preference when its value is overridden by another preference [CHAR LIMIT=35] -->
     <string name="daltonizer_type_overridden">Overridden by <xliff:g id="title" example="Simulate color space">%1$s</xliff:g></string>
 
-    <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery discharging -->
-    <string name="power_remaining_duration_only">About <xliff:g id="time">^1</xliff:g> left</string>
-    <!-- [CHAR_LIMIT=60] Label for estimated remaining duration of battery discharging -->
-    <string name="power_remaining_duration_only_enhanced">About <xliff:g id="time">^1</xliff:g> left based on your usage</string>
-    <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery charging -->
-    <string name="power_remaining_charging_duration_only"><xliff:g id="time">^1</xliff:g> left until fully charged</string>
+  <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery discharging -->
+  <string name="power_remaining_duration_only">About <xliff:g id="time">%1$s</xliff:g> left</string>
+  <!-- [CHAR_LIMIT=60] Label for estimated remaining duration of battery discharging -->
+  <string name="power_remaining_duration_only_enhanced">About <xliff:g id="time">%1$s</xliff:g> left based on your usage</string>
+  <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery charging -->
+  <string name="power_remaining_charging_duration_only"><xliff:g id="time">%1$s</xliff:g> left until fully charged</string>
 
-    <!-- [CHAR_LIMIT=40] Short label for estimated remaining duration of battery charging/discharging -->
-    <string name="power_remaining_duration_only_short"><xliff:g id="time">^1</xliff:g> left</string>
-    <!-- [CHAR_LIMIT=60] Short label for estimated remaining duration of battery charging/discharging -->
-    <string name="power_remaining_duration_only_short_enhanced"><xliff:g id="time">^1</xliff:g> left based on your usage</string>
+  <!-- [CHAR_LIMIT=40] Short label for estimated remaining duration of battery charging/discharging -->
+  <string name="power_remaining_duration_only_short"><xliff:g id="time">%1$s</xliff:g> left</string>
 
-    <!-- [CHAR_LIMIT=40] Label for battery level chart when discharging with duration -->
-    <string name="power_discharging_duration"><xliff:g id="level">^1</xliff:g> - about <xliff:g id="time">^2</xliff:g> left</string>
-    <!-- [CHAR_LIMIT=60] Label for battery level chart when discharging with duration and using enhanced estimate -->
-    <string name="power_discharging_duration_enhanced"><xliff:g id="level">^1</xliff:g> - about <xliff:g id="time">^2</xliff:g> left based on your usage</string>
+  <!-- [CHAR_LIMIT=60] label for estimated remaining duration of battery when under a certain amount -->
+  <string name="power_remaining_less_than_duration_only">Less than <xliff:g id="threshold">%1$s</xliff:g> remaining</string>
+  <!-- [CHAR_LIMIT=60] label for estimated remaining duration of battery when under a certain amount with the percentage -->
+  <string name="power_remaining_less_than_duration"><xliff:g id="level">%1$s</xliff:g> - Less than <xliff:g id="threshold">%2$s</xliff:g> remaining</string>
 
-    <!-- [CHAR_LIMIT=40] Label for battery level chart when discharging with duration -->
-    <string name="power_discharging_duration_short"><xliff:g id="level">^1</xliff:g> - <xliff:g id="time">^2</xliff:g> left</string>
+  <!-- Used to let users know that they have more than some amount of battery life remaining with percentage. ex: 75% - more than 1 day remaining [CHAR LIMIT = 80] -->
+  <string name="power_remaining_more_than_subtext"><xliff:g id="level">%1$s</xliff:g>more than <xliff:g id="time_remaining">%2$s</xliff:g> remaining</string>
+  <!-- Used to let users know that they have more than some amount of battery life remaining. ex: more than 1 day remaining [CHAR LIMIT = 40] -->
+  <string name="power_remaining_only_more_than_subtext">more than <xliff:g id="time_remaining">%1$s</xliff:g> remaining</string>
+
+  <!-- [CHAR_LIMIT=50] Short label for imminent shutdown warning of device -->
+  <string name="power_remaining_duration_only_shutdown_imminent" product="default">phone may shutdown soon</string>
+  <!-- [CHAR_LIMIT=50] Short label for imminent shutdown warning of device -->
+  <string name="power_remaining_duration_only_shutdown_imminent" product="tablet">tablet may shutdown soon</string>
+  <!-- [CHAR_LIMIT=50] Short label for imminent shutdown warning of device -->
+  <string name="power_remaining_duration_only_shutdown_imminent" product="device">device may shutdown soon</string>
+
+  <!-- [CHAR_LIMIT=40] Label for battery level chart when discharging with duration -->
+  <string name="power_discharging_duration"><xliff:g id="level">%1$s</xliff:g> - about <xliff:g id="time">%2$s</xliff:g> left</string>
+  <!-- [CHAR_LIMIT=60] Label for battery level chart when discharging with duration and using enhanced estimate -->
+  <string name="power_discharging_duration_enhanced"><xliff:g id="level">%1$s</xliff:g> - about <xliff:g id="time">%2$s</xliff:g> left based on your usage</string>
+
+  <!-- [CHAR_LIMIT=60] Label for battery level chart when shutdown is imminent-->
+  <string name="power_remaining_duration_shutdown_imminent" product="default"><xliff:g id="level">%1$s</xliff:g> - phone may shutdown soon</string>
+  <!-- [CHAR_LIMIT=60] Label for battery level chart when shutdown is imminent-->
+  <string name="power_remaining_duration_shutdown_imminent" product="tablet"><xliff:g id="level">%1$s</xliff:g> - tablet may shutdown soon</string>
+  <!-- [CHAR_LIMIT=60] Label for battery level chart when shutdown is imminent-->
+  <string name="power_remaining_duration_shutdown_imminent" product="device"><xliff:g id="level">%1$s</xliff:g> - device may shutdown soon</string>
 
     <!-- [CHAR_LIMIT=40] Label for battery level chart when charging -->
     <string name="power_charging"><xliff:g id="level">%1$s</xliff:g> - <xliff:g id="state">%2$s</xliff:g></string>
     <!-- [CHAR_LIMIT=40] Label for battery level chart when charging with duration -->
-    <string name="power_charging_duration"><xliff:g id="level">^1</xliff:g> - <xliff:g id="time">^2</xliff:g> until fully charged</string>
+    <string name="power_charging_duration"><xliff:g id="level">%1$s</xliff:g> - <xliff:g id="time">%2$s</xliff:g> until fully charged</string>
 
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="battery_info_status_unknown">Unknown</string>
@@ -1039,5 +1069,13 @@
     <string name="zen_interruption_level_priority">Priority only</string>
     <!-- [CHAR LIMIT=20] Accessibility string for current zen mode and selected exit condition. A template that simply concatenates existing mode string and the current condition description.  -->
     <string name="zen_mode_and_condition"><xliff:g id="zen_mode" example="Priority interruptions only">%1$s</xliff:g>. <xliff:g id="exit_condition" example="For one hour">%2$s</xliff:g></string>
+    <!-- Warning text when an alarm might be silenced by Do Not Disturb [CHAR LIMIT=NONE] -->
+    <string name="zen_alarm_warning_indef">You won\'t hear your next alarm <xliff:g id="when" example="at 7:00 AM">%1$s</xliff:g> unless you turn this off before then</string>
+    <!-- Warning text when an alarm might be silenced by Do Not Disturb due to a time-based condition [CHAR LIMIT=NONE] -->
+    <string name="zen_alarm_warning">You won\'t hear your next alarm <xliff:g id="when" example="at 7:00 AM">%1$s</xliff:g></string>
+    <!-- Alarm template for near alarms [CHAR LIMIT=25] -->
+    <string name="alarm_template">at <xliff:g id="when" example="7:00 AM">%1$s</xliff:g></string>
+    <!-- Alarm template for far in the future alarms [CHAR LIMIT=25] -->
+    <string name="alarm_template_far">on <xliff:g id="when" example="Fri 7:00 AM">%1$s</xliff:g></string>
 
 </resources>

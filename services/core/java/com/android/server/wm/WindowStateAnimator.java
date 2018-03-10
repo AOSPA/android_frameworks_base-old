@@ -211,6 +211,8 @@ class WindowStateAnimator {
 
     private final Rect mTmpSize = new Rect();
 
+    private final SurfaceControl.Transaction mReparentTransaction = new SurfaceControl.Transaction();
+
     WindowStateAnimator(final WindowState win) {
         final WindowManagerService service = win.mService;
 
@@ -371,9 +373,9 @@ class WindowStateAnimator {
                 // child layers need to be reparented to the new surface to make this
                 // transparent to the app.
                 if (mWin.mAppToken == null || mWin.mAppToken.isRelaunching() == false) {
-                    SurfaceControl.openTransaction();
-                    mPendingDestroySurface.reparentChildrenInTransaction(mSurfaceController);
-                    SurfaceControl.closeTransaction();
+                    mReparentTransaction.reparentChildren(mPendingDestroySurface.mSurfaceControl,
+                            mSurfaceController.mSurfaceControl.getHandle())
+                            .apply();
                 }
             }
         }
@@ -587,7 +589,7 @@ class WindowStateAnimator {
                         if (SHOW_TRANSACTIONS || SHOW_SURFACE_ALLOC) {
                             WindowManagerService.logSurface(mWin, "DESTROY PENDING", true);
                         }
-                        mPendingDestroySurface.destroyInTransaction();
+                        mPendingDestroySurface.destroyNotInTransaction();
                     }
                     mPendingDestroySurface = mSurfaceController;
                 }
@@ -624,7 +626,7 @@ class WindowStateAnimator {
                 if (SHOW_TRANSACTIONS || SHOW_SURFACE_ALLOC) {
                     WindowManagerService.logSurface(mWin, "DESTROY PENDING", true);
                 }
-                mPendingDestroySurface.destroyInTransaction();
+                mPendingDestroySurface.destroyNotInTransaction();
                 // Don't hide wallpaper if we're destroying a deferred surface
                 // after a surface mode change.
                 if (!mDestroyPreservedSurfaceUponRedraw) {
@@ -831,11 +833,6 @@ class WindowStateAnimator {
         final WindowState w = mWin;
         final LayoutParams attrs = mWin.getAttrs();
         final Task task = w.getTask();
-
-        // We got resized, so block all updates until we got the new surface.
-        if (w.isResizedWhileNotDragResizing() && !w.isGoneForLayoutLw()) {
-            return;
-        }
 
         mTmpSize.set(w.mShownPosition.x, w.mShownPosition.y, 0, 0);
         calculateSurfaceBounds(w, attrs);
@@ -1104,31 +1101,6 @@ class WindowStateAnimator {
                                 FINISH_LAYOUT_REDO_ANIM);
                     } else {
                         w.setOrientationChanging(false);
-                    }
-                }
-                // We process mTurnOnScreen even for windows which have already
-                // been shown, to handle cases where windows are not necessarily
-                // hidden while the screen is turning off.
-                // TODO(b/63773439): These cases should be eliminated, though we probably still
-                // want to process mTurnOnScreen in this way for clarity.
-                if (mWin.mTurnOnScreen &&
-                        (mWin.mAppToken == null || mWin.mAppToken.canTurnScreenOn())) {
-                    if (DEBUG_VISIBILITY) Slog.v(TAG, "Show surface turning screen on: " + mWin);
-                    mWin.mTurnOnScreen = false;
-
-                    // The window should only turn the screen on once per resume, but
-                    // prepareSurfaceLocked can be called multiple times. Set canTurnScreenOn to
-                    // false so the window doesn't turn the screen on again during this resume.
-                    if (mWin.mAppToken != null) {
-                        mWin.mAppToken.setCanTurnScreenOn(false);
-                    }
-
-                    // We do not add {@code SET_TURN_ON_SCREEN} when the screen is already
-                    // interactive as the value may persist until the next animation, which could
-                    // potentially occurring while turning off the screen. This would lead to the
-                    // screen incorrectly turning back on.
-                    if (!mService.mPowerManager.isInteractive()) {
-                        mService.mTurnOnScreen = true;
                     }
                 }
             }
@@ -1419,7 +1391,7 @@ class WindowStateAnimator {
     void destroySurface() {
         try {
             if (mSurfaceController != null) {
-                mSurfaceController.destroyInTransaction();
+                mSurfaceController.destroyNotInTransaction();
             }
         } catch (RuntimeException e) {
             Slog.w(TAG, "Exception thrown when destroying surface " + this

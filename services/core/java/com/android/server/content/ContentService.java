@@ -97,9 +97,7 @@ public final class ContentService extends IContentService.Stub {
 
         @Override
         public void onBootPhase(int phase) {
-            if (phase == SystemService.PHASE_ACTIVITY_MANAGER_READY) {
-                mService.systemReady();
-            }
+            mService.onBootPhase(phase);
         }
 
 
@@ -300,8 +298,15 @@ public final class ContentService extends IContentService.Stub {
                 localeFilter, null, null);
     }
 
-    void systemReady() {
-        getSyncManager();
+    void onBootPhase(int phase) {
+        switch (phase) {
+            case SystemService.PHASE_ACTIVITY_MANAGER_READY:
+                getSyncManager();
+                break;
+        }
+        if (mSyncManager != null) {
+            mSyncManager.onBootPhase(phase);
+        }
     }
 
     /**
@@ -1116,6 +1121,7 @@ public final class ContentService extends IContentService.Stub {
         return (pi != null) ? pi.packageName : null;
     }
 
+    @GuardedBy("mCache")
     private ArrayMap<Pair<String, Uri>, Bundle> findOrCreateCacheLocked(int userId,
             String providerPackageName) {
         ArrayMap<String, ArrayMap<Pair<String, Uri>, Bundle>> userCache = mCache.get(userId);
@@ -1131,6 +1137,7 @@ public final class ContentService extends IContentService.Stub {
         return packageCache;
     }
 
+    @GuardedBy("mCache")
     private void invalidateCacheLocked(int userId, String providerPackageName, Uri uri) {
         ArrayMap<String, ArrayMap<Pair<String, Uri>, Bundle>> userCache = mCache.get(userId);
         if (userCache == null) return;

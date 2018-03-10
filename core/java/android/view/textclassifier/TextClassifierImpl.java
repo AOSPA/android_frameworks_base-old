@@ -27,25 +27,27 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Bundle;
 import android.os.LocaleList;
 import android.os.ParcelFileDescriptor;
+import android.os.UserManager;
 import android.provider.Browser;
 import android.provider.CalendarContract;
 import android.provider.ContactsContract;
 import android.provider.Settings;
-import android.text.util.Linkify;
-import android.util.Patterns;
 import android.view.textclassifier.logging.DefaultLogger;
+import android.view.textclassifier.logging.GenerateLinksLogger;
 import android.view.textclassifier.logging.Logger;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.logging.MetricsLogger;
 import com.android.internal.util.Preconditions;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -56,6 +58,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.StringJoiner;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -76,36 +79,19 @@ public final class TextClassifierImpl implements TextClassifier {
     private static final String MODEL_FILE_REGEX = "textclassifier\\.(.*)\\.model";
     private static final String UPDATED_MODEL_FILE_PATH =
             "/data/misc/textclassifier/textclassifier.model";
-    private static final List<String> ENTITY_TYPES_ALL =
-            Collections.unmodifiableList(Arrays.asList(
-                    TextClassifier.TYPE_ADDRESS,
-                    TextClassifier.TYPE_EMAIL,
-                    TextClassifier.TYPE_PHONE,
-                    TextClassifier.TYPE_URL,
-                    TextClassifier.TYPE_DATE,
-                    TextClassifier.TYPE_DATE_TIME,
-                    TextClassifier.TYPE_FLIGHT_NUMBER));
-    private static final List<String> ENTITY_TYPES_BASE =
-            Collections.unmodifiableList(Arrays.asList(
-                    TextClassifier.TYPE_ADDRESS,
-                    TextClassifier.TYPE_EMAIL,
-                    TextClassifier.TYPE_PHONE,
-                    TextClassifier.TYPE_URL));
 
     private final Context mContext;
     private final TextClassifier mFallback;
 
-    private final MetricsLogger mMetricsLogger = new MetricsLogger();
+    private final GenerateLinksLogger mGenerateLinksLogger;
 
     private final Object mLock = new Object();
     @GuardedBy("mLock") // Do not access outside this lock.
-    private Map<Locale, String> mModelFilePaths;
+    private List<ModelFile> mAllModelFiles;
     @GuardedBy("mLock") // Do not access outside this lock.
-    private Locale mLocale;
+    private ModelFile mModel;
     @GuardedBy("mLock") // Do not access outside this lock.
-    private int mVersion;
-    @GuardedBy("mLock") // Do not access outside this lock.
-    private SmartSelection mSmartSelection;
+    private TextClassifierImplNative mNative;
 
     private final Object mLoggerLock = new Object();
     @GuardedBy("mLoggerLock") // Do not access outside this lock.
@@ -118,6 +104,8 @@ public final class TextClassifierImpl implements TextClassifier {
     public TextClassifierImpl(Context context) {
         mContext = Preconditions.checkNotNull(context);
         mFallback = TextClassifier.NO_OP;
+        mGenerateLinksLogger = new GenerateLinksLogger(
+                getSettings().getGenerateLinksLogSampleRate());
     }
 
     /** @inheritDoc */
@@ -127,10 +115,14 @@ public final class TextClassifierImpl implements TextClassifier {
             @Nullable TextSelection.Options options) {
         Utils.validate(text, selectionStartIndex, selectionEndIndex, false /* allowInMainThread */);
         try {
-            if (text.length() > 0) {
+            final int rangeLength = selectionEndIndex - selectionStartIndex;
+            if (text.length() > 0
+                    && rangeLength <= getSettings().getSuggestSelectionMaxRangeLength()) {
                 final LocaleList locales = (options == null) ? null : options.getDefaultLocales();
+                final String localesString = concatenateLocales(locales);
+                final Calendar refTime = Calendar.getInstance();
                 final boolean darkLaunchAllowed = options != null && options.isDarkLaunchAllowed();
-                final SmartSelection smartSelection = getSmartSelection(locales);
+                final TextClassifierImplNative nativeImpl = getNative(locales);
                 final String string = text.toString();
                 final int start;
                 final int end;
@@ -138,8 +130,9 @@ public final class TextClassifierImpl implements TextClassifier {
                     start = selectionStartIndex;
                     end = selectionEndIndex;
                 } else {
-                    final int[] startEnd = smartSelection.suggest(
-                            string, selectionStartIndex, selectionEndIndex);
+                    final int[] startEnd = nativeImpl.suggestSelection(
+                            string, selectionStartIndex, selectionEndIndex,
+                            new TextClassifierImplNative.SelectionOptions(localesString));
                     start = startEnd[0];
                     end = startEnd[1];
                 }
@@ -147,13 +140,16 @@ public final class TextClassifierImpl implements TextClassifier {
                         && start >= 0 && end <= string.length()
                         && start <= selectionStartIndex && end >= selectionEndIndex) {
                     final TextSelection.Builder tsBuilder = new TextSelection.Builder(start, end);
-                    final SmartSelection.ClassificationResult[] results =
-                            smartSelection.classifyText(
+                    final TextClassifierImplNative.ClassificationResult[] results =
+                            nativeImpl.classifyText(
                                     string, start, end,
-                                    getHintFlags(string, start, end));
+                                    new TextClassifierImplNative.ClassificationOptions(
+                                            refTime.getTimeInMillis(),
+                                            refTime.getTimeZone().getID(),
+                                            localesString));
                     final int size = results.length;
                     for (int i = 0; i < size; i++) {
-                        tsBuilder.setEntityType(results[i].mCollection, results[i].mScore);
+                        tsBuilder.setEntityType(results[i].getCollection(), results[i].getScore());
                     }
                     return tsBuilder
                             .setSignature(
@@ -182,13 +178,21 @@ public final class TextClassifierImpl implements TextClassifier {
             @Nullable TextClassification.Options options) {
         Utils.validate(text, startIndex, endIndex, false /* allowInMainThread */);
         try {
-            if (text.length() > 0) {
+            final int rangeLength = endIndex - startIndex;
+            if (text.length() > 0 && rangeLength <= getSettings().getClassifyTextMaxRangeLength()) {
                 final String string = text.toString();
                 final LocaleList locales = (options == null) ? null : options.getDefaultLocales();
-                final Calendar refTime = (options == null) ? null : options.getReferenceTime();
-                final SmartSelection.ClassificationResult[] results = getSmartSelection(locales)
-                        .classifyText(string, startIndex, endIndex,
-                                getHintFlags(string, startIndex, endIndex));
+                final String localesString = concatenateLocales(locales);
+                final Calendar refTime = (options != null && options.getReferenceTime() != null)
+                        ? options.getReferenceTime() : Calendar.getInstance();
+
+                final TextClassifierImplNative.ClassificationResult[] results =
+                        getNative(locales)
+                                .classifyText(string, startIndex, endIndex,
+                                        new TextClassifierImplNative.ClassificationOptions(
+                                                refTime.getTimeInMillis(),
+                                                refTime.getTimeZone().getID(),
+                                                localesString));
                 if (results.length > 0) {
                     return createClassificationResult(
                             results, string, startIndex, endIndex, refTime);
@@ -206,7 +210,7 @@ public final class TextClassifierImpl implements TextClassifier {
     @Override
     public TextLinks generateLinks(
             @NonNull CharSequence text, @Nullable TextLinks.Options options) {
-        Utils.validate(text, false /* allowInMainThread */);
+        Utils.validate(text, getMaxGenerateLinksTextLength(), false /* allowInMainThread */);
         final String textString = text.toString();
         final TextLinks.Builder builder = new TextLinks.Builder(textString);
 
@@ -215,24 +219,45 @@ public final class TextClassifierImpl implements TextClassifier {
         }
 
         try {
+            final long startTimeMs = System.currentTimeMillis();
             final LocaleList defaultLocales = options != null ? options.getDefaultLocales() : null;
+            final Calendar refTime = Calendar.getInstance();
             final Collection<String> entitiesToIdentify =
                     options != null && options.getEntityConfig() != null
-                            ? options.getEntityConfig().getEntities(this) : ENTITY_TYPES_ALL;
-            final SmartSelection smartSelection = getSmartSelection(defaultLocales);
-            final SmartSelection.AnnotatedSpan[] annotations = smartSelection.annotate(textString);
-            for (SmartSelection.AnnotatedSpan span : annotations) {
-                final SmartSelection.ClassificationResult[] results = span.getClassification();
-                if (results.length == 0 || !entitiesToIdentify.contains(results[0].mCollection)) {
+                            ? options.getEntityConfig().resolveEntityListModifications(
+                                    getEntitiesForHints(options.getEntityConfig().getHints()))
+                            : getSettings().getEntityListDefault();
+            final TextClassifierImplNative nativeImpl =
+                    getNative(defaultLocales);
+            final TextClassifierImplNative.AnnotatedSpan[] annotations =
+                    nativeImpl.annotate(
+                        textString,
+                        new TextClassifierImplNative.AnnotationOptions(
+                                refTime.getTimeInMillis(),
+                                refTime.getTimeZone().getID(),
+                                concatenateLocales(defaultLocales)));
+            for (TextClassifierImplNative.AnnotatedSpan span : annotations) {
+                final TextClassifierImplNative.ClassificationResult[] results =
+                        span.getClassification();
+                if (results.length == 0
+                        || !entitiesToIdentify.contains(results[0].getCollection())) {
                     continue;
                 }
                 final Map<String, Float> entityScores = new HashMap<>();
                 for (int i = 0; i < results.length; i++) {
-                    entityScores.put(results[i].mCollection, results[i].mScore);
+                    entityScores.put(results[i].getCollection(), results[i].getScore());
                 }
                 builder.addLink(span.getStartIndex(), span.getEndIndex(), entityScores);
             }
-            return builder.build();
+            final TextLinks links = builder.build();
+            final long endTimeMs = System.currentTimeMillis();
+            final String callingPackageName =
+                    options == null || options.getCallingPackageName() == null
+                            ? mContext.getPackageName()  // local (in process) TC.
+                            : options.getCallingPackageName();
+            mGenerateLinksLogger.logGenerateLinks(
+                    text, links, callingPackageName, endTimeMs - startTimeMs);
+            return links;
         } catch (Throwable t) {
             // Avoid throwing from this method. Log the error.
             Log.e(LOG_TAG, "Error getting links info.", t);
@@ -240,17 +265,24 @@ public final class TextClassifierImpl implements TextClassifier {
         return mFallback.generateLinks(text, options);
     }
 
+    /** @inheritDoc */
     @Override
-    public Collection<String> getEntitiesForPreset(@TextClassifier.EntityPreset int entityPreset) {
-        switch (entityPreset) {
-            case TextClassifier.ENTITY_PRESET_NONE:
-                return Collections.emptyList();
-            case TextClassifier.ENTITY_PRESET_BASE:
-                return ENTITY_TYPES_BASE;
-            case TextClassifier.ENTITY_PRESET_ALL:
-                // fall through
-            default:
-                return ENTITY_TYPES_ALL;
+    public int getMaxGenerateLinksTextLength() {
+        return getSettings().getGenerateLinksMaxTextLength();
+    }
+
+    private Collection<String> getEntitiesForHints(Collection<String> hints) {
+        final boolean editable = hints.contains(HINT_TEXT_IS_EDITABLE);
+        final boolean notEditable = hints.contains(HINT_TEXT_IS_NOT_EDITABLE);
+
+        // Use the default if there is no hint, or conflicting ones.
+        final boolean useDefault = editable == notEditable;
+        if (useDefault) {
+            return getSettings().getEntityListDefault();
+        } else if (editable) {
+            return getSettings().getEntityListEditable();
+        } else {  // notEditable
+            return getSettings().getEntityListNotEditable();
         }
     }
 
@@ -276,178 +308,124 @@ public final class TextClassifierImpl implements TextClassifier {
         return mSettings;
     }
 
-    private SmartSelection getSmartSelection(LocaleList localeList) throws FileNotFoundException {
+    private TextClassifierImplNative getNative(LocaleList localeList)
+            throws FileNotFoundException {
         synchronized (mLock) {
             localeList = localeList == null ? LocaleList.getEmptyLocaleList() : localeList;
-            final Locale locale = findBestSupportedLocaleLocked(localeList);
-            if (locale == null) {
-                throw new FileNotFoundException("No file for null locale");
+            final ModelFile bestModel = findBestModelLocked(localeList);
+            if (bestModel == null) {
+                throw new FileNotFoundException("No model for " + localeList.toLanguageTags());
             }
-            if (mSmartSelection == null || !Objects.equals(mLocale, locale)) {
-                destroySmartSelectionIfExistsLocked();
-                final ParcelFileDescriptor fd = getFdLocked(locale);
-                final int modelFd = fd.getFd();
-                mVersion = SmartSelection.getVersion(modelFd);
-                mSmartSelection = new SmartSelection(modelFd);
+            if (mNative == null || !Objects.equals(mModel, bestModel)) {
+                Log.d(DEFAULT_LOG_TAG, "Loading " + bestModel);
+                destroyNativeIfExistsLocked();
+                final ParcelFileDescriptor fd = ParcelFileDescriptor.open(
+                        new File(bestModel.getPath()), ParcelFileDescriptor.MODE_READ_ONLY);
+                mNative = new TextClassifierImplNative(fd.getFd());
                 closeAndLogError(fd);
-                mLocale = locale;
+                mModel = bestModel;
             }
-            return mSmartSelection;
+            return mNative;
         }
     }
 
     private String getSignature(String text, int start, int end) {
         synchronized (mLock) {
-            return DefaultLogger.createSignature(text, start, end, mContext, mVersion, mLocale);
+            return DefaultLogger.createSignature(text, start, end, mContext, mModel.getVersion(),
+                    mModel.getSupportedLocales());
         }
     }
 
     @GuardedBy("mLock") // Do not call outside this lock.
-    private ParcelFileDescriptor getFdLocked(Locale locale) throws FileNotFoundException {
-        ParcelFileDescriptor updateFd;
-        int updateVersion = -1;
-        try {
-            updateFd = ParcelFileDescriptor.open(
-                    new File(UPDATED_MODEL_FILE_PATH), ParcelFileDescriptor.MODE_READ_ONLY);
-            if (updateFd != null) {
-                updateVersion = SmartSelection.getVersion(updateFd.getFd());
-            }
-        } catch (FileNotFoundException e) {
-            updateFd = null;
-        }
-        ParcelFileDescriptor factoryFd;
-        int factoryVersion = -1;
-        try {
-            final String factoryModelFilePath = getFactoryModelFilePathsLocked().get(locale);
-            if (factoryModelFilePath != null) {
-                factoryFd = ParcelFileDescriptor.open(
-                        new File(factoryModelFilePath), ParcelFileDescriptor.MODE_READ_ONLY);
-                if (factoryFd != null) {
-                    factoryVersion = SmartSelection.getVersion(factoryFd.getFd());
-                }
-            } else {
-                factoryFd = null;
-            }
-        } catch (FileNotFoundException e) {
-            factoryFd = null;
-        }
-
-        if (updateFd == null) {
-            if (factoryFd != null) {
-                return factoryFd;
-            } else {
-                throw new FileNotFoundException(
-                        String.format(Locale.US, "No model file found for %s", locale));
-            }
-        }
-
-        final int updateFdInt = updateFd.getFd();
-        final boolean localeMatches = Objects.equals(
-                locale.getLanguage().trim().toLowerCase(),
-                SmartSelection.getLanguage(updateFdInt).trim().toLowerCase());
-        if (factoryFd == null) {
-            if (localeMatches) {
-                return updateFd;
-            } else {
-                closeAndLogError(updateFd);
-                throw new FileNotFoundException(
-                        String.format(Locale.US, "No model file found for %s", locale));
-            }
-        }
-
-        if (!localeMatches) {
-            closeAndLogError(updateFd);
-            return factoryFd;
-        }
-
-        if (updateVersion > factoryVersion) {
-            closeAndLogError(factoryFd);
-            return updateFd;
-        } else {
-            closeAndLogError(updateFd);
-            return factoryFd;
+    private void destroyNativeIfExistsLocked() {
+        if (mNative != null) {
+            mNative.close();
+            mNative = null;
         }
     }
 
-    @GuardedBy("mLock") // Do not call outside this lock.
-    private void destroySmartSelectionIfExistsLocked() {
-        if (mSmartSelection != null) {
-            mSmartSelection.close();
-            mSmartSelection = null;
-        }
+    private static String concatenateLocales(@Nullable LocaleList locales) {
+        return (locales == null) ? "" : locales.toLanguageTags();
     }
 
+    /**
+     * Finds the most appropriate model to use for the given target locale list.
+     *
+     * The basic logic is: we ignore all models that don't support any of the target locales. For
+     * the remaining candidates, we take the update model unless its version number is lower than
+     * the factory version. It's assumed that factory models do not have overlapping locale ranges
+     * and conflict resolution between these models hence doesn't matter.
+     */
     @GuardedBy("mLock") // Do not call outside this lock.
     @Nullable
-    private Locale findBestSupportedLocaleLocked(LocaleList localeList) {
+    private ModelFile findBestModelLocked(LocaleList localeList) {
         // Specified localeList takes priority over the system default, so it is listed first.
         final String languages = localeList.isEmpty()
                 ? LocaleList.getDefault().toLanguageTags()
                 : localeList.toLanguageTags() + "," + LocaleList.getDefault().toLanguageTags();
         final List<Locale.LanguageRange> languageRangeList = Locale.LanguageRange.parse(languages);
 
-        final List<Locale> supportedLocales =
-                new ArrayList<>(getFactoryModelFilePathsLocked().keySet());
-        final Locale updatedModelLocale = getUpdatedModelLocale();
-        if (updatedModelLocale != null) {
-            supportedLocales.add(updatedModelLocale);
+        ModelFile bestModel = null;
+        int bestModelVersion = -1;
+        for (ModelFile model : listAllModelsLocked()) {
+            if (model.isAnyLanguageSupported(languageRangeList)) {
+                if (model.getVersion() >= bestModelVersion) {
+                    bestModel = model;
+                    bestModelVersion = model.getVersion();
+                }
+            }
         }
-        return Locale.lookup(languageRangeList, supportedLocales);
+        return bestModel;
     }
 
+    /** Returns a list of all model files available, in order of precedence. */
     @GuardedBy("mLock") // Do not call outside this lock.
-    private Map<Locale, String> getFactoryModelFilePathsLocked() {
-        if (mModelFilePaths == null) {
-            final Map<Locale, String> modelFilePaths = new HashMap<>();
+    private List<ModelFile> listAllModelsLocked() {
+        if (mAllModelFiles == null) {
+            final List<ModelFile> allModels = new ArrayList<>();
+            // The update model has the highest precedence.
+            if (new File(UPDATED_MODEL_FILE_PATH).exists()) {
+                final ModelFile updatedModel = ModelFile.fromPath(UPDATED_MODEL_FILE_PATH);
+                if (updatedModel != null) {
+                    allModels.add(updatedModel);
+                }
+            }
+            // Factory models should never have overlapping locales, so the order doesn't matter.
             final File modelsDir = new File(MODEL_DIR);
             if (modelsDir.exists() && modelsDir.isDirectory()) {
-                final File[] models = modelsDir.listFiles();
+                final File[] modelFiles = modelsDir.listFiles();
                 final Pattern modelFilenamePattern = Pattern.compile(MODEL_FILE_REGEX);
-                final int size = models.length;
-                for (int i = 0; i < size; i++) {
-                    final File modelFile = models[i];
+                for (File modelFile : modelFiles) {
                     final Matcher matcher = modelFilenamePattern.matcher(modelFile.getName());
                     if (matcher.matches() && modelFile.isFile()) {
-                        final String language = matcher.group(1);
-                        final Locale locale = Locale.forLanguageTag(language);
-                        modelFilePaths.put(locale, modelFile.getAbsolutePath());
+                        final ModelFile model = ModelFile.fromPath(modelFile.getAbsolutePath());
+                        if (model != null) {
+                            allModels.add(model);
+                        }
                     }
                 }
             }
-            mModelFilePaths = modelFilePaths;
+            mAllModelFiles = allModels;
         }
-        return mModelFilePaths;
-    }
-
-    @Nullable
-    private Locale getUpdatedModelLocale() {
-        try {
-            final ParcelFileDescriptor updateFd = ParcelFileDescriptor.open(
-                    new File(UPDATED_MODEL_FILE_PATH), ParcelFileDescriptor.MODE_READ_ONLY);
-            final Locale locale = Locale.forLanguageTag(
-                    SmartSelection.getLanguage(updateFd.getFd()));
-            closeAndLogError(updateFd);
-            return locale;
-        } catch (FileNotFoundException e) {
-            return null;
-        }
+        return mAllModelFiles;
     }
 
     private TextClassification createClassificationResult(
-            SmartSelection.ClassificationResult[] classifications,
+            TextClassifierImplNative.ClassificationResult[] classifications,
             String text, int start, int end, @Nullable Calendar referenceTime) {
         final String classifiedText = text.substring(start, end);
         final TextClassification.Builder builder = new TextClassification.Builder()
                 .setText(classifiedText);
 
         final int size = classifications.length;
-        SmartSelection.ClassificationResult highestScoringResult = null;
+        TextClassifierImplNative.ClassificationResult highestScoringResult = null;
         float highestScore = Float.MIN_VALUE;
         for (int i = 0; i < size; i++) {
-            builder.setEntityType(classifications[i].mCollection, classifications[i].mScore);
-            if (classifications[i].mScore > highestScore) {
+            builder.setEntityType(classifications[i].getCollection(),
+                                  classifications[i].getScore());
+            if (classifications[i].getScore() > highestScore) {
                 highestScoringResult = classifications[i];
-                highestScore = classifications[i].mScore;
+                highestScore = classifications[i].getScore();
             }
         }
 
@@ -495,19 +473,6 @@ public final class TextClassifierImpl implements TextClassifier {
         }
     }
 
-    private static int getHintFlags(CharSequence text, int start, int end) {
-        int flag = 0;
-        final CharSequence subText = text.subSequence(start, end);
-        if (Patterns.AUTOLINK_EMAIL_ADDRESS.matcher(subText).matches()) {
-            flag |= SmartSelection.HINT_FLAG_EMAIL;
-        }
-        if (Patterns.AUTOLINK_WEB_URL.matcher(subText).matches()
-                && Linkify.sUrlMatchFilter.acceptMatch(text, start, end)) {
-            flag |= SmartSelection.HINT_FLAG_URL;
-        }
-        return flag;
-    }
-
     /**
      * Closes the ParcelFileDescriptor and logs any errors that occur.
      */
@@ -516,6 +481,96 @@ public final class TextClassifierImpl implements TextClassifier {
             fd.close();
         } catch (IOException e) {
             Log.e(LOG_TAG, "Error closing file.", e);
+        }
+    }
+
+    /**
+     * Describes TextClassifier model files on disk.
+     */
+    private static final class ModelFile {
+
+        private final String mPath;
+        private final String mName;
+        private final int mVersion;
+        private final List<Locale> mSupportedLocales;
+
+        /** Returns null if the path did not point to a compatible model. */
+        static @Nullable ModelFile fromPath(String path) {
+            final File file = new File(path);
+            try {
+                final ParcelFileDescriptor modelFd = ParcelFileDescriptor.open(
+                        file, ParcelFileDescriptor.MODE_READ_ONLY);
+                final int version = TextClassifierImplNative.getVersion(modelFd.getFd());
+                final String supportedLocalesStr =
+                        TextClassifierImplNative.getLocales(modelFd.getFd());
+                if (supportedLocalesStr.isEmpty()) {
+                    Log.d(DEFAULT_LOG_TAG, "Ignoring " + file.getAbsolutePath());
+                    return null;
+                }
+                final List<Locale> supportedLocales = new ArrayList<>();
+                for (String langTag : supportedLocalesStr.split(",")) {
+                    supportedLocales.add(Locale.forLanguageTag(langTag));
+                }
+                closeAndLogError(modelFd);
+                return new ModelFile(path, file.getName(), version, supportedLocales);
+            } catch (FileNotFoundException e) {
+                Log.e(DEFAULT_LOG_TAG, "Failed to peek " + file.getAbsolutePath(), e);
+                return null;
+            }
+        }
+
+        /** The absolute path to the model file. */
+        String getPath() {
+            return mPath;
+        }
+
+        /** A name to use for signature generation. Effectively the name of the model file. */
+        String getName() {
+            return mName;
+        }
+
+        /** Returns the version tag in the model's metadata. */
+        int getVersion() {
+            return mVersion;
+        }
+
+        /** Returns whether the language supports any language in the given ranges. */
+        boolean isAnyLanguageSupported(List<Locale.LanguageRange> languageRanges) {
+            return Locale.lookup(languageRanges, mSupportedLocales) != null;
+        }
+
+        /** All locales supported by the model. */
+        List<Locale> getSupportedLocales() {
+            return Collections.unmodifiableList(mSupportedLocales);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            } else if (other == null || !ModelFile.class.isAssignableFrom(other.getClass())) {
+                return false;
+            } else {
+                final ModelFile otherModel = (ModelFile) other;
+                return mPath.equals(otherModel.mPath);
+            }
+        }
+
+        @Override
+        public String toString() {
+            final StringJoiner localesJoiner = new StringJoiner(",");
+            for (Locale locale : mSupportedLocales) {
+                localesJoiner.add(locale.toLanguageTag());
+            }
+            return String.format(Locale.US, "ModelFile { path=%s name=%s version=%d locales=%s }",
+                    mPath, mName, mVersion, localesJoiner.toString());
+        }
+
+        private ModelFile(String path, String name, int version, List<Locale> supportedLocales) {
+            mPath = path;
+            mName = name;
+            mVersion = version;
+            mSupportedLocales = supportedLocales;
         }
     }
 
@@ -533,24 +588,25 @@ public final class TextClassifierImpl implements TextClassifier {
         public static List<Intent> create(
                 Context context,
                 @Nullable Calendar referenceTime,
-                SmartSelection.ClassificationResult classification,
+                TextClassifierImplNative.ClassificationResult classification,
                 String text) {
-            final String type = classification.mCollection.trim().toLowerCase(Locale.ENGLISH);
+            final String type = classification.getCollection().trim().toLowerCase(Locale.ENGLISH);
             text = text.trim();
             switch (type) {
                 case TextClassifier.TYPE_EMAIL:
                     return createForEmail(text);
                 case TextClassifier.TYPE_PHONE:
-                    return createForPhone(text);
+                    return createForPhone(context, text);
                 case TextClassifier.TYPE_ADDRESS:
                     return createForAddress(text);
                 case TextClassifier.TYPE_URL:
                     return createForUrl(context, text);
                 case TextClassifier.TYPE_DATE:
                 case TextClassifier.TYPE_DATE_TIME:
-                    if (classification.mDatetime != null) {
+                    if (classification.getDatetimeResult() != null) {
                         Calendar eventTime = Calendar.getInstance();
-                        eventTime.setTimeInMillis(classification.mDatetime.mMsSinceEpoch);
+                        eventTime.setTimeInMillis(
+                                classification.getDatetimeResult().getTimeMsUtc());
                         return createForDatetime(type, referenceTime, eventTime);
                     } else {
                         return new ArrayList<>();
@@ -573,21 +629,36 @@ public final class TextClassifierImpl implements TextClassifier {
         }
 
         @NonNull
-        private static List<Intent> createForPhone(String text) {
-            return Arrays.asList(
-                    new Intent(Intent.ACTION_DIAL)
-                            .setData(Uri.parse(String.format("tel:%s", text))),
-                    new Intent(Intent.ACTION_INSERT_OR_EDIT)
-                            .setType(ContactsContract.Contacts.CONTENT_ITEM_TYPE)
-                            .putExtra(ContactsContract.Intents.Insert.PHONE, text),
-                    new Intent(Intent.ACTION_SENDTO)
-                            .setData(Uri.parse(String.format("smsto:%s", text))));
+        private static List<Intent> createForPhone(Context context, String text) {
+            final List<Intent> intents = new ArrayList<>();
+            final UserManager userManager = context.getSystemService(UserManager.class);
+            final Bundle userRestrictions = userManager != null
+                    ? userManager.getUserRestrictions() : new Bundle();
+            if (!userRestrictions.getBoolean(UserManager.DISALLOW_OUTGOING_CALLS, false)) {
+                intents.add(new Intent(Intent.ACTION_DIAL)
+                        .setData(Uri.parse(String.format("tel:%s", text))));
+            }
+            intents.add(new Intent(Intent.ACTION_INSERT_OR_EDIT)
+                    .setType(ContactsContract.Contacts.CONTENT_ITEM_TYPE)
+                    .putExtra(ContactsContract.Intents.Insert.PHONE, text));
+            if (!userRestrictions.getBoolean(UserManager.DISALLOW_SMS, false)) {
+                intents.add(new Intent(Intent.ACTION_SENDTO)
+                        .setData(Uri.parse(String.format("smsto:%s", text))));
+            }
+            return intents;
         }
 
         @NonNull
         private static List<Intent> createForAddress(String text) {
-            return Arrays.asList(new Intent(Intent.ACTION_VIEW)
-                    .setData(Uri.parse(String.format("geo:0,0?q=%s", text))));
+            final List<Intent> intents = new ArrayList<>();
+            try {
+                final String encText = URLEncoder.encode(text, "UTF-8");
+                intents.add(new Intent(Intent.ACTION_VIEW)
+                        .setData(Uri.parse(String.format("geo:0,0?q=%s", encText))));
+            } catch (UnsupportedEncodingException e) {
+                Log.e(LOG_TAG, "Could not encode address", e);
+            }
+            return intents;
         }
 
         @NonNull

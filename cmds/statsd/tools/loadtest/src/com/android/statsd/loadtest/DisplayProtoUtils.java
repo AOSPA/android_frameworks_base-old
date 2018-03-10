@@ -36,6 +36,10 @@ public class DisplayProtoUtils {
         int numMetrics = 0;
         for (StatsLog.ConfigMetricsReport report : reports.getReportsList()) {
             sb.append("StatsLogReport size: ").append(report.getMetricsCount()).append("\n");
+            sb.append("Last report time:").append(getDateStr(report.getLastReportElapsedNanos())).
+                    append("\n");
+            sb.append("Current report time:").append(getDateStr(report.getCurrentReportElapsedNanos())).
+                    append("\n");
             for (StatsLog.StatsLogReport log : report.getMetricsList()) {
                 numMetrics++;
                 if (numMetrics > MAX_NUM_METRICS_TO_DISPLAY) {
@@ -45,8 +49,6 @@ public class DisplayProtoUtils {
                 }
                 sb.append("\n");
                 sb.append("metric id: ").append(log.getMetricId()).append("\n");
-                sb.append("start time:").append(getDateStr(log.getStartReportNanos())).append("\n");
-                sb.append("end time:").append(getDateStr(log.getEndReportNanos())).append("\n");
 
                 switch (log.getDataCase()) {
                     case DURATION_METRICS:
@@ -118,8 +120,8 @@ public class DisplayProtoUtils {
             }
 
             for (StatsLog.DurationBucketInfo info : duration.getBucketInfoList())  {
-                sb.append("\t[").append(getDateStr(info.getStartBucketNanos())).append("-")
-                        .append(getDateStr(info.getEndBucketNanos())).append("] -> ")
+                sb.append("\t[").append(getDateStr(info.getStartBucketElapsedNanos())).append("-")
+                        .append(getDateStr(info.getEndBucketElapsedNanos())).append("] -> ")
                         .append(info.getDurationNanos()).append(" ns\n");
             }
         }
@@ -130,7 +132,7 @@ public class DisplayProtoUtils {
         StatsLog.StatsLogReport.EventMetricDataWrapper eventMetricDataWrapper =
                 log.getEventMetrics();
         for (StatsLog.EventMetricData event : eventMetricDataWrapper.getDataList()) {
-            sb.append(getDateStr(event.getTimestampNanos())).append(": ");
+            sb.append(getDateStr(event.getElapsedTimestampNanos())).append(": ");
             sb.append(event.getAtom().getPushedCase().toString()).append("\n");
         }
     }
@@ -150,8 +152,8 @@ public class DisplayProtoUtils {
             }
 
             for (StatsLog.CountBucketInfo info : count.getBucketInfoList())  {
-                sb.append("\t[").append(getDateStr(info.getStartBucketNanos())).append("-")
-                        .append(getDateStr(info.getEndBucketNanos())).append("] -> ")
+                sb.append("\t[").append(getDateStr(info.getStartBucketElapsedNanos())).append("-")
+                        .append(getDateStr(info.getEndBucketElapsedNanos())).append("] -> ")
                         .append(info.getCount()).append("\n");
             }
         }

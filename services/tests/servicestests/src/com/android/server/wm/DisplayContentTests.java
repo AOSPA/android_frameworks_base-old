@@ -22,12 +22,14 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.DisplayCutout.fromBoundingRect;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -37,8 +39,6 @@ import org.junit.runner.RunWith;
 
 import android.annotation.SuppressLint;
 import android.content.res.Configuration;
-import android.graphics.Path;
-import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.SystemClock;
 import android.platform.test.annotations.Presubmit;
@@ -166,6 +166,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertTrue(appWin.canBeImeTarget());
         WindowState imeTarget = mDisplayContent.computeImeTarget(false /* updateImeTarget */);
         assertEquals(appWin, imeTarget);
+        appWin.mHidden = false;
 
         // Verify that an child window can be an ime target.
         final WindowState childWin = createWindow(appWin,
@@ -395,7 +396,9 @@ public class DisplayContentTests extends WindowTestsBase {
             final DisplayContent dc = createNewDisplay();
             dc.mInitialDisplayWidth = 200;
             dc.mInitialDisplayHeight = 400;
-            final DisplayCutout cutout = createCutout(new Rect(80, 0, 120, 10));
+            Rect r = new Rect(80, 0, 120, 10);
+            final DisplayCutout cutout = fromBoundingRect(r.left, r.top, r.right, r.bottom)
+                    .computeSafeInsets(200, 400);
 
             dc.mInitialDisplayCutout = cutout;
             dc.setRotation(Surface.ROTATION_0);
@@ -411,13 +414,17 @@ public class DisplayContentTests extends WindowTestsBase {
             final DisplayContent dc = createNewDisplay();
             dc.mInitialDisplayWidth = 200;
             dc.mInitialDisplayHeight = 400;
-            final DisplayCutout cutout = createCutout(new Rect(80, 0, 120, 10));
+            Rect r1 = new Rect(80, 0, 120, 10);
+            final DisplayCutout cutout = fromBoundingRect(r1.left, r1.top, r1.right, r1.bottom)
+                    .computeSafeInsets(200, 400);
 
             dc.mInitialDisplayCutout = cutout;
             dc.setRotation(Surface.ROTATION_90);
             dc.computeScreenConfiguration(new Configuration()); // recomputes dc.mDisplayInfo.
 
-            assertEquals(createCutout(new Rect(0, 80, 10, 120)), dc.getDisplayInfo().displayCutout);
+            final Rect r = new Rect(0, 80, 10, 120);
+            assertEquals(fromBoundingRect(r.left, r.top, r.right, r.bottom)
+                    .computeSafeInsets(400, 200), dc.getDisplayInfo().displayCutout);
         }
     }
 
@@ -485,11 +492,5 @@ public class DisplayContentTests extends WindowTestsBase {
                 x,
                 y,
                 metaState);
-    }
-
-    private DisplayCutout createCutout(Rect r) {
-        Path p = new Path();
-        p.addRect(r.left, r.top, r.right, r.bottom, Path.Direction.CCW);
-        return DisplayCutout.fromBounds(p);
     }
 }

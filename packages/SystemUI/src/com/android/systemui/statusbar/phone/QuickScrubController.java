@@ -29,15 +29,12 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.util.Log;
 import android.util.Slog;
-import android.view.Display;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
-import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
@@ -53,6 +50,7 @@ import static android.view.WindowManagerPolicyConstants.NAV_BAR_LEFT;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_BOTTOM;
 import static com.android.systemui.OverviewProxyService.DEBUG_OVERVIEW_PROXY;
 import static com.android.systemui.OverviewProxyService.TAG_OPS;
+import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_HOME;
 
 /**
  * Class to detect gestures on the navigation bar and implement quick scrub and switch.
@@ -63,7 +61,7 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
     private static final String TAG = "QuickScrubController";
     private static final int QUICK_SWITCH_FLING_VELOCITY = 0;
     private static final int ANIM_DURATION_MS = 200;
-    private static final long LONG_PRESS_DELAY_MS = 150;
+    private static final long LONG_PRESS_DELAY_MS = 225;
 
     /**
      * For quick step, set a damping value to allow the button to stick closer its origin position
@@ -76,6 +74,8 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
 
     private boolean mDraggingActive;
     private boolean mQuickScrubActive;
+    private boolean mAllowQuickSwitch;
+    private boolean mRecentsAnimationStarted;
     private float mDownOffset;
     private float mTranslation;
     private int mTouchDownX;
@@ -87,15 +87,14 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
     private int mLightTrackColor;
     private int mDarkTrackColor;
     private float mDarkIntensity;
+    private View mHomeButtonView;
 
     private final Handler mHandler = new Handler();
     private final Interpolator mQuickScrubEndInterpolator = new DecelerateInterpolator();
     private final Rect mTrackRect = new Rect();
-    private final Rect mHomeButtonRect = new Rect();
     private final Paint mTrackPaint = new Paint();
     private final int mScrollTouchSlop;
     private final OverviewProxyService mOverviewEventSender;
-    private final Display mDisplay;
     private final int mTrackThickness;
     private final int mTrackPadding;
     private final ValueAnimator mTrackAnimator;
@@ -114,11 +113,10 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
         if (!mQuickScrubActive) {
             pos = mDragPositive ? Math.min((int) mTranslation, pos) : Math.max((int) mTranslation, pos);
         }
-        final View homeView = mNavigationBarView.getHomeButton().getCurrentView();
         if (mIsVertical) {
-            homeView.setTranslationY(pos);
+            mHomeButtonView.setTranslationY(pos);
         } else {
-            homeView.setTranslationX(pos);
+            mHomeButtonView.setTranslationX(pos);
         }
     };
 
@@ -128,6 +126,8 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
             mNavigationBarView.getHomeButton().setClickable(true);
             mQuickScrubActive = false;
             mTranslation = 0;
+            mQuickScrubEndAnimator.setCurrentPlayTime(mQuickScrubEndAnimator.getDuration());
+            mHomeButtonView = null;
         }
     };
 
@@ -137,7 +137,9 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
         new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onFling(MotionEvent e1, MotionEvent e2, float velX, float velY) {
-                if (!isQuickScrubEnabled() || mQuickScrubActive) {
+                if (!mNavigationBarView.isQuickScrubEnabled() || mQuickScrubActive
+                        || !mAllowQuickSwitch
+                        || mNavigationBarView.getDownHitTarget() != HIT_TARGET_HOME) {
                     return false;
                 }
                 float velocityX = mIsRTL ? -velX : velX;
@@ -146,8 +148,7 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
                         mIsVertical ? (absVelY > velocityX) : (velocityX > absVelY);
                 if (isValidFling) {
                     mDraggingActive = false;
-                    mButtonAnimator.setIntValues((int) mTranslation, 0);
-                    mButtonAnimator.start();
+                    animateEnd();
                     mHandler.removeCallbacks(mLongPressRunnable);
                     try {
                         final IOverviewProxy overviewProxy = mOverviewEventSender.getProxy();
@@ -158,16 +159,15 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
                     } catch (RemoteException e) {
                         Log.e(TAG, "Failed to send start of quick switch.", e);
                     }
+                    return true;
                 }
-                return true;
+                return false;
             }
         };
 
     public QuickScrubController(Context context) {
         mContext = context;
         mScrollTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mDisplay = ((WindowManager) context.getSystemService(
-                Context.WINDOW_SERVICE)).getDefaultDisplay();
         mOverviewEventSender = Dependency.get(OverviewProxyService.class);
         mGestureDetector = new GestureDetector(mContext, mGestureListener);
         mTrackThickness = getDimensionPixelSize(mContext, R.dimen.nav_quick_scrub_track_thickness);
@@ -176,8 +176,10 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
 
         mTrackAnimator = ObjectAnimator.ofFloat();
         mTrackAnimator.addUpdateListener(mTrackAnimatorListener);
+        mTrackAnimator.setFloatValues(0);
         mButtonAnimator = ObjectAnimator.ofInt();
         mButtonAnimator.addUpdateListener(mButtonTranslationListener);
+        mButtonAnimator.setIntValues(0);
         mQuickScrubEndAnimator = new AnimatorSet();
         mQuickScrubEndAnimator.playTogether(mTrackAnimator, mButtonAnimator);
         mQuickScrubEndAnimator.setDuration(ANIM_DURATION_MS);
@@ -189,21 +191,49 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
         mNavigationBarView = navigationBarView;
     }
 
+    /**
+     * @return true if we want to intercept touch events for quick scrub/switch and prevent proxying
+     *         the event to the overview service.
+     */
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
-        final IOverviewProxy overviewProxy = mOverviewEventSender.getProxy();
         final ButtonDispatcher homeButton = mNavigationBarView.getHomeButton();
-        if (overviewProxy == null) {
+        if (!mNavigationBarView.isQuickScrubEnabled()) {
             homeButton.setDelayTouchFeedback(false);
             return false;
         }
-        mGestureDetector.onTouchEvent(event);
+
+        return handleTouchEvent(event);
+    }
+
+    /**
+     * @return true if we want to handle touch events for quick scrub/switch and prevent proxying
+     *         the event to the overview service.
+     */
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        return handleTouchEvent(event);
+    }
+
+    private boolean handleTouchEvent(MotionEvent event) {
+        final IOverviewProxy overviewProxy = mOverviewEventSender.getProxy();
+        final ButtonDispatcher homeButton = mNavigationBarView.getHomeButton();
+        if (mGestureDetector.onTouchEvent(event)) {
+            // If the fling has been handled on UP, then skip proxying the UP
+            return true;
+        }
         int action = event.getAction();
         switch (action & MotionEvent.ACTION_MASK) {
             case MotionEvent.ACTION_DOWN: {
                 int x = (int) event.getX();
                 int y = (int) event.getY();
-                if (isQuickScrubEnabled() && mHomeButtonRect.contains(x, y)) {
+                // End any existing quickscrub animations before starting the new transition
+                if (mHomeButtonView != null) {
+                    mQuickScrubEndAnimator.end();
+                }
+                mHomeButtonView = homeButton.getCurrentView();
+                if (mNavigationBarView.isQuickScrubEnabled()
+                        && mNavigationBarView.getDownHitTarget() == HIT_TARGET_HOME) {
                     mTouchDownX = x;
                     mTouchDownY = y;
                     homeButton.setDelayTouchFeedback(true);
@@ -212,6 +242,7 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
                     homeButton.setDelayTouchFeedback(false);
                     mTouchDownX = mTouchDownY = -1;
                 }
+                mAllowQuickSwitch = true;
                 break;
             }
             case MotionEvent.ACTION_MOVE: {
@@ -240,8 +271,9 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
                         offset = pos - mTrackRect.left;
                         trackSize = mTrackRect.width();
                     }
-                    // Do not start scrubbing when dragging in the perpendicular direction
-                    if (!mDraggingActive && exceededPerpendicularTouchSlop) {
+                    // Do not start scrubbing when dragging in the perpendicular direction if we
+                    // haven't already started quickscrub
+                    if (!mDraggingActive && !mQuickScrubActive && exceededPerpendicularTouchSlop) {
                         mHandler.removeCallbacksAndMessages(null);
                         return false;
                     }
@@ -250,7 +282,7 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
                     }
 
                     // Control the button movement
-                    if (!mDraggingActive && exceededTouchSlop) {
+                    if (!mDraggingActive && exceededTouchSlop && !mRecentsAnimationStarted) {
                         boolean allowDrag = !mDragPositive
                                 ? offset < 0 && pos < touchDown : offset >= 0 && pos > touchDown;
                         if (allowDrag) {
@@ -268,7 +300,7 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
                             : Utilities.clamp(offset - mDownOffset, 0, trackSize);
                         if (mQuickScrubActive) {
                             try {
-                                overviewProxy.onQuickScrubProgress(scrubFraction);
+                                mOverviewEventSender.getProxy().onQuickScrubProgress(scrubFraction);
                                 if (DEBUG_OVERVIEW_PROXY) {
                                     Log.d(TAG_OPS, "Quick Scrub Progress:" + scrubFraction);
                                 }
@@ -279,9 +311,9 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
                             mTranslation /= SWITCH_STICKINESS;
                         }
                         if (mIsVertical) {
-                            homeButton.getCurrentView().setTranslationY(mTranslation);
+                            mHomeButtonView.setTranslationY(mTranslation);
                         } else {
-                            homeButton.getCurrentView().setTranslationX(mTranslation);
+                            mHomeButtonView.setTranslationX(mTranslation);
                         }
                     }
                 }
@@ -289,7 +321,7 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
             }
             case MotionEvent.ACTION_CANCEL:
             case MotionEvent.ACTION_UP:
-                endQuickScrub();
+                endQuickScrub(true /* animate */);
                 break;
         }
         return mDraggingActive || mQuickScrubActive;
@@ -321,17 +353,6 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
             x2 = x1 + width / 2 - mTrackPadding;
         }
         mTrackRect.set(x1, y1, x2, y2);
-
-        // Get the touch rect of the home button location
-        View homeView = mNavigationBarView.getHomeButton().getCurrentView();
-        if (homeView != null) {
-            int[] globalHomePos = homeView.getLocationOnScreen();
-            int[] globalNavBarPos = mNavigationBarView.getLocationOnScreen();
-            int homeX = globalHomePos[0] - globalNavBarPos[0];
-            int homeY = globalHomePos[1] - globalNavBarPos[1];
-            mHomeButtonRect.set(homeX, homeY, homeX + homeView.getMeasuredWidth(),
-                    homeY + homeView.getMeasuredHeight());
-        }
     }
 
     @Override
@@ -341,15 +362,12 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
     }
 
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
-        if (event.getAction() == MotionEvent.ACTION_UP) {
-            endQuickScrub();
-        }
-        return false;
-    }
-
-    @Override
     public void setBarState(boolean isVertical, boolean isRTL) {
+        final boolean changed = (mIsVertical != isVertical) || (mIsRTL != isRTL);
+        if (changed) {
+            // End quickscrub if the state changes mid-transition
+            endQuickScrub(false /* animate */);
+        }
         mIsVertical = isVertical;
         mIsRTL = isRTL;
         try {
@@ -363,12 +381,8 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
         }
     }
 
-    boolean isQuickScrubEnabled() {
-        return SystemProperties.getBoolean("persist.quickstep.scrub.enabled", false);
-    }
-
     private void startQuickScrub() {
-        if (!mQuickScrubActive) {
+        if (!mQuickScrubActive && mDraggingActive) {
             mQuickScrubActive = true;
             mLightTrackColor = mContext.getColor(R.color.quick_step_track_background_light);
             mDarkTrackColor = mContext.getColor(R.color.quick_step_track_background_dark);
@@ -382,15 +396,16 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
             } catch (RemoteException e) {
                 Log.e(TAG, "Failed to send start of quick scrub.", e);
             }
+        } else {
+            // After long press do not allow quick scrub/switch
+            mTouchDownX = -1;
         }
     }
 
-    private void endQuickScrub() {
+    private void endQuickScrub(boolean animate) {
         mHandler.removeCallbacks(mLongPressRunnable);
         if (mDraggingActive || mQuickScrubActive) {
-            mButtonAnimator.setIntValues((int) mTranslation, 0);
-            mTrackAnimator.setFloatValues(mTrackAlpha, 0);
-            mQuickScrubEndAnimator.start();
+            animateEnd();
             try {
                 mOverviewEventSender.getProxy().onQuickScrubEnd();
                 if (DEBUG_OVERVIEW_PROXY) {
@@ -400,7 +415,29 @@ public class QuickScrubController extends GestureDetector.SimpleOnGestureListene
                 Log.e(TAG, "Failed to send end of quick scrub.", e);
             }
         }
+        if (mHomeButtonView != null && !animate) {
+            mQuickScrubEndAnimator.end();
+        }
         mDraggingActive = false;
+    }
+
+    public void setRecentsAnimationStarted(boolean started) {
+        mRecentsAnimationStarted = started;
+        if (started) {
+            cancelQuickSwitch();
+        }
+    }
+
+    public void cancelQuickSwitch() {
+        mAllowQuickSwitch = false;
+        mHandler.removeCallbacks(mLongPressRunnable);
+    }
+
+    private void animateEnd() {
+        mButtonAnimator.setIntValues((int) mTranslation, 0);
+        mTrackAnimator.setFloatValues(mTrackAlpha, 0);
+        mQuickScrubEndAnimator.setCurrentPlayTime(0);
+        mQuickScrubEndAnimator.start();
     }
 
     private int getDimensionPixelSize(Context context, @DimenRes int resId) {

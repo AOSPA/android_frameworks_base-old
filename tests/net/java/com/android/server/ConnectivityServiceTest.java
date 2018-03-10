@@ -35,6 +35,7 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_MMS;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_RCS;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_SUPL;
@@ -49,6 +50,7 @@ import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI_AWARE;
 
 import static com.android.internal.util.TestUtils.waitForIdleHandler;
+import static com.android.internal.util.TestUtils.waitForIdleLooper;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -84,6 +86,7 @@ import android.net.ConnectivityManager.NetworkCallback;
 import android.net.ConnectivityManager.PacketKeepalive;
 import android.net.ConnectivityManager.PacketKeepaliveCallback;
 import android.net.ConnectivityManager.TooManyRequestsException;
+import android.net.ConnectivityThread;
 import android.net.INetworkPolicyManager;
 import android.net.INetworkStatsService;
 import android.net.IpPrefix;
@@ -278,6 +281,7 @@ public class ConnectivityServiceTest {
         waitForIdle(mWiFiNetworkAgent, timeoutMs);
         waitForIdle(mEthernetNetworkAgent, timeoutMs);
         waitForIdleHandler(mService.mHandlerThread, timeoutMs);
+        waitForIdleLooper(ConnectivityThread.getInstanceLooper(), timeoutMs);
     }
 
     public void waitForIdle(MockNetworkAgent agent, long timeoutMs) {
@@ -318,6 +322,7 @@ public class ConnectivityServiceTest {
 
     // This test has an inherent race condition in it, and cannot be enabled for continuous testing
     // or presubmit tests. It is kept for manual runs and documentation purposes.
+    @Ignore
     public void verifyThatNotWaitingForIdleCausesRaceConditions() {
         // Bring up a network that we can use to send messages to ConnectivityService.
         ConditionVariable cv = waitForConnectivityBroadcasts(1);
@@ -527,6 +532,11 @@ public class ConnectivityServiceTest {
             mNetworkAgent.sendNetworkInfo(mNetworkInfo);
         }
 
+        public void resume() {
+            mNetworkInfo.setDetailedState(DetailedState.CONNECTED, null, null);
+            mNetworkAgent.sendNetworkInfo(mNetworkInfo);
+        }
+
         public void disconnect() {
             mNetworkInfo.setDetailedState(DetailedState.DISCONNECTED, null, null);
             mNetworkAgent.sendNetworkInfo(mNetworkInfo);
@@ -567,6 +577,10 @@ public class ConnectivityServiceTest {
         public String waitForRedirectUrl() {
             assertTrue(mNetworkStatusReceived.block(TIMEOUT_MS));
             return mRedirectUrl;
+        }
+
+        public NetworkCapabilities getNetworkCapabilities() {
+            return mNetworkCapabilities;
         }
     }
 
@@ -900,8 +914,10 @@ public class ConnectivityServiceTest {
                 mock(INetworkPolicyManager.class),
                 mock(IpConnectivityLog.class));
 
-        mService.systemReady();
+        // Create local CM before sending system ready so that we can answer
+        // getSystemService() correctly.
         mCm = new WrappedConnectivityManager(InstrumentationRegistry.getContext(), mService);
+        mService.systemReady();
         mCm.bindProcessToNetwork(null);
 
         // Ensure that the default setting for Captive Portals is used for most tests
@@ -1272,6 +1288,7 @@ public class ConnectivityServiceTest {
         NETWORK_CAPABILITIES,
         LINK_PROPERTIES,
         SUSPENDED,
+        RESUMED,
         LOSING,
         LOST,
         UNAVAILABLE
@@ -1340,6 +1357,11 @@ public class ConnectivityServiceTest {
         @Override
         public void onNetworkSuspended(Network network) {
             setLastCallback(CallbackState.SUSPENDED, network, null);
+        }
+
+        @Override
+        public void onNetworkResumed(Network network) {
+            setLastCallback(CallbackState.RESUMED, network, null);
         }
 
         @Override
@@ -1421,9 +1443,9 @@ public class ConnectivityServiceTest {
                 expectCallback(CallbackState.SUSPENDED, agent, timeoutMs);
             }
             if (expectValidated) {
-                expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, agent);
+                expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, agent, timeoutMs);
             } else {
-                expectCapabilitiesWithout(NET_CAPABILITY_VALIDATED, agent);
+                expectCapabilitiesWithout(NET_CAPABILITY_VALIDATED, agent, timeoutMs);
             }
             expectCallback(CallbackState.LINK_PROPERTIES, agent, timeoutMs);
         }
@@ -1462,14 +1484,24 @@ public class ConnectivityServiceTest {
         }
 
         NetworkCapabilities expectCapabilitiesWith(int capability, MockNetworkAgent agent) {
-            CallbackInfo cbi = expectCallback(CallbackState.NETWORK_CAPABILITIES, agent);
+            return expectCapabilitiesWith(capability, agent, TIMEOUT_MS);
+        }
+
+        NetworkCapabilities expectCapabilitiesWith(int capability, MockNetworkAgent agent,
+                int timeoutMs) {
+            CallbackInfo cbi = expectCallback(CallbackState.NETWORK_CAPABILITIES, agent, timeoutMs);
             NetworkCapabilities nc = (NetworkCapabilities) cbi.arg;
             assertTrue(nc.hasCapability(capability));
             return nc;
         }
 
         NetworkCapabilities expectCapabilitiesWithout(int capability, MockNetworkAgent agent) {
-            CallbackInfo cbi = expectCallback(CallbackState.NETWORK_CAPABILITIES, agent);
+            return expectCapabilitiesWithout(capability, agent, TIMEOUT_MS);
+        }
+
+        NetworkCapabilities expectCapabilitiesWithout(int capability, MockNetworkAgent agent,
+                int timeoutMs) {
+            CallbackInfo cbi = expectCallback(CallbackState.NETWORK_CAPABILITIES, agent, timeoutMs);
             NetworkCapabilities nc = (NetworkCapabilities) cbi.arg;
             assertFalse(nc.hasCapability(capability));
             return nc;
@@ -1811,6 +1843,51 @@ public class ConnectivityServiceTest {
         mCm.unregisterNetworkCallback(callback);
         mCm.unregisterNetworkCallback(defaultCallback);
         mCm.unregisterNetworkCallback(trackDefaultCallback);
+    }
+
+    @Test
+    public void testNetworkGoesIntoBackgroundAfterLinger() {
+        setMobileDataAlwaysOn(true);
+        NetworkRequest request = new NetworkRequest.Builder()
+                .clearCapabilities()
+                .build();
+        TestNetworkCallback callback = new TestNetworkCallback();
+        mCm.registerNetworkCallback(request, callback);
+
+        TestNetworkCallback defaultCallback = new TestNetworkCallback();
+        mCm.registerDefaultNetworkCallback(defaultCallback);
+
+        mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+
+        mCellNetworkAgent.connect(true);
+        callback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
+        defaultCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
+
+        // Wifi comes up and cell lingers.
+        mWiFiNetworkAgent.connect(true);
+        defaultCallback.expectAvailableDoubleValidatedCallbacks(mWiFiNetworkAgent);
+        callback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        callback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
+        callback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
+
+        // File a request for cellular, then release it.
+        NetworkRequest cellRequest = new NetworkRequest.Builder()
+                .addTransportType(TRANSPORT_CELLULAR).build();
+        NetworkCallback noopCallback = new NetworkCallback();
+        mCm.requestNetwork(cellRequest, noopCallback);
+        mCm.unregisterNetworkCallback(noopCallback);
+        callback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
+
+        // Let linger run its course.
+        callback.assertNoCallback();
+        final int lingerTimeoutMs = TEST_LINGER_DELAY_MS + TEST_LINGER_DELAY_MS / 4;
+        callback.expectCapabilitiesWithout(NET_CAPABILITY_FOREGROUND, mCellNetworkAgent,
+                lingerTimeoutMs);
+
+        // Clean up.
+        mCm.unregisterNetworkCallback(defaultCallback);
+        mCm.unregisterNetworkCallback(callback);
     }
 
     @Test
@@ -2458,15 +2535,30 @@ public class ConnectivityServiceTest {
 
         // Suspend the network.
         mCellNetworkAgent.suspend();
+        cellNetworkCallback.expectCapabilitiesWithout(NET_CAPABILITY_NOT_SUSPENDED,
+                mCellNetworkAgent);
         cellNetworkCallback.expectCallback(CallbackState.SUSPENDED, mCellNetworkAgent);
         cellNetworkCallback.assertNoCallback();
 
         // Register a garden variety default network request.
-        final TestNetworkCallback dfltNetworkCallback = new TestNetworkCallback();
+        TestNetworkCallback dfltNetworkCallback = new TestNetworkCallback();
         mCm.registerDefaultNetworkCallback(dfltNetworkCallback);
         // We should get onAvailable(), onCapabilitiesChanged(), onLinkPropertiesChanged(),
         // as well as onNetworkSuspended() in rapid succession.
         dfltNetworkCallback.expectAvailableAndSuspendedCallbacks(mCellNetworkAgent, true);
+        dfltNetworkCallback.assertNoCallback();
+        mCm.unregisterNetworkCallback(dfltNetworkCallback);
+
+        mCellNetworkAgent.resume();
+        cellNetworkCallback.expectCapabilitiesWith(NET_CAPABILITY_NOT_SUSPENDED,
+                mCellNetworkAgent);
+        cellNetworkCallback.expectCallback(CallbackState.RESUMED, mCellNetworkAgent);
+        cellNetworkCallback.assertNoCallback();
+
+        dfltNetworkCallback = new TestNetworkCallback();
+        mCm.registerDefaultNetworkCallback(dfltNetworkCallback);
+        // This time onNetworkSuspended should not be called.
+        dfltNetworkCallback.expectAvailableCallbacksValidated(mCellNetworkAgent);
         dfltNetworkCallback.assertNoCallback();
 
         mCm.unregisterNetworkCallback(dfltNetworkCallback);
@@ -3093,6 +3185,9 @@ public class ConnectivityServiceTest {
         InetAddress dstIPv4 = InetAddress.getByName("8.8.8.8");
         InetAddress dstIPv6 = InetAddress.getByName("2001:4860:4860::8888");
 
+        final int validKaInterval = 15;
+        final int invalidKaInterval = 9;
+
         LinkProperties lp = new LinkProperties();
         lp.setInterfaceName("wlan12");
         lp.addLinkAddress(new LinkAddress(myIPv6, 64));
@@ -3107,36 +3202,37 @@ public class ConnectivityServiceTest {
         PacketKeepalive ka;
 
         // Attempt to start keepalives with invalid parameters and check for errors.
-        ka = mCm.startNattKeepalive(notMyNet, 25, callback, myIPv4, 1234, dstIPv4);
+        ka = mCm.startNattKeepalive(notMyNet, validKaInterval, callback, myIPv4, 1234, dstIPv4);
         callback.expectError(PacketKeepalive.ERROR_INVALID_NETWORK);
 
-        ka = mCm.startNattKeepalive(myNet, 19, callback, notMyIPv4, 1234, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, invalidKaInterval, callback, myIPv4, 1234, dstIPv4);
         callback.expectError(PacketKeepalive.ERROR_INVALID_INTERVAL);
 
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 1234, dstIPv6);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 1234, dstIPv6);
         callback.expectError(PacketKeepalive.ERROR_INVALID_IP_ADDRESS);
 
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv6, 1234, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv6, 1234, dstIPv4);
         callback.expectError(PacketKeepalive.ERROR_INVALID_IP_ADDRESS);
 
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv6, 1234, dstIPv6);
-        callback.expectError(PacketKeepalive.ERROR_INVALID_IP_ADDRESS);  // NAT-T is IPv4-only.
+        // NAT-T is only supported for IPv4.
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv6, 1234, dstIPv6);
+        callback.expectError(PacketKeepalive.ERROR_INVALID_IP_ADDRESS);
 
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 123456, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 123456, dstIPv4);
         callback.expectError(PacketKeepalive.ERROR_INVALID_PORT);
 
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 123456, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 123456, dstIPv4);
         callback.expectError(PacketKeepalive.ERROR_INVALID_PORT);
 
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 12345, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 12345, dstIPv4);
         callback.expectError(PacketKeepalive.ERROR_HARDWARE_UNSUPPORTED);
 
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 12345, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 12345, dstIPv4);
         callback.expectError(PacketKeepalive.ERROR_HARDWARE_UNSUPPORTED);
 
         // Check that a started keepalive can be stopped.
         mWiFiNetworkAgent.setStartKeepaliveError(PacketKeepalive.SUCCESS);
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 12345, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 12345, dstIPv4);
         callback.expectStarted();
         mWiFiNetworkAgent.setStopKeepaliveError(PacketKeepalive.SUCCESS);
         ka.stop();
@@ -3144,7 +3240,7 @@ public class ConnectivityServiceTest {
 
         // Check that deleting the IP address stops the keepalive.
         LinkProperties bogusLp = new LinkProperties(lp);
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 12345, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 12345, dstIPv4);
         callback.expectStarted();
         bogusLp.removeLinkAddress(new LinkAddress(myIPv4, 25));
         bogusLp.addLinkAddress(new LinkAddress(notMyIPv4, 25));
@@ -3153,7 +3249,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent.sendLinkProperties(lp);
 
         // Check that a started keepalive is stopped correctly when the network disconnects.
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 12345, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 12345, dstIPv4);
         callback.expectStarted();
         mWiFiNetworkAgent.disconnect();
         waitFor(mWiFiNetworkAgent.getDisconnectedCV());
@@ -3170,7 +3266,7 @@ public class ConnectivityServiceTest {
         mWiFiNetworkAgent.setStartKeepaliveError(PacketKeepalive.SUCCESS);
 
         // Check things work as expected when the keepalive is stopped and the network disconnects.
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 12345, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 12345, dstIPv4);
         callback.expectStarted();
         ka.stop();
         mWiFiNetworkAgent.disconnect();
@@ -3184,13 +3280,14 @@ public class ConnectivityServiceTest {
 
         // Check that keepalive slots start from 1 and increment. The first one gets slot 1.
         mWiFiNetworkAgent.setExpectedKeepaliveSlot(1);
-        ka = mCm.startNattKeepalive(myNet, 25, callback, myIPv4, 12345, dstIPv4);
+        ka = mCm.startNattKeepalive(myNet, validKaInterval, callback, myIPv4, 12345, dstIPv4);
         callback.expectStarted();
 
         // The second one gets slot 2.
         mWiFiNetworkAgent.setExpectedKeepaliveSlot(2);
         TestKeepaliveCallback callback2 = new TestKeepaliveCallback();
-        PacketKeepalive ka2 = mCm.startNattKeepalive(myNet, 25, callback2, myIPv4, 6789, dstIPv4);
+        PacketKeepalive ka2 = mCm.startNattKeepalive(
+                myNet, validKaInterval, callback2, myIPv4, 6789, dstIPv4);
         callback2.expectStarted();
 
         // Now stop the first one and create a third. This also gets slot 1.
@@ -3199,7 +3296,8 @@ public class ConnectivityServiceTest {
 
         mWiFiNetworkAgent.setExpectedKeepaliveSlot(1);
         TestKeepaliveCallback callback3 = new TestKeepaliveCallback();
-        PacketKeepalive ka3 = mCm.startNattKeepalive(myNet, 25, callback3, myIPv4, 9876, dstIPv4);
+        PacketKeepalive ka3 = mCm.startNattKeepalive(
+                myNet, validKaInterval, callback3, myIPv4, 9876, dstIPv4);
         callback3.expectStarted();
 
         ka2.stop();
@@ -3316,8 +3414,10 @@ public class ConnectivityServiceTest {
 
     @Test
     public void testNetworkCallbackMaximum() {
-        final int MAX_REQUESTS = 100;
-        final int CALLBACKS = 90;
+        // We can only have 99 callbacks, because MultipathPolicyTracker is
+        // already one of them.
+        final int MAX_REQUESTS = 99;
+        final int CALLBACKS = 89;
         final int INTENTS = 10;
         assertEquals(MAX_REQUESTS, CALLBACKS + INTENTS);
 
@@ -3681,8 +3781,7 @@ public class ConnectivityServiceTest {
         vpnNetworkCallback.expectAvailableCallbacksUnvalidated(vpnNetworkAgent);
 
         genericNetworkCallback.expectCallback(CallbackState.NETWORK_CAPABILITIES, vpnNetworkAgent);
-        vpnNetworkCallback.expectCapabilitiesLike(
-                nc -> nc.appliesToUid(uid) && !nc.appliesToUid(uid + 1), vpnNetworkAgent);
+        vpnNetworkCallback.expectCapabilitiesLike(nc -> null == nc.getUids(), vpnNetworkAgent);
 
         ranges.clear();
         vpnNetworkAgent.setUids(ranges);

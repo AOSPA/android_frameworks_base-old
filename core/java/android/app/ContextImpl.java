@@ -18,6 +18,7 @@ package android.app;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.TestApi;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentProvider;
@@ -409,6 +410,7 @@ class ContextImpl extends Context {
         return sp;
     }
 
+    @GuardedBy("ContextImpl.class")
     private ArrayMap<File, SharedPreferencesImpl> getSharedPreferencesCacheLocked() {
         if (sSharedPrefsCache == null) {
             sSharedPrefsCache = new ArrayMap<>();
@@ -2263,6 +2265,7 @@ class ContextImpl extends Context {
     }
 
     /** @hide */
+    @TestApi
     @Override
     public void setAutofillCompatibilityEnabled(boolean autofillCompatEnabled) {
         mIsAutofillCompatEnabled = autofillCompatEnabled;

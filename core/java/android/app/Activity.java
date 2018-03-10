@@ -17,6 +17,7 @@
 package android.app;
 
 import static android.Manifest.permission.CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS;
+
 import static java.lang.Character.MIN_VALUE;
 
 import android.annotation.CallSuper;
@@ -135,6 +136,7 @@ import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 
@@ -748,6 +750,14 @@ public class Activity extends ContextThemeWrapper
     private static final String AUTO_FILL_AUTH_WHO_PREFIX = "@android:autoFillAuth:";
 
     private static final String KEYBOARD_SHORTCUTS_RECEIVER_PKG_NAME = "com.android.systemui";
+
+    private static final int LOG_AM_ON_CREATE_CALLED = 30057;
+    private static final int LOG_AM_ON_START_CALLED = 30059;
+    private static final int LOG_AM_ON_RESUME_CALLED = 30022;
+    private static final int LOG_AM_ON_PAUSE_CALLED = 30021;
+    private static final int LOG_AM_ON_STOP_CALLED = 30049;
+    private static final int LOG_AM_ON_RESTART_CALLED = 30058;
+    private static final int LOG_AM_ON_DESTROY_CALLED = 30060;
 
     private static class ManagedDialog {
         Dialog mDialog;
@@ -1390,6 +1400,7 @@ public class Activity extends ContextThemeWrapper
      *
      * {@hide}
      */
+    @Override
     public int getNextAutofillId() {
         if (mLastAutofillId == Integer.MAX_VALUE - 1) {
             mLastAutofillId = View.LAST_APP_AUTOFILL_ID;
@@ -1398,6 +1409,14 @@ public class Activity extends ContextThemeWrapper
         mLastAutofillId++;
 
         return mLastAutofillId;
+    }
+
+    /**
+     * @hide
+     */
+    @Override
+    public AutofillId autofillClientGetNextAutofillId() {
+        return new AutofillId(getNextAutofillId());
     }
 
     /**
@@ -1733,7 +1752,7 @@ public class Activity extends ContextThemeWrapper
      *
      * <p>This callback and {@link #onUserInteraction} are intended to help
      * activities manage status bar notifications intelligently; specifically,
-     * for helping activities determine the proper time to cancel a notfication.
+     * for helping activities determine the proper time to cancel a notification.
      *
      * @see #onUserInteraction()
      */
@@ -1741,32 +1760,16 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * Generate a new thumbnail for this activity.  This method is called before
-     * pausing the activity, and should draw into <var>outBitmap</var> the
-     * imagery for the desired thumbnail in the dimensions of that bitmap.  It
-     * can use the given <var>canvas</var>, which is configured to draw into the
-     * bitmap, for rendering if desired.
-     *
-     * <p>The default implementation returns fails and does not draw a thumbnail;
-     * this will result in the platform creating its own thumbnail if needed.
-     *
-     * @param outBitmap The bitmap to contain the thumbnail.
-     * @param canvas Can be used to render into the bitmap.
-     *
-     * @return Return true if you have drawn into the bitmap; otherwise after
-     *         you return it will be filled with a default thumbnail.
-     *
-     * @see #onCreateDescription
-     * @see #onSaveInstanceState
-     * @see #onPause
+     * @deprecated Method doesn't do anything and will be removed in the future.
      */
+    @Deprecated
     public boolean onCreateThumbnail(Bitmap outBitmap, Canvas canvas) {
         return false;
     }
 
     /**
      * Generate a new description for this activity.  This method is called
-     * before pausing the activity and can, if desired, return some textual
+     * before stopping the activity and can, if desired, return some textual
      * description of its current state to be displayed to the user.
      *
      * <p>The default implementation returns null, which will cause you to
@@ -1777,9 +1780,8 @@ public class Activity extends ContextThemeWrapper
      * @return A description of what the user is doing.  It should be short and
      *         sweet (only a few words).
      *
-     * @see #onCreateThumbnail
      * @see #onSaveInstanceState
-     * @see #onPause
+     * @see #onStop
      */
     @Nullable
     public CharSequence onCreateDescription() {
@@ -1915,7 +1917,7 @@ public class Activity extends ContextThemeWrapper
 
         if (isFinishing()) {
             if (mAutoFillResetNeeded) {
-                getAutofillManager().onActivityFinished();
+                getAutofillManager().onActivityFinishing();
             } else if (mIntent != null
                     && mIntent.hasExtra(AutofillManager.EXTRA_RESTORE_SESSION_TOKEN)) {
                 // Activity was launched when user tapped a link in the Autofill Save UI - since
@@ -4159,9 +4161,10 @@ public class Activity extends ContextThemeWrapper
      * <p>You can override this function to force global search, e.g. in response to a dedicated
      * search key, or to block search entirely (by simply returning false).
      *
-     * <p>Note: when running in a {@link Configuration#UI_MODE_TYPE_TELEVISION}, the default
-     * implementation changes to simply return false and you must supply your own custom
-     * implementation if you want to support search.</p>
+     * <p>Note: when running in a {@link Configuration#UI_MODE_TYPE_TELEVISION} or
+     * {@link Configuration#UI_MODE_TYPE_WATCH}, the default implementation changes to simply
+     * return false and you must supply your own custom implementation if you want to support
+     * search.
      *
      * @param searchEvent The {@link SearchEvent} that signaled this search.
      * @return Returns {@code true} if search launched, and {@code false} if the activity does
@@ -4181,8 +4184,10 @@ public class Activity extends ContextThemeWrapper
      * @see #onSearchRequested(SearchEvent)
      */
     public boolean onSearchRequested() {
-        if ((getResources().getConfiguration().uiMode&Configuration.UI_MODE_TYPE_MASK)
-                != Configuration.UI_MODE_TYPE_TELEVISION) {
+        final int uiMode = getResources().getConfiguration().uiMode
+            & Configuration.UI_MODE_TYPE_MASK;
+        if (uiMode != Configuration.UI_MODE_TYPE_TELEVISION
+                && uiMode != Configuration.UI_MODE_TYPE_WATCH) {
             startSearch(null, false, null, false);
             return true;
         } else {
@@ -4210,6 +4215,9 @@ public class Activity extends ContextThemeWrapper
      * onSearchRequested(), which may have been overridden elsewhere in your Activity.  If your goal
      * is to inject specific data such as context data, it is preferred to <i>override</i>
      * onSearchRequested(), so that any callers to it will benefit from the override.
+     *
+     * <p>Note: when running in a {@link Configuration#UI_MODE_TYPE_WATCH}, use of this API is
+     * not supported.
      *
      * @param initialQuery Any non-null non-empty string will be inserted as
      * pre-entered text in the search query box.
@@ -5568,13 +5576,7 @@ public class Activity extends ContextThemeWrapper
         if (mParent != null) {
             throw new IllegalStateException("Can only be called on top-level activity");
         }
-        if (Looper.myLooper() != mMainThread.getLooper()) {
-            throw new IllegalStateException("Must be called from main thread");
-        }
-        try {
-            ActivityManager.getService().requestActivityRelaunch(mToken);
-        } catch (RemoteException e) {
-        }
+        mMainThread.handleRelaunchActivityLocally(mToken);
     }
 
     /**
@@ -6358,6 +6360,8 @@ public class Activity extends ContextThemeWrapper
 
         final AutofillManager afm = getAutofillManager();
         if (afm != null) {
+            writer.print(prefix); writer.print("Autofill Compat Mode: ");
+            writer.println(isAutofillCompatibilityEnabled());
             afm.dump(prefix, writer);
         } else {
             writer.print(prefix); writer.println("No AutofillManager");
@@ -7116,6 +7120,7 @@ public class Activity extends ContextThemeWrapper
         } else {
             onCreate(icicle);
         }
+        writeEventLog(LOG_AM_ON_CREATE_CALLED, "performCreate");
         mActivityTransitionState.readState(icicle);
 
         mVisibleFromClient = !mWindow.getWindowStyle().getBoolean(
@@ -7129,12 +7134,14 @@ public class Activity extends ContextThemeWrapper
         onNewIntent(intent);
     }
 
-    final void performStart() {
+    final void performStart(String reason) {
         mActivityTransitionState.setEnterActivityOptions(this, getActivityOptions());
         mFragments.noteStateNotSaved();
         mCalled = false;
         mFragments.execPendingActions();
         mInstrumentation.callActivityOnStart(this);
+        writeEventLog(LOG_AM_ON_START_CALLED, reason);
+
         if (!mCalled) {
             throw new SuperNotCalledException(
                 "Activity " + mComponent.toShortString() +
@@ -7179,8 +7186,8 @@ public class Activity extends ContextThemeWrapper
 
                 String appName = getApplicationInfo().loadLabel(getPackageManager())
                         .toString();
-                String warning = "Detected problems with API compatiblity\n"
-                                 + "(please consult log for detail)";
+                String warning = "Detected problems with API compatibility\n"
+                                 + "(visit g.co/dev/appcompat for more info)";
                 if (isAppDebuggable) {
                     new AlertDialog.Builder(this)
                         .setTitle(appName)
@@ -7203,7 +7210,7 @@ public class Activity extends ContextThemeWrapper
      *              The option to not start immediately is needed in case a transaction with
      *              multiple lifecycle transitions is in progress.
      */
-    final void performRestart(boolean start) {
+    final void performRestart(boolean start, String reason) {
         mCanEnterPictureInPicture = true;
         mFragments.noteStateNotSaved();
 
@@ -7236,19 +7243,20 @@ public class Activity extends ContextThemeWrapper
 
             mCalled = false;
             mInstrumentation.callActivityOnRestart(this);
+            writeEventLog(LOG_AM_ON_RESTART_CALLED, reason);
             if (!mCalled) {
                 throw new SuperNotCalledException(
                     "Activity " + mComponent.toShortString() +
                     " did not call through to super.onRestart()");
             }
             if (start) {
-                performStart();
+                performStart(reason);
             }
         }
     }
 
-    final void performResume(boolean followedByPause) {
-        performRestart(true /* start */);
+    final void performResume(boolean followedByPause, String reason) {
+        performRestart(true /* start */, reason);
 
         mFragments.execPendingActions();
 
@@ -7267,6 +7275,7 @@ public class Activity extends ContextThemeWrapper
         mCalled = false;
         // mResumed is set by the instrumentation
         mInstrumentation.callActivityOnResume(this);
+        writeEventLog(LOG_AM_ON_RESUME_CALLED, reason);
         if (!mCalled) {
             throw new SuperNotCalledException(
                 "Activity " + mComponent.toShortString() +
@@ -7303,6 +7312,7 @@ public class Activity extends ContextThemeWrapper
         mFragments.dispatchPause();
         mCalled = false;
         onPause();
+        writeEventLog(LOG_AM_ON_PAUSE_CALLED, "performPause");
         mResumed = false;
         if (!mCalled && getApplicationInfo().targetSdkVersion
                 >= android.os.Build.VERSION_CODES.GINGERBREAD) {
@@ -7310,7 +7320,6 @@ public class Activity extends ContextThemeWrapper
                     "Activity " + mComponent.toShortString() +
                     " did not call through to super.onPause()");
         }
-        mResumed = false;
     }
 
     final void performUserLeaving() {
@@ -7318,7 +7327,7 @@ public class Activity extends ContextThemeWrapper
         onUserLeaveHint();
     }
 
-    final void performStop(boolean preserveWindow) {
+    final void performStop(boolean preserveWindow, String reason) {
         mDoReportFullyDrawn = false;
         mFragments.doLoaderStop(mChangingConfigurations /*retain*/);
 
@@ -7341,6 +7350,7 @@ public class Activity extends ContextThemeWrapper
 
             mCalled = false;
             mInstrumentation.callActivityOnStop(this);
+            writeEventLog(LOG_AM_ON_STOP_CALLED, reason);
             if (!mCalled) {
                 throw new SuperNotCalledException(
                     "Activity " + mComponent.toShortString() +
@@ -7368,6 +7378,7 @@ public class Activity extends ContextThemeWrapper
         mWindow.destroy();
         mFragments.dispatchDestroy();
         onDestroy();
+        writeEventLog(LOG_AM_ON_DESTROY_CALLED, "performDestroy");
         mFragments.doLoaderDestroy();
         if (mVoiceInteractor != null) {
             mVoiceInteractor.detachActivity();
@@ -7628,6 +7639,19 @@ public class Activity extends ContextThemeWrapper
 
     /** @hide */
     @Override
+    public final void autofillClientDispatchUnhandledKey(@NonNull View anchor,
+            @NonNull KeyEvent keyEvent) {
+        ViewRootImpl rootImpl = anchor.getViewRootImpl();
+        if (rootImpl != null) {
+            // dont care if anchorView is current focus, for example a custom view may only receive
+            // touchEvent, not focusable but can still trigger autofill window. The Key handling
+            // might be inside parent of the custom view.
+            rootImpl.dispatchKeyFromAutofill(keyEvent);
+        }
+    }
+
+    /** @hide */
+    @Override
     public final boolean autofillClientRequestHideFillUi() {
         if (mAutofillPopupWindow == null) {
             return false;
@@ -7706,6 +7730,9 @@ public class Activity extends ContextThemeWrapper
                 }
             }
         }
+        if (android.view.autofill.Helper.sVerbose) {
+            Log.v(TAG, "autofillClientGetViewVisibility(): " + Arrays.toString(visible));
+        }
         return visible;
     }
 
@@ -7740,7 +7767,7 @@ public class Activity extends ContextThemeWrapper
 
     /** @hide */
     @Override
-    public final boolean autofillIsCompatibilityModeEnabled() {
+    public final boolean autofillClientIsCompatibilityModeEnabled() {
         return isAutofillCompatibilityEnabled();
     }
 
@@ -7768,7 +7795,6 @@ public class Activity extends ContextThemeWrapper
      * @param disable {@code true} to disable preview screenshots; {@code false} otherwise.
      * @hide
      */
-    @SystemApi
     public void setDisablePreviewScreenshots(boolean disable) {
         try {
             ActivityManager.getService().setDisablePreviewScreenshots(mToken, disable);
@@ -7838,6 +7864,12 @@ public class Activity extends ContextThemeWrapper
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to call registerRemoteAnimations", e);
         }
+    }
+
+    /** Log a lifecycle event for current user id and component class. */
+    private void writeEventLog(int event, String reason) {
+        EventLog.writeEvent(event, UserHandle.myUserId(), getComponentName().getClassName(),
+                reason);
     }
 
     class HostCallbacks extends FragmentHostCallback<Activity> {

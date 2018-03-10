@@ -108,6 +108,7 @@ public final class TextLinks implements Parcelable {
      * @param text the text to apply the links to. Must match the original text
      * @param applyStrategy strategy for resolving link conflicts
      * @param spanFactory a factory to generate spans from TextLinks. Will use a default if null
+     * @param allowPrefix whether to allow applying links only to a prefix of the text.
      *
      * @return a status code indicating whether or not the links were successfully applied
      *
@@ -117,10 +118,12 @@ public final class TextLinks implements Parcelable {
     public int apply(
             @NonNull Spannable text,
             @ApplyStrategy int applyStrategy,
-            @Nullable Function<TextLink, TextLinkSpan> spanFactory) {
+            @Nullable Function<TextLink, TextLinkSpan> spanFactory,
+            boolean allowPrefix) {
         Preconditions.checkNotNull(text);
         checkValidApplyStrategy(applyStrategy);
-        if (!mFullText.equals(text.toString())) {
+        final String textString = text.toString();
+        if (!mFullText.equals(textString) && !(allowPrefix && textString.startsWith(mFullText))) {
             return STATUS_DIFFERENT_TEXT;
         }
         if (mLinks.isEmpty()) {
@@ -302,27 +305,29 @@ public final class TextLinks implements Parcelable {
         private @ApplyStrategy int mApplyStrategy;
         private Function<TextLink, TextLinkSpan> mSpanFactory;
 
+        private String mCallingPackageName;
+
         /**
          * Returns a new options object based on the specified link mask.
          */
         public static Options fromLinkMask(@LinkifyMask int mask) {
-            final TextClassifier.EntityConfig entityConfig =
-                    new TextClassifier.EntityConfig(TextClassifier.ENTITY_PRESET_NONE);
+            final List<String> entitiesToFind = new ArrayList<>();
 
             if ((mask & Linkify.WEB_URLS) != 0) {
-                entityConfig.includeEntities(TextClassifier.TYPE_URL);
+                entitiesToFind.add(TextClassifier.TYPE_URL);
             }
             if ((mask & Linkify.EMAIL_ADDRESSES) != 0) {
-                entityConfig.includeEntities(TextClassifier.TYPE_EMAIL);
+                entitiesToFind.add(TextClassifier.TYPE_EMAIL);
             }
             if ((mask & Linkify.PHONE_NUMBERS) != 0) {
-                entityConfig.includeEntities(TextClassifier.TYPE_PHONE);
+                entitiesToFind.add(TextClassifier.TYPE_PHONE);
             }
             if ((mask & Linkify.MAP_ADDRESSES) != 0) {
-                entityConfig.includeEntities(TextClassifier.TYPE_ADDRESS);
+                entitiesToFind.add(TextClassifier.TYPE_ADDRESS);
             }
 
-            return new Options().setEntityConfig(entityConfig);
+            return new Options().setEntityConfig(
+                    TextClassifier.EntityConfig.createWithEntityList(entitiesToFind));
         }
 
         public Options() {}
@@ -374,6 +379,15 @@ public final class TextLinks implements Parcelable {
         }
 
         /**
+         * Sets the name of the package that requested the links to get generated.
+         * @hide
+         */
+        public Options setCallingPackageName(@Nullable String callingPackageName) {
+            mCallingPackageName = callingPackageName;
+            return this;
+        }
+
+        /**
          * @return ordered list of locale preferences that can be used to disambiguate
          *      the provided text
          */
@@ -414,6 +428,16 @@ public final class TextLinks implements Parcelable {
             return mSpanFactory;
         }
 
+        /**
+         * @return the name of the package that requested the links to get generated.
+         * TODO: make available as system API
+         * @hide
+         */
+        @Nullable
+        public String getCallingPackageName() {
+            return mCallingPackageName;
+        }
+
         @Override
         public int describeContents() {
             return 0;
@@ -430,6 +454,7 @@ public final class TextLinks implements Parcelable {
                 mEntityConfig.writeToParcel(dest, flags);
             }
             dest.writeInt(mApplyStrategy);
+            dest.writeString(mCallingPackageName);
         }
 
         public static final Parcelable.Creator<Options> CREATOR =
@@ -453,6 +478,7 @@ public final class TextLinks implements Parcelable {
                 mEntityConfig = TextClassifier.EntityConfig.CREATOR.createFromParcel(in);
             }
             mApplyStrategy = in.readInt();
+            mCallingPackageName = in.readString();
         }
     }
 

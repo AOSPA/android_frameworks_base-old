@@ -36,7 +36,7 @@ aidl_parcelables :=
 define stubs-to-aidl-parcelables
   gen := $(TARGET_OUT_COMMON_INTERMEDIATES)/$1.aidl
   aidl_parcelables += $$(gen)
-  $$(gen): $(call java-lib-header-files,$1) | $(HOST_OUT_EXECUTABLES)/sdkparcelables
+  $$(gen): $(call java-lib-header-files,$1) $(HOST_OUT_EXECUTABLES)/sdkparcelables
 	@echo Extract SDK parcelables: $$@
 	rm -f $$@
 	$(HOST_OUT_EXECUTABLES)/sdkparcelables $$< $$@
@@ -793,6 +793,8 @@ LOCAL_SRC_FILES := \
     $(call all-proto-files-under, core/proto) \
     $(call all-proto-files-under, libs/incident/proto) \
     $(call all-proto-files-under, cmds/statsd/src)
+# b/72714520
+LOCAL_ERROR_PRONE_FLAGS := -Xep:MissingOverride:OFF
 include $(BUILD_HOST_JAVA_LIBRARY)
 
 # ====  java proto device library (for test only)  ==============================
@@ -804,7 +806,7 @@ LOCAL_PROTOC_FLAGS := \
     -Iexternal/protobuf/src
 LOCAL_PROTO_JAVA_OUTPUT_PARAMS := \
     store_unknown_fields = true
-LOCAL_JAVA_LIBRARIES := core-oj core-libart
+LOCAL_SDK_VERSION := current
 LOCAL_SRC_FILES := \
     $(call all-proto-files-under, core/proto) \
     $(call all-proto-files-under, libs/incident/proto/android/os)
