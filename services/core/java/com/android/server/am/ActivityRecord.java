@@ -1639,7 +1639,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
         mRecentTransitions.add(new StateTransition(prev, state, reason));
 
-        mState = state;
+        final TaskRecord parent = getTask();
+
+        if (parent != null) {
+            parent.onActivityStateChanged(this, state, reason);
+        }
 
         if (isState(DESTROYING, DESTROYED)) {
             makeFinishingLocked();
@@ -2122,7 +2126,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         if (mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(this) || stopped) {
             final ActivityStack stack = mStackSupervisor.getFocusedStack();
             // Try to use the one which is closest to top.
-            ActivityRecord r = stack.mResumedActivity;
+            ActivityRecord r = stack.getResumedActivity();
             if (r == null) {
                 r = stack.mPausingActivity;
             }
@@ -2219,7 +2223,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             return false;
         }
         final ActivityStack stack = getStack();
-        if (stack == null || this == stack.mResumedActivity || this == stack.mPausingActivity
+        if (stack == null || this == stack.getResumedActivity() || this == stack.mPausingActivity
                 || !haveState || !stopped) {
             // We're not ready for this kind of thing.
             return false;

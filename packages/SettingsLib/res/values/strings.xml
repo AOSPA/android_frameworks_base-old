@@ -758,10 +758,9 @@
     <string name="app_process_limit_title">Background process limit</string>
 
     <!-- UI debug setting: show all ANRs? [CHAR LIMIT=25] -->
-    <string name="show_all_anrs">Show all ANRs</string>
-    <!-- UI debug setting: show all ANRs summary [CHAR LIMIT=50] -->
-    <string name="show_all_anrs_summary">Show App Not Responding dialog
-        for background apps</string>
+    <string name="show_all_anrs">Show background ANRs</string>
+    <!-- UI debug setting: show all ANRs summary [CHAR LIMIT=100] -->
+    <string name="show_all_anrs_summary">Display App Not Responding dialog for background apps</string>
 
     <!-- UI debug setting: show all ANRs? [CHAR LIMIT=25] -->
     <string name="show_notification_channel_warnings">Show notification channel warnings</string>
@@ -888,13 +887,13 @@
     <string name="power_remaining_duration_only_short"><xliff:g id="time">%1$s</xliff:g> left</string>
 
     <!-- [CHAR_LIMIT=100] Label for enhanced estimated time that phone will run out of battery -->
-    <string name="power_discharge_by_enhanced">Will last until about about <xliff:g id="time">%1$s</xliff:g> based on your usage (<xliff:g id="level">%2$s</xliff:g>)</string>
+    <string name="power_discharge_by_enhanced">Will last until about <xliff:g id="time">%1$s</xliff:g> based on your usage (<xliff:g id="level">%2$s</xliff:g>)</string>
     <!-- [CHAR_LIMIT=100] Label for enhanced estimated time that phone will run out of battery with no percentage -->
-    <string name="power_discharge_by_only_enhanced">Will last until about about <xliff:g id="time">%1$s</xliff:g> based on your usage</string>
+    <string name="power_discharge_by_only_enhanced">Will last until about <xliff:g id="time">%1$s</xliff:g> based on your usage</string>
     <!-- [CHAR_LIMIT=100] Label for estimated time that phone will run out of battery -->
-    <string name="power_discharge_by">Will last until about about <xliff:g id="time">%1$s</xliff:g> (<xliff:g id="level">%2$s</xliff:g>)</string>
+    <string name="power_discharge_by">Will last until about <xliff:g id="time">%1$s</xliff:g> (<xliff:g id="level">%2$s</xliff:g>)</string>
     <!-- [CHAR_LIMIT=100] Label for estimated time that phone will run out of battery -->
-    <string name="power_discharge_by_only">Will last until about about <xliff:g id="time">%1$s</xliff:g></string>
+    <string name="power_discharge_by_only">Will last until about <xliff:g id="time">%1$s</xliff:g></string>
 
     <!-- [CHAR_LIMIT=60] label for estimated remaining duration of battery when under a certain amount -->
     <string name="power_remaining_less_than_duration_only">Less than <xliff:g id="threshold">%1$s</xliff:g> remaining</string>

@@ -249,14 +249,14 @@ void StatsLogProcessor::onDumpReportLocked(const ConfigKey& key, const uint64_t 
     ProtoOutputStream proto;
 
     // Start of ConfigKey.
-    long long configKeyToken = proto.start(FIELD_TYPE_MESSAGE | FIELD_ID_CONFIG_KEY);
+    uint64_t configKeyToken = proto.start(FIELD_TYPE_MESSAGE | FIELD_ID_CONFIG_KEY);
     proto.write(FIELD_TYPE_INT32 | FIELD_ID_UID, key.GetUid());
     proto.write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)key.GetId());
     proto.end(configKeyToken);
     // End of ConfigKey.
 
     // Start of ConfigMetricsReport (reports).
-    long long reportsToken =
+    uint64_t reportsToken =
             proto.start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_REPORTS);
 
     int64_t lastReportTimeNs = it->second->getLastReportTimeNs();
@@ -355,7 +355,6 @@ void StatsLogProcessor::WriteDataToDisk() {
         const ConfigKey& key = pair.first;
         vector<uint8_t> data;
         onDumpReportLocked(key, getElapsedRealtimeNs(), &data);
-        // TODO: Add a guardrail to prevent accumulation of file on disk.
         string file_name = StringPrintf("%s/%ld_%d_%lld", STATS_DATA_DIR,
              (long)getWallClockSec(), key.GetUid(), (long long)key.GetId());
         StorageManager::writeFile(file_name.c_str(), &data[0], data.size());

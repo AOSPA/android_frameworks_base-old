@@ -20,6 +20,9 @@ import static android.Manifest.permission.REMOTE_AUDIO_PLAYBACK;
 import static android.media.AudioManager.RINGER_MODE_NORMAL;
 import static android.media.AudioManager.RINGER_MODE_SILENT;
 import static android.media.AudioManager.RINGER_MODE_VIBRATE;
+import static android.media.AudioManager.STREAM_ALARM;
+import static android.media.AudioManager.STREAM_MUSIC;
+import static android.media.AudioManager.STREAM_SYSTEM;
 import static android.os.Process.FIRST_APPLICATION_UID;
 
 import android.Manifest;
@@ -141,6 +144,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -414,8 +418,10 @@ public class AudioService extends IAudioService.Stub
     /** @see System#MODE_RINGER_STREAMS_AFFECTED */
     private int mRingerModeAffectedStreams = 0;
 
-    // Streams currently muted by ringer mode
-    private int mRingerModeMutedStreams;
+    private int mZenModeAffectedStreams = 0;
+
+    // Streams currently muted by ringer mode and dnd
+    private int mRingerAndZenModeMutedStreams;
 
     /** Streams that can be muted. Do not resolve to aliases when checking.
      * @see System#MUTE_STREAMS_AFFECTED */
@@ -767,7 +773,7 @@ public class AudioService extends IAudioService.Stub
 
         // Call setRingerModeInt() to apply correct mute
         // state on streams affected by ringer mode.
-        mRingerModeMutedStreams = 0;
+        mRingerAndZenModeMutedStreams = 0;
         setRingerModeInt(getRingerModeInternal(), false);
 
         // Register for device connection intent broadcasts.
@@ -1278,7 +1284,7 @@ public class AudioService extends IAudioService.Stub
                                             mHasVibrator ? AudioManager.VIBRATE_SETTING_ONLY_SILENT
                                                             : AudioManager.VIBRATE_SETTING_OFF);
 
-            updateRingerModeAffectedStreams();
+            updateRingerAndZenModeAffectedStreams();
             readDockAudioSettings(cr);
             sendEncodedSurroundMode(cr, "readPersistedSettings");
         }
@@ -1531,7 +1537,9 @@ public class AudioService extends IAudioService.Stub
                 flags |= AudioManager.FLAG_SHOW_VIBRATE_HINT;
             }
         }
-        // If the ringermode is suppressing media, prevent changes
+
+        // If the ringer mode or zen is muting the stream, do not change stream unless
+        // it'll cause us to exit dnd
         if (!volumeAdjustmentAllowedByDnd(streamTypeAlias, flags)) {
             adjustVolume = false;
         }
@@ -1878,18 +1886,19 @@ public class AudioService extends IAudioService.Stub
         sendVolumeUpdate(streamType, oldIndex, index, flags);
     }
 
-    // No ringer affected streams can be changed in total silence mode or priority-only
-    // (with alarms/media toggled off) except those that will cause the device to exit
-    // the mode.
+    // No ringer or zen muted stream volumes can be changed unless it'll exit dnd
     private boolean volumeAdjustmentAllowedByDnd(int streamTypeAlias, int flags) {
-        if ((mNm.getZenMode() == Settings.Global.ZEN_MODE_NO_INTERRUPTIONS
-                || mNm.getZenMode() == Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS)
-                && isStreamMutedByRingerMode(streamTypeAlias)) {
-            if (!(((flags & AudioManager.FLAG_ALLOW_RINGER_MODES) != 0) ||
-                    (streamTypeAlias == getUiSoundsStreamType()))) {
-                return false;
-            }
+        switch (mNm.getZenMode()) {
+            case Settings.Global.ZEN_MODE_OFF:
+                return true;
+            case Settings.Global.ZEN_MODE_NO_INTERRUPTIONS:
+            case Settings.Global.ZEN_MODE_ALARMS:
+            case Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS:
+                return !isStreamMutedByRingerOrZenMode(streamTypeAlias)
+                        || streamTypeAlias == getUiSoundsStreamType()
+                        || (flags & AudioManager.FLAG_ALLOW_RINGER_MODES) != 0;
         }
+
         return true;
     }
 
@@ -1908,7 +1917,16 @@ public class AudioService extends IAudioService.Stub
                 }
                 mUserSelectedVolumeControlStream = false;
             } else {
-                mForceControlStreamClient = new ForceControlStreamClient(cb);
+                if (null == mForceControlStreamClient) {
+                    mForceControlStreamClient = new ForceControlStreamClient(cb);
+                } else {
+                    if (mForceControlStreamClient.getBinder() == cb) {
+                        Log.d(TAG, "forceVolumeControlStream cb:" + cb + " is already linked.");
+                    } else {
+                        mForceControlStreamClient.release();
+                        mForceControlStreamClient = new ForceControlStreamClient(cb);
+                    }
+                }
             }
         }
     }
@@ -1947,6 +1965,10 @@ public class AudioService extends IAudioService.Stub
                 mCb.unlinkToDeath(this, 0);
                 mCb = null;
             }
+        }
+
+        public IBinder getBinder() {
+            return mCb;
         }
     }
 
@@ -2405,9 +2427,9 @@ public class AudioService extends IAudioService.Stub
     }
 
     private void muteRingerModeStreams() {
-        // Mute stream if not previously muted by ringer mode and ringer mode
-        // is not RINGER_MODE_NORMAL and stream is affected by ringer mode.
-        // Unmute stream if previously muted by ringer mode and ringer mode
+        // Mute stream if not previously muted by ringer mode and (ringer mode
+        // is not RINGER_MODE_NORMAL OR stream is zen muted) and stream is affected by ringer mode.
+        // Unmute stream if previously muted by ringer/zen mode and ringer mode
         // is RINGER_MODE_NORMAL or stream is not affected by ringer mode.
         int numStreamTypes = AudioSystem.getNumStreamTypes();
 
@@ -2415,25 +2437,14 @@ public class AudioService extends IAudioService.Stub
             mNm = (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
         }
 
-        // in priority only dnd, alarms and media streams can be muted when ringer is not muted
-        boolean isZenPriorityMode = mNm.getZenMode() ==
-                Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS;
-        NotificationManager.Policy zenPolicy = mNm.getNotificationPolicy();
-        boolean muteAlarms = isZenPriorityMode && ((zenPolicy.priorityCategories
-                & NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS) == 0);
-        boolean muteMedia = isZenPriorityMode && ((zenPolicy.priorityCategories
-                & NotificationManager.Policy.PRIORITY_CATEGORY_MEDIA_SYSTEM_OTHER) == 0);
-
         final boolean ringerModeMute = mRingerMode == AudioManager.RINGER_MODE_VIBRATE
                 || mRingerMode == AudioManager.RINGER_MODE_SILENT;
 
         for (int streamType = numStreamTypes - 1; streamType >= 0; streamType--) {
-            final boolean isMuted = isStreamMutedByRingerMode(streamType);
-
-            final boolean shouldZenMute = (isAlarm(streamType) && muteAlarms)
-                    || (isMedia(streamType) && muteMedia);
-            final boolean shouldMute = (shouldZenMute || ringerModeMute)
-                    && isStreamAffectedByRingerMode(streamType);
+            final boolean isMuted = isStreamMutedByRingerOrZenMode(streamType);
+            final boolean shouldZenMute = shouldZenMuteStream(streamType);
+            final boolean shouldMute = shouldZenMute || (ringerModeMute
+                    && isStreamAffectedByRingerMode(streamType));
             if (isMuted == shouldMute) continue;
             if (!shouldMute) {
                 // unmute
@@ -2460,11 +2471,11 @@ public class AudioService extends IAudioService.Stub
                     }
                 }
                 mStreamStates[streamType].mute(false);
-                mRingerModeMutedStreams &= ~(1 << streamType);
+                mRingerAndZenModeMutedStreams &= ~(1 << streamType);
             } else {
                 // mute
                 mStreamStates[streamType].mute(true);
-                mRingerModeMutedStreams |= (1 << streamType);
+                mRingerAndZenModeMutedStreams |= (1 << streamType);
             }
         }
     }
@@ -2479,7 +2490,12 @@ public class AudioService extends IAudioService.Stub
     }
 
     private boolean isMedia(int streamType) {
-        return streamType == AudioSystem.STREAM_SYSTEM || streamType == AudioSystem.STREAM_MUSIC;
+        return streamType == AudioSystem.STREAM_MUSIC;
+    }
+
+
+    private boolean isSystem(int streamType) {
+        return streamType == AudioSystem.STREAM_SYSTEM;
     }
 
     private void setRingerModeInt(int ringerMode, boolean persist) {
@@ -2838,6 +2854,11 @@ public class AudioService extends IAudioService.Stub
 
     /** @see AudioManager#playSoundEffect(int, float) */
     public void playSoundEffectVolume(int effectType, float volume) {
+        // do not try to play the sound effect if the system stream is muted
+        if (isStreamMutedByRingerOrZenMode(STREAM_SYSTEM)) {
+            return;
+        }
+
         if (effectType >= AudioManager.NUM_SOUND_EFFECTS || effectType < 0) {
             Log.w(TAG, "AudioService effectType value " + effectType + " out of range");
             return;
@@ -2955,7 +2976,7 @@ public class AudioService extends IAudioService.Stub
             synchronized (VolumeStreamState.class) {
                 // unmute stream that was muted but is not affect by mute anymore
                 if (streamState.mIsMuted && ((!isStreamAffectedByMute(streamType) &&
-                        !isStreamMutedByRingerMode(streamType)) || mUseFixedVolume)) {
+                        !isStreamMutedByRingerOrZenMode(streamType)) || mUseFixedVolume)) {
                     streamState.mIsMuted = false;
                 }
             }
@@ -3901,12 +3922,69 @@ public class AudioService extends IAudioService.Stub
         return (mRingerModeAffectedStreams & (1 << streamType)) != 0;
     }
 
-    private boolean isStreamMutedByRingerMode(int streamType) {
-        return (mRingerModeMutedStreams & (1 << streamType)) != 0;
+    private boolean shouldZenMuteStream(int streamType) {
+        if (mNm.getZenMode() != Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS) {
+            return false;
+        }
+
+        NotificationManager.Policy zenPolicy = mNm.getNotificationPolicy();
+        final boolean muteAlarms = (zenPolicy.priorityCategories
+                & NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS) == 0;
+        final boolean muteMedia = (zenPolicy.priorityCategories
+                & NotificationManager.Policy.PRIORITY_CATEGORY_MEDIA) == 0;
+        final boolean muteSystem = (zenPolicy.priorityCategories
+                & NotificationManager.Policy.PRIORITY_CATEGORY_SYSTEM) == 0;
+        final boolean muteNotificationAndRing = ZenModeConfig
+                .areAllPriorityOnlyNotificationZenSoundsMuted(mNm.getNotificationPolicy());
+        return muteAlarms && isAlarm(streamType)
+                || muteMedia && isMedia(streamType)
+                || muteSystem && isSystem(streamType)
+                || muteNotificationAndRing && isNotificationOrRinger(streamType);
+    }
+
+    private boolean isStreamMutedByRingerOrZenMode(int streamType) {
+        return (mRingerAndZenModeMutedStreams & (1 << streamType)) != 0;
+    }
+
+    /**
+     * DND total silence: media and alarms streams are tied to the muted ringer
+     * {@link ZenModeHelper.RingerModeDelegate#getRingerModeAffectedStreams(int)}
+     * DND alarms only: notification, ringer + system muted (by default tied to muted ringer mode)
+     * DND priority only: alarms, media, system streams can be muted separate from ringer based on
+     * zenPolicy (this method determines which streams)
+     * @return true if changed, else false
+     */
+    private boolean updateZenModeAffectedStreams() {
+        int zenModeAffectedStreams = 0;
+        if (mSystemReady && mNm.getZenMode() == Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS) {
+            NotificationManager.Policy zenPolicy = mNm.getNotificationPolicy();
+            if ((zenPolicy.priorityCategories
+                    & NotificationManager.Policy.PRIORITY_CATEGORY_ALARMS) == 0) {
+                zenModeAffectedStreams |= 1 << AudioManager.STREAM_ALARM;
+            }
+
+            if ((zenPolicy.priorityCategories
+                    & NotificationManager.Policy.PRIORITY_CATEGORY_MEDIA) == 0) {
+                zenModeAffectedStreams |= 1 << AudioManager.STREAM_MUSIC;
+            }
+
+            if ((zenPolicy.priorityCategories
+                    & NotificationManager.Policy.PRIORITY_CATEGORY_SYSTEM) == 0) {
+                zenModeAffectedStreams |= 1 << AudioManager.STREAM_SYSTEM;
+            }
+        }
+
+        if (mZenModeAffectedStreams != zenModeAffectedStreams) {
+            mZenModeAffectedStreams = zenModeAffectedStreams;
+            return true;
+        }
+
+        return false;
     }
 
     @GuardedBy("mSettingsLock")
-    private boolean updateRingerModeAffectedStreams() {
+    private boolean updateRingerAndZenModeAffectedStreams() {
+        boolean updatedZenModeAffectedStreams = updateZenModeAffectedStreams();
         int ringerModeAffectedStreams = Settings.System.getIntForUser(mContentResolver,
                 Settings.System.MODE_RINGER_STREAMS_AFFECTED,
                 ((1 << AudioSystem.STREAM_RING)|(1 << AudioSystem.STREAM_NOTIFICATION)|
@@ -3938,7 +4016,7 @@ public class AudioService extends IAudioService.Stub
             mRingerModeAffectedStreams = ringerModeAffectedStreams;
             return true;
         }
-        return false;
+        return updatedZenModeAffectedStreams;
     }
 
     @Override
@@ -5261,6 +5339,10 @@ public class AudioService extends IAudioService.Stub
 
         SettingsObserver() {
             super(new Handler());
+            mContentResolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.ZEN_MODE), false, this);
+            mContentResolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.ZEN_MODE_CONFIG_ETAG), false, this);
             mContentResolver.registerContentObserver(Settings.System.getUriFor(
                 Settings.System.MODE_RINGER_STREAMS_AFFECTED), false, this);
             mContentResolver.registerContentObserver(Settings.Global.getUriFor(
@@ -5279,11 +5361,11 @@ public class AudioService extends IAudioService.Stub
         public void onChange(boolean selfChange) {
             super.onChange(selfChange);
             // FIXME This synchronized is not necessary if mSettingsLock only protects mRingerMode.
-            //       However there appear to be some missing locks around mRingerModeMutedStreams
+            //       However there appear to be some missing locks around mRingerAndZenModeMutedStreams
             //       and mRingerModeAffectedStreams, so will leave this synchronized for now.
-            //       mRingerModeMutedStreams and mMuteAffectedStreams are safe (only accessed once).
+            //       mRingerAndZenModeMutedStreams and mMuteAffectedStreams are safe (only accessed once).
             synchronized (mSettingsLock) {
-                if (updateRingerModeAffectedStreams()) {
+                if (updateRingerAndZenModeAffectedStreams()) {
                     /*
                      * Ensure all stream types that should be affected by ringer mode
                      * are in the proper state.
@@ -5617,7 +5699,9 @@ public class AudioService extends IAudioService.Stub
             }
             // ignore condition on device being actually used for music when in communication
             // because music routing is altered in this case.
-            if (((device == musicDevice) || isInCommunication()) && (device == devices)) {
+            // also checks whether media routing if affected by a dynamic policy
+            if (((device == musicDevice) || isInCommunication()) && (device == devices)
+                    && !hasMediaDynamicPolicy()) {
                 mAudioHandler.removeMessages(MSG_BROADCAST_AUDIO_BECOMING_NOISY);
                 sendMsg(mAudioHandler,
                         MSG_BROADCAST_AUDIO_BECOMING_NOISY,
@@ -5641,6 +5725,24 @@ public class AudioService extends IAudioService.Stub
             }
         }
         return delay;
+    }
+
+    /**
+     * @return true if there is currently a registered dynamic mixing policy that affects media
+     */
+    private boolean hasMediaDynamicPolicy() {
+        synchronized (mAudioPolicies) {
+            if (mAudioPolicies.isEmpty()) {
+                return false;
+            }
+            final Collection<AudioPolicyProxy> appColl = mAudioPolicies.values();
+            for (AudioPolicyProxy app : appColl) {
+                if (app.hasMixAffectingUsage(AudioAttributes.USAGE_MEDIA)) {
+                    return true;
+                }
+            }
+            return false;
+        }
     }
 
     private void updateAudioRoutes(int device, int state)
@@ -6616,7 +6718,7 @@ public class AudioService extends IAudioService.Stub
         pw.println("- mode (internal) = " + RINGER_MODE_NAMES[mRingerMode]);
         pw.println("- mode (external) = " + RINGER_MODE_NAMES[mRingerModeExternal]);
         dumpRingerModeStreams(pw, "affected", mRingerModeAffectedStreams);
-        dumpRingerModeStreams(pw, "muted", mRingerModeMutedStreams);
+        dumpRingerModeStreams(pw, "muted", mRingerAndZenModeMutedStreams);
         pw.print("- delegate = "); pw.println(mRingerModeDelegate);
     }
 
@@ -6913,7 +7015,7 @@ public class AudioService extends IAudioService.Stub
             mRingerModeDelegate = delegate;
             if (mRingerModeDelegate != null) {
                 synchronized (mSettingsLock) {
-                    updateRingerModeAffectedStreams();
+                    updateRingerAndZenModeAffectedStreams();
                 }
                 setRingerModeInternal(getRingerModeInternal(), TAG + ".setRingerModeDelegate");
             }
@@ -6954,7 +7056,7 @@ public class AudioService extends IAudioService.Stub
         @Override
         public void updateRingerModeAffectedStreamsInternal() {
             synchronized (mSettingsLock) {
-                if (updateRingerModeAffectedStreams()) {
+                if (updateRingerAndZenModeAffectedStreams()) {
                     setRingerModeInt(getRingerModeInternal(), false);
                 }
             }
@@ -7339,6 +7441,15 @@ public class AudioService extends IAudioService.Stub
             final long identity = Binder.clearCallingIdentity();
             AudioSystem.registerPolicyMixes(mMixes, false);
             Binder.restoreCallingIdentity(identity);
+        }
+
+        boolean hasMixAffectingUsage(int usage) {
+            for (AudioMix mix : mMixes) {
+                if (mix.isAffectingUsage(usage)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         void addMixes(@NonNull ArrayList<AudioMix> mixes) {

@@ -28,8 +28,6 @@ import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER
 import static android.content.Intent.ACTION_USER_REMOVED;
 import static android.content.Intent.EXTRA_USER_HANDLE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
-import static android.os.Process.ROOT_UID;
-import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.myPid;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
@@ -183,6 +181,7 @@ import android.util.MergedConfiguration;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
@@ -1113,7 +1112,7 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     public int addWindow(Session session, IWindow client, int seq,
-            LayoutParams attrs, int viewVisibility, int displayId,
+            LayoutParams attrs, int viewVisibility, int displayId, Rect outFrame,
             Rect outContentInsets, Rect outStableInsets, Rect outOutsets,
             DisplayCutout.ParcelableWrapper outDisplayCutout, InputChannel outInputChannel) {
         int[] appOp = new int[1];
@@ -1456,8 +1455,8 @@ public class WindowManagerService extends IWindowManager.Stub
             } else {
                 taskBounds = null;
             }
-            if (mPolicy.getInsetHintLw(win.mAttrs, taskBounds, displayFrames, outContentInsets,
-                    outStableInsets, outOutsets, outDisplayCutout)) {
+            if (mPolicy.getLayoutHintLw(win.mAttrs, taskBounds, displayFrames, outFrame,
+                    outContentInsets, outStableInsets, outOutsets, outDisplayCutout)) {
                 res |= WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_NAV_BAR;
             }
 
@@ -2671,11 +2670,12 @@ public class WindowManagerService extends IWindowManager.Stub
 
     public void initializeRecentsAnimation(
             IRecentsAnimationRunner recentsAnimationRunner,
-            RecentsAnimationController.RecentsAnimationCallbacks callbacks, int displayId) {
+            RecentsAnimationController.RecentsAnimationCallbacks callbacks, int displayId,
+            SparseBooleanArray recentTaskIds) {
         synchronized (mWindowMap) {
             mRecentsAnimationController = new RecentsAnimationController(this,
                     recentsAnimationRunner, callbacks, displayId);
-            mRecentsAnimationController.initialize();
+            mRecentsAnimationController.initialize(recentTaskIds);
         }
     }
 
@@ -3642,14 +3642,14 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public Bitmap screenshotWallpaper() {
-        if (!checkCallingPermission(READ_FRAME_BUFFER,
-                "screenshotWallpaper()")) {
+        if (!checkCallingPermission(READ_FRAME_BUFFER, "screenshotWallpaper()")) {
             throw new SecurityException("Requires READ_FRAME_BUFFER permission");
         }
         try {
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "screenshotWallpaper");
-            return screenshotApplications(DEFAULT_DISPLAY, Bitmap.Config.ARGB_8888,
-                    true /* wallpaperOnly */);
+            synchronized (mWindowMap) {
+                return mRoot.mWallpaperController.screenshotWallpaperLocked();
+            }
         } finally {
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
@@ -3662,14 +3662,25 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     @Override
     public boolean requestAssistScreenshot(final IAssistDataReceiver receiver) {
-        if (!checkCallingPermission(READ_FRAME_BUFFER,
-                "requestAssistScreenshot()")) {
+        if (!checkCallingPermission(READ_FRAME_BUFFER, "requestAssistScreenshot()")) {
             throw new SecurityException("Requires READ_FRAME_BUFFER permission");
         }
 
+        final Bitmap bm;
+        synchronized (mWindowMap) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(DEFAULT_DISPLAY);
+            if (displayContent == null) {
+                if (DEBUG_SCREENSHOT) {
+                    Slog.i(TAG_WM, "Screenshot returning null. No Display for displayId="
+                            + DEFAULT_DISPLAY);
+                }
+                bm = null;
+            } else {
+                bm = displayContent.screenshotDisplayLocked(Bitmap.Config.ARGB_8888);
+            }
+        }
+
         FgThread.getHandler().post(() -> {
-            Bitmap bm = screenshotApplications(DEFAULT_DISPLAY, Bitmap.Config.ARGB_8888,
-                    false /* wallpaperOnly */);
             try {
                 receiver.onHandleAssistScreenshot(bm);
             } catch (RemoteException e) {
@@ -3696,28 +3707,6 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mWindowMap) {
             mTaskSnapshotController.removeObsoleteTaskFiles(persistentTaskIds, runningUserIds);
         }
-    }
-
-    /**
-     * Takes a snapshot of the screen.  In landscape mode this grabs the whole screen.
-     * In portrait mode, it grabs the full screenshot.
-     *
-     * @param displayId the Display to take a screenshot of.
-     * @param config of the output bitmap
-     * @param wallpaperOnly true if only the wallpaper layer should be included in the screenshot
-     */
-    private Bitmap screenshotApplications(int displayId, Bitmap.Config config,
-            boolean wallpaperOnly) {
-        final DisplayContent displayContent;
-        synchronized(mWindowMap) {
-            displayContent = mRoot.getDisplayContent(displayId);
-            if (displayContent == null) {
-                if (DEBUG_SCREENSHOT) Slog.i(TAG_WM, "Screenshot returning null. No Display for "
-                        + "displayId=" + displayId);
-                return null;
-            }
-        }
-        return displayContent.screenshotDisplay(config, wallpaperOnly);
     }
 
     /**
@@ -4603,6 +4592,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int NOTIFY_KEYGUARD_FLAGS_CHANGED = 56;
         public static final int NOTIFY_KEYGUARD_TRUSTED_CHANGED = 57;
         public static final int SET_HAS_OVERLAY_UI = 58;
+        public static final int SET_RUNNING_REMOTE_ANIMATION = 59;
 
         /**
          * Used to denote that an integer field in a message will not be used.
@@ -5015,6 +5005,10 @@ public class WindowManagerService extends IWindowManager.Stub
                 break;
                 case SET_HAS_OVERLAY_UI: {
                     mAmInternal.setHasOverlayUi(msg.arg1, msg.arg2 == 1);
+                }
+                break;
+                case SET_RUNNING_REMOTE_ANIMATION: {
+                    mAmInternal.setRunningRemoteAnimation(msg.arg1, msg.arg2 == 1);
                 }
                 break;
             }
@@ -7037,6 +7031,15 @@ public class WindowManagerService extends IWindowManager.Stub
         mPolicy.registerShortcutKey(shortcutCode, shortcutKeyReceiver);
     }
 
+    @Override
+    public void requestUserActivityNotification() {
+        if (!checkCallingPermission(android.Manifest.permission.USER_ACTIVITY,
+                "requestUserActivityNotification()")) {
+            throw new SecurityException("Requires USER_ACTIVITY permission");
+        }
+        mPolicy.requestUserActivityNotification();
+    }
+
     void markForSeamlessRotation(WindowState w, boolean seamlesslyRotated) {
         if (seamlesslyRotated == w.mSeamlesslyRotated) {
             return;
@@ -7456,6 +7459,11 @@ public class WindowManagerService extends IWindowManager.Stub
 
     SurfaceControl.Builder makeSurfaceBuilder(SurfaceSession s) {
         return mSurfaceBuilderFactory.make(s);
+    }
+
+    void sendSetRunningRemoteAnimation(int pid, boolean runningRemoteAnimation) {
+        mH.obtainMessage(H.SET_RUNNING_REMOTE_ANIMATION, pid, runningRemoteAnimation ? 1 : 0)
+                .sendToTarget();
     }
 }
 

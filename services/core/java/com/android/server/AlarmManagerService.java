@@ -57,6 +57,9 @@ import android.os.ParcelableException;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
+import android.os.ShellCallback;
+import android.os.ShellCommand;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
@@ -1369,6 +1372,17 @@ class AlarmManagerService extends SystemService {
         }
     }
 
+    boolean setTimeImpl(long millis) {
+        if (mNativeData == 0) {
+            Slog.w(TAG, "Not setting time since no alarm driver is available.");
+            return false;
+        }
+
+        synchronized (mLock) {
+            return setKernelTime(mNativeData, millis) == 0;
+        }
+    }
+
     void setTimeZoneImpl(String tz) {
         if (TextUtils.isEmpty(tz)) {
             return;
@@ -1766,14 +1780,7 @@ class AlarmManagerService extends SystemService {
                     "android.permission.SET_TIME",
                     "setTime");
 
-            if (mNativeData == 0) {
-                Slog.w(TAG, "Not setting time since no alarm driver is available.");
-                return false;
-            }
-
-            synchronized (mLock) {
-                return setKernelTime(mNativeData, millis) == 0;
-            }
+            return setTimeImpl(millis);
         }
 
         @Override
@@ -1836,6 +1843,13 @@ class AlarmManagerService extends SystemService {
                 dumpImpl(pw);
             }
         }
+
+        @Override
+        public void onShellCommand(FileDescriptor in, FileDescriptor out,
+                FileDescriptor err, String[] args, ShellCallback callback,
+                ResultReceiver resultReceiver) {
+            (new ShellCmd()).exec(this, in, out, err, args, callback, resultReceiver);
+        }
     };
 
     void dumpImpl(PrintWriter pw) {
@@ -1854,6 +1868,7 @@ class AlarmManagerService extends SystemService {
 
             final long nowRTC = System.currentTimeMillis();
             final long nowELAPSED = SystemClock.elapsedRealtime();
+            final long nowUPTIME = SystemClock.uptimeMillis();
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
 
             pw.print("  nowRTC="); pw.print(nowRTC);
@@ -1869,6 +1884,25 @@ class AlarmManagerService extends SystemService {
             pw.print("  mLastTickSet="); pw.println(sdf.format(new Date(mLastTickSet)));
             pw.print("  mLastTickAdded="); pw.println(sdf.format(new Date(mLastTickAdded)));
             pw.print("  mLastTickRemoved="); pw.println(sdf.format(new Date(mLastTickRemoved)));
+
+            SystemServiceManager ssm = LocalServices.getService(SystemServiceManager.class);
+            if (ssm != null) {
+                pw.println();
+                pw.print("  RuntimeStarted=");
+                pw.print(sdf.format(
+                        new Date(nowRTC - nowELAPSED + ssm.getRuntimeStartElapsedTime())));
+                if (ssm.isRuntimeRestarted()) {
+                    pw.print("  (Runtime restarted)");
+                }
+                pw.println();
+                pw.print("  Runtime uptime (elapsed): ");
+                TimeUtils.formatDuration(nowELAPSED, ssm.getRuntimeStartElapsedTime(), pw);
+                pw.println();
+                pw.print("  Runtime uptime (uptime): ");
+                TimeUtils.formatDuration(nowUPTIME, ssm.getRuntimeStartUptime(), pw);
+                pw.println();
+            }
+
             pw.println();
             if (!mInteractive) {
                 pw.print("  Time since non-interactive: ");
@@ -4242,6 +4276,51 @@ class AlarmManagerService extends SystemService {
                         alarm.operation, alarm.workSource, alarm.uid, alarm.packageName,
                         alarm.statsTag);
             }
+        }
+    }
+
+    private class ShellCmd extends ShellCommand {
+
+        IAlarmManager getBinderService() {
+            return IAlarmManager.Stub.asInterface(mService);
+        }
+
+        @Override
+        public int onCommand(String cmd) {
+            if (cmd == null) {
+                return handleDefaultCommands(cmd);
+            }
+
+            final PrintWriter pw = getOutPrintWriter();
+            try {
+                switch (cmd) {
+                    case "set-time":
+                        final long millis = Long.parseLong(getNextArgRequired());
+                        return (getBinderService().setTime(millis)) ? 0 : -1;
+                    case "set-timezone":
+                        final String tz = getNextArgRequired();
+                        getBinderService().setTimeZone(tz);
+                        return 0;
+                    default:
+                        return handleDefaultCommands(cmd);
+                }
+            } catch (Exception e) {
+                pw.println(e);
+            }
+            return -1;
+        }
+
+        @Override
+        public void onHelp() {
+            PrintWriter pw = getOutPrintWriter();
+            pw.println("Alarm manager service (alarm) commands:");
+            pw.println("  help");
+            pw.println("    Print this help text.");
+            pw.println("  set-time TIME");
+            pw.println("    Set the system clock time to TIME where TIME is milliseconds");
+            pw.println("    since the Epoch.");
+            pw.println("  set-timezone TZ");
+            pw.println("    Set the system timezone to TZ where TZ is an Olson id.");
         }
     }
 }

@@ -19,6 +19,7 @@ package com.android.server.media;
 import static android.media.SessionToken2.TYPE_SESSION;
 
 import android.app.ActivityManager;
+import android.app.AppGlobals;
 import android.app.INotificationManager;
 import android.app.KeyguardManager;
 import android.app.PendingIntent;
@@ -30,6 +31,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
@@ -117,12 +119,13 @@ public class MediaSessionService extends SystemService implements Monitor {
     private final MessageHandler mHandler = new MessageHandler();
     private final PowerManager.WakeLock mMediaEventWakeLock;
     private final int mLongPressTimeout;
+    private final INotificationManager mNotificationManager;
+    private final IPackageManager mPackageManager;
 
     private KeyguardManager mKeyguardManager;
     private IAudioService mAudioService;
     private ContentResolver mContentResolver;
     private SettingsObserver mSettingsObserver;
-    private INotificationManager mNotificationManager;
     private boolean mHasFeatureLeanback;
 
     // The FullUserRecord of the current users. (i.e. The foreground user that isn't a profile)
@@ -136,8 +139,8 @@ public class MediaSessionService extends SystemService implements Monitor {
     private IRemoteVolumeController mRvc;
 
     // MediaSession2 support
-    // TODO(jaewan): Support multi-user and managed profile.
-    // TODO(jaewan): Make it priority list for handling volume/media key.
+    // TODO(jaewan): Support multi-user and managed profile. (b/73597722)
+    // TODO(jaewan): Make it priority list for handling volume/media key. (b/73760382)
     private final Map<SessionToken2, MediaController2> mSessionRecords = new ArrayMap<>();
 
     private final List<SessionTokensListenerRecord> mSessionTokensListeners = new ArrayList<>();
@@ -150,6 +153,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         mLongPressTimeout = ViewConfiguration.getLongPressTimeout();
         mNotificationManager = INotificationManager.Stub.asInterface(
                 ServiceManager.getService(Context.NOTIFICATION_SERVICE));
+        mPackageManager = AppGlobals.getPackageManager();
     }
 
     @Override
@@ -184,7 +188,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         updateUser();
 
         registerPackageBroadcastReceivers();
-        // TODO(jaewan): Query per users
+        // TODO(jaewan): Query per users (b/73597722)
         buildMediaSessionService2List();
     }
 
@@ -443,6 +447,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         // TODO(jaewan): Only consider changed packages when building session service list
         //               when we make this multi-user aware. At that time,
         //               use PackageMonitor.getChangingUserId() to know which user has changed.
+        //               (b/73597722)
         IntentFilter filter = new IntentFilter();
         filter.addDataScheme("package");
         filter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -465,7 +470,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 }
                 // Check if the package is replacing (i.e. reinstalling)
                 final boolean isReplacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false);
-                // TODO(jaewan): Add multi-user support with this.
+                // TODO(jaewan): Add multi-user support with this. (b/73597722)
                 // final int uid = intent.getIntExtra(Intent.EXTRA_UID, 0);
 
                 if (DEBUG) {
@@ -506,8 +511,7 @@ public class MediaSessionService extends SystemService implements Monitor {
         if (DEBUG) {
             Log.d(TAG, "buildMediaSessionService2List");
         }
-        // TODO(jaewan): Also query for managed profile users.
-        // TODO(jaewan): Similar codes are also at the updatable. Can't we share codes?
+        // TODO(jaewan): Also query for managed profile users. (b/73597722)
         PackageManager manager = getContext().getPackageManager();
         List<ResolveInfo> services = new ArrayList<>();
         // If multiple actions are declared for a service, browser gets higher priority.
@@ -539,7 +543,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                 ServiceInfo serviceInfo = services.get(i).serviceInfo;
                 int uid;
                 try {
-                    // TODO(jaewan): Do this per user.
+                    // TODO(jaewan): Do this per user. (b/73597722)
                     uid = manager.getPackageUid(serviceInfo.packageName,
                             PackageManager.GET_META_DATA);
                 } catch (NameNotFoundException e) {
@@ -1490,17 +1494,60 @@ public class MediaSessionService extends SystemService implements Monitor {
                     mUserRecords.valueAt(i).dumpLocked(pw, "");
                 }
                 mAudioPlayerStateMonitor.dump(getContext(), pw, "");
-
-                // TODO(jaewan): Remove this debug command before ship.
-                if (args != null && args.length > 0 && "--purge".equals(args[0])) {
-                    mSessionRecords.clear();
-                }
-                pw.println();
-                pw.println("Session2: size=" + mSessionRecords.size());
-                for (SessionToken2 token : mSessionRecords.keySet()) {
-                    pw.println("  " + token);
-                }
             }
+        }
+
+        /**
+         * Returns if the controller's package is trusted (i.e. has either MEDIA_CONTENT_CONTROL
+         * permission or an enabled notification listener)
+         *
+         * @param uid uid of the controller app
+         * @param packageName package name of the controller app
+         */
+        @Override
+        public boolean isTrusted(int uid, String packageName) throws RemoteException {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                int userId = UserHandle.getUserId(uid);
+                // Sanity check whether uid and packageName matches
+                if (uid != mPackageManager.getPackageUid(packageName, 0, userId)) {
+                    throw new IllegalArgumentException("uid=" + uid + " and packageName="
+                            + packageName + " doesn't match");
+                }
+
+                // Check if it's system server or has MEDIA_CONTENT_CONTROL.
+                // Note that system server doesn't have MEDIA_CONTENT_CONTROL, so we need extra
+                // check here.
+                if (uid == Process.SYSTEM_UID || mPackageManager.checkPermission(
+                        android.Manifest.permission.MEDIA_CONTENT_CONTROL, packageName, uid)
+                        == PackageManager.PERMISSION_GRANTED) {
+                    return true;
+                }
+                if (DEBUG) {
+                    Log.d(TAG, packageName + " (uid=" + uid + ") hasn't granted"
+                            + " MEDIA_CONTENT_CONTROL");
+                }
+
+                // TODO(jaewan): Add hasEnabledNotificationListener(String pkgName) for
+                //               optimization (Post-P)
+                final List<ComponentName> enabledNotificationListeners =
+                        mNotificationManager.getEnabledNotificationListeners(userId);
+                if (enabledNotificationListeners != null) {
+                    for (int i = 0; i < enabledNotificationListeners.size(); i++) {
+                        if (TextUtils.equals(packageName,
+                                enabledNotificationListeners.get(i).getPackageName())) {
+                            return true;
+                        }
+                    }
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+            if (DEBUG) {
+                Log.d(TAG, packageName + " (uid=" + uid + ") doesn't have an enabled notification"
+                        + " listener");
+            }
+            return false;
         }
 
         /**
@@ -1567,7 +1614,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             destroySession2Internal(token);
         }
 
-        // TODO(jaewan): Protect this API with permission
+        // TODO(jaewan): Protect this API with permission (b/73226436)
         @Override
         public List<Bundle> getSessionTokens(boolean activeSessionOnly,
                 boolean sessionServiceOnly) throws RemoteException {
@@ -1587,8 +1634,8 @@ public class MediaSessionService extends SystemService implements Monitor {
             return tokens;
         }
 
-        // TODO(jaewan): Protect this API with permission
-        // TODO(jaewan): "userId != calling user" needs extra protection
+        // TODO(jaewan): Protect this API with permission (b/73226436)
+        // TODO(jaewan): "userId != calling user" needs extra protection (b/73226436)
         @Override
         public void addSessionTokensListener(ISessionTokensListener listener, int userId,
                 String packageName) {
@@ -1603,7 +1650,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             }
         }
 
-        // TODO(jaewan): Protect this API with permission
+        // TODO(jaewan): Protect this API with permission (b/73226436)
         @Override
         public void removeSessionTokensListener(ISessionTokensListener listener) {
             synchronized (mLock) {
@@ -2039,7 +2086,8 @@ public class MediaSessionService extends SystemService implements Monitor {
 
         public SessionTokensListenerRecord(ISessionTokensListener listener, int userId) {
             mListener = listener;
-            mUserId = userId; // TODO should userId be mapped through mFullUserIds?
+            // TODO(jaewan): should userId be mapped through mFullUserIds? (b/73597722)
+            mUserId = userId;
         }
 
         @Override
@@ -2060,6 +2108,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             for (SessionToken2 token : mSessionRecords.keySet()) {
                 // TODO(jaewan): Remove the check for UserHandle.USER_ALL (shouldn't happen).
                 //               This happens when called form buildMediaSessionService2List(...).
+                //               (b/73760382)
                 if (UserHandle.getUserId(token.getUid()) == userId
                         || UserHandle.USER_ALL == userId) {
                     tokens.add(token.toBundle());
@@ -2067,7 +2116,7 @@ public class MediaSessionService extends SystemService implements Monitor {
             }
 
             for (SessionTokensListenerRecord record : mSessionTokensListeners) {
-                // TODO should userId be mapped through mFullUserIds?
+                // TODO(jaewan): Should userId be mapped through mFullUserIds? (b/73760382)
                 if (record.mUserId == userId || record.mUserId == UserHandle.USER_ALL) {
                     try {
                         record.mListener.onSessionTokensChanged(tokens);
