@@ -999,7 +999,7 @@
     <integer name="config_shortPressOnSleepBehavior">0</integer>
 
     <!-- Time to wait while a button is pressed before triggering a very long press. -->
-    <integer name="config_veryLongPressTimeout">6000</integer>
+    <integer name="config_veryLongPressTimeout">3500</integer>
 
     <!-- Package name for default keyguard appwidget [DO NOT TRANSLATE] -->
     <string name="widget_default_package_name" translatable="false"></string>
@@ -1074,6 +1074,14 @@
         <item>10</item>
         <item>10</item>
     </integer-array>
+
+    <!-- The URI to associate with each ringtone effect constant, intended to be used with the
+         android.os.VibrationEffect#get(Uri, Context) API.
+         The position of the string in the string-array determines which ringtone effect is chosen.
+         For example, if the URI passed into get match the third string in the string-array, then
+         RINGTONE_3 will be the returned effect -->
+    <string-array translatable="false" name="config_ringtoneEffectUris">
+    </string-array>
 
     <bool name="config_use_strict_phone_number_comparation">false</bool>
 
@@ -2182,6 +2190,10 @@
     players. -->
     <integer name="config_safe_media_volume_index">10</integer>
 
+    <!-- Safe USB headset gain. This value is used to ensure that the SPL on the USB
+    headset output is compliant to EN 60950 requirements for portable music players. -->
+    <integer name="config_safe_media_volume_usb_mB">-3700</integer>
+
     <!-- Configure mobile network MTU. The standard default is set here but each carrier
          may have a specific value set in an overlay config.xml file. -->
     <integer name="config_mobile_mtu">1500</integer>
@@ -2320,6 +2332,10 @@
     <string name="config_customVpnAlwaysOnDisconnectedDialogComponent" translatable="false"
             >com.android.vpndialogs/com.android.vpndialogs.AlwaysOnDisconnectedDialog</string>
 
+    <!-- Name of the dialog that is used to install the carrier app when the SIM is inserted -->
+    <string name="config_carrierAppInstallDialogComponent" translatable="false"
+            >com.android.simappdialog/com.android.simappdialog.InstallCarrierAppActivity</string>
+
     <!-- Apps that are authorized to access shared accounts, overridden by product overlays -->
     <string name="config_appsAuthorizedForSharedAccounts" translatable="false">;com.android.settings;</string>
 
@@ -2356,7 +2372,7 @@
          obtain user consent to access their location through other means. -->
     <string-array name="config_disabledUntilUsedPreinstalledCarrierApps" translatable="false" />
 
-    <!-- The list of classes that should be added to the notification ranking pipline.
+    <!-- The list of classes that should be added to the notification ranking pipeline.
      See {@link com.android.server.notification.NotificationSignalExtractor}
       If you add a new extractor to this list make sure to update
       NotificationManagerService.handleRankingSort()-->
@@ -2368,11 +2384,14 @@
         <!-- depends on AdjustmentExtractor-->
         <item>com.android.server.notification.ValidateNotificationPeople</item>
         <item>com.android.server.notification.PriorityExtractor</item>
+        <!-- depends on PriorityExtractor -->
+        <item>com.android.server.notification.ZenModeExtractor</item>
         <item>com.android.server.notification.ImportanceExtractor</item>
         <!-- depends on ImportanceExtractor-->
         <item>com.android.server.notification.NotificationIntrusivenessExtractor</item>
         <item>com.android.server.notification.VisibilityExtractor</item>
         <item>com.android.server.notification.BadgeExtractor</item>
+
     </string-array>
 
     <!-- Flag indicating that this device does not rotate and will always remain in its default
@@ -2486,9 +2505,9 @@
     <string-array translatable="false" name="config_globalActionsList">
         <item>power</item>
         <item>restart</item>
-        <item>screenshot</item>
-        <item>logout</item>
         <item>lockdown</item>
+        <item>logout</item>
+        <item>screenshot</item>
         <item>bugreport</item>
         <item>users</item>
     </string-array>
@@ -2498,6 +2517,32 @@
          to account for processing and rendering time plus a frame or two of latency
          in the display pipeline plus some slack just to be sure. -->
     <integer name="config_drawLockTimeoutMillis">120</integer>
+
+    <!-- An array of device capabilities defined by GSMA SGP.22 v2.0.
+         The first item is the capability name that the device supports. The second item is the
+         major version. The minor and revision versions are default to 0s.
+         The device capabilities and their definition in the spec are:
+             gsm : gsmSupportedRelease
+             utran : utranSupportedRelease
+             cdma1x : cdma2000onexSupportedRelease
+             hrpd : cdma2000hrpdSupportedRelease
+             ehrpd : cdma2000ehrpdSupportedRelease
+             eutran : eutranSupportedRelease
+             nfc : contactlessSupportedRelease
+             crl : rspCrlSupportedVersion
+    -->
+    <string-array translatable="false" name="config_telephonyEuiccDeviceCapabilities">
+        <!-- Example:
+        <item>"gsm,11"</item>
+        <item>"utran,11"</item>
+        <item>"cdma1x,1"</item>
+        <item>"hrpd,3"</item>
+        <item>"ehrpd,12"</item>
+        <item>"eutran,11"</item>
+        <item>"nfc,1"</item>
+        <item>"crl,1"</item>
+        -->
+    </string-array>
 
     <!-- default telephony hardware configuration for this platform.
     -->
@@ -2905,8 +2950,8 @@
     <item name="config_pictureInPictureAspectRatioLimitForMinSize" format="float" type="dimen">1.777778</item>
 
     <!-- The default gravity for the picture-in-picture window.
-         Currently, this maps to Gravity.BOTTOM | Gravity.RIGHT -->
-    <integer name="config_defaultPictureInPictureGravity">0x55</integer>
+         Currently, this maps to Gravity.TOP | Gravity.RIGHT -->
+    <integer name="config_defaultPictureInPictureGravity">0x35</integer>
 
     <!-- The minimum aspect ratio (width/height) that is supported for picture-in-picture.  Any
          ratio smaller than this is considered too tall and thin to be usable. Currently, this
@@ -3142,14 +3187,14 @@
     -->
     <string name="config_defaultAutofillService" translatable="false"></string>
 
-    <!-- The component name, flattened to a string, for the default system textclassifier service.
+    <!-- The package name for the default system textclassifier service.
          This service must be trusted, as it can be activated without explicit consent of the user.
-         (e.g. com.android.textclassifier/.TextClassifierServiceImpl).
+         Example: "com.android.textclassifier"
          If no textclassifier service with the specified name exists on the device (or if this is
          set to empty string), a default textclassifier will be loaded in the calling app's process.
          See android.view.textclassifier.TextClassificationManager.
     -->
-    <string name="config_defaultTextClassifierService" translatable="false"></string>
+    <string name="config_defaultTextClassifierPackage" translatable="false"></string>
 
     <!-- Whether the device uses the default focus highlight when focus state isn't specified. -->
     <bool name="config_useDefaultFocusHighlight">true</bool>
@@ -3303,4 +3348,12 @@
     <!-- IWLAN network service package name to bind to by default. If none is specified in an overlay, an
          empty string is passed in -->
     <string name="config_wlan_network_service_package" translatable="false"></string>
+
+    <!-- whether to show dual bar -->
+    <bool name="config_dual_bar">false</bool>
+    <!-- Wear devices: Controls the radios affected by Activity Mode. -->
+    <string-array name="config_wearActivityModeRadios">
+        <item>"wifi"</item>
+    </string-array>
+
 </resources>

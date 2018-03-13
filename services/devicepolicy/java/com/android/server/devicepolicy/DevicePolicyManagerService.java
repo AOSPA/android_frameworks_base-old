@@ -50,6 +50,8 @@ import static android.app.admin.DevicePolicyManager.ID_TYPE_IMEI;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_MEID;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_SERIAL;
 import static android.app.admin.DevicePolicyManager.LEAVE_ALL_SYSTEM_APPS_ENABLED;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_HOME;
+import static android.app.admin.DevicePolicyManager.LOCK_TASK_FEATURE_OVERVIEW;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_COMPLEX;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED;
 import static android.app.admin.DevicePolicyManager.PROFILE_KEYGUARD_FEATURES_AFFECT_OWNER;
@@ -304,8 +306,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     private static final String TAG_PASSWORD_TOKEN_HANDLE = "password-token";
 
     private static final String TAG_PASSWORD_VALIDITY = "password-validity";
-
-    private static final String TAG_PRINTING_ENABLED = "printing-enabled";
 
     private static final String TAG_TRANSFER_OWNERSHIP_BUNDLE = "transfer-ownership-bundle";
 
@@ -614,8 +614,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         PersistableBundle mInitBundle = null;
 
         long mPasswordTokenHandle = 0;
-
-        boolean mPrintingEnabled = true;
 
         public DevicePolicyData(int userHandle) {
             mUserHandle = userHandle;
@@ -2048,6 +2046,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         public TransferOwnershipMetadataManager newTransferOwnershipMetadataManager() {
             return new TransferOwnershipMetadataManager();
         }
+
+        public void runCryptoSelfTest() {
+            CryptoTestHelper.runAndLogSelfTest();
+        }
     }
 
     /**
@@ -2300,6 +2302,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
             if (hasDeviceOwner && mInjector.securityLogGetLoggingEnabledProperty()) {
                 mSecurityLogMonitor.start();
+                mInjector.runCryptoSelfTest();
                 maybePauseDeviceWideLoggingLocked();
             }
         }
@@ -2948,12 +2951,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 out.endTag(null, TAG_CURRENT_INPUT_METHOD_SET);
             }
 
-            if (!policy.mPrintingEnabled) {
-                out.startTag(null, TAG_PRINTING_ENABLED);
-                out.attribute(null, ATTR_VALUE, Boolean.toString(policy.mPrintingEnabled));
-                out.endTag(null, TAG_PRINTING_ENABLED);
-            }
-
             for (final String cert : policy.mOwnerInstalledCaCerts) {
                 out.startTag(null, TAG_OWNER_INSTALLED_CA_CERT);
                 out.attribute(null, ATTR_ALIAS, cert);
@@ -3172,9 +3169,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     policy.mCurrentInputMethodSet = true;
                 } else if (TAG_OWNER_INSTALLED_CA_CERT.equals(tag)) {
                     policy.mOwnerInstalledCaCerts.add(parser.getAttributeValue(null, ATTR_ALIAS));
-                } else if (TAG_PRINTING_ENABLED.equals(tag)) {
-                    String enabled = parser.getAttributeValue(null, ATTR_VALUE);
-                    policy.mPrintingEnabled = Boolean.toString(true).equals(enabled);
                 } else {
                     Slog.w(LOG_TAG, "Unknown tag: " + tag);
                     XmlUtils.skipCurrentTag(parser);
@@ -9825,6 +9819,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     @Override
     public void setLockTaskFeatures(ComponentName who, int flags) {
         Preconditions.checkNotNull(who, "ComponentName is null");
+
+        // Throw if Overview is used without Home.
+        boolean hasHome = (flags & LOCK_TASK_FEATURE_HOME) != 0;
+        boolean hasOverview = (flags & LOCK_TASK_FEATURE_OVERVIEW) != 0;
+        Preconditions.checkArgument(hasHome || !hasOverview,
+                "Cannot use LOCK_TASK_FEATURE_OVERVIEW without LOCK_TASK_FEATURE_HOME");
+
         final int userHandle = mInjector.userHandleGetCallingUserId();
         synchronized (this) {
             enforceCanCallLockTaskLocked(who);
@@ -10234,6 +10235,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             mInjector.registerContentObserver(mDefaultImeChanged, false, this, UserHandle.USER_ALL);
         }
 
+        @GuardedBy("DevicePolicyManagerService.this")
         private void addPendingChangeByOwnerLocked(int userId) {
             mUserIdsWithPendingChangesByOwner.add(userId);
         }
@@ -10417,7 +10419,8 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         public CharSequence getPrintingDisabledReasonForUser(@UserIdInt int userId) {
             synchronized (DevicePolicyManagerService.this) {
                 DevicePolicyData policy = getUserData(userId);
-                if (policy.mPrintingEnabled) {
+                if (!mUserManager.hasUserRestriction(UserManager.DISALLOW_PRINTING,
+                        UserHandle.of(userId))) {
                     Log.e(LOG_TAG, "printing is enabled");
                     return null;
                 }
@@ -12789,27 +12792,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
     }
 
-    private boolean hasPrinting() {
-        return mInjector.getPackageManager().hasSystemFeature(PackageManager.FEATURE_PRINTING);
-    }
-
-    @Override
-    public void setPrintingEnabled(ComponentName admin, boolean enabled) {
-        if (!mHasFeature || !hasPrinting()) {
-            return;
-        }
-        Preconditions.checkNotNull(admin, "Admin cannot be null.");
-        enforceProfileOrDeviceOwner(admin);
-        synchronized (this) {
-            final int userHandle = mInjector.userHandleGetCallingUserId();
-            DevicePolicyData policy = getUserData(userHandle);
-            if (policy.mPrintingEnabled != enabled) {
-                policy.mPrintingEnabled = enabled;
-                saveSettingsLocked(userHandle);
-            }
-        }
-    }
-
     private void deleteTransferOwnershipMetadataFileLocked() {
         mTransferOwnershipMetadataManager.deleteMetadataFile();
     }
@@ -12836,25 +12818,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                         + "owner transfer parameters from file " + bundleFile, e);
                 return null;
             }
-        }
-    }
-
-    /**
-     * Returns whether printing is enabled for current user.
-     * @hide
-     */
-    @Override
-    public boolean isPrintingEnabled() {
-        if (!hasPrinting()) {
-            return false;
-        }
-        if (!mHasFeature) {
-            return true;
-        }
-        synchronized (this) {
-            final int userHandle = mInjector.userHandleGetCallingUserId();
-            DevicePolicyData policy = getUserData(userHandle);
-            return policy.mPrintingEnabled;
         }
     }
 

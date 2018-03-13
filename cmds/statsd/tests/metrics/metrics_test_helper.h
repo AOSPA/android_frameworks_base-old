@@ -15,6 +15,7 @@
 
 #include "src/condition/ConditionWizard.h"
 #include "src/external/StatsPullerManager.h"
+#include "src/packages/UidMap.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -25,12 +26,10 @@ namespace statsd {
 
 class MockConditionWizard : public ConditionWizard {
 public:
-    MOCK_METHOD4(
-            query,
-            ConditionState(const int conditionIndex,
-                           const ConditionKey& conditionParameters,
-                           const FieldMatcher& dimensionFields,
-                           std::unordered_set<HashableDimensionKey> *dimensionKeySet));
+    MOCK_METHOD4(query,
+                 ConditionState(const int conditionIndex, const ConditionKey& conditionParameters,
+                                const vector<Matcher>& dimensionFields,
+                                std::unordered_set<HashableDimensionKey>* dimensionKeySet));
 };
 
 class MockStatsPullerManager : public StatsPullerManager {
@@ -40,8 +39,17 @@ public:
     MOCK_METHOD2(Pull, bool(const int pullCode, vector<std::shared_ptr<LogEvent>>* data));
 };
 
+class MockUidMap : public UidMap {
+ public:
+  MOCK_CONST_METHOD1(getHostUidOrSelf, int(int uid));
+};
+
 HashableDimensionKey getMockedDimensionKey(int tagId, int key, std::string value);
 MetricDimensionKey getMockedMetricDimensionKey(int tagId, int key, std::string value);
+
+// Utils to build FieldMatcher proto for simple one-depth atoms.
+void buildSimpleAtomFieldMatcher(const int tagId, const int atomFieldNum, FieldMatcher* matcher);
+void buildSimpleAtomFieldMatcher(const int tagId, FieldMatcher* matcher);
 
 }  // namespace statsd
 }  // namespace os

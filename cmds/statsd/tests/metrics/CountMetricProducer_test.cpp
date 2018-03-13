@@ -13,7 +13,6 @@
 // limitations under the License.
 
 #include "src/metrics/CountMetricProducer.h"
-#include "src/dimension.h"
 #include "src/stats_log_util.h"
 #include "metrics_test_helper.h"
 #include "tests/statsd_test_util.h"
@@ -49,12 +48,15 @@ TEST(CountMetricProducerTest, TestNonDimensionalEvents) {
     metric.set_bucket(ONE_MINUTE);
 
     LogEvent event1(tagId, bucketStartTimeNs + 1);
+    event1.init();
     LogEvent event2(tagId, bucketStartTimeNs + 2);
+    event2.init();
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
 
     CountMetricProducer countProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
                                       bucketStartTimeNs);
+    countProducer.setBucketSize(60 * NS_PER_SEC);
 
     // 2 events in bucket 1.
     countProducer.onMatchedLogEvent(1 /*log matcher index*/, event1);
@@ -77,6 +79,8 @@ TEST(CountMetricProducerTest, TestNonDimensionalEvents) {
 
     // 1 matched event happens in bucket 2.
     LogEvent event3(tagId, bucketStartTimeNs + bucketSizeNs + 2);
+    event3.init();
+
     countProducer.onMatchedLogEvent(1 /*log matcher index*/, event3);
     countProducer.flushIfNeededLocked(bucketStartTimeNs + 2 * bucketSizeNs + 1);
     EXPECT_EQ(1UL, countProducer.mPastBuckets.size());
@@ -107,11 +111,15 @@ TEST(CountMetricProducerTest, TestEventsWithNonSlicedCondition) {
     metric.set_condition(StringToId("SCREEN_ON"));
 
     LogEvent event1(1, bucketStartTimeNs + 1);
+    event1.init();
+
     LogEvent event2(1, bucketStartTimeNs + 10);
+    event2.init();
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
 
     CountMetricProducer countProducer(kConfigKey, metric, 1, wizard, bucketStartTimeNs);
+    countProducer.setBucketSize(60 * NS_PER_SEC);
 
     countProducer.onConditionChanged(true, bucketStartTimeNs);
     countProducer.onMatchedLogEvent(1 /*matcher index*/, event1);
@@ -173,6 +181,7 @@ TEST(CountMetricProducerTest, TestEventsWithSlicedCondition) {
 
     CountMetricProducer countProducer(kConfigKey, metric, 1 /*condition tracker index*/, wizard,
                                       bucketStartTimeNs);
+    countProducer.setBucketSize(60 * NS_PER_SEC);
 
     countProducer.onMatchedLogEvent(1 /*log matcher index*/, event1);
     countProducer.flushIfNeededLocked(bucketStartTimeNs + 1);
@@ -189,6 +198,120 @@ TEST(CountMetricProducerTest, TestEventsWithSlicedCondition) {
     EXPECT_EQ(bucketStartTimeNs, bucketInfo.mBucketStartNs);
     EXPECT_EQ(bucketStartTimeNs + bucketSizeNs, bucketInfo.mBucketEndNs);
     EXPECT_EQ(1LL, bucketInfo.mCount);
+}
+
+TEST(CountMetricProducerTest, TestEventWithAppUpgrade) {
+    uint64_t bucketStartTimeNs = 10000000000;
+    uint64_t bucketSizeNs = TimeUnitToBucketSizeInMillis(ONE_MINUTE) * 1000000LL;
+    uint64_t eventUpgradeTimeNs = bucketStartTimeNs + 15 * NS_PER_SEC;
+
+    int tagId = 1;
+    int conditionTagId = 2;
+
+    CountMetric metric;
+    metric.set_id(1);
+    metric.set_bucket(ONE_MINUTE);
+    Alert alert;
+    alert.set_num_buckets(3);
+    alert.set_trigger_if_sum_gt(2);
+    LogEvent event1(tagId, bucketStartTimeNs + 1);
+    event1.write("111");  // uid
+    event1.init();
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    CountMetricProducer countProducer(kConfigKey, metric, -1 /* no condition */, wizard,
+                                      bucketStartTimeNs);
+    countProducer.setBucketSize(60 * NS_PER_SEC);
+
+    sp<AnomalyTracker> anomalyTracker = countProducer.addAnomalyTracker(alert);
+    EXPECT_TRUE(anomalyTracker != nullptr);
+
+    // Bucket is flushed yet.
+    countProducer.onMatchedLogEvent(1 /*log matcher index*/, event1);
+    EXPECT_EQ(0UL, countProducer.mPastBuckets.size());
+    EXPECT_EQ(0, anomalyTracker->getSumOverPastBuckets(DEFAULT_METRIC_DIMENSION_KEY));
+
+    // App upgrade forces bucket flush.
+    // Check that there's a past bucket and the bucket end is not adjusted.
+    countProducer.notifyAppUpgrade(eventUpgradeTimeNs, "ANY.APP", 1, 1);
+    EXPECT_EQ(1UL, countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ((long long)bucketStartTimeNs,
+              countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mBucketStartNs);
+    EXPECT_EQ((long long)eventUpgradeTimeNs,
+              countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mBucketEndNs);
+    EXPECT_EQ(eventUpgradeTimeNs, countProducer.mCurrentBucketStartTimeNs);
+    // Anomaly tracker only contains full buckets.
+    EXPECT_EQ(0, anomalyTracker->getSumOverPastBuckets(DEFAULT_METRIC_DIMENSION_KEY));
+
+    uint64_t lastEndTimeNs = countProducer.getCurrentBucketEndTimeNs();
+    // Next event occurs in same bucket as partial bucket created.
+    LogEvent event2(tagId, bucketStartTimeNs + 59 * NS_PER_SEC + 10);
+    event2.write("222");  // uid
+    event2.init();
+    countProducer.onMatchedLogEvent(1 /*log matcher index*/, event2);
+    EXPECT_EQ(1UL, countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ(eventUpgradeTimeNs, countProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(0, anomalyTracker->getSumOverPastBuckets(DEFAULT_METRIC_DIMENSION_KEY));
+
+    // Third event in following bucket.
+    LogEvent event3(tagId, bucketStartTimeNs + 62 * NS_PER_SEC + 10);
+    event3.write("333");  // uid
+    event3.init();
+    countProducer.onMatchedLogEvent(1 /*log matcher index*/, event3);
+    EXPECT_EQ(2UL, countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ(lastEndTimeNs, countProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(2, anomalyTracker->getSumOverPastBuckets(DEFAULT_METRIC_DIMENSION_KEY));
+}
+
+TEST(CountMetricProducerTest, TestEventWithAppUpgradeInNextBucket) {
+    uint64_t bucketStartTimeNs = 10000000000;
+    uint64_t bucketSizeNs = TimeUnitToBucketSizeInMillis(ONE_MINUTE) * 1000000LL;
+    uint64_t eventUpgradeTimeNs = bucketStartTimeNs + 65 * NS_PER_SEC;
+
+    int tagId = 1;
+    int conditionTagId = 2;
+
+    CountMetric metric;
+    metric.set_id(1);
+    metric.set_bucket(ONE_MINUTE);
+    LogEvent event1(tagId, bucketStartTimeNs + 1);
+    event1.write("111");  // uid
+    event1.init();
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    CountMetricProducer countProducer(kConfigKey, metric, -1 /* no condition */, wizard,
+                                      bucketStartTimeNs);
+    countProducer.setBucketSize(60 * NS_PER_SEC);
+
+    // Bucket is flushed yet.
+    countProducer.onMatchedLogEvent(1 /*log matcher index*/, event1);
+    EXPECT_EQ(0UL, countProducer.mPastBuckets.size());
+
+    // App upgrade forces bucket flush.
+    // Check that there's a past bucket and the bucket end is not adjusted.
+    countProducer.notifyAppUpgrade(eventUpgradeTimeNs, "ANY.APP", 1, 1);
+    EXPECT_EQ(1UL, countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ((int64_t)bucketStartTimeNs,
+              countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mBucketStartNs);
+    EXPECT_EQ(bucketStartTimeNs + bucketSizeNs,
+              (uint64_t)countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mBucketEndNs);
+    EXPECT_EQ(eventUpgradeTimeNs, countProducer.mCurrentBucketStartTimeNs);
+
+    // Next event occurs in same bucket as partial bucket created.
+    LogEvent event2(tagId, bucketStartTimeNs + 70 * NS_PER_SEC + 10);
+    event2.write("222");  // uid
+    event2.init();
+    countProducer.onMatchedLogEvent(1 /*log matcher index*/, event2);
+    EXPECT_EQ(1UL, countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+
+    // Third event in following bucket.
+    LogEvent event3(tagId, bucketStartTimeNs + 121 * NS_PER_SEC + 10);
+    event3.write("333");  // uid
+    event3.init();
+    countProducer.onMatchedLogEvent(1 /*log matcher index*/, event3);
+    EXPECT_EQ(2UL, countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ((int64_t)eventUpgradeTimeNs,
+              countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][1].mBucketStartNs);
+    EXPECT_EQ(bucketStartTimeNs + 2 * bucketSizeNs,
+              (uint64_t)countProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][1].mBucketEndNs);
 }
 
 TEST(CountMetricProducerTest, TestAnomalyDetectionUnSliced) {
@@ -212,16 +335,25 @@ TEST(CountMetricProducerTest, TestAnomalyDetectionUnSliced) {
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     CountMetricProducer countProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
                                       bucketStartTimeNs);
+    countProducer.setBucketSize(60 * NS_PER_SEC);
+
     sp<AnomalyTracker> anomalyTracker = countProducer.addAnomalyTracker(alert);
 
     int tagId = 1;
     LogEvent event1(tagId, bucketStartTimeNs + 1);
+    event1.init();
     LogEvent event2(tagId, bucketStartTimeNs + 2);
+    event2.init();
     LogEvent event3(tagId, bucketStartTimeNs + 2 * bucketSizeNs + 1);
+    event3.init();
     LogEvent event4(tagId, bucketStartTimeNs + 3 * bucketSizeNs + 1);
+    event4.init();
     LogEvent event5(tagId, bucketStartTimeNs + 3 * bucketSizeNs + 2);
+    event5.init();
     LogEvent event6(tagId, bucketStartTimeNs + 3 * bucketSizeNs + 3);
+    event6.init();
     LogEvent event7(tagId, bucketStartTimeNs + 3 * bucketSizeNs + 2 * NS_PER_SEC);
+    event7.init();
 
     // Two events in bucket #0.
     countProducer.onMatchedLogEvent(1 /*log matcher index*/, event1);
@@ -245,13 +377,13 @@ TEST(CountMetricProducerTest, TestAnomalyDetectionUnSliced) {
     EXPECT_EQ(3L, countProducer.mCurrentSlicedCounter->begin()->second);
     // Anomaly at event 6 is within refractory period. The alarm is at event 5 timestamp not event 6
     EXPECT_EQ(anomalyTracker->getRefractoryPeriodEndsSec(DEFAULT_METRIC_DIMENSION_KEY),
-            event5.GetTimestampNs() / NS_PER_SEC + refPeriodSec);
+            event5.GetElapsedTimestampNs() / NS_PER_SEC + refPeriodSec);
 
     countProducer.onMatchedLogEvent(1 /*log matcher index*/, event7);
     EXPECT_EQ(1UL, countProducer.mCurrentSlicedCounter->size());
     EXPECT_EQ(4L, countProducer.mCurrentSlicedCounter->begin()->second);
     EXPECT_EQ(anomalyTracker->getRefractoryPeriodEndsSec(DEFAULT_METRIC_DIMENSION_KEY),
-            event7.GetTimestampNs() / NS_PER_SEC + refPeriodSec);
+            event7.GetElapsedTimestampNs() / NS_PER_SEC + refPeriodSec);
 }
 
 }  // namespace statsd

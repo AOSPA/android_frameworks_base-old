@@ -16,7 +16,7 @@
 #pragma once
 
 #include "config/ConfigKey.h"
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"
+#include "frameworks/base/cmds/statsd/src/stats_log_common.pb.h"
 #include "statslog.h"
 
 #include <gtest/gtest_prod.h>
@@ -42,6 +42,7 @@ public:
     const static int kDimensionKeySizeHardLimit = 500;
 
     const static int kMaxConfigCount = 10;
+    const static int kMaxAlertCountPerConfig = 100;
     const static int kMaxConditionCountPerConfig = 200;
     const static int kMaxMetricCountPerConfig = 300;
     const static int kMaxMatcherCountPerConfig = 500;
@@ -84,6 +85,9 @@ public:
 
     // Maximum size of all files that can be written to stats directory on disk.
     static const int kMaxFileSize = 50 * 1024 * 1024;
+
+    // How long to try to clear puller cache from last time
+    static const long kPullerCacheClearIntervalSec = 1;
 
     /**
      * Report a new config has been received and report the static stats about the config.

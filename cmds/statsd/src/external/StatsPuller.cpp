@@ -19,12 +19,17 @@
 
 #include "StatsPuller.h"
 #include "guardrail/StatsdStats.h"
+#include "puller_util.h"
+#include "stats_log_util.h"
 
 namespace android {
 namespace os {
 namespace statsd {
 
 using std::lock_guard;
+
+sp<UidMap> StatsPuller::mUidMap = nullptr;
+void StatsPuller::SetUidMap(const sp<UidMap>& uidMap) { mUidMap = uidMap; }
 
 // ValueMetric has a minimum bucket size of 10min so that we don't pull too frequently
 StatsPuller::StatsPuller(const int tagId)
@@ -40,7 +45,7 @@ StatsPuller::StatsPuller(const int tagId)
 bool StatsPuller::Pull(std::vector<std::shared_ptr<LogEvent>>* data) {
     lock_guard<std::mutex> lock(mLock);
     StatsdStats::getInstance().notePull(mTagId);
-    long curTime = time(nullptr);
+    long curTime = getElapsedRealtimeSec();
     if (curTime - mLastPullTimeSec < mCoolDownSec) {
         (*data) = mCachedData;
         StatsdStats::getInstance().notePullFromCache(mTagId);
@@ -54,14 +59,30 @@ bool StatsPuller::Pull(std::vector<std::shared_ptr<LogEvent>>* data) {
     mLastPullTimeSec = curTime;
     bool ret = PullInternal(&mCachedData);
     if (ret) {
-        (*data) = mCachedData;
+      mergeIsolatedUidsToHostUid(mCachedData, mUidMap, mTagId);
+      (*data) = mCachedData;
     }
     return ret;
 }
 
-void StatsPuller::ClearCache() {
+int StatsPuller::ForceClearCache() {
+    return clearCache();
+}
+
+int StatsPuller::clearCache() {
     lock_guard<std::mutex> lock(mLock);
+    int ret = mCachedData.size();
     mCachedData.clear();
+    mLastPullTimeSec = 0;
+    return ret;
+}
+
+int StatsPuller::ClearCacheIfNecessary(long timestampSec) {
+    if (timestampSec - mLastPullTimeSec > mCoolDownSec) {
+        return clearCache();
+    } else {
+        return 0;
+    }
 }
 
 }  // namespace statsd

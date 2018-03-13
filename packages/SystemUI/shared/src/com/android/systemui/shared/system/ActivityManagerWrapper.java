@@ -17,7 +17,6 @@
 package com.android.systemui.shared.system;
 
 import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
-import static android.app.ActivityManager.LOCK_TASK_MODE_PINNED;
 import static android.app.ActivityManager.RECENT_IGNORE_UNAVAILABLE;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
@@ -40,18 +39,14 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
-import android.content.res.Resources;
-import android.content.res.Resources.NotFoundException;
 import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
-import android.util.IconDrawableFactory;
 import android.util.Log;
 import android.view.IRecentsAnimationController;
 import android.view.IRecentsAnimationRunner;
@@ -72,14 +67,12 @@ public class ActivityManagerWrapper {
     private static final ActivityManagerWrapper sInstance = new ActivityManagerWrapper();
 
     private final PackageManager mPackageManager;
-    private final IconDrawableFactory mDrawableFactory;
     private final BackgroundExecutor mBackgroundExecutor;
     private final TaskStackChangeListeners mTaskStackChangeListeners;
 
     private ActivityManagerWrapper() {
         final Context context = AppGlobals.getInitialApplication();
         mPackageManager = context.getPackageManager();
-        mDrawableFactory = IconDrawableFactory.newInstance(context);
         mBackgroundExecutor = BackgroundExecutor.get();
         mTaskStackChangeListeners = new TaskStackChangeListeners(Looper.getMainLooper());
     }
@@ -154,58 +147,6 @@ public class ActivityManagerWrapper {
     }
 
     /**
-     * @return the task description icon, loading and badging it if it necessary.
-     */
-    public Drawable getBadgedTaskDescriptionIcon(Context context,
-            ActivityManager.TaskDescription taskDescription, int userId, Resources res) {
-        Bitmap tdIcon = taskDescription.getInMemoryIcon();
-        Drawable dIcon = null;
-        if (tdIcon != null) {
-            dIcon = new BitmapDrawable(res, tdIcon);
-        } else if (taskDescription.getIconResource() != 0) {
-            try {
-                dIcon = context.getDrawable(taskDescription.getIconResource());
-            } catch (NotFoundException e) {
-                Log.e(TAG, "Could not find icon drawable from resource", e);
-            }
-        } else {
-            tdIcon = ActivityManager.TaskDescription.loadTaskDescriptionIcon(
-                    taskDescription.getIconFilename(), userId);
-            if (tdIcon != null) {
-                dIcon = new BitmapDrawable(res, tdIcon);
-            }
-        }
-        if (dIcon != null) {
-            return getBadgedIcon(dIcon, userId);
-        }
-        return null;
-    }
-
-    /**
-     * @return the given icon for a user, badging if necessary.
-     */
-    private Drawable getBadgedIcon(Drawable icon, int userId) {
-        if (userId != UserHandle.myUserId()) {
-            icon = mPackageManager.getUserBadgedIcon(icon, new UserHandle(userId));
-        }
-        return icon;
-    }
-
-    /**
-     * @return the activity icon for the ActivityInfo for a user, badging if necessary.
-     */
-    public Drawable getBadgedActivityIcon(ActivityInfo info, int userId) {
-        return mDrawableFactory.getBadgedIcon(info, info.applicationInfo, userId);
-    }
-
-    /**
-     * @return the application icon for the ApplicationInfo for a user, badging if necessary.
-     */
-    public Drawable getBadgedApplicationIcon(ApplicationInfo appInfo, int userId) {
-        return mDrawableFactory.getBadgedIcon(appInfo, userId);
-    }
-
-    /**
      * @return the activity label, badging if necessary.
      */
     public String getBadgedActivityLabel(ActivityInfo info, int userId) {
@@ -271,11 +212,20 @@ public class ActivityManagerWrapper {
                 runner = new IRecentsAnimationRunner.Stub() {
                     public void onAnimationStart(IRecentsAnimationController controller,
                             RemoteAnimationTarget[] apps) {
+                        final Rect stableInsets = new Rect();
+                        WindowManagerWrapper.getInstance().getStableInsets(stableInsets);
+                        onAnimationStart_New(controller, apps, stableInsets, null);
+                    }
+
+                    public void onAnimationStart_New(IRecentsAnimationController controller,
+                            RemoteAnimationTarget[] apps, Rect homeContentInsets,
+                            Rect minimizedHomeBounds) {
                         final RecentsAnimationControllerCompat controllerCompat =
                                 new RecentsAnimationControllerCompat(controller);
                         final RemoteAnimationTargetCompat[] appsCompat =
                                 RemoteAnimationTargetCompat.wrap(apps);
-                        animationHandler.onAnimationStart(controllerCompat, appsCompat);
+                        animationHandler.onAnimationStart(controllerCompat, appsCompat,
+                                homeContentInsets, minimizedHomeBounds);
                     }
 
                     public void onAnimationCanceled() {
@@ -301,6 +251,17 @@ public class ActivityManagerWrapper {
                     }
                 });
             }
+        }
+    }
+
+    /**
+     * Cancels the remote recents animation started from {@link #startRecentsActivity}.
+     */
+    public void cancelRecentsAnimation() {
+        try {
+            ActivityManager.getService().cancelRecentsAnimation();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to cancel recents animation", e);
         }
     }
 

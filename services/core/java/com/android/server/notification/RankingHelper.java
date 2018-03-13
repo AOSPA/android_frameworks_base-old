@@ -102,7 +102,7 @@ public class RankingHelper implements RankingConfig {
     private SparseBooleanArray mBadgingEnabled;
 
     public RankingHelper(Context context, PackageManager pm, RankingHandler rankingHandler,
-            NotificationUsageStats usageStats, String[] extractorNames) {
+            ZenModeHelper zenHelper, NotificationUsageStats usageStats, String[] extractorNames) {
         mContext = context;
         mRankingHandler = rankingHandler;
         mPm = pm;
@@ -120,6 +120,7 @@ public class RankingHelper implements RankingConfig {
                         (NotificationSignalExtractor) extractorClass.newInstance();
                 extractor.initialize(mContext, usageStats);
                 extractor.setConfig(this);
+                extractor.setZenHelper(zenHelper);
                 mSignalExtractors[i] = extractor;
             } catch (ClassNotFoundException e) {
                 Slog.w(TAG, "Couldn't find extractor " + extractorNames[i] + ".", e);
@@ -640,9 +641,11 @@ public class RankingHelper implements RankingConfig {
         if (updatedChannel.getLockscreenVisibility() == Notification.VISIBILITY_PUBLIC) {
             updatedChannel.setLockscreenVisibility(Ranking.VISIBILITY_NO_OVERRIDE);
         }
-        updatedChannel.unlockFields(updatedChannel.getUserLockedFields());
-        updatedChannel.lockFields(channel.getUserLockedFields());
+        if (!fromUser) {
+            updatedChannel.unlockFields(updatedChannel.getUserLockedFields());
+        }
         if (fromUser) {
+            updatedChannel.lockFields(channel.getUserLockedFields());
             lockFieldsForUpdate(channel, updatedChannel);
         }
         r.channels.put(updatedChannel.getId(), updatedChannel);

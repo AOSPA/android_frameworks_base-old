@@ -41,6 +41,7 @@ import android.os.ServiceManager;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
+import android.util.Pair;
 
 import com.android.internal.annotations.GuardedBy;
 
@@ -705,6 +706,12 @@ public class AudioRecord implements AudioRouting
         case AudioFormat.ENCODING_PCM_FLOAT:
         case AudioFormat.ENCODING_PCM_16BIT:
         case AudioFormat.ENCODING_PCM_8BIT:
+        case AudioFormat.ENCODING_AMRNB:
+        case AudioFormat.ENCODING_AMRWB:
+        case AudioFormat.ENCODING_EVRC:
+        case AudioFormat.ENCODING_EVRCB:
+        case AudioFormat.ENCODING_EVRCWB:
+        case AudioFormat.ENCODING_EVRCNW:
             mAudioFormat = audioFormat;
             break;
         default:
@@ -941,6 +948,9 @@ public class AudioRecord implements AudioRouting
         case AudioFormat.CHANNEL_CONFIGURATION_STEREO:
         case (AudioFormat.CHANNEL_IN_FRONT | AudioFormat.CHANNEL_IN_BACK):
             channelCount = 2;
+            break;
+        case AudioFormat.CHANNEL_IN_5POINT1:
+            channelCount = 6;
             break;
         case AudioFormat.CHANNEL_INVALID:
         default:
@@ -1416,6 +1426,7 @@ public class AudioRecord implements AudioRouting
     /*
      * Call BEFORE adding a routing callback handler.
      */
+    @GuardedBy("mRoutingChangeListeners")
     private void testEnableNativeRoutingCallbacksLocked() {
         if (mRoutingChangeListeners.size() == 0) {
             native_enableDeviceCallback();
@@ -1425,6 +1436,7 @@ public class AudioRecord implements AudioRouting
     /*
      * Call AFTER removing a routing callback handler.
      */
+    @GuardedBy("mRoutingChangeListeners")
     private void testDisableNativeRoutingCallbacksLocked() {
         if (mRoutingChangeListeners.size() == 0) {
             native_disableDeviceCallback();
@@ -1628,6 +1640,20 @@ public class AudioRecord implements AudioRouting
             return new ArrayList<MicrophoneInfo>();
         }
         AudioManager.setPortIdForMicrophones(activeMicrophones);
+
+        // Use routed device when there is not information returned by hal.
+        if (activeMicrophones.size() == 0) {
+            AudioDeviceInfo device = getRoutedDevice();
+            if (device != null) {
+                MicrophoneInfo microphone = AudioManager.microphoneInfoFromAudioDeviceInfo(device);
+                ArrayList<Pair<Integer, Integer>> channelMapping = new ArrayList<>();
+                for (int i = 0; i < mChannelCount; i++) {
+                    channelMapping.add(new Pair(i, MicrophoneInfo.CHANNEL_MAPPING_DIRECT));
+                }
+                microphone.setChannelMapping(channelMapping);
+                activeMicrophones.add(microphone);
+            }
+        }
         return activeMicrophones;
     }
 

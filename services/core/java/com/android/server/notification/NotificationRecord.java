@@ -15,6 +15,7 @@
  */
 package com.android.server.notification;
 
+import static android.app.NotificationChannel.USER_LOCKED_IMPORTANCE;
 import static android.app.NotificationManager.IMPORTANCE_MIN;
 import static android.app.NotificationManager.IMPORTANCE_UNSPECIFIED;
 import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
@@ -22,6 +23,8 @@ import static android.app.NotificationManager.IMPORTANCE_HIGH;
 import static android.app.NotificationManager.IMPORTANCE_LOW;
 import static android.service.notification.NotificationListenerService.Ranking
         .USER_SENTIMENT_NEUTRAL;
+import static android.service.notification.NotificationListenerService.Ranking
+        .USER_SENTIMENT_POSITIVE;
 
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -38,6 +41,7 @@ import android.metrics.LogMaker;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Parcelable;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.notification.Adjustment;
@@ -47,6 +51,7 @@ import android.service.notification.NotificationStats;
 import android.service.notification.SnoozeCriterion;
 import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
+import android.util.ArraySet;
 import android.util.Log;
 import android.util.Slog;
 import android.util.TimeUtils;
@@ -64,6 +69,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Holds data about notifications that should not be shared with the
@@ -160,6 +166,7 @@ public final class NotificationRecord {
         mLight = calculateLights();
         mAdjustments = new ArrayList<>();
         mStats = new NotificationStats();
+        calculateUserSentiment();
     }
 
     private boolean isPreChannelsNotification() {
@@ -317,7 +324,7 @@ public final class NotificationRecord {
         if (mPreChannelsNotification
                 && (importance == IMPORTANCE_UNSPECIFIED
                 || (getChannel().getUserLockedFields()
-                & NotificationChannel.USER_LOCKED_IMPORTANCE) == 0)) {
+                & USER_LOCKED_IMPORTANCE) == 0)) {
             if (!stats.isNoisy && requestedImportance > IMPORTANCE_LOW) {
                 requestedImportance = IMPORTANCE_LOW;
             }
@@ -582,8 +589,12 @@ public final class NotificationRecord {
                     setOverrideGroupKey(groupOverrideKey);
                 }
                 if (signals.containsKey(Adjustment.KEY_USER_SENTIMENT)) {
-                    setUserSentiment(adjustment.getSignals().getInt(
-                            Adjustment.KEY_USER_SENTIMENT, USER_SENTIMENT_NEUTRAL));
+                    // Only allow user sentiment update from assistant if user hasn't already
+                    // expressed a preference for this channel
+                    if ((getChannel().getUserLockedFields() & USER_LOCKED_IMPORTANCE) == 0) {
+                        setUserSentiment(adjustment.getSignals().getInt(
+                                Adjustment.KEY_USER_SENTIMENT, USER_SENTIMENT_NEUTRAL));
+                    }
                 }
             }
         }
@@ -842,10 +853,6 @@ public final class NotificationRecord {
         }
     }
 
-    public boolean isImportanceFromUser() {
-        return mImportance == mUserImportance;
-    }
-
     public NotificationChannel getChannel() {
         return mChannel;
     }
@@ -854,6 +861,7 @@ public final class NotificationRecord {
         if (channel != null) {
             mChannel = channel;
             calculateImportance();
+            calculateUserSentiment();
         }
     }
 
@@ -897,6 +905,12 @@ public final class NotificationRecord {
         mSnoozeCriteria = snoozeCriteria;
     }
 
+    private void calculateUserSentiment() {
+        if ((getChannel().getUserLockedFields() & USER_LOCKED_IMPORTANCE) != 0) {
+            mUserSentiment = USER_SENTIMENT_POSITIVE;
+        }
+    }
+
     private void setUserSentiment(int userSentiment) {
         mUserSentiment = userSentiment;
     }
@@ -927,6 +941,42 @@ public final class NotificationRecord {
 
     public void recordViewedSettings() {
         mStats.setViewedSettings();
+    }
+
+    public Set<Uri> getNotificationUris() {
+        Notification notification = getNotification();
+        Set<Uri> uris = new ArraySet<>();
+
+        if (notification.sound != null) {
+            uris.add(notification.sound);
+        }
+        if (notification.getChannelId() != null) {
+            NotificationChannel channel = getChannel();
+            if (channel != null && channel.getSound() != null) {
+                uris.add(channel.getSound());
+            }
+        }
+        if (notification.extras.containsKey(Notification.EXTRA_AUDIO_CONTENTS_URI)) {
+            uris.add(notification.extras.getParcelable(Notification.EXTRA_AUDIO_CONTENTS_URI));
+        }
+        if (notification.extras.containsKey(Notification.EXTRA_BACKGROUND_IMAGE_URI)) {
+            uris.add(notification.extras.getParcelable(Notification.EXTRA_BACKGROUND_IMAGE_URI));
+        }
+        if (Notification.MessagingStyle.class.equals(notification.getNotificationStyle())) {
+            Parcelable[] newMessages =
+                    notification.extras.getParcelableArray(Notification.EXTRA_MESSAGES);
+            List<Notification.MessagingStyle.Message> messages
+                    = Notification.MessagingStyle.Message.getMessagesFromBundleArray(newMessages);
+            Parcelable[] histMessages =
+                    notification.extras.getParcelableArray(Notification.EXTRA_HISTORIC_MESSAGES);
+            messages.addAll(
+                    Notification.MessagingStyle.Message.getMessagesFromBundleArray(histMessages));
+            for (Notification.MessagingStyle.Message message : messages) {
+                uris.add(message.getDataUri());
+            }
+        }
+
+        return uris;
     }
 
     public LogMaker getLogMaker(long now) {

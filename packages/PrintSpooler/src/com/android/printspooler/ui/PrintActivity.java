@@ -306,19 +306,22 @@ public class PrintActivity extends Activity implements RemotePrintDocument.Updat
         // This will take just a few milliseconds, so just wait to
         // bind to the local service before showing the UI.
         mSpoolerProvider = new PrintSpoolerProvider(this,
-                new Runnable() {
-            @Override
-            public void run() {
-                if (isFinishing() || isDestroyed()) {
-                    // onPause might have not been able to cancel the job, see PrintActivity#onPause
-                    // To be sure, cancel the job again. Double canceling does no harm.
-                    mSpoolerProvider.getSpooler().setPrintJobState(mPrintJob.getId(),
-                            PrintJobInfo.STATE_CANCELED, null);
-                } else {
-                    onConnectedToPrintSpooler(adapter);
-                }
-            }
-        });
+                () -> {
+                    if (isFinishing() || isDestroyed()) {
+                        if (savedInstanceState != null) {
+                            // onPause might have not been able to cancel the job, see
+                            // PrintActivity#onPause
+                            // To be sure, cancel the job again. Double canceling does no harm.
+                            mSpoolerProvider.getSpooler().setPrintJobState(mPrintJob.getId(),
+                                    PrintJobInfo.STATE_CANCELED, null);
+                        }
+                    } else {
+                        if (savedInstanceState == null) {
+                            mSpoolerProvider.getSpooler().createPrintJob(mPrintJob);
+                        }
+                        onConnectedToPrintSpooler(adapter);
+                    }
+                });
 
         getLoaderManager().initLoader(LOADER_ID_ENABLED_PRINT_SERVICES, null, this);
     }
@@ -3117,6 +3120,8 @@ public class PrintActivity extends Activity implements RemotePrintDocument.Updat
 
         private final Consumer<String> mCallback;
 
+        private boolean mIsTransformationStarted;
+
         public DocumentTransformer(Context context, PrintJobInfo printJob,
                 MutexFileProvider fileProvider, PrintAttributes attributes,
                 Consumer<String> callback) {
@@ -3144,29 +3149,35 @@ public class PrintActivity extends Activity implements RemotePrintDocument.Updat
 
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            final IPdfEditor editor = IPdfEditor.Stub.asInterface(service);
-            new AsyncTask<Void, Void, String>() {
-                @Override
-                protected String doInBackground(Void... params) {
-                    // It's OK to access the data members as they are
-                    // final and this code is the last one to touch
-                    // them as shredding is the very last step, so the
-                    // UI is not interactive at this point.
-                    try {
-                        doTransform(editor);
-                        updatePrintJob();
-                        return null;
-                    } catch (IOException | RemoteException | IllegalStateException e) {
-                        return e.toString();
+            // We might get several onServiceConnected if the service crashes and restarts.
+            // mIsTransformationStarted makes sure that we only try once.
+            if (!mIsTransformationStarted) {
+                final IPdfEditor editor = IPdfEditor.Stub.asInterface(service);
+                new AsyncTask<Void, Void, String>() {
+                    @Override
+                    protected String doInBackground(Void... params) {
+                        // It's OK to access the data members as they are
+                        // final and this code is the last one to touch
+                        // them as shredding is the very last step, so the
+                        // UI is not interactive at this point.
+                        try {
+                            doTransform(editor);
+                            updatePrintJob();
+                            return null;
+                        } catch (IOException | RemoteException | IllegalStateException e) {
+                            return e.toString();
+                        }
                     }
-                }
 
-                @Override
-                protected void onPostExecute(String error) {
-                    mContext.unbindService(DocumentTransformer.this);
-                    mCallback.accept(error);
-                }
-            }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+                    @Override
+                    protected void onPostExecute(String error) {
+                        mContext.unbindService(DocumentTransformer.this);
+                        mCallback.accept(error);
+                    }
+                }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+
+                mIsTransformationStarted = true;
+            }
         }
 
         @Override

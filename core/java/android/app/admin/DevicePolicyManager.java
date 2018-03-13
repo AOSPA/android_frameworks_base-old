@@ -21,9 +21,11 @@ import android.annotation.ColorInt;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresFeature;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.StringDef;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
@@ -57,6 +59,7 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.ContactsContract.Directory;
+import android.provider.Settings;
 import android.security.AttestedKeyPair;
 import android.security.Credentials;
 import android.security.KeyChain;
@@ -116,6 +119,7 @@ import java.util.concurrent.Executor;
  * guide. </div>
  */
 @SystemService(Context.DEVICE_POLICY_SERVICE)
+@RequiresFeature(PackageManager.FEATURE_DEVICE_ADMIN)
 public class DevicePolicyManager {
     private static String TAG = "DevicePolicyManager";
 
@@ -1642,11 +1646,15 @@ public class DevicePolicyManager {
     public static final int LOCK_TASK_FEATURE_HOME = 1 << 2;
 
     /**
-     * Enable the Recents button and the Recents screen during LockTask mode.
+     * Enable the Overview button and the Overview screen during LockTask mode. This feature flag
+     * can only be used in combination with {@link #LOCK_TASK_FEATURE_HOME}, and
+     * {@link #setLockTaskFeatures(ComponentName, int)} will throw an
+     * {@link IllegalArgumentException} if this feature flag is defined without
+     * {@link #LOCK_TASK_FEATURE_HOME}.
      *
      * @see #setLockTaskFeatures(ComponentName, int)
      */
-    public static final int LOCK_TASK_FEATURE_RECENTS = 1 << 3;
+    public static final int LOCK_TASK_FEATURE_OVERVIEW = 1 << 3;
 
     /**
      * Enable the global actions dialog during LockTask mode. This is the dialog that shows up when
@@ -1678,7 +1686,7 @@ public class DevicePolicyManager {
             LOCK_TASK_FEATURE_SYSTEM_INFO,
             LOCK_TASK_FEATURE_NOTIFICATIONS,
             LOCK_TASK_FEATURE_HOME,
-            LOCK_TASK_FEATURE_RECENTS,
+            LOCK_TASK_FEATURE_OVERVIEW,
             LOCK_TASK_FEATURE_GLOBAL_ACTIONS,
             LOCK_TASK_FEATURE_KEYGUARD
     })
@@ -2850,8 +2858,8 @@ public class DevicePolicyManager {
      * When called by a profile owner of a managed profile returns true if the profile uses unified
      * challenge with its parent user.
      *
-     * <strong>Note: This method is not concerned with password quality and will return false if
-     * the profile has empty password as a separate challenge.
+     * <strong>Note</strong>: This method is not concerned with password quality and will return
+     * false if the profile has empty password as a separate challenge.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @throws SecurityException if {@code admin} is not a profile owner of a managed profile.
@@ -3444,9 +3452,6 @@ public class DevicePolicyManager {
 
     /**
      * Flag for {@link #wipeData(int)}: also erase the device's eUICC data.
-     *
-     * TODO(b/35851809): make this public.
-     * @hide
      */
     public static final int WIPE_EUICC = 0x0004;
 
@@ -3490,18 +3495,18 @@ public class DevicePolicyManager {
      *             that uses {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA}
      * @throws IllegalArgumentException if the input reason string is null or empty.
      */
-    public void wipeDataWithReason(int flags, @NonNull CharSequence reason) {
-        throwIfParentInstance("wipeDataWithReason");
+    public void wipeData(int flags, @NonNull CharSequence reason) {
+        throwIfParentInstance("wipeData");
         Preconditions.checkNotNull(reason, "CharSequence is null");
         wipeDataInternal(flags, reason.toString());
     }
 
     /**
      * Internal function for both {@link #wipeData(int)} and
-     * {@link #wipeDataWithReason(int, CharSequence)} to call.
+     * {@link #wipeData(int, CharSequence)} to call.
      *
      * @see #wipeData(int)
-     * @see #wipeDataWithReason(int, CharSequence)
+     * @see #wipeData(int, CharSequence)
      * @hide
      */
     private void wipeDataInternal(int flags, @NonNull String wipeReasonForUser) {
@@ -7192,7 +7197,7 @@ public class DevicePolicyManager {
      *              {@link #LOCK_TASK_FEATURE_SYSTEM_INFO},
      *              {@link #LOCK_TASK_FEATURE_NOTIFICATIONS},
      *              {@link #LOCK_TASK_FEATURE_HOME},
-     *              {@link #LOCK_TASK_FEATURE_RECENTS},
+     *              {@link #LOCK_TASK_FEATURE_OVERVIEW},
      *              {@link #LOCK_TASK_FEATURE_GLOBAL_ACTIONS},
      *              {@link #LOCK_TASK_FEATURE_KEYGUARD}
      * @throws SecurityException if {@code admin} is not the device owner, the profile owner of an
@@ -7282,6 +7287,15 @@ public class DevicePolicyManager {
         }
     }
 
+    /** @hide */
+    @StringDef({
+            Settings.System.SCREEN_BRIGHTNESS_MODE,
+            Settings.System.SCREEN_BRIGHTNESS,
+            Settings.System.SCREEN_OFF_TIMEOUT
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SystemSettingsWhitelist {}
+
     /**
      * Called by device owner to update {@link android.provider.Settings.System} settings.
      * Validation that the value of the setting is in the correct form for the setting type should
@@ -7301,8 +7315,8 @@ public class DevicePolicyManager {
      * @param value The value to update the setting to.
      * @throws SecurityException if {@code admin} is not a device owner.
      */
-    public void setSystemSetting(@NonNull ComponentName admin, @NonNull String setting,
-            String value) {
+    public void setSystemSetting(@NonNull ComponentName admin,
+            @NonNull @SystemSettingsWhitelist String setting, String value) {
         throwIfParentInstance("setSystemSetting");
         if (mService != null) {
             try {
@@ -9404,41 +9418,6 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Allows/disallows printing.
-     *
-     * Called by a device owner or a profile owner.
-     * Device owner changes policy for all users. Profile owner can override it if present.
-     * Printing is enabled by default. If {@code FEATURE_PRINTING} is absent, the call is ignored.
-     *
-     * @param admin which {@link DeviceAdminReceiver} this request is associated with.
-     * @param enabled whether printing should be allowed or not.
-     * @throws SecurityException if {@code admin} is neither device, nor profile owner.
-     */
-    public void setPrintingEnabled(@NonNull ComponentName admin, boolean enabled) {
-        try {
-            mService.setPrintingEnabled(admin, enabled);
-        } catch (RemoteException re) {
-            throw re.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Returns whether printing is enabled for this user.
-     *
-     * Always {@code false} if {@code FEATURE_PRINTING} is absent.
-     * Otherwise, {@code true} by default.
-     *
-     * @return {@code true} iff printing is enabled.
-     */
-    public boolean isPrintingEnabled() {
-        try {
-            return mService.isPrintingEnabled();
-        } catch (RemoteException re) {
-            throw re.rethrowFromSystemServer();
-        }
-    }
-
-    /**
      * Called by device owner to add an override APN.
      *
      * @param admin which {@link DeviceAdminReceiver} this request is associated with
@@ -9575,12 +9554,19 @@ public class DevicePolicyManager {
     /**
      * Returns the data passed from the current administrator to the new administrator during an
      * ownership transfer. This is the same {@code bundle} passed in
-     * {@link #transferOwnership(ComponentName, ComponentName, PersistableBundle)}.
+     * {@link #transferOwnership(ComponentName, ComponentName, PersistableBundle)}. The bundle is
+     * persisted until the profile owner or device owner is removed.
+     *
+     * <p>This is the same <code>bundle</code> received in the
+     * {@link DeviceAdminReceiver#onTransferOwnershipComplete(Context, PersistableBundle)}.
+     * Use this method to retrieve it after the transfer as long as the new administrator is the
+     * active device or profile owner.
      *
      * <p>Returns <code>null</code> if no ownership transfer was started for the calling user.
      *
      * @see #transferOwnership
      * @see DeviceAdminReceiver#onTransferOwnershipComplete(Context, PersistableBundle)
+     * @throws SecurityException if the caller is not a device or profile owner.
      */
     @Nullable
     public PersistableBundle getTransferOwnershipBundle() {

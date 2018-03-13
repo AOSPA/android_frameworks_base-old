@@ -19,6 +19,7 @@ package android.telephony;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -178,7 +179,6 @@ public class ServiceState implements Parcelable {
 
     /**
      * Number of radio technologies for GSM, UMTS and CDMA.
-     * @hide
      */
     private static final int NEXT_RIL_RADIO_TECHNOLOGY = 20;
 
@@ -340,6 +340,8 @@ public class ServiceState implements Parcelable {
         mIsEmergencyOnly = s.mIsEmergencyOnly;
         mIsDataRoamingFromRegistration = s.mIsDataRoamingFromRegistration;
         mIsUsingCarrierAggregation = s.mIsUsingCarrierAggregation;
+        mChannelNumber = s.mChannelNumber;
+        mCellBandwidths = Arrays.copyOf(s.mCellBandwidths, s.mCellBandwidths.length);
         mLteEarfcnRsrpBoost = s.mLteEarfcnRsrpBoost;
         mNetworkRegistrationStates = new ArrayList<>(s.mNetworkRegistrationStates);
     }
@@ -1214,6 +1216,7 @@ public class ServiceState implements Parcelable {
     }
 
     /** @hide */
+    @TestApi
     public void setSystemAndNetworkId(int systemId, int networkId) {
         this.mSystemId = systemId;
         this.mNetworkId = networkId;
@@ -1526,7 +1529,9 @@ public class ServiceState implements Parcelable {
      */
     @SystemApi
     public List<NetworkRegistrationState> getNetworkRegistrationStates() {
-        return mNetworkRegistrationStates;
+        synchronized (mNetworkRegistrationStates) {
+            return new ArrayList<>(mNetworkRegistrationStates);
+        }
     }
 
     /**
@@ -1539,11 +1544,15 @@ public class ServiceState implements Parcelable {
     @SystemApi
     public List<NetworkRegistrationState> getNetworkRegistrationStates(int transportType) {
         List<NetworkRegistrationState> list = new ArrayList<>();
-        for (NetworkRegistrationState networkRegistrationState : mNetworkRegistrationStates) {
-            if (networkRegistrationState.getTransportType() == transportType) {
-                list.add(networkRegistrationState);
+
+        synchronized (mNetworkRegistrationStates) {
+            for (NetworkRegistrationState networkRegistrationState : mNetworkRegistrationStates) {
+                if (networkRegistrationState.getTransportType() == transportType) {
+                    list.add(networkRegistrationState);
+                }
             }
         }
+
         return list;
     }
 
@@ -1557,12 +1566,36 @@ public class ServiceState implements Parcelable {
      */
     @SystemApi
     public NetworkRegistrationState getNetworkRegistrationStates(int transportType, int domain) {
-        for (NetworkRegistrationState networkRegistrationState : mNetworkRegistrationStates) {
-            if (networkRegistrationState.getTransportType() == transportType
-                    && networkRegistrationState.getDomain() == domain) {
-                return networkRegistrationState;
+        synchronized (mNetworkRegistrationStates) {
+            for (NetworkRegistrationState networkRegistrationState : mNetworkRegistrationStates) {
+                if (networkRegistrationState.getTransportType() == transportType
+                        && networkRegistrationState.getDomain() == domain) {
+                    return networkRegistrationState;
+                }
             }
         }
+
         return null;
     }
+
+    /**
+     * @hide
+     */
+    public void addNetworkRegistrationState(NetworkRegistrationState regState) {
+        if (regState == null) return;
+
+        synchronized (mNetworkRegistrationStates) {
+            for (int i = 0; i < mNetworkRegistrationStates.size(); i++) {
+                NetworkRegistrationState curRegState = mNetworkRegistrationStates.get(i);
+                if (curRegState.getTransportType() == regState.getTransportType()
+                        && curRegState.getDomain() == regState.getDomain()) {
+                    mNetworkRegistrationStates.remove(i);
+                    break;
+                }
+            }
+
+            mNetworkRegistrationStates.add(regState);
+        }
+    }
+
 }

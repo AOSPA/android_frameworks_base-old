@@ -53,6 +53,7 @@ import android.telephony.ims.aidl.IImsMmTelFeature;
 import android.telephony.ims.aidl.IImsRcsFeature;
 import android.telephony.ims.aidl.IImsRegistration;
 import android.telephony.ims.feature.ImsFeature;
+import android.telephony.ims.stub.ImsRegistrationImplBase;
 import android.util.Log;
 
 import com.android.ims.internal.IImsServiceFeatureCallback;
@@ -903,6 +904,61 @@ public class TelephonyManager {
      */
     public static final String EVENT_CALL_FORWARDED =
             "android.telephony.event.EVENT_CALL_FORWARDED";
+
+    /**
+     * {@link android.telecom.Connection} event used to indicate that a supplementary service
+     * notification has been received.
+     * <p>
+     * Sent via {@link android.telecom.Connection#sendConnectionEvent(String, Bundle)}.
+     * The {@link Bundle} parameter is expected to include the following extras:
+     * <ul>
+     *     <li>{@link #EXTRA_NOTIFICATION_TYPE} - the notification type.</li>
+     *     <li>{@link #EXTRA_NOTIFICATION_CODE} - the notification code.</li>
+     *     <li>{@link #EXTRA_NOTIFICATION_MESSAGE} - human-readable message associated with the
+     *     supplementary service notification.</li>
+     * </ul>
+     * @hide
+     */
+    public static final String EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION =
+            "android.telephony.event.EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION";
+
+    /**
+     * Integer extra key used with {@link #EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION} which indicates
+     * the type of supplementary service notification which occurred.
+     * Will be either
+     * {@link com.android.internal.telephony.gsm.SuppServiceNotification#NOTIFICATION_TYPE_CODE_1}
+     * or
+     * {@link com.android.internal.telephony.gsm.SuppServiceNotification#NOTIFICATION_TYPE_CODE_2}
+     * <p>
+     * Set in the extras for the {@link #EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION} connection event.
+     * @hide
+     */
+    public static final String EXTRA_NOTIFICATION_TYPE =
+            "android.telephony.extra.NOTIFICATION_TYPE";
+
+    /**
+     * Integer extra key used with {@link #EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION} which indicates
+     * the supplementary service notification which occurred.
+     * <p>
+     * Depending on the {@link #EXTRA_NOTIFICATION_TYPE}, the code will be one of the {@code CODE_*}
+     * codes defined in {@link com.android.internal.telephony.gsm.SuppServiceNotification}.
+     * <p>
+     * Set in the extras for the {@link #EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION} connection event.
+     * @hide
+     */
+    public static final String EXTRA_NOTIFICATION_CODE =
+            "android.telephony.extra.NOTIFICATION_CODE";
+
+    /**
+     * {@link CharSequence} extra key used with {@link #EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION}
+     * which contains a human-readable message which can be displayed to the user for the
+     * supplementary service notification.
+     * <p>
+     * Set in the extras for the {@link #EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION} connection event.
+     * @hide
+     */
+    public static final String EXTRA_NOTIFICATION_MESSAGE =
+            "android.telephony.extra.NOTIFICATION_MESSAGE";
 
     /* Visual voicemail protocols */
 
@@ -3998,6 +4054,9 @@ public class TelephonyManager {
      * To unregister a listener, pass the listener object and set the
      * events argument to
      * {@link PhoneStateListener#LISTEN_NONE LISTEN_NONE} (0).
+     * Note: if you call this method while in the middle of a binder transaction, you <b>must</b>
+     * call {@link android.os.Binder#clearCallingIdentity()} before calling this method. A
+     * {@link SecurityException} will be thrown otherwise.
      *
      * @param listener The {@link PhoneStateListener} object to register
      *                 (or unregister)
@@ -4746,7 +4805,7 @@ public class TelephonyManager {
     }
 
     /**
-     * Sets the telephony property with the value specified.
+     * Sets a per-phone telephony property with the value specified.
      *
      * @hide
      */
@@ -4790,9 +4849,21 @@ public class TelephonyManager {
             return;
         }
 
-        Rlog.d(TAG, "setTelephonyProperty: success phoneId=" + phoneId +
-                " property=" + property + " value: " + value + " propVal=" + propVal);
         SystemProperties.set(property, propVal);
+    }
+
+    /**
+     * Sets a global telephony property with the value specified.
+     *
+     * @hide
+     */
+    public static void setTelephonyProperty(String property, String value) {
+        if (value == null) {
+            value = "";
+        }
+        Rlog.d(TAG, "setTelephonyProperty: success" + " property=" +
+                property + " value: " + value);
+        SystemProperties.set(property, value);
     }
 
     /**
@@ -4884,7 +4955,7 @@ public class TelephonyManager {
     }
 
     /**
-     * Gets the telephony property.
+     * Gets a per-phone telephony property.
      *
      * @hide
      */
@@ -4897,6 +4968,19 @@ public class TelephonyManager {
                 propVal = values[phoneId];
             }
         }
+        return propVal == null ? defaultVal : propVal;
+    }
+
+    /**
+     * Gets a global telephony property.
+     *
+     * See also getTelephonyProperty(phoneId, property, defaultVal). Most telephony properties are
+     * per-phone.
+     *
+     * @hide
+     */
+    public static String getTelephonyProperty(String property, String defaultVal) {
+        String propVal = SystemProperties.get(property);
         return propVal == null ? defaultVal : propVal;
     }
 
@@ -6328,83 +6412,105 @@ public class TelephonyManager {
         return false;
     }
 
-   /**
-    * Returns the IMS Registration Status
-    * @hide
-    */
-   public boolean isImsRegistered() {
-       try {
-           ITelephony telephony = getITelephony();
-           if (telephony == null)
-               return false;
-           return telephony.isImsRegistered();
-       } catch (RemoteException ex) {
-           return false;
-       } catch (NullPointerException ex) {
-           return false;
-       }
-   }
-
     /**
-     * Returns the IMS Registration Status for a particular Subscription ID
+     * Returns the IMS Registration Status for a particular Subscription ID.
      *
      * @param subId Subscription ID
      * @return true if IMS status is registered, false if the IMS status is not registered or a
      * RemoteException occurred.
-     *
      * @hide
      */
     public boolean isImsRegistered(int subId) {
-       try {
-           return getITelephony().isImsRegisteredForSubscriber(subId);
-       } catch (RemoteException ex) {
-           return false;
-       } catch (NullPointerException ex) {
-           return false;
-       }
-    }
-
-    /**
-     * Returns the Status of Volte
-     * @hide
-     */
-    public boolean isVolteAvailable() {
-       try {
-           return getITelephony().isVolteAvailable();
-       } catch (RemoteException ex) {
-           return false;
-       } catch (NullPointerException ex) {
-           return false;
-       }
-   }
-
-    /**
-     * Returns the Status of video telephony (VT)
-     * @hide
-     */
-    public boolean isVideoTelephonyAvailable() {
         try {
-            return getITelephony().isVideoTelephonyAvailable();
-        } catch (RemoteException ex) {
-            return false;
-        } catch (NullPointerException ex) {
+            return getITelephony().isImsRegistered(subId);
+        } catch (RemoteException | NullPointerException ex) {
             return false;
         }
     }
 
     /**
-     * Returns the Status of Wi-Fi Calling
+     * Returns the IMS Registration Status for a particular Subscription ID, which is determined
+     * when the TelephonyManager is created using {@link #createForSubscriptionId(int)}. If an
+     * invalid subscription ID is used during creation, will the default subscription ID will be
+     * used.
+     *
+     * @return true if IMS status is registered, false if the IMS status is not registered or a
+     * RemoteException occurred.
+     * @see SubscriptionManager#getDefaultSubscriptionId()
+     * @hide
+     */
+    public boolean isImsRegistered() {
+       try {
+           return getITelephony().isImsRegistered(getSubId());
+       } catch (RemoteException | NullPointerException ex) {
+           return false;
+       }
+    }
+
+    /**
+     * The current status of Voice over LTE for the subscription associated with this instance when
+     * it was created using {@link #createForSubscriptionId(int)}. If an invalid subscription ID was
+     * used during creation, the default subscription ID will be used.
+     * @return true if Voice over LTE is available or false if it is unavailable or unknown.
+     * @see SubscriptionManager#getDefaultSubscriptionId()
+     * @hide
+     */
+    public boolean isVolteAvailable() {
+        try {
+            return getITelephony().isVolteAvailable(getSubId());
+        } catch (RemoteException | NullPointerException ex) {
+            return false;
+        }
+    }
+
+    /**
+     * The availability of Video Telephony (VT) for the subscription ID specified when this instance
+     * was created using {@link #createForSubscriptionId(int)}. If an invalid subscription ID was
+     * used during creation, the default subscription ID will be used. To query the
+     * underlying technology that VT is available on, use {@link #getImsRegTechnologyForMmTel}.
+     * @return true if VT is available, or false if it is unavailable or unknown.
+     * @hide
+     */
+    public boolean isVideoTelephonyAvailable() {
+        try {
+            return getITelephony().isVideoTelephonyAvailable(getSubId());
+        } catch (RemoteException | NullPointerException ex) {
+            return false;
+        }
+    }
+
+    /**
+     * Returns the Status of Wi-Fi calling (Voice over WiFi) for the subscription ID specified.
+     * @param subId the subscription ID.
+     * @return true if VoWiFi is available, or false if it is unavailable or unknown.
      * @hide
      */
     public boolean isWifiCallingAvailable() {
        try {
-           return getITelephony().isWifiCallingAvailable();
-       } catch (RemoteException ex) {
-           return false;
-       } catch (NullPointerException ex) {
+           return getITelephony().isWifiCallingAvailable(getSubId());
+       } catch (RemoteException | NullPointerException ex) {
            return false;
        }
    }
+
+    /**
+     * The technology that IMS is registered for for the MMTEL feature.
+     * @param subId subscription ID to get IMS registration technology for.
+     * @return The IMS registration technology that IMS is registered to for the MMTEL feature.
+     * Valid return results are:
+     *  - {@link ImsRegistrationImplBase#REGISTRATION_TECH_LTE} for LTE registration,
+     *  - {@link ImsRegistrationImplBase#REGISTRATION_TECH_IWLAN} for IWLAN registration, or
+     *  - {@link ImsRegistrationImplBase#REGISTRATION_TECH_NONE} if we are not registered or the
+     *  result is unavailable.
+     *  @hide
+     */
+    public @ImsRegistrationImplBase.ImsRegistrationTech int getImsRegTechnologyForMmTel() {
+        try {
+            return getITelephony().getImsRegTechnologyForMmTel(getSubId());
+        } catch (RemoteException ex) {
+            return ImsRegistrationImplBase.REGISTRATION_TECH_NONE;
+        }
+    }
 
    /**
     * Set TelephonyProperties.PROPERTY_ICC_OPERATOR_NUMERIC for the default phone.

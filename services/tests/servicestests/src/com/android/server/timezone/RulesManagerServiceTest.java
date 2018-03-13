@@ -41,6 +41,7 @@ import javax.annotation.Nullable;
 
 import libcore.io.IoUtils;
 
+import static com.android.server.timezone.RulesManagerService.REQUIRED_QUERY_PERMISSION;
 import static com.android.server.timezone.RulesManagerService.REQUIRED_UPDATER_PERMISSION;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -68,6 +69,7 @@ public class RulesManagerServiceTest {
 
     private FakeExecutor mFakeExecutor;
     private PermissionHelper mMockPermissionHelper;
+    private RulesManagerIntentHelper mMockIntentHelper;
     private PackageTracker mMockPackageTracker;
     private TimeZoneDistroInstaller mMockTimeZoneDistroInstaller;
 
@@ -77,36 +79,38 @@ public class RulesManagerServiceTest {
 
         mMockPackageTracker = mock(PackageTracker.class);
         mMockPermissionHelper = mock(PermissionHelper.class);
+        mMockIntentHelper = mock(RulesManagerIntentHelper.class);
         mMockTimeZoneDistroInstaller = mock(TimeZoneDistroInstaller.class);
 
         mRulesManagerService = new RulesManagerService(
                 mMockPermissionHelper,
                 mFakeExecutor,
+                mMockIntentHelper,
                 mMockPackageTracker,
                 mMockTimeZoneDistroInstaller);
     }
 
     @Test(expected = SecurityException.class)
     public void getRulesState_noCallerPermission() throws Exception {
-        configureCallerDoesNotHavePermission();
+        configureCallerDoesNotHaveQueryPermission();
         mRulesManagerService.getRulesState();
     }
 
     @Test(expected = SecurityException.class)
     public void requestInstall_noCallerPermission() throws Exception {
-        configureCallerDoesNotHavePermission();
+        configureCallerDoesNotHaveUpdatePermission();
         mRulesManagerService.requestInstall(null, null, null);
     }
 
     @Test(expected = SecurityException.class)
     public void requestUninstall_noCallerPermission() throws Exception {
-        configureCallerDoesNotHavePermission();
+        configureCallerDoesNotHaveUpdatePermission();
         mRulesManagerService.requestUninstall(null, null);
     }
 
     @Test(expected = SecurityException.class)
     public void requestNothing_noCallerPermission() throws Exception {
-        configureCallerDoesNotHavePermission();
+        configureCallerDoesNotHaveUpdatePermission();
         mRulesManagerService.requestNothing(null, true);
     }
 
@@ -329,6 +333,7 @@ public class RulesManagerServiceTest {
         mFakeExecutor.assertNothingQueued();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -353,6 +358,7 @@ public class RulesManagerServiceTest {
         mFakeExecutor.assertNothingQueued();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -372,6 +378,7 @@ public class RulesManagerServiceTest {
         mFakeExecutor.assertNothingQueued();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -394,6 +401,7 @@ public class RulesManagerServiceTest {
         mFakeExecutor.assertNothingQueued();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -416,6 +424,7 @@ public class RulesManagerServiceTest {
         callback.assertNoResultReceived();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
 
         // Set up the installer.
         configureStageInstallExpectation(TimeZoneDistroInstaller.INSTALL_SUCCESS);
@@ -428,6 +437,7 @@ public class RulesManagerServiceTest {
         // Verify the expected calls were made to other components.
         verifyStageInstallCalled();
         verifyPackageTrackerCalled(token, true /* success */);
+        verifyStagedOperationIntentSent();
 
         // Check the callback was called.
         callback.assertResultReceived(Callback.SUCCESS);
@@ -450,6 +460,7 @@ public class RulesManagerServiceTest {
         // Assert nothing has happened yet.
         verifyNoInstallerCallsMade();
         callback.assertNoResultReceived();
+        verifyNoIntentsSent();
 
         // Set up the installer.
         configureStageInstallExpectation(TimeZoneDistroInstaller.INSTALL_SUCCESS);
@@ -462,6 +473,7 @@ public class RulesManagerServiceTest {
         // Verify the expected calls were made to other components.
         verifyStageInstallCalled();
         verifyPackageTrackerCalled(null /* expectedToken */, true /* success */);
+        verifyStagedOperationIntentSent();
 
         // Check the callback was received.
         callback.assertResultReceived(Callback.SUCCESS);
@@ -486,6 +498,7 @@ public class RulesManagerServiceTest {
         // Assert nothing has happened yet.
         verifyNoInstallerCallsMade();
         callback.assertNoResultReceived();
+        verifyNoIntentsSent();
 
         // Set up the installer.
         configureStageInstallExpectation(TimeZoneDistroInstaller.INSTALL_FAIL_VALIDATION_ERROR);
@@ -501,6 +514,9 @@ public class RulesManagerServiceTest {
         // Validation failure is treated like a successful check: repeating it won't improve things.
         boolean expectedSuccess = true;
         verifyPackageTrackerCalled(token, expectedSuccess);
+
+        // Nothing should be staged, so no intents sent.
+        verifyNoIntentsSent();
 
         // Check the callback was received.
         callback.assertResultReceived(Callback.ERROR_INSTALL_VALIDATION_ERROR);
@@ -529,6 +545,7 @@ public class RulesManagerServiceTest {
         mFakeExecutor.assertNothingQueued();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -548,6 +565,7 @@ public class RulesManagerServiceTest {
         mFakeExecutor.assertNothingQueued();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -566,6 +584,7 @@ public class RulesManagerServiceTest {
         mFakeExecutor.assertNothingQueued();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -585,6 +604,7 @@ public class RulesManagerServiceTest {
         callback.assertNoResultReceived();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
 
         // Set up the installer.
         configureStageUninstallExpectation(TimeZoneDistroInstaller.UNINSTALL_SUCCESS);
@@ -595,6 +615,7 @@ public class RulesManagerServiceTest {
         // Verify the expected calls were made to other components.
         verifyStageUninstallCalled();
         verifyPackageTrackerCalled(token, true /* success */);
+        verifyStagedOperationIntentSent();
 
         // Check the callback was called.
         callback.assertResultReceived(Callback.SUCCESS);
@@ -617,6 +638,7 @@ public class RulesManagerServiceTest {
         callback.assertNoResultReceived();
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
 
         // Set up the installer.
         configureStageUninstallExpectation(TimeZoneDistroInstaller.UNINSTALL_NOTHING_INSTALLED);
@@ -627,6 +649,7 @@ public class RulesManagerServiceTest {
         // Verify the expected calls were made to other components.
         verifyStageUninstallCalled();
         verifyPackageTrackerCalled(token, true /* success */);
+        verifyUnstagedOperationIntentSent();
 
         // Check the callback was called.
         callback.assertResultReceived(Callback.SUCCESS);
@@ -645,6 +668,7 @@ public class RulesManagerServiceTest {
         // Assert nothing has happened yet.
         verifyNoInstallerCallsMade();
         callback.assertNoResultReceived();
+        verifyNoIntentsSent();
 
         // Set up the installer.
         configureStageUninstallExpectation(TimeZoneDistroInstaller.UNINSTALL_SUCCESS);
@@ -655,6 +679,7 @@ public class RulesManagerServiceTest {
         // Verify the expected calls were made to other components.
         verifyStageUninstallCalled();
         verifyPackageTrackerCalled(null /* expectedToken */, true /* success */);
+        verifyStagedOperationIntentSent();
 
         // Check the callback was received.
         callback.assertResultReceived(Callback.SUCCESS);
@@ -676,6 +701,7 @@ public class RulesManagerServiceTest {
         // Assert nothing has happened yet.
         verifyNoInstallerCallsMade();
         callback.assertNoResultReceived();
+        verifyNoIntentsSent();
 
         // Set up the installer.
         configureStageUninstallExpectation(TimeZoneDistroInstaller.UNINSTALL_FAIL);
@@ -686,6 +712,7 @@ public class RulesManagerServiceTest {
         // Verify the expected calls were made to other components.
         verifyStageUninstallCalled();
         verifyPackageTrackerCalled(token, false /* success */);
+        verifyNoIntentsSent();
 
         // Check the callback was received.
         callback.assertResultReceived(Callback.ERROR_UNKNOWN_FAILURE);
@@ -714,6 +741,7 @@ public class RulesManagerServiceTest {
         // Verify the expected calls were made to other components.
         verifyPackageTrackerCalled(token, true /* success */);
         verifyNoInstallerCallsMade();
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -734,6 +762,7 @@ public class RulesManagerServiceTest {
         // Assert no other calls were made.
         verifyNoInstallerCallsMade();
         verifyNoPackageTrackerCallsMade();
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -749,6 +778,7 @@ public class RulesManagerServiceTest {
         // Assert everything required was done.
         verifyNoInstallerCallsMade();
         verifyPackageTrackerCalled(token, false /* success */);
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -761,6 +791,7 @@ public class RulesManagerServiceTest {
         // Assert everything required was done.
         verifyNoInstallerCallsMade();
         verifyPackageTrackerCalled(null /* token */, true /* success */);
+        verifyNoIntentsSent();
     }
 
     @Test
@@ -865,16 +896,37 @@ public class RulesManagerServiceTest {
         reset(mMockPackageTracker);
     }
 
+    private void verifyNoIntentsSent() {
+        verifyNoMoreInteractions(mMockIntentHelper);
+        reset(mMockIntentHelper);
+    }
+
+    private void verifyStagedOperationIntentSent() {
+        verify(mMockIntentHelper).sendTimeZoneOperationStaged();
+        reset(mMockIntentHelper);
+    }
+
+    private void verifyUnstagedOperationIntentSent() {
+        verify(mMockIntentHelper).sendTimeZoneOperationUnstaged();
+        reset(mMockIntentHelper);
+    }
+
     private void configureCallerHasPermission() throws Exception {
         doNothing()
                 .when(mMockPermissionHelper)
                 .enforceCallerHasPermission(REQUIRED_UPDATER_PERMISSION);
     }
 
-    private void configureCallerDoesNotHavePermission() {
+    private void configureCallerDoesNotHaveUpdatePermission() {
         doThrow(new SecurityException("Simulated permission failure"))
                 .when(mMockPermissionHelper)
                 .enforceCallerHasPermission(REQUIRED_UPDATER_PERMISSION);
+    }
+
+    private void configureCallerDoesNotHaveQueryPermission() {
+        doThrow(new SecurityException("Simulated permission failure"))
+                .when(mMockPermissionHelper)
+                .enforceCallerHasPermission(REQUIRED_QUERY_PERMISSION);
     }
 
     private void configureStageInstallExpectation(int resultCode)

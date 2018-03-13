@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#define DEBUG true  // STOPSHIP if true
+#define DEBUG false  // STOPSHIP if true
 #include "Log.h"
 
 #include "../condition/CombinationConditionTracker.h"
@@ -37,6 +37,22 @@ using std::vector;
 namespace android {
 namespace os {
 namespace statsd {
+
+namespace {
+
+bool hasLeafNode(const FieldMatcher& matcher) {
+    if (!matcher.has_field()) {
+        return false;
+    }
+    for (int i = 0; i < matcher.child_size(); ++i) {
+        if (hasLeafNode(matcher.child(i))) {
+            return true;
+        }
+    }
+    return true;
+}
+
+}  // namespace
 
 bool handleMetricWithLogTrackers(const int64_t what, const int metricIndex,
                                  const bool usedForDimension,
@@ -497,10 +513,12 @@ bool initAlerts(const StatsdConfig& config,
         const int metricIndex = itr->second;
         sp<MetricProducer> metric = allMetricProducers[metricIndex];
         sp<AnomalyTracker> anomalyTracker = metric->addAnomalyTracker(alert);
-        if (anomalyTracker != nullptr) {
-            anomalyTrackerMap.insert(std::make_pair(alert.id(), allAnomalyTrackers.size()));
-            allAnomalyTrackers.push_back(anomalyTracker);
+        if (anomalyTracker == nullptr) {
+            // The ALOGW for this invalid alert was already displayed in addAnomalyTracker().
+            return false;
         }
+        anomalyTrackerMap.insert(std::make_pair(alert.id(), allAnomalyTrackers.size()));
+        allAnomalyTrackers.push_back(anomalyTracker);
     }
     for (int i = 0; i < config.subscription_size(); ++i) {
         const Subscription& subscription = config.subscription(i);
@@ -541,7 +559,7 @@ bool initStatsdConfig(const ConfigKey& key, const StatsdConfig& config,
         ALOGE("initLogMatchingTrackers failed");
         return false;
     }
-    ALOGD("initLogMatchingTrackers succeed...");
+    VLOG("initLogMatchingTrackers succeed...");
 
     if (!initConditions(key, config, logTrackerMap, conditionTrackerMap, allConditionTrackers,
                         trackerToConditionMap)) {

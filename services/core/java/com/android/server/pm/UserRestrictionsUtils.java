@@ -33,6 +33,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.UserManagerInternal;
 import android.provider.Settings;
+import android.provider.Settings.Global;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.util.Log;
@@ -122,7 +123,8 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_CONFIG_BRIGHTNESS,
             UserManager.DISALLOW_SHARE_INTO_MANAGED_PROFILE,
             UserManager.DISALLOW_AMBIENT_DISPLAY,
-            UserManager.DISALLOW_CONFIG_SCREEN_TIMEOUT
+            UserManager.DISALLOW_CONFIG_SCREEN_TIMEOUT,
+            UserManager.DISALLOW_PRINTING
     });
 
     /**
@@ -578,6 +580,15 @@ public class UserRestrictionsUtils {
                         android.provider.Settings.Secure.putString(
                                 context.getContentResolver(),
                                 Settings.Secure.DOZE_PULSE_ON_DOUBLE_TAP, "0");
+                    }
+                    break;
+                case UserManager.DISALLOW_CONFIG_LOCATION:
+                    // When DISALLOW_CONFIG_LOCATION is set on any user, we undo the global
+                    // kill switch.
+                    if (newValue) {
+                        android.provider.Settings.Global.putString(
+                                context.getContentResolver(),
+                                Global.LOCATION_GLOBAL_KILL_SWITCH, "0");
                     }
                     break;
             }

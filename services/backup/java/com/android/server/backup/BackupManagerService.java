@@ -1931,6 +1931,7 @@ public class BackupManagerService implements BackupManagerServiceInterface {
     /**
      * Remove a package from the full-data queue.
      */
+    @GuardedBy("mQueueLock")
     private void dequeueFullBackupLocked(String packageName) {
         final int N = mFullBackupQueue.size();
         for (int i = N - 1; i >= 0; i--) {
@@ -2356,7 +2357,7 @@ public class BackupManagerService implements BackupManagerServiceInterface {
 
         // If the caller does not hold the BACKUP permission, it can only request a
         // wipe of its own backed-up data.
-        HashSet<String> apps;
+        Set<String> apps;
         if ((mContext.checkPermission(android.Manifest.permission.BACKUP, Binder.getCallingPid(),
                 Binder.getCallingUid())) == PackageManager.PERMISSION_DENIED) {
             apps = mBackupParticipants.get(Binder.getCallingUid());
@@ -2364,10 +2365,9 @@ public class BackupManagerService implements BackupManagerServiceInterface {
             // a caller with full permission can ask to back up any participating app
             // !!! TODO: allow data-clear of ANY app?
             if (MORE_DEBUG) Slog.v(TAG, "Privileged caller, allowing clear of other apps");
-            apps = SparseArrayUtils.union(mBackupParticipants);
+            apps = mProcessedPackagesJournal.getPackagesCopy();
         }
 
-        // Is the given app an available participant?
         if (apps.contains(packageName)) {
             // found it; fire off the clear request
             if (MORE_DEBUG) Slog.v(TAG, "Found the app - running clear process");

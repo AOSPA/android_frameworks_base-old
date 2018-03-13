@@ -77,6 +77,9 @@ public class SecurityLog {
             TAG_KEY_DESTRUCTION,
             TAG_CERT_AUTHORITY_INSTALLED,
             TAG_CERT_AUTHORITY_REMOVED,
+            TAG_CRYPTO_SELF_TEST_COMPLETED,
+            TAG_KEY_INTEGRITY_VIOLATION,
+            TAG_CERT_VALIDATION_FAILURE,
     })
     public @interface SecurityLogTag {}
 
@@ -292,7 +295,7 @@ public class SecurityLog {
      * <li> [1] admin user ID ({@code Integer})
      * <li> [2] target user ID ({@code Integer})
      * <li> [3] new maximum number of failed password attempts ({@code Integer})
-     * @see DevicePolicyManager#setMaximumTimeToLock(ComponentName, long)
+     * @see DevicePolicyManager#setMaximumFailedPasswordsForWipe(ComponentName, int)
      */
     public static final int TAG_MAX_PASSWORD_ATTEMPTS_SET =
             SecurityLogTags.SECURITY_MAX_PASSWORD_ATTEMPTS_SET;
@@ -316,6 +319,7 @@ public class SecurityLog {
      * {@link SecurityEvent#getData()}:
      * <li> [0] admin package name ({@code String}),
      * <li> [1] admin user ID ({@code Integer}).
+     * <li> [2] target user ID ({@code Integer})
      */
     public static final int TAG_REMOTE_LOCK = SecurityLogTags.SECURITY_REMOTE_LOCK;
 
@@ -366,7 +370,7 @@ public class SecurityLog {
             SecurityLogTags.SECURITY_CERT_AUTHORITY_INSTALLED;
 
     /**
-     * Indicates that a new oot certificate has been removed from system's trusted credential
+     * Indicates that a new root certificate has been removed from system's trusted credential
      * storage. The log entry contains the following information about the event, encapsulated in an
      * {@link Object} array and accessible via {@link SecurityEvent#getData()}:
      * <li> [0] result ({@code Integer}, 0 if operation failed, 1 if succeeded)
@@ -398,6 +402,31 @@ public class SecurityLog {
      */
     public static final int TAG_USER_RESTRICTION_REMOVED =
             SecurityLogTags.SECURITY_USER_RESTRICTION_REMOVED;
+
+    /**
+     * Indicates that cryptographic functionality self test has completed. The log entry contains an
+     * {@code Integer} payload, indicating the result of the test (0 if the test failed, 1 if
+     * succeeded) and accessible via {@link SecurityEvent#getData()}.
+     */
+    public static final int TAG_CRYPTO_SELF_TEST_COMPLETED =
+            SecurityLogTags.SECURITY_CRYPTO_SELF_TEST_COMPLETED;
+
+    /**
+     * Indicates a failed cryptographic key integrity check. The log entry contains the following
+     * information about the event, encapsulated in an {@link Object} array and accessible via
+     * {@link SecurityEvent#getData()}:
+     * <li> [0] alias of the key ({@code String})
+     * <li> [1] owner application uid ({@code Integer}).
+     */
+    public static final int TAG_KEY_INTEGRITY_VIOLATION =
+            SecurityLogTags.SECURITY_KEY_INTEGRITY_VIOLATION;
+
+    /**
+     * Indicates a failure to validate X.509v3 certificate. The log entry contains a {@code String}
+     * payload indicating the failure reason, accessible via {@link SecurityEvent#getData()}.
+     */
+    public static final int TAG_CERT_VALIDATION_FAILURE =
+            SecurityLogTags.SECURITY_CERT_VALIDATION_FAILURE;
 
     /**
      * Event severity level indicating that the event corresponds to normal workflow.
@@ -529,6 +558,7 @@ public class SecurityLog {
                 case TAG_USER_RESTRICTION_REMOVED:
                     return LEVEL_INFO;
                 case TAG_CERT_AUTHORITY_REMOVED:
+                case TAG_CRYPTO_SELF_TEST_COMPLETED:
                     return getSuccess() ? LEVEL_INFO : LEVEL_ERROR;
                 case TAG_CERT_AUTHORITY_INSTALLED:
                 case TAG_KEYGUARD_DISMISS_AUTH_ATTEMPT:
@@ -538,7 +568,10 @@ public class SecurityLog {
                     return getSuccess() ? LEVEL_INFO : LEVEL_WARNING;
                 case TAG_LOG_BUFFER_SIZE_CRITICAL:
                 case TAG_WIPE_FAILURE:
+                case TAG_KEY_INTEGRITY_VIOLATION:
                     return LEVEL_ERROR;
+                case TAG_CERT_VALIDATION_FAILURE:
+                    return LEVEL_WARNING;
                 default:
                     return LEVEL_INFO;
             }

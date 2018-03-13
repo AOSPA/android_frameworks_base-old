@@ -58,6 +58,7 @@ import com.android.internal.app.ColorDisplayController;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BinderInternal;
+import com.android.internal.os.RegionalizationEnvironment;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.widget.ILockSettings;
@@ -66,7 +67,6 @@ import com.android.server.am.ActivityManagerService;
 import com.android.server.audio.AudioService;
 import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
-import com.android.server.car.CarServiceHelperService;
 import com.android.server.clipboard.ClipboardService;
 import com.android.server.connectivity.IpConnectivityMetrics;
 import com.android.server.coverage.CoverageService;
@@ -91,6 +91,7 @@ import com.android.server.net.watchlist.NetworkWatchlistService;
 import com.android.server.notification.NotificationManagerService;
 import com.android.server.oemlock.OemLockService;
 import com.android.server.om.OverlayManagerService;
+import com.android.server.os.RegionalizationService;
 import com.android.server.os.DeviceIdentifiersPolicyService;
 import com.android.server.os.SchedulingPolicyService;
 import com.android.server.pm.BackgroundDexOptService;
@@ -201,7 +202,7 @@ public final class SystemServer {
     private static final String THERMAL_OBSERVER_CLASS =
             "com.google.android.clockwork.ThermalObserver";
     private static final String WEAR_CONNECTIVITY_SERVICE_CLASS =
-            "com.google.android.clockwork.connectivity.WearConnectivityService";
+            "com.android.clockwork.connectivity.WearConnectivityService";
     private static final String WEAR_SIDEKICK_SERVICE_CLASS =
             "com.google.android.clockwork.sidekick.SidekickService";
     private static final String WEAR_DISPLAY_SERVICE_CLASS =
@@ -224,6 +225,8 @@ public final class SystemServer {
             "com.google.android.things.services.IoTSystemService";
     private static final String SLICE_MANAGER_SERVICE_CLASS =
             "com.android.server.slice.SliceManagerService$Lifecycle";
+    private static final String CAR_SERVICE_HELPER_SERVICE_CLASS =
+            "com.android.internal.car.CarServiceHelperService";
 
     private static final String PERSISTENT_DATA_BLOCK_PROP = "ro.frp.pst";
 
@@ -604,6 +607,13 @@ public final class SystemServer {
             mOnlyCore = true;
         }
 
+        // Start Carrier regionalization service
+        if (RegionalizationEnvironment.isSupported()) {
+            Slog.i(TAG, "Regionalization Service");
+            RegionalizationService regionalizationService = new RegionalizationService();
+            ServiceManager.addService("regionalization", regionalizationService);
+        }
+
         // Start the package manager.
         if (!mRuntimeRestart) {
             MetricsLogger.histogram(null, "boot_package_manager_init_start",
@@ -729,7 +739,6 @@ public final class SystemServer {
         Object wigigP2pService = null;
         Object wigigService = null;
 
-        boolean disableRtt = SystemProperties.getBoolean("config.disable_rtt", false);
         boolean disableSystemTextClassifier = SystemProperties.getBoolean(
                 "config.disable_systemtextclassifier", false);
         boolean disableCameraService = SystemProperties.getBoolean("config.disable_cameraservice",
@@ -849,6 +858,14 @@ public final class SystemServer {
             ServiceManager.addService(Context.INPUT_SERVICE, inputManager);
             traceEnd();
 
+            traceBeginAndSlog("SetWindowManagerService");
+            mActivityManagerService.setWindowManager(wm);
+            traceEnd();
+
+            traceBeginAndSlog("WindowManagerServiceOnInitReady");
+            wm.onInitReady();
+            traceEnd();
+
             // Start receiving calls from HIDL services. Start in in a separate thread
             // because it need to connect to SensorManager. This have to start
             // after START_SENSOR_SERVICE is done.
@@ -865,10 +882,6 @@ public final class SystemServer {
                 mSystemServiceManager.startService(VrManagerService.class);
                 traceEnd();
             }
-
-            traceBeginAndSlog("SetWindowManagerService");
-            mActivityManagerService.setWindowManager(wm);
-            traceEnd();
 
             traceBeginAndSlog("StartInputManager");
             inputManager.setWindowManagerCallbacks(wm.getInputMonitor());
@@ -1091,8 +1104,8 @@ public final class SystemServer {
 
             traceBeginAndSlog("StartNetworkPolicyManagerService");
             try {
-                networkPolicy = new NetworkPolicyManagerService(context,
-                    mActivityManagerService, networkStats, networkManagement);
+                networkPolicy = new NetworkPolicyManagerService(context, mActivityManagerService,
+                        networkManagement);
                 ServiceManager.addService(Context.NETWORK_POLICY_SERVICE, networkPolicy);
             } catch (Throwable e) {
                 reportWtf("starting NetworkPolicy Service", e);
@@ -1111,18 +1124,12 @@ public final class SystemServer {
                 traceEnd();
             }
 
-            if (!disableRtt) {
-                traceBeginAndSlog("StartWifiRtt");
-                mSystemServiceManager.startService("com.android.server.wifi.RttService");
+            if (context.getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_WIFI_RTT)) {
+                traceBeginAndSlog("StartRttService");
+                mSystemServiceManager.startService(
+                    "com.android.server.wifi.rtt.RttService");
                 traceEnd();
-
-                if (context.getPackageManager().hasSystemFeature(
-                    PackageManager.FEATURE_WIFI_RTT)) {
-                    traceBeginAndSlog("StartRttService");
-                    mSystemServiceManager.startService(
-                        "com.android.server.wifi.rtt.RttService");
-                    traceEnd();
-                }
             }
 
             if (context.getPackageManager().hasSystemFeature(
@@ -1149,9 +1156,12 @@ public final class SystemServer {
             if (enableWigig) {
                 try {
                     Slog.i(TAG, "Wigig Service");
+                    String wigigClassPath =
+                        "/system/framework/wigig-service.jar" + ":" +
+                        "/system/framework/vendor.qti.hardware.wigig.supptunnel-V1.0-java.jar" + ":" +
+                        "/system/framework/vendor.qti.hardware.wigig.netperftuner-V1.0-java.jar";
                     PathClassLoader wigigClassLoader =
-                            new PathClassLoader("/system/framework/wigig-service.jar",
-                                    getClass().getClassLoader());
+                            new PathClassLoader(wigigClassPath, getClass().getClassLoader());
                     Class wigigP2pClass = wigigClassLoader.loadClass(
                         "com.qualcomm.qti.server.wigig.p2p.WigigP2pServiceImpl");
                     Constructor<Class> ctor = wigigP2pClass.getConstructor(Context.class);
@@ -1303,7 +1313,8 @@ public final class SystemServer {
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_USB_HOST)
                 || mPackageManager.hasSystemFeature(
-                PackageManager.FEATURE_USB_ACCESSORY)) {
+                PackageManager.FEATURE_USB_ACCESSORY)
+                || isEmulator) {
                 // Manage USB host and device support
                 traceBeginAndSlog("StartUsbService");
                 mSystemServiceManager.startService(USB_SERVICE_CLASS);
@@ -1801,7 +1812,7 @@ public final class SystemServer {
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
                 traceBeginAndSlog("StartCarServiceHelperService");
-                mSystemServiceManager.startService(CarServiceHelperService.class);
+                mSystemServiceManager.startService(CAR_SERVICE_HELPER_SERVICE_CLASS);
                 traceEnd();
             }
 

@@ -19,6 +19,9 @@ package com.android.frameworks.perftests.am.util;
 public class Constants {
     public static final String TYPE_TARGET_PACKAGE_START = "target_package_start";
     public static final String TYPE_BROADCAST_RECEIVE = "broadcast_receive";
+    public static final String TYPE_SERVICE_BIND = "service_bind";
+    public static final String TYPE_SERVICE_START = "service_start";
+    public static final String TYPE_SERVICE_CONNECTED = "service_connection_connect";
 
     public static final String ACTION_BROADCAST_MANIFEST_RECEIVE =
             "com.android.frameworks.perftests.ACTION_BROADCAST_MANIFEST_RECEIVE";
@@ -26,4 +29,5 @@ public class Constants {
             "com.android.frameworks.perftests.ACTION_BROADCAST_REGISTERED_RECEIVE";
 
     public static final String EXTRA_RECEIVER_CALLBACK = "receiver_callback_binder";
+    public static final String EXTRA_LOOPER_IDLE_CALLBACK = "looper_idle_callback_binder";
 }

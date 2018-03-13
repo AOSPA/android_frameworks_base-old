@@ -196,10 +196,6 @@ public class PackageParser {
     private static final String TAG_RESTRICT_UPDATE = "restrict-update";
     private static final String TAG_USES_SPLIT = "uses-split";
 
-    // [b/36551762] STOPSHIP remove the ability to expose components via meta-data
-    // Temporary workaround; allow meta-data to expose components to instant apps
-    private static final String META_DATA_INSTANT_APPS = "instantapps.clients.allowed";
-
     private static final String METADATA_MAX_ASPECT_RATIO = "android.max_aspect";
 
     /**
@@ -680,6 +676,7 @@ public class PackageParser {
         pi.restrictedAccountType = p.mRestrictedAccountType;
         pi.requiredAccountType = p.mRequiredAccountType;
         pi.overlayTarget = p.mOverlayTarget;
+        pi.overlayCategory = p.mOverlayCategory;
         pi.overlayPriority = p.mOverlayPriority;
         pi.mOverlayIsStatic = p.mOverlayIsStatic;
         pi.compileSdkVersion = p.mCompileSdkVersion;
@@ -2077,6 +2074,8 @@ public class PackageParser {
                         com.android.internal.R.styleable.AndroidManifestResourceOverlay);
                 pkg.mOverlayTarget = sa.getString(
                         com.android.internal.R.styleable.AndroidManifestResourceOverlay_targetPackage);
+                pkg.mOverlayCategory = sa.getString(
+                        com.android.internal.R.styleable.AndroidManifestResourceOverlay_category);
                 pkg.mOverlayPriority = sa.getInt(
                         com.android.internal.R.styleable.AndroidManifestResourceOverlay_priority,
                         0);
@@ -3186,7 +3185,7 @@ public class PackageParser {
 
         perm.info.protectionLevel = PermissionInfo.fixProtectionLevel(perm.info.protectionLevel);
 
-        if ((perm.info.protectionLevel&PermissionInfo.PROTECTION_MASK_FLAGS) != 0) {
+        if (perm.info.getProtectionFlags() != 0) {
             if ( (perm.info.protectionLevel&PermissionInfo.PROTECTION_FLAG_INSTANT) == 0
                     && (perm.info.protectionLevel&PermissionInfo.PROTECTION_FLAG_RUNTIME_ONLY) == 0
                     && (perm.info.protectionLevel&PermissionInfo.PROTECTION_MASK_BASE) !=
@@ -4430,24 +4429,6 @@ public class PackageParser {
                         outError)) == null) {
                     return null;
                 }
-                // we don't have an attribute [or it's false], but, we have meta-data
-                if (!visibleToEphemeral && a.metaData.getBoolean(META_DATA_INSTANT_APPS)) {
-                    visibleToEphemeral = true; // set in case there are more intent filters
-                    a.info.flags |= ActivityInfo.FLAG_VISIBLE_TO_INSTANT_APP;
-                    a.info.flags &= ~ActivityInfo.FLAG_IMPLICITLY_VISIBLE_TO_INSTANT_APP;
-                    owner.visibleToInstantApps = true;
-                    // cycle through any filters already seen
-                    for (int i = a.intents.size() - 1; i >= 0; --i) {
-                        a.intents.get(i)
-                                .setVisibilityToInstantApp(IntentFilter.VISIBILITY_EXPLICIT);
-                    }
-                    if (owner.preferredActivityFilters != null) {
-                        for (int i = owner.preferredActivityFilters.size() - 1; i >= 0; --i) {
-                            owner.preferredActivityFilters.get(i)
-                                    .setVisibilityToInstantApp(IntentFilter.VISIBILITY_EXPLICIT);
-                        }
-                    }
-                }
             } else if (!receiver && parser.getName().equals("layout")) {
                 parseLayout(res, parser, a);
             } else {
@@ -4942,7 +4923,7 @@ public class PackageParser {
         p.info.authority = cpname.intern();
 
         if (!parseProviderTags(
-                res, parser, visibleToEphemeral, owner, p, outError)) {
+                res, parser, visibleToEphemeral, p, outError)) {
             return null;
         }
 
@@ -4950,7 +4931,7 @@ public class PackageParser {
     }
 
     private boolean parseProviderTags(Resources res, XmlResourceParser parser,
-            boolean visibleToEphemeral, Package owner, Provider outInfo, String[] outError)
+            boolean visibleToEphemeral, Provider outInfo, String[] outError)
                     throws XmlPullParserException, IOException {
         int outerDepth = parser.getDepth();
         int type;
@@ -4977,17 +4958,6 @@ public class PackageParser {
                 if ((outInfo.metaData=parseMetaData(res, parser,
                         outInfo.metaData, outError)) == null) {
                     return false;
-                }
-                // we don't have an attribute [or it's false], but, we have meta-data
-                if (!visibleToEphemeral && outInfo.metaData.getBoolean(META_DATA_INSTANT_APPS)) {
-                    visibleToEphemeral = true; // set in case there are more intent filters
-                    outInfo.info.flags |= ProviderInfo.FLAG_VISIBLE_TO_INSTANT_APP;
-                    owner.visibleToInstantApps = true;
-                    // cycle through any filters already seen
-                    for (int i = outInfo.intents.size() - 1; i >= 0; --i) {
-                        outInfo.intents.get(i)
-                                .setVisibilityToInstantApp(IntentFilter.VISIBILITY_EXPLICIT);
-                    }
                 }
 
             } else if (parser.getName().equals("grant-uri-permission")) {
@@ -5276,17 +5246,6 @@ public class PackageParser {
                 if ((s.metaData=parseMetaData(res, parser, s.metaData,
                         outError)) == null) {
                     return null;
-                }
-                // we don't have an attribute [or it's false], but, we have meta-data
-                if (!visibleToEphemeral && s.metaData.getBoolean(META_DATA_INSTANT_APPS)) {
-                    visibleToEphemeral = true; // set in case there are more intent filters
-                    s.info.flags |= ServiceInfo.FLAG_VISIBLE_TO_INSTANT_APP;
-                    owner.visibleToInstantApps = true;
-                    // cycle through any filters already seen
-                    for (int i = s.intents.size() - 1; i >= 0; --i) {
-                        s.intents.get(i)
-                                .setVisibilityToInstantApp(IntentFilter.VISIBILITY_EXPLICIT);
-                    }
                 }
             } else {
                 if (!RIGID_PARSER) {
@@ -6368,6 +6327,7 @@ public class PackageParser {
         public String mRequiredAccountType;
 
         public String mOverlayTarget;
+        public String mOverlayCategory;
         public int mOverlayPriority;
         public boolean mOverlayIsStatic;
 
@@ -6878,6 +6838,7 @@ public class PackageParser {
             mRestrictedAccountType = dest.readString();
             mRequiredAccountType = dest.readString();
             mOverlayTarget = dest.readString();
+            mOverlayCategory = dest.readString();
             mOverlayPriority = dest.readInt();
             mOverlayIsStatic = (dest.readInt() == 1);
             mCompileSdkVersion = dest.readInt();
@@ -7001,6 +6962,7 @@ public class PackageParser {
             dest.writeString(mRestrictedAccountType);
             dest.writeString(mRequiredAccountType);
             dest.writeString(mOverlayTarget);
+            dest.writeString(mOverlayCategory);
             dest.writeInt(mOverlayPriority);
             dest.writeInt(mOverlayIsStatic ? 1 : 0);
             dest.writeInt(mCompileSdkVersion);

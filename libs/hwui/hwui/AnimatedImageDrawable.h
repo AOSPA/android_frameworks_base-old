@@ -72,6 +72,7 @@ public:
     // already stopped)
     bool stop();
     bool isRunning();
+    int getRepetitionCount() const { return mSkAnimatedImage->getRepetitionCount(); }
     void setRepetitionCount(int count) { mSkAnimatedImage->setRepetitionCount(count); }
 
     void setOnAnimationEndListener(std::unique_ptr<OnAnimationEndListener> listener) {
@@ -102,7 +103,7 @@ protected:
 private:
     sk_sp<SkAnimatedImage> mSkAnimatedImage;
     bool mRunning = false;
-    bool mFinished = false;
+    bool mStarting = false;
 
     // A snapshot of the current frame to draw.
     Snapshot mSnapshot;

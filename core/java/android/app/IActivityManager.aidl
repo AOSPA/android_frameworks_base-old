@@ -68,6 +68,7 @@ import android.os.WorkSource;
 import android.service.voice.IVoiceInteractionSession;
 import android.view.IRecentsAnimationRunner;
 import android.view.RemoteAnimationDefinition;
+import android.view.RemoteAnimationAdapter;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.policy.IKeyguardDismissCallback;
@@ -423,6 +424,8 @@ interface IActivityManager {
     void restart();
     void performIdleMaintenance();
     void takePersistableUriPermission(in Uri uri, int modeFlags, int userId);
+    boolean updatePersistableUriPermission(in Uri uri, boolean prefix, String packageName,
+                                           boolean grant, int userId);
     void releasePersistableUriPermission(in Uri uri, int modeFlags, int userId);
     ParceledListSlice getPersistedUriPermissions(in String packageName, boolean incoming);
     void appNotRespondingViaProvider(in IBinder connection);
@@ -627,7 +630,6 @@ interface IActivityManager {
     void setHasTopUi(boolean hasTopUi);
 
     // Start of O transactions
-    void requestActivityRelaunch(in IBinder token);
     /**
      * Updates override configuration applied to specific display.
      * @param values Update values for display configuration. If null is passed it will request the
@@ -683,17 +685,24 @@ interface IActivityManager {
     // If a transaction which will also be used on the native side is being inserted, add it
     // alongside with other transactions of this kind at the top of this file.
 
-     void setShowWhenLocked(in IBinder token, boolean showWhenLocked);
-     void setTurnScreenOn(in IBinder token, boolean turnScreenOn);
+    void setShowWhenLocked(in IBinder token, boolean showWhenLocked);
+    void setTurnScreenOn(in IBinder token, boolean turnScreenOn);
 
-     /**
-      *  Similar to {@link #startUserInBackground(int userId), but with a listener to report
-      *  user unlock progress.
-      */
-     boolean startUserInBackgroundWithListener(int userid, IProgressListener unlockProgressListener);
+    /**
+     *  Similar to {@link #startUserInBackground(int userId), but with a listener to report
+     *  user unlock progress.
+     */
+    boolean startUserInBackgroundWithListener(int userid, IProgressListener unlockProgressListener);
 
-     /**
-      * Registers remote animations for a specific activity.
-      */
-     void registerRemoteAnimations(in IBinder token, in RemoteAnimationDefinition definition);
+    /**
+     * Registers remote animations for a specific activity.
+     */
+    void registerRemoteAnimations(in IBinder token, in RemoteAnimationDefinition definition);
+
+    /**
+     * Registers a remote animation to be run for all activity starts from a certain package during
+     * a short predefined amount of time.
+     */
+    void registerRemoteAnimationForNextActivityStart(in String packageName,
+           in RemoteAnimationAdapter adapter);
 }

@@ -44,6 +44,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.UnrecoverableKeyException;
+import java.security.cert.CertPath;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -176,8 +177,17 @@ public class KeySyncTask implements Runnable {
             return;
         }
 
-        PublicKey publicKey = mRecoverableKeyStoreDb.getRecoveryServicePublicKey(mUserId,
+        PublicKey publicKey;
+        CertPath certPath = mRecoverableKeyStoreDb.getRecoveryServiceCertPath(mUserId,
                 recoveryAgentUid);
+        if (certPath != null) {
+            Log.d(TAG, "Using the public key in stored CertPath for syncing");
+            publicKey = certPath.getCertificates().get(0).getPublicKey();
+        } else {
+            Log.d(TAG, "Using the stored raw public key for syncing");
+            publicKey = mRecoverableKeyStoreDb.getRecoveryServicePublicKey(mUserId,
+                    recoveryAgentUid);
+        }
         if (publicKey == null) {
             Log.w(TAG, "Not initialized for KeySync: no public key set. Cancelling task.");
             return;
@@ -279,6 +289,7 @@ public class KeySyncTask implements Runnable {
                 .setMaxAttempts(TRUSTED_HARDWARE_MAX_ATTEMPTS)
                 .setCounterId(counterId)
                 .setTrustedHardwarePublicKey(SecureBox.encodePublicKey(publicKey))
+                .setTrustedHardwareCertPath(certPath)
                 .setServerParams(vaultHandle)
                 .setKeyChainProtectionParams(metadataList)
                 .setWrappedApplicationKeys(createApplicationKeyEntries(encryptedApplicationKeys))

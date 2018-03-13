@@ -18,11 +18,11 @@ package com.android.server.usage;
 
 import static android.app.usage.UsageEvents.Event.NOTIFICATION_SEEN;
 import static android.app.usage.UsageEvents.Event.USER_INTERACTION;
-import static android.app.usage.UsageStatsManager.REASON_DEFAULT;
-import static android.app.usage.UsageStatsManager.REASON_FORCED;
-import static android.app.usage.UsageStatsManager.REASON_PREDICTED;
-import static android.app.usage.UsageStatsManager.REASON_TIMEOUT;
-import static android.app.usage.UsageStatsManager.REASON_USAGE;
+import static android.app.usage.UsageStatsManager.REASON_MAIN_DEFAULT;
+import static android.app.usage.UsageStatsManager.REASON_MAIN_FORCED;
+import static android.app.usage.UsageStatsManager.REASON_MAIN_PREDICTED;
+import static android.app.usage.UsageStatsManager.REASON_MAIN_TIMEOUT;
+import static android.app.usage.UsageStatsManager.REASON_MAIN_USAGE;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_ACTIVE;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_EXEMPTED;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_FREQUENT;
@@ -308,6 +308,7 @@ public class AppStandbyControllerTests {
     private void reportEvent(AppStandbyController controller, int eventType,
             long elapsedTime) {
         // Back to ACTIVE on event
+        mInjector.mElapsedRealtime = elapsedTime;
         UsageEvents.Event ev = new UsageEvents.Event();
         ev.mPackage = PACKAGE_1;
         ev.mEventType = eventType;
@@ -409,11 +410,11 @@ public class AppStandbyControllerTests {
         setChargingState(mController, false);
         // Set it to timeout or usage, so that prediction can override it
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RARE,
-                REASON_TIMEOUT, 1 * HOUR_MS);
+                REASON_MAIN_TIMEOUT, 1 * HOUR_MS);
         assertEquals(STANDBY_BUCKET_RARE, getStandbyBucket(mController));
 
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_ACTIVE,
-                REASON_PREDICTED + ":CTS", 1 * HOUR_MS);
+                REASON_MAIN_PREDICTED, 1 * HOUR_MS);
         assertEquals(STANDBY_BUCKET_ACTIVE, getStandbyBucket(mController));
 
         // Fast forward 12 hours
@@ -439,28 +440,28 @@ public class AppStandbyControllerTests {
         setChargingState(mController, false);
         // Can force to NEVER
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_NEVER,
-                REASON_FORCED, 1 * HOUR_MS);
+                REASON_MAIN_FORCED, 1 * HOUR_MS);
         assertEquals(STANDBY_BUCKET_NEVER, getStandbyBucket(mController));
 
         // Prediction can't override FORCED reason
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
-                REASON_FORCED, 1 * HOUR_MS);
+                REASON_MAIN_FORCED, 1 * HOUR_MS);
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_WORKING_SET,
-                REASON_PREDICTED, 1 * HOUR_MS);
+                REASON_MAIN_PREDICTED, 1 * HOUR_MS);
         assertEquals(STANDBY_BUCKET_FREQUENT, getStandbyBucket(mController));
 
         // Prediction can't override NEVER
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_NEVER,
-                REASON_DEFAULT, 2 * HOUR_MS);
+                REASON_MAIN_DEFAULT, 2 * HOUR_MS);
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_ACTIVE,
-                REASON_PREDICTED, 2 * HOUR_MS);
+                REASON_MAIN_PREDICTED, 2 * HOUR_MS);
         assertEquals(STANDBY_BUCKET_NEVER, getStandbyBucket(mController));
 
         // Prediction can't set to NEVER
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_ACTIVE,
-                REASON_USAGE, 2 * HOUR_MS);
+                REASON_MAIN_USAGE, 2 * HOUR_MS);
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_NEVER,
-                REASON_PREDICTED, 2 * HOUR_MS);
+                REASON_MAIN_PREDICTED, 2 * HOUR_MS);
         assertEquals(STANDBY_BUCKET_ACTIVE, getStandbyBucket(mController));
     }
 
@@ -473,7 +474,7 @@ public class AppStandbyControllerTests {
 
         mInjector.mElapsedRealtime = 2000;
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
-                REASON_PREDICTED, mInjector.mElapsedRealtime);
+                REASON_MAIN_PREDICTED, mInjector.mElapsedRealtime);
         assertBucket(STANDBY_BUCKET_ACTIVE);
 
         // bucketing works after timeout
@@ -482,8 +483,91 @@ public class AppStandbyControllerTests {
         assertBucket(STANDBY_BUCKET_WORKING_SET);
 
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
-                REASON_PREDICTED, mInjector.mElapsedRealtime);
+                REASON_MAIN_PREDICTED, mInjector.mElapsedRealtime);
         assertBucket(STANDBY_BUCKET_FREQUENT);
+    }
+
+    @Test
+    public void testCascadingTimeouts() throws Exception {
+        setChargingState(mController, false);
+
+        reportEvent(mController, USER_INTERACTION, 0);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        reportEvent(mController, NOTIFICATION_SEEN, 1000);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_WORKING_SET,
+                REASON_MAIN_PREDICTED, 1000);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
+                REASON_MAIN_PREDICTED, 2000 + mController.mStrongUsageTimeoutMillis);
+        assertBucket(STANDBY_BUCKET_WORKING_SET);
+
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
+                REASON_MAIN_PREDICTED, 2000 + mController.mNotificationSeenTimeoutMillis);
+        assertBucket(STANDBY_BUCKET_FREQUENT);
+    }
+
+    @Test
+    public void testOverlappingTimeouts() throws Exception {
+        setChargingState(mController, false);
+
+        reportEvent(mController, USER_INTERACTION, 0);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        reportEvent(mController, NOTIFICATION_SEEN, 1000);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        // Overlapping USER_INTERACTION before previous one times out
+        reportEvent(mController, USER_INTERACTION, mController.mStrongUsageTimeoutMillis - 1000);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        // Still in ACTIVE after first USER_INTERACTION times out
+        mInjector.mElapsedRealtime = mController.mStrongUsageTimeoutMillis + 1000;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
+                REASON_MAIN_PREDICTED, mInjector.mElapsedRealtime);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        // Both timed out, so NOTIFICATION_SEEN timeout should be effective
+        mInjector.mElapsedRealtime = mController.mStrongUsageTimeoutMillis * 2 + 2000;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
+                REASON_MAIN_PREDICTED, mInjector.mElapsedRealtime);
+        assertBucket(STANDBY_BUCKET_WORKING_SET);
+
+        mInjector.mElapsedRealtime = mController.mNotificationSeenTimeoutMillis + 2000;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RARE,
+                REASON_MAIN_PREDICTED, mInjector.mElapsedRealtime);
+        assertBucket(STANDBY_BUCKET_RARE);
+    }
+
+    @Test
+    public void testPredictionNotOverridden() throws Exception {
+        setChargingState(mController, false);
+
+        reportEvent(mController, USER_INTERACTION, 0);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        mInjector.mElapsedRealtime = WORKING_SET_THRESHOLD - 1000;
+        reportEvent(mController, NOTIFICATION_SEEN, mInjector.mElapsedRealtime);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        // Falls back to WORKING_SET
+        mInjector.mElapsedRealtime += 5000;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_WORKING_SET);
+
+        // Predict to ACTIVE
+        mInjector.mElapsedRealtime += 1000;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_ACTIVE,
+                REASON_MAIN_PREDICTED, mInjector.mElapsedRealtime);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        // CheckIdleStates should not change the prediction
+        mInjector.mElapsedRealtime += 1000;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
     }
 
     @Test

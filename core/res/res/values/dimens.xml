@@ -176,13 +176,13 @@
     <dimen name="notification_extra_margin_ambient">16dp</dimen>
 
     <!-- The height of the notification action list -->
-    <dimen name="notification_action_list_height">56dp</dimen>
+    <dimen name="notification_action_list_height">60dp</dimen>
 
     <!-- height of the content margin to accomodate for the header -->
     <dimen name="notification_content_margin_top">46dp</dimen>
 
-    <!-- height of the content margin on the bottom -->
-    <dimen name="notification_content_margin_bottom">20dp</dimen>
+    <!-- height of the content margin that is applied at the end of the notification content -->
+    <dimen name="notification_content_margin">20dp</dimen>
 
     <!-- The height of the progress bar. -->
     <dimen name="notification_progress_bar_height">15dp</dimen>
@@ -261,6 +261,18 @@
 
     <!-- The spacing between messages in Notification.MessagingStyle -->
     <dimen name="notification_messaging_spacing">6dp</dimen>
+
+    <!-- The rounding for messaging images -->
+    <dimen name="messaging_image_rounding">4dp</dimen>
+
+    <!-- The minimum size for any image in messaging style in order to be displayed -->
+    <dimen name="messaging_image_min_size">44dp</dimen>
+
+    <!-- The maximum size for any image in messaging style in order to be displayed -->
+    <dimen name="messaging_image_max_height">136dp</dimen>
+
+    <!-- Extra spacing before and after images in messaging style -->
+    <dimen name="messaging_image_extra_spacing">8dp</dimen>
 
     <!-- Preferred width and height of the search view. -->
     <dimen name="search_view_preferred_width">320dip</dimen>
@@ -614,7 +626,8 @@
     <dimen name="messaging_avatar_size">@dimen/notification_right_icon_size</dimen>
 
     <!-- Max width/height of the autofill data set picker as a fraction of the screen width/height -->
-    <dimen name="autofill_dataset_picker_max_size">90%</dimen>
+    <dimen name="autofill_dataset_picker_max_width">90%</dimen>
+    <dimen name="autofill_dataset_picker_max_height">90%</dimen>
 
     <!-- Max height of the the autofill save custom subtitle as a fraction of the screen width/height -->
     <dimen name="autofill_save_custom_subtitle_max_height">20%</dimen>

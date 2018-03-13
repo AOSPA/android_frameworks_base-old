@@ -17,7 +17,6 @@
 package android.view.textclassifier.logging;
 
 import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.content.Context;
 import android.metrics.LogMaker;
 import android.util.Log;
@@ -27,8 +26,10 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.Preconditions;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.StringJoiner;
 
 /**
  * Default Logger.
@@ -79,7 +80,7 @@ public final class DefaultLogger extends Logger {
         Preconditions.checkNotNull(event);
         final LogMaker log = new LogMaker(MetricsEvent.TEXT_SELECTION_SESSION)
                 .setType(getLogType(event))
-                .setSubtype(MetricsEvent.TEXT_SELECTION_INVOCATION_MANUAL)
+                .setSubtype(getLogSubType(event))
                 .setPackageName(event.getPackageName())
                 .addTaggedData(START_EVENT_DELTA, event.getDurationSinceSessionStart())
                 .addTaggedData(PREV_EVENT_DELTA, event.getDurationSincePreviousEvent())
@@ -136,6 +137,17 @@ public final class DefaultLogger extends Logger {
         }
     }
 
+    private static int getLogSubType(SelectionEvent event) {
+        switch (event.getInvocationMethod()) {
+            case SelectionEvent.INVOCATION_MANUAL:
+                return MetricsEvent.TEXT_SELECTION_INVOCATION_MANUAL;
+            case SelectionEvent.INVOCATION_LINK:
+                return MetricsEvent.TEXT_SELECTION_INVOCATION_LINK;
+            default:
+                return MetricsEvent.TEXT_SELECTION_INVOCATION_UNKNOWN;
+        }
+    }
+
     private static String getLogTypeString(int logType) {
         switch (logType) {
             case MetricsEvent.ACTION_TEXT_SELECTION_OVERTYPE:
@@ -175,6 +187,17 @@ public final class DefaultLogger extends Logger {
         }
     }
 
+    private static String getLogSubTypeString(int logSubType) {
+        switch (logSubType) {
+            case MetricsEvent.TEXT_SELECTION_INVOCATION_MANUAL:
+                return "MANUAL";
+            case MetricsEvent.TEXT_SELECTION_INVOCATION_LINK:
+                return "LINK";
+            default:
+                return UNKNOWN;
+        }
+    }
+
     private static void debugLog(LogMaker log) {
         if (!DEBUG_LOG_ENABLED) return;
 
@@ -192,6 +215,7 @@ public final class DefaultLogger extends Logger {
         final String model = Objects.toString(log.getTaggedData(MODEL_NAME), UNKNOWN);
         final String entity = Objects.toString(log.getTaggedData(ENTITY_TYPE), UNKNOWN);
         final String type = getLogTypeString(log.getType());
+        final String subType = getLogSubTypeString(log.getSubtype());
         final int smartStart = Integer.parseInt(
                 Objects.toString(log.getTaggedData(SMART_START), ZERO));
         final int smartEnd = Integer.parseInt(
@@ -201,8 +225,9 @@ public final class DefaultLogger extends Logger {
         final int eventEnd = Integer.parseInt(
                 Objects.toString(log.getTaggedData(EVENT_END), ZERO));
 
-        Log.d(LOG_TAG, String.format("%2d: %s/%s, range=%d,%d - smart_range=%d,%d (%s/%s)",
-                index, type, entity, eventStart, eventEnd, smartStart, smartEnd, widget, model));
+        Log.d(LOG_TAG, String.format("%2d: %s/%s/%s, range=%d,%d - smart_range=%d,%d (%s/%s)",
+                index, type, subType, entity, eventStart, eventEnd, smartStart, smartEnd, widget,
+                model));
     }
 
     /**
@@ -210,12 +235,16 @@ public final class DefaultLogger extends Logger {
      */
     public static String createSignature(
             String text, int start, int end, Context context, int modelVersion,
-            @Nullable Locale locale) {
+            List<Locale> locales) {
         Preconditions.checkNotNull(text);
         Preconditions.checkNotNull(context);
-        final String modelName = (locale != null)
-                ? String.format(Locale.US, "%s_v%d", locale.toLanguageTag(), modelVersion)
-                : "";
+        Preconditions.checkNotNull(locales);
+        final StringJoiner localesJoiner = new StringJoiner(",");
+        for (Locale locale : locales) {
+            localesJoiner.add(locale.toLanguageTag());
+        }
+        final String modelName = String.format(Locale.US, "%s_v%d", localesJoiner.toString(),
+                modelVersion);
         final int hash = Objects.hash(text, start, end, context.getPackageName());
         return SignatureParser.createSignature(CLASSIFIER_ID, modelName, hash);
     }
@@ -242,9 +271,9 @@ public final class DefaultLogger extends Logger {
 
         static String getModelName(String signature) {
             Preconditions.checkNotNull(signature);
-            final int start = signature.indexOf("|");
+            final int start = signature.indexOf("|") + 1;
             final int end = signature.indexOf("|", start);
-            if (start >= 0 && end >= start) {
+            if (start >= 1 && end >= start) {
                 return signature.substring(start, end);
             }
             return "";

@@ -47,6 +47,8 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.android.systemui.shared.system.NavigationBarCompat.InteractionType;
+
 /**
  * Class to send information from overview to launcher with a binder.
  */
@@ -66,6 +68,8 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
 
     private IOverviewProxy mOverviewProxy;
     private int mConnectionBackoffAttempts;
+    private CharSequence mOnboardingText;
+    private @InteractionType int mInteractionFlags;
 
     private ISystemUiProxy mSysUiProxy = new ISystemUiProxy.Stub() {
 
@@ -98,9 +102,27 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         public void onRecentsAnimationStarted() {
             long token = Binder.clearCallingIdentity();
             try {
-                mHandler.post(() -> {
-                    notifyRecentsAnimationStarted();
-                });
+                mHandler.post(OverviewProxyService.this::notifyRecentsAnimationStarted);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        public void setRecentsOnboardingText(CharSequence text) {
+            mOnboardingText = text;
+        }
+
+        public void setInteractionState(@InteractionType int flags) {
+            long token = Binder.clearCallingIdentity();
+            try {
+                if (mInteractionFlags != flags) {
+                    mInteractionFlags = flags;
+                    mHandler.post(() -> {
+                        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+                            mConnectionCallbacks.get(i).onInteractionFlagsChanged(flags);
+                        }
+                    });
+                }
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -223,8 +245,12 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         return mOverviewProxy;
     }
 
-    public ComponentName getLauncherComponent() {
-        return mLauncherComponentName;
+    public CharSequence getOnboardingText() {
+        return mOnboardingText;
+    }
+
+    public int getInteractionFlags() {
+        return mInteractionFlags;
     }
 
     private void disconnectFromLauncherService() {
@@ -260,5 +286,6 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     public interface OverviewProxyListener {
         default void onConnectionChanged(boolean isConnected) {}
         default void onRecentsAnimationStarted() {}
+        default void onInteractionFlagsChanged(@InteractionType int flags) {}
     }
 }

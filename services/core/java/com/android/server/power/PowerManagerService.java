@@ -100,14 +100,13 @@ import com.android.server.lights.LightsManager;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.power.batterysaver.BatterySaverController;
 
-import libcore.util.Objects;
-
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Objects;
 
 /**
  * The power manager service is responsible for coordinating power management
@@ -119,9 +118,6 @@ public final class PowerManagerService extends SystemService
 
     private static final boolean DEBUG = false;
     private static final boolean DEBUG_SPEW = DEBUG && true;
-
-    // if DEBUG_WIRELESS=true, plays wireless charging animation w/ sound on every plug + unplug
-    private static final boolean DEBUG_WIRELESS = false;
 
     // Message: Sent when a user activity timeout occurs to update the power state.
     private static final int MSG_USER_ACTIVITY_TIMEOUT = 1;
@@ -1743,10 +1739,15 @@ public final class PowerManagerService extends SystemService
                 userActivityNoUpdateLocked(
                         now, PowerManager.USER_ACTIVITY_EVENT_OTHER, 0, Process.SYSTEM_UID);
 
-                // Tell the notifier whether wireless charging has started so that
-                // it can provide feedback to the user.
-                if (dockedOnWirelessCharger || DEBUG_WIRELESS) {
-                    mNotifier.onWirelessChargingStarted(mBatteryLevel);
+                // only play charging sounds if boot is completed so charging sounds don't play
+                // with potential notification sounds
+                if (mBootCompleted) {
+                    if (mIsPowered && !BatteryManager.isPlugWired(oldPlugType)
+                            && BatteryManager.isPlugWired(mPlugType)) {
+                        mNotifier.onWiredChargingStarted();
+                    } else if (dockedOnWirelessCharger) {
+                        mNotifier.onWirelessChargingStarted(mBatteryLevel);
+                    }
                 }
             }
 
@@ -3974,7 +3975,7 @@ public final class PowerManagerService extends SystemService
         }
 
         public boolean hasSameWorkSource(WorkSource workSource) {
-            return Objects.equal(mWorkSource, workSource);
+            return Objects.equals(mWorkSource, workSource);
         }
 
         public void updateWorkSource(WorkSource workSource) {

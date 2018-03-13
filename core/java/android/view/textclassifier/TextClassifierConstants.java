@@ -20,6 +20,11 @@ import android.annotation.Nullable;
 import android.util.KeyValueListParser;
 import android.util.Slog;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.StringJoiner;
+
 /**
  * TextClassifier specific settings.
  * This is encoded as a key=value list, separated by commas. Ex:
@@ -27,6 +32,12 @@ import android.util.Slog;
  * <pre>
  * smart_selection_dark_launch              (boolean)
  * smart_selection_enabled_for_edit_text    (boolean)
+ * suggest_selection_max_range_length       (int)
+ * classify_text_max_range_length           (int)
+ * generate_links_max_text_length           (int)
+ * entity_list_default                      (String[])
+ * entity_list_not_editable                 (String[])
+ * entity_list_editable                     (String[])
  * </pre>
  *
  * <p>
@@ -34,7 +45,9 @@ import android.util.Slog;
  * see also android.provider.Settings.Global.TEXT_CLASSIFIER_CONSTANTS
  *
  * Example of setting the values for testing.
- * adb shell settings put global text_classifier_constants smart_selection_dark_launch=true,smart_selection_enabled_for_edit_text=true
+ * adb shell settings put global text_classifier_constants \
+ *      smart_selection_dark_launch=true,smart_selection_enabled_for_edit_text=true,\
+ *      entity_list_default=phone:address
  * @hide
  */
 public final class TextClassifierConstants {
@@ -47,10 +60,37 @@ public final class TextClassifierConstants {
             "smart_selection_enabled_for_edit_text";
     private static final String SMART_LINKIFY_ENABLED =
             "smart_linkify_enabled";
+    private static final String SUGGEST_SELECTION_MAX_RANGE_LENGTH =
+            "suggest_selection_max_range_length";
+    private static final String CLASSIFY_TEXT_MAX_RANGE_LENGTH =
+            "classify_text_max_range_length";
+    private static final String GENERATE_LINKS_MAX_TEXT_LENGTH =
+            "generate_links_max_text_length";
+    private static final String GENERATE_LINKS_LOG_SAMPLE_RATE =
+            "generate_links_log_sample_rate";
+    private static final String ENTITY_LIST_DEFAULT =
+            "entity_list_default";
+    private static final String ENTITY_LIST_NOT_EDITABLE =
+            "entity_list_not_editable";
+    private static final String ENTITY_LIST_EDITABLE =
+            "entity_list_editable";
 
     private static final boolean SMART_SELECTION_DARK_LAUNCH_DEFAULT = false;
     private static final boolean SMART_SELECTION_ENABLED_FOR_EDIT_TEXT_DEFAULT = true;
     private static final boolean SMART_LINKIFY_ENABLED_DEFAULT = true;
+    private static final int SUGGEST_SELECTION_MAX_RANGE_LENGTH_DEFAULT = 10 * 1000;
+    private static final int CLASSIFY_TEXT_MAX_RANGE_LENGTH_DEFAULT = 10 * 1000;
+    private static final int GENERATE_LINKS_MAX_TEXT_LENGTH_DEFAULT = 100 * 1000;
+    private static final int GENERATE_LINKS_LOG_SAMPLE_RATE_DEFAULT = 100;
+    private static final String ENTITY_LIST_DELIMITER = ":";
+    private static final String ENTITY_LIST_DEFAULT_VALUE = new StringJoiner(ENTITY_LIST_DELIMITER)
+            .add(TextClassifier.TYPE_ADDRESS)
+            .add(TextClassifier.TYPE_EMAIL)
+            .add(TextClassifier.TYPE_PHONE)
+            .add(TextClassifier.TYPE_URL)
+            .add(TextClassifier.TYPE_DATE)
+            .add(TextClassifier.TYPE_DATE_TIME)
+            .add(TextClassifier.TYPE_FLIGHT_NUMBER).toString();
 
     /** Default settings. */
     static final TextClassifierConstants DEFAULT = new TextClassifierConstants();
@@ -58,11 +98,25 @@ public final class TextClassifierConstants {
     private final boolean mDarkLaunch;
     private final boolean mSuggestSelectionEnabledForEditableText;
     private final boolean mSmartLinkifyEnabled;
+    private final int mSuggestSelectionMaxRangeLength;
+    private final int mClassifyTextMaxRangeLength;
+    private final int mGenerateLinksMaxTextLength;
+    private final int mGenerateLinksLogSampleRate;
+    private final List<String> mEntityListDefault;
+    private final List<String> mEntityListNotEditable;
+    private final List<String> mEntityListEditable;
 
     private TextClassifierConstants() {
         mDarkLaunch = SMART_SELECTION_DARK_LAUNCH_DEFAULT;
         mSuggestSelectionEnabledForEditableText = SMART_SELECTION_ENABLED_FOR_EDIT_TEXT_DEFAULT;
         mSmartLinkifyEnabled = SMART_LINKIFY_ENABLED_DEFAULT;
+        mSuggestSelectionMaxRangeLength = SUGGEST_SELECTION_MAX_RANGE_LENGTH_DEFAULT;
+        mClassifyTextMaxRangeLength = CLASSIFY_TEXT_MAX_RANGE_LENGTH_DEFAULT;
+        mGenerateLinksMaxTextLength = GENERATE_LINKS_MAX_TEXT_LENGTH_DEFAULT;
+        mGenerateLinksLogSampleRate = GENERATE_LINKS_LOG_SAMPLE_RATE_DEFAULT;
+        mEntityListDefault = parseEntityList(ENTITY_LIST_DEFAULT_VALUE);
+        mEntityListNotEditable = mEntityListDefault;
+        mEntityListEditable = mEntityListDefault;
     }
 
     private TextClassifierConstants(@Nullable String settings) {
@@ -82,9 +136,31 @@ public final class TextClassifierConstants {
         mSmartLinkifyEnabled = parser.getBoolean(
                 SMART_LINKIFY_ENABLED,
                 SMART_LINKIFY_ENABLED_DEFAULT);
+        mSuggestSelectionMaxRangeLength = parser.getInt(
+                SUGGEST_SELECTION_MAX_RANGE_LENGTH,
+                SUGGEST_SELECTION_MAX_RANGE_LENGTH_DEFAULT);
+        mClassifyTextMaxRangeLength = parser.getInt(
+                CLASSIFY_TEXT_MAX_RANGE_LENGTH,
+                CLASSIFY_TEXT_MAX_RANGE_LENGTH_DEFAULT);
+        mGenerateLinksMaxTextLength = parser.getInt(
+                GENERATE_LINKS_MAX_TEXT_LENGTH,
+                GENERATE_LINKS_MAX_TEXT_LENGTH_DEFAULT);
+        mGenerateLinksLogSampleRate = parser.getInt(
+                GENERATE_LINKS_LOG_SAMPLE_RATE,
+                GENERATE_LINKS_LOG_SAMPLE_RATE_DEFAULT);
+        mEntityListDefault = parseEntityList(parser.getString(
+                ENTITY_LIST_DEFAULT,
+                ENTITY_LIST_DEFAULT_VALUE));
+        mEntityListNotEditable = parseEntityList(parser.getString(
+                ENTITY_LIST_NOT_EDITABLE,
+                ENTITY_LIST_DEFAULT_VALUE));
+        mEntityListEditable = parseEntityList(parser.getString(
+                ENTITY_LIST_EDITABLE,
+                ENTITY_LIST_DEFAULT_VALUE));
     }
 
-    static TextClassifierConstants loadFromString(String settings) {
+    /** Load from a settings string. */
+    public static TextClassifierConstants loadFromString(String settings) {
         return new TextClassifierConstants(settings);
     }
 
@@ -98,5 +174,37 @@ public final class TextClassifierConstants {
 
     public boolean isSmartLinkifyEnabled() {
         return mSmartLinkifyEnabled;
+    }
+
+    public int getSuggestSelectionMaxRangeLength() {
+        return mSuggestSelectionMaxRangeLength;
+    }
+
+    public int getClassifyTextMaxRangeLength() {
+        return mClassifyTextMaxRangeLength;
+    }
+
+    public int getGenerateLinksMaxTextLength() {
+        return mGenerateLinksMaxTextLength;
+    }
+
+    public int getGenerateLinksLogSampleRate() {
+        return mGenerateLinksLogSampleRate;
+    }
+
+    public List<String> getEntityListDefault() {
+        return mEntityListDefault;
+    }
+
+    public List<String> getEntityListNotEditable() {
+        return mEntityListNotEditable;
+    }
+
+    public List<String> getEntityListEditable() {
+        return mEntityListEditable;
+    }
+
+    private static List<String> parseEntityList(String listStr) {
+        return Collections.unmodifiableList(Arrays.asList(listStr.split(ENTITY_LIST_DELIMITER)));
     }
 }

@@ -51,6 +51,7 @@ cc_library_shared {
         "libexif",
         "libpiex",
         "libandroidfw",
+        "libhidlallocatorutils",
         "libhidlbase",
         "libhidltransport",
         "android.hardware.cas@1.0",
@@ -106,6 +107,7 @@ cc_library_shared {
         "liblog",  // NDK
         "libdrmframework",  // for FileSource, MediaHTTP
         "libgui",  // for VideoFrameScheduler
+        "libhidlallocatorutils",
         "libhidlbase",  // VNDK???
         "libmediandk",  // NDK
         "libpowermanager",  // for JWakeLock. to be removed
@@ -130,11 +132,11 @@ cc_library_shared {
         "libdexfile",
         "liblzma",
         "libmedia_helper",
-        "libmedia_player2",
         "libmedia_player2_util",
         "libmediadrm",
         "libmediaextractor",
         "libmediametrics",
+        "libmediaplayer2",
         "libmediautils",
         "libnativehelper",
         "libnetd_client",

@@ -35,13 +35,19 @@ LOCAL_SRC_FILES := $(call all-java-files-under, src) \
 LOCAL_STATIC_JAVA_LIBRARIES := \
     metrics-helper-lib \
     android-support-test \
-    mockito-target-minus-junit4 \
+    mockito-target-inline-minus-junit4 \
     SystemUI-proto \
     SystemUI-tags \
     testables \
     truth-prebuilt \
 
-LOCAL_JAVA_LIBRARIES := android.test.runner telephony-common android.car
+LOCAL_MULTILIB := both
+
+LOCAL_JNI_SHARED_LIBRARIES := \
+    libdexmakerjvmtiagent \
+    libmultiplejvmtiagentsinterferenceagent
+
+LOCAL_JAVA_LIBRARIES := android.test.runner telephony-common
 
 # sign this with platform cert, so this test is allowed to inject key events into
 # UI it doesn't own. This is necessary to allow screenshots to be taken

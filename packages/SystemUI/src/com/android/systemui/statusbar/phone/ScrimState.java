@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone;
 
 import android.graphics.Color;
 import android.os.Trace;
+import android.util.MathUtils;
 
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.statusbar.ScrimView;
@@ -48,13 +49,19 @@ public enum ScrimState {
                     // set our scrim to black in this frame to avoid flickering and
                     // fade it out afterwards.
                     mBlankScreen = true;
-                    updateScrimColor(mScrimInFront, 1, Color.BLACK);
                 }
             } else {
                 mAnimationDuration = ScrimController.ANIMATION_DURATION;
             }
             mCurrentBehindAlpha = mScrimBehindAlphaKeyguard;
             mCurrentInFrontAlpha = 0;
+        }
+
+        @Override
+        public float getBehindAlpha(float busynessFactor) {
+            return MathUtils.map(0 /* start */, 1 /* stop */,
+                   ScrimController.GRADIENT_SCRIM_ALPHA, ScrimController.GRADIENT_SCRIM_ALPHA_BUSY,
+                   busynessFactor);
         }
     },
 
@@ -86,9 +93,6 @@ public enum ScrimState {
     AOD(3) {
         @Override
         public void prepare(ScrimState previousState) {
-            if (previousState == ScrimState.PULSING && !mCanControlScreenOff) {
-                updateScrimColor(mScrimInFront, 1, Color.BLACK);
-            }
             final boolean alwaysOnEnabled = mDozeParameters.getAlwaysOn();
             final boolean wasPulsing = previousState == ScrimState.PULSING;
             mBlankScreen = wasPulsing && !mCanControlScreenOff;
@@ -115,9 +119,6 @@ public enum ScrimState {
                     && !mKeyguardUpdateMonitor.hasLockscreenWallpaper() ? 0f : 1f;
             mCurrentBehindTint = Color.BLACK;
             mBlankScreen = mDisplayRequiresBlanking;
-            if (mDisplayRequiresBlanking) {
-                updateScrimColor(mScrimInFront, 1, Color.BLACK);
-            }
         }
     },
 
@@ -190,7 +191,7 @@ public enum ScrimState {
         return mCurrentInFrontAlpha;
     }
 
-    public float getBehindAlpha() {
+    public float getBehindAlpha(float busyness) {
         return mCurrentBehindAlpha;
     }
 

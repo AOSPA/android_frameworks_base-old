@@ -28,6 +28,7 @@ import android.graphics.drawable.RippleDrawable;
 import android.util.AttributeSet;
 import android.view.View;
 
+import com.android.internal.util.ArrayUtils;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
@@ -50,6 +51,7 @@ public class NotificationBackgroundView extends View {
     private boolean mExpandAnimationRunning;
     private float mActualWidth;
     private int mDrawableAlpha = 255;
+    private boolean mIsPressedAllowed;
 
     public NotificationBackgroundView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -94,13 +96,7 @@ public class NotificationBackgroundView extends View {
 
     @Override
     protected void drawableStateChanged() {
-        drawableStateChanged(mBackground);
-    }
-
-    private void drawableStateChanged(Drawable d) {
-        if (d != null && d.isStateful()) {
-            d.setState(getDrawableState());
-        }
+        setState(getDrawableState());
     }
 
     @Override
@@ -177,7 +173,13 @@ public class NotificationBackgroundView extends View {
     }
 
     public void setState(int[] drawableState) {
-        mBackground.setState(drawableState);
+        if (mBackground != null && mBackground.isStateful()) {
+            if (!mIsPressedAllowed) {
+                drawableState = ArrayUtils.removeInt(drawableState,
+                        com.android.internal.R.attr.state_pressed);
+            }
+            mBackground.setState(drawableState);
+        }
     }
 
     public void setRippleColor(int color) {
@@ -249,10 +251,17 @@ public class NotificationBackgroundView extends View {
                     (GradientDrawable) ((LayerDrawable) mBackground).getDrawable(0);
             gradientDrawable.setXfermode(
                     running ? new PorterDuffXfermode(PorterDuff.Mode.SRC) : null);
+            // Speed optimization: disable AA if transfer mode is not SRC_OVER. AA is not easy to
+            // spot during animation anyways.
+            gradientDrawable.setAntiAlias(!running);
         }
         if (!mExpandAnimationRunning) {
             setDrawableAlpha(mDrawableAlpha);
         }
         invalidate();
+    }
+
+    public void setPressedAllowed(boolean allowed) {
+        mIsPressedAllowed = allowed;
     }
 }

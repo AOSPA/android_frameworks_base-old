@@ -21,7 +21,6 @@
 
 #include "config/ConfigKey.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"  // subscription
-#include "frameworks/base/cmds/statsd/src/stats_log.pb.h"  // DimensionsValue
 #include "android/os/StatsDimensionsValue.h"
 #include "HashableDimensionKey.h"
 
@@ -82,6 +81,8 @@ public:
                                   const Subscription& subscription,
                                   const MetricDimensionKey& dimKey) const;
 
+    static StatsDimensionsValue getStatsDimensionsValue(const HashableDimensionKey& dim);
+
 private:
     SubscriberReporter() {};
 
@@ -102,14 +103,6 @@ private:
                              const ConfigKey& configKey,
                              const Subscription& subscription,
                              const MetricDimensionKey& dimKey) const;
-
-    /** Converts a stats_log.proto DimensionsValue to a StatsDimensionsValue. */
-    static StatsDimensionsValue protoToStatsDimensionsValue(
-            const DimensionsValue& protoDimsVal);
-
-    /** Converts a HashableDimensionKey to a StatsDimensionsValue. */
-    static StatsDimensionsValue protoToStatsDimensionsValue(
-            const MetricDimensionKey& dimKey);
 };
 
 }  // namespace statsd

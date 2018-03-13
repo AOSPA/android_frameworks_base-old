@@ -18,6 +18,7 @@ package com.android.systemui.qs;
 
 import static com.android.systemui.qs.tileimpl.QSTileImpl.getColorForState;
 
+import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -26,10 +27,8 @@ import android.metrics.LogMaker;
 import android.os.Handler;
 import android.os.Message;
 import android.service.quicksettings.Tile;
-import android.support.v4.widget.Space;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
 import android.view.View;
 import android.widget.LinearLayout;
 
@@ -54,15 +53,17 @@ import com.android.systemui.tuner.TunerService.Tunable;
 import java.util.ArrayList;
 import java.util.Collection;
 
-/** View that represents the quick settings tile panel. **/
+/** View that represents the quick settings tile panel (when expanded/pulled down). **/
 public class QSPanel extends LinearLayout implements Tunable, Callback, BrightnessMirrorListener {
 
     public static final String QS_SHOW_BRIGHTNESS = "qs_show_brightness";
+    public static final String QS_SHOW_HEADER = "qs_show_header";
 
     protected final Context mContext;
     protected final ArrayList<TileRecord> mRecords = new ArrayList<TileRecord>();
     protected final View mBrightnessView;
     private final H mHandler = new H();
+    private final View mPageIndicator;
     private final MetricsLogger mMetricsLogger = Dependency.get(MetricsLogger.class);
 
     protected boolean mExpanded;
@@ -75,7 +76,6 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     protected QSSecurityFooter mFooter;
     private boolean mGridContentVisible = true;
 
-    private QSScrollLayout mScrollLayout;
     protected QSTileLayout mTileLayout;
 
     private QSCustomizer mCustomizePanel;
@@ -96,13 +96,18 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
         mBrightnessView = LayoutInflater.from(mContext).inflate(
             R.layout.quick_settings_brightness_dialog, this, false);
-        mTileLayout = new TileLayout(mContext);
+        addView(mBrightnessView);
+
+        mTileLayout = (QSTileLayout) LayoutInflater.from(mContext).inflate(
+                R.layout.qs_paged_tile_layout, this, false);
         mTileLayout.setListening(mListening);
-        Space space = new Space(mContext);
-        space.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT,
-                mContext.getResources().getDimensionPixelSize(R.dimen.qs_footer_height)));
-        mScrollLayout = new QSScrollLayout(mContext, mBrightnessView, (View) mTileLayout, space);
-        addView(mScrollLayout);
+        addView((View) mTileLayout);
+
+        mPageIndicator = LayoutInflater.from(context).inflate(
+                R.layout.qs_page_indicator, this, false);
+        addView(mPageIndicator);
+
+        ((PagedTileLayout) mTileLayout).setPageIndicator((PageIndicator) mPageIndicator);
 
         addDivider();
 
@@ -127,6 +132,10 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
         return mDivider;
     }
 
+    public View getPageIndicator() {
+        return mPageIndicator;
+    }
+
     public boolean isShowingCustomize() {
         return mCustomizePanel != null && mCustomizePanel.isCustomizing();
     }
@@ -134,7 +143,9 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        Dependency.get(TunerService.class).addTunable(this, QS_SHOW_BRIGHTNESS);
+        final TunerService tunerService = Dependency.get(TunerService.class);
+        tunerService.addTunable(this, QS_SHOW_BRIGHTNESS);
+
         if (mHost != null) {
             setTiles(mHost.getTiles());
         }
@@ -166,9 +177,12 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     @Override
     public void onTuningChanged(String key, String newValue) {
         if (QS_SHOW_BRIGHTNESS.equals(key)) {
-            mBrightnessView.setVisibility(newValue == null || Integer.parseInt(newValue) != 0
-                    ? VISIBLE : GONE);
+            updateViewVisibilityForTuningValue(mBrightnessView, newValue);
         }
+    }
+
+    private void updateViewVisibilityForTuningValue(View view, @Nullable String newValue) {
+        view.setVisibility(newValue == null || Integer.parseInt(newValue) != 0 ? VISIBLE : GONE);
     }
 
     public void openDetails(String subPanel) {
@@ -226,13 +240,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     public void updateResources() {
         final Resources res = mContext.getResources();
-        mBrightnessView.setPadding(
-            mBrightnessView.getPaddingLeft(),
-            res.getDimensionPixelSize(R.dimen.qs_brightness_padding_top),
-            mBrightnessView.getPaddingRight(),
-            mBrightnessView.getPaddingBottom());
-        setPadding(
-            0, 0, 0, res.getDimensionPixelSize(R.dimen.qs_panel_padding_bottom));
+        setPadding(0, res.getDimensionPixelSize(R.dimen.qs_panel_padding_top), 0, res.getDimensionPixelSize(R.dimen.qs_panel_padding_bottom));
         for (TileRecord r : mRecords) {
             r.tile.clearState();
         }
@@ -271,11 +279,8 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     public void setExpanded(boolean expanded) {
         if (mExpanded == expanded) return;
         mExpanded = expanded;
-        if (!mExpanded) {
-            if (mTileLayout instanceof PagedTileLayout) {
-                ((PagedTileLayout) mTileLayout).setCurrentItem(0, false);
-            }
-            mScrollLayout.setScrollY(0);
+        if (!mExpanded && mTileLayout instanceof PagedTileLayout) {
+            ((PagedTileLayout) mTileLayout).setCurrentItem(0, false);
         }
         mMetricsLogger.visibility(MetricsEvent.QS_PANEL, mExpanded);
         if (!mExpanded) {
@@ -288,14 +293,6 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     public void setPageListener(final PagedTileLayout.PageListener pageListener) {
         if (mTileLayout instanceof PagedTileLayout) {
             ((PagedTileLayout) mTileLayout).setPageListener(pageListener);
-        } else {
-            mScrollLayout.setOnScrollChangeListener(new OnScrollChangeListener() {
-                @Override
-                public void onScrollChange(View v, int scrollX, int scrollY, int oldScrollX,
-                        int oldScrollY) {
-                    pageListener.onPageChanged(scrollY == 0);
-                }
-            });
         }
     }
 
@@ -569,11 +566,6 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
     public void showDeviceMonitoringDialog() {
         mFooter.showDeviceMonitoringDialog();
-    }
-
-    @Override
-    public boolean onInterceptTouchEvent(MotionEvent event) {
-        return mExpanded && mScrollLayout.shouldIntercept(event);
     }
 
     private class H extends Handler {

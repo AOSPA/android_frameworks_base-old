@@ -17,6 +17,7 @@
 package android.media;
 
 import android.annotation.NonNull;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.app.ActivityThread;
 import android.hardware.Camera;
@@ -28,6 +29,7 @@ import android.os.PersistableBundle;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
+import android.util.Pair;
 import android.view.Surface;
 
 import java.io.File;
@@ -104,6 +106,8 @@ public class MediaRecorder implements AudioRouting
     private OnErrorListener mOnErrorListener;
     private OnInfoListener mOnInfoListener;
 
+    private int mChannelCount;
+
     /**
      * Default constructor.
      */
@@ -118,6 +122,7 @@ public class MediaRecorder implements AudioRouting
             mEventHandler = null;
         }
 
+        mChannelCount = 1;
         String packageName = ActivityThread.currentPackageName();
         /* Native setup requires a weak reference to our object.
          * It's easier to create it here than in C++.
@@ -278,6 +283,7 @@ public class MediaRecorder implements AudioRouting
          * third-party applications.
          * </p>
          */
+        @RequiresPermission(android.Manifest.permission.CAPTURE_AUDIO_OUTPUT)
         public static final int REMOTE_SUBMIX = 8;
 
         /** Microphone audio source tuned for unprocessed (raw) sound if available, behaves like
@@ -303,6 +309,7 @@ public class MediaRecorder implements AudioRouting
          * @hide
          */
         @SystemApi
+        @RequiresPermission(android.Manifest.permission.CAPTURE_AUDIO_HOTWORD)
         public static final int HOTWORD = 1999;
     }
 
@@ -436,6 +443,13 @@ public class MediaRecorder implements AudioRouting
 
         /** VP8/VORBIS data in a WEBM container */
         public static final int WEBM = 9;
+
+        /** @hide QCP file format */
+        public static final int QCP = 20;
+
+        /** @hide WAVE media file format*/
+        public static final int WAVE = 21;
+
     };
 
     /**
@@ -460,6 +474,12 @@ public class MediaRecorder implements AudioRouting
         public static final int AAC_ELD = 5;
         /** Ogg Vorbis audio codec */
         public static final int VORBIS = 6;
+        /** @hide EVRC audio codec */
+        public static final int EVRC = 10;
+        /** @hide QCELP audio codec */
+        public static final int QCELP = 11;
+        /** @hide Linear PCM audio codec */
+        public static final int LPCM = 12;
     }
 
     /**
@@ -752,6 +772,7 @@ public class MediaRecorder implements AudioRouting
         if (numChannels <= 0) {
             throw new IllegalArgumentException("Number of channels is not positive");
         }
+        mChannelCount = numChannels;
         setParameter("audio-param-number-of-channels=" + numChannels);
     }
 
@@ -1353,6 +1374,7 @@ public class MediaRecorder implements AudioRouting
     /*
      * Call BEFORE adding a routing callback handler or AFTER removing a routing callback handler.
      */
+    @GuardedBy("mRoutingChangeListeners")
     private void enableNativeRoutingCallbacksLocked(boolean enabled) {
         if (mRoutingChangeListeners.size() == 0) {
             native_enableDeviceCallback(enabled);
@@ -1428,6 +1450,20 @@ public class MediaRecorder implements AudioRouting
             return new ArrayList<MicrophoneInfo>();
         }
         AudioManager.setPortIdForMicrophones(activeMicrophones);
+
+        // Use routed device when there is not information returned by hal.
+        if (activeMicrophones.size() == 0) {
+            AudioDeviceInfo device = getRoutedDevice();
+            if (device != null) {
+                MicrophoneInfo microphone = AudioManager.microphoneInfoFromAudioDeviceInfo(device);
+                ArrayList<Pair<Integer, Integer>> channelMapping = new ArrayList<>();
+                for (int i = 0; i < mChannelCount; i++) {
+                    channelMapping.add(new Pair(i, MicrophoneInfo.CHANNEL_MAPPING_DIRECT));
+                }
+                microphone.setChannelMapping(channelMapping);
+                activeMicrophones.add(microphone);
+            }
+        }
         return activeMicrophones;
     }
 

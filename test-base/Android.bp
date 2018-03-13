@@ -24,12 +24,15 @@ java_library {
 
     srcs: ["src/**/*.java"],
 
-    no_framework_libs: true,
-    hostdex: true,
-    libs: [
-        "framework",
-    ],
+    errorprone: {
+      javacflags: ["-Xep:DepAnn:ERROR"],
+    },
 
+    // Needs to be consistent with the repackaged version of this make target.
+    java_version: "1.8",
+
+    sdk_version: "current",
+    hostdex: true,
 }
 
 // Build the legacy-test library
@@ -39,12 +42,9 @@ java_library {
 // Also contains the com.android.internal.util.Predicate[s] classes.
 java_library {
     name: "legacy-test",
-    static_libs: ["android.test.base"],
 
-    no_framework_libs: true,
-    libs: [
-        "framework",
-    ],
+    sdk_version: "current",
+    static_libs: ["android.test.base"],
 }
 
 // Build the repackaged.android.test.base library
@@ -54,22 +54,20 @@ java_library {
 java_library_static {
     name: "repackaged.android.test.base",
 
+    sdk_version: "current",
     static_libs: ["android.test.base"],
 
-    no_framework_libs: true,
-    libs: [
-        "framework",
-    ],
-
     jarjar_rules: "jarjar-rules.txt",
+    // Pin java_version until jarjar is certified to support later versions. http://b/72703434
+    java_version: "1.8",
 }
 
 // Build the android.test.base-minus-junit library
 // ===============================================
 // This contains the android.test classes from android.test.base plus
 // the com.android.internal.util.Predicate[s] classes. This is only
-// intended for inclusion in the android.test.legacy static library and
-// must not be used elsewhere.
+// intended for inclusion in the android.test.legacy and
+// legacy-android-test static libraries and must not be used elsewhere.
 java_library_static {
     name: "android.test.base-minus-junit",
 

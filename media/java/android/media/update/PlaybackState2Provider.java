@@ -21,7 +21,6 @@ import android.os.Bundle;
 /**
  * @hide
  */
-// TODO(jaewan): @SystemApi
 public interface PlaybackState2Provider {
     String toString_impl();
 
@@ -32,8 +31,6 @@ public interface PlaybackState2Provider {
     long getBufferedPosition_impl();
 
     float getPlaybackSpeed_impl();
-
-    CharSequence getErrorMessage_impl();
 
     long getLastPositionUpdateTime_impl();
 

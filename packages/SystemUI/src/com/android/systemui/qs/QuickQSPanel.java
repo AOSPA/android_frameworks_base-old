@@ -20,7 +20,6 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.Space;
 
@@ -57,8 +56,7 @@ public class QuickQSPanel extends QSPanel {
             for (int i = 0; i < mRecords.size(); i++) {
                 mTileLayout.removeTile(mRecords.get(i));
             }
-            View tileLayoutView = (View) mTileLayout;
-            ((ViewGroup) tileLayoutView.getParent()).removeView(tileLayoutView);
+            removeView((View) mTileLayout);
         }
         mTileLayout = new HeaderTileLayout(context);
         mTileLayout.setListening(mListening);
@@ -124,9 +122,8 @@ public class QuickQSPanel extends QSPanel {
 
     @Override
     public void onTuningChanged(String key, String newValue) {
-        // No tunings for you.
-        if (key.equals(QS_SHOW_BRIGHTNESS)) {
-            // No Brightness for you.
+        if (QS_SHOW_BRIGHTNESS.equals(key)) {
+            // No Brightness or Tooltip for you!
             super.onTuningChanged(key, "0");
         }
     }

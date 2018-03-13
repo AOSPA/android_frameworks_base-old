@@ -21,6 +21,7 @@ import static com.android.internal.util.Preconditions.checkNotNull;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.content.Context;
 import android.os.Binder;
@@ -83,9 +84,11 @@ public final class IpSecTransform implements AutoCloseable {
     @Retention(RetentionPolicy.SOURCE)
     public @interface EncapType {}
 
-    private IpSecTransform(Context context, IpSecConfig config) {
+    /** @hide */
+    @VisibleForTesting
+    public IpSecTransform(Context context, IpSecConfig config) {
         mContext = context;
-        mConfig = config;
+        mConfig = new IpSecConfig(config);
         mResourceId = INVALID_RESOURCE_ID;
     }
 
@@ -139,6 +142,18 @@ public final class IpSecTransform implements AutoCloseable {
         }
 
         return this;
+    }
+
+    /**
+     * Equals method used for testing
+     *
+     * @hide
+     */
+    @VisibleForTesting
+    public static boolean equals(IpSecTransform lhs, IpSecTransform rhs) {
+        if (lhs == null || rhs == null) return (lhs == rhs);
+        return IpSecConfig.equals(lhs.getConfig(), rhs.getConfig())
+                && lhs.mResourceId == rhs.mResourceId;
     }
 
     /**
@@ -266,6 +281,10 @@ public final class IpSecTransform implements AutoCloseable {
      * @hide
      */
     @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_STACK,
+            android.Manifest.permission.PACKET_KEEPALIVE_OFFLOAD
+    })
     public void startNattKeepalive(@NonNull NattKeepaliveCallback userCallback,
             int intervalSeconds, @NonNull Handler handler) throws IOException {
         checkNotNull(userCallback);
@@ -305,6 +324,10 @@ public final class IpSecTransform implements AutoCloseable {
      * @hide
      */
     @SystemApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_STACK,
+            android.Manifest.permission.PACKET_KEEPALIVE_OFFLOAD
+    })
     public void stopNattKeepalive() {
         synchronized (mKeepaliveCallback) {
             if (mKeepalive == null) {
@@ -449,6 +472,7 @@ public final class IpSecTransform implements AutoCloseable {
          * @hide
          */
         @SystemApi
+        @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
         public IpSecTransform buildTunnelModeTransform(
                 @NonNull InetAddress sourceAddress,
                 @NonNull IpSecManager.SecurityParameterIndex spi)

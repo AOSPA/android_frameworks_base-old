@@ -14,18 +14,15 @@
  * limitations under the License.
  */
 
-#define DEBUG true  // STOPSHIP if true
+#define DEBUG false  // STOPSHIP if true
 #include "Log.h"
 
 #include "AnomalyTracker.h"
 #include "external/Perfetto.h"
 #include "guardrail/StatsdStats.h"
-#include "frameworks/base/libs/incident/proto/android/os/header.pb.h"
+#include "subscriber/IncidentdReporter.h"
 #include "subscriber/SubscriberReporter.h"
 
-#include <android/os/IIncidentManager.h>
-#include <android/os/IncidentReportArgs.h>
-#include <binder/IServiceManager.h>
 #include <statslog.h>
 #include <time.h>
 
@@ -35,20 +32,17 @@ namespace statsd {
 
 // TODO: Get rid of bucketNumbers, and return to the original circular array method.
 AnomalyTracker::AnomalyTracker(const Alert& alert, const ConfigKey& configKey)
-    : mAlert(alert),
-      mConfigKey(configKey),
-      mNumOfPastBuckets(mAlert.num_buckets() - 1) {
+    : mAlert(alert), mConfigKey(configKey), mNumOfPastBuckets(mAlert.num_buckets() - 1) {
     VLOG("AnomalyTracker() called");
     if (mAlert.num_buckets() <= 0) {
-        ALOGE("Cannot create AnomalyTracker with %lld buckets",
-              (long long)mAlert.num_buckets());
+        ALOGE("Cannot create AnomalyTracker with %lld buckets", (long long)mAlert.num_buckets());
         return;
     }
     if (!mAlert.has_trigger_if_sum_gt()) {
         ALOGE("Cannot create AnomalyTracker without threshold");
         return;
     }
-    resetStorage(); // initialization
+    resetStorage();  // initialization
 }
 
 AnomalyTracker::~AnomalyTracker() {
@@ -98,6 +92,9 @@ void AnomalyTracker::flushPastBuckets(const int64_t& latestPastBucketNum) {
 
 void AnomalyTracker::addPastBucket(const MetricDimensionKey& key, const int64_t& bucketValue,
                                    const int64_t& bucketNum) {
+    if (mNumOfPastBuckets == 0) {
+        return;
+    }
     flushPastBuckets(bucketNum);
 
     auto& bucket = mPastBuckets[index(bucketNum)];
@@ -112,6 +109,9 @@ void AnomalyTracker::addPastBucket(const MetricDimensionKey& key, const int64_t&
 void AnomalyTracker::addPastBucket(std::shared_ptr<DimToValMap> bucketValues,
                                    const int64_t& bucketNum) {
     VLOG("addPastBucket() called.");
+    if (mNumOfPastBuckets == 0) {
+        return;
+    }
     flushPastBuckets(bucketNum);
     // Replace the oldest bucket with the new bucket we are adding.
     mPastBuckets[index(bucketNum)] = bucketValues;
@@ -149,6 +149,10 @@ void AnomalyTracker::addBucketToSum(const shared_ptr<DimToValMap>& bucket) {
 
 int64_t AnomalyTracker::getPastBucketValue(const MetricDimensionKey& key,
                                            const int64_t& bucketNum) const {
+    if (mNumOfPastBuckets == 0) {
+        return 0;
+    }
+
     const auto& bucket = mPastBuckets[index(bucketNum)];
     if (bucket == nullptr) {
         return 0;
@@ -171,8 +175,8 @@ bool AnomalyTracker::detectAnomaly(const int64_t& currentBucketNum, const Metric
         // TODO: This creates a needless 0 entry in mSumOverPastBuckets. Fix this.
         addPastBucket(key, 0, currentBucketNum - 1);
     }
-    return mAlert.has_trigger_if_sum_gt()
-            && getSumOverPastBuckets(key) + currentBucketValue > mAlert.trigger_if_sum_gt();
+    return mAlert.has_trigger_if_sum_gt() &&
+           getSumOverPastBuckets(key) + currentBucketValue > mAlert.trigger_if_sum_gt();
 }
 
 void AnomalyTracker::declareAnomaly(const uint64_t& timestampNs, const MetricDimensionKey& key) {
@@ -188,7 +192,7 @@ void AnomalyTracker::declareAnomaly(const uint64_t& timestampNs, const MetricDim
 
     if (!mSubscriptions.empty()) {
         if (mAlert.has_id()) {
-            ALOGI("An anomaly (%llu) has occurred! Informing subscribers.",mAlert.id());
+            ALOGI("An anomaly (%lld) has occurred! Informing subscribers.", mAlert.id());
             informSubscribers(key);
         } else {
             ALOGI("An anomaly (with no id) has occurred! Not informing any subscribers.");
@@ -229,46 +233,36 @@ bool AnomalyTracker::isInRefractoryPeriod(const uint64_t& timestampNs,
 void AnomalyTracker::informSubscribers(const MetricDimensionKey& key) {
     VLOG("informSubscribers called.");
     if (mSubscriptions.empty()) {
-        ALOGE("Attempt to call with no subscribers.");
+        // The config just wanted to log the anomaly. That's fine.
+        VLOG("No Subscriptions were associated with the alert.");
         return;
     }
 
-    std::set<int> incidentdSections;
-
     for (const Subscription& subscription : mSubscriptions) {
+        if (subscription.probability_of_informing() < 1
+                && ((float)rand() / RAND_MAX) >= subscription.probability_of_informing()) {
+            // Note that due to float imprecision, 0.0 and 1.0 might not truly mean never/always.
+            // The config writer was advised to use -0.1 and 1.1 for never/always.
+            ALOGI("Fate decided that a subscriber would not be informed.");
+            continue;
+        }
         switch (subscription.subscriber_information_case()) {
             case Subscription::SubscriberInformationCase::kIncidentdDetails:
-                for (int i = 0; i < subscription.incidentd_details().section_size(); i++) {
-                    incidentdSections.insert(subscription.incidentd_details().section(i));
+                if (!GenerateIncidentReport(subscription.incidentd_details(), mAlert, mConfigKey)) {
+                    ALOGW("Failed to generate incident report.");
                 }
                 break;
             case Subscription::SubscriberInformationCase::kPerfettoDetails:
-                CollectPerfettoTraceAndUploadToDropbox(subscription.perfetto_details());
+                if (!CollectPerfettoTraceAndUploadToDropbox(subscription.perfetto_details())) {
+                    ALOGW("Failed to generate prefetto traces.");
+                }
                 break;
             case Subscription::SubscriberInformationCase::kBroadcastSubscriberDetails:
-                SubscriberReporter::getInstance()
-                        .alertBroadcastSubscriber(mConfigKey, subscription, key);
+                SubscriberReporter::getInstance().alertBroadcastSubscriber(mConfigKey, subscription,
+                                                                           key);
                 break;
             default:
                 break;
-        }
-    }
-    if (!incidentdSections.empty()) {
-        sp<IIncidentManager> service = interface_cast<IIncidentManager>(
-                defaultServiceManager()->getService(android::String16("incident")));
-        if (service != NULL) {
-            IncidentReportArgs incidentReport;
-            for (const auto section : incidentdSections) {
-                incidentReport.addSection(section);
-            }
-            android::os::IncidentHeaderProto header;
-            header.set_alert_id(mAlert.id());
-            header.mutable_config_key()->set_uid(mConfigKey.GetUid());
-            header.mutable_config_key()->set_id(mConfigKey.GetId());
-            incidentReport.addHeader(header);
-            service->reportIncident(incidentReport);
-        } else {
-            ALOGW("Couldn't get the incident service.");
         }
     }
 }

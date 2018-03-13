@@ -44,6 +44,7 @@ const int64_t bucketSizeNs = TimeUnitToBucketSizeInMillis(ONE_MINUTE) * 1000000L
 const int64_t bucket2StartTimeNs = bucketStartTimeNs + bucketSizeNs;
 const int64_t bucket3StartTimeNs = bucketStartTimeNs + 2 * bucketSizeNs;
 const int64_t bucket4StartTimeNs = bucketStartTimeNs + 3 * bucketSizeNs;
+const int64_t eventUpgradeTimeNs = bucketStartTimeNs + 15 * NS_PER_SEC;
 
 /*
  * Tests pulled atoms with no conditions
@@ -65,6 +66,7 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
 
     ValueMetricProducer valueProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
                                       tagId, bucketStartTimeNs, pullerManager);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     vector<shared_ptr<LogEvent>> allData;
     allData.clear();
@@ -78,6 +80,8 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
+
     // startUpdated:true tainted:0 sum:0 start:11
     EXPECT_EQ(true, curInterval.startUpdated);
     EXPECT_EQ(0, curInterval.tainted);
@@ -161,7 +165,7 @@ TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition) {
 
     ValueMetricProducer valueProducer(kConfigKey, metric, 1, wizard, tagId, bucketStartTimeNs,
                                       pullerManager);
-
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
     valueProducer.onConditionChanged(true, bucketStartTimeNs + 8);
 
     // has one slice
@@ -202,6 +206,103 @@ TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition) {
     EXPECT_EQ(false, curInterval.startUpdated);
 }
 
+TEST(ValueMetricProducerTest, TestPushedEventsWithUpgrade) {
+    ValueMetric metric;
+    metric.set_id(metricId);
+    metric.set_bucket(ONE_MINUTE);
+    metric.mutable_value_field()->set_field(tagId);
+    metric.mutable_value_field()->add_child()->set_field(2);
+
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    shared_ptr<MockStatsPullerManager> pullerManager =
+            make_shared<StrictMock<MockStatsPullerManager>>();
+    ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
+                                      pullerManager);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
+
+    shared_ptr<LogEvent> event1 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 10);
+    event1->write(1);
+    event1->write(10);
+    event1->init();
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event1);
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+
+    valueProducer.notifyAppUpgrade(eventUpgradeTimeNs, "ANY.APP", 1, 1);
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ((uint64_t)eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
+
+    shared_ptr<LogEvent> event2 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 59 * NS_PER_SEC);
+    event2->write(1);
+    event2->write(10);
+    event2->init();
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event2);
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ((uint64_t)eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
+
+    // Next value should create a new bucket.
+    shared_ptr<LogEvent> event3 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 65 * NS_PER_SEC);
+    event3->write(1);
+    event3->write(10);
+    event3->init();
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event3);
+    EXPECT_EQ(2UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ((uint64_t)bucketStartTimeNs + bucketSizeNs, valueProducer.mCurrentBucketStartTimeNs);
+}
+
+TEST(ValueMetricProducerTest, TestPulledValueWithUpgrade) {
+    ValueMetric metric;
+    metric.set_id(metricId);
+    metric.set_bucket(ONE_MINUTE);
+    metric.mutable_value_field()->set_field(tagId);
+    metric.mutable_value_field()->add_child()->set_field(2);
+
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    shared_ptr<MockStatsPullerManager> pullerManager =
+            make_shared<StrictMock<MockStatsPullerManager>>();
+    EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _)).WillOnce(Return());
+    EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillOnce(Return());
+    EXPECT_CALL(*pullerManager, Pull(tagId, _))
+            .WillOnce(Invoke([](int tagId, vector<std::shared_ptr<LogEvent>>* data) {
+                data->clear();
+                shared_ptr<LogEvent> event = make_shared<LogEvent>(tagId, bucketStartTimeNs + 10);
+                event->write(tagId);
+                event->write(120);
+                event->init();
+                data->push_back(event);
+                return true;
+            }));
+    ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, tagId, bucketStartTimeNs,
+                                      pullerManager);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
+
+    vector<shared_ptr<LogEvent>> allData;
+    allData.clear();
+    shared_ptr<LogEvent> event = make_shared<LogEvent>(tagId, bucketStartTimeNs + 1);
+    event->write(tagId);
+    event->write(100);
+    event->init();
+    allData.push_back(event);
+
+    valueProducer.onDataPulled(allData);
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+
+    valueProducer.notifyAppUpgrade(eventUpgradeTimeNs, "ANY.APP", 1, 1);
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ((uint64_t)eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(20L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mValue);
+
+    allData.clear();
+    event = make_shared<LogEvent>(tagId, bucket2StartTimeNs + 1);
+    event->write(tagId);
+    event->write(150);
+    event->init();
+    allData.push_back(event);
+    valueProducer.onDataPulled(allData);
+    EXPECT_EQ(2UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
+    EXPECT_EQ((uint64_t)bucket2StartTimeNs, valueProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(30L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][1].mValue);
+}
+
 TEST(ValueMetricProducerTest, TestPushedEventsWithoutCondition) {
     ValueMetric metric;
     metric.set_id(metricId);
@@ -215,6 +316,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithoutCondition) {
 
     ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
                                       pullerManager);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     shared_ptr<LogEvent> event1 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 10);
     event1->write(1);
@@ -261,6 +363,8 @@ TEST(ValueMetricProducerTest, TestAnomalyDetection) {
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     ValueMetricProducer valueProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
                                       -1 /*not pulled*/, bucketStartTimeNs);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
+
     sp<AnomalyTracker> anomalyTracker = valueProducer.addAnomalyTracker(alert);
 
 
@@ -310,16 +414,16 @@ TEST(ValueMetricProducerTest, TestAnomalyDetection) {
     valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event4);
     // Anomaly at event 4 since Value sum == 131 > 130!
     EXPECT_EQ(anomalyTracker->getRefractoryPeriodEndsSec(DEFAULT_METRIC_DIMENSION_KEY),
-            event4->GetTimestampNs() / NS_PER_SEC + refPeriodSec);
+            event4->GetElapsedTimestampNs() / NS_PER_SEC + refPeriodSec);
     valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event5);
     // Event 5 is within 3 sec refractory period. Thus last alarm timestamp is still event4.
     EXPECT_EQ(anomalyTracker->getRefractoryPeriodEndsSec(DEFAULT_METRIC_DIMENSION_KEY),
-            event4->GetTimestampNs() / NS_PER_SEC + refPeriodSec);
+            event4->GetElapsedTimestampNs() / NS_PER_SEC + refPeriodSec);
 
     valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event6);
     // Anomaly at event 6 since Value sum == 160 > 130 and after refractory period.
     EXPECT_EQ(anomalyTracker->getRefractoryPeriodEndsSec(DEFAULT_METRIC_DIMENSION_KEY),
-            event6->GetTimestampNs() / NS_PER_SEC + refPeriodSec);
+            event6->GetElapsedTimestampNs() / NS_PER_SEC + refPeriodSec);
 }
 
 }  // namespace statsd

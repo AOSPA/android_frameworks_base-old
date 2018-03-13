@@ -1376,6 +1376,12 @@ public class CarrierConfigManager {
      */
     public static final String KEY_ALLOW_HOLD_IN_IMS_CALL_BOOL = "allow_hold_in_ims_call";
 
+    /**
+     * Flag indicating whether the carrier supports call deflection for an incoming IMS call.
+     * @hide
+     */
+    public static final String KEY_CARRIER_ALLOW_DEFLECT_IMS_CALL_BOOL =
+            "carrier_allow_deflect_ims_call_bool";
 
     /**
      * Flag indicating whether the carrier always wants to play an "on-hold" tone when a call has
@@ -1698,13 +1704,6 @@ public class CarrierConfigManager {
             "roaming_operator_string_array";
 
     /**
-     * Controls whether Assisted Dialing is enabled and the preference is shown. This feature
-     * transforms numbers when the user is roaming.
-     */
-    public static final String KEY_ASSISTED_DIALING_ENABLED_BOOL =
-            "assisted_dialing_enabled_bool";
-
-    /**
      * URL from which the proto containing the public key of the Carrier used for
      * IMSI encryption will be downloaded.
      * @hide
@@ -1844,6 +1843,7 @@ public class CarrierConfigManager {
     static {
         sDefaults = new PersistableBundle();
         sDefaults.putBoolean(KEY_ALLOW_HOLD_IN_IMS_CALL_BOOL, true);
+        sDefaults.putBoolean(KEY_CARRIER_ALLOW_DEFLECT_IMS_CALL_BOOL, false);
         sDefaults.putBoolean(KEY_ALWAYS_PLAY_REMOTE_HOLD_TONE_BOOL, false);
         sDefaults.putBoolean(KEY_ADDITIONAL_CALL_SETTING_BOOL, true);
         sDefaults.putBoolean(KEY_ALLOW_EMERGENCY_NUMBERS_IN_CALL_LOG_BOOL, false);
@@ -1871,7 +1871,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CARRIER_FORCE_DISABLE_ETWS_CMAS_TEST_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_OVERRIDE_WFC_PROVISIONING_BOOL, false);
-        sDefaults.putBoolean(KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL, true);
+        sDefaults.putBoolean(KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_ALLOW_TURNOFF_IMS_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_IMS_GBA_REQUIRED_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_INSTANT_LETTERING_AVAILABLE_BOOL, false);
@@ -2124,7 +2124,6 @@ public class CarrierConfigManager {
                 false);
         sDefaults.putStringArray(KEY_NON_ROAMING_OPERATOR_STRING_ARRAY, null);
         sDefaults.putStringArray(KEY_ROAMING_OPERATOR_STRING_ARRAY, null);
-        sDefaults.putBoolean(KEY_ASSISTED_DIALING_ENABLED_BOOL, true);
         sDefaults.putBoolean(KEY_SHOW_IMS_REGISTRATION_STATUS_BOOL, false);
         sDefaults.putBoolean(KEY_RTT_SUPPORTED_BOOL, false);
         sDefaults.putBoolean(KEY_DISABLE_CHARGE_INDICATION_BOOL, false);

@@ -14,12 +14,13 @@
  * limitations under the License.
  */
 
-#define DEBUG true  // STOPSHIP if true
+#define DEBUG false  // STOPSHIP if true
 #include "Log.h"
 
 #include "android-base/stringprintf.h"
 #include "guardrail/StatsdStats.h"
 #include "storage/StorageManager.h"
+#include "stats_log_util.h"
 
 #include <android-base/file.h>
 #include <dirent.h>
@@ -252,7 +253,7 @@ void StorageManager::trimToFit(const char* path) {
         string file_name = getFilePath(path, timestamp, uid, configID);
 
         // Check for timestamp and delete if it's too old.
-        long fileAge = time(nullptr) - timestamp;
+        long fileAge = getWallClockSec() - timestamp;
         if (fileAge > StatsdStats::kMaxAgeSecond) {
             deleteFile(file_name.c_str());
         }

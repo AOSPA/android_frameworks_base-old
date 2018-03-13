@@ -14,10 +14,11 @@
  * limitations under the License.
  */
 
-#define DEBUG true  // STOPSHIP if true
+#define DEBUG false  // STOPSHIP if true
 #include "Log.h"
 
 #include "StatsService.h"
+#include "stats_log_util.h"
 #include "android-base/stringprintf.h"
 #include "config/ConfigKey.h"
 #include "config/ConfigManager.h"
@@ -77,20 +78,22 @@ StatsService::StatsService(const sp<Looper>& handlerLooper)
     : mAnomalyMonitor(new AnomalyMonitor(MIN_DIFF_TO_UPDATE_REGISTERED_ALARM_SECS))
 {
     mUidMap = new UidMap();
+    StatsPuller::SetUidMap(mUidMap);
     mConfigManager = new ConfigManager();
-    mProcessor = new StatsLogProcessor(mUidMap, mAnomalyMonitor, time(nullptr), [this](const ConfigKey& key) {
-        sp<IStatsCompanionService> sc = getStatsCompanionService();
-        auto receiver = mConfigManager->GetConfigReceiver(key);
-        if (sc == nullptr) {
-            VLOG("Could not find StatsCompanionService");
-        } else if (receiver.first.size() == 0) {
-            VLOG("Statscompanion could not find a broadcast receiver for %s",
-                 key.ToString().c_str());
-        } else {
-            sc->sendBroadcast(String16(receiver.first.c_str()),
-                              String16(receiver.second.c_str()));
+    mProcessor = new StatsLogProcessor(mUidMap, mAnomalyMonitor, getElapsedRealtimeSec(),
+        [this](const ConfigKey& key) {
+            sp<IStatsCompanionService> sc = getStatsCompanionService();
+            auto receiver = mConfigManager->GetConfigReceiver(key);
+            if (sc == nullptr) {
+                VLOG("Could not find StatsCompanionService");
+            } else if (receiver == nullptr) {
+                VLOG("Statscompanion could not find a broadcast receiver for %s",
+                     key.ToString().c_str());
+            } else {
+                sc->sendDataBroadcast(receiver);
+            }
         }
-    });
+    );
 
     mConfigManager->AddListener(mProcessor);
 
@@ -121,8 +124,6 @@ void StatsService::init_build_type_callback(void* cookie, const char* /*name*/, 
  */
 status_t StatsService::onTransact(uint32_t code, const Parcel& data, Parcel* reply,
                                   uint32_t flags) {
-    status_t err;
-
     switch (code) {
         case SHELL_COMMAND_TRANSACTION: {
             int in = data.readFileDescriptor();
@@ -237,8 +238,12 @@ status_t StatsService::command(FILE* in, FILE* out, FILE* err, Vector<String8>& 
             return cmd_write_data_to_disk(out);
         }
 
-        if (!args[0].compare(String8("log-app-hook"))) {
-            return cmd_log_app_hook(out, args);
+        if (!args[0].compare(String8("log-app-breadcrumb"))) {
+            return cmd_log_app_breadcrumb(out, args);
+        }
+
+        if (!args[0].compare(String8("clear-puller-cache"))) {
+            return cmd_clear_puller_cache(out);
         }
     }
 
@@ -277,8 +282,8 @@ void StatsService::print_cmd_help(FILE* out) {
     fprintf(out, "  Flushes all data on memory to disk.\n");
     fprintf(out, "\n");
     fprintf(out, "\n");
-    fprintf(out, "usage: adb shell cmd stats log-app-hook [UID] LABEL STATE\n");
-    fprintf(out, "  Writes an AppHook event to the statslog buffer.\n");
+    fprintf(out, "usage: adb shell cmd stats log-app-breadcrumb [UID] LABEL STATE\n");
+    fprintf(out, "  Writes an AppBreadcrumbReported event to the statslog buffer.\n");
     fprintf(out, "  UID           The uid to use. It is only possible to pass a UID\n");
     fprintf(out, "                parameter on eng builds. If UID is omitted the calling\n");
     fprintf(out, "                uid is used.\n");
@@ -320,6 +325,10 @@ void StatsService::print_cmd_help(FILE* out) {
     fprintf(out, "\n");
     fprintf(out, "usage: adb shell cmd stats print-stats\n");
     fprintf(out, "  Prints some basic stats.\n");
+    fprintf(out, "\n");
+    fprintf(out, "\n");
+    fprintf(out, "usage: adb shell cmd stats clear-puller-cache\n");
+    fprintf(out, "  Clear cached puller data.\n");
 }
 
 status_t StatsService::cmd_trigger_broadcast(FILE* out, Vector<String8>& args) {
@@ -358,12 +367,14 @@ status_t StatsService::cmd_trigger_broadcast(FILE* out, Vector<String8>& args) {
     }
     auto receiver = mConfigManager->GetConfigReceiver(ConfigKey(uid, StrToInt64(name)));
     sp<IStatsCompanionService> sc = getStatsCompanionService();
-    if (sc != nullptr) {
-        sc->sendBroadcast(String16(receiver.first.c_str()), String16(receiver.second.c_str()));
+    if (sc == nullptr) {
+        VLOG("Could not access statsCompanion");
+    } else if (receiver == nullptr) {
+        VLOG("Could not find receiver for %s, %s", args[1].c_str(), args[2].c_str())
+    } else {
+        sc->sendDataBroadcast(receiver);
         VLOG("StatsService::trigger broadcast succeeded to %s, %s", args[1].c_str(),
              args[2].c_str());
-    } else {
-        VLOG("Could not access statsCompanion");
     }
 
     return NO_ERROR;
@@ -482,7 +493,8 @@ status_t StatsService::cmd_dump_report(FILE* out, FILE* err, const Vector<String
         }
         if (good) {
             vector<uint8_t> data;
-            mProcessor->onDumpReport(ConfigKey(uid, StrToInt64(name)), &data);
+            mProcessor->onDumpReport(ConfigKey(uid, StrToInt64(name)), getElapsedRealtimeNs(),
+                                     &data);
             // TODO: print the returned StatsLogReport to file instead of printing to logcat.
             if (proto) {
                 for (size_t i = 0; i < data.size(); i ++) {
@@ -537,7 +549,7 @@ status_t StatsService::cmd_write_data_to_disk(FILE* out) {
     return NO_ERROR;
 }
 
-status_t StatsService::cmd_log_app_hook(FILE* out, const Vector<String8>& args) {
+status_t StatsService::cmd_log_app_breadcrumb(FILE* out, const Vector<String8>& args) {
     bool good = false;
     int32_t uid;
     int32_t label;
@@ -559,13 +571,13 @@ status_t StatsService::cmd_log_app_hook(FILE* out, const Vector<String8>& args) 
             good = true;
         } else {
             fprintf(out,
-                    "Selecting a UID for writing AppHook can only be dumped for other UIDs on eng"
-                            " or userdebug builds.\n");
+                    "Selecting a UID for writing AppBreadcrumb can only be done for other UIDs "
+                            "on eng or userdebug builds.\n");
         }
     }
     if (good) {
-        fprintf(out, "Logging AppHook(%d, %d, %d) to statslog.\n", uid, label, state);
-        android::util::stats_write(android::util::APP_HOOK, uid, label, state);
+        fprintf(out, "Logging AppBreadcrumbReported(%d, %d, %d) to statslog.\n", uid, label, state);
+        android::util::stats_write(android::util::APP_BREADCRUMB_REPORTED, uid, label, state);
     } else {
         print_cmd_help(out);
         return UNKNOWN_ERROR;
@@ -602,9 +614,15 @@ status_t StatsService::cmd_dump_memory_info(FILE* out) {
 }
 
 status_t StatsService::cmd_clear_puller_cache(FILE* out) {
-    mStatsPullerManager.ClearPullerCache();
-    fprintf(out, "Puller cached data removed!\n");
-    return NO_ERROR;
+    IPCThreadState* ipc = IPCThreadState::self();
+    VLOG("StatsService::cmd_clear_puller_cache with Pid %i, Uid %i", ipc->getCallingPid(), ipc->getCallingUid());
+    if (checkCallingPermission(String16(kPermissionDump))) {
+        int cleared = mStatsPullerManager.ForceClearPullerCache();
+        fprintf(out, "Puller removed %d cached data!\n", cleared);
+        return NO_ERROR;
+    } else {
+        return PERMISSION_DENIED;
+    }
 }
 
 Status StatsService::informAllUidData(const vector<int32_t>& uid, const vector<int64_t>& version,
@@ -641,6 +659,7 @@ Status StatsService::informOnePackageRemoved(const String16& app, int32_t uid) {
                                          "Only system uid can call informOnePackageRemoved");
     }
     mUidMap->removeApp(app, uid);
+    mConfigManager->RemoveConfigs(uid);
     return Status::ok();
 }
 
@@ -651,12 +670,15 @@ Status StatsService::informAnomalyAlarmFired() {
         return Status::fromExceptionCode(Status::EX_SECURITY,
                                          "Only system uid can call informAnomalyAlarmFired");
     }
-
-    VLOG("StatsService::informAnomalyAlarmFired succeeded");
-    uint64_t currentTimeSec = time(nullptr);
+    uint64_t currentTimeSec = getElapsedRealtimeSec();
     std::unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>> anomalySet =
             mAnomalyMonitor->popSoonerThan(static_cast<uint32_t>(currentTimeSec));
-    mProcessor->onAnomalyAlarmFired(currentTimeSec * NS_PER_SEC, anomalySet);
+    if (anomalySet.size() > 0) {
+        VLOG("Found an anomaly alarm that fired.");
+        mProcessor->onAnomalyAlarmFired(currentTimeSec * NS_PER_SEC, anomalySet);
+    } else {
+        VLOG("Cannot find an anomaly alarm that fired. Perhaps it was recently cancelled.");
+    }
     return Status::ok();
 }
 
@@ -764,7 +786,7 @@ Status StatsService::getData(int64_t key, vector<uint8_t>* output) {
     VLOG("StatsService::getData with Pid %i, Uid %i", ipc->getCallingPid(), ipc->getCallingUid());
     if (checkCallingPermission(String16(kPermissionDump))) {
         ConfigKey configKey(ipc->getCallingUid(), key);
-        mProcessor->onDumpReport(configKey, output);
+        mProcessor->onDumpReport(configKey, getElapsedRealtimeNs(), output);
         return Status::ok();
     } else {
         return Status::fromExceptionCode(binder::Status::EX_SECURITY);
@@ -785,7 +807,6 @@ Status StatsService::getMetadata(vector<uint8_t>* output) {
 
 Status StatsService::addConfiguration(int64_t key,
                                       const vector <uint8_t>& config,
-                                      const String16& package, const String16& cls,
                                       bool* success) {
     IPCThreadState* ipc = IPCThreadState::self();
     if (checkCallingPermission(String16(kPermissionDump))) {
@@ -796,8 +817,33 @@ Status StatsService::addConfiguration(int64_t key,
             return Status::ok();
         }
         mConfigManager->UpdateConfig(configKey, cfg);
-        mConfigManager->SetConfigReceiver(configKey, string(String8(package).string()),
-                                          string(String8(cls).string()));
+        *success = true;
+        return Status::ok();
+    } else {
+        *success = false;
+        return Status::fromExceptionCode(binder::Status::EX_SECURITY);
+    }
+}
+
+Status StatsService::removeDataFetchOperation(int64_t key, bool* success) {
+    IPCThreadState* ipc = IPCThreadState::self();
+    if (checkCallingPermission(String16(kPermissionDump))) {
+        ConfigKey configKey(ipc->getCallingUid(), key);
+        mConfigManager->RemoveConfigReceiver(configKey);
+        *success = true;
+        return Status::ok();
+    } else {
+        *success = false;
+        return Status::fromExceptionCode(binder::Status::EX_SECURITY);
+    }
+}
+
+Status StatsService::setDataFetchOperation(int64_t key, const sp<android::IBinder>& intentSender,
+                                           bool* success) {
+    IPCThreadState* ipc = IPCThreadState::self();
+    if (checkCallingPermission(String16(kPermissionDump))) {
+        ConfigKey configKey(ipc->getCallingUid(), key);
+        mConfigManager->SetConfigReceiver(configKey, intentSender);
         *success = true;
         return Status::ok();
     } else {

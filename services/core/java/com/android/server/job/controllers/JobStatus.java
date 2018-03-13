@@ -302,7 +302,6 @@ public final class JobStatus {
         this.numFailures = numFailures;
 
         int requiredConstraints = job.getConstraintFlags();
-
         if (job.getRequiredNetwork() != null) {
             requiredConstraints |= CONSTRAINT_CONNECTIVITY;
         }
@@ -323,6 +322,13 @@ public final class JobStatus {
         mInternalFlags = internalFlags;
 
         updateEstimatedNetworkBytesLocked();
+
+        if (job.getRequiredNetwork() != null) {
+            // Later, when we check if a given network satisfies the required
+            // network, we need to know the UID that is requesting it, so push
+            // our source UID into place.
+            job.getRequiredNetwork().networkCapabilities.setSingleUid(this.sourceUid);
+        }
     }
 
     /** Copy constructor: used specifically when cloning JobStatus objects for persistence,
@@ -882,11 +888,6 @@ public final class JobStatus {
         return mLastFailedRunTime;
     }
 
-    public boolean shouldDump(int filterUid) {
-        return filterUid == -1 || UserHandle.getAppId(getUid()) == filterUid
-                || UserHandle.getAppId(getSourceUid()) == filterUid;
-    }
-
     /**
      * @return Whether or not this job is ready to run, based on its requirements. This is true if
      * the constraints are satisfied <strong>or</strong> the deadline on the job has expired.
@@ -1346,6 +1347,15 @@ public final class JobStatus {
         }
         pw.print(prefix); pw.print("Standby bucket: ");
         pw.println(bucketName(standbyBucket));
+        if (standbyBucket > 0) {
+            pw.print(prefix); pw.print("Base heartbeat: ");
+            pw.println(baseHeartbeat);
+        }
+        if (whenStandbyDeferred != 0) {
+            pw.print(prefix); pw.print("  Deferred since: ");
+            TimeUtils.formatDuration(whenStandbyDeferred, elapsedRealtimeMillis, pw);
+            pw.println();
+        }
         pw.print(prefix); pw.print("Enqueue time: ");
         TimeUtils.formatDuration(enqueueTime, elapsedRealtimeMillis, pw);
         pw.println();

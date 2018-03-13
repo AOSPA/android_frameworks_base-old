@@ -90,9 +90,19 @@ public:
      * Binder call to let clients send a configuration and indicate they're interested when they
      * should requestData for this configuration.
      */
-    virtual Status addConfiguration(int64_t key, const vector <uint8_t>& config,
-                                    const String16& package, const String16& cls, bool* success)
-    override;
+    virtual Status addConfiguration(int64_t key, const vector<uint8_t>& config,
+                                    bool* success) override;
+
+    /**
+     * Binder call to let clients register the data fetch operation for a configuration.
+     */
+    virtual Status setDataFetchOperation(int64_t key, const sp<android::IBinder>& intentSender,
+                                         bool* success) override;
+
+    /**
+     * Binder call to remove the data fetch operation for the specified config key.
+     */
+    virtual Status removeDataFetchOperation(int64_t key, bool* success) override;
 
     /**
      * Binder call to allow clients to remove the specified configuration.
@@ -183,9 +193,10 @@ private:
     status_t cmd_write_data_to_disk(FILE* out);
 
     /**
-     * Write an AppHook event to the StatsLog buffer, as though StatsLog.write(APP_HOOK).
+     * Write an AppBreadcrumbReported event to the StatsLog buffer, as if calling
+     * StatsLog.write(APP_BREADCRUMB_REPORTED).
      */
-    status_t cmd_log_app_hook(FILE* out, const Vector<String8>& args);
+    status_t cmd_log_app_breadcrumb(FILE* out, const Vector<String8>& args);
 
     /**
      * Print contents of a pulled metrics source.
