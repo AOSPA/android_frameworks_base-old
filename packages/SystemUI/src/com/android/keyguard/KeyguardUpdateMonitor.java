@@ -1554,7 +1554,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(j).get();
             if (cb != null) {
                 cb.onRefreshCarrierInfo();
-                cb.onServiceStateChanged(subId, serviceState);
             }
         }
     }
@@ -1807,32 +1806,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
-    public boolean isOOS()
-    {
-        boolean ret = true;
-        int phoneCount = TelephonyManager.getDefault().getPhoneCount();
-
-        for (int phoneId = 0; phoneId < phoneCount; phoneId++) {
-            ServiceState state = mServiceStates.get(phoneId);
-            if (state != null) {
-                if (state.isEmergencyOnly())
-                    ret = false;
-                if ((state.getVoiceRegState() != ServiceState.STATE_OUT_OF_SERVICE)
-                        && (state.getVoiceRegState() != ServiceState.STATE_POWER_OFF))
-                    ret = false;
-                if (DEBUG) {
-                    Log.d(TAG, "phoneId: " + phoneId + ", is emergency: "
-                        + state.isEmergencyOnly() + ", voice state: "
-                            + state.getVoiceRegState());
-                }
-            } else {
-                if (DEBUG) Log.d(TAG, "phoneId: " + phoneId + ", state is NULL");
-            }
-        }
-
-        if (DEBUG) Log.d(TAG, "is Emergency supported: " + !ret);
-        return ret;
-    }
     private final TaskStackListener mTaskStackListener = new TaskStackListener() {
         @Override
         public void onTaskStackChangedBackground() {
