@@ -3039,7 +3039,10 @@ public class AudioService extends IAudioService.Stub
 
         // Only enable calls from system components
         if (Binder.getCallingUid() >= FIRST_APPLICATION_UID) {
-            mForcedUseForCommExt = on ? AudioSystem.FORCE_BT_SCO : AudioSystem.FORCE_NONE;
+            if (on)
+                mForcedUseForCommExt = AudioSystem.FORCE_BT_SCO;
+            else if (mForcedUseForCommExt == AudioSystem.FORCE_BT_SCO)
+                mForcedUseForCommExt = AudioSystem.FORCE_NONE;
             return;
         }
 
@@ -3574,6 +3577,15 @@ public class AudioService extends IAudioService.Stub
                             mScoAudioState == SCO_STATE_DEACTIVATE_EXT_REQ) {
                         boolean status = false;
                         if (mBluetoothHeadsetDevice != null) {
+                            // Get correct mScoAudioMode
+                            mScoAudioMode = new Integer(Settings.Global.getInt(
+                                                        mContentResolver,
+                                                        "bluetooth_sco_channel_"+
+                                                        mBluetoothHeadsetDevice.getAddress(),
+                                                        SCO_MODE_VIRTUAL_CALL));
+                            if (mScoAudioMode > SCO_MODE_MAX || mScoAudioMode < 0) {
+                                mScoAudioMode = SCO_MODE_VIRTUAL_CALL;
+                            }
                             switch (mScoAudioState) {
                             case SCO_STATE_ACTIVATE_REQ:
                                 mScoAudioState = SCO_STATE_ACTIVE_INTERNAL;
