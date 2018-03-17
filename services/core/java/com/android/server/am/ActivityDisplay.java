@@ -106,21 +106,21 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
 
     private DisplayWindowController mWindowContainerController;
 
+    @VisibleForTesting
     ActivityDisplay(ActivityStackSupervisor supervisor, int displayId) {
+        this(supervisor, supervisor.mDisplayManager.getDisplay(displayId));
+    }
+
+    ActivityDisplay(ActivityStackSupervisor supervisor, Display display) {
         mSupervisor = supervisor;
-        mDisplayId = displayId;
-        final Display display = supervisor.mDisplayManager.getDisplay(displayId);
-        if (display == null) {
-            throw new IllegalStateException("Display does not exist displayId=" + displayId);
-        }
+        mDisplayId = display.getDisplayId();
         mDisplay = display;
         mWindowContainerController = createWindowContainerController();
-
         updateBounds();
     }
 
     protected DisplayWindowController createWindowContainerController() {
-        return new DisplayWindowController(mDisplayId, this);
+        return new DisplayWindowController(mDisplay, this);
     }
 
     void updateBounds() {
@@ -664,6 +664,10 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         while (getChildCount() > 0) {
             final ActivityStack stack = getChildAt(0);
             if (destroyContentOnRemoval) {
+                // Override the stack configuration to make it equal to the current applied one, so
+                // that we don't accidentally report configuration change to activities that are
+                // going to be finished.
+                stack.onOverrideConfigurationChanged(stack.getConfiguration());
                 mSupervisor.moveStackToDisplayLocked(stack.mStackId, DEFAULT_DISPLAY,
                         false /* onTop */);
                 stack.finishAllActivitiesLocked(true /* immediately */);

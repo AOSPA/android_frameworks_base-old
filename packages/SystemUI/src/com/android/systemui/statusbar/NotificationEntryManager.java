@@ -124,6 +124,7 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
     protected boolean mUseHeadsUp = false;
     protected boolean mDisableNotificationAlerts;
     protected NotificationListContainer mListContainer;
+    private ExpandableNotificationRow.OnAppOpsClickListener mOnAppOpsClickListener;
 
     private final class NotificationClicker implements View.OnClickListener {
 
@@ -271,6 +272,7 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
         mDeviceProvisionedController.addCallback(mDeviceProvisionedListener);
 
         mHeadsUpObserver.onChange(true); // set up
+        mOnAppOpsClickListener = mGutsManager::openGuts;
     }
 
     public NotificationData getNotificationData() {
@@ -302,11 +304,7 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
             return true;
         }
 
-        if (mPowerManager.isInteractive()) {
-            return mNotificationData.shouldSuppressScreenOn(key);
-        } else {
-            return mNotificationData.shouldSuppressScreenOff(key);
-        }
+        return mNotificationData.shouldSuppressFullScreenIntent(key);
     }
 
     private void inflateViews(NotificationData.Entry entry, ViewGroup parent) {
@@ -360,6 +358,8 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
         if (ENABLE_REMOTE_INPUT) {
             row.setDescendantFocusability(ViewGroup.FOCUS_BEFORE_DESCENDANTS);
         }
+
+        row.setAppOpsOnClickListener(mOnAppOpsClickListener);
 
         mCallback.onBindRow(entry, pmUser, sbn, row);
     }
@@ -622,7 +622,7 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
         }
     }
 
-    private void updateNotification(NotificationData.Entry entry, PackageManager pmUser,
+    protected void updateNotification(NotificationData.Entry entry, PackageManager pmUser,
             StatusBarNotification sbn, ExpandableNotificationRow row) {
         row.setNeedsRedaction(mLockscreenUserManager.needsRedaction(entry));
         boolean isLowPriority = mNotificationData.isAmbient(sbn.getKey());
@@ -845,12 +845,13 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
             return false;
         }
 
-        if (!mPresenter.isDozing() && mNotificationData.shouldSuppressScreenOn(sbn.getKey())) {
+        if (!mPresenter.isDozing() && mNotificationData.shouldSuppressPeek(sbn.getKey())) {
             if (DEBUG) Log.d(TAG, "No peeking: suppressed by DND: " + sbn.getKey());
             return false;
         }
 
-        if (mPresenter.isDozing() && mNotificationData.shouldSuppressScreenOff(sbn.getKey())) {
+        // Peeking triggers an ambient display pulse, so disable peek is ambient is active
+        if (mPresenter.isDozing() && mNotificationData.shouldSuppressAmbient(sbn.getKey())) {
             if (DEBUG) Log.d(TAG, "No peeking: suppressed by DND: " + sbn.getKey());
             return false;
         }

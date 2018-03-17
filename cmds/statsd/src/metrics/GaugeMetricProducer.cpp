@@ -83,6 +83,7 @@ GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric
     // TODO: use UidMap if uid->pkg_name is required
     if (metric.has_dimensions_in_what()) {
         translateFieldMatcher(metric.dimensions_in_what(), &mDimensionsInWhat);
+        mContainANYPositionInDimensionsInWhat = HasPositionANY(metric.dimensions_in_what());
     }
 
     if (metric.has_dimensions_in_condition()) {
@@ -135,23 +136,23 @@ void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
     }
 
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)mMetricId);
-    long long protoToken = protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_ID_GAUGE_METRICS);
+    uint64_t protoToken = protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_ID_GAUGE_METRICS);
 
     for (const auto& pair : mPastBuckets) {
         const MetricDimensionKey& dimensionKey = pair.first;
 
-        VLOG("  dimension key %s", dimensionKey.c_str());
-        long long wrapperToken =
+        VLOG("  dimension key %s", dimensionKey.toString().c_str());
+        uint64_t wrapperToken =
                 protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_DATA);
 
         // First fill dimension.
-        long long dimensionToken = protoOutput->start(
+        uint64_t dimensionToken = protoOutput->start(
                 FIELD_TYPE_MESSAGE | FIELD_ID_DIMENSION_IN_WHAT);
         writeDimensionToProto(dimensionKey.getDimensionKeyInWhat(), protoOutput);
         protoOutput->end(dimensionToken);
 
         if (dimensionKey.hasDimensionKeyInCondition()) {
-            long long dimensionInConditionToken = protoOutput->start(
+            uint64_t dimensionInConditionToken = protoOutput->start(
                     FIELD_TYPE_MESSAGE | FIELD_ID_DIMENSION_IN_CONDITION);
             writeDimensionToProto(dimensionKey.getDimensionKeyInCondition(), protoOutput);
             protoOutput->end(dimensionInConditionToken);
@@ -159,7 +160,7 @@ void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
 
         // Then fill bucket_info (GaugeBucketInfo).
         for (const auto& bucket : pair.second) {
-            long long bucketInfoToken = protoOutput->start(
+            uint64_t bucketInfoToken = protoOutput->start(
                     FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_BUCKET_INFO);
             protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_START_BUCKET_ELAPSED_NANOS,
                                (long long)bucket.mBucketStartNs);
@@ -167,7 +168,7 @@ void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
                                (long long)bucket.mBucketEndNs);
 
             if (!bucket.mGaugeAtoms.empty()) {
-                long long atomsToken =
+                uint64_t atomsToken =
                     protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_ATOM);
                 for (const auto& atom : bucket.mGaugeAtoms) {
                     writeFieldValueTreeToStream(mTagId, *(atom.mFields), protoOutput);
@@ -283,7 +284,7 @@ bool GaugeMetricProducer::hitGuardRailLocked(const MetricDimensionKey& newKey) {
         // 2. Don't add more tuples, we are above the allowed threshold. Drop the data.
         if (newTupleCount > StatsdStats::kDimensionKeySizeHardLimit) {
             ALOGE("GaugeMetric %lld dropping data for dimension key %s",
-                (long long)mMetricId, newKey.c_str());
+                (long long)mMetricId, newKey.toString().c_str());
             return true;
         }
     }
@@ -398,7 +399,8 @@ void GaugeMetricProducer::flushCurrentBucketLocked(const uint64_t& eventTimeNs) 
         info.mGaugeAtoms = slice.second;
         auto& bucketList = mPastBuckets[slice.first];
         bucketList.push_back(info);
-        VLOG("gauge metric %lld, dump key value: %s", (long long)mMetricId, slice.first.c_str());
+        VLOG("gauge metric %lld, dump key value: %s", (long long)mMetricId,
+             slice.first.toString().c_str());
     }
 
     // If we have anomaly trackers, we need to update the partial bucket values.

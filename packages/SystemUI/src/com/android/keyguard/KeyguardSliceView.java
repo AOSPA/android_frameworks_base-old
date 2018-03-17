@@ -72,6 +72,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
     private int mIconSize;
     private Consumer<Boolean> mListener;
     private boolean mHasHeader;
+    private boolean mHideContent;
 
     public KeyguardSliceView(Context context) {
         this(context, null, 0);
@@ -179,7 +180,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
                         / (float) iconDrawable.getIntrinsicHeight() * mIconSize);
                 iconDrawable.setBounds(0, 0, Math.max(width, 1), mIconSize);
             }
-            button.setCompoundDrawablesRelative(iconDrawable, null, null, null);
+            button.setCompoundDrawables(iconDrawable, null, null, null);
             button.setOnClickListener(this);
         }
 
@@ -192,12 +193,16 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
             }
         }
 
-        final int visibility = mHasHeader || subItemsCount > 0 ? VISIBLE : GONE;
+        updateVisibility();
+        mListener.accept(mHasHeader);
+    }
+
+    private void updateVisibility() {
+        final boolean hasContent = mHasHeader || mRow.getChildCount() > 0;
+        final int visibility = hasContent && !mHideContent ? VISIBLE : GONE;
         if (visibility != getVisibility()) {
             setVisibility(visibility);
         }
-
-        mListener.accept(mHasHeader);
     }
 
     /**
@@ -321,6 +326,42 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         updateTextColors();
     }
 
+    public void setHideContent(boolean hideContent) {
+        mHideContent = hideContent;
+        updateVisibility();
+    }
+
+    public static class Row extends LinearLayout {
+
+        public Row(Context context) {
+            super(context);
+        }
+
+        public Row(Context context, AttributeSet attrs) {
+            super(context, attrs);
+        }
+
+        public Row(Context context, AttributeSet attrs, int defStyleAttr) {
+            super(context, attrs, defStyleAttr);
+        }
+
+        public Row(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+            super(context, attrs, defStyleAttr, defStyleRes);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int width = MeasureSpec.getSize(widthMeasureSpec);
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child instanceof KeyguardSliceButton) {
+                    ((KeyguardSliceButton) child).setMaxWidth(width / 2);
+                }
+            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        }
+    }
+
     /**
      * Representation of an item that appears under the clock on main keyguard message.
      */
@@ -334,9 +375,30 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
             setPadding(horizontalPadding / 2, 0, horizontalPadding / 2, 0);
             setCompoundDrawablePadding((int) context.getResources()
                     .getDimension(R.dimen.widget_icon_padding));
-            setMaxWidth(KeyguardSliceView.this.getWidth() / 2);
             setMaxLines(1);
             setEllipsize(TruncateAt.END);
+        }
+
+        @Override
+        public void setTextColor(int color) {
+            super.setTextColor(color);
+            updateDrawableColors();
+        }
+
+        @Override
+        public void setCompoundDrawables(Drawable left, Drawable top, Drawable right,
+                Drawable bottom) {
+            super.setCompoundDrawables(left, top, right, bottom);
+            updateDrawableColors();
+        }
+
+        private void updateDrawableColors() {
+            final int color = getCurrentTextColor();
+            for (Drawable drawable : getCompoundDrawables()) {
+                if (drawable != null) {
+                    drawable.setTint(color);
+                }
+            }
         }
     }
 }

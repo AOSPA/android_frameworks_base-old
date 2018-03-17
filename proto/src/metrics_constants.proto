@@ -5369,6 +5369,137 @@ message MetricsEvent {
     // OS: P
     FIELD_DEVICE_ROTATION = 1329;
 
+    // OPEN: TV Settings > Inputs > Input Options
+    // CATEGORY: SETTINGS
+    // OS: P
+    SETTINGS_TV_INPUT_OPTIONS_CATEGORY = 1330;
+
+    // OPEN: TV Settings > Network & Internet > Add known WIFI network
+    // CATEGORY: SETTINGS
+    // OS: P
+    SETTINGS_TV_WIFI_ADD_KNOWN_CATEGORY = 1331;
+
+    // ACTION: DND Settings > What to block > full screen intents
+    //   SUBTYPE: false is allowed, true is blocked
+    // CATEGORY: SETTINGS
+    // OS: 6.0
+    ACTION_ZEN_BLOCK_FULL_SCREEN_INTENTS = 1332;
+
+    // ACTION: DND Settings > What to block
+    //   SUBTYPE: false is allowed, true is blocked
+    // OS: P
+    ACTION_ZEN_BLOCK_LIGHT = 1333;
+
+    // ACTION: DND Settings > What to block
+    //   SUBTYPE: false is allowed, true is blocked
+    // OS: P
+    ACTION_ZEN_BLOCK_PEEK = 1334;
+
+    // ACTION: DND Settings > What to block
+    //   SUBTYPE: false is allowed, true is blocked
+    // OS: P
+    ACTION_ZEN_BLOCK_STATUS = 1335;
+
+    // ACTION: DND Settings > What to block
+    //   SUBTYPE: false is allowed, true is blocked
+    // OS: P
+    ACTION_ZEN_BLOCK_BADGE = 1336;
+
+    // ACTION: DND Settings > What to block
+    //   SUBTYPE: false is allowed, true is blocked
+    // OS: P
+    ACTION_ZEN_BLOCK_AMBIENT = 1337;
+
+    // ACTION: DND Settings > What to block
+    //   SUBTYPE: false is allowed, true is blocked
+    // OS: P
+    ACTION_ZEN_BLOCK_NOTIFICATION_LIST = 1338;
+
+    // OPEN: DND Settings > What to block
+    // OS: P
+    ZEN_WHAT_TO_BLOCK = 1339;
+
+    // ACTION: DND Settings > Priority only allows > System toggle
+    // SUBTYPE: 0 is off, 1 is on
+    // CATEGORY: SETTINGS
+    // OS: P
+    ACTION_ZEN_ALLOW_SYSTEM = 1340;
+
+    // OPEN: Settings > Sounds > Do Not Disturb > Duration
+    // CATEGORY: SETTINGS
+    // OS: P
+    NOTIFICATION_ZEN_MODE_DURATION_DIALOG = 1341;
+
+    // OPEN: Settings > Sound & notification > Do Not Disturb > Duration -> Time Option (ie: for one hour)
+    // CATEGORY: SETTINGS
+    // OS: P
+    NOTIFICATION_ZEN_MODE_DURATION_TIME = 1342;
+
+    // OPEN: Settings > Sound & notification > Do Not Disturb > Duration -> Until you turn off
+    // CATEGORY: SETTINGS
+    // OS: P
+    NOTIFICATION_ZEN_MODE_DURATION_FOREVER = 1343;
+
+    // OPEN: Settings > Sound & notification > Do Not Disturb > Duration -> Ask every time
+    // CATEGORY: SETTINGS
+    // OS: P
+    NOTIFICATION_ZEN_MODE_DURATION_PROMPT = 1344;
+
+    // Notification Guts, active app ops variant
+    // OS: P
+    APP_OPS_GUTS = 1345;
+
+    // ACTION: Notification Guts, active app ops variant > Settings button
+    // OS: P
+    ACTION_OPS_GUTS_SETTINGS = 1346;
+
+    // ACTION: Settings > Battery settings > Battery tip > App restriction tip
+    // OS: P
+    ACTION_APP_RESTRICTION_TIP = 1347;
+
+    // ACTION: Settings > Battery settings > Battery tip > High usage tip
+    // OS: P
+    ACTION_HIGH_USAGE_TIP = 1348;
+
+    // ACTION: Settings > Battery settings > Battery tip > Summary tip
+    // OS: P
+    ACTION_SUMMARY_TIP = 1349;
+
+    // ACTION: Settings > Battery settings > Battery tip > Smart battery tip
+    // OS: P
+    ACTION_SMART_BATTERY_TIP = 1350;
+
+    // ACTION: Settings > Battery settings > Battery tip > Early warning tip
+    // OS: P
+    ACTION_EARLY_WARNING_TIP = 1351;
+
+    // ACTION: Settings > Battery settings > Battery tip > Low battery tip
+    // OS: P
+    ACTION_LOW_BATTERY_TIP = 1352;
+
+    // ACTION: Settings > Battery settings > Battery tip > App restriction list shown
+    // OS: P
+    ACTION_APP_RESTRICTION_TIP_LIST = 1353;
+
+    // ACTION: Settings > Battery settings > Battery tip > High usage list shown
+    // OS: P
+    ACTION_HIGH_USAGE_TIP_LIST = 1354;
+
+    // OPEN: Settings > Date & time > Select time zone -> Region
+    // CATEGORY: SETTINGS
+    // OS: P
+    SETTINGS_ZONE_PICKER_REGION = 1355;
+
+    // OPEN: Settings > Date & time > Select time zone -> Time Zone
+    // CATEGORY: SETTINGS
+    // OS: P
+    SETTINGS_ZONE_PICKER_TIME_ZONE = 1356;
+
+    // OPEN: Settings > Date & time > Select time zone -> Select UTC Offset
+    // CATEGORY: SETTINGS
+    // OS: P
+    SETTINGS_ZONE_PICKER_FIXED_OFFSET = 1357;
+
     // ---- End P Constants, all P constants go above this line ----
     // Add new aosp constants above this line.
     // END OF AOSP CONSTANTS

@@ -152,6 +152,11 @@ package android.graphics {
     method public deprecated boolean clipRegion(android.graphics.Region);
   }
 
+  public final class ImageDecoder implements java.lang.AutoCloseable {
+    method public deprecated boolean getAsAlphaMask();
+    method public deprecated android.graphics.ImageDecoder setAsAlphaMask(boolean);
+  }
+
   public deprecated class LayerRasterizer extends android.graphics.Rasterizer {
     ctor public LayerRasterizer();
     method public void addLayer(android.graphics.Paint, float, float);
@@ -169,6 +174,16 @@ package android.graphics {
 
   public class Rasterizer {
     ctor public Rasterizer();
+  }
+
+}
+
+package android.graphics.drawable {
+
+  public class AnimatedImageDrawable extends android.graphics.drawable.Drawable implements android.graphics.drawable.Animatable2 {
+    method public deprecated int getLoopCount(int);
+    method public deprecated void setLoopCount(int);
+    field public static final deprecated int LOOP_INFINITE = -1; // 0xffffffff
   }
 
 }

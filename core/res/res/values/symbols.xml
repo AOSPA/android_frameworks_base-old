@@ -1421,6 +1421,7 @@
   <java-symbol type="layout" name="action_menu_layout" />
   <java-symbol type="layout" name="action_mode_close_item" />
   <java-symbol type="layout" name="alert_dialog" />
+  <java-symbol type="layout" name="cascading_menu_item_layout" />
   <java-symbol type="layout" name="choose_account" />
   <java-symbol type="layout" name="choose_account_row" />
   <java-symbol type="layout" name="choose_account_type" />
@@ -2457,6 +2458,7 @@
   <java-symbol type="bool" name="config_defaultWindowFeatureOptionsPanel" />
   <java-symbol type="bool" name="config_defaultWindowFeatureContextMenu" />
   <java-symbol type="bool" name="config_overrideRemoteViewsActivityTransition" />
+  <java-symbol type="attr" name="colorProgressBackgroundNormal" />
 
   <java-symbol type="layout" name="simple_account_item" />
   <java-symbol type="string" name="prohibit_manual_network_selection_in_gobal_mode" />
@@ -3289,5 +3291,7 @@
 
   <java-symbol type="string" name="zen_upgrade_notification_title" />
   <java-symbol type="string" name="zen_upgrade_notification_content" />
+
+  <java-symbol type="string" name="config_managed_provisioning_package" />
 
 </resources>

@@ -26,6 +26,8 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECOND
 
 import static com.android.server.am.ActivityStack.ActivityState.DESTROYED;
 import static com.android.server.am.ActivityStack.ActivityState.DESTROYING;
+import static com.android.server.am.ActivityStack.ActivityState.PAUSING;
+import static com.android.server.am.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.am.ActivityStack.REMOVE_TASK_MODE_DESTROYING;
 
 import static org.junit.Assert.assertEquals;
@@ -99,7 +101,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         // Simulate the a resumed activity set during
         // {@link ActivityStack#resumeTopActivityUncheckedLocked}.
         mSupervisor.inResumeTopActivity = true;
-        mStack.mResumedActivity = r;
+        r.setState(RESUMED, "testNoPauseDuringResumeTopActivity");
 
         final boolean waiting = mStack.goToSleepIfPossible(false);
 
@@ -107,7 +109,18 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertFalse(waiting);
 
         // Make sure the resumed activity is untouched.
-        assertEquals(mStack.mResumedActivity, r);
+        assertEquals(mStack.getResumedActivity(), r);
+    }
+
+    @Test
+    public void testResumedActivity() throws Exception {
+        final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
+        assertEquals(mStack.getResumedActivity(), null);
+        r.setState(RESUMED, "testResumedActivity");
+        assertEquals(mStack.getResumedActivity(), r);
+        r.setState(PAUSING, "testResumedActivity");
+        assertEquals(mStack.getResumedActivity(), null);
+
     }
 
     @Test
@@ -485,5 +498,46 @@ public class ActivityStackTests extends ActivityTestsBase {
         mStack.destroyActivityLocked(r, true, "second invocation");
         verify(lifecycleManager, times(1)).scheduleTransaction(eq(app.thread),
                 eq(r.appToken), any(DestroyActivityItem.class));
+    }
+
+    @Test
+    public void testFinishDisabledPackageActivities() throws Exception {
+        final ActivityRecord firstActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord secondActivity = new ActivityBuilder(mService).setTask(mTask).build();
+
+        // Making the second activity a task overlay without an app means it will be removed from
+        // the task's activities as well once first activity is removed.
+        secondActivity.mTaskOverlay = true;
+        secondActivity.app = null;
+
+        assertEquals(mTask.mActivities.size(), 2);
+
+        mStack.finishDisabledPackageActivitiesLocked(firstActivity.packageName, null,
+                true /* doit */, true /* evenPersistent */, UserHandle.USER_ALL);
+
+        assertTrue(mTask.mActivities.isEmpty());
+        assertTrue(mStack.getAllTasks().isEmpty());
+    }
+
+    @Test
+    public void testHandleAppDied() throws Exception {
+        final ActivityRecord firstActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        final ActivityRecord secondActivity = new ActivityBuilder(mService).setTask(mTask).build();
+
+        // Making the first activity a task overlay means it will be removed from the task's
+        // activities as well once second activity is removed as handleAppDied processes the
+        // activity list in reverse.
+        firstActivity.mTaskOverlay = true;
+        firstActivity.app = null;
+
+        // second activity will be immediately removed as it has no state.
+        secondActivity.haveState = false;
+
+        assertEquals(mTask.mActivities.size(), 2);
+
+        mStack.handleAppDiedLocked(secondActivity.app);
+
+        assertTrue(mTask.mActivities.isEmpty());
+        assertTrue(mStack.getAllTasks().isEmpty());
     }
 }

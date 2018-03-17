@@ -176,7 +176,6 @@ import android.content.pm.PackageParser.PackageLite;
 import android.content.pm.PackageParser.PackageParserException;
 import android.content.pm.PackageParser.ParseFlags;
 import android.content.pm.PackageParser.ServiceIntentInfo;
-import android.content.pm.PackageParser.SigningDetails;
 import android.content.pm.PackageParser.SigningDetails.SignatureSchemeVersion;
 import android.content.pm.PackageStats;
 import android.content.pm.PackageUserState;
@@ -3396,6 +3395,13 @@ public class PackageManagerService extends IPackageManager.Stub
         // "/data/system/package_cache/1"
         File cacheDir = FileUtils.createDir(cacheBaseDir, PACKAGE_PARSER_CACHE_VERSION);
 
+        if (cacheDir == null) {
+            // Something went wrong. Attempt to delete everything and return.
+            Slog.wtf(TAG, "Cache directory cannot be created - wiping base dir " + cacheBaseDir);
+            FileUtils.deleteContentsAndDir(cacheBaseDir);
+            return null;
+        }
+
         // The following is a workaround to aid development on non-numbered userdebug
         // builds or cases where "adb sync" is used on userdebug builds. If we detect that
         // the system partition is newer.
@@ -4120,8 +4126,15 @@ public class PackageManagerService extends IPackageManager.Stub
             return false;
         }
         if (callerIsInstantApp) {
-            // request for a specific component; if it hasn't been explicitly exposed, filter
+            // request for a specific component; if it hasn't been explicitly exposed through
+            // property or instrumentation target, filter
             if (component != null) {
+                final PackageParser.Instrumentation instrumentation =
+                        mInstrumentation.get(component);
+                if (instrumentation != null
+                        && isCallerSameApp(instrumentation.info.targetPackage, callingUid)) {
+                    return false;
+                }
                 return !isComponentVisibleToInstantApp(component, componentType);
             }
             // request for application; if no components have been explicitly exposed, filter
@@ -23357,39 +23370,6 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
                 int flagValues, int userId) {
             PackageManagerService.this.updatePermissionFlags(
                     permName, packageName, flagMask, flagValues, userId);
-        }
-
-        @Override
-        public boolean isDataRestoreSafe(byte[] restoringFromSigHash, String packageName) {
-            SigningDetails sd = getSigningDetails(packageName);
-            if (sd == null) {
-                return false;
-            }
-            return sd.hasSha256Certificate(restoringFromSigHash,
-                    SigningDetails.CertCapabilities.INSTALLED_DATA);
-        }
-
-        @Override
-        public boolean isDataRestoreSafe(Signature restoringFromSig, String packageName) {
-            SigningDetails sd = getSigningDetails(packageName);
-            if (sd == null) {
-                return false;
-            }
-            return sd.hasCertificate(restoringFromSig,
-                    SigningDetails.CertCapabilities.INSTALLED_DATA);
-        }
-
-        private SigningDetails getSigningDetails(String packageName) {
-            synchronized (mPackages) {
-                if (packageName == null) {
-                    return null;
-                }
-                PackageParser.Package p = mPackages.get(packageName);
-                if (p == null) {
-                    return null;
-                }
-                return p.mSigningDetails;
-            }
         }
 
         @Override

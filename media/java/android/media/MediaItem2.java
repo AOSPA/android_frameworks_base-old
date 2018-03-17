@@ -70,7 +70,6 @@ public class MediaItem2 {
      * @return a new bundle instance
      */
     public Bundle toBundle() {
-        // TODO(jaewan): Fill here when we rebase.
         return mProvider.toBundle_impl();
     }
 
@@ -140,6 +139,13 @@ public class MediaItem2 {
         return mProvider.getDataSourceDesc_impl();
     }
 
+    @Override
+    public boolean equals(Object obj) {
+        // TODO(jaewan): Override this. MediaItem2 may have auto-generated srcId when the DSD isn't
+        //               set, and it should be compared for the equals.
+        return super.equals(obj);
+    }
+
     /**
      * Build {@link MediaItem2}
      */
@@ -190,12 +196,12 @@ public class MediaItem2 {
         }
 
         /**
-         * Set the data source descriptor for this instance. Should not be {@code null}.
+         * Set the data source descriptor for this instance. {@code null} for unset.
          *
          * @param dataSourceDesc data source descriptor
          * @return this instance for chaining
          */
-        public Builder setDataSourceDesc(@NonNull DataSourceDesc dataSourceDesc) {
+        public Builder setDataSourceDesc(@Nullable DataSourceDesc dataSourceDesc) {
             return mProvider.setDataSourceDesc_impl(dataSourceDesc);
         }
 

@@ -177,11 +177,6 @@ private:
     /**
      * Print the event log.
      */
-    status_t cmd_print_stats_log(FILE* out, const Vector<String8>& args);
-
-    /**
-     * Print the event log.
-     */
     status_t cmd_dump_report(FILE* out, FILE* err, const Vector<String8>& args);
 
     /**
@@ -215,10 +210,10 @@ private:
      */
     status_t cmd_dump_memory_info(FILE* out);
 
-  /*
+    /*
      * Clear all puller cached data
      */
-  status_t cmd_clear_puller_cache(FILE* out);
+    status_t cmd_clear_puller_cache(FILE* out);
 
     /**
      * Update a configuration.

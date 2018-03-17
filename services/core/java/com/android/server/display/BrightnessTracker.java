@@ -69,6 +69,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.Map;
@@ -333,8 +334,16 @@ public class BrightnessTracker {
 
         try {
             final ActivityManager.StackInfo focusedStack = mInjector.getFocusedStack();
-            builder.setUserId(focusedStack.userId);
-            builder.setPackageName(focusedStack.topActivity.getPackageName());
+            if (focusedStack != null && focusedStack.topActivity != null) {
+                builder.setUserId(focusedStack.userId);
+                builder.setPackageName(focusedStack.topActivity.getPackageName());
+            } else {
+                // Ignore the event because we can't determine user / package.
+                if (DEBUG) {
+                    Slog.d(TAG, "Ignoring event due to null focusedStack.");
+                }
+                return;
+            }
         } catch (RemoteException e) {
             // Really shouldn't be possible.
             return;
@@ -649,7 +658,10 @@ public class BrightnessTracker {
     }
 
     public ParceledListSlice<AmbientBrightnessDayStats> getAmbientBrightnessStats(int userId) {
-        return new ParceledListSlice<>(mAmbientBrightnessStatsTracker.getUserStats(userId));
+        ArrayList<AmbientBrightnessDayStats> stats = mAmbientBrightnessStatsTracker.getUserStats(
+                userId);
+        return (stats != null) ? new ParceledListSlice<>(stats) : new ParceledListSlice<>(
+                Collections.EMPTY_LIST);
     }
 
     // Not allowed to keep the SensorEvent so used to copy the data we care about.

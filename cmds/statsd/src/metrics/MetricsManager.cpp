@@ -103,7 +103,9 @@ MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
     // no matter whether this config is valid, log it in the stats.
     StatsdStats::getInstance().noteConfigReceived(key, mAllMetricProducers.size(),
                                                   mAllConditionTrackers.size(),
-                                                  mAllAtomMatchers.size(), 0, mConfigValid);
+                                                  mAllAtomMatchers.size(),
+                                                  mAllAnomalyTrackers.size(),
+                                                  mConfigValid);
 }
 
 MetricsManager::~MetricsManager() {
@@ -184,7 +186,7 @@ void MetricsManager::onDumpReport(const uint64_t dumpTimeStampNs, ProtoOutputStr
     // one StatsLogReport per MetricProduer
     for (const auto& producer : mAllMetricProducers) {
         if (mNoReportMetricIds.find(producer->getMetricId()) == mNoReportMetricIds.end()) {
-            long long token =
+            uint64_t token =
                     protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_METRICS);
             producer->onDumpReport(dumpTimeStampNs, protoOutput);
             protoOutput->end(token);

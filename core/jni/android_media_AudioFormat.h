@@ -85,7 +85,7 @@ static inline audio_format_t audioFormatToNative(int audioFormat)
     case ENCODING_AAC_ELD:
         return AUDIO_FORMAT_AAC_ELD;
     case ENCODING_AAC_XHE:
-        return AUDIO_FORMAT_AAC; // FIXME temporary value, needs addition of xHE-AAC
+        return AUDIO_FORMAT_AAC_XHE;
     case ENCODING_AC4:
         return AUDIO_FORMAT_AC4;
     // case ENCODING_E_AC3_JOC:  // FIXME Not defined on the native side yet
@@ -102,6 +102,8 @@ static inline audio_format_t audioFormatToNative(int audioFormat)
         return AUDIO_FORMAT_EVRCWB;
     case ENCODING_EVRC_NW:
         return AUDIO_FORMAT_EVRCNW;
+    case ENCODING_E_AC3_JOC:
+        return AUDIO_FORMAT_E_AC3_JOC;
     case ENCODING_DEFAULT:
         return AUDIO_FORMAT_DEFAULT;
     default:
@@ -166,6 +168,8 @@ static inline int audioFormatFromNative(audio_format_t nativeFormat)
         return ENCODING_EVRC_WB;
     case AUDIO_FORMAT_EVRCNW:
         return ENCODING_EVRC_NW;
+    case AUDIO_FORMAT_E_AC3_JOC:
+        return ENCODING_E_AC3_JOC;
     case AUDIO_FORMAT_DEFAULT:
         return ENCODING_DEFAULT;
     default:
