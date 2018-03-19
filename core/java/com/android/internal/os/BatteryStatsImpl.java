@@ -7872,12 +7872,10 @@ public class BatteryStatsImpl extends BatteryStats {
                 return;
             }
             final int deferredCount = mJobsDeferredCount.getCountLocked(which);
-            final long averageLatency = deferredEventCount != 0
-                    ? mJobsFreshnessTimeMs.getCountLocked(which) / deferredEventCount
-                    : 0L;
+            final long totalLatency = mJobsFreshnessTimeMs.getCountLocked(which);
             sb.append(deferredEventCount); sb.append(',');
             sb.append(deferredCount); sb.append(',');
-            sb.append(averageLatency);
+            sb.append(totalLatency);
             for (int i = 0; i < JOB_FRESHNESS_BUCKETS.length; i++) {
                 if (mJobsFreshnessBuckets[i] == null) {
                     sb.append(",0");
@@ -7896,12 +7894,10 @@ public class BatteryStatsImpl extends BatteryStats {
                 return;
             }
             final int deferredCount = mJobsDeferredCount.getCountLocked(which);
-            final long averageLatency = deferredEventCount != 0
-                    ? mJobsFreshnessTimeMs.getCountLocked(which) / deferredEventCount
-                    : 0L;
+            final long totalLatency = mJobsFreshnessTimeMs.getCountLocked(which);
             sb.append("times="); sb.append(deferredEventCount); sb.append(", ");
             sb.append("count="); sb.append(deferredCount); sb.append(", ");
-            sb.append("avgLatency="); sb.append(averageLatency); sb.append(", ");
+            sb.append("totalLatencyMs="); sb.append(totalLatency); sb.append(", ");
             for (int i = 0; i < JOB_FRESHNESS_BUCKETS.length; i++) {
                 sb.append("<"); sb.append(JOB_FRESHNESS_BUCKETS[i]); sb.append("ms=");
                 if (mJobsFreshnessBuckets[i] == null) {
@@ -11597,7 +11593,7 @@ public class BatteryStatsImpl extends BatteryStats {
      * time at the highest power level.
      * @param activityInfo
      */
-    private void addModemTxPowerToHistory(final ModemActivityInfo activityInfo) {
+    private synchronized void addModemTxPowerToHistory(final ModemActivityInfo activityInfo) {
         if (activityInfo == null) {
             return;
         }
@@ -12606,7 +12602,7 @@ public class BatteryStatsImpl extends BatteryStats {
         temp = Math.max(0, temp);
 
         reportChangesToStatsLog(mHaveBatteryLevel ? mHistoryCur : null,
-                status, plugType, level, temp);
+                status, plugType, level);
 
         final boolean onBattery = isOnBattery(plugType, status);
         final long uptime = mClocks.uptimeMillis();
@@ -12805,7 +12801,7 @@ public class BatteryStatsImpl extends BatteryStats {
     // Inform StatsLog of setBatteryState changes.
     // If this is the first reporting, pass in recentPast == null.
     private void reportChangesToStatsLog(HistoryItem recentPast,
-            final int status, final int plugType, final int level, final int temp) {
+            final int status, final int plugType, final int level) {
 
         if (recentPast == null || recentPast.batteryStatus != status) {
             StatsLog.write(StatsLog.CHARGING_STATE_CHANGED, status);
@@ -12816,8 +12812,6 @@ public class BatteryStatsImpl extends BatteryStats {
         if (recentPast == null || recentPast.batteryLevel != level) {
             StatsLog.write(StatsLog.BATTERY_LEVEL_CHANGED, level);
         }
-        // Let's just always print the temperature, regardless of whether it changed.
-        StatsLog.write(StatsLog.DEVICE_TEMPERATURE_REPORTED, temp);
     }
 
     public long getAwakeTimeBattery() {
@@ -13350,7 +13344,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
         private static final boolean DEFAULT_TRACK_CPU_TIMES_BY_PROC_STATE = true;
         private static final boolean DEFAULT_TRACK_CPU_ACTIVE_CLUSTER_TIME = true;
-        private static final boolean DEFAULT_READ_BINARY_CPU_TIME = false;
+        private static final boolean DEFAULT_READ_BINARY_CPU_TIME = true;
         private static final long DEFAULT_PROC_STATE_CPU_TIMES_READ_DELAY_MS = 5_000;
         private static final long DEFAULT_KERNEL_UID_READERS_THROTTLE_TIME = 10_000;
 
@@ -13438,6 +13432,7 @@ public class BatteryStatsImpl extends BatteryStats {
         private void updateKernelUidReadersThrottleTime(long oldTimeMs, long newTimeMs) {
             KERNEL_UID_READERS_THROTTLE_TIME = newTimeMs;
             if (oldTimeMs != newTimeMs) {
+                mKernelUidCpuTimeReader.setThrottleInterval(KERNEL_UID_READERS_THROTTLE_TIME);
                 mKernelUidCpuFreqTimeReader.setThrottleInterval(KERNEL_UID_READERS_THROTTLE_TIME);
                 mKernelUidCpuActiveTimeReader.setThrottleInterval(KERNEL_UID_READERS_THROTTLE_TIME);
                 mKernelUidCpuClusterTimeReader

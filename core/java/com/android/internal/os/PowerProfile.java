@@ -38,17 +38,12 @@ import java.util.HashMap;
  */
 public class PowerProfile {
 
-    /**
-     * No power consumption, or accounted for elsewhere.
-     */
-    public static final String POWER_NONE = "none";
-
-    /**
+    /*
      * POWER_CPU_SUSPEND: Power consumption when CPU is in power collapse mode.
      * POWER_CPU_IDLE: Power consumption when CPU is awake (when a wake lock is held). This should
      *                 be zero on devices that can go into full CPU power collapse even when a wake
      *                 lock is held. Otherwise, this is the power consumption in addition to
-     *                 POWER_CPU_SUSPEND due to a wake lock being held but with no CPU activity.
+     * POWER_CPU_SUSPEND due to a wake lock being held but with no CPU activity.
      * POWER_CPU_ACTIVE: Power consumption when CPU is running, excluding power consumed by clusters
      *                   and cores.
      *
@@ -84,7 +79,6 @@ public class PowerProfile {
     // Updated power constants. These are not estimated, they are real world
     // currents and voltages for the underlying bluetooth and wifi controllers.
     //
-
     public static final String POWER_WIFI_CONTROLLER_IDLE = "wifi.controller.idle";
     public static final String POWER_WIFI_CONTROLLER_RX = "wifi.controller.rx";
     public static final String POWER_WIFI_CONTROLLER_TX = "wifi.controller.tx";
@@ -104,7 +98,7 @@ public class PowerProfile {
     public static final String POWER_MODEM_CONTROLLER_OPERATING_VOLTAGE =
             "modem.controller.voltage";
 
-     /**
+    /**
      * Power consumption when GPS is on.
      */
     public static final String POWER_GPS_ON = "gps.on";
@@ -117,6 +111,7 @@ public class PowerProfile {
 
     /**
      * Power consumption when Bluetooth driver is on.
+     *
      * @deprecated
      */
     @Deprecated
@@ -124,6 +119,7 @@ public class PowerProfile {
 
     /**
      * Power consumption when Bluetooth driver is transmitting/receiving.
+     *
      * @deprecated
      */
     @Deprecated
@@ -131,11 +127,16 @@ public class PowerProfile {
 
     /**
      * Power consumption when Bluetooth driver gets an AT command.
+     *
      * @deprecated
      */
     @Deprecated
     public static final String POWER_BLUETOOTH_AT_CMD = "bluetooth.at";
 
+    /**
+     * Power consumption when screen is in doze/ambient/always-on mode, including backlight power.
+     */
+    public static final String POWER_AMBIENT_DISPLAY = "ambient.on";
 
     /**
      * Power consumption when screen is on, not including the backlight power.
@@ -167,13 +168,13 @@ public class PowerProfile {
      * Power consumed by the audio hardware when playing back audio content. This is in addition
      * to the CPU power, probably due to a DSP and / or amplifier.
      */
-    public static final String POWER_AUDIO = "dsp.audio";
+    public static final String POWER_AUDIO = "audio";
 
     /**
      * Power consumed by any media hardware when playing back video content. This is in addition
      * to the CPU power, probably due to a DSP.
      */
-    public static final String POWER_VIDEO = "dsp.video";
+    public static final String POWER_VIDEO = "video";
 
     /**
      * Average power consumption when camera flashlight is on.
@@ -405,6 +406,7 @@ public class PowerProfile {
     /**
      * Returns the number of memory bandwidth buckets defined in power_profile.xml, or a
      * default value if the subsystem has no recorded value.
+     *
      * @return the number of memory bandwidth buckets.
      */
     public int getNumElements(String key) {
@@ -419,7 +421,8 @@ public class PowerProfile {
     /**
      * Returns the average current in mA consumed by the subsystem, or the given
      * default value if the subsystem has no recorded value.
-     * @param type the subsystem type
+     *
+     * @param type         the subsystem type
      * @param defaultValue the value to return if the subsystem has no recorded value.
      * @return the average current in milliAmps.
      */
@@ -435,19 +438,21 @@ public class PowerProfile {
 
     /**
      * Returns the average current in mA consumed by the subsystem
+     *
      * @param type the subsystem type
      * @return the average current in milliAmps.
      */
     public double getAveragePower(String type) {
         return getAveragePowerOrDefault(type, 0);
     }
-    
+
     /**
      * Returns the average current in mA consumed by the subsystem for the given level.
-     * @param type the subsystem type
+     *
+     * @param type  the subsystem type
      * @param level the level of power at which the subsystem is running. For instance, the
-     *  signal strength of the cell network between 0 and 4 (if there are 4 bars max.)
-     *  If there is no data for multiple levels, the level is ignored.
+     *              signal strength of the cell network between 0 and 4 (if there are 4 bars max.)
+     *              If there is no data for multiple levels, the level is ignored.
      * @return the average current in milliAmps.
      */
     public double getAveragePower(String type, int level) {
@@ -470,6 +475,7 @@ public class PowerProfile {
     /**
      * Returns the battery capacity, if available, in milli Amp Hours. If not available,
      * it returns zero.
+     *
      * @return the battery capacity in mAh
      */
     public double getBatteryCapacity() {

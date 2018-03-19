@@ -77,7 +77,7 @@ import android.os.ShellCallback;
 import android.os.ShellCommand;
 import android.os.SystemClock;
 import android.os.UserHandle;
-import android.os.UserManager;
+import android.os.UserManagerInternal;
 import android.text.TextUtils;
 import android.text.format.Time;
 import android.util.ArraySet;
@@ -315,7 +315,7 @@ public class ShortcutService extends IShortcutService.Stub {
 
     private final IPackageManager mIPackageManager;
     private final PackageManagerInternal mPackageManagerInternal;
-    private final UserManager mUserManager;
+    private final UserManagerInternal mUserManagerInternal;
     private final UsageStatsManagerInternal mUsageStatsManagerInternal;
     private final ActivityManagerInternal mActivityManagerInternal;
 
@@ -430,7 +430,8 @@ public class ShortcutService extends IShortcutService.Stub {
         mIPackageManager = AppGlobals.getPackageManager();
         mPackageManagerInternal = Preconditions.checkNotNull(
                 LocalServices.getService(PackageManagerInternal.class));
-        mUserManager = Preconditions.checkNotNull(context.getSystemService(UserManager.class));
+        mUserManagerInternal = Preconditions.checkNotNull(
+                LocalServices.getService(UserManagerInternal.class));
         mUsageStatsManagerInternal = Preconditions.checkNotNull(
                 LocalServices.getService(UsageStatsManagerInternal.class));
         mActivityManagerInternal = Preconditions.checkNotNull(
@@ -1176,12 +1177,7 @@ public class ShortcutService extends IShortcutService.Stub {
         // the user might just have been unlocked.
         // Note we just don't use isUserUnlockingOrUnlocked() here, because it'll return false
         // when the user is STOPPING, which we still want to consider as "unlocked".
-        final long token = injectClearCallingIdentity();
-        try {
-            return mUserManager.isUserUnlockingOrUnlocked(userId);
-        } finally {
-            injectRestoreCallingIdentity(token);
-        }
+        return mUserManagerInternal.isUserUnlockingOrUnlocked(userId);
     }
 
     // Requires mLock held, but "Locked" prefix would look weired so we jsut say "L".
@@ -3493,13 +3489,7 @@ public class ShortcutService extends IShortcutService.Stub {
      * itself.
      */
     int getParentOrSelfUserId(int userId) {
-        final long token = injectClearCallingIdentity();
-        try {
-            final UserInfo parent = mUserManager.getProfileParent(userId);
-            return (parent != null) ? parent.id : userId;
-        } finally {
-            injectRestoreCallingIdentity(token);
-        }
+        return mUserManagerInternal.getProfileParentId(userId);
     }
 
     void injectSendIntentSender(IntentSender intentSender, Intent extras) {
@@ -3545,9 +3535,11 @@ public class ShortcutService extends IShortcutService.Stub {
             // Update the signatures for all packages.
             user.forAllPackageItems(spi -> spi.refreshPackageSignatureAndSave());
 
+            // Rescan all apps; this will also update the version codes and "allow-backup".
+            user.forAllPackages(pkg -> pkg.rescanPackageIfNeeded(
+                    /*isNewApp=*/ false, /*forceRescan=*/ true));
+
             // Set the version code for the launchers.
-            // We shouldn't do this for publisher packages, because we don't want to update the
-            // version code without rescanning the manifest.
             user.forAllLaunchers(launcher -> launcher.ensurePackageInfo());
 
             // Save to the filesystem.
@@ -3566,7 +3558,9 @@ public class ShortcutService extends IShortcutService.Stub {
                 Slog.w(TAG, "Backup failed.", e);
                 return null;
             }
-            return os.toByteArray();
+            byte[] payload = os.toByteArray();
+            mShortcutDumpFiles.save("backup-1-payload.txt", payload);
+            return payload;
         }
     }
 
@@ -3846,6 +3840,8 @@ public class ShortcutService extends IShortcutService.Stub {
                 pw.print(next);
                 pw.print("] ");
                 pw.print(formatTime(next));
+                pw.println();
+                pw.println();
 
                 pw.print("  Config:");
                 pw.print("    Max icon dim: ");
@@ -4241,7 +4237,6 @@ public class ShortcutService extends IShortcutService.Stub {
     }
 
     // Injection point.
-    @VisibleForTesting
     String injectBuildFingerprint() {
         return Build.FINGERPRINT;
     }

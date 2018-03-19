@@ -101,4 +101,24 @@ public class WindowManagerWrapper {
             Log.w(TAG, "Failed to override pending app transition (remote): ", e);
         }
     }
+
+    public void endProlongedAnimations() {
+        try {
+            WindowManagerGlobal.getWindowManagerService().endProlongedAnimations();
+        } catch (RemoteException e) {
+            Log.w(TAG, "Failed to end prolonged animations: ", e);
+        }
+    }
+
+    /**
+     * Enable or disable haptic feedback on the navigation bar buttons.
+     */
+    public void setNavBarVirtualKeyHapticFeedbackEnabled(boolean enabled) {
+        try {
+            WindowManagerGlobal.getWindowManagerService()
+                    .setNavBarVirtualKeyHapticFeedbackEnabled(enabled);
+        } catch (RemoteException e) {
+            Log.w(TAG, "Failed to enable or disable navigation bar button haptics: ", e);
+        }
+    }
 }

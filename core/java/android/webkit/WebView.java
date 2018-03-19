@@ -1683,7 +1683,7 @@ public class WebView extends AbsoluteLayout
      * @param callback will be called on the UI thread with {@code true} if initialization is
      * successful, {@code false} otherwise.
      */
-    public static void startSafeBrowsing(Context context,
+    public static void startSafeBrowsing(@NonNull Context context,
             @Nullable ValueCallback<Boolean> callback) {
         getFactory().getStatics().initSafeBrowsing(context, callback);
     }
@@ -3119,6 +3119,11 @@ public class WebView extends AbsoluteLayout
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         mProvider.getViewDelegate().onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
+    public boolean onCheckIsTextEditor() {
+        return mProvider.getViewDelegate().onCheckIsTextEditor();
     }
 
     /** @hide */

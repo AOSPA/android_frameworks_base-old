@@ -136,6 +136,7 @@ public class BatteryStatsHelper {
     PowerCalculator mCameraPowerCalculator;
     PowerCalculator mFlashlightPowerCalculator;
     PowerCalculator mMemoryPowerCalculator;
+    PowerCalculator mMediaPowerCalculator;
 
     boolean mHasWifiPowerReporting = false;
     boolean mHasBluetoothPowerReporting = false;
@@ -424,6 +425,11 @@ public class BatteryStatsHelper {
         }
         mFlashlightPowerCalculator.reset();
 
+        if (mMediaPowerCalculator == null) {
+            mMediaPowerCalculator = new MediaPowerCalculator(mPowerProfile);
+        }
+        mMediaPowerCalculator.reset();
+
         mStatsType = statsType;
         mRawUptimeUs = rawUptimeUs;
         mRawRealtimeUs = rawRealtimeUs;
@@ -560,6 +566,7 @@ public class BatteryStatsHelper {
             mCameraPowerCalculator.calculateApp(app, u, mRawRealtimeUs, mRawUptimeUs, mStatsType);
             mFlashlightPowerCalculator.calculateApp(app, u, mRawRealtimeUs, mRawUptimeUs,
                     mStatsType);
+            mMediaPowerCalculator.calculateApp(app, u, mRawRealtimeUs, mRawUptimeUs, mStatsType);
 
             final double totalPower = app.sumPower();
             if (DEBUG && totalPower != 0) {
@@ -640,6 +647,21 @@ public class BatteryStatsHelper {
         power /= (60 * 60 * 1000); // To hours
         if (power != 0) {
             addEntry(BatterySipper.DrainType.SCREEN, screenOnTimeMs, power);
+        }
+    }
+
+    /**
+     * Ambient display power is the additional power the screen takes while in ambient display/
+     * screen doze/ always-on display (interchangeable terms) mode. Ambient display power should
+     * be hidden {@link #shouldHideSipper(BatterySipper)}, but should not be included in smearing
+     * {@link #removeHiddenBatterySippers(List)}.
+     */
+    private void addAmbientDisplayUsage() {
+        long ambientDisplayMs = mStats.getScreenDozeTime(mRawRealtimeUs, mStatsType);
+        double power = mPowerProfile.getAveragePower(PowerProfile.POWER_AMBIENT_DISPLAY)
+                * ambientDisplayMs / (60 * 60 * 1000);
+        if (power > 0) {
+            addEntry(DrainType.AMBIENT_DISPLAY, ambientDisplayMs, power);
         }
     }
 
@@ -741,6 +763,7 @@ public class BatteryStatsHelper {
         addUserUsage();
         addPhoneUsage();
         addScreenUsage();
+        addAmbientDisplayUsage();
         addWiFiUsage();
         addBluetoothUsage();
         addMemoryUsage();
@@ -841,12 +864,13 @@ public class BatteryStatsHelper {
             final BatterySipper sipper = sippers.get(i);
             sipper.shouldHide = shouldHideSipper(sipper);
             if (sipper.shouldHide) {
-                if (sipper.drainType != BatterySipper.DrainType.OVERCOUNTED
-                        && sipper.drainType != BatterySipper.DrainType.SCREEN
-                        && sipper.drainType != BatterySipper.DrainType.UNACCOUNTED
-                        && sipper.drainType != BatterySipper.DrainType.BLUETOOTH
-                        && sipper.drainType != BatterySipper.DrainType.WIFI
-                        && sipper.drainType != BatterySipper.DrainType.IDLE) {
+                if (sipper.drainType != DrainType.OVERCOUNTED
+                        && sipper.drainType != DrainType.SCREEN
+                        && sipper.drainType != DrainType.AMBIENT_DISPLAY
+                        && sipper.drainType != DrainType.UNACCOUNTED
+                        && sipper.drainType != DrainType.BLUETOOTH
+                        && sipper.drainType != DrainType.WIFI
+                        && sipper.drainType != DrainType.IDLE) {
                     // Don't add it if it is overcounted, unaccounted or screen
                     proportionalSmearPowerMah += sipper.totalPowerMah;
                 }
@@ -893,13 +917,14 @@ public class BatteryStatsHelper {
      * Check whether we should hide the battery sipper.
      */
     public boolean shouldHideSipper(BatterySipper sipper) {
-        final BatterySipper.DrainType drainType = sipper.drainType;
+        final DrainType drainType = sipper.drainType;
 
-        return drainType == BatterySipper.DrainType.IDLE
-                || drainType == BatterySipper.DrainType.CELL
-                || drainType == BatterySipper.DrainType.SCREEN
-                || drainType == BatterySipper.DrainType.UNACCOUNTED
-                || drainType == BatterySipper.DrainType.OVERCOUNTED
+        return drainType == DrainType.IDLE
+                || drainType == DrainType.CELL
+                || drainType == DrainType.SCREEN
+                || drainType == DrainType.AMBIENT_DISPLAY
+                || drainType == DrainType.UNACCOUNTED
+                || drainType == DrainType.OVERCOUNTED
                 || isTypeService(sipper)
                 || isTypeSystem(sipper);
     }

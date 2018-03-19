@@ -19,6 +19,7 @@ package android.os;
 import android.Manifest;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.Application;
 import android.content.Context;
 import android.text.TextUtils;
@@ -287,6 +288,7 @@ public class Build {
          * we are operating under, we bump the assumed resource platform version by 1.
          * @hide
          */
+        @TestApi
         public static final int RESOURCES_SDK_INT = SDK_INT + ACTIVE_CODENAMES.length;
 
         /**
@@ -894,6 +896,14 @@ public class Build {
 
         /**
          * P.
+         *
+         * <p>Applications targeting this or a later release will get these
+         * new changes in behavior:</p>
+         * <ul>
+         * <li>{@link android.app.Service#startForeground Service.startForeground} requires
+         * that apps hold the permission
+         * {@link android.Manifest.permission#FOREGROUND_SERVICE}.</li>
+         * </ul>
          */
         public static final int P = CUR_DEVELOPMENT; // STOPSHIP Replace with the real version.
     }

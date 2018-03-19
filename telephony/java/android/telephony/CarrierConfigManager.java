@@ -1000,8 +1000,13 @@ public class CarrierConfigManager {
             "wfc_emergency_address_carrier_app_string";
 
     /**
-     * Boolean to decide whether to use #KEY_CARRIER_NAME_STRING from CarrierConfig app.
-     * @hide
+     * Unconditionally override the carrier name string using #KEY_CARRIER_NAME_STRING.
+     *
+     * If true, then the carrier display name will be #KEY_CARRIER_NAME_STRING, unconditionally.
+     *
+     * <p>If false, then the override will be performed conditionally and the
+     * #KEY_CARRIER_NAME_STRING will have the lowest-precedence; it will only be used in the event
+     * that the name string would otherwise be empty, allowing it to serve as a last-resort.
      */
     public static final String KEY_CARRIER_NAME_OVERRIDE_BOOL = "carrier_name_override_bool";
 
@@ -1009,7 +1014,6 @@ public class CarrierConfigManager {
      * String to identify carrier name in CarrierConfig app. This string overrides SPN if
      * #KEY_CARRIER_NAME_OVERRIDE_BOOL is true; otherwise, it will be used if its value is provided
      * and SPN is unavailable
-     * @hide
      */
     public static final String KEY_CARRIER_NAME_STRING = "carrier_name_string";
 
@@ -1404,6 +1408,13 @@ public class CarrierConfigManager {
             "allow_add_call_during_video_call";
 
     /**
+     * When false, indicates that holding a video call is disabled
+     * @hide
+     */
+    public static final String KEY_ALLOW_HOLDING_VIDEO_CALL_BOOL =
+            "allow_holding_video_call";
+
+    /**
      * When true, indicates that the HD audio icon in the in-call screen should not be shown for
      * VoWifi calls.
      * @hide
@@ -1573,6 +1584,14 @@ public class CarrierConfigManager {
      */
     public static final String KEY_NOTIFY_INTERNATIONAL_CALL_ON_WFC_BOOL =
             "notify_international_call_on_wfc_bool";
+
+    /**
+     * Flag specifying whether to show an alert dialog for video call charges.
+     * By default this value is {@code false}.
+     * @hide
+     */
+    public static final String KEY_SHOW_VIDEO_CALL_CHARGES_ALERT_DIALOG_BOOL =
+            "show_video_call_charges_alert_dialog_bool";
 
     /**
      * An array containing custom call forwarding number prefixes that will be blocked while the
@@ -1815,7 +1834,14 @@ public class CarrierConfigManager {
             "check_pricing_with_carrier_data_roaming_bool";
 
     /**
-     * List of thresholds of RSRP for determining the display level of LTE signal bar.
+     * A list of 4 LTE RSRP thresholds above which a signal level is considered POOR,
+     * MODERATE, GOOD, or EXCELLENT, to be used in SignalStrength reporting.
+     *
+     * Note that the min and max thresholds are fixed at -140 and -44, as explained in
+     * TS 136.133 9.1.4 - RSRP Measurement Report Mapping.
+     * <p>
+     * See SignalStrength#MAX_LTE_RSRP and SignalStrength#MIN_LTE_RSRP. Any signal level outside
+     * these boundaries is considered invalid.
      * @hide
      */
     public static final String KEY_LTE_RSRP_THRESHOLDS_INT_ARRAY =
@@ -1836,6 +1862,33 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CARRIER_NETWORK_SERVICE_WWAN_PACKAGE_OVERRIDE_STRING
             = "carrier_network_service_wwan_package_override_string";
+
+    /**
+     * A list of 4 LTE RSCP thresholds above which a signal level is considered POOR,
+     * MODERATE, GOOD, or EXCELLENT, to be used in SignalStrength reporting.
+     *
+     * Note that the min and max thresholds are fixed at -120 and -24, as set in 3GPP TS 27.007
+     * section 8.69.
+     * <p>
+     * See SignalStrength#MAX_WCDMA_RSCP and SignalStrength#MIN_WDCMA_RSCP. Any signal level outside
+     * these boundaries is considered invalid.
+     * @hide
+     */
+    public static final String KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY =
+            "wcdma_rscp_thresholds_int_array";
+
+    /**
+     * The default measurement to use for signal strength reporting. If this is not specified, the
+     * RSSI is used.
+     * <p>
+     * e.g.) To use RSCP by default, set the value to "rscp". The signal strength level will
+     * then be determined by #KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY
+     * <p>
+     * Currently this only supports the value "rscp"
+     * @hide
+     */
+    public static final String KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING =
+            "wcdma_default_signal_strength_measurement_string";
 
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
@@ -2092,6 +2145,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_DROP_VIDEO_CALL_WHEN_ANSWERING_AUDIO_CALL_BOOL, false);
         sDefaults.putBoolean(KEY_ALLOW_MERGE_WIFI_CALLS_WHEN_VOWIFI_OFF_BOOL, true);
         sDefaults.putBoolean(KEY_ALLOW_ADD_CALL_DURING_VIDEO_CALL_BOOL, true);
+        sDefaults.putBoolean(KEY_ALLOW_HOLDING_VIDEO_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_WIFI_CALLS_CAN_BE_HD_AUDIO, true);
         sDefaults.putBoolean(KEY_VIDEO_CALLS_CAN_BE_HD_AUDIO, true);
         sDefaults.putBoolean(KEY_GSM_CDMA_CALLS_CAN_BE_HD_AUDIO, false);
@@ -2112,6 +2166,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_DISPLAY_VOICEMAIL_NUMBER_AS_DEFAULT_CALL_FORWARDING_NUMBER_BOOL,
                 false);
         sDefaults.putBoolean(KEY_NOTIFY_INTERNATIONAL_CALL_ON_WFC_BOOL, false);
+        sDefaults.putBoolean(KEY_SHOW_VIDEO_CALL_CHARGES_ALERT_DIALOG_BOOL, false);
         sDefaults.putStringArray(KEY_CALL_FORWARDING_BLOCKS_WHILE_ROAMING_STRING_ARRAY,
                 null);
         sDefaults.putInt(KEY_LTE_EARFCNS_RSRP_BOOST_INT, 0);
@@ -2136,13 +2191,19 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CHECK_PRICING_WITH_CARRIER_FOR_DATA_ROAMING_BOOL, false);
         sDefaults.putIntArray(KEY_LTE_RSRP_THRESHOLDS_INT_ARRAY,
                 new int[] {
-                        -140, /* SIGNAL_STRENGTH_NONE_OR_UNKNOWN */
                         -128, /* SIGNAL_STRENGTH_POOR */
                         -118, /* SIGNAL_STRENGTH_MODERATE */
                         -108, /* SIGNAL_STRENGTH_GOOD */
                         -98,  /* SIGNAL_STRENGTH_GREAT */
-                        -44
                 });
+        sDefaults.putIntArray(KEY_WCDMA_RSCP_THRESHOLDS_INT_ARRAY,
+                new int[] {
+                        -115,  /* SIGNAL_STRENGTH_POOR */
+                        -105, /* SIGNAL_STRENGTH_MODERATE */
+                        -95, /* SIGNAL_STRENGTH_GOOD */
+                        -85  /* SIGNAL_STRENGTH_GREAT */
+                });
+        sDefaults.putString(KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING, "");
     }
 
     /**

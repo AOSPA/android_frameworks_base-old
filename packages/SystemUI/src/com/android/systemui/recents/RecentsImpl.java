@@ -24,9 +24,9 @@ import static com.android.systemui.statusbar.phone.StatusBar.SYSTEM_DIALOG_REASO
 
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
-import android.app.KeyguardManager;
 import android.app.trust.TrustManager;
 import android.content.ActivityNotFoundException;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
@@ -34,7 +34,6 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
-import android.os.AsyncTask.Status;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.util.ArraySet;
@@ -47,6 +46,8 @@ import android.view.WindowManager;
 
 import android.widget.Toast;
 
+import com.android.systemui.Dependency;
+import com.android.systemui.OverviewProxyService;
 import com.google.android.collect.Lists;
 
 import com.android.internal.logging.MetricsLogger;
@@ -124,6 +125,11 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
 
         @Override
         public void onTaskStackChangedBackground() {
+            // Skip background preloading recents in SystemUI if the overview services is bound
+            if (Dependency.get(OverviewProxyService.class).getProxy() != null) {
+                return;
+            }
+
             // Check this is for the right user
             if (!checkCurrentUserId(mContext, false /* debug */)) {
                 return;
@@ -259,6 +265,17 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
         }
     });
 
+    private OverviewProxyService.OverviewProxyListener mOverviewProxyListener =
+            new OverviewProxyService.OverviewProxyListener() {
+        @Override
+        public void onConnectionChanged(boolean isConnected) {
+            if (!isConnected) {
+                // Clear everything when the connection to the overview service
+                Recents.getTaskLoader().onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_COMPLETE);
+            }
+        }
+    };
+
     public RecentsImpl(Context context) {
         mContext = context;
         mHandler = new Handler();
@@ -279,6 +296,11 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
     }
 
     public void onBootCompleted() {
+        // Skip preloading tasks if we are already bound to the service
+        if (Dependency.get(OverviewProxyService.class).getProxy() != null) {
+            return;
+        }
+
         // When we start, preload the data associated with the previous recent tasks.
         // We can use a new plan since the caches will be the same.
         RecentsTaskLoader loader = Recents.getTaskLoader();
@@ -385,8 +407,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
     }
 
     public void toggleRecents(int growTarget) {
-        // Skip preloading if the task is locked
-        if (ActivityManagerWrapper.getInstance().isLockToAppActive()) {
+        if (ActivityManagerWrapper.getInstance().isScreenPinningActive()) {
             return;
         }
 
@@ -464,8 +485,7 @@ public class RecentsImpl implements ActivityOptions.OnAnimationFinishedListener 
     }
 
     public void preloadRecents() {
-        // Skip preloading if the task is locked
-        if (ActivityManagerWrapper.getInstance().isLockToAppActive()) {
+        if (ActivityManagerWrapper.getInstance().isScreenPinningActive()) {
             return;
         }
 

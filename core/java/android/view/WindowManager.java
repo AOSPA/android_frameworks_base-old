@@ -2234,6 +2234,7 @@ public interface WindowManager extends ViewManager {
          * @see #LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
          * @see #LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
          * @see DisplayCutout
+         * @see android.R.attr#layoutInDisplayCutoutMode
          */
         @LayoutInDisplayCutoutMode
         public int layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
@@ -2369,6 +2370,13 @@ public interface WindowManager extends ViewManager {
          * @hide
          */
         public long hideTimeoutMilliseconds = -1;
+
+        /**
+         * A frame number in which changes requested in this layout will be rendered.
+         *
+         * @hide
+         */
+        public long frameNumber = -1;
 
         /**
          * The color mode requested by this window. The target display may
@@ -2543,6 +2551,7 @@ public interface WindowManager extends ViewManager {
             TextUtils.writeToParcel(accessibilityTitle, out, parcelableFlags);
             out.writeInt(mColorMode);
             out.writeLong(hideTimeoutMilliseconds);
+            out.writeLong(frameNumber);
         }
 
         public static final Parcelable.Creator<LayoutParams> CREATOR
@@ -2599,6 +2608,7 @@ public interface WindowManager extends ViewManager {
             accessibilityTitle = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(in);
             mColorMode = in.readInt();
             hideTimeoutMilliseconds = in.readLong();
+            frameNumber = in.readLong();
         }
 
         @SuppressWarnings({"PointlessBitwiseExpression"})
@@ -2798,6 +2808,10 @@ public interface WindowManager extends ViewManager {
                 surfaceInsets.set(o.surfaceInsets);
                 changes |= SURFACE_INSETS_CHANGED;
             }
+
+            // The frame number changing is only relevant in the context of other
+            // changes, and so we don't need to track it with a flag.
+            frameNumber = o.frameNumber;
 
             if (hasManualSurfaceInsets != o.hasManualSurfaceInsets) {
                 hasManualSurfaceInsets = o.hasManualSurfaceInsets;

@@ -18,17 +18,19 @@
 
 #include "Section.h"
 
+#include <dirent.h>
 #include <errno.h>
-#include <sys/prctl.h>
-#include <unistd.h>
 #include <wait.h>
 
-#include <memory>
 #include <mutex>
+#include <set>
 
 #include <android-base/file.h>
+#include <android-base/stringprintf.h>
 #include <android/util/protobuf.h>
 #include <binder/IServiceManager.h>
+#include <debuggerd/client.h>
+#include <dumputils/dump_utils.h>
 #include <log/log_event_list.h>
 #include <log/log_read.h>
 #include <log/logprint.h>
@@ -37,6 +39,8 @@
 #include "FdBuffer.h"
 #include "Privacy.h"
 #include "PrivacyBuffer.h"
+#include "frameworks/base/core/proto/android/os/backtrace.proto.h"
+#include "frameworks/base/core/proto/android/os/data.proto.h"
 #include "frameworks/base/core/proto/android/util/log.proto.h"
 #include "incidentd_util.h"
 
@@ -52,31 +56,11 @@ const int FIELD_ID_INCIDENT_METADATA = 2;
 const int WAIT_MAX = 5;
 const struct timespec WAIT_INTERVAL_NS = {0, 200 * 1000 * 1000};
 const char INCIDENT_HELPER[] = "/system/bin/incident_helper";
+const char GZIP[] = "/system/bin/gzip";
 
-static pid_t fork_execute_incident_helper(const int id, const char* name, Fpipe& p2cPipe,
-                                          Fpipe& c2pPipe) {
+static pid_t fork_execute_incident_helper(const int id, Fpipe* p2cPipe, Fpipe* c2pPipe) {
     const char* ihArgs[]{INCIDENT_HELPER, "-s", String8::format("%d", id).string(), NULL};
-    // fork used in multithreaded environment, avoid adding unnecessary code in child process
-    pid_t pid = fork();
-    if (pid == 0) {
-        if (TEMP_FAILURE_RETRY(dup2(p2cPipe.readFd(), STDIN_FILENO)) != 0 || !p2cPipe.close() ||
-            TEMP_FAILURE_RETRY(dup2(c2pPipe.writeFd(), STDOUT_FILENO)) != 1 || !c2pPipe.close()) {
-            ALOGW("%s can't setup stdin and stdout for incident helper", name);
-            _exit(EXIT_FAILURE);
-        }
-
-        /* make sure the child dies when incidentd dies */
-        prctl(PR_SET_PDEATHSIG, SIGKILL);
-
-        execv(INCIDENT_HELPER, const_cast<char**>(ihArgs));
-
-        ALOGW("%s failed in incident helper process: %s", name, strerror(errno));
-        _exit(EXIT_FAILURE);  // always exits with failure if any
-    }
-    // close the fds used in incident helper
-    close(p2cPipe.readFd());
-    close(c2pPipe.writeFd());
-    return pid;
+    return fork_execute_cmd(INCIDENT_HELPER, const_cast<char**>(ihArgs), p2cPipe, c2pPipe);
 }
 
 // ================================================================================
@@ -118,13 +102,14 @@ static status_t write_section_header(int fd, int sectionId, size_t size) {
     return WriteFully(fd, buf, p - buf) ? NO_ERROR : -errno;
 }
 
+// Reads data from FdBuffer and writes it to the requests file descriptor.
 static status_t write_report_requests(const int id, const FdBuffer& buffer,
                                       ReportRequestSet* requests) {
     status_t err = -EBADF;
     EncodedBuffer::iterator data = buffer.data();
     PrivacyBuffer privacyBuffer(get_privacy_of_section(id), data);
     int writeable = 0;
-    auto stats = requests->sectionStats(id);
+    IncidentMetadata::SectionStats* stats = requests->sectionStats(id);
 
     stats->set_dump_size_bytes(data.size());
     stats->set_dump_duration_ms(buffer.durationMs());
@@ -230,23 +215,48 @@ MetadataSection::MetadataSection() : Section(FIELD_ID_INCIDENT_METADATA, 0) {}
 MetadataSection::~MetadataSection() {}
 
 status_t MetadataSection::Execute(ReportRequestSet* requests) const {
-    std::string metadataBuf;
-    requests->metadata().SerializeToString(&metadataBuf);
+    ProtoOutputStream proto;
+    IncidentMetadata metadata = requests->metadata();
+    proto.write(FIELD_TYPE_ENUM | IncidentMetadata::kDestFieldNumber, metadata.dest());
+    proto.write(FIELD_TYPE_INT32 | IncidentMetadata::kRequestSizeFieldNumber,
+                metadata.request_size());
+    proto.write(FIELD_TYPE_BOOL | IncidentMetadata::kUseDropboxFieldNumber, metadata.use_dropbox());
+    for (auto iter = requests->allSectionStats().begin(); iter != requests->allSectionStats().end();
+         iter++) {
+        IncidentMetadata::SectionStats stats = iter->second;
+        uint64_t token = proto.start(FIELD_TYPE_MESSAGE | IncidentMetadata::kSectionsFieldNumber);
+        proto.write(FIELD_TYPE_INT32 | IncidentMetadata::SectionStats::kIdFieldNumber, stats.id());
+        proto.write(FIELD_TYPE_BOOL | IncidentMetadata::SectionStats::kSuccessFieldNumber,
+                    stats.success());
+        proto.write(FIELD_TYPE_INT32 | IncidentMetadata::SectionStats::kReportSizeBytesFieldNumber,
+                    stats.report_size_bytes());
+        proto.write(FIELD_TYPE_INT64 | IncidentMetadata::SectionStats::kExecDurationMsFieldNumber,
+                    stats.exec_duration_ms());
+        proto.write(FIELD_TYPE_INT32 | IncidentMetadata::SectionStats::kDumpSizeBytesFieldNumber,
+                    stats.dump_size_bytes());
+        proto.write(FIELD_TYPE_INT64 | IncidentMetadata::SectionStats::kDumpDurationMsFieldNumber,
+                    stats.dump_duration_ms());
+        proto.write(FIELD_TYPE_BOOL | IncidentMetadata::SectionStats::kTimedOutFieldNumber,
+                    stats.timed_out());
+        proto.write(FIELD_TYPE_BOOL | IncidentMetadata::SectionStats::kIsTruncatedFieldNumber,
+                    stats.is_truncated());
+        proto.end(token);
+    }
+
     for (ReportRequestSet::iterator it = requests->begin(); it != requests->end(); it++) {
         const sp<ReportRequest> request = *it;
-        if (metadataBuf.empty() || request->fd < 0 || request->err != NO_ERROR) {
+        if (request->fd < 0 || request->err != NO_ERROR) {
             continue;
         }
-        write_section_header(request->fd, id, metadataBuf.size());
-        if (!WriteFully(request->fd, (uint8_t const*)metadataBuf.data(), metadataBuf.size())) {
+        write_section_header(request->fd, id, proto.size());
+        if (!proto.flush(request->fd)) {
             ALOGW("Failed to write metadata to fd %d", request->fd);
             // we don't fail if we can't write to a single request's fd.
         }
     }
-    if (requests->mainFd() >= 0 && !metadataBuf.empty()) {
-        write_section_header(requests->mainFd(), id, metadataBuf.size());
-        if (!WriteFully(requests->mainFd(), (uint8_t const*)metadataBuf.data(),
-                        metadataBuf.size())) {
+    if (requests->mainFd() >= 0) {
+        write_section_header(requests->mainFd(), id, proto.size());
+        if (!proto.flush(requests->mainFd())) {
             ALOGW("Failed to write metadata to dropbox fd %d", requests->mainFd());
             return -1;
         }
@@ -254,10 +264,12 @@ status_t MetadataSection::Execute(ReportRequestSet* requests) const {
     return NO_ERROR;
 }
 // ================================================================================
+static inline bool isSysfs(const char* filename) { return strncmp(filename, "/sys/", 5) == 0; }
+
 FileSection::FileSection(int id, const char* filename, const int64_t timeoutMs)
     : Section(id, timeoutMs), mFilename(filename) {
     name = filename;
-    mIsSysfs = strncmp(filename, "/sys/", 5) == 0;
+    mIsSysfs = isSysfs(filename);
 }
 
 FileSection::~FileSection() {}
@@ -280,7 +292,7 @@ status_t FileSection::Execute(ReportRequestSet* requests) const {
         return -errno;
     }
 
-    pid_t pid = fork_execute_incident_helper(this->id, this->name.string(), p2cPipe, c2pPipe);
+    pid_t pid = fork_execute_incident_helper(this->id, &p2cPipe, &c2pPipe);
     if (pid == -1) {
         ALOGW("FileSection '%s' failed to fork", this->name.string());
         return -errno;
@@ -289,6 +301,8 @@ status_t FileSection::Execute(ReportRequestSet* requests) const {
     // parent process
     status_t readStatus = buffer.readProcessedDataInStream(fd, p2cPipe.writeFd(), c2pPipe.readFd(),
                                                            this->timeoutMs, mIsSysfs);
+    close(fd);  // close the fd anyway.
+
     if (readStatus != NO_ERROR || buffer.timedOut()) {
         ALOGW("FileSection '%s' failed to read data from incident helper: %s, timedout: %s",
               this->name.string(), strerror(-readStatus), buffer.timedOut() ? "true" : "false");
@@ -308,6 +322,99 @@ status_t FileSection::Execute(ReportRequestSet* requests) const {
     status_t err = write_report_requests(this->id, buffer, requests);
     if (err != NO_ERROR) {
         ALOGW("FileSection '%s' failed writing: %s", this->name.string(), strerror(-err));
+        return err;
+    }
+
+    return NO_ERROR;
+}
+// ================================================================================
+GZipSection::GZipSection(int id, const char* filename, ...) : Section(id) {
+    name = "gzip ";
+    name += filename;
+    va_list args;
+    va_start(args, filename);
+    mFilenames = varargs(filename, args);
+    va_end(args);
+}
+
+GZipSection::~GZipSection() {}
+
+status_t GZipSection::Execute(ReportRequestSet* requests) const {
+    // Reads the files in order, use the first available one.
+    int index = 0;
+    int fd = -1;
+    while (mFilenames[index] != NULL) {
+        fd = open(mFilenames[index], O_RDONLY | O_CLOEXEC);
+        if (fd != -1) {
+            break;
+        }
+        ALOGW("GZipSection failed to open file %s", mFilenames[index]);
+        index++;  // look at the next file.
+    }
+    VLOG("GZipSection is using file %s, fd=%d", mFilenames[index], fd);
+    if (fd == -1) return -1;
+
+    FdBuffer buffer;
+    Fpipe p2cPipe;
+    Fpipe c2pPipe;
+    // initiate pipes to pass data to/from gzip
+    if (!p2cPipe.init() || !c2pPipe.init()) {
+        ALOGW("GZipSection '%s' failed to setup pipes", this->name.string());
+        return -errno;
+    }
+
+    const char* gzipArgs[]{GZIP, NULL};
+    pid_t pid = fork_execute_cmd(GZIP, const_cast<char**>(gzipArgs), &p2cPipe, &c2pPipe);
+    if (pid == -1) {
+        ALOGW("GZipSection '%s' failed to fork", this->name.string());
+        return -errno;
+    }
+    // parent process
+
+    // construct Fdbuffer to output GZippedfileProto, the reason to do this instead of using
+    // ProtoOutputStream is to avoid allocation of another buffer inside ProtoOutputStream.
+    EncodedBuffer* internalBuffer = buffer.getInternalBuffer();
+    internalBuffer->writeHeader((uint32_t)GZippedFileProto::FILENAME, WIRE_TYPE_LENGTH_DELIMITED);
+    String8 usedFile(mFilenames[index]);
+    internalBuffer->writeRawVarint32(usedFile.size());
+    for (size_t i = 0; i < usedFile.size(); i++) {
+        internalBuffer->writeRawByte(mFilenames[index][i]);
+    }
+    internalBuffer->writeHeader((uint32_t)GZippedFileProto::GZIPPED_DATA,
+                                WIRE_TYPE_LENGTH_DELIMITED);
+    size_t editPos = internalBuffer->wp()->pos();
+    internalBuffer->wp()->move(8);  // reserve 8 bytes for the varint of the data size.
+    size_t dataBeginAt = internalBuffer->wp()->pos();
+    VLOG("GZipSection '%s' editPos=%zd, dataBeginAt=%zd", this->name.string(), editPos,
+         dataBeginAt);
+
+    status_t readStatus = buffer.readProcessedDataInStream(
+            fd, p2cPipe.writeFd(), c2pPipe.readFd(), this->timeoutMs, isSysfs(mFilenames[index]));
+    close(fd);  // close the fd anyway.
+
+    if (readStatus != NO_ERROR || buffer.timedOut()) {
+        ALOGW("GZipSection '%s' failed to read data from gzip: %s, timedout: %s",
+              this->name.string(), strerror(-readStatus), buffer.timedOut() ? "true" : "false");
+        kill_child(pid);
+        return readStatus;
+    }
+
+    status_t gzipStatus = wait_child(pid);
+    if (gzipStatus != NO_ERROR) {
+        ALOGW("GZipSection '%s' abnormal child process: %s", this->name.string(),
+              strerror(-gzipStatus));
+        return gzipStatus;
+    }
+    // Revisit the actual size from gzip result and edit the internal buffer accordingly.
+    size_t dataSize = buffer.size() - dataBeginAt;
+    internalBuffer->wp()->rewind()->move(editPos);
+    internalBuffer->writeRawVarint32(dataSize);
+    internalBuffer->copy(dataBeginAt, dataSize);
+    VLOG("GZipSection '%s' wrote %zd bytes in %d ms, dataSize=%zd", this->name.string(),
+         buffer.size(), (int)buffer.durationMs(), dataSize);
+    status_t err = write_report_requests(this->id, buffer, requests);
+    if (err != NO_ERROR) {
+        ALOGW("GZipSection '%s' failed writing: %s", this->name.string(), strerror(-err));
         return err;
     }
 
@@ -340,7 +447,8 @@ WorkerThreadData::WorkerThreadData(const WorkerThreadSection* sec)
 WorkerThreadData::~WorkerThreadData() {}
 
 // ================================================================================
-WorkerThreadSection::WorkerThreadSection(int id) : Section(id) {}
+WorkerThreadSection::WorkerThreadSection(int id, const int64_t timeoutMs)
+    : Section(id, timeoutMs) {}
 
 WorkerThreadSection::~WorkerThreadSection() {}
 
@@ -457,42 +565,20 @@ status_t WorkerThreadSection::Execute(ReportRequestSet* requests) const {
 }
 
 // ================================================================================
-void CommandSection::init(const char* command, va_list args) {
-    va_list copied_args;
-    int numOfArgs = 0;
-
-    va_copy(copied_args, args);
-    while (va_arg(copied_args, const char*) != NULL) {
-        numOfArgs++;
-    }
-    va_end(copied_args);
-
-    // allocate extra 1 for command and 1 for NULL terminator
-    mCommand = (const char**)malloc(sizeof(const char*) * (numOfArgs + 2));
-
-    mCommand[0] = command;
-    name = command;
-    for (int i = 0; i < numOfArgs; i++) {
-        const char* arg = va_arg(args, const char*);
-        mCommand[i + 1] = arg;
-        name += " ";
-        name += arg;
-    }
-    mCommand[numOfArgs + 1] = NULL;
-}
-
 CommandSection::CommandSection(int id, const int64_t timeoutMs, const char* command, ...)
     : Section(id, timeoutMs) {
+    name = command;
     va_list args;
     va_start(args, command);
-    init(command, args);
+    mCommand = varargs(command, args);
     va_end(args);
 }
 
 CommandSection::CommandSection(int id, const char* command, ...) : Section(id) {
+    name = command;
     va_list args;
     va_start(args, command);
-    init(command, args);
+    mCommand = varargs(command, args);
     va_end(args);
 }
 
@@ -527,7 +613,7 @@ status_t CommandSection::Execute(ReportRequestSet* requests) const {
               strerror(errno));
         _exit(err);  // exit with command error code
     }
-    pid_t ihPid = fork_execute_incident_helper(this->id, this->name.string(), cmdPipe, ihPipe);
+    pid_t ihPid = fork_execute_incident_helper(this->id, &cmdPipe, &ihPipe);
     if (ihPid == -1) {
         ALOGW("CommandSection '%s' failed to fork", this->name.string());
         return -errno;
@@ -543,9 +629,8 @@ status_t CommandSection::Execute(ReportRequestSet* requests) const {
         return readStatus;
     }
 
-    // TODO: wait for command here has one trade-off: the failed status of command won't be detected
-    // until
-    //       buffer timeout, but it has advatage on starting the data stream earlier.
+    // Waiting for command here has one trade-off: the failed status of command won't be detected
+    // until buffer timeout, but it has advatage on starting the data stream earlier.
     status_t cmdStatus = wait_child(cmdPid);
     status_t ihStatus = wait_child(ihPid);
     if (cmdStatus != NO_ERROR || ihStatus != NO_ERROR) {
@@ -644,7 +729,6 @@ static inline int32_t get4LE(uint8_t const* src) {
 }
 
 status_t LogSection::BlockingCall(int pipeWriteFd) const {
-    status_t err = NO_ERROR;
     // Open log buffer and getting logs since last retrieved time if any.
     unique_ptr<logger_list, void (*)(logger_list*)> loggers(
             gLastLogsRetrieved.find(mLogID) == gLastLogsRetrieved.end()
@@ -655,15 +739,16 @@ status_t LogSection::BlockingCall(int pipeWriteFd) const {
 
     if (android_logger_open(loggers.get(), mLogID) == NULL) {
         ALOGW("LogSection %s: Can't get logger.", this->name.string());
-        return err;
+        return NO_ERROR;
     }
 
     log_msg msg;
     log_time lastTimestamp(0);
 
+    status_t err = NO_ERROR;
     ProtoOutputStream proto;
     while (true) {  // keeps reading until logd buffer is fully read.
-        status_t err = android_logger_list_read(loggers.get(), &msg);
+        err = android_logger_list_read(loggers.get(), &msg);
         // err = 0 - no content, unexpected connection drop or EOF.
         // err = +ive number - size of retrieved data from logger
         // err = -ive number, OS supplied error _except_ for -EAGAIN
@@ -685,7 +770,7 @@ status_t LogSection::BlockingCall(int pipeWriteFd) const {
             lastTimestamp.tv_nsec = msg.entry_v1.nsec;
 
             // format a BinaryLogEntry
-            long long token = proto.start(LogProto::BINARY_LOGS);
+            uint64_t token = proto.start(LogProto::BINARY_LOGS);
             proto.write(BinaryLogEntry::SEC, msg.entry_v1.sec);
             proto.write(BinaryLogEntry::NANOSEC, msg.entry_v1.nsec);
             proto.write(BinaryLogEntry::UID, (int)msg.entry_v4.uid);
@@ -695,7 +780,7 @@ status_t LogSection::BlockingCall(int pipeWriteFd) const {
                         get4LE(reinterpret_cast<uint8_t const*>(msg.msg())));
             do {
                 elem = android_log_read_next(context);
-                long long elemToken = proto.start(BinaryLogEntry::ELEMS);
+                uint64_t elemToken = proto.start(BinaryLogEntry::ELEMS);
                 switch (elem.type) {
                     case EVENT_TYPE_INT:
                         proto.write(BinaryLogEntry::Elem::TYPE,
@@ -747,7 +832,7 @@ status_t LogSection::BlockingCall(int pipeWriteFd) const {
             lastTimestamp.tv_nsec = entry.tv_nsec;
 
             // format a TextLogEntry
-            long long token = proto.start(LogProto::TEXT_LOGS);
+            uint64_t token = proto.start(LogProto::TEXT_LOGS);
             proto.write(TextLogEntry::SEC, (long long)entry.tv_sec);
             proto.write(TextLogEntry::NANOSEC, (long long)entry.tv_nsec);
             proto.write(TextLogEntry::PRIORITY, (int)entry.priority);
@@ -761,6 +846,136 @@ status_t LogSection::BlockingCall(int pipeWriteFd) const {
         }
     }
     gLastLogsRetrieved[mLogID] = lastTimestamp;
+    proto.flush(pipeWriteFd);
+    return err;
+}
+
+// ================================================================================
+
+TombstoneSection::TombstoneSection(int id, const char* type, const int64_t timeoutMs)
+    : WorkerThreadSection(id, timeoutMs), mType(type) {
+    name += "tombstone ";
+    name += type;
+}
+
+TombstoneSection::~TombstoneSection() {}
+
+status_t TombstoneSection::BlockingCall(int pipeWriteFd) const {
+    std::unique_ptr<DIR, decltype(&closedir)> proc(opendir("/proc"), closedir);
+    if (proc.get() == nullptr) {
+        ALOGE("opendir /proc failed: %s\n", strerror(errno));
+        return -errno;
+    }
+
+    const std::set<int> hal_pids = get_interesting_hal_pids();
+
+    ProtoOutputStream proto;
+    struct dirent* d;
+    status_t err = NO_ERROR;
+    while ((d = readdir(proc.get()))) {
+        int pid = atoi(d->d_name);
+        if (pid <= 0) {
+            continue;
+        }
+
+        const std::string link_name = android::base::StringPrintf("/proc/%d/exe", pid);
+        std::string exe;
+        if (!android::base::Readlink(link_name, &exe)) {
+            ALOGE("Can't read '%s': %s\n", link_name.c_str(), strerror(errno));
+            continue;
+        }
+
+        bool is_java_process;
+        if (exe == "/system/bin/app_process32" || exe == "/system/bin/app_process64") {
+            if (mType != "java") continue;
+            // Don't bother dumping backtraces for the zygote.
+            if (IsZygote(pid)) {
+                VLOG("Skipping Zygote");
+                continue;
+            }
+
+            is_java_process = true;
+        } else if (should_dump_native_traces(exe.c_str())) {
+            if (mType != "native") continue;
+            is_java_process = false;
+        } else if (hal_pids.find(pid) != hal_pids.end()) {
+            if (mType != "hal") continue;
+            is_java_process = false;
+        } else {
+            // Probably a native process we don't care about, continue.
+            VLOG("Skipping %d", pid);
+            continue;
+        }
+
+        Fpipe dumpPipe;
+        if (!dumpPipe.init()) {
+            ALOGW("TombstoneSection '%s' failed to setup dump pipe", this->name.string());
+            err = -errno;
+            break;
+        }
+
+        const uint64_t start = Nanotime();
+        pid_t child = fork();
+        if (child < 0) {
+            ALOGE("Failed to fork child process");
+            break;
+        } else if (child == 0) {
+            // This is the child process.
+            close(dumpPipe.readFd());
+            const int ret = dump_backtrace_to_file_timeout(
+                    pid, is_java_process ? kDebuggerdJavaBacktrace : kDebuggerdNativeBacktrace,
+                    is_java_process ? 5 : 20, dumpPipe.writeFd());
+            if (ret == -1) {
+                if (errno == 0) {
+                    ALOGW("Dumping failed for pid '%d', likely due to a timeout\n", pid);
+                } else {
+                    ALOGE("Dumping failed for pid '%d': %s\n", pid, strerror(errno));
+                }
+            }
+            if (close(dumpPipe.writeFd()) != 0) {
+                ALOGW("TombstoneSection '%s' failed to close dump pipe writeFd: %d",
+                      this->name.string(), errno);
+                _exit(EXIT_FAILURE);
+            }
+
+            _exit(EXIT_SUCCESS);
+        }
+        close(dumpPipe.writeFd());
+        // Parent process.
+        // Read from the pipe concurrently to avoid blocking the child.
+        FdBuffer buffer;
+        err = buffer.readFully(dumpPipe.readFd());
+        if (err != NO_ERROR) {
+            ALOGW("TombstoneSection '%s' failed to read stack dump: %d", this->name.string(), err);
+            if (close(dumpPipe.readFd()) != 0) {
+                ALOGW("TombstoneSection '%s' failed to close dump pipe readFd: %s",
+                      this->name.string(), strerror(errno));
+            }
+            break;
+        }
+
+        auto dump = std::make_unique<char[]>(buffer.size());
+        auto iterator = buffer.data();
+        int i = 0;
+        while (iterator.hasNext()) {
+            dump[i] = iterator.next();
+            i++;
+        }
+        long long token = proto.start(android::os::BackTraceProto::TRACES);
+        proto.write(android::os::BackTraceProto::Stack::PID, pid);
+        proto.write(android::os::BackTraceProto::Stack::DUMP, dump.get(), i);
+        proto.write(android::os::BackTraceProto::Stack::DUMP_DURATION_NS,
+                    static_cast<long long>(Nanotime() - start));
+        proto.end(token);
+
+        if (close(dumpPipe.readFd()) != 0) {
+            ALOGW("TombstoneSection '%s' failed to close dump pipe readFd: %d", this->name.string(),
+                  errno);
+            err = -errno;
+            break;
+        }
+    }
+
     proto.flush(pipeWriteFd);
     return err;
 }

@@ -23,10 +23,11 @@ import android.annotation.Nullable;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.media.MediaPlayerBase.EventCallback;
-import android.media.session.MediaSession;
-import android.media.session.MediaSession.Callback;
-import android.media.session.PlaybackState;
+import android.media.MediaPlayerBase.BuffState;
+import android.media.MediaPlayerBase.PlayerEventCallback;
+import android.media.MediaPlayerBase.PlayerState;
+import android.media.MediaSession2.PlaylistParams.RepeatMode;
+import android.media.MediaSession2.PlaylistParams.ShuffleMode;
 import android.media.update.ApiLoader;
 import android.media.update.MediaSession2Provider;
 import android.media.update.MediaSession2Provider.BuilderBaseProvider;
@@ -69,7 +70,7 @@ import java.util.concurrent.Executor;
  * <p>
  * When a session receive transport control commands, the session sends the commands directly to
  * the the underlying media player set by {@link Builder} or
- * {@link #setPlayer(MediaPlayerBase)}.
+ * {@link #updatePlayer}.
  * <p>
  * When an app is finished performing playback it must call {@link #close()} to clean up the session
  * and notify any controllers.
@@ -78,14 +79,9 @@ import java.util.concurrent.Executor;
  *
  * @see MediaSessionService2
  */
-public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
+public class MediaSession2 implements AutoCloseable {
     private final MediaSession2Provider mProvider;
 
-    // TODO(jaewan): Should we define IntDef? Currently we don't have to allow subclass to add more.
-    // TODO(jaewan): Shouldn't we pull out?
-    // TODO(jaewan): Should we also protect getters not related with metadata?
-    //               Getters are getPlaybackState(), getSessionActivity(), getPlaylistParams()
-    // Next ID: 23
     /**
      * Command code for the custom command which can be defined by string action in the
      * {@link Command}.
@@ -96,7 +92,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      * Command code for {@link MediaController2#play()}.
      * <p>
      * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
     public static final int COMMAND_CODE_PLAYBACK_PLAY = 1;
 
@@ -104,7 +100,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      * Command code for {@link MediaController2#pause()}.
      * <p>
      * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
     public static final int COMMAND_CODE_PLAYBACK_PAUSE = 2;
 
@@ -112,23 +108,23 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      * Command code for {@link MediaController2#stop()}.
      * <p>
      * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
     public static final int COMMAND_CODE_PLAYBACK_STOP = 3;
 
     /**
-     * Command code for {@link MediaController2#skipToNext()} ()}.
+     * Command code for {@link MediaController2#skipToNextItem()}.
      * <p>
      * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
     public static final int COMMAND_CODE_PLAYBACK_SKIP_NEXT_ITEM = 4;
 
     /**
-     * Command code for {@link MediaController2#skipToPrevious()} ()}.
+     * Command code for {@link MediaController2#skipToPreviousItem()}.
      * <p>
      * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
     public static final int COMMAND_CODE_PLAYBACK_SKIP_PREV_ITEM = 5;
 
@@ -136,7 +132,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      * Command code for {@link MediaController2#prepare()}.
      * <p>
      * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
     public static final int COMMAND_CODE_PLAYBACK_PREPARE = 6;
 
@@ -145,7 +141,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      * <p>
      * This is transport control command. Command would be sent directly to the player if the
      * session doesn't reject the request through the
-     * {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
     public static final int COMMAND_CODE_PLAYBACK_FAST_FORWARD = 7;
 
@@ -153,7 +149,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      * Command code for {@link MediaController2#rewind()}.
      * <p>
      * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
     public static final int COMMAND_CODE_PLAYBACK_REWIND = 8;
 
@@ -161,97 +157,176 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      * Command code for {@link MediaController2#seekTo(long)}.
      * <p>
      * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
     public static final int COMMAND_CODE_PLAYBACK_SEEK_TO = 9;
+
+    /**
+     * Command code for both {@link MediaController2#setVolumeTo(int, int)}.
+     * <p>
+     * Command would set the device volume or send to the volume provider directly if the session
+     * doesn't reject the request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
+     */
+    public static final int COMMAND_CODE_PLAYBACK_SET_VOLUME = 10;
+
+    /**
+     * Command code for both {@link MediaController2#adjustVolume(int, int)}.
+     * <p>
+     * Command would adjust the device volume or send to the volume provider directly if the session
+     * doesn't reject the request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
+     */
+    public static final int COMMAND_CODE_PLAYBACK_ADJUST_VOLUME = 11;
+
+    /**
+     * Command code for {@link MediaController2#setPlaylistParams(PlaylistParams)}.
+     * <p>
+     * Command would be sent directly to the player if the session doesn't reject the request
+     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
+     * @hide
+     */
+    // TODO(jaewan): Remove (b/74116823)
+    public static final int COMMAND_CODE_PLAYBACK_SET_PLAYLIST_PARAMS = 12;
+
     /**
      * Command code for {@link MediaController2#skipToPlaylistItem(MediaItem2)}.
      * <p>
-     * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
-    public static final int COMMAND_CODE_PLAYBACK_SET_CURRENT_PLAYLIST_ITEM = 10;
+    public static final int COMMAND_CODE_PLAYLIST_SKIP_TO_PLAYLIST_ITEM = 12;
 
     /**
-     * Command code for {@link MediaController2#setPlaylistParams(PlaylistParams)} ()}.
+     * Command code for {@link MediaController2#setShuffleMode(int)}.
      * <p>
-     * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
-    public static final int COMMAND_CODE_PLAYBACK_SET_PLAYLIST_PARAMS = 11;
+    public static final int COMMAND_CODE_PLAYLIST_SET_SHUFFLE_MODE = 13;
+
+    /**
+     * Command code for {@link MediaController2#setRepeatMode(int)}.
+     * <p>
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
+     */
+    public static final int COMMAND_CODE_PLAYLIST_SET_REPEAT_MODE = 14;
 
     /**
      * Command code for {@link MediaController2#addPlaylistItem(int, MediaItem2)}.
      * <p>
-     * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
-    public static final int COMMAND_CODE_PLAYLIST_ADD = 12;
+    public static final int COMMAND_CODE_PLAYLIST_ADD_ITEM = 15;
 
     /**
      * Command code for {@link MediaController2#addPlaylistItem(int, MediaItem2)}.
      * <p>
-     * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
-    public static final int COMMAND_CODE_PLAYLIST_REMOVE = 13;
+    public static final int COMMAND_CODE_PLAYLIST_REMOVE_ITEM = 16;
 
     /**
-     * Command code for {@link MediaController2#getPlaylist()}.
+     * Command code for {@link MediaController2#replacePlaylistItem(int, MediaItem2)}.
      * <p>
-     * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
-    public static final int COMMAND_CODE_PLAYLIST_GET = 14;
+    public static final int COMMAND_CODE_PLAYLIST_REPLACE_ITEM = 17;
 
     /**
-     * Command code for both {@link MediaController2#setVolumeTo(int, int)} and
-     * {@link MediaController2#adjustVolume(int, int)}.
+     * Command code for {@link MediaController2#getPlaylist()}. This will expose metadata
+     * information to the controller.
      * <p>
-     * Command would adjust the volume or sent to the volume provider directly if the session
-     * doesn't reject the request through the
-     * {@link SessionCallback#onCommandRequest(ControllerInfo, Command)}.
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
      */
-    public static final int COMMAND_CODE_SET_VOLUME = 15;
+    public static final int COMMAND_CODE_PLAYLIST_GET_LIST = 18;
+
+    /**
+     * Command code for {@link MediaController2#setPlaylist(List, MediaMetadata2).
+     * <p>
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
+     */
+    public static final int COMMAND_CODE_PLAYLIST_SET_LIST = 19;
+
+    /**
+     * Command code for {@link MediaController2#getPlaylistMetadata()} ()}. This will expose
+     * metadata information to the controller.
+     * *
+     * Command code for {@link MediaController2#setPlaylist(List, MediaMetadata2)} and
+     * {@link MediaController2#updatePlaylistMetadata(MediaMetadata2)}.
+     * <p>
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
+     */
+    public static final int COMMAND_CODE_PLAYLIST_GET_LIST_METADATA = 20;
+
+    /**
+     * Command code for {@link MediaController2#updatePlaylistMetadata(MediaMetadata2)}.
+     * <p>
+     * Command would be sent directly to the playlist agent if the session doesn't reject the
+     * request through the
+     * {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
+     */
+    public static final int COMMAND_CODE_PLAYLIST_SET_LIST_METADATA = 21;
 
     /**
      * Command code for {@link MediaController2#playFromMediaId(String, Bundle)}.
      */
-    public static final int COMMAND_CODE_PLAY_FROM_MEDIA_ID = 16;
+    public static final int COMMAND_CODE_PLAY_FROM_MEDIA_ID = 22;
 
     /**
      * Command code for {@link MediaController2#playFromUri(Uri, Bundle)}.
      */
-    public static final int COMMAND_CODE_PLAY_FROM_URI = 17;
+    public static final int COMMAND_CODE_PLAY_FROM_URI = 23;
 
     /**
      * Command code for {@link MediaController2#playFromSearch(String, Bundle)}.
      */
-    public static final int COMMAND_CODE_PLAY_FROM_SEARCH = 18;
+    public static final int COMMAND_CODE_PLAY_FROM_SEARCH = 24;
 
     /**
      * Command code for {@link MediaController2#prepareFromMediaId(String, Bundle)}.
      */
-    public static final int COMMAND_CODE_PREPARE_FROM_MEDIA_ID = 19;
+    public static final int COMMAND_CODE_PREPARE_FROM_MEDIA_ID = 25;
 
     /**
      * Command code for {@link MediaController2#prepareFromUri(Uri, Bundle)}.
      */
-    public static final int COMMAND_CODE_PREPARE_FROM_URI = 20;
+    public static final int COMMAND_CODE_PREPARE_FROM_URI = 26;
 
     /**
      * Command code for {@link MediaController2#prepareFromSearch(String, Bundle)}.
      */
-    public static final int COMMAND_CODE_PREPARE_FROM_SEARCH = 21;
+    public static final int COMMAND_CODE_PREPARE_FROM_SEARCH = 27;
 
     /**
      * Command code for {@link MediaBrowser2} specific functions that allows navigation and search
-     * from the {@link MediaLibraryService2}. This would be ignored if a {@link MediaSession2},
-     * not {@link android.media.MediaLibraryService2.MediaLibrarySession}, specify this.
+     * from the {@link MediaLibraryService2}. This would be ignored for a {@link MediaSession2},
+     * not {@link android.media.MediaLibraryService2.MediaLibrarySession}.
      *
      * @see MediaBrowser2
      */
-    public static final int COMMAND_CODE_BROWSER = 22;
+    public static final int COMMAND_CODE_BROWSER = 28;
+
+    /**
+     * @hide
+     */
+    public static final int COMMAND_CODE_MAX = 28;
 
     /**
      * @hide
@@ -332,13 +407,36 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
     public static final int ERROR_CODE_SETUP_REQUIRED = 12;
 
     /**
+     * Interface definition of a callback to be invoked when a {@link MediaItem2} in the playlist
+     * didn't have a {@link DataSourceDesc} but it's needed now for preparing or playing it.
+     *
+     * #see #setOnDataSourceMissingHelper
+     */
+    public interface OnDataSourceMissingHelper {
+        /**
+         * Called when a {@link MediaItem2} in the playlist didn't have a {@link DataSourceDesc}
+         * but it's needed now for preparing or playing it. Returned data source descriptor will be
+         * sent to the player directly to prepare or play the contents.
+         * <p>
+         * An exception may be thrown if the returned {@link DataSourceDesc} is duplicated in the
+         * playlist, so items cannot be differentiated.
+         *
+         * @param session the session for this event
+         * @param item media item from the controller
+         * @return a data source descriptor if the media item. Can be {@code null} if the content
+         *        isn't available.
+         */
+        @Nullable DataSourceDesc onDataSourceMissing(@NonNull MediaSession2 session,
+                @NonNull MediaItem2 item);
+    }
+
+    /**
      * Define a command that a {@link MediaController2} can send to a {@link MediaSession2}.
      * <p>
      * If {@link #getCommandCode()} isn't {@link #COMMAND_CODE_CUSTOM}), it's predefined command.
      * If {@link #getCommandCode()} is {@link #COMMAND_CODE_CUSTOM}), it's custom command and
      * {@link #getCustomCommand()} shouldn't be {@code null}.
      */
-    // TODO(jaewan): Move this into the updatable.
     public static final class Command {
         private final CommandProvider mProvider;
 
@@ -347,12 +445,12 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
                     .createMediaSession2Command(this, commandCode, null, null);
         }
 
-        public Command(@NonNull Context context, @NonNull String action, @Nullable Bundle extra) {
+        public Command(@NonNull Context context, @NonNull String action, @Nullable Bundle extras) {
             if (action == null) {
                 throw new IllegalArgumentException("action shouldn't be null");
             }
             mProvider = ApiLoader.getProvider(context)
-                    .createMediaSession2Command(this, COMMAND_CODE_CUSTOM, action, extra);
+                    .createMediaSession2Command(this, COMMAND_CODE_CUSTOM, action, extras);
         }
 
         public int getCommandCode() {
@@ -363,8 +461,8 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
             return mProvider.getCustomCommand_impl();
         }
 
-        public @Nullable Bundle getExtra() {
-            return mProvider.getExtra_impl();
+        public @Nullable Bundle getExtras() {
+            return mProvider.getExtras_impl();
         }
 
         /**
@@ -392,7 +490,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * @return a new Command instance from the Bundle
          * @hide
          */
-        public static Command fromBundle(@NonNull Context context, Bundle command) {
+        public static Command fromBundle(@NonNull Context context, @NonNull Bundle command) {
             return ApiLoader.getProvider(context).fromBundle_MediaSession2Command(context, command);
         }
     }
@@ -403,17 +501,17 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
     public static final class CommandGroup {
         private final CommandGroupProvider mProvider;
 
-        public CommandGroup(Context context) {
+        public CommandGroup(@NonNull Context context) {
             mProvider = ApiLoader.getProvider(context)
                     .createMediaSession2CommandGroup(context, this, null);
         }
 
-        public CommandGroup(Context context, CommandGroup others) {
+        public CommandGroup(@NonNull Context context, @Nullable CommandGroup others) {
             mProvider = ApiLoader.getProvider(context)
                     .createMediaSession2CommandGroup(context, this, others);
         }
 
-        public void addCommand(Command command) {
+        public void addCommand(@NonNull Command command) {
             mProvider.addCommand_impl(command);
         }
 
@@ -421,11 +519,11 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
             mProvider.addAllPredefinedCommands_impl();
         }
 
-        public void removeCommand(Command command) {
+        public void removeCommand(@NonNull Command command) {
             mProvider.removeCommand_impl(command);
         }
 
-        public boolean hasCommand(Command command) {
+        public boolean hasCommand(@NonNull Command command) {
             return mProvider.hasCommand_impl(command);
         }
 
@@ -433,10 +531,14 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
             return mProvider.hasCommand_impl(code);
         }
 
+        public @NonNull List<Command> getCommands() {
+            return mProvider.getCommands_impl();
+        }
+
         /**
          * @hide
          */
-        public CommandGroupProvider getProvider() {
+        public @NonNull CommandGroupProvider getProvider() {
             return mProvider;
         }
 
@@ -444,7 +546,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * @return new bundle from the CommandGroup
          * @hide
          */
-        public Bundle toBundle() {
+        public @NonNull Bundle toBundle() {
             return mProvider.toBundle_impl();
         }
 
@@ -464,11 +566,14 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      * If it's not set, the session will accept all controllers and all incoming commands by
      * default.
      */
-    // TODO(jaewan): Can we move this inside of the updatable for default implementation.
+    // TODO(jaewan): Move this to updatable for default implementation (b/74091963)
     public static abstract class SessionCallback {
         private final Context mContext;
 
-        public SessionCallback(Context context) {
+        public SessionCallback(@NonNull Context context) {
+            if (context == null) {
+                throw new IllegalArgumentException("context shouldn't be null");
+            }
             mContext = context;
         }
 
@@ -477,13 +582,15 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * controller. By default it allows all connection requests and commands.
          * <p>
          * You can reject the connection by return {@code null}. In that case, controller receives
-         * {@link MediaController2.ControllerCallback#onDisconnected()} and cannot be usable.
+         * {@link MediaController2.ControllerCallback#onDisconnected(MediaController2)} and cannot
+         * be usable.
          *
+         * @param session the session for this event
          * @param controller controller information.
-         * @return allowed commands. Can be {@code null} to reject coonnection.
+         * @return allowed commands. Can be {@code null} to reject connection.
          */
-        // TODO(jaewan): Change return type. Once we do, null is for reject.
-        public @Nullable CommandGroup onConnect(@NonNull ControllerInfo controller) {
+        public @Nullable CommandGroup onConnect(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller) {
             CommandGroup commands = new CommandGroup(mContext);
             commands.addAllPredefinedCommands();
             return commands;
@@ -492,14 +599,17 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
         /**
          * Called when a controller is disconnected
          *
+         * @param session the session for this event
          * @param controller controller information
          */
-        public void onDisconnected(@NonNull ControllerInfo controller) { }
+        public void onDisconnected(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller) { }
 
         /**
          * Called when a controller sent a command that will be sent directly to the player. Return
          * {@code false} here to reject the request and stop sending command to the player.
          *
+         * @param session the session for this event
          * @param controller controller information.
          * @param command a command. This method will be called for every single command.
          * @return {@code true} if you want to accept incoming command. {@code false} otherwise.
@@ -512,15 +622,15 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * @see #COMMAND_CODE_PLAYBACK_FAST_FORWARD
          * @see #COMMAND_CODE_PLAYBACK_REWIND
          * @see #COMMAND_CODE_PLAYBACK_SEEK_TO
-         * @see #COMMAND_CODE_PLAYBACK_SET_CURRENT_PLAYLIST_ITEM
+         * @see #COMMAND_CODE_PLAYLIST_SKIP_TO_PLAYLIST_ITEM
          * @see #COMMAND_CODE_PLAYBACK_SET_PLAYLIST_PARAMS
-         * @see #COMMAND_CODE_PLAYLIST_ADD
-         * @see #COMMAND_CODE_PLAYLIST_REMOVE
-         * @see #COMMAND_CODE_PLAYLIST_GET
-         * @see #COMMAND_CODE_SET_VOLUME
+         * @see #COMMAND_CODE_PLAYLIST_ADD_ITEM
+         * @see #COMMAND_CODE_PLAYLIST_REMOVE_ITEM
+         * @see #COMMAND_CODE_PLAYLIST_GET_LIST
+         * @see #COMMAND_CODE_PLAYBACK_SET_VOLUME
          */
-        public boolean onCommandRequest(@NonNull ControllerInfo controller,
-                @NonNull Command command) {
+        public boolean onCommandRequest(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller, @NonNull Command command) {
             return true;
         }
 
@@ -533,37 +643,41 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * in order to provide possible rating style for controller. Controller will follow the
          * rating style.
          *
+         * @param session the session for this event
          * @param controller controller information
          * @param mediaId media id from the controller
          * @param rating new rating from the controller
          */
-        public void onSetRating(@NonNull ControllerInfo controller, @NonNull String mediaId,
-                @NonNull Rating2 rating) { }
+        public void onSetRating(@NonNull MediaSession2 session, @NonNull ControllerInfo controller,
+                @NonNull String mediaId, @NonNull Rating2 rating) { }
 
         /**
          * Called when a controller sent a custom command through
          * {@link MediaController2#sendCustomCommand(Command, Bundle, ResultReceiver)}.
          *
+         * @param session the session for this event
          * @param controller controller information
          * @param customCommand custom command.
          * @param args optional arguments
          * @param cb optional result receiver
          */
-        public void onCustomCommand(@NonNull ControllerInfo controller,
-                @NonNull Command customCommand, @Nullable Bundle args,
-                @Nullable ResultReceiver cb) { }
+        public void onCustomCommand(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller, @NonNull Command customCommand,
+                @Nullable Bundle args, @Nullable ResultReceiver cb) { }
 
         /**
          * Called when a controller requested to play a specific mediaId through
          * {@link MediaController2#playFromMediaId(String, Bundle)}.
          *
+         * @param session the session for this event
          * @param controller controller information
          * @param mediaId media id
          * @param extras optional extra bundle
          * @see #COMMAND_CODE_PLAY_FROM_MEDIA_ID
          */
-        public void onPlayFromMediaId(@NonNull ControllerInfo controller,
-                @NonNull String mediaId, @Nullable Bundle extras) { }
+        public void onPlayFromMediaId(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller, @NonNull String mediaId,
+                @Nullable Bundle extras) { }
 
         /**
          * Called when a controller requested to begin playback from a search query through
@@ -572,25 +686,29 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * An empty query indicates that the app may play any music. The implementation should
          * attempt to make a smart choice about what to play.
          *
+         * @param session the session for this event
          * @param controller controller information
          * @param query query string. Can be empty to indicate any suggested media
          * @param extras optional extra bundle
          * @see #COMMAND_CODE_PLAY_FROM_SEARCH
          */
-        public void onPlayFromSearch(@NonNull ControllerInfo controller,
-                @NonNull String query, @Nullable Bundle extras) { }
+        public void onPlayFromSearch(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller, @NonNull String query,
+                @Nullable Bundle extras) { }
 
         /**
          * Called when a controller requested to play a specific media item represented by a URI
          * through {@link MediaController2#playFromUri(Uri, Bundle)}
          *
+         * @param session the session for this event
          * @param controller controller information
          * @param uri uri
          * @param extras optional extra bundle
          * @see #COMMAND_CODE_PLAY_FROM_URI
          */
-        public void onPlayFromUri(@NonNull ControllerInfo controller,
-                @NonNull Uri uri, @Nullable Bundle extras) { }
+        public void onPlayFromUri(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller, @NonNull Uri uri,
+                @Nullable Bundle extras) { }
 
         /**
          * Called when a controller requested to prepare for playing a specific mediaId through
@@ -598,7 +716,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * <p>
          * During the preparation, a session should not hold audio focus in order to allow other
          * sessions play seamlessly. The state of playback should be updated to
-         * {@link PlaybackState#STATE_PAUSED} after the preparation is done.
+         * {@link MediaPlayerBase#PLAYER_STATE_PAUSED} after the preparation is done.
          * <p>
          * The playback of the prepared content should start in the later calls of
          * {@link MediaSession2#play()}.
@@ -606,13 +724,15 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * Override {@link #onPlayFromMediaId} to handle requests for starting
          * playback without preparation.
          *
+         * @param session the session for this event
          * @param controller controller information
          * @param mediaId media id to prepare
          * @param extras optional extra bundle
          * @see #COMMAND_CODE_PREPARE_FROM_MEDIA_ID
          */
-        public void onPrepareFromMediaId(@NonNull ControllerInfo controller,
-                @NonNull String mediaId, @Nullable Bundle extras) { }
+        public void onPrepareFromMediaId(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller, @NonNull String mediaId,
+                @Nullable Bundle extras) { }
 
         /**
          * Called when a controller requested to prepare playback from a search query through
@@ -621,28 +741,30 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * An empty query indicates that the app may prepare any music. The implementation should
          * attempt to make a smart choice about what to play.
          * <p>
-         * The state of playback should be updated to {@link PlaybackState#STATE_PAUSED} after the
-         * preparation is done. The playback of the prepared content should start in the later
-         * calls of {@link MediaSession2#play()}.
+         * The state of playback should be updated to {@link MediaPlayerBase#PLAYER_STATE_PAUSED}
+         * after the preparation is done. The playback of the prepared content should start in the
+         * later calls of {@link MediaSession2#play()}.
          * <p>
          * Override {@link #onPlayFromSearch} to handle requests for starting playback without
          * preparation.
          *
+         * @param session the session for this event
          * @param controller controller information
          * @param query query string. Can be empty to indicate any suggested media
          * @param extras optional extra bundle
          * @see #COMMAND_CODE_PREPARE_FROM_SEARCH
          */
-        public void onPrepareFromSearch(@NonNull ControllerInfo controller,
-                @NonNull String query, @Nullable Bundle extras) { }
+        public void onPrepareFromSearch(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller, @NonNull String query,
+                @Nullable Bundle extras) { }
 
         /**
          * Called when a controller requested to prepare a specific media item represented by a URI
          * through {@link MediaController2#prepareFromUri(Uri, Bundle)}.
-         * <p></p>
+         * <p>
          * During the preparation, a session should not hold audio focus in order to allow
          * other sessions play seamlessly. The state of playback should be updated to
-         * {@link PlaybackState#STATE_PAUSED} after the preparation is done.
+         * {@link MediaPlayerBase#PLAYER_STATE_PAUSED} after the preparation is done.
          * <p>
          * The playback of the prepared content should start in the later calls of
          * {@link MediaSession2#play()}.
@@ -650,14 +772,111 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * Override {@link #onPlayFromUri} to handle requests for starting playback without
          * preparation.
          *
+         * @param session the session for this event
          * @param controller controller information
          * @param uri uri
          * @param extras optional extra bundle
          * @see #COMMAND_CODE_PREPARE_FROM_URI
          */
-        public void onPrepareFromUri(@NonNull ControllerInfo controller,
-                @NonNull Uri uri, @Nullable Bundle extras) { }
-    };
+        public void onPrepareFromUri(@NonNull MediaSession2 session,
+                @NonNull ControllerInfo controller, @NonNull Uri uri, @Nullable Bundle extras) { }
+
+        /**
+         * Called when the player's current playing item is changed
+         * <p>
+         * When it's called, you should invalidate previous playback information and wait for later
+         * callbacks.
+         *
+         * @param session the controller for this event
+         * @param player the player for this event
+         * @param item new item
+         */
+        // TODO(jaewan): Use this (b/74316764)
+        public void onCurrentMediaItemChanged(@NonNull MediaSession2 session,
+                @NonNull MediaPlayerBase player, @NonNull MediaItem2 item) { }
+
+        /**
+         * Called when the player is <i>prepared</i>, i.e. it is ready to play the content
+         * referenced by the given data source.
+         * @param session the session for this event
+         * @param player the player for this event
+         * @param item the media item for which buffering is happening
+         */
+        public void onMediaPrepared(@NonNull MediaSession2 session, @NonNull MediaPlayerBase player,
+                @NonNull MediaItem2 item) { }
+
+        /**
+         * Called to indicate that the state of the player has changed.
+         * See {@link MediaPlayerBase#getPlayerState()} for polling the player state.
+         * @param session the session for this event
+         * @param player the player for this event
+         * @param state the new state of the player.
+         */
+        public void onPlayerStateChanged(@NonNull MediaSession2 session,
+                @NonNull MediaPlayerBase player, @PlayerState int state) { }
+
+        /**
+         * Called to report buffering events for a data source.
+         *
+         * @param session the session for this event
+         * @param player the player for this event
+         * @param item the media item for which buffering is happening.
+         * @param state the new buffering state.
+         */
+        public void onBufferingStateChanged(@NonNull MediaSession2 session,
+                @NonNull MediaPlayerBase player, @NonNull MediaItem2 item, @BuffState int state) { }
+
+        /**
+         * Called when a playlist is changed.
+         *
+         * @param session the session for this event
+         * @param playlistAgent playlist agent for this event
+         * @param list new playlist
+         * @param metadata new metadata
+         */
+        public void onPlaylistChanged(@NonNull MediaSession2 session,
+                @NonNull MediaPlaylistAgent playlistAgent, @NonNull List<MediaItem2> list,
+                @Nullable MediaMetadata2 metadata) { }
+
+        /**
+         * Called when a playlist metadata is changed.
+         *
+         * @param session the session for this event
+         * @param playlistAgent playlist agent for this event
+         * @param metadata new metadata
+         */
+        public void onPlaylistMetadataChanged(@NonNull MediaSession2 session,
+                @NonNull MediaPlaylistAgent playlistAgent, @Nullable MediaMetadata2 metadata) { }
+
+        /**
+         * Called when the shuffle mode is changed.
+         *
+         * @param session the session for this event
+         * @param playlistAgent playlist agent for this event
+         * @param shuffleMode repeat mode
+         * @see MediaPlaylistAgent#SHUFFLE_MODE_NONE
+         * @see MediaPlaylistAgent#SHUFFLE_MODE_ALL
+         * @see MediaPlaylistAgent#SHUFFLE_MODE_GROUP
+         */
+        public void onShuffleModeChanged(@NonNull MediaSession2 session,
+                @NonNull MediaPlaylistAgent playlistAgent,
+                @MediaPlaylistAgent.ShuffleMode int shuffleMode) { }
+
+        /**
+         * Called when the repeat mode is changed.
+         *
+         * @param session the session for this event
+         * @param playlistAgent playlist agent for this event
+         * @param repeatMode repeat mode
+         * @see MediaPlaylistAgent#REPEAT_MODE_NONE
+         * @see MediaPlaylistAgent#REPEAT_MODE_ONE
+         * @see MediaPlaylistAgent#REPEAT_MODE_ALL
+         * @see MediaPlaylistAgent#REPEAT_MODE_GROUP
+         */
+        public void onRepeatModeChanged(@NonNull MediaSession2 session,
+                @NonNull MediaPlaylistAgent playlistAgent,
+                @MediaPlaylistAgent.RepeatMode int repeatMode) { }
+    }
 
     /**
      * Base builder class for MediaSession2 and its subclass. Any change in this class should be
@@ -685,15 +904,39 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
         }
 
         /**
-         * Set volume provider to configure this session to use remote volume handling.
-         * This must be called to receive volume button events, otherwise the system
-         * will adjust the appropriate stream volume for this session's player.
-         * <p>
-         * Set {@code null} to reset.
+         * Sets the underlying {@link MediaPlayerBase} for this session to dispatch incoming event
+         * to.
          *
-         * @param volumeProvider The provider that will handle volume changes. Can be {@code null}.
+         * @param player a {@link MediaPlayerBase} that handles actual media playback in your app.
          */
-        U setVolumeProvider(@Nullable VolumeProvider2 volumeProvider) {
+        @NonNull U setPlayer(@NonNull MediaPlayerBase player) {
+            mProvider.setPlayer_impl(player);
+            return (U) this;
+        }
+
+        /**
+         * Sets the {@link MediaPlaylistAgent} for this session to manages playlist of the
+         * underlying {@link MediaPlayerBase}. The playlist agent should manage
+         * {@link MediaPlayerBase} for calling {@link MediaPlayerBase#setNextDataSources(List)}.
+         * <p>
+         * If the {@link MediaPlaylistAgent} isn't set, session will create the default playlist
+         * agent.
+         *
+         * @param playlistAgent a {@link MediaPlaylistAgent} that manages playlist of the
+         *                      {@code player}
+         */
+        U setPlaylistAgent(@NonNull MediaPlaylistAgent playlistAgent) {
+            mProvider.setPlaylistAgent_impl(playlistAgent);
+            return (U) this;
+        }
+
+        /**
+         * Sets the {@link VolumeProvider2} for this session to handle volume events. If not set,
+         * system will adjust the appropriate stream volume for this session's player.
+         *
+         * @param volumeProvider The provider that will receive volume button events.
+         */
+        @NonNull U setVolumeProvider(@Nullable VolumeProvider2 volumeProvider) {
             mProvider.setVolumeProvider_impl(volumeProvider);
             return (U) this;
         }
@@ -705,7 +948,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          *
          * @param pi The intent to launch to show UI for this session.
          */
-        U setSessionActivity(@Nullable PendingIntent pi) {
+        @NonNull U setSessionActivity(@Nullable PendingIntent pi) {
             mProvider.setSessionActivity_impl(pi);
             return (U) this;
         }
@@ -720,7 +963,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * @throws IllegalArgumentException if id is {@code null}
          * @return
          */
-        U setId(@NonNull String id) {
+        @NonNull U setId(@NonNull String id) {
             mProvider.setId_impl(id);
             return (U) this;
         }
@@ -732,7 +975,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * @param callback session callback.
          * @return
          */
-        U setSessionCallback(@NonNull @CallbackExecutor Executor executor,
+        @NonNull U setSessionCallback(@NonNull @CallbackExecutor Executor executor,
                 @NonNull C callback) {
             mProvider.setSessionCallback_impl(executor, callback);
             return (U) this;
@@ -745,7 +988,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          * @throws IllegalStateException if the session with the same id is already exists for the
          *      package.
          */
-        T build() {
+        @NonNull T build() {
             return mProvider.build_impl();
         }
     }
@@ -759,34 +1002,44 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
     // Override all methods just to show them with the type instead of generics in Javadoc.
     // This workarounds javadoc issue described in the MediaSession2.BuilderBase.
     public static final class Builder extends BuilderBase<MediaSession2, Builder, SessionCallback> {
-        public Builder(Context context, @NonNull MediaPlayerBase player) {
+        public Builder(Context context) {
             super((instance) -> ApiLoader.getProvider(context).createMediaSession2Builder(
-                    context, (Builder) instance, player));
+                    context, (Builder) instance));
         }
 
         @Override
-        public Builder setVolumeProvider(@Nullable VolumeProvider2 volumeProvider) {
+        public @NonNull Builder setPlayer(@NonNull MediaPlayerBase player) {
+            return super.setPlayer(player);
+        }
+
+        @Override
+        public Builder setPlaylistAgent(@NonNull MediaPlaylistAgent playlistAgent) {
+            return super.setPlaylistAgent(playlistAgent);
+        }
+
+        @Override
+        public @NonNull Builder setVolumeProvider(@Nullable VolumeProvider2 volumeProvider) {
             return super.setVolumeProvider(volumeProvider);
         }
 
         @Override
-        public Builder setSessionActivity(@Nullable PendingIntent pi) {
+        public @NonNull Builder setSessionActivity(@Nullable PendingIntent pi) {
             return super.setSessionActivity(pi);
         }
 
         @Override
-        public Builder setId(@NonNull String id) {
+        public @NonNull Builder setId(@NonNull String id) {
             return super.setId(id);
         }
 
         @Override
-        public Builder setSessionCallback(@NonNull Executor executor,
+        public @NonNull Builder setSessionCallback(@NonNull Executor executor,
                 @Nullable SessionCallback callback) {
             return super.setSessionCallback(executor, callback);
         }
 
         @Override
-        public MediaSession2 build() {
+        public @NonNull MediaSession2 build() {
             return super.build();
         }
     }
@@ -800,9 +1053,8 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
         /**
          * @hide
          */
-        // TODO(jaewan): Also accept componentName to check notificaiton listener.
-        public ControllerInfo(Context context, int uid, int pid, String packageName,
-                IInterface callback) {
+        public ControllerInfo(@NonNull Context context, int uid, int pid,
+                @NonNull String packageName, @NonNull IInterface callback) {
             mProvider = ApiLoader.getProvider(context)
                     .createMediaSession2ControllerInfo(
                             context, this, uid, pid, packageName, callback);
@@ -811,7 +1063,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
         /**
          * @return package name of the controller
          */
-        public String getPackageName() {
+        public @NonNull String getPackageName() {
             return mProvider.getPackageName_impl();
         }
 
@@ -836,7 +1088,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
         /**
          * @hide
          */
-        public ControllerInfoProvider getProvider() {
+        public @NonNull ControllerInfoProvider getProvider() {
             return mProvider;
         }
 
@@ -847,18 +1099,12 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
 
         @Override
         public boolean equals(Object obj) {
-            if (!(obj instanceof ControllerInfo)) {
-                return false;
-            }
-            ControllerInfo other = (ControllerInfo) obj;
-            return mProvider.equals_impl(other.mProvider);
+            return mProvider.equals_impl(obj);
         }
 
         @Override
         public String toString() {
-            // TODO(jaewan): Move this to updatable.
-            return "ControllerInfo {pkg=" + getPackageName() + ", uid=" + getUid() + ", trusted="
-                    + isTrusted() + "}";
+            return mProvider.toString_impl();
         }
     }
 
@@ -912,8 +1158,8 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
          *
          * @return
          */
-        public @Nullable Bundle getExtra() {
-            return mProvider.getExtra_impl();
+        public @Nullable Bundle getExtras() {
+            return mProvider.getExtras_impl();
         }
 
         /**
@@ -928,7 +1174,7 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
         /**
          * @hide
          */
-        public CommandButtonProvider getProvider() {
+        public @NonNull CommandButtonProvider getProvider() {
             return mProvider;
         }
 
@@ -943,27 +1189,27 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
                         .createMediaSession2CommandButtonBuilder(context, this);
             }
 
-            public Builder setCommand(Command command) {
+            public @NonNull Builder setCommand(@Nullable Command command) {
                 return mProvider.setCommand_impl(command);
             }
 
-            public Builder setIconResId(int resId) {
+            public @NonNull Builder setIconResId(int resId) {
                 return mProvider.setIconResId_impl(resId);
             }
 
-            public Builder setDisplayName(String displayName) {
+            public @NonNull Builder setDisplayName(@Nullable String displayName) {
                 return mProvider.setDisplayName_impl(displayName);
             }
 
-            public Builder setEnabled(boolean enabled) {
+            public @NonNull Builder setEnabled(boolean enabled) {
                 return mProvider.setEnabled_impl(enabled);
             }
 
-            public Builder setExtra(Bundle extra) {
-                return mProvider.setExtra_impl(extra);
+            public @NonNull Builder setExtras(@Nullable Bundle extras) {
+                return mProvider.setExtras_impl(extras);
             }
 
-            public CommandButton build() {
+            public @NonNull CommandButton build() {
                 return mProvider.build_impl();
             }
         }
@@ -971,7 +1217,9 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
 
     /**
      * Parameter for the playlist.
+     * @hide
      */
+    // TODO(jaewan): Remove (b/74116823)
     public final static class PlaylistParams {
         /**
          * @hide
@@ -1103,10 +1351,13 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      *       Whenever it happens only one session was properly setup and others were all dummies.
      *       Android framework couldn't find the right session to dispatch media key event.
      *    2. Simplify session's lifecycle.
-     *       {@link MediaSession} can be available after all of {@link MediaSession#setFlags(int)},
-     *       {@link MediaSession#setCallback(Callback)}, and
-     *       {@link MediaSession#setActive(boolean)}. It was common for an app to omit one, so
-     *       framework had to add heuristics to figure out if an app is
+     *       {@link android.media.session.MediaSession} is available after all of
+     *       {@link android.media.session.MediaSession#setFlags(int)},
+     *       {@link android.media.session.MediaSession#setCallback(
+     *              android.media.session.MediaSession.Callback)},
+     *       and {@link android.media.session.MediaSession#setActive(boolean)}.
+     *       It was common for an app to omit one, so framework had to add heuristics to figure out
+     *       which should be the highest priority for handling media key event.
      * @hide
      */
     public MediaSession2(MediaSession2Provider provider) {
@@ -1117,36 +1368,28 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
     /**
      * @hide
      */
-    public MediaSession2Provider getProvider() {
+    public @NonNull MediaSession2Provider getProvider() {
         return mProvider;
     }
 
     /**
-     * Set the underlying {@link MediaPlayerBase} for this session to dispatch incoming event
-     * to. Events from the {@link MediaController2} will be sent directly to the underlying
-     * player on the {@link Handler} where the session is created on.
+     * Sets the underlying {@link MediaPlayerBase} and {@link MediaPlaylistAgent} for this session
+     * to dispatch incoming event to.
      * <p>
-     * For the remote playback case which you want to handle volume by yourself, use
-     * {@link #setPlayer(MediaPlayerBase, VolumeProvider2)}.
+     * When a {@link MediaPlaylistAgent} is specified here, the playlist agent should manage
+     * {@link MediaPlayerBase} for calling {@link MediaPlayerBase#setNextDataSources(List)}.
+     * <p>
+     * If the {@link MediaPlaylistAgent} isn't set, session will recreate the default playlist
+     * agent.
      *
-     * @param player a {@link MediaPlayerBase} that handles actual media playback in your app.
-     * @throws IllegalArgumentException if the player is {@code null}.
+     * @param player a {@link MediaPlayerBase} that handles actual media playback in your app
+     * @param playlistAgent a {@link MediaPlaylistAgent} that manages playlist of the {@code player}
+     * @param volumeProvider a {@link VolumeProvider2}. If {@code null}, system will adjust the
+     *                       appropriate stream volume for this session's player.
      */
-    public void setPlayer(@NonNull MediaPlayerBase player) {
-        mProvider.setPlayer_impl(player);
-    }
-
-    /**
-     * Set the underlying {@link MediaPlayerBase} with the volume provider for remote playback.
-     *
-     * @param player a {@link MediaPlayerBase} that handles actual media playback in your app.
-     * @param volumeProvider a volume provider
-     * @see #setPlayer(MediaPlayerBase)
-     * @see Builder#setVolumeProvider(VolumeProvider2)
-     */
-    public void setPlayer(@NonNull MediaPlayerBase player,
-            @NonNull VolumeProvider2 volumeProvider) {
-        mProvider.setPlayer_impl(player, volumeProvider);
+    public void updatePlayer(@NonNull MediaPlayerBase player,
+            @Nullable MediaPlaylistAgent playlistAgent, @Nullable VolumeProvider2 volumeProvider) {
+        mProvider.updatePlayer_impl(player, playlistAgent, volumeProvider);
     }
 
     @Override
@@ -1157,9 +1400,22 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
     /**
      * @return player
      */
-    public @Nullable
-    MediaPlayerBase getPlayer() {
+    public @NonNull MediaPlayerBase getPlayer() {
         return mProvider.getPlayer_impl();
+    }
+
+    /**
+     * @return playlist agent
+     */
+    public @NonNull MediaPlaylistAgent getPlaylistAgent() {
+        return mProvider.getPlaylistAgent_impl();
+    }
+
+    /**
+     * @return volume provider
+     */
+    public @Nullable VolumeProvider2 getVolumeProvider() {
+        return mProvider.getVolumeProvider_impl();
     }
 
     /**
@@ -1175,24 +1431,13 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
     }
 
     /**
-     * Sets which type of audio focus will be requested during the playback, or configures playback
-     * to not request audio focus. Valid values for focus requests are
-     * {@link AudioManager#AUDIOFOCUS_GAIN}, {@link AudioManager#AUDIOFOCUS_GAIN_TRANSIENT},
-     * {@link AudioManager#AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK}, and
-     * {@link AudioManager#AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE}. Or use
-     * {@link AudioManager#AUDIOFOCUS_NONE} to express that audio focus should not be
-     * requested when playback starts. You can for instance use this when playing a silent animation
-     * through this class, and you don't want to affect other audio applications playing in the
-     * background.
+     * Set the {@link AudioFocusRequest} to obtain the audio focus
      *
-     * @param focusGain the type of audio focus gain that will be requested, or
-     *                  {@link AudioManager#AUDIOFOCUS_NONE} to disable the use audio focus during
-     *                  playback.
-     * @hide
+     * @param afr the full request parameters
      */
-    // TODO(jaewan): Revisit
-    public void setAudioFocusRequest(int focusGain) {
-        mProvider.setAudioFocusRequest_impl(focusGain);
+    public void setAudioFocusRequest(@Nullable AudioFocusRequest afr) {
+        // TODO(jaewan): implement this (b/72529899)
+        // mProvider.setAudioFocusRequest_impl(focusGain);
     }
 
     /**
@@ -1209,10 +1454,10 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      *      expanded row:   layout[5] layout[6] layout[7] layout[8] layout[9]
      *      main row:       layout[3] layout[1] layout[0] layout[2] layout[4]
      * <p>
-     * This API can be called in the {@link SessionCallback#onConnect(ControllerInfo)}.
+     * This API can be called in the {@link SessionCallback#onConnect(MediaSession2, ControllerInfo)}.
      *
      * @param controller controller to specify layout.
-     * @param layout oredered list of layout.
+     * @param layout ordered list of layout.
      */
     public void setCustomLayout(@NonNull ControllerInfo controller,
             @NonNull List<CommandButton> layout) {
@@ -1255,45 +1500,39 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
 
     /**
      * Play playback
+     * <p>
+     * This calls {@link MediaPlayerBase#play()}.
      */
     public void play() {
         mProvider.play_impl();
     }
 
     /**
-     * Pause playback
+     * Pause playback.
+     * <p>
+     * This calls {@link MediaPlayerBase#pause()}.
      */
     public void pause() {
         mProvider.pause_impl();
     }
 
     /**
-     * Stop playback
+     * Stop playback, and reset the player to the initial state.
+     * <p>
+     * This calls {@link MediaPlayerBase#reset()}.
      */
     public void stop() {
         mProvider.stop_impl();
     }
 
     /**
-     * Rewind playback
-     */
-    public void skipToPrevious() {
-        mProvider.skipToPrevious_impl();
-    }
-
-    /**
-     * Rewind playback
-     */
-    public void skipToNext() {
-        mProvider.skipToNext_impl();
-    }
-
-    /**
      * Request that the player prepare its playback. In other words, other sessions can continue
      * to play during the preparation of this session. This method can be used to speed up the
      * start of the playback. Once the preparation is done, the session will change its playback
-     * state to {@link PlaybackState#STATE_PAUSED}. Afterwards, {@link #play} can be called to
-     * start playback.
+     * state to {@link MediaPlayerBase#PLAYER_STATE_PAUSED}. Afterwards, {@link #play} can be called
+     * to start playback.
+     * <p>
+     * This calls {@link MediaPlayerBase#reset()}.
      */
     public void prepare() {
         mProvider.prepare_impl();
@@ -1323,17 +1562,6 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
     }
 
     /**
-     * Skip to the item in the play list.
-     *
-     * @param item item in the play list you want to play
-     * @throws IllegalArgumentException if the play list is null
-     * @throws NullPointerException if index is outside play list range
-     */
-    public void skipToPlaylistItem(MediaItem2 item) {
-        mProvider.skipToPlaylistItem_impl(item);
-    }
-
-    /**
      * @hide
      */
     public void skipForward() {
@@ -1348,27 +1576,193 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
     }
 
     /**
+     * Sets the {@link PlaylistParams} for the current play list. Repeat/shuffle mode and metadata
+     * for the list can be set by calling this method.
+     *
+     * @param params A {@link PlaylistParams} object to set.
+     * @throws IllegalArgumentException if given {@param param} is null.
+     * @hide
+     */
+    // TODO(jaewan): Remove (b/74116823)
+    public void setPlaylistParams(PlaylistParams params) {
+        mProvider.setPlaylistParams_impl(params);
+    }
+
+    /**
+     * Returns the {@link PlaylistParams} for the current play list.
+     * Returns {@code null} if not set.
+     * @hide
+     */
+    // TODO(jaewan): Remove (b/74116823)
+    public PlaylistParams getPlaylistParams() {
+        return mProvider.getPlaylistParams_impl();
+    }
+
+    /**
+     * Notify errors to the connected controllers
+     *
+     * @param errorCode error code
+     * @param extras extras
+     */
+    public void notifyError(@ErrorCode int errorCode, @Nullable Bundle extras) {
+        mProvider.notifyError_impl(errorCode, extras);
+    }
+
+    /**
+     * Register {@link PlayerEventCallback} to listen changes in the underlying
+     * {@link MediaPlayerBase}, regardless of the change in the underlying player.
+     * <p>
+     * Registered callbacks will be also called when the underlying player is changed.
+     *
+     * @param executor a callback Executor
+     * @param callback a EventCallback
+     * @throws IllegalArgumentException if executor or callback is {@code null}.
+     * @hide
+     */
+    // TODO(jaewan): Remove (b/74157064)
+    public void registerPlayerEventCallback(@NonNull @CallbackExecutor Executor executor,
+            @NonNull PlayerEventCallback callback) {
+        mProvider.registerPlayerEventCallback_impl(executor, callback);
+    }
+
+    /**
+     * Unregister the previously registered {@link PlayerEventCallback}.
+     *
+     * @param callback the callback to be removed
+     * @throws IllegalArgumentException if the callback is {@code null}.
+     * @hide
+     */
+    // TODO(jaewan): Remove (b/74157064)
+    public void unregisterPlayerEventCallback(@NonNull PlayerEventCallback callback) {
+        mProvider.unregisterPlayerEventCallback_impl(callback);
+    }
+
+    /**
+     * Return the {@link PlaybackState2} from the player.
+     *
+     * @return playback state
+     * @hide
+     */
+    public PlaybackState2 getPlaybackState() {
+        return mProvider.getPlaybackState_impl();
+    }
+
+    /**
+     * Get the playback speed.
+     *
+     * @return speed
+     */
+    public float getPlaybackSpeed() {
+        // TODO(jaewan): implement this (b/74093080)
+        return -1;
+    }
+
+    /**
+     * Set the playback speed.
+     */
+    public void setPlaybackSpeed(float speed) {
+        // TODO(jaewan): implement this (b/74093080)
+    }
+
+    /**
+     * Sets the data source missing helper. Helper will be used to provide default implementation of
+     * {@link MediaPlaylistAgent} when it isn't set by developer.
+     * <p>
+     * Default implementation of the {@link MediaPlaylistAgent} will call helper when a
+     * {@link MediaItem2} in the playlist doesn't have a {@link DataSourceDesc}. This may happen
+     * when
+     * <ul>
+     *      <li>{@link MediaItem2} specified by {@link #setPlaylist(List, MediaMetadata2)} doesn't
+     *          have {@link DataSourceDesc}</li>
+     *      <li>{@link MediaController2#addPlaylistItem(int, MediaItem2)} is called and accepted
+     *          by {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
+     *          In that case, an item would be added automatically without the data source.</li>
+     * </ul>
+     * <p>
+     * If it's not set, playback wouldn't happen for the item without data source descriptor.
+     * <p>
+     * The helper will be run on the executor that you've specified by the
+     * {@link Builder#setSessionCallback(Executor, SessionCallback)}.
+     *
+     * @param helper a data source missing helper.
+     * @throws IllegalStateException when the helper is set when the playlist agent is set
+     * @see #setPlaylist(List, MediaMetadata2)
+     * @see SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)
+     * @see #COMMAND_CODE_PLAYLIST_ADD_ITEM
+     * @see #COMMAND_CODE_PLAYLIST_REPLACE_ITEM
+     */
+    public void setOnDataSourceMissingHelper(@NonNull OnDataSourceMissingHelper helper) {
+        // TODO(jaewan): Implement (b/74090741).
+    }
+
+    /**
+     * Clears the data source missing helper.
+     *
+     * @see #setOnDataSourceMissingHelper(OnDataSourceMissingHelper)
+     */
+    public void clearOnDataSourceMissingHelper() {
+        // TODO(jaewan): Implement (b/74090741)
+    }
+
+    /**
+     * Return the playlist which is lastly set.
+     *
+     * @return playlist
+     */
+    public List<MediaItem2> getPlaylist() {
+        return mProvider.getPlaylist_impl();
+    }
+
+    /**
      * Set a list of {@link MediaItem2} as the current play list.
      *
      * @param playlist A list of {@link MediaItem2} objects to set as a play list.
      * @throws IllegalArgumentException if given {@param playlist} is null.
+     * @hide
      */
+    // TODO(jaewan): Remove
     public void setPlaylist(@NonNull List<MediaItem2> playlist) {
         mProvider.setPlaylist_impl(playlist);
     }
 
     /**
-     * Remove the media item at index in the play list.
+     * Set a list of {@link MediaItem2} as the current play list. Ensure uniqueness in the
+     * {@link MediaItem2} in the playlist so session can uniquely identity individual items.
      * <p>
-     * If index is same as the current index of the playlist, current playback
-     * will be stopped and playback moves to next source in the list.
+     * You may specify a {@link MediaItem2} without {@link DataSourceDesc}. However, in that case,
+     * you should set {@link OnDataSourceMissingHelper} for player to prepare.
      *
-     * @throws IllegalArgumentException if the play list is null
+     * @param list A list of {@link MediaItem2} objects to set as a play list.
+     * @throws IllegalArgumentException if given list is {@code null}, or has duplicated media item.
+     * @see #setOnDataSourceMissingHelper
      */
-    // TODO(jaewan): Remove with index was previously rejected by council (b/36524925)
-    // TODO(jaewan): Should we also add movePlaylistItem from index to index?
-    public void removePlaylistItem(MediaItem2 item) {
-        mProvider.removePlaylistItem_impl(item);
+    public void setPlaylist(@NonNull List<MediaItem2> list, @Nullable MediaMetadata2 metadata) {
+        // TODO(jaewan): Handle metadata here (b/74174649)
+        // TODO(jaewan): Handle list change (b/74326040)
+    }
+
+    /**
+     * Skip to the item in the play list.
+     *
+     * @param item item in the play list you want to play
+     * @throws IllegalArgumentException if the play list is null
+     * @throws NullPointerException if index is outside play list range
+     */
+    public void skipToPlaylistItem(@NonNull MediaItem2 item) {
+        mProvider.skipToPlaylistItem_impl(item);
+    }
+
+    public void skipToPreviousItem() {
+        mProvider.skipToPreviousItem_impl();
+    }
+
+    public void skipToNextItem() {
+        mProvider.skipToNextItem_impl();
+    }
+
+    public MediaMetadata2 getPlaylistMetadata() {
+        // TODO(jaewan): Implement (b/74174649)
+        return null;
     }
 
     /**
@@ -1382,31 +1776,31 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      * @param item the media item you want to add
      * @throws IndexOutOfBoundsException if index is outside play list range
      */
-    @Override
     public void addPlaylistItem(int index, @NonNull MediaItem2 item) {
         mProvider.addPlaylistItem_impl(index, item);
     }
 
     /**
-     * Edit the media item to the play list at position index. This is expected to be called when
-     * the metadata information is updated.
+     * Remove the media item in the play list.
      * <p>
-     * This will not change the currently playing media item.
+     * If the item is the currently playing item of the playlist, current playback
+     * will be stopped and playback moves to next source in the list.
      *
-     * @param item the media item you want to add to the play list
+     * @throws IllegalArgumentException if the play list is null
      */
-    public void editPlaylistItem(@NonNull MediaItem2 item) {
-        mProvider.editPlaylistItem_impl(item);
+    public void removePlaylistItem(@NonNull MediaItem2 item) {
+        mProvider.removePlaylistItem_impl(item);
     }
 
     /**
-     * Return the playlist which is lastly set.
+     * Replace the media item at index in the playlist. This can be also used to update metadata of
+     * an item.
      *
-     * @return playlist
+     * @param index the index of the item to replace
+     * @param item the new item
      */
-    @Override
-    public List<MediaItem2> getPlaylist() {
-        return mProvider.getPlaylist_impl();
+    public void replacePlaylistItem(int index, @NonNull MediaItem2 item) {
+        mProvider.replacePlaylistItem_impl(index, item);
     }
 
     /**
@@ -1414,76 +1808,30 @@ public class MediaSession2 implements AutoCloseable, MediaPlaylistController {
      *
      * @return currently playing media item
      */
-    @Override
-    public MediaItem2 getCurrentPlaylistItem() {
+    public MediaItem2 getCurrentMediaItem() {
+        // TODO(jaewan): Rename provider, and implement (b/74316764)
         return mProvider.getCurrentPlaylistItem_impl();
     }
 
-    /**
-     * Sets the {@link PlaylistParams} for the current play list. Repeat/shuffle mode and metadata
-     * for the list can be set by calling this method.
-     *
-     * @param params A {@link PlaylistParams} object to set.
-     * @throws IllegalArgumentException if given {@param param} is null.
-     */
-    public void setPlaylistParams(PlaylistParams params) {
-        mProvider.setPlaylistParams_impl(params);
+    public void updatePlaylistMetadata(@Nullable MediaMetadata2 metadata) {
+        // TODO(jaewan): Implement (b/74174649)
     }
 
-    /**
-     * Returns the {@link PlaylistParams} for the current play list.
-     * Returns {@code null} if not set.
-     */
-    public PlaylistParams getPlaylistParams() {
-        return mProvider.getPlaylistParams_impl();
+    public @RepeatMode int getRepeatMode() {
+        // TODO(jaewan): Implement (b/74118768)
+        return 0;
     }
 
-    /**
-     * Notify errors to the connected controllers
-     *
-     * @param errorCode error code
-     * @param extra extra
-     */
-    public void notifyError(@ErrorCode int errorCode, int extra) {
-        mProvider.notifyError_impl(errorCode, extra);
+    public void setRepeatMode(@RepeatMode int repeatMode) {
+        // TODO(jaewan): Implement (b/74118768)
     }
 
-    /**
-     * Register {@link EventCallback} to listen changes in the underlying
-     * {@link MediaPlayerBase}, regardless of the change in the underlying player.
-     * <p>
-     * Registered callbacks will be also called when the underlying player is changed.
-     *
-     * @param executor a callback Executor
-     * @param callback a EventCallback
-     * @throws IllegalArgumentException if executor or callback is {@code null}.
-     * @hide
-     */
-    // TODO(jaewan): Unhide or remove
-    public void registerPlayerEventCallback(@NonNull @CallbackExecutor Executor executor,
-            @NonNull EventCallback callback) {
-        mProvider.registerPlayerEventCallback_impl(executor, callback);
+    public @ShuffleMode int getShuffleMode() {
+        // TODO(jaewan): Implement (b/74118768)
+        return 0;
     }
 
-    /**
-     * Unregister the previously registered {@link EventCallback}.
-     *
-     * @param callback the callback to be removed
-     * @throws IllegalArgumentException if the callback is {@code null}.
-     * @hide
-     */
-    // TODO(jaewan): Unhide or remove
-    public void unregisterPlayerEventCallback(@NonNull EventCallback callback) {
-        mProvider.unregisterPlayerEventCallback_impl(callback);
-    }
-
-    /**
-     * Return the {@link PlaybackState2} from the player.
-     *
-     * @return playback state
-     * @hide
-     */
-    public PlaybackState2 getPlaybackState() {
-        return mProvider.getPlaybackState_impl();
+    public void setShuffleMode(@ShuffleMode int shuffleMode) {
+        // TODO(jaewan): Implement (b/74118768)
     }
 }

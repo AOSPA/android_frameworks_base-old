@@ -20,6 +20,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import android.platform.test.annotations.Presubmit;
+import android.support.test.filters.FlakyTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 
@@ -40,6 +41,7 @@ import static org.mockito.Mockito.mock;
  *  bit FrameworksServicesTests:com.android.server.wm.WindowTokenTests
  */
 @SmallTest
+@FlakyTest(bugId = 74078662)
 @Presubmit
 @RunWith(AndroidJUnit4.class)
 public class WindowTokenTests extends WindowTestsBase {
@@ -47,7 +49,7 @@ public class WindowTokenTests extends WindowTestsBase {
     @Test
     public void testAddWindow() throws Exception {
         final WindowTestUtils.TestWindowToken token =
-                new WindowTestUtils.TestWindowToken(0, mDisplayContent);
+                WindowTestUtils.createTestWindowToken(0, mDisplayContent);
 
         assertEquals(0, token.getWindowsCount());
 
@@ -77,7 +79,7 @@ public class WindowTokenTests extends WindowTestsBase {
     @Test
     public void testChildRemoval() throws Exception {
         final DisplayContent dc = mDisplayContent;
-        final WindowTestUtils.TestWindowToken token = new WindowTestUtils.TestWindowToken(0, dc);
+        final WindowTestUtils.TestWindowToken token = WindowTestUtils.createTestWindowToken(0, dc);
 
         assertEquals(token, dc.getWindowToken(token.token));
 
@@ -100,9 +102,8 @@ public class WindowTokenTests extends WindowTestsBase {
      */
     @Test
     public void testTokenRemovalProcess() throws Exception {
-        final WindowTestUtils.TestWindowToken token =
-                new WindowTestUtils.TestWindowToken(TYPE_TOAST, mDisplayContent,
-                        true /* persistOnEmpty */);
+        final WindowTestUtils.TestWindowToken token = WindowTestUtils.createTestWindowToken(
+                TYPE_TOAST, mDisplayContent, true /* persistOnEmpty */);
 
         // Verify that the token is on the display
         assertNotNull(mDisplayContent.getWindowToken(token.token));

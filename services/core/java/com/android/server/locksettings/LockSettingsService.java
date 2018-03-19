@@ -1983,6 +1983,14 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     @Override
+    public void initRecoveryServiceWithSigFile(@NonNull String rootCertificateAlias,
+            @NonNull byte[] recoveryServiceCertFile, @NonNull byte[] recoveryServiceSigFile)
+            throws RemoteException {
+        mRecoverableKeyStoreManager.initRecoveryServiceWithSigFile(rootCertificateAlias,
+                recoveryServiceCertFile, recoveryServiceSigFile);
+    }
+
+    @Override
     public KeyChainSnapshot getKeyChainSnapshot() throws RemoteException {
         return mRecoverableKeyStoreManager.getKeyChainSnapshot();
     }
@@ -2079,13 +2087,17 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     @Override
+    public String importKey(@NonNull String alias, byte[] keyBytes) throws RemoteException {
+        return mRecoverableKeyStoreManager.importKey(alias, keyBytes);
+    }
+
+    @Override
     public String getKey(@NonNull String alias) throws RemoteException {
         return mRecoverableKeyStoreManager.getKey(alias);
     }
 
     private static final String[] VALID_SETTINGS = new String[] {
             LockPatternUtils.LOCKOUT_PERMANENT_KEY,
-            LockPatternUtils.LOCKOUT_ATTEMPT_DEADLINE,
             LockPatternUtils.PATTERN_EVER_CHOSEN_KEY,
             LockPatternUtils.PASSWORD_TYPE_KEY,
             LockPatternUtils.PASSWORD_TYPE_ALTERNATE_KEY,

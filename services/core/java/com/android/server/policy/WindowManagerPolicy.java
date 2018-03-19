@@ -232,14 +232,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
         public Rect getFrameLw();
 
         /**
-         * Retrieve the current position of the window that is actually shown.
-         * Must be called with the window manager lock held.
-         *
-         * @return Point The point holding the shown window position.
-         */
-        public Point getShownPositionLw();
-
-        /**
          * Retrieve the frame of the display that this window was last
          * laid out in.  Must be called with the
          * window manager lock held.
@@ -1153,13 +1145,14 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
 
 
     /**
-     * Return the insets for the areas covered by system windows. These values are computed on the
+     * Return the layout hints for a newly added window. These values are computed on the
      * most recent layout, so they are not guaranteed to be correct.
      *
      * @param attrs The LayoutParams of the window.
      * @param taskBounds The bounds of the task this window is on or {@code null} if no task is
      *                   associated with the window.
      * @param displayFrames display frames.
+     * @param outFrame The frame of the window.
      * @param outContentInsets The areas covered by system windows, expressed as positive insets.
      * @param outStableInsets The areas covered by stable system windows irrespective of their
      *                        current visibility. Expressed as positive insets.
@@ -1168,9 +1161,10 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * @return Whether to always consume the navigation bar.
      *         See {@link #isNavBarForcedShownLw(WindowState)}.
      */
-    default boolean getInsetHintLw(WindowManager.LayoutParams attrs, Rect taskBounds,
-            DisplayFrames displayFrames, Rect outContentInsets, Rect outStableInsets,
-            Rect outOutsets, DisplayCutout.ParcelableWrapper outDisplayCutout) {
+    default boolean getLayoutHintLw(WindowManager.LayoutParams attrs, Rect taskBounds,
+            DisplayFrames displayFrames, Rect outFrame, Rect outContentInsets,
+            Rect outStableInsets, Rect outOutsets,
+            DisplayCutout.ParcelableWrapper outDisplayCutout) {
         return false;
     }
 
@@ -1539,6 +1533,11 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
     void setPipVisibilityLw(boolean visible);
 
     /**
+     * Called by System UI to enable or disable haptic feedback on the navigation bar buttons.
+     */
+    void setNavBarVirtualKeyHapticFeedbackEnabledLw(boolean enabled);
+
+    /**
      * Specifies whether there is an on-screen navigation bar separate from the status bar.
      */
     public boolean hasNavigationBar();
@@ -1719,4 +1718,10 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
                 return Integer.toString(mode);
         }
     }
+
+    /**
+     * Requests that the WindowManager sends WindowManagerPolicy#ACTION_USER_ACTIVITY_NOTIFICATION
+     * on the next user activity.
+     */
+    public void requestUserActivityNotification();
 }

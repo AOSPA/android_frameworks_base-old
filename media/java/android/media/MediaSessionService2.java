@@ -85,7 +85,8 @@ import android.os.IBinder;
  * session service, the controller binds to the session service. {@link #onCreateSession(String)}
  * may be called after the {@link #onCreate} if the service hasn't created yet.
  * <p>
- * After the binding, session's {@link MediaSession2.SessionCallback#onConnect(ControllerInfo)}
+ * After the binding, session's {@link MediaSession2.SessionCallback#onConnect(MediaSession2, ControllerInfo)}
+ *
  * will be called to accept or reject connection request from a controller. If the connection is
  * rejected, the controller will unbind. If it's accepted, the controller will be available to use
  * and keep binding.
@@ -99,7 +100,7 @@ import android.os.IBinder;
  * <p>
  * Any app can bind to the session service with controller, but the controller can be used only if
  * the session service accepted the connection request through
- * {@link MediaSession2.SessionCallback#onConnect(ControllerInfo)}.
+ * {@link MediaSession2.SessionCallback#onConnect(MediaSession2, ControllerInfo)}.
  */
 public abstract class MediaSessionService2 extends Service {
     private final MediaSessionService2Provider mProvider;
@@ -165,17 +166,19 @@ public abstract class MediaSessionService2 extends Service {
      *
      * @return a {@link MediaNotification}. If it's {@code null}, notification wouldn't be shown.
      */
-    public MediaNotification onUpdateNotification() {
+    public @Nullable MediaNotification onUpdateNotification() {
         return mProvider.onUpdateNotification_impl();
     }
 
     /**
      * Get instance of the {@link MediaSession2} that you've previously created with the
      * {@link #onCreateSession} for this service.
+     * <p>
+     * This may be {@code null} before the {@link #onCreate()} is finished.
      *
      * @return created session
      */
-    public final MediaSession2 getSession() {
+    public final @Nullable MediaSession2 getSession() {
         return mProvider.getSession_impl();
     }
 
@@ -199,7 +202,7 @@ public abstract class MediaSessionService2 extends Service {
     }
 
     /**
-     * Returned by {@link #onUpdateNotification()} for making session service forground service
+     * Returned by {@link #onUpdateNotification()} for making session service foreground service
      * to keep playback running in the background. It's highly recommended to show media style
      * notification here.
      */
@@ -226,7 +229,7 @@ public abstract class MediaSessionService2 extends Service {
             return mProvider.getNotificationId_impl();
         }
 
-        public Notification getNotification() {
+        public @NonNull Notification getNotification() {
             return mProvider.getNotification_impl();
         }
     }

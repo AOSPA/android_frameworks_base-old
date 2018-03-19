@@ -44,7 +44,6 @@ import android.graphics.GraphicBuffer;
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.net.Uri;
 import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.Build;
@@ -71,6 +70,7 @@ import com.android.internal.app.procstats.ProcessStats;
 import com.android.internal.os.RoSystemProperties;
 import com.android.internal.os.TransferPipe;
 import com.android.internal.util.FastPrintWriter;
+import com.android.internal.util.MemInfoReader;
 import com.android.server.LocalServices;
 
 import org.xmlpull.v1.XmlSerializer;
@@ -961,6 +961,17 @@ public class ActivityManager {
     static public boolean isHighEndGfx() {
         return !isLowRamDeviceStatic() &&
                 !Resources.getSystem().getBoolean(com.android.internal.R.bool.config_avoidGfxAccel);
+    }
+
+    /**
+     * Return the total number of bytes of RAM this device has.
+     * @hide
+     */
+    @TestApi
+    public long getTotalRam() {
+        MemInfoReader memreader = new MemInfoReader();
+        memreader.readMemInfo();
+        return memreader.getTotalSize();
     }
 
     /**
@@ -2751,30 +2762,6 @@ public class ActivityManager {
     }
 
     /**
-     * Updates (grants or revokes) a persitable URI permission.
-     *
-     * @param uri URI to be granted or revoked.
-     * @param prefix if {@code false}, permission apply to this specific URI; if {@code true}, it
-     * applies to all URIs that are prefixed by this URI.
-     * @param packageName target package.
-     * @param grant if {@code true} a new permission will be granted, otherwise an existing
-     * permission will be revoked.
-     *
-     * @return whether or not the requested succeeded.
-     *
-     * @hide
-     */
-    public boolean updatePersistableUriPermission(Uri uri, boolean prefix, String packageName,
-            boolean grant) {
-        try {
-            return getService().updatePersistableUriPermission(uri, prefix, packageName, grant,
-                    UserHandle.myUserId());
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
      * Information you can retrieve about any processes that are in an error condition.
      */
     public static class ProcessErrorStateInfo implements Parcelable {
@@ -3329,6 +3316,28 @@ public class ActivityManager {
     public List<ApplicationInfo> getRunningExternalApplications() {
         try {
             return getService().getRunningExternalApplications();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Query whether the user has enabled background restrictions for this app.
+     *
+     * <p> The user may chose to do this, if they see that an app is consuming an unreasonable
+     * amount of battery while in the background. </p>
+     *
+     * <p> If true, any work that the app tries to do will be aggressively restricted while it is in
+     * the background. At a minimum, jobs and alarms will not execute and foreground services
+     * cannot be started unless an app activity is in the foreground. </p>
+     *
+     * <p><b> Note that these restrictions stay in effect even when the device is charging.</b></p>
+     *
+     * @return true if user has enforced background restrictions for this app, false otherwise.
+     */
+    public boolean isBackgroundRestricted() {
+        try {
+            return getService().isBackgroundRestricted(mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

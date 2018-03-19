@@ -58,6 +58,8 @@ import com.android.internal.R;
 import com.android.server.UiThread;
 import com.android.server.autofill.Helper;
 
+import static com.android.server.autofill.Helper.sVisibleDatasetsMaxCount;
+
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -68,8 +70,6 @@ import java.util.stream.Collectors;
 
 final class FillUi {
     private static final String TAG = "FillUi";
-
-    private static final int VISIBLE_OPTIONS_MAX_COUNT = 3;
 
     private static final TypedValue sTempTypedValue = new TypedValue();
 
@@ -375,7 +375,7 @@ final class FillUi {
                     }
                     requestShowFillUi();
                 }
-                if (mAdapter.getCount() > VISIBLE_OPTIONS_MAX_COUNT) {
+                if (mAdapter.getCount() > sVisibleDatasetsMaxCount) {
                     mListView.setVerticalScrollBarEnabled(true);
                     mListView.onVisibilityAggregated(true);
                 } else {
@@ -415,10 +415,15 @@ final class FillUi {
         applyNewFilterText();
     }
 
-    public void destroy() {
+    public void destroy(boolean notifyClient) {
         throwIfDestroyed();
+        if (mWindow != null) {
+            mWindow.hide(false);
+        }
         mCallback.onDestroy();
-        mCallback.requestHideFillUi();
+        if (notifyClient) {
+            mCallback.requestHideFillUi();
+        }
         mDestroyed = true;
     }
 
@@ -475,7 +480,7 @@ final class FillUi {
                     changed = true;
                 }
                 // Update the width to fit only the first items up to max count
-                if (i < VISIBLE_OPTIONS_MAX_COUNT) {
+                if (i < sVisibleDatasetsMaxCount) {
                     final int clampedMeasuredHeight = Math.min(view.getMeasuredHeight(), maxSize.y);
                     final int newContentHeight = mContentHeight + clampedMeasuredHeight;
                     if (newContentHeight != mContentHeight) {
@@ -590,7 +595,7 @@ final class FillUi {
         }
     }
 
-    final class AnchoredWindow implements View.OnTouchListener {
+    final class AnchoredWindow {
         private final @NonNull OverlayControl mOverlayControl;
         private final WindowManager mWm;
         private final View mContentView;
@@ -623,7 +628,6 @@ final class FillUi {
                     params.accessibilityTitle = mContentView.getContext()
                             .getString(R.string.autofill_picker_accessibility_title);
                     mWm.addView(mContentView, params);
-                    mContentView.setOnTouchListener(this);
                     mOverlayControl.hideOverlays();
                     mShowing = true;
                 } else {
@@ -645,9 +649,12 @@ final class FillUi {
          * Hides the window.
          */
         void hide() {
+            hide(true);
+        }
+
+        void hide(boolean destroyCallbackOnError) {
             try {
                 if (mShowing) {
-                    mContentView.setOnTouchListener(null);
                     mWm.removeView(mContentView);
                     mShowing = false;
                 }
@@ -656,20 +663,12 @@ final class FillUi {
                 // happen - since show() and hide() are always called in the UIThread - but if it
                 // does, it should not crash the system.
                 Slog.e(TAG, "Exception hiding window ", e);
-                mCallback.onDestroy();
+                if (destroyCallbackOnError) {
+                    mCallback.onDestroy();
+                }
             } finally {
                 mOverlayControl.showOverlays();
             }
-        }
-
-        @Override
-        public boolean onTouch(View view, MotionEvent event) {
-            // When the window is touched outside, hide the window.
-            if (view == mContentView && event.getAction() == MotionEvent.ACTION_OUTSIDE) {
-                mCallback.onCanceled();
-                return true;
-            }
-            return false;
         }
     }
 

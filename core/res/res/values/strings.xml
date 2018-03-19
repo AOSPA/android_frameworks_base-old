@@ -379,7 +379,7 @@
     <!-- Text message in the factory reset warning dialog. This says that the the device admin app
          is missing or corrupted. As a result the device will be erased. [CHAR LIMIT=NONE]-->
     <string name="factory_reset_message">The admin app can\'t be used. Your device will now be
-        erased.\n\nIf you have questions, contact your organization's admin.</string>
+        erased.\n\nIf you have questions, contact your organization\'s admin.</string>
 
     <!-- A toast message displayed when printing is attempted but disabled by policy. -->
     <string name="printing_disabled_by">Printing disabled by <xliff:g id="owner_app">%s</xliff:g>.</string>
@@ -538,6 +538,15 @@
 
     <!-- status message in phone options dialog for when airplane mode is off -->
     <string name="global_actions_airplane_mode_off_status">Airplane mode is OFF</string>
+
+    <!-- label for item that enables battery saver in phone options dialog -->
+    <string name="global_action_toggle_battery_saver">Battery saver</string>
+
+    <!-- status message in phone options dialog for when battery saver is enabled -->
+    <string name="global_action_battery_saver_on_status">Battery saver is OFF</string>
+
+    <!-- status message in phone options dialog for when battery saver is disabled -->
+    <string name="global_action_battery_saver_off_status">Battery saver is ON</string>
 
     <!-- label for item that launches settings in phone options dialog [CHAR LIMIT=15]-->
     <string name="global_action_settings">Settings</string>
@@ -764,7 +773,7 @@
     <string name="capability_title_canCaptureFingerprintGestures">Fingerprint gestures</string>
     <!-- Description for the capability of an accessibility service to perform gestures. -->
     <string name="capability_desc_canCaptureFingerprintGestures">Can capture gestures performed on
-        the device's fingerprint sensor.</string>
+        the device\'s fingerprint sensor.</string>
 
     <!--  Permissions -->
 
@@ -916,6 +925,11 @@
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_persistentActivity" product="tv">Allows the app to make parts of itself persistent in memory.  This can limit memory available to other apps slowing down the TV.</string>
     <string name="permdesc_persistentActivity" product="default">Allows the app to make parts of itself persistent in memory.  This can limit memory available to other apps slowing down the phone.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_foregroundService">run foreground service</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_foregroundService">Allows the app to make use of foreground services.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_getPackageSize">measure app storage space</string>
@@ -2923,19 +2937,25 @@
     <string name="smv_process">The process <xliff:g id="process">%1$s</xliff:g> has
       has violated its self-enforced StrictMode policy.</string>
 
-    <!-- [CHAR LIMIT=40] Title of dialog that is shown when performing a system upgrade. -->
-    <string name="android_upgrading_title">Android is upgrading\u2026</string>
+    <!-- [CHAR LIMIT=40] Title of dialog that is shown when performing a system update. -->
+    <string name="android_upgrading_title" product="default">Phone is updating\u2026</string>
+    <!-- [CHAR LIMIT=40] Title of dialog that is shown when performing a system update. -->
+    <string name="android_upgrading_title" product="tablet">Tablet is updating\u2026</string>
+    <!-- [CHAR LIMIT=40] Title of dialog that is shown when performing a system update. -->
+    <string name="android_upgrading_title" product="device">Device is updating\u2026</string>
 
     <!-- [CHAR LIMIT=40] Title of dialog that is shown when system is starting. -->
-    <string name="android_start_title">Android is starting\u2026</string>
+    <string name="android_start_title" product="default">Phone is starting\u2026</string>
+    <!-- [CHAR LIMIT=40] Title of dialog that is shown when system is starting. -->
+    <string name="android_start_title" product="tablet">Tablet is starting\u2026</string>
+    <!-- [CHAR LIMIT=40] Title of dialog that is shown when system is starting. -->
+    <string name="android_start_title" product="device">Device is starting\u2026</string>
 
     <!-- [CHAR LIMIT=NONE] Message shown in upgrading dialog when doing an fstrim. -->
     <string name="android_upgrading_fstrim">Optimizing storage.</string>
 
-    <!-- [CHAR LIMIT=40] Title of notification that is shown when finishing a system upgrade. -->
-    <string name="android_upgrading_notification_title">Finishing Android update\u2026</string>
-    <!-- [CHAR LIMIT=200] Body of notification that is shown when performing a system upgrade. -->
-    <string name="android_upgrading_notification_body">Some apps may not work properly until the upgrade finishes</string>
+    <!-- [CHAR LIMIT=40] Title of notification that is shown when finishing a system update. -->
+    <string name="android_upgrading_notification_title" product="default">Finishing system update\u2026</string>
 
     <!-- [CHAR LIMIT=40] Toast that is shown when an app is still upgrading. -->
     <string name="app_upgrading_toast"><xliff:g id="application">%1$s</xliff:g> is upgrading\u2026</string>
@@ -3068,7 +3088,7 @@
     <!-- Notification action name for connecting to the network specified in the notification body. -->
     <string name="wifi_available_action_connect">Connect</string>
     <!-- Notification action name for opening the wifi picker, showing the user all the nearby networks. -->
-    <string name="wifi_available_action_all_networks">All Networks</string>
+    <string name="wifi_available_action_all_networks">All networks</string>
 
     <!--Notification title for Wi-Fi Wake onboarding. This is displayed the first time a user disables Wi-Fi with the feature enabled. -->
     <string name="wifi_wakeup_onboarding_title">Wi\u2011Fi will turn on automatically</string>
@@ -3320,8 +3340,7 @@
          [CHAR LIMIT=NONE] -->
     <string name="alert_windows_notification_message">If you don’t want <xliff:g id="name" example="Google Maps">%s</xliff:g> to use this feature, tap to open settings and turn it off.</string>
     <!-- Notification action to turn-off app displaying on-top of other apps. [CHAR LIMIT=20] -->
-    <string name="alert_windows_notification_turn_off_action">TURN OFF</string>
-
+    <string name="alert_windows_notification_turn_off_action">Turn off</string>
 
     <!-- External media notification strings -->
     <skip />
@@ -3775,7 +3794,7 @@
     <!-- Notification title when data usage has exceeded warning threshold. [CHAR LIMIT=50] -->
     <string name="data_usage_warning_title">Data warning</string>
     <!-- Notification body when data usage has exceeded warning threshold. [CHAR LIMIT=32] -->
-    <string name="data_usage_warning_body">You've used <xliff:g id="app" example="3.8GB">%s</xliff:g> of data</string>
+    <string name="data_usage_warning_body">You\'ve used <xliff:g id="app" example="3.8GB">%s</xliff:g> of data</string>
 
     <!-- Notification title when mobile data usage has exceeded limit threshold, and has been disabled. [CHAR LIMIT=50] -->
     <string name="data_usage_mobile_limit_title">Mobile data limit reached</string>
@@ -3789,7 +3808,7 @@
     <!-- Notification title when Wi-Fi data usage has exceeded limit threshold. [CHAR LIMIT=32] -->
     <string name="data_usage_wifi_limit_snoozed_title">Over your Wi-Fi data limit</string>
     <!-- Notification body when data usage has exceeded limit threshold. -->
-    <string name="data_usage_limit_snoozed_body">You've gone <xliff:g id="size" example="3.8GB">%s</xliff:g> over your set limit</string>
+    <string name="data_usage_limit_snoozed_body">You\'ve gone <xliff:g id="size" example="3.8GB">%s</xliff:g> over your set limit</string>
 
     <!-- Notification title when background data usage is limited. [CHAR LIMIT=32] -->
     <string name="data_usage_restricted_title">Background data restricted</string>
@@ -4864,7 +4883,7 @@
     <!-- Title for the notification channel notifying user of settings system changes (i.e. Do Not Disturb has changed). [CHAR LIMIT=NONE] -->
     <string name="notification_channel_system_changes">System changes</string>
     <!-- Title of notification indicating do not disturb settings have changed when upgrading to P -->
-    <string name="zen_upgrade_notification_title">Do Not Disturb has changed</string>
+    <string name="zen_upgrade_notification_title">Do Not Disturb is hiding notifications to help you focus</string>
     <!-- Content of notification indicating users can tap on the notification to go to dnd behavior settings -->
-    <string name="zen_upgrade_notification_content">Tap to check your behavior settings for interruptions</string>
+    <string name="zen_upgrade_notification_content">This is a new feature from the latest system update. Tap to change.</string>
 </resources>

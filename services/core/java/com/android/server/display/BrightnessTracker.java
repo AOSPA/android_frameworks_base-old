@@ -69,7 +69,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 
+import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -225,15 +228,24 @@ public class BrightnessTracker {
      * @return List of recent {@link BrightnessChangeEvent}s
      */
     public ParceledListSlice<BrightnessChangeEvent> getEvents(int userId, boolean includePackage) {
-        // TODO include apps from any managed profiles in the brightness information.
         BrightnessChangeEvent[] events;
         synchronized (mEventsLock) {
             events = mEvents.toArray();
         }
+        int[] profiles = mInjector.getProfileIds(mUserManager, userId);
+        Map<Integer, Boolean> toRedact = new HashMap<>();
+        for (int i = 0; i < profiles.length; ++i) {
+            int profileId = profiles[i];
+            // Include slider interactions when a managed profile app is in the
+            // foreground but always redact the package name.
+            boolean redact = (!includePackage) || profileId != userId;
+            toRedact.put(profiles[i], redact);
+        }
         ArrayList<BrightnessChangeEvent> out = new ArrayList<>(events.length);
         for (int i = 0; i < events.length; ++i) {
-            if (events[i].userId == userId) {
-                if (includePackage) {
+            Boolean redact = toRedact.get(events[i].userId);
+            if (redact != null) {
+                if (!redact) {
                     out.add(events[i]);
                 } else {
                     BrightnessChangeEvent event = new BrightnessChangeEvent((events[i]),
@@ -322,8 +334,16 @@ public class BrightnessTracker {
 
         try {
             final ActivityManager.StackInfo focusedStack = mInjector.getFocusedStack();
-            builder.setUserId(focusedStack.userId);
-            builder.setPackageName(focusedStack.topActivity.getPackageName());
+            if (focusedStack != null && focusedStack.topActivity != null) {
+                builder.setUserId(focusedStack.userId);
+                builder.setPackageName(focusedStack.topActivity.getPackageName());
+            } else {
+                // Ignore the event because we can't determine user / package.
+                if (DEBUG) {
+                    Slog.d(TAG, "Ignoring event due to null focusedStack.");
+                }
+                return;
+            }
         } catch (RemoteException e) {
             // Really shouldn't be possible.
             return;
@@ -638,7 +658,10 @@ public class BrightnessTracker {
     }
 
     public ParceledListSlice<AmbientBrightnessDayStats> getAmbientBrightnessStats(int userId) {
-        return new ParceledListSlice<>(mAmbientBrightnessStatsTracker.getUserStats(userId));
+        ArrayList<AmbientBrightnessDayStats> stats = mAmbientBrightnessStatsTracker.getUserStats(
+                userId);
+        return (stats != null) ? new ParceledListSlice<>(stats) : new ParceledListSlice<>(
+                Collections.EMPTY_LIST);
     }
 
     // Not allowed to keep the SensorEvent so used to copy the data we care about.
@@ -815,6 +838,14 @@ public class BrightnessTracker {
 
         public int getUserId(UserManager userManager, int userSerialNumber) {
             return userManager.getUserHandle(userSerialNumber);
+        }
+
+        public int[] getProfileIds(UserManager userManager, int userId) {
+            if (userManager != null) {
+                return userManager.getProfileIds(userId, false);
+            } else {
+                return new int[]{userId};
+            }
         }
 
         public ActivityManager.StackInfo getFocusedStack() throws RemoteException {

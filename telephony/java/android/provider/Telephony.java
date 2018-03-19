@@ -1136,10 +1136,15 @@ public final class Telephony {
                 "android.provider.Telephony.MMS_DOWNLOADED";
 
             /**
-             * Broadcast Action: A debug code has been entered in the dialer. These "secret codes"
-             * are used to activate developer menus by dialing certain codes. And they are of the
-             * form {@code *#*#&lt;code&gt;#*#*}. The intent will have the data URI:
-             * {@code android_secret_code://&lt;code&gt;}.
+             * Broadcast Action: A debug code has been entered in the dialer. This intent is
+             * broadcast by the system and OEM telephony apps may need to receive these broadcasts.
+             * These "secret codes" are used to activate developer menus by dialing certain codes.
+             * And they are of the form {@code *#*#&lt;code&gt;#*#*}. The intent will have the data
+             * URI: {@code android_secret_code://&lt;code&gt;}. It is possible that a manifest
+             * receiver would be woken up even if it is not currently running.
+             *
+             * <p>Requires {@code android.Manifest.permission#CONTROL_INCALL_EXPERIENCE} to
+             * send and receive.</p>
              */
             @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
             public static final String SECRET_CODE_ACTION =
@@ -3398,23 +3403,23 @@ public final class Telephony {
      * Contains carrier identification information for the current subscriptions.
      * @see SubscriptionManager#getActiveSubscriptionIdList()
      */
-    public static final class CarrierIdentification implements BaseColumns {
+    public static final class CarrierId implements BaseColumns {
         /**
          * Not instantiable.
          * @hide
          */
-        private CarrierIdentification() {}
+        private CarrierId() {}
 
         /**
          * The {@code content://} style URI for this provider.
          */
-        public static final Uri CONTENT_URI = Uri.parse("content://carrier_identification");
+        public static final Uri CONTENT_URI = Uri.parse("content://carrier_id");
 
         /**
-         * The authority string for the CarrierIdentification Provider
+         * The authority string for the CarrierId Provider
          * @hide
          */
-        public static final String AUTHORITY = "carrier_identification";
+        public static final String AUTHORITY = "carrier_id";
 
 
         /**
@@ -3441,14 +3446,14 @@ public final class Telephony {
          * @see TelephonyManager#getAndroidCarrierNameForSubscription()
          * <P>Type: TEXT </P>
          */
-        public static final String NAME = "carrier_name";
+        public static final String CARRIER_NAME = "carrier_name";
 
         /**
          * A unique carrier id
          * @see TelephonyManager#getAndroidCarrierIdForSubscription()
          * <P>Type: INTEGER </P>
          */
-        public static final String CID = "carrier_id";
+        public static final String CARRIER_ID = "carrier_id";
 
         /**
          * Contains mappings between matching rules with carrier id for all carriers.
@@ -3506,7 +3511,7 @@ public final class Telephony {
             /**
              * The {@code content://} URI for this table.
              */
-            public static final Uri CONTENT_URI = Uri.parse("content://carrier_identification/all");
+            public static final Uri CONTENT_URI = Uri.parse("content://carrier_id/all");
         }
     }
 }

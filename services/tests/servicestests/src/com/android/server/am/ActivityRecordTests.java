@@ -24,7 +24,9 @@ import static android.view.Display.DEFAULT_DISPLAY;
 
 import static com.android.server.am.ActivityStack.ActivityState.DESTROYED;
 import static com.android.server.am.ActivityStack.ActivityState.DESTROYING;
+import static com.android.server.am.ActivityStack.ActivityState.FINISHING;
 import static com.android.server.am.ActivityStack.ActivityState.INITIALIZING;
+import static com.android.server.am.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.am.ActivityStack.ActivityState.PAUSING;
 import static com.android.server.am.ActivityStack.ActivityState.STOPPED;
 import static com.android.server.am.ActivityStack.REMOVE_TASK_MODE_MOVING;
@@ -111,8 +113,6 @@ public class ActivityRecordTests extends ActivityTestsBase {
         assertEquals(mStack.onActivityRemovedFromStackInvocationCount(), 0);
     }
 
-    // TODO: b/71582913
-    @Ignore("b/71582913")
     @Test
     public void testPausingWhenVisibleFromStopped() throws Exception {
         final MutableBoolean pauseFound = new MutableBoolean(false);
@@ -137,6 +137,16 @@ public class ActivityRecordTests extends ActivityTestsBase {
         mActivity.makeVisibleIfNeeded(null /* starting */);
 
         assertTrue(mActivity.isState(INITIALIZING));
+
+        // Make sure the state does not change if we are not the current top activity.
+        mActivity.setState(STOPPED, "testPausingWhenVisibleFromStopped behind");
+
+        // Make sure that the state does not change when we have an activity becoming translucent
+        final ActivityRecord topActivity = new ActivityBuilder(mService).setTask(mTask).build();
+        mStack.mTranslucentActivityWaiting = topActivity;
+        mActivity.makeVisibleIfNeeded(null /* starting */);
+
+        assertTrue(mActivity.isState(STOPPED));
     }
 
     @Test
@@ -219,5 +229,20 @@ public class ActivityRecordTests extends ActivityTestsBase {
         mActivity.setState(DESTROYED, "testFinishingAfterDestroyed");
         assertTrue(mActivity.isState(DESTROYED));
         assertTrue(mActivity.finishing);
+    }
+
+    @Test
+    public void testSetInvalidState() throws Exception {
+        mActivity.setState(DESTROYED, "testInvalidState");
+
+        boolean exceptionEncountered = false;
+
+        try {
+            mActivity.setState(FINISHING, "testInvalidState");
+        } catch (IllegalArgumentException e) {
+            exceptionEncountered = true;
+        }
+
+        assertTrue(exceptionEncountered);
     }
 }

@@ -84,6 +84,7 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.MemoryIntArray;
 import android.util.StatsLog;
+import android.view.textservice.TextServicesManager;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.widget.ILockSettings;
@@ -427,6 +428,20 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_WIFI_IP_SETTINGS =
             "android.settings.WIFI_IP_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of data and view data usage.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_DATA_USAGE_SETTINGS =
+            "android.settings.DATA_USAGE_SETTINGS";
 
     /**
      * Activity Action: Show settings to allow configuration of Bluetooth.
@@ -3131,7 +3146,7 @@ public final class Settings {
         public static final String ALWAYS_FINISH_ACTIVITIES = Global.ALWAYS_FINISH_ACTIVITIES;
 
         /**
-         * Determines which streams are affected by ringer mode changes. The
+         * Determines which streams are affected by ringer and zen mode changes. The
          * stream type's bit should be set to 1 if it should be muted when going
          * into an inaudible ringer mode.
          */
@@ -6169,10 +6184,13 @@ public final class Settings {
 
         /**
          * Integer property that specifies the type of color space adjustment to
-         * perform. Valid values are defined in AccessibilityManager:
+         * perform. Valid values are defined in AccessibilityManager and Settings arrays.xml:
          * - AccessibilityManager.DALTONIZER_DISABLED = -1
          * - AccessibilityManager.DALTONIZER_SIMULATE_MONOCHROMACY = 0
-         * - AccessibilityManager.DALTONIZER_CORRECT_DEUTERANOMALY = 12
+         * - <item>@string/daltonizer_mode_protanomaly</item> = 11
+         * - AccessibilityManager.DALTONIZER_CORRECT_DEUTERANOMALY and
+         *       <item>@string/daltonizer_mode_deuteranomaly</item> = 12
+         * - <item>@string/daltonizer_mode_tritanomaly</item> = 13
          *
          * @hide
          */
@@ -6180,7 +6198,8 @@ public final class Settings {
                 "accessibility_display_daltonizer";
 
         private static final Validator ACCESSIBILITY_DISPLAY_DALTONIZER_VALIDATOR =
-                new SettingsValidators.DiscreteValueValidator(new String[] {"-1", "0", "12"});
+                new SettingsValidators.DiscreteValueValidator(
+                        new String[] {"-1", "0", "11", "12", "13"});
 
         /**
          * Setting that specifies whether automatic click when the mouse pointer stops moving is
@@ -7970,6 +7989,10 @@ public final class Settings {
             CLONE_TO_MANAGED_PROFILE.add(LOCATION_MODE);
             CLONE_TO_MANAGED_PROFILE.add(LOCATION_PROVIDERS_ALLOWED);
             CLONE_TO_MANAGED_PROFILE.add(SELECTED_INPUT_METHOD_SUBTYPE);
+            if (TextServicesManager.DISABLE_PER_PROFILE_SPELL_CHECKER) {
+                CLONE_TO_MANAGED_PROFILE.add(SELECTED_SPELL_CHECKER);
+                CLONE_TO_MANAGED_PROFILE.add(SELECTED_SPELL_CHECKER_SUBTYPE);
+            }
         }
 
         /** @hide */
@@ -8581,6 +8604,7 @@ public final class Settings {
          * (0 = false, 1 = true)
          * @hide
          */
+        @SystemApi
         public static final String EUICC_PROVISIONED = "euicc_provisioned";
 
         /**
@@ -10515,8 +10539,13 @@ public final class Settings {
          * entity_list_default use ":" as delimiter for values. Ex:
          *
          * <pre>
-         * smart_selection_dark_launch              (boolean)
-         * smart_selection_enabled_for_edit_text    (boolean)
+         * smart_linkify_enabled                    (boolean)
+         * system_textclassifier_enabled            (boolean)
+         * model_dark_launch_enabled                (boolean)
+         * smart_selection_enabled                  (boolean)
+         * smart_text_share_enabled                 (boolean)
+         * smart_linkify_enabled                    (boolean)
+         * smart_select_animation_enabled           (boolean)
          * suggest_selection_max_range_length       (int)
          * classify_text_max_range_length           (int)
          * generate_links_max_text_length           (int)
@@ -10529,7 +10558,7 @@ public final class Settings {
          * <p>
          * Type: string
          * @hide
-         * see also android.view.textclassifier.TextClassifierConstants
+         * see also android.view.textclassifier.TextClassificationConstants
          */
         public static final String TEXT_CLASSIFIER_CONSTANTS = "text_classifier_constants";
 
@@ -10572,6 +10601,21 @@ public final class Settings {
         public static final java.lang.String APP_STANDBY_ENABLED = "app_standby_enabled";
 
         /**
+         * Whether or not app auto restriction is enabled. When it is enabled, settings app will
+         * auto restrict the app if it has bad behavior(e.g. hold wakelock for long time).
+         *
+         * Type: boolean (0 for false, 1 for true)
+         * Default: 1
+         *
+         * @hide
+         */
+        public static final java.lang.String APP_AUTO_RESTRICTION_ENABLED =
+                "app_auto_restriction_enabled";
+
+        private static final Validator APP_AUTO_RESTRICTION_ENABLED_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
          * Feature flag to enable or disable the Forced App Standby feature.
          * Type: int (0 for false, 1 for true)
          * Default: 1
@@ -10587,6 +10631,32 @@ public final class Settings {
          */
         public static final String FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED
                 = "forced_app_standby_for_small_battery_enabled";
+
+        /**
+         * Whether or not to enable the Off Body, Radios Off feature on small battery devices.
+         * Type: int (0 for false, 1 for true)
+         * Default: 0
+         * @hide
+         */
+        public static final String OFF_BODY_RADIOS_OFF_FOR_SMALL_BATTERY_ENABLED
+                = "off_body_radios_off_for_small_battery_enabled";
+
+        /**
+         * How long after the device goes off body to disable radios, in milliseconds.
+         * Type: long
+         * Default: 10 minutes
+         * @hide
+         */
+        public static final String OFF_BODY_RADIOS_OFF_DELAY_MS = "off_body_radios_off_delay_ms";
+
+        /**
+         * Whether or not to turn on Wifi when proxy is disconnected.
+         * Type: int (0 for false, 1 for true)
+         * Default: 1
+         * @hide
+         */
+        public static final String WIFI_ON_WHEN_PROXY_DISCONNECTED
+                = "wifi_on_when_proxy_disconnected";
 
         /**
          * Whether or not to enable Time Only Mode for watch type devices.
@@ -10844,6 +10914,15 @@ public final class Settings {
 
         private static final Validator LOW_POWER_MODE_TRIGGER_LEVEL_VALIDATOR =
                 new SettingsValidators.InclusiveIntegerRangeValidator(0, 100);
+
+
+        /**
+         * The max value for {@link #LOW_POWER_MODE_TRIGGER_LEVEL}. If this setting is not set
+         * or the value is 0, the default max will be used.
+         *
+         * @hide
+         */
+        public static final String LOW_POWER_MODE_TRIGGER_LEVEL_MAX = "low_power_trigger_level_max";
 
          /**
          * If not 0, the activity manager will aggressively finish activities and
@@ -11445,6 +11524,7 @@ public final class Settings {
          *
          * @hide
          */
+        @TestApi
         public static final String HIDDEN_API_BLACKLIST_EXEMPTIONS =
                 "hidden_api_blacklist_exemptions";
 
@@ -11467,6 +11547,7 @@ public final class Settings {
         public static final String[] SETTINGS_TO_BACKUP = {
             BUGREPORT_IN_POWER_MENU,
             STAY_ON_WHILE_PLUGGED_IN,
+            APP_AUTO_RESTRICTION_ENABLED,
             AUTO_TIME,
             AUTO_TIME_ZONE,
             POWER_SOUNDS_ENABLED,
@@ -11519,12 +11600,15 @@ public final class Settings {
             VALIDATORS.put(DOCK_AUDIO_MEDIA_ENABLED, DOCK_AUDIO_MEDIA_ENABLED_VALIDATOR);
             VALIDATORS.put(ENCODED_SURROUND_OUTPUT, ENCODED_SURROUND_OUTPUT_VALIDATOR);
             VALIDATORS.put(LOW_POWER_MODE_TRIGGER_LEVEL, LOW_POWER_MODE_TRIGGER_LEVEL_VALIDATOR);
+            VALIDATORS.put(LOW_POWER_MODE_TRIGGER_LEVEL_MAX,
+                    LOW_POWER_MODE_TRIGGER_LEVEL_VALIDATOR);
             VALIDATORS.put(BLUETOOTH_ON, BLUETOOTH_ON_VALIDATOR);
             VALIDATORS.put(PRIVATE_DNS_MODE, PRIVATE_DNS_MODE_VALIDATOR);
             VALIDATORS.put(PRIVATE_DNS_SPECIFIER, PRIVATE_DNS_SPECIFIER_VALIDATOR);
             VALIDATORS.put(SOFT_AP_TIMEOUT_ENABLED, SOFT_AP_TIMEOUT_ENABLED_VALIDATOR);
             VALIDATORS.put(WIFI_CARRIER_NETWORKS_AVAILABLE_NOTIFICATION_ON,
                     WIFI_CARRIER_NETWORKS_AVAILABLE_NOTIFICATION_ON_VALIDATOR);
+            VALIDATORS.put(APP_AUTO_RESTRICTION_ENABLED, APP_AUTO_RESTRICTION_ENABLED_VALIDATOR);
         }
 
         /**

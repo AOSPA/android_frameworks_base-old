@@ -85,7 +85,10 @@ import java.util.List;
  * or after {@link #onListenerDisconnected()}.
  * </p>
  * <p> Notification listeners cannot get notification access or be bound by the system on
- * {@link ActivityManager#isLowRamDevice() low ram} devices</p>
+ * {@linkplain ActivityManager#isLowRamDevice() low-RAM} devices. The system also ignores
+ * notification listeners running in a work profile. A
+ * {@link android.app.admin.DevicePolicyManager} might block notifications originating from a work
+ * profile.</p>
  */
 public abstract class NotificationListenerService extends Service {
 
@@ -146,13 +149,19 @@ public abstract class NotificationListenerService extends Service {
     /**
      * Whether notification suppressed by DND should not interruption visually when the screen is
      * off.
+     *
+     * @deprecated Use the more specific visual effects in {@link NotificationManager.Policy}.
      */
+    @Deprecated
     public static final int SUPPRESSED_EFFECT_SCREEN_OFF =
             NotificationManager.Policy.SUPPRESSED_EFFECT_SCREEN_OFF;
     /**
      * Whether notification suppressed by DND should not interruption visually when the screen is
      * on.
+     *
+     * @deprecated Use the more specific visual effects in {@link NotificationManager.Policy}.
      */
+    @Deprecated
     public static final int SUPPRESSED_EFFECT_SCREEN_ON =
             NotificationManager.Policy.SUPPRESSED_EFFECT_SCREEN_ON;
 
@@ -1217,6 +1226,7 @@ public abstract class NotificationListenerService extends Service {
                 // convert icon metadata to legacy format for older clients
                 createLegacyIconExtras(sbn.getNotification());
                 maybePopulateRemoteViews(sbn.getNotification());
+                maybePopulatePeople(sbn.getNotification());
             } catch (IllegalArgumentException e) {
                 // warn and drop corrupt notification
                 Log.w(TAG, "onNotificationPosted: can't rebuild notification from " +
@@ -1449,7 +1459,8 @@ public abstract class NotificationListenerService extends Service {
 
         /**
          * Returns the type(s) of visual effects that should be suppressed for this notification.
-         * See {@link #SUPPRESSED_EFFECT_SCREEN_OFF}, {@link #SUPPRESSED_EFFECT_SCREEN_ON}.
+         * See {@link NotificationManager.Policy}, e.g.
+         * {@link NotificationManager.Policy#SUPPRESSED_EFFECT_LIGHTS}.
          */
         public int getSuppressedVisualEffects() {
             return mSuppressedVisualEffects;

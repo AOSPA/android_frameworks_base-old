@@ -72,7 +72,7 @@ message Atom {
         BatteryLevelChanged battery_level_changed = 30;
         ChargingStateChanged charging_state_changed = 31;
         PluggedStateChanged plugged_state_changed = 32;
-        DeviceTemperatureReported device_temperature_reported = 33;
+        // TODO: 33 is blank, but is available for use.
         DeviceOnStatusChanged device_on_status_changed = 34;
         WakeupAlarmOccurred wakeup_alarm_occurred = 35;
         KernelWakeupReported kernel_wakeup_reported = 36;
@@ -101,11 +101,16 @@ message Atom {
         OverlayStateChanged overlay_state_changed = 59;
         ForegroundServiceStateChanged foreground_service_state_changed = 60;
         CallStateChanged call_state_changed = 61;
+        KeyguardStateChanged keyguard_state_changed = 62;
+        KeyguardBouncerStateChanged keyguard_bouncer_state_changed = 63;
+        KeyguardBouncerPasswordEntered keyguard_bouncer_password_entered = 64;
+        AppDied app_died=65;
+        ResourceConfigurationChanged resource_configuration_changed = 66;
         // TODO: Reorder the numbering so that the most frequent occur events occur in the first 15.
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10021
+    // Next: 10022
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -128,7 +133,11 @@ message Atom {
         DiskSpace disk_space = 10018;
         RemainingBatteryCapacity remaining_battery_capacity = 10019;
         FullBatteryCapacity full_battery_capacity = 10020;
+        Temperature temperature = 10021;
     }
+
+    // DO NOT USE field numbers above 100,000 in AOSP. Field numbers above
+    // 100,000 are reserved for non-AOSP (e.g. OEMs) to use.
 }
 
 /**
@@ -536,17 +545,6 @@ message PluggedStateChanged {
     optional android.os.BatteryPluggedStateEnum state = 1;
 }
 
-/**
- * Logs the temperature of the device, in tenths of a degree Celsius.
- *
- * Logged from:
- *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
- */
-message DeviceTemperatureReported {
-    // Temperature in tenths of a degree C.
-    optional int32 temperature = 1;
-}
-
 // TODO: Define this more precisely.
 // TODO: Log the ON state somewhere. It isn't currently logged anywhere.
 /**
@@ -757,14 +755,166 @@ message CallStateChanged {
 }
 
 /**
+ * Logs keyguard state. The keyguard is the lock screen.
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarKeyguardViewManager.java
+ */
+message KeyguardStateChanged {
+    enum State {
+        UNKNOWN = 0;
+        // The keyguard is hidden when the phone is unlocked.
+        HIDDEN = 1;
+        // The keyguard is shown when the phone is locked (screen turns off).
+        SHOWN= 2;
+        // The keyguard is occluded when something is overlaying the keyguard.
+        // Eg. Opening the camera while on the lock screen.
+        OCCLUDED = 3;
+    }
+    optional State state = 1;
+}
+
+/**
+ * Logs keyguard bouncer state. The bouncer is a part of the keyguard, and
+ * prompts the user to enter a password (pattern, pin, etc).
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/src/com/android/systemui/statusbar/phone/KeyguardBouncer.java
+ */
+
+message KeyguardBouncerStateChanged {
+    enum State {
+        UNKNOWN = 0;
+        // Bouncer is hidden, either as a result of successfully entering the
+        // password, screen timing out, or user going back to lock screen.
+        HIDDEN = 1;
+        // This is when the user is being prompted to enter the password.
+        SHOWN = 2;
+    }
+    optional State state = 1;
+}
+
+/**
+ * Logs the result of entering a password into the keyguard bouncer.
+ *
+ * Logged from:
+ *   frameworks/base/packages/SystemUI/src/com/android/keyguard/KeyguardSecurityContainer.java
+ */
+message KeyguardBouncerPasswordEntered {
+    enum BouncerResult {
+        UNKNOWN = 0;
+        // The password entered was incorrect.
+        FAILURE = 1;
+        // The password entered was correct.
+        SUCCESS = 2;
+    }
+    optional BouncerResult result = 1;
+}
+
+/*
+ * Logs changes to the configuration of the device. The configuration is defined
+ * in frameworks/base/core/java/android/content/res/Configuration.java
+ * More documentation is at https://d.android.com/reference/android/content/res/Configuration.html
+ * Please go there to interpret the possible values each field can be.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+ */
+message ResourceConfigurationChanged {
+    // Bit mask of color capabilities of the screen.
+    // Contains information about the color gamut and hdr mode of the screen.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#colorMode
+    optional int32 colorMode = 1;
+
+    // The target screen density being rendered to.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#densityDpi
+    optional int32 densityDpi = 2;
+
+    // Current user preference for the scaling factor for fonts,
+    // relative to the base density scaling.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#fontScale
+    optional float fontScale = 3;
+
+    // Flag indicating whether the hard keyboard is hidden.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#hardKeyboardHidden
+    optional int32 hardKeyboardHidden = 4;
+
+    // The type of keyboard attached to the device.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#keyboard
+    optional int32 keyboard = 5;
+
+    // Flag indicating whether any keyboard is available. Takes soft keyboards into account.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#keyboardHidden
+    optional int32 keyboardHideen = 6;
+
+    // IMSI MCC (Mobile Country Code), corresponding to mcc resource qualifier.
+    // 0 if undefined.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#mcc
+    optional int32 mcc = 7;
+
+    // IMSI MNC (Mobile Network Code), corresponding to mnc resource qualifier.
+    // 0 if undefined. Note: the actual MNC may be 0, to check for this use the
+    // MNC_ZERO symbol defined in Configuration.java.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#mnc
+    optional int32 mnc = 8;
+
+    // The kind of navigation available on the device.
+    // See: https://developer.android.com/reference/android/content/res/Configuration.html#navigation
+    optional int32 navigation = 9;
+
+    // Flag indicating whether the navigation is available.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#navigationHidden
+    optional int32 navigationHidden = 10;
+
+    // Overall orientation of the screen.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#orientation
+    optional int32 orientation = 11;
+
+    // The current height of the available screen space, in dp units.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#screenHeightDp
+    optional int32 screenHeightDp = 12;
+
+    // Bit mask of overall layout of the screen.
+    // Contains information about screen size, whether the screen is wider/taller
+    // than normal, whether the screen layout is right-tl-left or left-to-right,
+    // and whether the screen has a rounded shape.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#screenLayout
+    optional int32 screenLayout = 13;
+
+    // Current width of the available screen space, in dp units.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#screenWidthDp
+    optional int32 screenWidthDp = 14;
+
+    // The smallest screen size an application will see in normal operation.
+    // This is the smallest value of both screenWidthDp and screenHeightDp
+    // in portrait and landscape.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#smallestScreenWidthDp
+    optional int32 smallestScreenWidthDp = 15;
+
+    // The type of touch screen attached to the device.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#touchscreen
+    optional int32 touchscreen = 16;
+
+    // Bit mask of the ui mode.
+    // Contains information about the overall ui mode of the device.
+    // Eg: NORMAL, DESK, CAR, TELEVISION, WATCH, VR_HEADSET
+    // Also contains information about whether the device is in night mode.
+    // See: https://d.android.com/reference/android/content/res/Configuration.html#uiMode
+    optional int32 uiMode = 17;
+}
+
+/**
  * Logs the duration of a davey (jank of >=700ms) when it occurs
  *
  * Logged from:
  *   frameworks/base/libs/hwui/JankTracker.cpp
  */
 message DaveyOccurred {
+    // The UID that logged this atom.
+    optional int32 uid = 1;
+
     // Amount of time it took to render the frame. Should be >=700ms.
-    optional int64 jank_duration_millis = 1;
+    optional int64 jank_duration_millis = 2;
 }
 
 /**
@@ -1179,6 +1329,17 @@ message LmkKillOccurred {
     optional int64 swap_in_bytes = 8;
 }
 
+/*
+ * Logs when the ActivityManagerService detects that an app died.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java
+ */
+message AppDied {
+    // timestamp(elapsedRealtime) of record creation
+    optional uint64 timestamp_millis = 1;
+}
+
 //////////////////////////////////////////////////////////////////////
 // Pulled atoms below this line //
 //////////////////////////////////////////////////////////////////////
@@ -1328,7 +1489,7 @@ message CpuTimePerFreq {
  * Note that isolated process uid time should be attributed to host uids.
  */
 message CpuTimePerUid {
-    optional uint64 uid = 1;
+    optional int32 uid = 1;
     optional uint64 user_time_millis = 2;
     optional uint64 sys_time_millis = 3;
 }
@@ -1339,8 +1500,8 @@ message CpuTimePerUid {
  * For each uid, we order the time by descending frequencies.
  */
 message CpuTimePerUidFreq {
-    optional uint64 uid = 1;
-    optional uint64 freq_idx = 2;
+    optional int32 uid = 1;
+    optional uint32 freq_index = 2;
     optional uint64 time_millis = 3;
 }
 
@@ -1473,10 +1634,8 @@ message SystemUptime {
  * The file contains a monotonically increasing count of time for a single boot.
  */
 message CpuActiveTime {
-    optional uint64 uid = 1;
-    optional uint32 cluster_number = 2;
-    optional uint64 idx = 3;
-    optional uint64 time_millis = 4;
+    optional int32 uid = 1;
+    optional uint64 time_millis = 2;
 }
 
 /**
@@ -1489,8 +1648,8 @@ message CpuActiveTime {
  * The file contains a monotonically increasing count of time for a single boot.
  */
 message CpuClusterTime {
-    optional uint64 uid = 1;
-    optional uint64 idx = 2;
+    optional int32 uid = 1;
+    optional int32 cluster_index = 2;
     optional uint64 time_millis = 3;
 }
 
@@ -1508,7 +1667,8 @@ message DiskSpace {
 
 /**
  * Pulls battery coulomb counter, which is the remaining battery charge in uAh.
- * Logged from: frameworks/base/cmds/statsd/src/external/ResourceHealthManagerPuller.cpp
+ * Pulled from:
+ *   frameworks/base/cmds/statsd/src/external/ResourceHealthManagerPuller.cpp
  */
 message RemainingBatteryCapacity {
     optional int32 charge_uAh = 1;
@@ -1516,8 +1676,26 @@ message RemainingBatteryCapacity {
 
 /**
  * Pulls battery capacity, which is the battery capacity when full in uAh.
- * Logged from: frameworks/base/cmds/statsd/src/external/ResourceHealthManagerPuller.cpp
+ * Pulled from:
+ *   frameworks/base/cmds/statsd/src/external/ResourceHealthManagerPuller.cpp
  */
 message FullBatteryCapacity {
     optional int32 capacity_uAh = 1;
+}
+
+/**
+ * Pulls the temperature of various parts of the device, in Celsius.
+ *
+ * Pulled from:
+ *   frameworks/base/cmds/statsd/src/external/ResourceThermalManagerPuller.cpp
+ */
+message Temperature {
+    // The type of temperature being reported. Eg. CPU, GPU, SKIN, BATTERY.
+    optional android.os.TemperatureTypeEnum sensor_location = 1;
+
+    // The name of the temperature source. Eg. CPU0
+    optional string sensor_name = 2;
+
+    // Temperature in degrees C.
+    optional float temperature_C = 3;
 }
