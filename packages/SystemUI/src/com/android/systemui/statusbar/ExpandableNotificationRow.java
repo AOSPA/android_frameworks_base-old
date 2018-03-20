@@ -25,8 +25,8 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.content.res.Resources;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Path;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.AnimationDrawable;
@@ -36,6 +36,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
+import android.util.ArraySet;
 import android.util.AttributeSet;
 import android.util.FloatProperty;
 import android.util.MathUtils;
@@ -187,6 +188,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private boolean mShowNoBackground;
     private ExpandableNotificationRow mNotificationParent;
     private OnExpandClickListener mOnExpandClickListener;
+    private View.OnClickListener mOnAppOpsClickListener;
 
     // Listener will be called when receiving a long click event.
     // Use #setLongPressPosition to optionally assign positional data with the long press.
@@ -889,6 +891,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             ArrayList<MenuItem> items = new ArrayList<>();
             items.add(NotificationMenuRow.createInfoItem(mContext));
             items.add(NotificationMenuRow.createSnoozeItem(mContext));
+            items.add(NotificationMenuRow.createAppOpsItem(mContext));
             mMenuRow.setMenuItems(items);
         }
         if (existed) {
@@ -1352,6 +1355,28 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     public void showBlockingHelper(boolean show) {
         mHelperButton.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+
+    public void showAppOpsIcons(ArraySet<Integer> activeOps) {
+        if (mIsSummaryWithChildren && mChildrenContainer.getHeaderView() != null) {
+            mChildrenContainer.getHeaderView().showAppOpsIcons(activeOps);
+        }
+        mPrivateLayout.showAppOpsIcons(activeOps);
+        mPublicLayout.showAppOpsIcons(activeOps);
+    }
+
+    public View.OnClickListener getAppOpsOnClickListener() {
+        return mOnAppOpsClickListener;
+    }
+
+    protected void setAppOpsOnClickListener(ExpandableNotificationRow.OnAppOpsClickListener l) {
+        mOnAppOpsClickListener = v -> {
+            createMenu();
+            MenuItem menuItem = getProvider().getAppOpsMenuItem(mContext);
+            if (menuItem != null) {
+                l.onClick(this, v.getWidth() / 2, v.getHeight() / 2, menuItem);
+            }
+        };
     }
 
     @Override
@@ -2629,6 +2654,16 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mChildrenContainer = childrenContainer;
     }
 
+    @VisibleForTesting
+    protected void setPrivateLayout(NotificationContentView privateLayout) {
+        mPrivateLayout = privateLayout;
+    }
+
+    @VisibleForTesting
+    protected void setPublicLayout(NotificationContentView publicLayout) {
+        mPublicLayout = publicLayout;
+    }
+
     /**
      * Equivalent to View.OnLongClickListener with coordinates
      */
@@ -2638,5 +2673,16 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
          * @return whether the longpress was handled
          */
         boolean onLongPress(View v, int x, int y, MenuItem item);
+    }
+
+    /**
+     * Equivalent to View.OnClickListener with coordinates
+     */
+    public interface OnAppOpsClickListener {
+        /**
+         * Equivalent to {@link View.OnClickListener#onClick(View)} with coordinates
+         * @return whether the click was handled
+         */
+        boolean onClick(View v, int x, int y, MenuItem item);
     }
 }

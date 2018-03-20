@@ -20,6 +20,7 @@ import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.IActivityManager;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Color;
@@ -357,12 +358,12 @@ public class KeyguardStatusView extends GridLayout {
         updateDozeVisibleViews();
         mKeyguardSlice.setDark(darkAmount);
         mClockView.setTextColor(blendedTextColor);
-        mClockSeparator.setBackgroundColor(blendedTextColor);
+        mClockSeparator.setBackgroundTintList(ColorStateList.valueOf(blendedTextColor));
     }
 
     public void setPulsing(boolean pulsing) {
         mPulsing = pulsing;
-        mKeyguardSlice.setVisibility(pulsing ? INVISIBLE : VISIBLE);
+        mKeyguardSlice.setHideContent(pulsing);
         onSliceContentChanged(mKeyguardSlice.hasHeader());
         updateDozeVisibleViews();
     }

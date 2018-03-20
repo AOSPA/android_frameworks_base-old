@@ -271,8 +271,11 @@ public class MobileSignalController extends SignalController<
             if (mConfig.readIconsFromXml) {
                 return getIcons().mSingleSignalIcon;
             }else {
-                return SignalDrawable.getState(level, getNumLevels(),
-                        mCurrentState.inetCondition == 0);
+                boolean dataDisabled = mCurrentState.userSetup
+                        && mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED;
+                boolean noInternet = mCurrentState.inetCondition == 0;
+                boolean cutOut = dataDisabled || noInternet;
+                return SignalDrawable.getState(level, getNumLevels(), cutOut);
             }
         } else if (mCurrentState.enabled) {
             if (mConfig.readIconsFromXml) {
@@ -303,6 +306,9 @@ public class MobileSignalController extends SignalController<
 
         String contentDescription = getStringIfExists(getContentDescription());
         String dataContentDescription = getStringIfExists(icons.mDataContentDescription);
+        if (mCurrentState.inetCondition == 0) {
+            dataContentDescription = mContext.getString(R.string.data_connection_no_internet);
+        }
         final boolean dataDisabled = mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
                 && mCurrentState.userSetup;
 
@@ -534,7 +540,7 @@ public class MobileSignalController extends SignalController<
 
         int[] contentDesc = AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH;
         int discContentDesc = AccessibilityContentDescriptions.PHONE_SIGNAL_STRENGTH[0];
-        int dataContentDesc, dataTypeIcon, qsDataTypeIcon, dataActivityId;
+        int dataContentDesc, dataTypeIcon, dataActivityId;
         int singleSignalIcon, stackedDataIcon = 0, stackedVoiceIcon = 0;
 
         final int slotId = getSimSlotIndex();
@@ -615,23 +621,20 @@ public class MobileSignalController extends SignalController<
         if (dataType == TelephonyManager.NETWORK_TYPE_IWLAN) {
             // wimax is a special 4g network not handled by telephony
             dataTypeIcon = TelephonyIcons.ICON_4G;
-            qsDataTypeIcon = TelephonyIcons.QS_DATA_4G;
-            dataContentDesc = R.string.accessibility_data_connection_4g;
+            dataContentDesc = R.string.data_connection_4g;
         } else {
             dataTypeIcon = TelephonyIcons.getDataTypeIcon(slotId);
             dataContentDesc = TelephonyIcons.getDataTypeDesc(slotId);
-            qsDataTypeIcon = TelephonyIcons.getQSDataTypeIcon(slotId);
         }
 
         if (DEBUG) {
             Log.d(mTag, "updateDataNetType, dataTypeIcon=" + getResourceName(dataTypeIcon)
-                    + " qsDataTypeIcon=" + getResourceName(qsDataTypeIcon)
                     + " dataContentDesc=" + dataContentDesc);
         }
         mCurrentState.iconGroup = new MobileIconGroup(
                 TelephonyManager.getNetworkTypeName(dataType),
                 null, null, contentDesc, 0, 0, sbDiscState, 0, discContentDesc,
-                dataContentDesc, dataTypeIcon, false, qsDataTypeIcon,
+                dataContentDesc, dataTypeIcon, false,
                 singleSignalIcon, stackedDataIcon, stackedVoiceIcon, dataActivityId);
     }
 
@@ -833,24 +836,22 @@ public class MobileSignalController extends SignalController<
 
         public MobileIconGroup(String name, int[][] sbIcons, int[][] qsIcons, int[] contentDesc,
                 int sbNullState, int qsNullState, int sbDiscState, int qsDiscState,
-                int discContentDesc, int dataContentDesc, int dataType, boolean isWide,
-                int qsDataType) {
+                int discContentDesc, int dataContentDesc, int dataType, boolean isWide) {
                 this(name, sbIcons, qsIcons, contentDesc, sbNullState, qsNullState, sbDiscState,
                         qsDiscState, discContentDesc, dataContentDesc, dataType, isWide,
-                        qsDataType, 0, 0, 0, 0);
+                        0, 0, 0, 0);
         }
 
         public MobileIconGroup(String name, int[][] sbIcons, int[][] qsIcons, int[] contentDesc,
                 int sbNullState, int qsNullState, int sbDiscState, int qsDiscState,
                 int discContentDesc, int dataContentDesc, int dataType, boolean isWide,
-                int qsDataType, int singleSignalIcon, int stackedDataIcon,
-                int stackedVoicelIcon, int activityId) {
+                int singleSignalIcon, int stackedDataIcon, int stackedVoicelIcon, int activityId) {
             super(name, sbIcons, qsIcons, contentDesc, sbNullState, qsNullState, sbDiscState,
                     qsDiscState, discContentDesc);
             mDataContentDescription = dataContentDesc;
             mDataType = dataType;
             mIsWide = isWide;
-            mQsDataType = qsDataType;
+            mQsDataType = dataType; // TODO: remove this field
             mSingleSignalIcon = singleSignalIcon;
             mStackedDataIcon = stackedDataIcon;
             mStackedVoiceIcon = stackedVoicelIcon;

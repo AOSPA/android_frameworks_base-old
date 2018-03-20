@@ -17,12 +17,18 @@
 package com.android.systemui.statusbar;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import android.app.AppOpsManager;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
+import android.util.ArraySet;
+import android.view.NotificationHeaderView;
 import android.view.View;
 
 import com.android.systemui.SysuiTestCase;
@@ -145,5 +151,48 @@ public class ExpandableNotificationRowTest extends SysuiTestCase {
         mGroup.setSecureStateProvider(()-> true);
         Assert.assertTrue("Should always play sounds when not trusted.",
                 mGroup.isSoundEffectsEnabled());
+    }
+
+    @Test
+    public void testShowAppOps_noHeader() {
+        // public notification is custom layout - no header
+        mGroup.setSensitive(true, true);
+        mGroup.setAppOpsOnClickListener(null);
+        mGroup.showAppOpsIcons(null);
+    }
+
+    @Test
+    public void testShowAppOpsIcons_header() {
+        NotificationHeaderView mockHeader = mock(NotificationHeaderView.class);
+
+        NotificationContentView publicLayout = mock(NotificationContentView.class);
+        mGroup.setPublicLayout(publicLayout);
+        NotificationContentView privateLayout = mock(NotificationContentView.class);
+        mGroup.setPrivateLayout(privateLayout);
+        NotificationChildrenContainer mockContainer = mock(NotificationChildrenContainer.class);
+        when(mockContainer.getNotificationChildCount()).thenReturn(1);
+        when(mockContainer.getHeaderView()).thenReturn(mockHeader);
+        mGroup.setChildrenContainer(mockContainer);
+
+        ArraySet<Integer> ops = new ArraySet<>();
+        ops.add(AppOpsManager.OP_ANSWER_PHONE_CALLS);
+        mGroup.showAppOpsIcons(ops);
+
+        verify(mockHeader, times(1)).showAppOpsIcons(ops);
+        verify(privateLayout, times(1)).showAppOpsIcons(ops);
+        verify(publicLayout, times(1)).showAppOpsIcons(ops);
+
+    }
+
+    @Test
+    public void testAppOpsOnClick() {
+        ExpandableNotificationRow.OnAppOpsClickListener l = mock(
+                ExpandableNotificationRow.OnAppOpsClickListener.class);
+        View view = mock(View.class);
+
+        mGroup.setAppOpsOnClickListener(l);
+
+        mGroup.getAppOpsOnClickListener().onClick(view);
+        verify(l, times(1)).onClick(any(), anyInt(), anyInt(), any());
     }
 }

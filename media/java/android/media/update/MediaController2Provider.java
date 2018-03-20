@@ -16,6 +16,7 @@
 
 package android.media.update;
 
+import android.annotation.NonNull;
 import android.app.PendingIntent;
 import android.media.AudioAttributes;
 import android.media.MediaController2.PlaybackInfo;
@@ -49,7 +50,7 @@ public interface MediaController2Provider extends TransportControlProvider {
 
     void prepareFromUri_impl(Uri uri, Bundle extras);
     void prepareFromSearch_impl(String query, Bundle extras);
-    void prepareMediaId_impl(String mediaId, Bundle extras);
+    void prepareFromMediaId_impl(String mediaId, Bundle extras);
     void playFromSearch_impl(String query, Bundle extras);
     void playFromUri_impl(Uri uri, Bundle extras);
     void playFromMediaId_impl(String mediaId, Bundle extras);
@@ -58,8 +59,9 @@ public interface MediaController2Provider extends TransportControlProvider {
     void sendCustomCommand_impl(Command command, Bundle args, ResultReceiver cb);
     List<MediaItem2> getPlaylist_impl();
 
-    void removePlaylistItem_impl(MediaItem2 index);
     void addPlaylistItem_impl(int index, MediaItem2 item);
+    void replacePlaylistItem_impl(int index, MediaItem2 item);
+    void removePlaylistItem_impl(MediaItem2 item);
 
     PlaylistParams getPlaylistParams_impl();
     void setPlaylistParams_impl(PlaylistParams params);
@@ -68,7 +70,7 @@ public interface MediaController2Provider extends TransportControlProvider {
     long getPosition_impl();
     float getPlaybackSpeed_impl();
     long getBufferedPosition_impl();
-    MediaItem2 getCurrentPlaylistItem_impl();
+    MediaItem2 getCurrentMediaItem_impl();
 
     interface PlaybackInfoProvider {
         int getPlaybackType_impl();

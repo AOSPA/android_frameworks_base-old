@@ -50,8 +50,9 @@ import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.StatusBarState;
-import android.util.BoostFramework;
+import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
+import android.util.BoostFramework;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -67,7 +68,6 @@ public abstract class PanelView extends FrameLayout {
     private LockscreenGestureLogger mLockscreenGestureLogger = new LockscreenGestureLogger();
     private boolean mPanelUpdateWhenAnimatorEnds;
     private boolean mVibrateOnOpening;
-    private boolean mVibrationEnabled;
     protected boolean mLaunchingNotification;
     private int mFixedDuration = NO_FIXED_DURATION;
 
@@ -111,13 +111,7 @@ public abstract class PanelView extends FrameLayout {
     private FlingAnimationUtils mFlingAnimationUtilsClosing;
     private FlingAnimationUtils mFlingAnimationUtilsDismissing;
     private FalsingManager mFalsingManager;
-    private final Vibrator mVibrator;
-    final private ContentObserver mVibrationObserver = new ContentObserver(Handler.getMain()) {
-        @Override
-        public void onChange(boolean selfChange) {
-            updateHapticFeedBackEnabled();
-        }
-    };
+    private final VibratorHelper mVibratorHelper;
 
     /**
      * For PanelView fling perflock call
@@ -224,20 +218,11 @@ public abstract class PanelView extends FrameLayout {
         mFalsingManager = FalsingManager.getInstance(context);
         mNotificationsDragEnabled =
                 getResources().getBoolean(R.bool.config_enableNotificationShadeDrag);
-        mVibrator = mContext.getSystemService(Vibrator.class);
+        mVibratorHelper = new VibratorHelper(context);
         mVibrateOnOpening = mContext.getResources().getBoolean(
                 R.bool.config_vibrateOnIconAnimation);
-        mContext.getContentResolver().registerContentObserver(
-                Settings.System.getUriFor(Settings.System.HAPTIC_FEEDBACK_ENABLED), true,
-                mVibrationObserver);
-        mVibrationObserver.onChange(false /* selfChange */);
 
         mPerf = new BoostFramework();
-    }
-
-    public void updateHapticFeedBackEnabled() {
-        mVibrationEnabled = Settings.System.getIntForUser(mContext.getContentResolver(),
-                Settings.System.HAPTIC_FEEDBACK_ENABLED, 0, UserHandle.USER_CURRENT) != 0;
     }
 
     protected void loadDimens() {
@@ -350,7 +335,7 @@ public abstract class PanelView extends FrameLayout {
                     onTrackingStarted();
                 }
                 if (isFullyCollapsed() && !mHeadsUpManager.hasPinnedHeadsUp()) {
-                    startOpening();
+                    startOpening(event);
                 }
                 break;
 
@@ -425,14 +410,25 @@ public abstract class PanelView extends FrameLayout {
         return !mGestureWaitForTouchSlop || mTracking;
     }
 
-    private void startOpening() {;
+    private void startOpening(MotionEvent event) {
         runPeekAnimation(INITIAL_OPENING_PEEK_DURATION, getOpeningHeight(),
                 false /* collapseWhenFinished */);
         notifyBarPanelExpansionChanged();
-        if (mVibrateOnOpening && mVibrationEnabled) {
-            AsyncTask.execute(() ->
-                    mVibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_TICK, false)));
+        if (mVibrateOnOpening) {
+            mVibratorHelper.vibrate(VibrationEffect.EFFECT_TICK);
         }
+
+        //TODO: keyguard opens QS a different way; log that too?
+
+        // Log the position of the swipe that opened the panel
+        float width = mStatusBar.getDisplayWidth();
+        float height = mStatusBar.getDisplayHeight();
+        int rot = mStatusBar.getRotation();
+
+        mLockscreenGestureLogger.writeAtFractionalPosition(MetricsEvent.ACTION_PANEL_VIEW_EXPAND,
+                (int) (event.getX() / width * 100),
+                (int) (event.getY() / height * 100),
+                rot);
     }
 
     protected abstract float getOpeningHeight();

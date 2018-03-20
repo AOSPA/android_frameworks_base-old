@@ -319,6 +319,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     // Enum for the "typeface" XML parameter.
     // TODO: How can we get this from the XML instead of hardcoding it here?
+    /** @hide */
+    @IntDef(value = {DEFAULT_TYPEFACE, SANS, SERIF, MONOSPACE})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface XMLTypefaceAttr{}
+    private static final int DEFAULT_TYPEFACE = -1;
     private static final int SANS = 1;
     private static final int SERIF = 2;
     private static final int MONOSPACE = 3;
@@ -1976,33 +1981,52 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
     }
 
-    private void setTypefaceFromAttrs(Typeface fontTypeface, String familyName, int typefaceIndex,
-            int styleIndex) {
-        Typeface tf = fontTypeface;
-        if (tf == null && familyName != null) {
-            tf = Typeface.create(familyName, styleIndex);
-        } else if (tf != null && tf.getStyle() != styleIndex) {
-            tf = Typeface.create(tf, styleIndex);
+    /**
+     * Sets the Typeface taking into account the given attributes.
+     *
+     * @param typeface a typeface
+     * @param familyName family name string, e.g. "serif"
+     * @param typefaceIndex an index of the typeface enum, e.g. SANS, SERIF.
+     * @param style a typeface style
+     * @param weight a weight value for the Typeface or -1 if not specified.
+     */
+    private void setTypefaceFromAttrs(@Nullable Typeface typeface, @Nullable String familyName,
+            @XMLTypefaceAttr int typefaceIndex, @Typeface.Style int style,
+            @IntRange(from = -1, to = Typeface.MAX_WEIGHT) int weight) {
+        if (typeface == null && familyName != null) {
+            // Lookup normal Typeface from system font map.
+            final Typeface normalTypeface = Typeface.create(familyName, Typeface.NORMAL);
+            resolveStyleAndSetTypeface(normalTypeface, style, weight);
+        } else if (typeface != null) {
+            resolveStyleAndSetTypeface(typeface, style, weight);
+        } else {  // both typeface and familyName is null.
+            switch (typefaceIndex) {
+                case SANS:
+                    resolveStyleAndSetTypeface(Typeface.SANS_SERIF, style, weight);
+                    break;
+                case SERIF:
+                    resolveStyleAndSetTypeface(Typeface.SERIF, style, weight);
+                    break;
+                case MONOSPACE:
+                    resolveStyleAndSetTypeface(Typeface.MONOSPACE, style, weight);
+                    break;
+                case DEFAULT_TYPEFACE:
+                default:
+                    resolveStyleAndSetTypeface(null, style, weight);
+                    break;
+            }
         }
-        if (tf != null) {
-            setTypeface(tf);
-            return;
+    }
+
+    private void resolveStyleAndSetTypeface(@NonNull Typeface typeface, @Typeface.Style int style,
+            @IntRange(from = -1, to = Typeface.MAX_WEIGHT) int weight) {
+        if (weight >= 0) {
+            weight = Math.min(Typeface.MAX_WEIGHT, weight);
+            final boolean italic = (style & Typeface.ITALIC) != 0;
+            setTypeface(Typeface.create(typeface, weight, italic));
+        } else {
+            setTypeface(typeface, style);
         }
-        switch (typefaceIndex) {
-            case SANS:
-                tf = Typeface.SANS_SERIF;
-                break;
-
-            case SERIF:
-                tf = Typeface.SERIF;
-                break;
-
-            case MONOSPACE:
-                tf = Typeface.MONOSPACE;
-                break;
-        }
-
-        setTypeface(tf, styleIndex);
     }
 
     private void setRelativeDrawablesIfNeeded(Drawable start, Drawable end) {
@@ -2087,7 +2111,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @attr ref android.R.styleable#TextView_typeface
      * @attr ref android.R.styleable#TextView_textStyle
      */
-    public void setTypeface(Typeface tf, int style) {
+    public void setTypeface(@Nullable Typeface tf, @Typeface.Style int style) {
         if (style > 0) {
             if (tf == null) {
                 tf = Typeface.defaultFromStyle(style);
@@ -3392,6 +3416,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         boolean mFontFamilyExplicit = false;
         int mTypefaceIndex = -1;
         int mStyleIndex = -1;
+        int mFontWeight = -1;
         boolean mAllCaps = false;
         int mShadowColor = 0;
         float mShadowDx = 0, mShadowDy = 0, mShadowRadius = 0;
@@ -3416,6 +3441,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     + "    mFontFamilyExplicit:" + mFontFamilyExplicit + "\n"
                     + "    mTypefaceIndex:" + mTypefaceIndex + "\n"
                     + "    mStyleIndex:" + mStyleIndex + "\n"
+                    + "    mFontWeight:" + mFontWeight + "\n"
                     + "    mAllCaps:" + mAllCaps + "\n"
                     + "    mShadowColor:" + mShadowColor + "\n"
                     + "    mShadowDx:" + mShadowDx + "\n"
@@ -3451,6 +3477,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 com.android.internal.R.styleable.TextAppearance_fontFamily);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_textStyle,
                 com.android.internal.R.styleable.TextAppearance_textStyle);
+        sAppearanceValues.put(com.android.internal.R.styleable.TextView_textFontWeight,
+                com.android.internal.R.styleable.TextAppearance_textFontWeight);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_textAllCaps,
                 com.android.internal.R.styleable.TextAppearance_textAllCaps);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_shadowColor,
@@ -3536,6 +3564,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 case com.android.internal.R.styleable.TextAppearance_textStyle:
                     attributes.mStyleIndex = appearance.getInt(attr, attributes.mStyleIndex);
                     break;
+                case com.android.internal.R.styleable.TextAppearance_textFontWeight:
+                    attributes.mFontWeight = appearance.getInt(attr, attributes.mFontWeight);
+                    break;
                 case com.android.internal.R.styleable.TextAppearance_textAllCaps:
                     attributes.mAllCaps = appearance.getBoolean(attr, attributes.mAllCaps);
                     break;
@@ -3598,7 +3629,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             attributes.mFontFamily = null;
         }
         setTypefaceFromAttrs(attributes.mFontTypeface, attributes.mFontFamily,
-                attributes.mTypefaceIndex, attributes.mStyleIndex);
+                attributes.mTypefaceIndex, attributes.mStyleIndex, attributes.mFontWeight);
 
         if (attributes.mShadowColor != 0) {
             setShadowLayer(attributes.mShadowRadius, attributes.mShadowDx, attributes.mShadowDy,
@@ -3865,7 +3896,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @attr ref android.R.styleable#TextView_typeface
      * @attr ref android.R.styleable#TextView_textStyle
      */
-    public void setTypeface(Typeface tf) {
+    public void setTypeface(@Nullable Typeface tf) {
         if (mTextPaint.getTypeface() != tf) {
             mTextPaint.setTypeface(tf);
 
@@ -4110,6 +4141,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     public void setTextMetricsParams(@NonNull PrecomputedText.Params params) {
         mTextPaint.set(params.getTextPaint());
+        mUserSetTextScaleX = true;
         mTextDir = params.getTextDirection();
         mBreakStrategy = params.getBreakStrategy();
         mHyphenationFrequency = params.getHyphenationFrequency();
@@ -5497,9 +5529,16 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * {@link android.text.Editable.Factory} to create final or intermediate
      * {@link Editable Editables}.
      *
+     * If the passed text is a {@link PrecomputedText} but the parameters used to create the
+     * PrecomputedText mismatches with this TextView, IllegalArgumentException is thrown. To ensure
+     * the parameters match, you can call {@link TextView#setTextMetricsParams} before calling this.
+     *
      * @param text text to be displayed
      *
      * @attr ref android.R.styleable#TextView_text
+     * @throws IllegalArgumentException if the passed text is a {@link PrecomputedText} but the
+     *                                  parameters used to create the PrecomputedText mismatches
+     *                                  with this TextView.
      */
     @android.view.RemotableViewMethod
     public final void setText(CharSequence text) {
@@ -5613,7 +5652,21 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (imm != null) imm.restartInput(this);
         } else if (type == BufferType.SPANNABLE || mMovement != null) {
             text = mSpannableFactory.newSpannable(text);
-        } else if (!(text instanceof PrecomputedText || text instanceof CharWrapper)) {
+        } else if (text instanceof PrecomputedText) {
+            PrecomputedText precomputed = (PrecomputedText) text;
+            if (mTextDir == null) {
+                mTextDir = getTextDirectionHeuristic();
+            }
+            if (!precomputed.getParams().isSameTextMetricsInternal(
+                    getPaint(), mTextDir, mBreakStrategy, mHyphenationFrequency)) {
+                throw new IllegalArgumentException(
+                        "PrecomputedText's Parameters don't match the parameters of this TextView."
+                        + "Consider using setTextMetricsParams(precomputedText.getParams()) "
+                        + "to override the settings of this TextView: "
+                        + "PrecomputedText: " + precomputed.getParams()
+                        + "TextView: " + getTextMetricsParams());
+            }
+        } else if (!(text instanceof CharWrapper)) {
             text = TextUtils.stringOrSpannedString(text);
         }
 
@@ -5938,15 +5991,19 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         boolean forceUpdate = false;
         if (isPassword) {
             setTransformationMethod(PasswordTransformationMethod.getInstance());
-            setTypefaceFromAttrs(null/* fontTypeface */, null /* fontFamily */, MONOSPACE, 0);
+            setTypefaceFromAttrs(null/* fontTypeface */, null /* fontFamily */, MONOSPACE,
+                    Typeface.NORMAL, -1 /* weight, not specifeid */);
         } else if (isVisiblePassword) {
             if (mTransformation == PasswordTransformationMethod.getInstance()) {
                 forceUpdate = true;
             }
-            setTypefaceFromAttrs(null/* fontTypeface */, null /* fontFamily */, MONOSPACE, 0);
+            setTypefaceFromAttrs(null/* fontTypeface */, null /* fontFamily */, MONOSPACE,
+                    Typeface.NORMAL, -1 /* weight, not specified */);
         } else if (wasPassword || wasVisiblePassword) {
             // not in password mode, clean up typeface and transformation
-            setTypefaceFromAttrs(null/* fontTypeface */, null /* fontFamily */, -1, -1);
+            setTypefaceFromAttrs(null/* fontTypeface */, null /* fontFamily */,
+                    DEFAULT_TYPEFACE /* typeface index */, Typeface.NORMAL,
+                    -1 /* weight, not specified */);
             if (mTransformation == PasswordTransformationMethod.getInstance()) {
                 forceUpdate = true;
             }
@@ -8027,7 +8084,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return false;
     }
 
-    private void nullLayouts() {
+    /** @hide */
+    @VisibleForTesting
+    public void nullLayouts() {
         if (mLayout instanceof BoringLayout && mSavedLayout == null) {
             mSavedLayout = (BoringLayout) mLayout;
         }
@@ -8121,7 +8180,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * not the full view width with padding.
      * {@hide}
      */
-    protected void makeNewLayout(int wantWidth, int hintWidth,
+    @VisibleForTesting
+    public void makeNewLayout(int wantWidth, int hintWidth,
                                  BoringLayout.Metrics boring,
                                  BoringLayout.Metrics hintBoring,
                                  int ellipsisWidth, boolean bringIntoView) {
@@ -8411,7 +8471,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         return mIncludePad;
     }
 
-    private static final BoringLayout.Metrics UNKNOWN_BORING = new BoringLayout.Metrics();
+    /** @hide */
+    @VisibleForTesting
+    public static final BoringLayout.Metrics UNKNOWN_BORING = new BoringLayout.Metrics();
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -11464,12 +11526,27 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @return Whether or not we're attempting to start the action mode.
      * @hide
      */
-    public boolean requestActionMode(@NonNull TextLinks.TextLink link) {
+    public boolean requestActionMode(@NonNull TextLinks.TextLinkSpan clickedSpan) {
+        Preconditions.checkNotNull(clickedSpan);
+        final TextLinks.TextLink link = clickedSpan.getTextLink();
         Preconditions.checkNotNull(link);
         createEditorIfNeeded();
-        mEditor.startLinkActionModeAsync(link);
+
+        if (!(mText instanceof Spanned)) {
+            return false;
+        }
+
+        final int start = ((Spanned) mText).getSpanStart(clickedSpan);
+        final int end = ((Spanned) mText).getSpanEnd(clickedSpan);
+
+        if (start < 0 || end < 1) {
+            return false;
+        }
+
+        mEditor.startLinkActionModeAsync(start, end);
         return true;
     }
+
     /**
      * @hide
      */

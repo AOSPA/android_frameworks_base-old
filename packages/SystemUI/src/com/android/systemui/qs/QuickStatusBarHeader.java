@@ -15,10 +15,11 @@
 package com.android.systemui.qs;
 
 import static android.app.StatusBarManager.DISABLE2_QUICK_SETTINGS;
-import static com.android.systemui.keyguard.KeyguardSliceProvider.formatNextAlarm;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.annotation.ColorInt;
+import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.content.Context;
 import android.content.Intent;
@@ -51,6 +52,8 @@ import com.android.systemui.statusbar.policy.DarkIconDispatcher;
 import com.android.systemui.statusbar.policy.DarkIconDispatcher.DarkReceiver;
 import com.android.systemui.statusbar.policy.NextAlarmController;
 
+import java.util.Locale;
+
 /**
  * View that contains the top-most bits of the screen (primarily the status bar with date, time, and
  * battery) and also contains the {@link QuickQSPanel} along with some of the panel's inner
@@ -63,7 +66,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements CommandQueue
     private static final long AUTO_FADE_OUT_DELAY_MS = DateUtils.SECOND_IN_MILLIS * 6;
     private static final int FADE_ANIMATION_DURATION_MS = 300;
     private static final int TOOLTIP_NOT_YET_SHOWN_COUNT = 0;
-    public static final int MAX_TOOLTIP_SHOWN_COUNT = 3;
+    public static final int MAX_TOOLTIP_SHOWN_COUNT = 2;
 
     private final Handler mHandler = new Handler();
 
@@ -126,7 +129,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements CommandQueue
 
         Rect tintArea = new Rect(0, 0, 0, 0);
         int colorForeground = Utils.getColorAttr(getContext(), android.R.attr.colorForeground);
-        float intensity = colorForeground == Color.WHITE ? 0 : 1;
+        float intensity = getColorIntensity(colorForeground);
         int fillColor = fillColorForIntensity(intensity, getContext());
 
         // Set light text on the header icons because they will always be on a black background
@@ -289,7 +292,7 @@ public class QuickStatusBarHeader extends RelativeLayout implements CommandQueue
 
     @Override
     public void onNextAlarmChanged(AlarmManager.AlarmClockInfo nextAlarm) {
-        mNextAlarmText = nextAlarm != null ? formatNextAlarm(mContext, nextAlarm) : null;
+        mNextAlarmText = nextAlarm != null ? formatNextAlarm(nextAlarm) : null;
         if (mNextAlarmText != null) {
             hideLongPressTooltip(true /* shouldFadeInAlarmText */);
         } else {
@@ -430,4 +433,20 @@ public class QuickStatusBarHeader extends RelativeLayout implements CommandQueue
     public void setCallback(Callback qsPanelCallback) {
         mHeaderQsPanel.setCallback(qsPanelCallback);
     }
+
+    private String formatNextAlarm(AlarmManager.AlarmClockInfo info) {
+        if (info == null) {
+            return "";
+        }
+        String skeleton = android.text.format.DateFormat
+                .is24HourFormat(mContext, ActivityManager.getCurrentUser()) ? "EHm" : "Ehma";
+        String pattern = android.text.format.DateFormat
+                .getBestDateTimePattern(Locale.getDefault(), skeleton);
+        return android.text.format.DateFormat.format(pattern, info.getTriggerTime()).toString();
+    }
+
+    public static float getColorIntensity(@ColorInt int color) {
+        return color == Color.WHITE ? 0 : 1;
+    }
+
 }

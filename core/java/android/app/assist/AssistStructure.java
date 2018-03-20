@@ -1309,6 +1309,11 @@ public class AssistStructure implements Parcelable {
             if (domain == null) return;
 
             final Uri uri = Uri.parse(domain);
+            if (uri == null) {
+                // Cannot log domain because it could contain PII;
+                Log.w(TAG, "Failed to parse web domain");
+                return;
+            }
             mWebScheme = uri.getScheme();
             mWebDomain = uri.getHost();
         }
@@ -2230,6 +2235,22 @@ public class AssistStructure implements Parcelable {
     public WindowNode getWindowNodeAt(int index) {
         ensureData();
         return mWindowNodes.get(index);
+    }
+
+    // TODO(b/35708678): temporary method that disable one-way warning flag on binder.
+    /** @hide */
+    public void ensureDataForAutofill() {
+        if (mHaveData) {
+            return;
+        }
+        mHaveData = true;
+        Binder.allowBlocking(mReceiveChannel);
+        try {
+            ParcelTransferReader reader = new ParcelTransferReader(mReceiveChannel);
+            reader.go();
+        } finally {
+            Binder.defaultBlocking(mReceiveChannel);
+        }
     }
 
     /** @hide */

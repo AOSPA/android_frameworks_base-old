@@ -106,21 +106,21 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
 
     private DisplayWindowController mWindowContainerController;
 
+    @VisibleForTesting
     ActivityDisplay(ActivityStackSupervisor supervisor, int displayId) {
+        this(supervisor, supervisor.mDisplayManager.getDisplay(displayId));
+    }
+
+    ActivityDisplay(ActivityStackSupervisor supervisor, Display display) {
         mSupervisor = supervisor;
-        mDisplayId = displayId;
-        final Display display = supervisor.mDisplayManager.getDisplay(displayId);
-        if (display == null) {
-            throw new IllegalStateException("Display does not exist displayId=" + displayId);
-        }
+        mDisplayId = display.getDisplayId();
         mDisplay = display;
         mWindowContainerController = createWindowContainerController();
-
         updateBounds();
     }
 
     protected DisplayWindowController createWindowContainerController() {
-        return new DisplayWindowController(mDisplayId, this);
+        return new DisplayWindowController(mDisplay, this);
     }
 
     void updateBounds() {
@@ -158,6 +158,8 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
     }
 
     private void positionChildAt(ActivityStack stack, int position) {
+        // TODO: Keep in sync with WindowContainer.positionChildAt(), once we change that to adjust
+        //       the position internally, also update the logic here
         mStacks.remove(stack);
         final int insertPosition = getTopInsertPosition(stack, position);
         mStacks.add(insertPosition, stack);
@@ -662,6 +664,10 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         while (getChildCount() > 0) {
             final ActivityStack stack = getChildAt(0);
             if (destroyContentOnRemoval) {
+                // Override the stack configuration to make it equal to the current applied one, so
+                // that we don't accidentally report configuration change to activities that are
+                // going to be finished.
+                stack.onOverrideConfigurationChanged(stack.getConfiguration());
                 mSupervisor.moveStackToDisplayLocked(stack.mStackId, DEFAULT_DISPLAY,
                         false /* onTop */);
                 stack.finishAllActivitiesLocked(true /* immediately */);
@@ -750,7 +756,15 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
             return;
         }
 
-        positionChildAt(mHomeStack, Math.max(0, mStacks.indexOf(behindStack) - 1));
+        // Note that positionChildAt will first remove the given stack before inserting into the
+        // list, so we need to adjust the insertion index to account for the removed index
+        // TODO: Remove this logic when WindowContainer.positionChildAt() is updated to adjust the
+        //       position internally
+        final int homeStackIndex = mStacks.indexOf(mHomeStack);
+        final int behindStackIndex = mStacks.indexOf(behindStack);
+        final int insertIndex = homeStackIndex <= behindStackIndex
+                ? behindStackIndex - 1 : behindStackIndex;
+        positionChildAt(mHomeStack, Math.max(0, insertIndex));
     }
 
     boolean isSleeping() {

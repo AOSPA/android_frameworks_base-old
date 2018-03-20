@@ -22,6 +22,7 @@ import static android.content.Context.AUTOFILL_MANAGER_SERVICE;
 import static com.android.server.autofill.Helper.bundleToString;
 import static com.android.server.autofill.Helper.sDebug;
 import static com.android.server.autofill.Helper.sPartitionMaxCount;
+import static com.android.server.autofill.Helper.sVisibleDatasetsMaxCount;
 import static com.android.server.autofill.Helper.sVerbose;
 
 import android.annotation.NonNull;
@@ -463,6 +464,24 @@ public final class AutofillManagerService extends SystemService {
     }
 
     // Called by Shell command.
+    public int getMaxVisibleDatasets() {
+        mContext.enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+
+        synchronized (mLock) {
+            return sVisibleDatasetsMaxCount;
+        }
+    }
+
+    // Called by Shell command.
+    public void setMaxVisibleDatasets(int max) {
+        mContext.enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
+        Slog.i(TAG, "setMaxVisibleDatasets(): " + max);
+        synchronized (mLock) {
+            sVisibleDatasetsMaxCount = max;
+        }
+    }
+
+    // Called by Shell command.
     public void getScore(@Nullable String algorithmName, @NonNull String value1,
             @NonNull String value2, @NonNull RemoteCallback callback) {
         mContext.enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
@@ -546,16 +565,19 @@ public final class AutofillManagerService extends SystemService {
         }
     }
 
-    private @Nullable Set<String> getWhitelistedCompatModePackages() {
-        final String compatPackagesSetting = Settings.Global.getString(
+    private String getWhitelistedCompatModePackagesFromSettings() {
+        return Settings.Global.getString(
                 mContext.getContentResolver(),
                 Settings.Global.AUTOFILL_COMPAT_ALLOWED_PACKAGES);
+    }
+
+    private @Nullable Set<String> getWhitelistedCompatModePackages() {
+        final String compatPackagesSetting = getWhitelistedCompatModePackagesFromSettings();
         if (TextUtils.isEmpty(compatPackagesSetting)) {
             return null;
         }
         final Set<String> compatPackages = new ArraySet<>();
-        final SimpleStringSplitter splitter = new SimpleStringSplitter(
-                COMPAT_PACKAGE_DELIMITER);
+        final SimpleStringSplitter splitter = new SimpleStringSplitter(COMPAT_PACKAGE_DELIMITER);
         splitter.setString(compatPackagesSetting);
         while (splitter.hasNext()) {
             compatPackages.add(splitter.next());
@@ -1009,6 +1031,7 @@ public final class AutofillManagerService extends SystemService {
                     pw.print("Verbose mode: "); pw.println(sVerbose);
                     pw.print("Disabled users: "); pw.println(mDisabledUsers);
                     pw.print("Max partitions per session: "); pw.println(sPartitionMaxCount);
+                    pw.print("Max visible datasets: "); pw.println(sVisibleDatasetsMaxCount);
                     pw.println("User data constraints: "); UserData.dumpConstraints(prefix, pw);
                     final int size = mServicesCache.size();
                     pw.print("Cached services: ");
@@ -1025,6 +1048,8 @@ public final class AutofillManagerService extends SystemService {
                     mUi.dump(pw);
                     pw.print("Autofill Compat State: ");
                     pw.println(mAutofillCompatState.mUserSpecs);
+                    pw.print(prefix); pw.print("from settings: ");
+                    pw.println(getWhitelistedCompatModePackagesFromSettings());
                 }
                 if (showHistory) {
                     pw.println(); pw.println("Requests history:"); pw.println();

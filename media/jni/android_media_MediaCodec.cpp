@@ -36,7 +36,6 @@
 
 #include <gui/Surface.h>
 
-#include <media/ICrypto.h>
 #include <media/MediaCodecBuffer.h>
 #include <media/stagefright/MediaCodec.h>
 #include <media/stagefright/foundation/ABuffer.h>
@@ -46,6 +45,7 @@
 #include <media/stagefright/foundation/AString.h>
 #include <media/stagefright/MediaErrors.h>
 #include <media/stagefright/PersistentSurface.h>
+#include <mediadrm/ICrypto.h>
 #include <nativehelper/ScopedLocalRef.h>
 
 #include <system/window.h>
@@ -1011,7 +1011,7 @@ static void android_media_MediaCodec_native_configure(
 
     sp<IDescrambler> descrambler;
     if (descramblerBinderObj != NULL) {
-        descrambler = JDescrambler::GetDescrambler(env, descramblerBinderObj);
+        descrambler = GetDescrambler(env, descramblerBinderObj);
     }
 
     err = codec->configure(format, bufferProducer, crypto, descrambler, flags);

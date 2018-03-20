@@ -218,6 +218,10 @@
   <java-symbol type="id" name="selection_end_handle" />
   <java-symbol type="id" name="insertion_handle" />
   <java-symbol type="id" name="accessibilityActionClickOnClickableSpan" />
+  <java-symbol type="id" name="camera" />
+  <java-symbol type="id" name="mic" />
+  <java-symbol type="id" name="overlay" />
+  <java-symbol type="id" name="app_ops" />
 
   <java-symbol type="attr" name="actionModeShareDrawable" />
   <java-symbol type="attr" name="alertDialogCenterButtons" />
@@ -315,6 +319,7 @@
   <java-symbol type="bool" name="config_wifi_softap_acs_supported" />
   <java-symbol type="bool" name="config_wifi_softap_ieee80211ac_supported" />
   <java-symbol type="bool" name="config_enableMultiUserUI"/>
+  <java-symbol type="bool" name="config_enableNewAutoSelectNetworkUI"/>
   <java-symbol type="bool" name="config_disableUsbPermissionDialogs"/>
   <java-symbol type="bool" name="config_hasRecents" />
   <java-symbol type="string" name="config_recentsComponentName" />
@@ -405,6 +410,7 @@
   <java-symbol type="integer" name="config_wifi_framework_current_network_boost" />
   <java-symbol type="integer" name="config_bluetooth_max_advertisers" />
   <java-symbol type="integer" name="config_bluetooth_max_scan_filters" />
+  <java-symbol type="integer" name="config_bluetooth_max_connected_audio_devices" />
   <java-symbol type="integer" name="config_burnInProtectionMinHorizontalOffset" />
   <java-symbol type="integer" name="config_burnInProtectionMaxHorizontalOffset" />
   <java-symbol type="integer" name="config_burnInProtectionMinVerticalOffset" />
@@ -1372,6 +1378,7 @@
   <java-symbol type="drawable" name="ic_corp_statusbar_icon" />
   <java-symbol type="drawable" name="ic_instant_icon_badge_bolt" />
   <java-symbol type="drawable" name="emulator_circular_window_overlay" />
+  <java-symbol type="drawable" name="ic_qs_battery_saver" />
 
   <java-symbol type="drawable" name="sim_light_blue" />
   <java-symbol type="drawable" name="sim_light_green" />
@@ -1388,6 +1395,9 @@
 
   <java-symbol type="drawable" name="stat_notify_mmcc_indication_icn" />
   <java-symbol type="drawable" name="autofilled_highlight"/>
+  <java-symbol type="drawable" name="ic_camera" />
+  <java-symbol type="drawable" name="ic_mic" />
+  <java-symbol type="drawable" name="ic_alert_window_layer" />
 
   <java-symbol type="drawable" name="ic_account_circle" />
   <java-symbol type="color" name="user_icon_1" />
@@ -1411,6 +1421,7 @@
   <java-symbol type="layout" name="action_menu_layout" />
   <java-symbol type="layout" name="action_mode_close_item" />
   <java-symbol type="layout" name="alert_dialog" />
+  <java-symbol type="layout" name="cascading_menu_item_layout" />
   <java-symbol type="layout" name="choose_account" />
   <java-symbol type="layout" name="choose_account_row" />
   <java-symbol type="layout" name="choose_account_type" />
@@ -1729,6 +1740,9 @@
   <java-symbol type="string" name="global_action_silent_mode_off_status" />
   <java-symbol type="string" name="global_action_silent_mode_on_status" />
   <java-symbol type="string" name="global_action_toggle_silent_mode" />
+  <java-symbol type="string" name="global_action_battery_saver_off_status" />
+  <java-symbol type="string" name="global_action_battery_saver_on_status" />
+  <java-symbol type="string" name="global_action_toggle_battery_saver" />
   <java-symbol type="string" name="global_action_lockdown" />
   <java-symbol type="string" name="global_action_voice_assist" />
   <java-symbol type="string" name="global_action_assist" />
@@ -2444,6 +2458,7 @@
   <java-symbol type="bool" name="config_defaultWindowFeatureOptionsPanel" />
   <java-symbol type="bool" name="config_defaultWindowFeatureContextMenu" />
   <java-symbol type="bool" name="config_overrideRemoteViewsActivityTransition" />
+  <java-symbol type="attr" name="colorProgressBackgroundNormal" />
 
   <java-symbol type="layout" name="simple_account_item" />
   <java-symbol type="string" name="prohibit_manual_network_selection_in_gobal_mode" />
@@ -3237,6 +3252,9 @@
   <java-symbol type="string" name="keyguard_accessibility_sim_puk_unlock" />
   <java-symbol type="string" name="keyguard_accessibility_password_unlock" />
 
+  <java-symbol type="dimen" name="status_bar_height_portrait" />
+  <java-symbol type="dimen" name="status_bar_height_landscape" />
+
   <java-symbol type="string" name="global_action_logout" />
   <java-symbol type="string" name="config_mainBuiltInDisplayCutout" />
   <java-symbol type="drawable" name="messaging_user" />
@@ -3273,5 +3291,7 @@
 
   <java-symbol type="string" name="zen_upgrade_notification_title" />
   <java-symbol type="string" name="zen_upgrade_notification_content" />
+
+  <java-symbol type="string" name="config_managed_provisioning_package" />
 
 </resources>

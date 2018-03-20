@@ -475,6 +475,20 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 setClientHidden(!visible);
             }
 
+            if (!mService.mClosingApps.contains(this) && !mService.mOpeningApps.contains(this)) {
+                // The token is not closing nor opening, so even if there is an animation set, that
+                // doesn't mean that it goes through the normal app transition cycle so we have
+                // to inform the docked controller about visibility change.
+                // TODO(multi-display): notify docked divider on all displays where visibility was
+                // affected.
+                mService.getDefaultDisplayContentLocked().getDockedDividerController()
+                        .notifyAppVisibilityChanged();
+
+                // Take the screenshot before possibly hiding the WSA, otherwise the screenshot
+                // will not be taken.
+                mService.mTaskSnapshotController.notifyAppVisibilityChanged(this, visible);
+            }
+
             // If we are hidden but there is no delay needed we immediately
             // apply the Surface transaction so that the ActivityManager
             // can have some guarantee on the Surface state following
@@ -491,17 +505,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     mChildren.get(i).mWinAnimator.hide("immediately hidden");
                 }
                 SurfaceControl.closeTransaction();
-            }
-
-            if (!mService.mClosingApps.contains(this) && !mService.mOpeningApps.contains(this)) {
-                // The token is not closing nor opening, so even if there is an animation set, that
-                // doesn't mean that it goes through the normal app transition cycle so we have
-                // to inform the docked controller about visibility change.
-                // TODO(multi-display): notify docked divider on all displays where visibility was
-                // affected.
-                mService.getDefaultDisplayContentLocked().getDockedDividerController()
-                        .notifyAppVisibilityChanged();
-                mService.mTaskSnapshotController.notifyAppVisibilityChanged(this, visible);
             }
         }
 
@@ -1620,7 +1623,15 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
     @Override
     public SurfaceControl getAnimationLeashParent() {
-        return getAppAnimationLayer();
+        // All normal app transitions take place in an animation layer which is below the pinned
+        // stack but may be above the parent stacks of the given animating apps.
+        // For transitions in the pinned stack (menu activity) we just let them occur as a child
+        // of the pinned stack.
+        if (!inPinnedWindowingMode()) {
+            return getAppAnimationLayer();
+        } else {
+            return getStack().getSurfaceControl();
+        }
     }
 
     boolean applyAnimationLocked(WindowManager.LayoutParams lp, int transit, boolean enter,
@@ -1709,10 +1720,16 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 frame.set(win.mFrame);
             } else if (win.isLetterboxedAppWindow()) {
                 frame.set(getTask().getBounds());
+            } else if (win.isDockedResizing()) {
+                // If we are animating while docked resizing, then use the stack bounds as the
+                // animation target (which will be different than the task bounds)
+                frame.set(getTask().getParent().getBounds());
             } else {
                 frame.set(win.mContainingFrame);
             }
             surfaceInsets = win.getAttrs().surfaceInsets;
+            // XXX(b/72757033): These are insets relative to the window frame, but we're really
+            // interested in the insets relative to the frame we chose in the if-blocks above.
             insets.set(win.mContentInsets);
             stableInsets.set(win.mStableInsets);
         }
@@ -1763,10 +1780,18 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
     @Override
     public void onAnimationLeashCreated(Transaction t, SurfaceControl leash) {
-
         // The leash is parented to the animation layer. We need to preserve the z-order by using
         // the prefix order index, but we boost if necessary.
-        int layer = getPrefixOrderIndex();
+        int layer = 0;
+        if (!inPinnedWindowingMode()) {
+            layer = getPrefixOrderIndex();
+        } else {
+            // Pinned stacks have animations take place within themselves rather than an animation
+            // layer so we need to preserve the order relative to the stack (e.g. the order of our
+            // task/parent).
+            layer = getParent().getPrefixOrderIndex();
+        }
+
         if (mNeedsZBoost) {
             layer += Z_BOOST_BASE;
         }
@@ -2096,5 +2121,13 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             stringName = sb.toString();
         }
         return stringName + ((mIsExiting) ? " mIsExiting=" : "");
+    }
+
+    Rect getLetterboxInsets() {
+        if (mLetterbox != null) {
+            return mLetterbox.getInsets();
+        } else {
+            return new Rect();
+        }
     }
 }

@@ -34,7 +34,8 @@ namespace statsd {
 
 class StatsLogProcessor : public ConfigListener {
 public:
-    StatsLogProcessor(const sp<UidMap>& uidMap, const sp<AnomalyMonitor>& anomalyMonitor,
+    StatsLogProcessor(const sp<UidMap>& uidMap, const sp<AlarmMonitor>& anomalyAlarmMonitor,
+                      const sp<AlarmMonitor>& subscriberTriggerAlarmMonitor,
                       const long timeBaseSec,
                       const std::function<void(const ConfigKey&)>& sendBroadcast);
     virtual ~StatsLogProcessor();
@@ -48,10 +49,15 @@ public:
 
     void onDumpReport(const ConfigKey& key, const uint64_t dumpTimeNs, vector<uint8_t>* outData);
 
-    /* Tells MetricsManager that the alarms in anomalySet have fired. Modifies anomalySet. */
+    /* Tells MetricsManager that the alarms in alarmSet have fired. Modifies anomaly alarmSet. */
     void onAnomalyAlarmFired(
             const uint64_t timestampNs,
-            unordered_set<sp<const AnomalyAlarm>, SpHash<AnomalyAlarm>> anomalySet);
+            unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet);
+
+    /* Tells MetricsManager that the alarms in alarmSet have fired. Modifies periodic alarmSet. */
+    void onPeriodicAlarmFired(
+            const uint64_t timestampNs,
+            unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet);
 
     /* Flushes data to disk. Data on memory will be gone after written to disk. */
     void WriteDataToDisk();
@@ -76,7 +82,9 @@ private:
 
     StatsPullerManager mStatsPullerManager;
 
-    sp<AnomalyMonitor> mAnomalyMonitor;
+    sp<AlarmMonitor> mAnomalyAlarmMonitor;
+
+    sp<AlarmMonitor> mPeriodicAlarmMonitor;
 
     void onDumpReportLocked(const ConfigKey& key, const uint64_t dumpTimeNs,
                             vector<uint8_t>* outData);
@@ -98,11 +106,12 @@ private:
 
     const long mTimeBaseSec;
 
+    int64_t mLastLogTimestamp;
+
     long mLastPullerCacheClearTimeSec = 0;
 
     FRIEND_TEST(StatsLogProcessorTest, TestRateLimitByteSize);
     FRIEND_TEST(StatsLogProcessorTest, TestRateLimitBroadcast);
-    FRIEND_TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge);
     FRIEND_TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge);
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration1);
     FRIEND_TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration2);
@@ -114,10 +123,21 @@ private:
     FRIEND_TEST(MetricConditionLinkE2eTest, TestMultiplePredicatesAndLinks2);
     FRIEND_TEST(AttributionE2eTest, TestAttributionMatchAndSlice);
     FRIEND_TEST(GaugeMetricE2eTest, TestMultipleFieldsForPushedEvent);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestCountMetricNoLink);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestCountMetricWithLink);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetricNoLink);
-    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetricWithLink);
+    FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_NoLink_OR_CombinationCondition);
+    FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_Link_OR_CombinationCondition);
+    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_OR_CombinationCondition);
+    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_Link_OR_CombinationCondition);
+
+    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_SimpleCondition);
+    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_Link_SimpleCondition);
+    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_PartialLink_SimpleCondition);
+
+
+
+    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_PartialLink_AND_CombinationCondition);
+    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_AND_CombinationCondition);
+    FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_Link_AND_CombinationCondition);
+
 };
 
 }  // namespace statsd

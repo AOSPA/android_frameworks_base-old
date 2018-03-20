@@ -20,11 +20,13 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.AnimatedVectorDrawable;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
@@ -1067,7 +1069,14 @@ public final class ThreadedRenderer {
             mAppContext = context.getApplicationContext();
 
             initSched(renderProxy);
-            initGraphicsStats();
+
+            if (mAppContext != null) {
+                final boolean appDebuggable =
+                        (mAppContext.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE)
+                        != 0;
+                nSetDebuggingEnabled(appDebuggable || Build.IS_DEBUGGABLE);
+                initGraphicsStats();
+            }
         }
 
         private void initSched(long renderProxy) {
@@ -1194,4 +1203,5 @@ public final class ThreadedRenderer {
     private static native void nSetHighContrastText(boolean enabled);
     // For temporary experimentation b/66945974
     private static native void nHackySetRTAnimationsEnabled(boolean enabled);
+    private static native void nSetDebuggingEnabled(boolean enabled);
 }

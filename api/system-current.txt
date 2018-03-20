@@ -1,6 +1,7 @@
 package android {
 
   public static final class Manifest.permission {
+    field public static final java.lang.String ACCESS_AMBIENT_LIGHT_STATS = "android.permission.ACCESS_AMBIENT_LIGHT_STATS";
     field public static final java.lang.String ACCESS_BROADCAST_RADIO = "android.permission.ACCESS_BROADCAST_RADIO";
     field public static final java.lang.String ACCESS_CACHE_FILESYSTEM = "android.permission.ACCESS_CACHE_FILESYSTEM";
     field public static final java.lang.String ACCESS_CHECKIN_PROPERTIES = "android.permission.ACCESS_CHECKIN_PROPERTIES";
@@ -617,6 +618,7 @@ package android.app.backup {
     method public java.lang.String transportDirName();
     field public static final int AGENT_ERROR = -1003; // 0xfffffc15
     field public static final int AGENT_UNKNOWN = -1004; // 0xfffffc14
+    field public static final java.lang.String EXTRA_TRANSPORT_REGISTRATION = "android.app.backup.extra.TRANSPORT_REGISTRATION";
     field public static final int FLAG_INCREMENTAL = 2; // 0x2
     field public static final int FLAG_NON_INCREMENTAL = 4; // 0x4
     field public static final int FLAG_USER_INITIATED = 1; // 0x1
@@ -838,6 +840,7 @@ package android.content {
   }
 
   public class Intent implements java.lang.Cloneable android.os.Parcelable {
+    field public static final java.lang.String ACTION_BATTERY_LEVEL_CHANGED = "android.intent.action.BATTERY_LEVEL_CHANGED";
     field public static final java.lang.String ACTION_CALL_EMERGENCY = "android.intent.action.CALL_EMERGENCY";
     field public static final java.lang.String ACTION_CALL_PRIVILEGED = "android.intent.action.CALL_PRIVILEGED";
     field public static final java.lang.String ACTION_FACTORY_RESET = "android.intent.action.FACTORY_RESET";
@@ -1219,6 +1222,7 @@ package android.hardware.display {
   }
 
   public final class DisplayManager {
+    method public java.util.List<android.hardware.display.AmbientBrightnessDayStats> getAmbientBrightnessStats();
     method public java.util.List<android.hardware.display.BrightnessChangeEvent> getBrightnessEvents();
     method public android.graphics.Point getStableDisplaySize();
     method public void setBrightnessConfiguration(android.hardware.display.BrightnessConfiguration);
@@ -1591,7 +1595,7 @@ package android.hardware.location {
     method public abstract void onMessageReceipt(int, int, android.hardware.location.ContextHubMessage);
   }
 
-  public deprecated class ContextHubMessage {
+  public deprecated class ContextHubMessage implements android.os.Parcelable {
     ctor public ContextHubMessage(int, int, byte[]);
     method public int describeContents();
     method public byte[] getData();
@@ -1722,7 +1726,7 @@ package android.hardware.location {
     field public static final android.os.Parcelable.Creator<android.hardware.location.MemoryRegion> CREATOR;
   }
 
-  public deprecated class NanoApp {
+  public deprecated class NanoApp implements android.os.Parcelable {
     ctor public NanoApp();
     ctor public deprecated NanoApp(int, byte[]);
     ctor public NanoApp(long, byte[]);
@@ -1770,7 +1774,7 @@ package android.hardware.location {
     field public static final android.os.Parcelable.Creator<android.hardware.location.NanoAppBinary> CREATOR;
   }
 
-  public deprecated class NanoAppFilter {
+  public deprecated class NanoAppFilter implements android.os.Parcelable {
     ctor public NanoAppFilter(long, int, int, long);
     method public int describeContents();
     method public boolean testMatch(android.hardware.location.NanoAppInstanceInfo);
@@ -1785,7 +1789,7 @@ package android.hardware.location {
     field public static final int VENDOR_ANY = -1; // 0xffffffff
   }
 
-  public deprecated class NanoAppInstanceInfo {
+  public deprecated class NanoAppInstanceInfo implements android.os.Parcelable {
     ctor public NanoAppInstanceInfo();
     method public int describeContents();
     method public long getAppId();
@@ -2114,8 +2118,15 @@ package android.hardware.radio {
     field public static final java.lang.String METADATA_KEY_ART = "android.hardware.radio.metadata.ART";
     field public static final java.lang.String METADATA_KEY_ARTIST = "android.hardware.radio.metadata.ARTIST";
     field public static final java.lang.String METADATA_KEY_CLOCK = "android.hardware.radio.metadata.CLOCK";
+    field public static final java.lang.String METADATA_KEY_DAB_COMPONENT_NAME = "android.hardware.radio.metadata.DAB_COMPONENT_NAME";
+    field public static final java.lang.String METADATA_KEY_DAB_COMPONENT_NAME_SHORT = "android.hardware.radio.metadata.DAB_COMPONENT_NAME_SHORT";
+    field public static final java.lang.String METADATA_KEY_DAB_ENSEMBLE_NAME = "android.hardware.radio.metadata.DAB_ENSEMBLE_NAME";
+    field public static final java.lang.String METADATA_KEY_DAB_ENSEMBLE_NAME_SHORT = "android.hardware.radio.metadata.DAB_ENSEMBLE_NAME_SHORT";
+    field public static final java.lang.String METADATA_KEY_DAB_SERVICE_NAME = "android.hardware.radio.metadata.DAB_SERVICE_NAME";
+    field public static final java.lang.String METADATA_KEY_DAB_SERVICE_NAME_SHORT = "android.hardware.radio.metadata.DAB_SERVICE_NAME_SHORT";
     field public static final java.lang.String METADATA_KEY_GENRE = "android.hardware.radio.metadata.GENRE";
     field public static final java.lang.String METADATA_KEY_ICON = "android.hardware.radio.metadata.ICON";
+    field public static final java.lang.String METADATA_KEY_PROGRAM_NAME = "android.hardware.radio.metadata.PROGRAM_NAME";
     field public static final java.lang.String METADATA_KEY_RBDS_PTY = "android.hardware.radio.metadata.RBDS_PTY";
     field public static final java.lang.String METADATA_KEY_RDS_PI = "android.hardware.radio.metadata.RDS_PI";
     field public static final java.lang.String METADATA_KEY_RDS_PS = "android.hardware.radio.metadata.RDS_PS";
@@ -2648,8 +2659,10 @@ package android.media.audiopolicy {
   }
 
   public class AudioPolicy {
+    method public int attachMixes(java.util.List<android.media.audiopolicy.AudioMix>);
     method public android.media.AudioRecord createAudioRecordSink(android.media.audiopolicy.AudioMix) throws java.lang.IllegalArgumentException;
     method public android.media.AudioTrack createAudioTrackSource(android.media.audiopolicy.AudioMix) throws java.lang.IllegalArgumentException;
+    method public int detachMixes(java.util.List<android.media.audiopolicy.AudioMix>);
     method public int getFocusDuckingBehavior();
     method public int getStatus();
     method public int setFocusDuckingBehavior(int) throws java.lang.IllegalArgumentException, java.lang.IllegalStateException;
@@ -3600,6 +3613,11 @@ package android.nfc {
 
 package android.os {
 
+  public class BatteryManager {
+    field public static final java.lang.String EXTRA_EVENTS = "android.os.extra.EVENTS";
+    field public static final java.lang.String EXTRA_EVENT_TIMESTAMP = "android.os.extra.EVENT_TIMESTAMP";
+  }
+
   public final class ConfigUpdate {
     field public static final java.lang.String ACTION_UPDATE_CARRIER_PROVISIONING_URLS = "android.intent.action.UPDATE_CARRIER_PROVISIONING_URLS";
     field public static final java.lang.String ACTION_UPDATE_CT_LOGS = "android.intent.action.UPDATE_CT_LOGS";
@@ -4180,6 +4198,7 @@ package android.provider {
     field public static final java.lang.String CARRIER_APP_NAMES = "carrier_app_names";
     field public static final java.lang.String CARRIER_APP_WHITELIST = "carrier_app_whitelist";
     field public static final java.lang.String DEFAULT_SM_DP_PLUS = "default_sm_dp_plus";
+    field public static final java.lang.String EUICC_PROVISIONED = "euicc_provisioned";
     field public static final java.lang.String INSTALL_CARRIER_APP_NOTIFICATION_PERSISTENT = "install_carrier_app_notification_persistent";
     field public static final java.lang.String INSTALL_CARRIER_APP_NOTIFICATION_SLEEP_MILLIS = "install_carrier_app_notification_sleep_millis";
     field public static final java.lang.String OTA_DISABLE_AUTOMATIC_UPDATE = "ota_disable_automatic_update";
@@ -4275,6 +4294,7 @@ package android.security.keystore.recovery {
     method public byte[] getServerParams();
     method public int getSnapshotVersion();
     method public java.security.cert.CertPath getTrustedHardwareCertPath();
+    method public deprecated byte[] getTrustedHardwarePublicKey();
     method public java.util.List<android.security.keystore.recovery.WrappedApplicationKey> getWrappedApplicationKeys();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.security.keystore.recovery.KeyChainSnapshot> CREATOR;
@@ -4297,16 +4317,22 @@ package android.security.keystore.recovery {
   public class RecoveryController {
     method public android.security.keystore.recovery.RecoverySession createRecoverySession();
     method public byte[] generateAndStoreKey(java.lang.String, byte[]) throws android.security.keystore.recovery.InternalRecoveryServiceException, android.security.keystore.recovery.LockScreenRequiredException;
+    method public deprecated java.security.Key generateKey(java.lang.String, byte[]) throws android.security.keystore.recovery.InternalRecoveryServiceException, android.security.keystore.recovery.LockScreenRequiredException;
     method public java.security.Key generateKey(java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException, android.security.keystore.recovery.LockScreenRequiredException;
+    method public deprecated java.util.List<java.lang.String> getAliases(java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public java.util.List<java.lang.String> getAliases() throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public static android.security.keystore.recovery.RecoveryController getInstance(android.content.Context);
     method public int[] getPendingRecoverySecretTypes() throws android.security.keystore.recovery.InternalRecoveryServiceException;
+    method public deprecated android.security.keystore.recovery.KeyChainSnapshot getRecoveryData() throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public int[] getRecoverySecretTypes() throws android.security.keystore.recovery.InternalRecoveryServiceException;
+    method public deprecated int getRecoveryStatus(java.lang.String, java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public int getRecoveryStatus(java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException;
-    method public void initRecoveryService(java.lang.String, byte[]) throws java.security.cert.CertificateException, android.security.keystore.recovery.InternalRecoveryServiceException;
+    method public deprecated void initRecoveryService(java.lang.String, byte[]) throws java.security.cert.CertificateException, android.security.keystore.recovery.InternalRecoveryServiceException;
+    method public void initRecoveryService(java.lang.String, byte[], byte[]) throws java.security.cert.CertificateException, android.security.keystore.recovery.InternalRecoveryServiceException;
     method public void recoverySecretAvailable(android.security.keystore.recovery.KeyChainProtectionParams) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public void removeKey(java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public void setRecoverySecretTypes(int[]) throws android.security.keystore.recovery.InternalRecoveryServiceException;
+    method public deprecated void setRecoveryStatus(java.lang.String, java.lang.String, int) throws android.security.keystore.recovery.InternalRecoveryServiceException, android.content.pm.PackageManager.NameNotFoundException;
     method public void setRecoveryStatus(java.lang.String, int) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public void setServerParams(byte[]) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public void setSnapshotCreatedPendingIntent(android.app.PendingIntent) throws android.security.keystore.recovery.InternalRecoveryServiceException;
@@ -4318,6 +4344,7 @@ package android.security.keystore.recovery {
   public class RecoverySession implements java.lang.AutoCloseable {
     method public void close();
     method public java.util.Map<java.lang.String, byte[]> recoverKeys(byte[], java.util.List<android.security.keystore.recovery.WrappedApplicationKey>) throws android.security.keystore.recovery.DecryptionFailedException, android.security.keystore.recovery.InternalRecoveryServiceException, android.security.keystore.recovery.SessionExpiredException;
+    method public deprecated byte[] start(byte[], byte[], byte[], java.util.List<android.security.keystore.recovery.KeyChainProtectionParams>) throws java.security.cert.CertificateException, android.security.keystore.recovery.InternalRecoveryServiceException;
     method public byte[] start(java.security.cert.CertPath, byte[], byte[], java.util.List<android.security.keystore.recovery.KeyChainProtectionParams>) throws java.security.cert.CertificateException, android.security.keystore.recovery.InternalRecoveryServiceException;
   }
 
@@ -4327,6 +4354,7 @@ package android.security.keystore.recovery {
 
   public final class WrappedApplicationKey implements android.os.Parcelable {
     method public int describeContents();
+    method public deprecated byte[] getAccount();
     method public java.lang.String getAlias();
     method public byte[] getEncryptedKeyMaterial();
     method public void writeToParcel(android.os.Parcel, int);
@@ -4336,6 +4364,7 @@ package android.security.keystore.recovery {
   public static class WrappedApplicationKey.Builder {
     ctor public WrappedApplicationKey.Builder();
     method public android.security.keystore.recovery.WrappedApplicationKey build();
+    method public deprecated android.security.keystore.recovery.WrappedApplicationKey.Builder setAccount(byte[]);
     method public android.security.keystore.recovery.WrappedApplicationKey.Builder setAlias(java.lang.String);
     method public android.security.keystore.recovery.WrappedApplicationKey.Builder setEncryptedKeyMaterial(byte[]);
   }
@@ -4972,7 +5001,6 @@ package android.telecom {
 package android.telephony {
 
   public static final class AccessNetworkConstants.TransportType {
-    ctor public AccessNetworkConstants.TransportType();
     field public static final int WLAN = 2; // 0x2
     field public static final int WWAN = 1; // 0x1
   }
@@ -5384,6 +5412,7 @@ package android.telephony.euicc {
     field public static final int RESET_OPTION_DELETE_FIELD_LOADED_TEST_PROFILES = 2; // 0x2
     field public static final int RESET_OPTION_DELETE_OPERATIONAL_PROFILES = 1; // 0x1
     field public static final int RESET_OPTION_RESET_DEFAULT_SMDP_ADDRESS = 4; // 0x4
+    field public static final int RESULT_EUICC_NOT_FOUND = -2; // 0xfffffffe
     field public static final int RESULT_OK = 0; // 0x0
     field public static final int RESULT_UNKNOWN_ERROR = -1; // 0xffffffff
   }
@@ -5983,7 +6012,6 @@ package android.telephony.ims.feature {
     method public void setUiTtyMode(int, android.os.Message);
     method public int shouldProcessCall(java.lang.String[]);
     field public static final int PROCESS_CALL_CSFB = 1; // 0x1
-    field public static final int PROCESS_CALL_EMERGENCY_CSFB = 2; // 0x2
     field public static final int PROCESS_CALL_IMS = 0; // 0x0
   }
 
@@ -6641,6 +6669,7 @@ package android.webkit {
     method public abstract android.os.Handler getHandler(android.os.Handler);
     method public abstract void onActivityResult(int, int, android.content.Intent);
     method public abstract void onAttachedToWindow();
+    method public default boolean onCheckIsTextEditor();
     method public abstract void onConfigurationChanged(android.content.res.Configuration);
     method public abstract android.view.inputmethod.InputConnection onCreateInputConnection(android.view.inputmethod.EditorInfo);
     method public abstract void onDetachedFromWindow();

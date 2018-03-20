@@ -19,6 +19,7 @@ package com.android.server.am;
 import static android.app.ActivityManager.FLAG_AND_UNLOCKED;
 import static android.app.ActivityManager.RECENT_IGNORE_UNAVAILABLE;
 import static android.app.ActivityManager.RECENT_WITH_EXCLUDED;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
@@ -276,6 +277,16 @@ class RecentTasks {
      */
     boolean isRecentsComponent(ComponentName cn, int uid) {
         return cn.equals(mRecentsComponent) && UserHandle.isSameApp(uid, mRecentsUid);
+    }
+
+    /**
+     * @return whether the home app is also the active handler of recent tasks.
+     */
+    boolean isRecentsComponentHomeActivity(int userId) {
+        final ComponentName defaultHomeActivity = mService.getPackageManagerInternalLocked()
+                .getDefaultHomeActivity(userId);
+        return defaultHomeActivity != null &&
+                defaultHomeActivity.getPackageName().equals(mRecentsComponent.getPackageName());
     }
 
     /**
@@ -817,6 +828,25 @@ class RecentTasks {
     }
 
     /**
+     * @return ids of tasks that are presented in Recents UI.
+     */
+    SparseBooleanArray getRecentTaskIds() {
+        final SparseBooleanArray res = new SparseBooleanArray();
+        final int size = mTasks.size();
+        int numVisibleTasks = 0;
+        for (int i = 0; i < size; i++) {
+            final TaskRecord tr = mTasks.get(i);
+            if (isVisibleRecentTask(tr)) {
+                numVisibleTasks++;
+                if (isInVisibleRange(tr, numVisibleTasks)) {
+                    res.put(tr.taskId, true);
+                }
+            }
+        }
+        return res;
+    }
+
+    /**
      * @return the task in the task list with the given {@param id} if one exists.
      */
     TaskRecord getTask(int id) {
@@ -1089,13 +1119,22 @@ class RecentTasks {
                 + " sessionDuration=" + mActiveTasksSessionDurationMs
                 + " inactiveDuration=" + task.getInactiveDuration()
                 + " activityType=" + task.getActivityType()
-                + " windowingMode=" + task.getWindowingMode());
+                + " windowingMode=" + task.getWindowingMode()
+                + " intentFlags=" + task.getBaseIntent().getFlags());
 
-        // Ignore certain activity types completely
         switch (task.getActivityType()) {
             case ACTIVITY_TYPE_HOME:
             case ACTIVITY_TYPE_RECENTS:
+                // Ignore certain activity types completely
                 return false;
+            case ACTIVITY_TYPE_ASSISTANT:
+                // Ignore assistant that chose to be excluded from Recents, even if it's a top
+                // task.
+                if ((task.getBaseIntent().getFlags()
+                        & Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                        == Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) {
+                    return false;
+                }
         }
 
         // Ignore certain windowing modes

@@ -80,6 +80,7 @@ ValueMetricProducer::ValueMetricProducer(const ConfigKey& key, const ValueMetric
     mBucketSizeNs = bucketSizeMills * 1000000;
     if (metric.has_dimensions_in_what()) {
         translateFieldMatcher(metric.dimensions_in_what(), &mDimensionsInWhat);
+        mContainANYPositionInDimensionsInWhat = HasPositionANY(metric.dimensions_in_what());
     }
 
     if (metric.has_dimensions_in_condition()) {
@@ -129,6 +130,11 @@ void ValueMetricProducer::onSlicedConditionMayChangeLocked(const uint64_t eventT
     VLOG("Metric %lld onSlicedConditionMayChange", (long long)mMetricId);
 }
 
+void ValueMetricProducer::dropDataLocked(const uint64_t dropTimeNs) {
+    flushIfNeededLocked(dropTimeNs);
+    mPastBuckets.clear();
+}
+
 void ValueMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
                                              ProtoOutputStream* protoOutput) {
     VLOG("metric %lld dump report now...", (long long)mMetricId);
@@ -137,21 +143,21 @@ void ValueMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
         return;
     }
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)mMetricId);
-    long long protoToken = protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_ID_VALUE_METRICS);
+    uint64_t protoToken = protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_ID_VALUE_METRICS);
 
     for (const auto& pair : mPastBuckets) {
         const MetricDimensionKey& dimensionKey = pair.first;
-        VLOG("  dimension key %s", dimensionKey.c_str());
-        long long wrapperToken =
+        VLOG("  dimension key %s", dimensionKey.toString().c_str());
+        uint64_t wrapperToken =
                 protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_DATA);
 
         // First fill dimension.
-        long long dimensionToken = protoOutput->start(
+        uint64_t dimensionToken = protoOutput->start(
             FIELD_TYPE_MESSAGE | FIELD_ID_DIMENSION_IN_WHAT);
         writeDimensionToProto(dimensionKey.getDimensionKeyInWhat(), protoOutput);
         protoOutput->end(dimensionToken);
         if (dimensionKey.hasDimensionKeyInCondition()) {
-            long long dimensionInConditionToken = protoOutput->start(
+            uint64_t dimensionInConditionToken = protoOutput->start(
                     FIELD_TYPE_MESSAGE | FIELD_ID_DIMENSION_IN_CONDITION);
             writeDimensionToProto(dimensionKey.getDimensionKeyInCondition(), protoOutput);
             protoOutput->end(dimensionInConditionToken);
@@ -159,7 +165,7 @@ void ValueMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
 
         // Then fill bucket_info (ValueBucketInfo).
         for (const auto& bucket : pair.second) {
-            long long bucketInfoToken = protoOutput->start(
+            uint64_t bucketInfoToken = protoOutput->start(
                     FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_BUCKET_INFO);
             protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_START_BUCKET_NANOS,
                                (long long)bucket.mBucketStartNs);
@@ -249,7 +255,7 @@ bool ValueMetricProducer::hitGuardRailLocked(const MetricDimensionKey& newKey) {
         // 2. Don't add more tuples, we are above the allowed threshold. Drop the data.
         if (newTupleCount > StatsdStats::kDimensionKeySizeHardLimit) {
             ALOGE("ValueMetric %lld dropping data for dimension key %s",
-                (long long)mMetricId, newKey.c_str());
+                (long long)mMetricId, newKey.toString().c_str());
             return true;
         }
     }

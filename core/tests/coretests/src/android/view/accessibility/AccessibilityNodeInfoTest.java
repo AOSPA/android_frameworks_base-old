@@ -16,8 +16,13 @@
 
 package android.view.accessibility;
 
+import static org.hamcrest.Matchers.emptyCollectionOf;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasItem;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 
+import android.os.Parcel;
 import android.support.test.filters.LargeTest;
 import android.support.test.runner.AndroidJUnit4;
 import android.util.ArraySet;
@@ -77,4 +82,36 @@ public class AccessibilityNodeInfoTest {
         }
     }
 
+    @Test
+    public void testStandardActions_allComeThroughParceling() {
+        for (AccessibilityAction action : AccessibilityAction.sStandardActions) {
+            final AccessibilityNodeInfo nodeWithAction = AccessibilityNodeInfo.obtain();
+            nodeWithAction.addAction(action);
+            assertThat(nodeWithAction.getActionList(), hasItem(action));
+            final Parcel parcel = Parcel.obtain();
+            nodeWithAction.writeToParcel(parcel, 0);
+            parcel.setDataPosition(0);
+            final AccessibilityNodeInfo unparceledNode =
+                    AccessibilityNodeInfo.CREATOR.createFromParcel(parcel);
+            assertThat(unparceledNode.getActionList(), hasItem(action));
+        }
+    }
+
+    @Test
+    public void testEmptyListOfActions_parcelsCorrectly() {
+        // Also set text, as if there's nothing else in the parcel it can unparcel even with
+        // a bug present.
+        final String text = "text";
+        final AccessibilityNodeInfo nodeWithEmptyActionList = AccessibilityNodeInfo.obtain();
+        nodeWithEmptyActionList.addAction(AccessibilityAction.ACTION_ACCESSIBILITY_FOCUS);
+        nodeWithEmptyActionList.removeAction(AccessibilityAction.ACTION_ACCESSIBILITY_FOCUS);
+        nodeWithEmptyActionList.setText(text);
+        final Parcel parcel = Parcel.obtain();
+        nodeWithEmptyActionList.writeToParcel(parcel, 0);
+        parcel.setDataPosition(0);
+        final AccessibilityNodeInfo unparceledNode =
+                AccessibilityNodeInfo.CREATOR.createFromParcel(parcel);
+        assertThat(unparceledNode.getActionList(), emptyCollectionOf(AccessibilityAction.class));
+        assertThat(unparceledNode.getText(), equalTo(text));
+    }
 }

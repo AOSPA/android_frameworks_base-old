@@ -71,6 +71,7 @@ CountMetricProducer::CountMetricProducer(const ConfigKey& key, const CountMetric
 
     if (metric.has_dimensions_in_what()) {
         translateFieldMatcher(metric.dimensions_in_what(), &mDimensionsInWhat);
+        mContainANYPositionInDimensionsInWhat = HasPositionANY(metric.dimensions_in_what());
     }
 
     if (metric.has_dimensions_in_condition()) {
@@ -109,23 +110,23 @@ void CountMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
         return;
     }
     protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)mMetricId);
-    long long protoToken = protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_ID_COUNT_METRICS);
+    uint64_t protoToken = protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_ID_COUNT_METRICS);
 
     for (const auto& counter : mPastBuckets) {
         const MetricDimensionKey& dimensionKey = counter.first;
-        VLOG("  dimension key %s", dimensionKey.c_str());
+        VLOG("  dimension key %s", dimensionKey.toString().c_str());
 
-        long long wrapperToken =
+        uint64_t wrapperToken =
                 protoOutput->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_DATA);
 
         // First fill dimension.
-        long long dimensionInWhatToken = protoOutput->start(
+        uint64_t dimensionInWhatToken = protoOutput->start(
                 FIELD_TYPE_MESSAGE | FIELD_ID_DIMENSION_IN_WHAT);
         writeDimensionToProto(dimensionKey.getDimensionKeyInWhat(), protoOutput);
         protoOutput->end(dimensionInWhatToken);
 
         if (dimensionKey.hasDimensionKeyInCondition()) {
-            long long dimensionInConditionToken = protoOutput->start(
+            uint64_t dimensionInConditionToken = protoOutput->start(
                     FIELD_TYPE_MESSAGE | FIELD_ID_DIMENSION_IN_CONDITION);
             writeDimensionToProto(dimensionKey.getDimensionKeyInCondition(), protoOutput);
             protoOutput->end(dimensionInConditionToken);
@@ -134,7 +135,7 @@ void CountMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
         // Then fill bucket_info (CountBucketInfo).
 
         for (const auto& bucket : counter.second) {
-            long long bucketInfoToken = protoOutput->start(
+            uint64_t bucketInfoToken = protoOutput->start(
                     FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_BUCKET_INFO);
             protoOutput->write(FIELD_TYPE_INT64 | FIELD_ID_START_BUCKET_ELAPSED_NANOS,
                                (long long)bucket.mBucketStartNs);
@@ -151,8 +152,11 @@ void CountMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
     protoOutput->end(protoToken);
 
     mPastBuckets.clear();
+}
 
-    // TODO: Clear mDimensionKeyMap once the report is dumped.
+void CountMetricProducer::dropDataLocked(const uint64_t dropTimeNs) {
+    flushIfNeededLocked(dropTimeNs);
+    mPastBuckets.clear();
 }
 
 void CountMetricProducer::onConditionChangedLocked(const bool conditionMet,
@@ -173,7 +177,7 @@ bool CountMetricProducer::hitGuardRailLocked(const MetricDimensionKey& newKey) {
         // 2. Don't add more tuples, we are above the allowed threshold. Drop the data.
         if (newTupleCount > StatsdStats::kDimensionKeySizeHardLimit) {
             ALOGE("CountMetric %lld dropping data for dimension key %s",
-                (long long)mMetricId, newKey.c_str());
+                (long long)mMetricId, newKey.toString().c_str());
             return true;
         }
     }
@@ -215,7 +219,7 @@ void CountMetricProducer::onMatchedLogEventInternalLocked(
                                          countWholeBucket);
     }
 
-    VLOG("metric %lld %s->%lld", (long long)mMetricId, eventKey.c_str(),
+    VLOG("metric %lld %s->%lld", (long long)mMetricId, eventKey.toString().c_str(),
          (long long)(*mCurrentSlicedCounter)[eventKey]);
 }
 
@@ -250,7 +254,8 @@ void CountMetricProducer::flushCurrentBucketLocked(const uint64_t& eventTimeNs) 
         info.mCount = counter.second;
         auto& bucketList = mPastBuckets[counter.first];
         bucketList.push_back(info);
-        VLOG("metric %lld, dump key value: %s -> %lld", (long long)mMetricId, counter.first.c_str(),
+        VLOG("metric %lld, dump key value: %s -> %lld", (long long)mMetricId,
+             counter.first.toString().c_str(),
              (long long)counter.second);
     }
 

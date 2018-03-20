@@ -3353,7 +3353,7 @@ public class AccessibilityNodeInfo implements Parcelable {
                     }
                 }
             } else {
-                parcel.writeInt(0);
+                parcel.writeLong(0);
                 parcel.writeInt(0);
             }
         }
@@ -3621,7 +3621,7 @@ public class AccessibilityNodeInfo implements Parcelable {
     }
 
     private static boolean isDefaultStandardAction(AccessibilityAction action) {
-        return action.mSerializationFlag != -1 && TextUtils.isEmpty(action.getLabel());
+        return (action.mSerializationFlag != -1L) && TextUtils.isEmpty(action.getLabel());
     }
 
     private static AccessibilityAction getActionSingleton(int actionId) {
@@ -3651,7 +3651,7 @@ public class AccessibilityNodeInfo implements Parcelable {
     private void addStandardActions(long serializationIdMask) {
         long remainingIds = serializationIdMask;
         while (remainingIds > 0) {
-            final int id = 1 << Long.numberOfTrailingZeros(remainingIds);
+            final long id = 1L << Long.numberOfTrailingZeros(remainingIds);
             remainingIds &= ~id;
             AccessibilityAction action = getActionSingletonBySerializationFlag(id);
             addAction(action);

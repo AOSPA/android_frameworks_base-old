@@ -14,12 +14,6 @@
  * limitations under the License.
  */
 
-/**
- * A container for Status bar system icons. Limits the number of system icons and handles overflow
- * similar to NotificationIconController. Can be used to layout nested StatusIconContainers
- *
- * Children are expected to be of type StatusBarIconView.
- */
 package com.android.systemui.statusbar.phone;
 
 import android.annotation.Nullable;
@@ -33,12 +27,22 @@ import com.android.systemui.R;
 import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.stack.ViewState;
 
+/**
+ * A container for Status bar system icons. Limits the number of system icons and handles overflow
+ * similar to NotificationIconController. Can be used to layout nested StatusIconContainers
+ *
+ * Children are expected to be of type StatusBarIconView.
+ */
 public class StatusIconContainer extends AlphaOptimizedLinearLayout {
 
     private static final String TAG = "StatusIconContainer";
     private static final boolean DEBUG = false;
     private static final int MAX_ICONS = 5;
     private static final int MAX_DOTS = 3;
+
+    public StatusIconContainer(Context context) {
+        this(context, null);
+    }
 
     public StatusIconContainer(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -65,10 +69,14 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+
+        int width = MeasureSpec.getSize(widthMeasureSpec);
+        int widthSpec = MeasureSpec.makeMeasureSpec(width, MeasureSpec.UNSPECIFIED);
+
         final int count = getChildCount();
         // Measure all children so that they report the correct width
         for (int i = 0; i < count; i++) {
-            measureChild(getChildAt(i), widthMeasureSpec, heightMeasureSpec);
+            measureChild(getChildAt(i), widthSpec, heightMeasureSpec);
         }
     }
 
@@ -95,7 +103,8 @@ public class StatusIconContainer extends AlphaOptimizedLinearLayout {
         int childCount = getChildCount();
         // Underflow === don't show content until that index
         int firstUnderflowIndex = -1;
-        if (DEBUG) android.util.Log.d(TAG, "calculateIconTransitions: start=" + translationX);
+        if (DEBUG) android.util.Log.d(TAG, "calculateIconTransitions: start=" + translationX
+                + " width=" + width);
 
         //TODO: Dots
         for (int i = childCount - 1; i >= 0; i--) {

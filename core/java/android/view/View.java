@@ -2953,6 +2953,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *       1                           PFLAG3_NO_REVEAL_ON_FOCUS
      *      1                            PFLAG3_NOTIFY_AUTOFILL_ENTER_ON_LAYOUT
      *     1                             PFLAG3_SCREEN_READER_FOCUSABLE
+     *    1                              PFLAG3_AGGREGATED_VISIBLE
+     *   1                               PFLAG3_AUTOFILLID_EXPLICITLY_SET
+     *  1                                available
      * |-------|-------|-------|-------|
      */
 
@@ -3242,6 +3245,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * The last aggregated visibility. Used to detect when it truly changes.
      */
     private static final int PFLAG3_AGGREGATED_VISIBLE = 0x20000000;
+
+    /**
+     * Used to indicate that {@link #mAutofillId} was explicitly set through
+     * {@link #setAutofillId(AutofillId)}.
+     */
+    private static final int PFLAG3_AUTOFILLID_EXPLICITLY_SET = 0x40000000;
 
     /* End of masks for mPrivateFlags3 */
 
@@ -7280,16 +7289,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * If this view is a visually distinct portion of a window, for example the content view of
-     * a fragment that is replaced, it is considered a pane for accessibility purposes. In order
-     * for accessibility services to understand the views role, and to announce its title as
-     * appropriate, such views should have pane titles.
+     * Visually distinct portion of a window with window-like semantics are considered panes for
+     * accessibility purposes. One example is the content view of a fragment that is replaced.
+     * In order for accessibility services to understand a pane's window-like behavior, panes
+     * should have descriptive titles. Views with pane titles produce {@link AccessibilityEvent}s
+     * when they appear, disappear, or change title.
      *
-     * @param accessibilityPaneTitle The pane's title.
+     * @param accessibilityPaneTitle The pane's title. Setting to {@code null} indicates that this
+     *                               View is not a pane.
      *
      * {@see AccessibilityNodeInfo#setPaneTitle(CharSequence)}
      */
-    public void setAccessibilityPaneTitle(CharSequence accessibilityPaneTitle) {
+    public void setAccessibilityPaneTitle(@Nullable CharSequence accessibilityPaneTitle) {
         if (!TextUtils.equals(accessibilityPaneTitle, mAccessibilityPaneTitle)) {
             mAccessibilityPaneTitle = accessibilityPaneTitle;
             notifyViewAccessibilityStateChangedIfNeeded(
@@ -7304,7 +7315,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * {@see #setAccessibilityPaneTitle}.
      */
-    public CharSequence getAccessibilityPaneTitle() {
+    @Nullable public CharSequence getAccessibilityPaneTitle() {
         return mAccessibilityPaneTitle;
     }
 
@@ -7969,6 +7980,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private void onProvideVirtualStructureCompat(ViewStructure structure, boolean forAutofill) {
         final AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
         if (provider != null) {
+            if (android.view.autofill.Helper.sVerbose && forAutofill) {
+                Log.v(VIEW_LOG_TAG, "onProvideVirtualStructureCompat() for " + this);
+            }
+
             final AccessibilityNodeInfo info = createAccessibilityNodeInfo();
             structure.setChildCount(1);
             final ViewStructure root = structure.newChild(0);
@@ -8205,16 +8220,28 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @throws IllegalArgumentException if the id is an autofill id associated with a virtual view.
      */
     public void setAutofillId(@Nullable AutofillId id) {
+        // TODO(b/37566627): add unit / CTS test for all possible combinations below
         if (android.view.autofill.Helper.sVerbose) {
             Log.v(VIEW_LOG_TAG, "setAutofill(): from " + mAutofillId + " to " + id);
         }
         if (isAttachedToWindow()) {
             throw new IllegalStateException("Cannot set autofill id when view is attached");
         }
-        if (id.isVirtual()) {
+        if (id != null && id.isVirtual()) {
             throw new IllegalStateException("Cannot set autofill id assigned to virtual views");
         }
+        if (id == null && (mPrivateFlags3 & PFLAG3_AUTOFILLID_EXPLICITLY_SET) == 0) {
+            // Ignore reset because it was never explicitly set before.
+            return;
+        }
         mAutofillId = id;
+        if (id != null) {
+            mAutofillViewId = id.getViewId();
+            mPrivateFlags3 |= PFLAG3_AUTOFILLID_EXPLICITLY_SET;
+        } else {
+            mAutofillViewId = NO_ID;
+            mPrivateFlags3 &= ~PFLAG3_AUTOFILLID_EXPLICITLY_SET;
+        }
     }
 
     /**
@@ -13982,7 +14009,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 // setFlags invocation.
                 shouldNotifyFocusableAvailable = true;
             } else {
-                if (hasFocus()) clearFocus();
+                if (isFocused()) clearFocus();
             }
         }
 
@@ -18524,7 +18551,17 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 // Hence prevent the same autofill view id from being restored multiple times.
                 ((BaseSavedState) state).mSavedData &= ~BaseSavedState.AUTOFILL_ID;
 
-                mAutofillViewId = baseState.mAutofillViewId;
+                if ((mPrivateFlags3 & PFLAG3_AUTOFILLID_EXPLICITLY_SET) != 0) {
+                    // Ignore when view already set it through setAutofillId();
+                    if (android.view.autofill.Helper.sDebug) {
+                        Log.d(VIEW_LOG_TAG, "onRestoreInstanceState(): not setting autofillId to "
+                                + baseState.mAutofillViewId + " because view explicitly set it to "
+                                + mAutofillId);
+                    }
+                } else {
+                    mAutofillViewId = baseState.mAutofillViewId;
+                    mAutofillId = null; // will be set on demand by getAutofillId()
+                }
             }
         }
     }

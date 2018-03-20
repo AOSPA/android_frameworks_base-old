@@ -18,6 +18,7 @@
 #include "Log.h"
 
 #include "AnomalyTracker.h"
+#include "subscriber_util.h"
 #include "external/Perfetto.h"
 #include "guardrail/StatsdStats.h"
 #include "subscriber/IncidentdReporter.h"
@@ -58,6 +59,12 @@ void AnomalyTracker::resetStorage() {
 }
 
 size_t AnomalyTracker::index(int64_t bucketNum) const {
+    if (bucketNum < 0) {
+        // To support this use-case, we can easily modify index to wrap around. But currently
+        // AnomalyTracker should never need this, so if it happens, it's a bug we should log.
+        // TODO: Audit this.
+        ALOGE("index() was passed a negative bucket number (%lld)!", (long long)bucketNum);
+    }
     return bucketNum % mNumOfPastBuckets;
 }
 
@@ -71,9 +78,7 @@ void AnomalyTracker::flushPastBuckets(const int64_t& latestPastBucketNum) {
     // The past packets are ancient. Empty out old mPastBuckets[i] values and reset
     // mSumOverPastBuckets.
     if (latestPastBucketNum - mMostRecentBucketNum >= mNumOfPastBuckets) {
-        mPastBuckets.clear();
-        mPastBuckets.resize(mNumOfPastBuckets);
-        mSumOverPastBuckets.clear();
+        resetStorage();
     } else {
         for (int64_t i = std::max(0LL, (long long)(mMostRecentBucketNum - mNumOfPastBuckets + 1));
              i <= latestPastBucketNum - mNumOfPastBuckets; i++) {
@@ -149,7 +154,7 @@ void AnomalyTracker::addBucketToSum(const shared_ptr<DimToValMap>& bucket) {
 
 int64_t AnomalyTracker::getPastBucketValue(const MetricDimensionKey& key,
                                            const int64_t& bucketNum) const {
-    if (mNumOfPastBuckets == 0) {
+    if (mNumOfPastBuckets == 0 || bucketNum < 0) {
         return 0;
     }
 
@@ -192,7 +197,8 @@ void AnomalyTracker::declareAnomaly(const uint64_t& timestampNs, const MetricDim
 
     if (!mSubscriptions.empty()) {
         if (mAlert.has_id()) {
-            ALOGI("An anomaly (%lld) has occurred! Informing subscribers.", mAlert.id());
+            ALOGI("An anomaly (%lld) %s has occurred! Informing subscribers.", mAlert.id(),
+                  key.toString().c_str());
             informSubscribers(key);
         } else {
             ALOGI("An anomaly (with no id) has occurred! Not informing any subscribers.");
@@ -231,40 +237,7 @@ bool AnomalyTracker::isInRefractoryPeriod(const uint64_t& timestampNs,
 }
 
 void AnomalyTracker::informSubscribers(const MetricDimensionKey& key) {
-    VLOG("informSubscribers called.");
-    if (mSubscriptions.empty()) {
-        // The config just wanted to log the anomaly. That's fine.
-        VLOG("No Subscriptions were associated with the alert.");
-        return;
-    }
-
-    for (const Subscription& subscription : mSubscriptions) {
-        if (subscription.probability_of_informing() < 1
-                && ((float)rand() / RAND_MAX) >= subscription.probability_of_informing()) {
-            // Note that due to float imprecision, 0.0 and 1.0 might not truly mean never/always.
-            // The config writer was advised to use -0.1 and 1.1 for never/always.
-            ALOGI("Fate decided that a subscriber would not be informed.");
-            continue;
-        }
-        switch (subscription.subscriber_information_case()) {
-            case Subscription::SubscriberInformationCase::kIncidentdDetails:
-                if (!GenerateIncidentReport(subscription.incidentd_details(), mAlert, mConfigKey)) {
-                    ALOGW("Failed to generate incident report.");
-                }
-                break;
-            case Subscription::SubscriberInformationCase::kPerfettoDetails:
-                if (!CollectPerfettoTraceAndUploadToDropbox(subscription.perfetto_details())) {
-                    ALOGW("Failed to generate prefetto traces.");
-                }
-                break;
-            case Subscription::SubscriberInformationCase::kBroadcastSubscriberDetails:
-                SubscriberReporter::getInstance().alertBroadcastSubscriber(mConfigKey, subscription,
-                                                                           key);
-                break;
-            default:
-                break;
-        }
-    }
+    triggerSubscribers(mAlert.id(), key, mConfigKey, mSubscriptions);
 }
 
 }  // namespace statsd

@@ -44,13 +44,60 @@ public:
     void isConditionMet(const ConditionKey& conditionParameters,
                         const std::vector<sp<ConditionTracker>>& allConditions,
                         const vector<Matcher>& dimensionFields,
+                        const bool isSubOutputDimensionFields,
+                        const bool isPartialLink,
                         std::vector<ConditionState>& conditionCache,
                         std::unordered_set<HashableDimensionKey>& dimensionsKeySet) const override;
 
     ConditionState getMetConditionDimension(
             const std::vector<sp<ConditionTracker>>& allConditions,
             const vector<Matcher>& dimensionFields,
+            const bool isSubOutputDimensionFields,
             std::unordered_set<HashableDimensionKey>& dimensionsKeySet) const override;
+
+    // Only one child predicate can have dimension.
+    const std::set<HashableDimensionKey>* getChangedToTrueDimensions(
+            const std::vector<sp<ConditionTracker>>& allConditions) const override {
+        for (const auto& child : mChildren) {
+            auto result = allConditions[child]->getChangedToTrueDimensions(allConditions);
+            if (result != nullptr) {
+                return result;
+            }
+        }
+        return nullptr;
+    }
+
+    // Only one child predicate can have dimension.
+    const std::set<HashableDimensionKey>* getChangedToFalseDimensions(
+            const std::vector<sp<ConditionTracker>>& allConditions) const override {
+        for (const auto& child : mChildren) {
+            auto result = allConditions[child]->getChangedToFalseDimensions(allConditions);
+            if (result != nullptr) {
+                return result;
+            }
+        }
+        return nullptr;
+    }
+
+    bool IsSimpleCondition() const  override { return false; }
+
+    bool IsChangedDimensionTrackable() const  override {
+        return mLogicalOperation == LogicalOperation::AND && mSlicedChildren.size() == 1;
+    }
+
+    bool equalOutputDimensions(
+        const std::vector<sp<ConditionTracker>>& allConditions,
+        const vector<Matcher>& dimensions) const override;
+
+    void getTrueSlicedDimensions(
+            const std::vector<sp<ConditionTracker>>& allConditions,
+            std::set<HashableDimensionKey>* dimensions) const override {
+        if (mSlicedChildren.size() == 1) {
+            return allConditions[mSlicedChildren.front()]->getTrueSlicedDimensions(
+                allConditions, dimensions);
+        }
+    }
+
 
 private:
     LogicalOperation mLogicalOperation;
@@ -60,6 +107,10 @@ private:
     // map the name to object. We don't want to store smart pointers to children, because it
     // increases the risk of circular dependency and memory leak.
     std::vector<int> mChildren;
+
+    std::vector<int> mSlicedChildren;
+    std::vector<int> mUnSlicedChildren;
+
 };
 
 }  // namespace statsd

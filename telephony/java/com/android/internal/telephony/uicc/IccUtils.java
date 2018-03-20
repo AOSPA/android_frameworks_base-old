@@ -117,9 +117,9 @@ public class IccUtils {
         trans[2] = (byte) ((data[2 + offset] & 0xF0) | ((data[1 + offset] >> 4) & 0xF));
         String ret = bytesToHexString(trans);
 
-        // For a valid plmn we trim all character 'f'
-        if (ret.contains("f")) {
-            ret = ret.replaceAll("f", "");
+        // For a valid plmn we trim all character 'F'
+        if (ret.contains("F")) {
+            ret = ret.replaceAll("F", "");
         }
         return ret;
     }

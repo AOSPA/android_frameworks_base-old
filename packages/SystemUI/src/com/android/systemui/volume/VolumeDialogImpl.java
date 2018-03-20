@@ -207,8 +207,6 @@ public class VolumeDialogImpl implements VolumeDialog {
             rescheduleTimeoutH();
             return true;
         });
-        VolumeUiLayout uiLayout = VolumeUiLayout.get(mDialogView);
-        uiLayout.updateRotation();
 
         mDialogRowsView = mDialog.findViewById(R.id.volume_dialog_rows);
         mRinger = mDialog.findViewById(R.id.ringer);
@@ -691,7 +689,8 @@ public class VolumeDialogImpl implements VolumeDialog {
                 : isZenNone ? (isRingStream || isSystemStream || isAlarmStream || isMusicStream)
                 : isZenPriorityOnly ? ((isAlarmStream && mState.disallowAlarms) ||
                         (isMusicStream && mState.disallowMedia) ||
-                        (isRingStream && mState.disallowRinger))
+                        (isRingStream && mState.disallowRinger) ||
+                        (isSystemStream && mState.disallowSystem))
                 : false;
 
         // update slider max

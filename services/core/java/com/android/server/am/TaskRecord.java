@@ -650,7 +650,7 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
             final ActivityRecord r = topRunningActivityLocked();
             final boolean wasFocused = r != null && supervisor.isFocusedStack(sourceStack)
                     && (topRunningActivityLocked() == r);
-            final boolean wasResumed = r != null && sourceStack.mResumedActivity == r;
+            final boolean wasResumed = r != null && sourceStack.getResumedActivity() == r;
             final boolean wasPaused = r != null && sourceStack.mPausingActivity == r;
 
             // In some cases the focused stack isn't the front stack. E.g. pinned stack.
@@ -1754,6 +1754,22 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
         return !mTmpConfig.equals(newConfig);
     }
 
+    /**
+     * This should be called when an child activity changes state. This should only
+     * be called from
+     * {@link ActivityRecord#setState(ActivityState, String)} .
+     * @param record The {@link ActivityRecord} whose state has changed.
+     * @param state The new state.
+     * @param reason The reason for the change.
+     */
+    void onActivityStateChanged(ActivityRecord record, ActivityState state, String reason) {
+        final ActivityStack parent = getStack();
+
+        if (parent != null) {
+            parent.onActivityStateChanged(record, state, reason);
+        }
+    }
+
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
         final boolean wasInMultiWindowMode = inMultiWindowMode();
@@ -2002,7 +2018,7 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
         } else if (intent != null) {
             sb.append(" I=");
             sb.append(intent.getComponent().flattenToShortString());
-        } else if (affinityIntent != null) {
+        } else if (affinityIntent != null && affinityIntent.getComponent() != null) {
             sb.append(" aI=");
             sb.append(affinityIntent.getComponent().flattenToShortString());
         } else {

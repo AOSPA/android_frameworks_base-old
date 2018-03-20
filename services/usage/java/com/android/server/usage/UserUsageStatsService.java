@@ -355,6 +355,47 @@ class UserUsageStatsService {
         return new UsageEvents(results, table);
     }
 
+    UsageEvents queryEventsForPackage(final long beginTime, final long endTime,
+            final String packageName) {
+        final ArraySet<String> names = new ArraySet<>();
+        names.add(packageName);
+        final List<UsageEvents.Event> results = queryStats(UsageStatsManager.INTERVAL_DAILY,
+                beginTime, endTime, (stats, mutable, accumulatedResult) -> {
+                    if (stats.events == null) {
+                        return;
+                    }
+
+                    final int startIndex = stats.events.closestIndexOnOrAfter(beginTime);
+                    if (startIndex < 0) {
+                        return;
+                    }
+
+                    final int size = stats.events.size();
+                    for (int i = startIndex; i < size; i++) {
+                        if (stats.events.keyAt(i) >= endTime) {
+                            return;
+                        }
+
+                        final UsageEvents.Event event = stats.events.valueAt(i);
+                        if (!packageName.equals(event.mPackage)) {
+                            continue;
+                        }
+                        if (event.mClass != null) {
+                            names.add(event.mClass);
+                        }
+                        accumulatedResult.add(event);
+                    }
+                });
+
+        if (results == null || results.isEmpty()) {
+            return null;
+        }
+
+        final String[] table = names.toArray(new String[names.size()]);
+        Arrays.sort(table);
+        return new UsageEvents(results, table);
+    }
+
     void persistActiveStats() {
         if (mStatsChanged) {
             Slog.i(TAG, mLogPrefix + "Flushing usage stats to disk");
@@ -475,25 +516,28 @@ class UserUsageStatsService {
         mDatabase.checkinDailyFiles(new UsageStatsDatabase.CheckinAction() {
             @Override
             public boolean checkin(IntervalStats stats) {
-                printIntervalStats(pw, stats, true, null);
+                printIntervalStats(pw, stats, false, false, null);
                 return true;
             }
         });
     }
 
     void dump(IndentingPrintWriter pw, String pkg) {
-        printLast24HrEvents(pw, true, pkg);
+        dump(pw, pkg, false);
+    }
+    void dump(IndentingPrintWriter pw, String pkg, boolean compact) {
+        printLast24HrEvents(pw, !compact, pkg);
         for (int interval = 0; interval < mCurrentStats.length; interval++) {
             pw.print("In-memory ");
             pw.print(intervalToString(interval));
             pw.println(" stats");
-            printIntervalStats(pw, mCurrentStats[interval], false, pkg);
+            printIntervalStats(pw, mCurrentStats[interval], !compact, true, pkg);
         }
     }
 
     private String formatDateTime(long dateTime, boolean pretty) {
         if (pretty) {
-            return "\"" + DateFormat.format("yyyy-MM-dd HH:mm:ss", dateTime).toString() + "\"";
+            return "\"" + sDateFormat.format(dateTime)+ "\"";
         }
         return Long.toString(dateTime);
     }
@@ -572,16 +616,17 @@ class UserUsageStatsService {
             pw.printPair("endTime", endTime);
         }
         pw.println(")");
-        pw.increaseIndent();
-        for (UsageEvents.Event event : events) {
-            printEvent(pw, event, prettyDates);
+        if (events != null) {
+            pw.increaseIndent();
+            for (UsageEvents.Event event : events) {
+                printEvent(pw, event, prettyDates);
+            }
+            pw.decreaseIndent();
         }
-        pw.decreaseIndent();
     }
 
     void printIntervalStats(IndentingPrintWriter pw, IntervalStats stats,
-            boolean checkin, String pkg) {
-        boolean prettyDates = !checkin;
+            boolean prettyDates, boolean skipEvents, String pkg) {
         if (prettyDates) {
             pw.printPair("timeRange", "\"" + DateUtils.formatDateRange(mContext,
                     stats.beginTime, stats.endTime, sDateFormatFlags) + "\"");
@@ -656,7 +701,7 @@ class UserUsageStatsService {
 
         // The last 24 hours of events is already printed in the non checkin dump
         // No need to repeat here.
-        if (checkin) {
+        if (!skipEvents) {
             pw.println("events");
             pw.increaseIndent();
             final TimeSparseArray<UsageEvents.Event> events = stats.events;

@@ -41,18 +41,27 @@ using android::util::ProtoOutputStream;
  */
 class MockMetricsManager : public MetricsManager {
 public:
-    MockMetricsManager() : MetricsManager(ConfigKey(1, 12345), StatsdConfig(), 1000, new UidMap()) {
+    MockMetricsManager() : MetricsManager(
+        ConfigKey(1, 12345), StatsdConfig(), 1000,
+        new UidMap(),
+        new AlarmMonitor(10, [](const sp<IStatsCompanionService>&, int64_t){},
+                         [](const sp<IStatsCompanionService>&){}),
+        new AlarmMonitor(10, [](const sp<IStatsCompanionService>&, int64_t){},
+                         [](const sp<IStatsCompanionService>&){})) {
     }
 
     MOCK_METHOD0(byteSize, size_t());
-    MOCK_METHOD2(onDumpReport, void(const uint64_t timeNs, ProtoOutputStream* output));
+
+    MOCK_METHOD1(dropData, void(const uint64_t dropTimeNs));
 };
 
 TEST(StatsLogProcessorTest, TestRateLimitByteSize) {
     sp<UidMap> m = new UidMap();
-    sp<AnomalyMonitor> anomalyMonitor;
+    sp<AlarmMonitor> anomalyAlarmMonitor;
+    sp<AlarmMonitor> periodicAlarmMonitor;
     // Construct the processor with a dummy sendBroadcast function that does nothing.
-    StatsLogProcessor p(m, anomalyMonitor, 0, [](const ConfigKey& key) {});
+    StatsLogProcessor p(m, anomalyAlarmMonitor, periodicAlarmMonitor, 0,
+        [](const ConfigKey& key) {});
 
     MockMetricsManager mockMetricsManager;
 
@@ -67,11 +76,11 @@ TEST(StatsLogProcessorTest, TestRateLimitByteSize) {
 
 TEST(StatsLogProcessorTest, TestRateLimitBroadcast) {
     sp<UidMap> m = new UidMap();
-    sp<AnomalyMonitor> anomalyMonitor;
+    sp<AlarmMonitor> anomalyAlarmMonitor;
+    sp<AlarmMonitor> subscriberAlarmMonitor;
     int broadcastCount = 0;
-    StatsLogProcessor p(m, anomalyMonitor, 0, [&broadcastCount](const ConfigKey& key) {
-        broadcastCount++;
-    });
+    StatsLogProcessor p(m, anomalyAlarmMonitor, subscriberAlarmMonitor, 0,
+                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; });
 
     MockMetricsManager mockMetricsManager;
 
@@ -93,9 +102,10 @@ TEST(StatsLogProcessorTest, TestRateLimitBroadcast) {
 
 TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge) {
     sp<UidMap> m = new UidMap();
-    sp<AnomalyMonitor> anomalyMonitor;
+    sp<AlarmMonitor> anomalyAlarmMonitor;
+    sp<AlarmMonitor> subscriberAlarmMonitor;
     int broadcastCount = 0;
-    StatsLogProcessor p(m, anomalyMonitor, 0,
+    StatsLogProcessor p(m, anomalyAlarmMonitor, subscriberAlarmMonitor, 0,
                         [&broadcastCount](const ConfigKey& key) { broadcastCount++; });
 
     MockMetricsManager mockMetricsManager;
@@ -105,7 +115,7 @@ TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge) {
             .Times(1)
             .WillRepeatedly(Return(int(StatsdStats::kMaxMetricsBytesPerConfig * 1.2)));
 
-    EXPECT_CALL(mockMetricsManager, onDumpReport(_, _)).Times(1);
+    EXPECT_CALL(mockMetricsManager, dropData(_)).Times(1);
 
     // Expect to call the onDumpReport and skip the broadcast.
     p.flushIfNecessaryLocked(1, key, mockMetricsManager);

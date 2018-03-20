@@ -193,16 +193,16 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
             int viewVisibility, Rect outContentInsets, Rect outStableInsets,
             InputChannel outInputChannel) {
         return addToDisplay(window, seq, attrs, viewVisibility, Display.DEFAULT_DISPLAY,
-                outContentInsets, outStableInsets, null /* outOutsets */, null /* cutout */,
-                outInputChannel);
+                new Rect() /* outFrame */, outContentInsets, outStableInsets, null /* outOutsets */,
+                null /* cutout */, outInputChannel);
     }
 
     @Override
     public int addToDisplay(IWindow window, int seq, WindowManager.LayoutParams attrs,
-            int viewVisibility, int displayId, Rect outContentInsets, Rect outStableInsets,
-            Rect outOutsets, DisplayCutout.ParcelableWrapper outDisplayCutout,
-            InputChannel outInputChannel) {
-        return mService.addWindow(this, window, seq, attrs, viewVisibility, displayId,
+            int viewVisibility, int displayId, Rect outFrame, Rect outContentInsets,
+            Rect outStableInsets, Rect outOutsets,
+            DisplayCutout.ParcelableWrapper outDisplayCutout, InputChannel outInputChannel) {
+        return mService.addWindow(this, window, seq, attrs, viewVisibility, displayId, outFrame,
                 outContentInsets, outStableInsets, outOutsets, outDisplayCutout, outInputChannel);
     }
 
@@ -217,7 +217,8 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
     public int addToDisplayWithoutInputChannel(IWindow window, int seq, WindowManager.LayoutParams attrs,
             int viewVisibility, int displayId, Rect outContentInsets, Rect outStableInsets) {
         return mService.addWindow(this, window, seq, attrs, viewVisibility, displayId,
-            outContentInsets, outStableInsets, null /* outOutsets */, null /* cutout */, null);
+                new Rect() /* outFrame */, outContentInsets, outStableInsets, null /* outOutsets */,
+                null /* cutout */, null /* outInputChannel */);
     }
 
     @Override
@@ -509,14 +510,10 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
             // on-going notification for the user to control their visibility.
             if (visible) {
                 changed = mAlertWindowSurfaces.add(surfaceController);
-                if (changed) {
-                    MetricsLoggerWrapper.logAppOverlayEnter(mUid, mPackageName, true);
-                }
+                MetricsLoggerWrapper.logAppOverlayEnter(mUid, mPackageName, changed, type, true);
             } else {
                 changed = mAlertWindowSurfaces.remove(surfaceController);
-                if (changed) {
-                    MetricsLoggerWrapper.logAppOverlayExit(mUid, mPackageName, true);
-                }
+                MetricsLoggerWrapper.logAppOverlayExit(mUid, mPackageName, changed, type, true);
             }
 
             if (changed) {
@@ -537,14 +534,10 @@ class Session extends IWindowSession.Stub implements IBinder.DeathRecipient {
 
         if (visible) {
             changed = mAppOverlaySurfaces.add(surfaceController);
-            if (changed) {
-                MetricsLoggerWrapper.logAppOverlayEnter(mUid, mPackageName, false);
-            }
+            MetricsLoggerWrapper.logAppOverlayEnter(mUid, mPackageName, changed, type, false);
         } else {
             changed = mAppOverlaySurfaces.remove(surfaceController);
-            if (changed) {
-                MetricsLoggerWrapper.logAppOverlayExit(mUid, mPackageName, false);
-            }
+            MetricsLoggerWrapper.logAppOverlayExit(mUid, mPackageName, changed, type, false);
         }
 
         if (changed) {

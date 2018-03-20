@@ -65,9 +65,12 @@ interface ILockSettings {
     // {@code ServiceSpecificException} may be thrown to signal an error, which caller can
     // convert to  {@code RecoveryManagerException}.
     void initRecoveryService(in String rootCertificateAlias, in byte[] signedPublicKeyList);
+    void initRecoveryServiceWithSigFile(in String rootCertificateAlias,
+            in byte[] recoveryServiceCertFile, in byte[] recoveryServiceSigFile);
     KeyChainSnapshot getKeyChainSnapshot();
     byte[] generateAndStoreKey(String alias);
     String generateKey(String alias);
+    String importKey(String alias, in byte[] keyBytes);
     String getKey(String alias);
     void removeKey(String alias);
     void setSnapshotCreatedPendingIntent(in PendingIntent intent);

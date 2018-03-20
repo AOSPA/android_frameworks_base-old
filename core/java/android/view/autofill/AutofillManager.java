@@ -358,6 +358,9 @@ public final class AutofillManager {
     @GuardedBy("mLock")
     @Nullable private ArraySet<AutofillId> mFillableIds;
 
+    /** id of last requested autofill ui */
+    @Nullable private AutofillId mIdShownFillUi;
+
     /**
      * Views that were already "entered" - if they're entered again when the session is not active,
      * they're ignored
@@ -983,6 +986,7 @@ public final class AutofillManager {
      * @param virtualId id identifying the virtual child inside the parent view.
      */
     public void notifyViewExited(@NonNull View view, int virtualId) {
+        if (sVerbose) Log.v(TAG, "notifyViewExited(" + view.getAutofillId() + ", " + virtualId);
         if (!hasAutofillFeature()) {
             return;
         }
@@ -1547,6 +1551,7 @@ public final class AutofillManager {
         mTrackedViews = null;
         mFillableIds = null;
         mSaveTriggerId = null;
+        mIdShownFillUi = null;
         if (resetEnteredIds) {
             mEnteredIds = null;
         }
@@ -1676,8 +1681,9 @@ public final class AutofillManager {
 
                 if (client != null) {
                     if (client.autofillClientRequestShowFillUi(anchor, width, height,
-                            anchorBounds, presenter) && mCallback != null) {
+                            anchorBounds, presenter)) {
                         callback = mCallback;
+                        mIdShownFillUi = id;
                     }
                 }
             }
@@ -1944,10 +1950,23 @@ public final class AutofillManager {
         }
     }
 
-    private void requestHideFillUi(AutofillId id) {
-        final View anchor = findView(id);
+    /** @hide */
+    public void requestHideFillUi() {
+        requestHideFillUi(mIdShownFillUi, true);
+    }
+
+    private void requestHideFillUi(AutofillId id, boolean force) {
+        final View anchor = id == null ? null : findView(id);
         if (sVerbose) Log.v(TAG, "requestHideFillUi(" + id + "): anchor = " + anchor);
         if (anchor == null) {
+            if (force) {
+                // When user taps outside autofill window, force to close fill ui even id does
+                // not match.
+                AutofillClient client = getClient();
+                if (client != null) {
+                    client.autofillClientRequestHideFillUi();
+                }
+            }
             return;
         }
         requestHideFillUi(id, anchor);
@@ -1963,7 +1982,8 @@ public final class AutofillManager {
             //    service being uninstalled and the UI being dismissed.
             AutofillClient client = getClient();
             if (client != null) {
-                if (client.autofillClientRequestHideFillUi() && mCallback != null) {
+                if (client.autofillClientRequestHideFillUi()) {
+                    mIdShownFillUi = null;
                     callback = mCallback;
                 }
             }
@@ -2171,6 +2191,7 @@ public final class AutofillManager {
         public int getRelevantEventTypes(int relevantEventTypes) {
             return relevantEventTypes | AccessibilityEvent.TYPE_VIEW_FOCUSED
                     | AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
+                    | AccessibilityEvent.TYPE_VIEW_CLICKED
                     | AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
         }
 
@@ -2226,6 +2247,12 @@ public final class AutofillManager {
                                 && mFocusedNodeId == event.getSourceNodeId()) {
                             notifyValueChanged(event.getWindowId(), event.getSourceNodeId());
                         }
+                    }
+                } break;
+
+                case AccessibilityEvent.TYPE_VIEW_CLICKED: {
+                    synchronized (mLock) {
+                        notifyViewClicked(event.getWindowId(), event.getSourceNodeId());
                     }
                 } break;
 
@@ -2298,6 +2325,22 @@ public final class AutofillManager {
             }
             AutofillManager.this.notifyValueChanged(view, virtualId,
                     AutofillValue.forText(node.getText()));
+        }
+
+        private void notifyViewClicked(int windowId, long nodeId) {
+            final int virtualId = AccessibilityNodeInfo.getVirtualDescendantId(nodeId);
+            if (!isVirtualNode(virtualId)) {
+                return;
+            }
+            final View view = findViewByAccessibilityId(windowId, nodeId);
+            if (view == null) {
+                return;
+            }
+            final AccessibilityNodeInfo node = findVirtualNodeByAccessibilityId(view, virtualId);
+            if (node == null) {
+                return;
+            }
+            AutofillManager.this.notifyViewClicked(view, virtualId);
         }
 
         @GuardedBy("mLock")
@@ -2655,7 +2698,7 @@ public final class AutofillManager {
         public void requestHideFillUi(int sessionId, AutofillId id) {
             final AutofillManager afm = mAfm.get();
             if (afm != null) {
-                afm.post(() -> afm.requestHideFillUi(id));
+                afm.post(() -> afm.requestHideFillUi(id, false));
             }
         }
 

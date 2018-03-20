@@ -132,13 +132,13 @@ static jboolean AnimatedImageDrawable_nStop(JNIEnv* env, jobject /*clazz*/, jlon
 // Java's LOOP_INFINITE relies on this being the same.
 static_assert(SkCodec::kRepetitionCountInfinite == -1);
 
-static jint AnimatedImageDrawable_nGetLoopCount(JNIEnv* env, jobject /*clazz*/, jlong nativePtr) {
+static jint AnimatedImageDrawable_nGetRepeatCount(JNIEnv* env, jobject /*clazz*/, jlong nativePtr) {
     auto* drawable = reinterpret_cast<AnimatedImageDrawable*>(nativePtr);
     return drawable->getRepetitionCount();
 }
 
-static void AnimatedImageDrawable_nSetLoopCount(JNIEnv* env, jobject /*clazz*/, jlong nativePtr,
-                                                jint loopCount) {
+static void AnimatedImageDrawable_nSetRepeatCount(JNIEnv* env, jobject /*clazz*/, jlong nativePtr,
+                                                  jint loopCount) {
     auto* drawable = reinterpret_cast<AnimatedImageDrawable*>(nativePtr);
     drawable->setRepetitionCount(loopCount);
 }
@@ -213,6 +213,12 @@ static void AnimatedImageDrawable_nMarkInvisible(JNIEnv* env, jobject /*clazz*/,
     drawable->markInvisible();
 }
 
+static void AnimatedImageDrawable_nSetMirrored(JNIEnv* env, jobject /*clazz*/, jlong nativePtr,
+                                               jboolean mirrored) {
+    auto* drawable = reinterpret_cast<AnimatedImageDrawable*>(nativePtr);
+    drawable->setStagingMirrored(mirrored);
+}
+
 static const JNINativeMethod gAnimatedImageDrawableMethods[] = {
     { "nCreate",             "(JLandroid/graphics/ImageDecoder;IILandroid/graphics/Rect;)J", (void*) AnimatedImageDrawable_nCreate },
     { "nGetNativeFinalizer", "()J",                                                          (void*) AnimatedImageDrawable_nGetNativeFinalizer },
@@ -223,11 +229,12 @@ static const JNINativeMethod gAnimatedImageDrawableMethods[] = {
     { "nIsRunning",          "(J)Z",                                                         (void*) AnimatedImageDrawable_nIsRunning },
     { "nStart",              "(J)Z",                                                         (void*) AnimatedImageDrawable_nStart },
     { "nStop",               "(J)Z",                                                         (void*) AnimatedImageDrawable_nStop },
-    { "nGetLoopCount",       "(J)I",                                                         (void*) AnimatedImageDrawable_nGetLoopCount },
-    { "nSetLoopCount",       "(JI)V",                                                        (void*) AnimatedImageDrawable_nSetLoopCount },
+    { "nGetRepeatCount",     "(J)I",                                                         (void*) AnimatedImageDrawable_nGetRepeatCount },
+    { "nSetRepeatCount",     "(JI)V",                                                        (void*) AnimatedImageDrawable_nSetRepeatCount },
     { "nSetOnAnimationEndListener", "(JLandroid/graphics/drawable/AnimatedImageDrawable;)V", (void*) AnimatedImageDrawable_nSetOnAnimationEndListener },
     { "nNativeByteSize",     "(J)J",                                                         (void*) AnimatedImageDrawable_nNativeByteSize },
     { "nMarkInvisible",      "(J)V",                                                         (void*) AnimatedImageDrawable_nMarkInvisible },
+    { "nSetMirrored",        "(JZ)V",                                                        (void*) AnimatedImageDrawable_nSetMirrored },
 };
 
 int register_android_graphics_drawable_AnimatedImageDrawable(JNIEnv* env) {
