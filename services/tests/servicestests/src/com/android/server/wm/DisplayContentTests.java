@@ -31,9 +31,11 @@ import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
-import android.support.test.filters.FlakyTest;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -49,6 +51,8 @@ import android.util.SparseIntArray;
 import android.view.DisplayCutout;
 import android.view.MotionEvent;
 import android.view.Surface;
+
+import com.android.server.wm.utils.WmDisplayCutout;
 
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -300,7 +304,6 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    @FlakyTest(bugId = 37908381)
     public void testFocusedWindowMultipleDisplays() throws Exception {
         // Create a focusable window and check that focus is calculated correctly
         final WindowState window1 =
@@ -398,8 +401,9 @@ public class DisplayContentTests extends WindowTestsBase {
             dc.mInitialDisplayWidth = 200;
             dc.mInitialDisplayHeight = 400;
             Rect r = new Rect(80, 0, 120, 10);
-            final DisplayCutout cutout = fromBoundingRect(r.left, r.top, r.right, r.bottom)
-                    .computeSafeInsets(200, 400);
+            final DisplayCutout cutout = new WmDisplayCutout(
+                    fromBoundingRect(r.left, r.top, r.right, r.bottom), null)
+                    .computeSafeInsets(200, 400).getDisplayCutout();
 
             dc.mInitialDisplayCutout = cutout;
             dc.setRotation(Surface.ROTATION_0);
@@ -416,16 +420,18 @@ public class DisplayContentTests extends WindowTestsBase {
             dc.mInitialDisplayWidth = 200;
             dc.mInitialDisplayHeight = 400;
             Rect r1 = new Rect(80, 0, 120, 10);
-            final DisplayCutout cutout = fromBoundingRect(r1.left, r1.top, r1.right, r1.bottom)
-                    .computeSafeInsets(200, 400);
+            final DisplayCutout cutout = new WmDisplayCutout(
+                    fromBoundingRect(r1.left, r1.top, r1.right, r1.bottom), null)
+                    .computeSafeInsets(200, 400).getDisplayCutout();
 
             dc.mInitialDisplayCutout = cutout;
             dc.setRotation(Surface.ROTATION_90);
             dc.computeScreenConfiguration(new Configuration()); // recomputes dc.mDisplayInfo.
 
             final Rect r = new Rect(0, 80, 10, 120);
-            assertEquals(fromBoundingRect(r.left, r.top, r.right, r.bottom)
-                    .computeSafeInsets(400, 200), dc.getDisplayInfo().displayCutout);
+            assertEquals(new WmDisplayCutout(
+                    fromBoundingRect(r.left, r.top, r.right, r.bottom), null)
+                    .computeSafeInsets(400, 200).getDisplayCutout(), dc.getDisplayInfo().displayCutout);
         }
     }
 
@@ -452,6 +458,18 @@ public class DisplayContentTests extends WindowTestsBase {
         sWm.setKeyguardGoingAway(true);
         assertEquals("Keyguard that is going away must not influence device orientation",
                 SCREEN_ORIENTATION_LANDSCAPE, dc.getOrientation());
+    }
+
+    @Test
+    public void testDisableDisplayInfoOverrideFromWindowManager() {
+        final DisplayContent dc = createNewDisplay();
+
+        assertTrue(dc.mShouldOverrideDisplayConfiguration);
+        sWm.dontOverrideDisplayInfo(dc.getDisplayId());
+
+        assertFalse(dc.mShouldOverrideDisplayConfiguration);
+        verify(sWm.mDisplayManagerInternal, times(1))
+                .setDisplayInfoOverrideFromWindowManager(dc.getDisplayId(), null);
     }
 
     private static void verifySizes(DisplayContent displayContent, int expectedBaseWidth,

@@ -1196,6 +1196,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     boolean isFocusable() {
+        if (inSplitScreenPrimaryWindowingMode() && mStackSupervisor.mIsDockMinimized) {
+            return false;
+        }
         return getWindowConfiguration().canReceiveKeys() || isAlwaysFocusable();
     }
 
@@ -1543,7 +1546,13 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     Slog.e(TAG, "applyOptionsLocked: Unknown animationType=" + animationType);
                     break;
             }
-            pendingOptions = null;
+
+            if (task == null) {
+                clearOptionsLocked(false /* withAbort */);
+            } else {
+                // This will clear the options for all the ActivityRecords for this Task.
+                task.clearAllPendingOptions();
+            }
         }
     }
 
@@ -1552,10 +1561,14 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     void clearOptionsLocked() {
-        if (pendingOptions != null) {
+        clearOptionsLocked(true /* withAbort */);
+    }
+
+    void clearOptionsLocked(boolean withAbort) {
+        if (withAbort && pendingOptions != null) {
             pendingOptions.abort();
-            pendingOptions = null;
         }
+        pendingOptions = null;
     }
 
     ActivityOptions takeOptionsLocked() {
@@ -1624,12 +1637,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             return;
         }
 
-        if (isState(DESTROYED) || (state != DESTROYED && isState(DESTROYING))) {
-            // We cannot move backwards from destroyed and destroying states.
-            throw new IllegalArgumentException("cannot move back states once destroying"
-                    + "current:" + mState + " requested:" + state);
-        }
-
         final ActivityState prev = mState;
         mState = state;
 
@@ -1643,23 +1650,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
         if (parent != null) {
             parent.onActivityStateChanged(this, state, reason);
-        }
-
-        if (isState(DESTROYING, DESTROYED)) {
-            makeFinishingLocked();
-
-            // When moving to the destroyed state, immediately destroy the activity in the
-            // associated stack. Most paths for finishing an activity will handle an activity's path
-            // to destroy through mechanisms such as ActivityStackSupervisor#mFinishingActivities.
-            // However, moving to the destroyed state directly (as in the case of an app dying) and
-            // marking it as finished will lead to cleanup steps that will prevent later handling
-            // from happening.
-            if (isState(DESTROYED)) {
-                final ActivityStack stack = getStack();
-                if (stack != null) {
-                    stack.activityDestroyedLocked(this, reason);
-                }
-            }
         }
     }
 
@@ -1753,8 +1743,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             // this when there is an activity waiting to become translucent as the extra binder
             // calls will lead to noticeable jank. A later call to
             // ActivityStack#ensureActivitiesVisibleLocked will bring the activity to the proper
-            // paused state.
-            if (isState(STOPPED, STOPPING) && stack.mTranslucentActivityWaiting == null) {
+            // paused state. We also avoid doing this for the activity the stack supervisor
+            // considers the resumed activity, as normal means will bring the activity from STOPPED
+            // to RESUMED. Adding PAUSING in this scenario will lead to double lifecycles.
+            if (isState(STOPPED, STOPPING) && stack.mTranslucentActivityWaiting == null
+                    && mStackSupervisor.getResumedActivityLocked() != this) {
                 // Capture reason before state change
                 final String reason = getLifecycleDescription("makeVisibleIfNeeded");
 

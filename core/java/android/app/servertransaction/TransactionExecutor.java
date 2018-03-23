@@ -147,7 +147,10 @@ public class TransactionExecutor {
             pw.println("Executor:");
             dump(pw, prefix);
 
-            Slog.wtf(TAG, stringWriter.toString());
+            Slog.w(TAG, stringWriter.toString());
+
+            // Ignore requests for non-existent client records for now.
+            return;
         }
 
         // Cycle to the state right before the final requested state.
@@ -191,7 +194,7 @@ public class TransactionExecutor {
                     mTransactionHandler.handleStartActivity(r, mPendingActions);
                     break;
                 case ON_RESUME:
-                    mTransactionHandler.handleResumeActivity(r.token, false /* clearHide */,
+                    mTransactionHandler.handleResumeActivity(r.token, false /* finalStateRequest */,
                             r.isForward, "LIFECYCLER_RESUME_ACTIVITY");
                     break;
                 case ON_PAUSE:
@@ -201,7 +204,8 @@ public class TransactionExecutor {
                     break;
                 case ON_STOP:
                     mTransactionHandler.handleStopActivity(r.token, false /* show */,
-                            0 /* configChanges */, mPendingActions, "LIFECYCLER_STOP_ACTIVITY");
+                            0 /* configChanges */, mPendingActions, false /* finalStateRequest */,
+                            "LIFECYCLER_STOP_ACTIVITY");
                     break;
                 case ON_DESTROY:
                     mTransactionHandler.handleDestroyActivity(r.token, false /* finishing */,

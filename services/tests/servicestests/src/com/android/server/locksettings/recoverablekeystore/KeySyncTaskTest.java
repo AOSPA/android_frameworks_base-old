@@ -30,6 +30,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.never;
@@ -42,11 +43,13 @@ import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.security.keystore.recovery.KeyDerivationParams;
 import android.security.keystore.recovery.KeyChainSnapshot;
+import android.security.keystore.recovery.RecoveryController;
 import android.security.keystore.recovery.WrappedApplicationKey;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 
+import android.util.Log;
 import com.android.server.locksettings.recoverablekeystore.storage.RecoverableKeyStoreDb;
 import com.android.server.locksettings.recoverablekeystore.storage.RecoverySnapshotStorage;
 
@@ -238,25 +241,6 @@ public class KeySyncTaskTest {
     }
 
     @Test
-    public void run_doesNotSendAnythingIfNoRecoveryAgentPendingIntentRegistered() throws Exception {
-        SecretKey applicationKey = generateKey();
-        mRecoverableKeyStoreDb.setServerParams(
-                TEST_USER_ID, TEST_RECOVERY_AGENT_UID, TEST_VAULT_HANDLE);
-        mRecoverableKeyStoreDb.setPlatformKeyGenerationId(TEST_USER_ID, TEST_GENERATION_ID);
-        mRecoverableKeyStoreDb.insertKey(
-                TEST_USER_ID,
-                TEST_RECOVERY_AGENT_UID,
-                TEST_APP_KEY_ALIAS,
-                WrappedKey.fromSecretKey(mEncryptKey, applicationKey));
-        mRecoverableKeyStoreDb.setRecoveryServicePublicKey(
-                TEST_USER_ID, TEST_RECOVERY_AGENT_UID, mKeyPair.getPublic());
-
-        mKeySyncTask.run();
-
-        assertNull(mRecoverySnapshotStorage.get(TEST_RECOVERY_AGENT_UID));
-    }
-
-    @Test
     public void run_doesNotSendAnythingIfNoDeviceIdIsSet() throws Exception {
         SecretKey applicationKey = generateKey();
         mRecoverableKeyStoreDb.setPlatformKeyGenerationId(TEST_USER_ID, TEST_GENERATION_ID);
@@ -272,6 +256,21 @@ public class KeySyncTaskTest {
         mKeySyncTask.run();
 
         assertNull(mRecoverySnapshotStorage.get(TEST_RECOVERY_AGENT_UID));
+    }
+
+    @Test
+    public void run_stillCreatesSnapshotIfNoRecoveryAgentPendingIntentRegistered()
+            throws Exception {
+        mRecoverableKeyStoreDb.setServerParams(
+                TEST_USER_ID, TEST_RECOVERY_AGENT_UID, TEST_VAULT_HANDLE);
+        mRecoverableKeyStoreDb.setPlatformKeyGenerationId(TEST_USER_ID, TEST_GENERATION_ID);
+        addApplicationKey(TEST_USER_ID, TEST_RECOVERY_AGENT_UID, TEST_APP_KEY_ALIAS);
+        mRecoverableKeyStoreDb.setRecoveryServicePublicKey(
+                TEST_USER_ID, TEST_RECOVERY_AGENT_UID, mKeyPair.getPublic());
+
+        mKeySyncTask.run();
+
+        assertNotNull(mRecoverySnapshotStorage.get(TEST_RECOVERY_AGENT_UID));
     }
 
     @Test
@@ -500,7 +499,7 @@ public class KeySyncTaskTest {
     }
 
     @Test
-    public void run_doesNotSendKeyToNonregisteredAgent() throws Exception {
+    public void run_notifiesNonregisteredAgent() throws Exception {
         mRecoverableKeyStoreDb.setRecoveryServicePublicKey(
                 TEST_USER_ID, TEST_RECOVERY_AGENT_UID, mKeyPair.getPublic());
         mRecoverableKeyStoreDb.setRecoveryServicePublicKey(
@@ -512,8 +511,35 @@ public class KeySyncTaskTest {
         mKeySyncTask.run();
 
         verify(mSnapshotListenersStorage).recoverySnapshotAvailable(TEST_RECOVERY_AGENT_UID);
-        verify(mSnapshotListenersStorage, never()).
-                recoverySnapshotAvailable(TEST_RECOVERY_AGENT_UID2);
+        verify(mSnapshotListenersStorage).recoverySnapshotAvailable(TEST_RECOVERY_AGENT_UID2);
+    }
+
+    @Test
+    public void run_customLockScreen_RecoveryStatusFailure() throws Exception {
+      mKeySyncTask = new KeySyncTask(
+          mRecoverableKeyStoreDb,
+          mRecoverySnapshotStorage,
+          mSnapshotListenersStorage,
+          TEST_USER_ID,
+          /*credentialType=*/ 3,
+          "12345",
+          /*credentialUpdated=*/ false,
+          mPlatformKeyManager);
+
+      addApplicationKey(TEST_USER_ID, TEST_RECOVERY_AGENT_UID, TEST_APP_KEY_ALIAS);
+
+      int status =
+          mRecoverableKeyStoreDb
+              .getStatusForAllKeys(TEST_RECOVERY_AGENT_UID)
+              .get(TEST_APP_KEY_ALIAS);
+      assertEquals(RecoveryController.RECOVERY_STATUS_SYNC_IN_PROGRESS, status);
+
+      mKeySyncTask.run();
+
+      status = mRecoverableKeyStoreDb
+          .getStatusForAllKeys(TEST_RECOVERY_AGENT_UID)
+          .get(TEST_APP_KEY_ALIAS);
+      assertEquals(RecoveryController.RECOVERY_STATUS_PERMANENT_FAILURE, status);
     }
 
     private SecretKey addApplicationKey(int userId, int recoveryAgentUid, String alias)

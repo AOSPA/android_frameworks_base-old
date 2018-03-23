@@ -34,6 +34,8 @@ import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_BOTTOM;
 import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_LEFT;
 import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_RIGHT;
 
+import static junit.framework.TestCase.assertNotNull;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -45,6 +47,8 @@ import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import android.app.ActivityOptions;
 import android.app.servertransaction.ClientTransaction;
 import android.app.servertransaction.PauseActivityItem;
 import android.graphics.Rect;
@@ -123,12 +127,20 @@ public class ActivityRecordTests extends ActivityTestsBase {
             }
             return null;
         }).when(mActivity.app.thread).scheduleTransaction(any());
+
         mActivity.setState(STOPPED, "testPausingWhenVisibleFromStopped");
 
+        // The activity is in the focused stack so it should not move to paused.
         mActivity.makeVisibleIfNeeded(null /* starting */);
+        assertTrue(mActivity.isState(STOPPED));
+        assertFalse(pauseFound.value);
 
+        // Clear focused stack
+        mActivity.mStackSupervisor.mFocusedStack = null;
+
+        // In the unfocused stack, the activity should move to paused.
+        mActivity.makeVisibleIfNeeded(null /* starting */);
         assertTrue(mActivity.isState(PAUSING));
-
         assertTrue(pauseFound.value);
 
         // Make sure that the state does not change for current non-stopping states.
@@ -193,6 +205,35 @@ public class ActivityRecordTests extends ActivityTestsBase {
                 false /*activityResizeable*/, true /*expected*/);
     }
 
+    @Test
+    public void testsApplyOptionsLocked() {
+        ActivityOptions activityOptions = ActivityOptions.makeBasic();
+
+        // Set and apply options for ActivityRecord. Pending options should be cleared
+        mActivity.updateOptionsLocked(activityOptions);
+        mActivity.applyOptionsLocked();
+        assertNull(mActivity.pendingOptions);
+
+        // Set options for two ActivityRecords in same Task. Apply one ActivityRecord options.
+        // Pending options should be cleared for both ActivityRecords
+        ActivityRecord activity2 = new ActivityBuilder(mService).setTask(mTask).build();
+        activity2.updateOptionsLocked(activityOptions);
+        mActivity.updateOptionsLocked(activityOptions);
+        mActivity.applyOptionsLocked();
+        assertNull(mActivity.pendingOptions);
+        assertNull(activity2.pendingOptions);
+
+        // Set options for two ActivityRecords in separate Tasks. Apply one ActivityRecord options.
+        // Pending options should be cleared for only ActivityRecord that was applied
+        TaskRecord task2 = new TaskBuilder(mService.mStackSupervisor).setStack(mStack).build();
+        activity2 = new ActivityBuilder(mService).setTask(task2).build();
+        activity2.updateOptionsLocked(activityOptions);
+        mActivity.updateOptionsLocked(activityOptions);
+        mActivity.applyOptionsLocked();
+        assertNull(mActivity.pendingOptions);
+        assertNotNull(activity2.pendingOptions);
+    }
+
     private void testSupportsLaunchingResizeable(boolean taskPresent, boolean taskResizeable,
             boolean activityResizeable, boolean expected) {
         mService.mSupportsMultiWindow = true;
@@ -213,36 +254,5 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
         verify(mService.mStackSupervisor, times(1)).canPlaceEntityOnDisplay(anyInt(), eq(expected),
                 anyInt(), anyInt(), eq(record.info));
-    }
-
-    @Test
-    public void testFinishingAfterDestroying() throws Exception {
-        assertFalse(mActivity.finishing);
-        mActivity.setState(DESTROYING, "testFinishingAfterDestroying");
-        assertTrue(mActivity.isState(DESTROYING));
-        assertTrue(mActivity.finishing);
-    }
-
-    @Test
-    public void testFinishingAfterDestroyed() throws Exception {
-        assertFalse(mActivity.finishing);
-        mActivity.setState(DESTROYED, "testFinishingAfterDestroyed");
-        assertTrue(mActivity.isState(DESTROYED));
-        assertTrue(mActivity.finishing);
-    }
-
-    @Test
-    public void testSetInvalidState() throws Exception {
-        mActivity.setState(DESTROYED, "testInvalidState");
-
-        boolean exceptionEncountered = false;
-
-        try {
-            mActivity.setState(FINISHING, "testInvalidState");
-        } catch (IllegalArgumentException e) {
-            exceptionEncountered = true;
-        }
-
-        assertTrue(exceptionEncountered);
     }
 }

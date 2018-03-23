@@ -2938,7 +2938,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 156;
+            private static final int SETTINGS_VERSION = 161;
 
             private final int mUserId;
 
@@ -3584,7 +3584,7 @@ public class SettingsProvider extends ContentProvider {
                 }
 
                 if (currentVersion == 155) {
-                    // Version 155: Set the default value for CHARGING_STARTED_SOUND.
+                    // Version 156: Set the default value for CHARGING_STARTED_SOUND.
                     final SettingsState globalSettings = getGlobalSettingsLocked();
                     final String oldValue = globalSettings.getSettingLocked(
                             Global.CHARGING_STARTED_SOUND).getValue();
@@ -3604,6 +3604,98 @@ public class SettingsProvider extends ContentProvider {
                     currentVersion = 156;
                 }
 
+                if (currentVersion == 156) {
+                    // Version 157: Set a default value for zen duration
+                    final SettingsState globalSettings = getGlobalSettingsLocked();
+                    final Setting currentSetting = globalSettings.getSettingLocked(
+                            Global.ZEN_DURATION);
+                    if (currentSetting.isNull()) {
+                        String defaultZenDuration = Integer.toString(getContext()
+                                .getResources().getInteger(R.integer.def_zen_duration));
+                        globalSettings.insertSettingLocked(
+                                Global.ZEN_DURATION, defaultZenDuration,
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+                    currentVersion = 157;
+                }
+
+                if (currentVersion == 157) {
+                    // Version 158: Set default value for BACKUP_AGENT_TIMEOUT_PARAMETERS.
+                    final SettingsState globalSettings = getGlobalSettingsLocked();
+                    final String oldValue = globalSettings.getSettingLocked(
+                            Settings.Global.BACKUP_AGENT_TIMEOUT_PARAMETERS).getValue();
+                    if (TextUtils.equals(null, oldValue)) {
+                        final String defaultValue = getContext().getResources().getString(
+                                R.string.def_backup_agent_timeout_parameters);
+                        if (!TextUtils.isEmpty(defaultValue)) {
+                            globalSettings.insertSettingLocked(
+                                    Settings.Global.BACKUP_AGENT_TIMEOUT_PARAMETERS, defaultValue,
+                                    null, true,
+                                    SettingsState.SYSTEM_PACKAGE_NAME);
+                        }
+                    }
+                    currentVersion = 158;
+                }
+
+                if (currentVersion == 158) {
+                    // Remove setting that specifies wifi bgscan throttling params
+                    getGlobalSettingsLocked().deleteSettingLocked(
+                        "wifi_scan_background_throttle_interval_ms");
+                    getGlobalSettingsLocked().deleteSettingLocked(
+                        "wifi_scan_background_throttle_package_whitelist");
+                    currentVersion = 159;
+                }
+
+                if (currentVersion == 159) {
+                    // Version 160: Hiding notifications from the lockscreen is only available as
+                    // primary user option, profiles can only make them redacted. If a profile was
+                    // configured to not show lockscreen notifications, ensure that at the very
+                    // least these will be come hidden.
+                    if (mUserManager.isManagedProfile(userId)) {
+                        final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                        Setting showNotifications = secureSettings.getSettingLocked(
+                            Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS);
+                        // The default value is "1", check if user has turned it off.
+                        if ("0".equals(showNotifications.getValue())) {
+                            secureSettings.insertSettingLocked(
+                                Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, "0",
+                                null /* tag */, false /* makeDefault */,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
+                        }
+                        // The setting is no longer valid for managed profiles, it should be
+                        // treated as if it was set to "1".
+                        secureSettings.deleteSettingLocked(Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS);
+                    }
+                    currentVersion = 160;
+                }
+
+                if (currentVersion == 160) {
+                    // Version 161: Set the default value for
+                    // MAX_SOUND_TRIGGER_DETECTION_SERVICE_OPS_PER_DAY and
+                    // SOUND_TRIGGER_DETECTION_SERVICE_OP_TIMEOUT
+                    final SettingsState globalSettings = getGlobalSettingsLocked();
+
+                    String oldValue = globalSettings.getSettingLocked(
+                            Global.MAX_SOUND_TRIGGER_DETECTION_SERVICE_OPS_PER_DAY).getValue();
+                    if (TextUtils.equals(null, oldValue)) {
+                        globalSettings.insertSettingLocked(
+                                Settings.Global.MAX_SOUND_TRIGGER_DETECTION_SERVICE_OPS_PER_DAY,
+                                Integer.toString(getContext().getResources().getInteger(
+                                        R.integer.def_max_sound_trigger_detection_service_ops_per_day)),
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+
+                    oldValue = globalSettings.getSettingLocked(
+                            Global.SOUND_TRIGGER_DETECTION_SERVICE_OP_TIMEOUT).getValue();
+                    if (TextUtils.equals(null, oldValue)) {
+                        globalSettings.insertSettingLocked(
+                                Settings.Global.SOUND_TRIGGER_DETECTION_SERVICE_OP_TIMEOUT,
+                                Integer.toString(getContext().getResources().getInteger(
+                                        R.integer.def_sound_trigger_detection_service_op_timeout)),
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+                    currentVersion = 161;
+                }
 
                 // vXXX: Add new settings above this point.
 

@@ -81,9 +81,14 @@ class SurfaceAnimator {
                 if (anim != mAnimation) {
                     return;
                 }
-                reset(mAnimatable.getPendingTransaction(), true /* destroyLeash */);
-                if (animationFinishedCallback != null) {
-                    animationFinishedCallback.run();
+                final Runnable resetAndInvokeFinish = () -> {
+                    reset(mAnimatable.getPendingTransaction(), true /* destroyLeash */);
+                    if (animationFinishedCallback != null) {
+                        animationFinishedCallback.run();
+                    }
+                };
+                if (!mAnimatable.shouldDeferAnimationFinish(resetAndInvokeFinish)) {
+                    resetAndInvokeFinish.run();
                 }
             }
         };
@@ -313,7 +318,9 @@ class SurfaceAnimator {
      */
     void writeToProto(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
-        proto.write(ANIMATION_ADAPTER, mAnimation != null ? mAnimation.toString() : "null");
+        if (mAnimation != null) {
+            mAnimation.writeToProto(proto, ANIMATION_ADAPTER);
+        }
         if (mLeash != null){
             mLeash.writeToProto(proto, LEASH);
         }
@@ -322,8 +329,18 @@ class SurfaceAnimator {
     }
 
     void dump(PrintWriter pw, String prefix) {
-        pw.print(prefix); pw.print("mAnimation="); pw.print(mAnimation);
-        pw.print(" mLeash="); pw.println(mLeash);
+        pw.print(prefix); pw.print("mLeash="); pw.print(mLeash);
+        if (mAnimationStartDelayed) {
+            pw.print(" mAnimationStartDelayed="); pw.println(mAnimationStartDelayed);
+        } else {
+            pw.println();
+        }
+        pw.print(prefix); pw.println("Animation:");
+        if (mAnimation != null) {
+            mAnimation.dump(pw, prefix + "  ");
+        } else {
+            pw.print(prefix); pw.println("null");
+        }
     }
 
     /**
@@ -395,5 +412,17 @@ class SurfaceAnimator {
          * @return The height of the surface to be animated.
          */
         int getSurfaceHeight();
+
+        /**
+         * Gets called when the animation is about to finish and gives the client the opportunity to
+         * defer finishing the animation, i.e. it keeps the leash around until the client calls
+         * {@link #cancelAnimation}.
+         *
+         * @param endDeferFinishCallback The callback to call when defer finishing should be ended.
+         * @return Whether the client would like to defer the animation finish.
+         */
+        default boolean shouldDeferAnimationFinish(Runnable endDeferFinishCallback) {
+            return false;
+        }
     }
 }

@@ -92,7 +92,6 @@ void OringDurationTracker::noteStart(const HashableDimensionKey& key, bool condi
 
 void OringDurationTracker::noteStop(const HashableDimensionKey& key, const uint64_t timestamp,
                                     const bool stopAll) {
-    declareAnomalyIfAlarmExpired(timestamp);
     VLOG("Oring: %s stop", key.toString().c_str());
     auto it = mStarted.find(key);
     if (it != mStarted.end()) {
@@ -118,12 +117,11 @@ void OringDurationTracker::noteStop(const HashableDimensionKey& key, const uint6
         }
     }
     if (mStarted.empty()) {
-        stopAnomalyAlarm();
+        stopAnomalyAlarm(timestamp);
     }
 }
 
 void OringDurationTracker::noteStopAll(const uint64_t timestamp) {
-    declareAnomalyIfAlarmExpired(timestamp);
     if (!mStarted.empty()) {
         mDuration += (timestamp - mLastStartTime);
         VLOG("Oring Stop all: record duration %lld %lld ", (long long)timestamp - mLastStartTime,
@@ -131,7 +129,7 @@ void OringDurationTracker::noteStopAll(const uint64_t timestamp) {
         detectAndDeclareAnomaly(timestamp, mCurrentBucketNum, mDuration + mDurationFullBucket);
     }
 
-    stopAnomalyAlarm();
+    stopAnomalyAlarm(timestamp);
     mStarted.clear();
     mPaused.clear();
     mConditionKeyMap.clear();
@@ -165,13 +163,12 @@ bool OringDurationTracker::flushCurrentBucket(
         DurationBucket current_info;
         current_info.mBucketStartNs = mCurrentBucketStartTimeNs;
         current_info.mBucketEndNs = currentBucketEndTimeNs;
-        current_info.mBucketNum = mCurrentBucketNum;
         current_info.mDuration = mDuration;
         (*output)[mEventKey].push_back(current_info);
         mDurationFullBucket += mDuration;
         if (eventTimeNs > fullBucketEnd) {
             // End of full bucket, can send to anomaly tracker now.
-            addPastBucketToAnomalyTrackers(mDurationFullBucket, current_info.mBucketNum);
+            addPastBucketToAnomalyTrackers(mDurationFullBucket, mCurrentBucketNum);
             mDurationFullBucket = 0;
         }
         VLOG("  duration: %lld", (long long)current_info.mDuration);
@@ -182,12 +179,11 @@ bool OringDurationTracker::flushCurrentBucket(
             DurationBucket info;
             info.mBucketStartNs = fullBucketEnd + mBucketSizeNs * (i - 1);
             info.mBucketEndNs = info.mBucketStartNs + mBucketSizeNs;
-            info.mBucketNum = mCurrentBucketNum + i;
             info.mDuration = mBucketSizeNs;
             (*output)[mEventKey].push_back(info);
             // Safe to send these buckets to anomaly tracker since they must be full buckets.
             // If it's a partial bucket, numBucketsForward would be 0.
-            addPastBucketToAnomalyTrackers(info.mDuration, info.mBucketNum);
+            addPastBucketToAnomalyTrackers(info.mDuration, mCurrentBucketNum + i);
             VLOG("  add filling bucket with duration %lld", (long long)info.mDuration);
         }
     }
@@ -215,7 +211,6 @@ bool OringDurationTracker::flushIfNeeded(
 }
 
 void OringDurationTracker::onSlicedConditionMayChange(const uint64_t timestamp) {
-    declareAnomalyIfAlarmExpired(timestamp);
     vector<pair<HashableDimensionKey, int>> startedToPaused;
     vector<pair<HashableDimensionKey, int>> pausedToStarted;
     if (!mStarted.empty()) {
@@ -293,12 +288,11 @@ void OringDurationTracker::onSlicedConditionMayChange(const uint64_t timestamp) 
     mPaused.insert(startedToPaused.begin(), startedToPaused.end());
 
     if (mStarted.empty()) {
-        stopAnomalyAlarm();
+        stopAnomalyAlarm(timestamp);
     }
 }
 
 void OringDurationTracker::onConditionChanged(bool condition, const uint64_t timestamp) {
-    declareAnomalyIfAlarmExpired(timestamp);
     if (condition) {
         if (!mPaused.empty()) {
             VLOG("Condition true, all started");
@@ -321,7 +315,7 @@ void OringDurationTracker::onConditionChanged(bool condition, const uint64_t tim
         }
     }
     if (mStarted.empty()) {
-        stopAnomalyAlarm();
+        stopAnomalyAlarm(timestamp);
     }
 }
 
@@ -330,12 +324,16 @@ int64_t OringDurationTracker::predictAnomalyTimestampNs(
     // TODO: Unit-test this and see if it can be done more efficiently (e.g. use int32).
     // All variables below represent durations (not timestamps).
 
+    const int64_t thresholdNs = anomalyTracker.getAnomalyThreshold();
+
     // The time until the current bucket ends. This is how much more 'space' it can hold.
     const int64_t currRemainingBucketSizeNs =
             mBucketSizeNs - (eventTimestampNs - mCurrentBucketStartTimeNs);
-    // TODO: This should never be < 0. Document/guard against possible failures if it is.
-
-    const int64_t thresholdNs = anomalyTracker.getAnomalyThreshold();
+    if (currRemainingBucketSizeNs < 0) {
+        ALOGE("OringDurationTracker currRemainingBucketSizeNs < 0");
+        // This should never happen. Return the safest thing possible given that data is corrupt.
+        return eventTimestampNs + thresholdNs;
+    }
 
     // As we move into the future, old buckets get overwritten (so their old data is erased).
 

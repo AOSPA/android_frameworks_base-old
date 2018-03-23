@@ -35,7 +35,6 @@ import android.content.pm.ParceledListSlice;
 import android.content.pm.ShortcutInfo;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.DisplayMetrics;
@@ -680,11 +679,13 @@ public class AppWidgetManager {
     }
 
     /**
-     * Updates the info for the supplied AppWidget provider.
+     * Updates the info for the supplied AppWidget provider. Apps can use this to change the default
+     * behavior of the widget based on the state of the app (for e.g., if the user is logged in
+     * or not). Calling this API completely replaces the previous definition.
      *
      * <p>
      * The manifest entry of the provider should contain an additional meta-data tag similar to
-     * {@link #META_DATA_APPWIDGET_PROVIDER} which should point to any additional definitions for
+     * {@link #META_DATA_APPWIDGET_PROVIDER} which should point to any alternative definitions for
      * the provider.
      *
      * <p>
@@ -1185,6 +1186,11 @@ public class AppWidgetManager {
      * <p>It's up to the launcher how to handle previous pending requests when the same package
      * calls this API multiple times in a row.  It may ignore the previous requests,
      * for example.
+     *
+     * <p>Launcher will not show the configuration activity associated with the provider in this
+     * case. The app could either show the configuration activity as a response to the callback,
+     * or show if before calling the API (various configurations can be encapsulated in
+     * {@code successCallback} to avoid persisting them before the widgetId is known).
      *
      * @param provider The {@link ComponentName} for the {@link
      *    android.content.BroadcastReceiver BroadcastReceiver} provider for your AppWidget.

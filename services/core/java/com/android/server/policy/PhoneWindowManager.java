@@ -666,6 +666,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final Rect mTmpStableFrame = new Rect();
     static final Rect mTmpNavigationFrame = new Rect();
     static final Rect mTmpOutsetFrame = new Rect();
+    private static final Rect mTmpDisplayCutoutSafeExceptMaybeBarsRect = new Rect();
     private static final Rect mTmpRect = new Rect();
 
     WindowState mTopFullscreenOpaqueWindowState;
@@ -1004,7 +1005,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             resolver.registerContentObserver(Settings.Global.getUriFor(
                     Settings.Global.POLICY_CONTROL), false, this,
                     UserHandle.USER_ALL);
-            resolver.registerContentObserver(Settings.Global.getUriFor(
+            resolver.registerContentObserver(Settings.Secure.getUriFor(
                     Settings.Secure.SYSTEM_NAVIGATION_KEYS_ENABLED), false, this,
                     UserHandle.USER_ALL);
             updateSettings();
@@ -1462,6 +1463,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     + "already in the process of turning the screen on.");
             return;
         }
+        Slog.d(TAG, "powerPress: eventTime=" + eventTime + " interactive=" + interactive
+                + " count=" + count + " beganFromNonInteractive=" + mBeganFromNonInteractive +
+                " mShortPressOnPowerBehavior=" + mShortPressOnPowerBehavior);
 
         if (count == 2) {
             powerMultiPressAction(eventTime, interactive, mDoublePressOnPowerBehavior);
@@ -1761,7 +1765,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     void showGlobalActionsInternal() {
-        sendCloseSystemWindows(SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS);
         if (mGlobalActions == null) {
             mGlobalActions = new GlobalActions(mContext, mWindowManagerFuncs);
         }
@@ -2704,8 +2707,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 attrs.flags &= ~WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH;
                 break;
             case TYPE_DREAM:
-                // Dreams don't have an app window token and can thus not be letterboxed.
-                // Hence always let them extend under the cutout.
+            case TYPE_WALLPAPER:
+                // Dreams and wallpapers don't have an app window token and can thus not be
+                // letterboxed. Hence always let them extend under the cutout.
                 attrs.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
                 break;
             case TYPE_STATUS_BAR:
@@ -3904,6 +3908,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             hideRecentApps(true, false);
         }
 
+        // Handle keyboard layout switching.
+        // TODO: Deprecate this behavior when we fully migrate to IME subtype-based layout rotation.
+        if (down && repeatCount == 0 && keyCode == KeyEvent.KEYCODE_SPACE
+                && ((metaState & KeyEvent.META_CTRL_MASK) != 0)) {
+            int direction = (metaState & KeyEvent.META_SHIFT_MASK) != 0 ? -1 : 1;
+            mWindowManagerFuncs.switchKeyboardLayout(event.getDeviceId(), direction);
+            return -1;
+        }
+
         // Handle input method switching.
         if (down && repeatCount == 0
                 && (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH
@@ -4505,7 +4518,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         displayWidth, displayHeight);
                 outFrame.intersect(taskBounds);
             }
-            outDisplayCutout.set(displayFrames.mDisplayCutout.calculateRelativeTo(outFrame));
+            outDisplayCutout.set(displayFrames.mDisplayCutout.calculateRelativeTo(outFrame)
+                    .getDisplayCutout());
             return mForceShowSystemBars;
         } else {
             if (layoutInScreen) {
@@ -4647,7 +4661,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
             w.computeFrameLw(pf /* parentFrame */, df /* displayFrame */, df /* overlayFrame */,
                     df /* contentFrame */, df /* visibleFrame */, dcf /* decorFrame */,
-                    df /* stableFrame */, df /* outsetFrame */, displayFrames.mDisplayCutout);
+                    df /* stableFrame */, df /* outsetFrame */, displayFrames.mDisplayCutout,
+                    false /* parentFrameWasClippedByDisplayCutout */);
             final Rect frame = w.getFrameLw();
 
             if (frame.left <= 0 && frame.top <= 0) {
@@ -4710,11 +4725,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mStatusBar.computeFrameLw(pf /* parentFrame */, df /* displayFrame */,
                 vf /* overlayFrame */, vf /* contentFrame */, vf /* visibleFrame */,
                 dcf /* decorFrame */, vf /* stableFrame */, vf /* outsetFrame */,
-                displayFrames.mDisplayCutout);
+                displayFrames.mDisplayCutout, false /* parentFrameWasClippedByDisplayCutout */);
 
         // For layout, the status bar is always at the top with our fixed height.
         displayFrames.mStable.top = displayFrames.mUnrestricted.top
                 + mStatusBarHeightForRotation[displayFrames.mRotation];
+
+        // Tell the bar controller where the collapsed status bar content is
+        mTmpRect.set(mStatusBar.getContentFrameLw());
+        mTmpRect.intersect(displayFrames.mDisplayCutoutSafe);
+        mTmpRect.top = mStatusBar.getContentFrameLw().top;  // Ignore top display cutout inset
+        mTmpRect.bottom = displayFrames.mStable.top;  // Use collapsed status bar size
+        mStatusBarController.setContentFrame(mTmpRect);
 
         boolean statusBarTransient = (sysui & View.STATUS_BAR_TRANSIENT) != 0;
         boolean statusBarTranslucent = (sysui
@@ -4771,7 +4793,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // It's a system nav bar or a portrait screen; nav bar goes on bottom.
             final int top = cutoutSafeUnrestricted.bottom
                     - getNavigationBarHeight(rotation, uiMode);
-            mTmpNavigationFrame.set(0, top, displayWidth, cutoutSafeUnrestricted.bottom);
+            mTmpNavigationFrame.set(0, top, displayWidth, displayFrames.mUnrestricted.bottom);
             displayFrames.mStable.bottom = displayFrames.mStableFullscreen.bottom = top;
             if (transientNavBarShowing) {
                 mNavigationBarController.setBarShowingLw(true);
@@ -4794,7 +4816,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // Landscape screen; nav bar goes to the right.
             final int left = cutoutSafeUnrestricted.right
                     - getNavigationBarWidth(rotation, uiMode);
-            mTmpNavigationFrame.set(left, 0, cutoutSafeUnrestricted.right, displayHeight);
+            mTmpNavigationFrame.set(left, 0, displayFrames.mUnrestricted.right, displayHeight);
             displayFrames.mStable.right = displayFrames.mStableFullscreen.right = left;
             if (transientNavBarShowing) {
                 mNavigationBarController.setBarShowingLw(true);
@@ -4817,7 +4839,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // Seascape screen; nav bar goes to the left.
             final int right = cutoutSafeUnrestricted.left
                     + getNavigationBarWidth(rotation, uiMode);
-            mTmpNavigationFrame.set(cutoutSafeUnrestricted.left, 0, right, displayHeight);
+            mTmpNavigationFrame.set(displayFrames.mUnrestricted.left, 0, right, displayHeight);
             displayFrames.mStable.left = displayFrames.mStableFullscreen.left = right;
             if (transientNavBarShowing) {
                 mNavigationBarController.setBarShowingLw(true);
@@ -4846,8 +4868,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mStatusBarLayer = mNavigationBar.getSurfaceLayer();
         // And compute the final frame.
         mNavigationBar.computeFrameLw(mTmpNavigationFrame, mTmpNavigationFrame,
-                mTmpNavigationFrame, mTmpNavigationFrame, mTmpNavigationFrame, dcf,
-                mTmpNavigationFrame, mTmpNavigationFrame, displayFrames.mDisplayCutout);
+                mTmpNavigationFrame, displayFrames.mDisplayCutoutSafe, mTmpNavigationFrame, dcf,
+                mTmpNavigationFrame, displayFrames.mDisplayCutoutSafe,
+                displayFrames.mDisplayCutout, false /* parentFrameWasClippedByDisplayCutout */);
+        mNavigationBarController.setContentFrame(mNavigationBar.getContentFrameLw());
+
         if (DEBUG_LAYOUT) Slog.i(TAG, "mNavigationBar frame: " + mTmpNavigationFrame);
         return mNavigationBarController.checkHiddenLw();
     }
@@ -5005,8 +5030,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             df.set(displayFrames.mDock);
             pf.set(displayFrames.mDock);
             // IM dock windows layout below the nav bar...
-            pf.bottom = df.bottom = of.bottom = Math.min(displayFrames.mUnrestricted.bottom,
-                    displayFrames.mDisplayCutoutSafe.bottom);
+            pf.bottom = df.bottom = of.bottom = displayFrames.mUnrestricted.bottom;
             // ...with content insets above the nav bar
             cf.bottom = vf.bottom = displayFrames.mStable.bottom;
             if (mStatusBar != null && mFocusedWindow == mStatusBar && canReceiveInput(mStatusBar)) {
@@ -5301,33 +5325,56 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         vf.set(cf);
                     }
                 }
-                pf.intersectUnchecked(displayFrames.mDisplayCutoutSafe);
             }
         }
 
+        boolean parentFrameWasClippedByDisplayCutout = false;
         final int cutoutMode = attrs.layoutInDisplayCutoutMode;
         final boolean attachedInParent = attached != null && !layoutInScreen;
+        final boolean requestedHideNavigation =
+                (requestedSysUiFl & View.SYSTEM_UI_FLAG_HIDE_NAVIGATION) != 0;
         // Ensure that windows with a DEFAULT or NEVER display cutout mode are laid out in
         // the cutout safe zone.
         if (cutoutMode != LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS) {
-            final Rect displayCutoutSafeExceptMaybeTop = mTmpRect;
-            displayCutoutSafeExceptMaybeTop.set(displayFrames.mDisplayCutoutSafe);
+            final Rect displayCutoutSafeExceptMaybeBars = mTmpDisplayCutoutSafeExceptMaybeBarsRect;
+            displayCutoutSafeExceptMaybeBars.set(displayFrames.mDisplayCutoutSafe);
             if (layoutInScreen && layoutInsetDecor && !requestedFullscreen
                     && cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT) {
                 // At the top we have the status bar, so apps that are
                 // LAYOUT_IN_SCREEN | LAYOUT_INSET_DECOR but not FULLSCREEN
                 // already expect that there's an inset there and we don't need to exclude
                 // the window from that area.
-                displayCutoutSafeExceptMaybeTop.top = Integer.MIN_VALUE;
+                displayCutoutSafeExceptMaybeBars.top = Integer.MIN_VALUE;
             }
-            // Windows that are attached to a parent and laid out in said parent are already
-            // avoidingthe cutout according to that parent and don't need to be further constrained.
+            if (layoutInScreen && layoutInsetDecor && !requestedHideNavigation
+                    && cutoutMode == LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT) {
+                // Same for the navigation bar.
+                switch (mNavigationBarPosition) {
+                    case NAV_BAR_BOTTOM:
+                        displayCutoutSafeExceptMaybeBars.bottom = Integer.MAX_VALUE;
+                        break;
+                    case NAV_BAR_RIGHT:
+                        displayCutoutSafeExceptMaybeBars.right = Integer.MAX_VALUE;
+                        break;
+                    case NAV_BAR_LEFT:
+                        displayCutoutSafeExceptMaybeBars.left = Integer.MIN_VALUE;
+                        break;
+                }
+            }
+            if (type == TYPE_INPUT_METHOD && mNavigationBarPosition == NAV_BAR_BOTTOM) {
+                // The IME can always extend under the bottom cutout if the navbar is there.
+                displayCutoutSafeExceptMaybeBars.bottom = Integer.MAX_VALUE;
+            }
+            // Windows that are attached to a parent and laid out in said parent already avoid
+            // the cutout according to that parent and don't need to be further constrained.
             if (!attachedInParent) {
-                pf.intersectUnchecked(displayCutoutSafeExceptMaybeTop);
+                mTmpRect.set(pf);
+                pf.intersectUnchecked(displayCutoutSafeExceptMaybeBars);
+                parentFrameWasClippedByDisplayCutout |= !mTmpRect.equals(pf);
             }
-            // Make sure that NO_LIMITS windows clipped to the display don't extend into the display
-            // don't extend under the cutout.
-            df.intersectUnchecked(displayCutoutSafeExceptMaybeTop);
+            // Make sure that NO_LIMITS windows clipped to the display don't extend under the
+            // cutout.
+            df.intersectUnchecked(displayCutoutSafeExceptMaybeBars);
         }
 
         // Content should never appear in the cutout.
@@ -5381,7 +5428,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 + " sf=" + sf.toShortString()
                 + " osf=" + (osf == null ? "null" : osf.toShortString()));
 
-        win.computeFrameLw(pf, df, of, cf, vf, dcf, sf, osf, displayFrames.mDisplayCutout);
+        win.computeFrameLw(pf, df, of, cf, vf, dcf, sf, osf, displayFrames.mDisplayCutout,
+                parentFrameWasClippedByDisplayCutout);
 
         // Dock windows carve out the bottom of the screen, so normal windows
         // can't appear underneath them.
@@ -8015,11 +8063,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             // If the top fullscreen-or-dimming window is also the top fullscreen, respect
             // its light flag.
             vis &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            if (!statusColorWin.isLetterboxedForDisplayCutoutLw()) {
-                // Only allow white status bar if the window was not letterboxed.
-                vis |= PolicyControl.getSystemUiVisibility(statusColorWin, null)
-                        & View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-            }
+            vis |= PolicyControl.getSystemUiVisibility(statusColorWin, null)
+                    & View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
         } else if (statusColorWin != null && statusColorWin.isDimming()) {
             // Otherwise if it's dimming, clear the light flag.
             vis &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
@@ -8087,15 +8132,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return vis;
     }
 
-    private boolean drawsSystemBarBackground(WindowState win) {
-        return win == null || (win.getAttrs().flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0;
-    }
-
-    private boolean forcesDrawStatusBarBackground(WindowState win) {
-        return win == null || (win.getAttrs().privateFlags
-                & PRIVATE_FLAG_FORCE_DRAW_STATUS_BAR_BACKGROUND) != 0;
-    }
-
     private int updateSystemBarsLw(WindowState win, int oldVis, int vis) {
         final boolean dockedStackVisible =
                 mWindowManagerInternal.isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
@@ -8119,13 +8155,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mTopDockedOpaqueWindowState, 0, 0);
 
         final boolean fullscreenDrawsStatusBarBackground =
-                (drawsSystemBarBackground(mTopFullscreenOpaqueWindowState)
-                        && (vis & View.STATUS_BAR_TRANSLUCENT) == 0)
-                || forcesDrawStatusBarBackground(mTopFullscreenOpaqueWindowState);
+                drawsStatusBarBackground(vis, mTopFullscreenOpaqueWindowState);
         final boolean dockedDrawsStatusBarBackground =
-                (drawsSystemBarBackground(mTopDockedOpaqueWindowState)
-                        && (dockedVis & View.STATUS_BAR_TRANSLUCENT) == 0)
-                || forcesDrawStatusBarBackground(mTopDockedOpaqueWindowState);
+                drawsStatusBarBackground(dockedVis, mTopDockedOpaqueWindowState);
 
         // prevent status bar interaction from clearing certain flags
         int type = win.getAttrs().type;
@@ -8226,6 +8258,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mWindowManagerFuncs.getInputMethodWindowLw(), navColorWin);
 
         return vis;
+    }
+
+    private boolean drawsStatusBarBackground(int vis, WindowState win) {
+        if (!mStatusBarController.isTransparentAllowed(win)) {
+            return false;
+        }
+        if (win == null) {
+            return true;
+        }
+
+        final boolean drawsSystemBars =
+                (win.getAttrs().flags & FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS) != 0;
+        final boolean forceDrawsSystemBars =
+                (win.getAttrs().privateFlags & PRIVATE_FLAG_FORCE_DRAW_STATUS_BAR_BACKGROUND) != 0;
+
+        return forceDrawsSystemBars || drawsSystemBars && (vis & View.STATUS_BAR_TRANSLUCENT) == 0;
     }
 
     /**
@@ -8800,5 +8848,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             default:
                 return Integer.toString(behavior);
         }
+    }
+
+    @Override
+    public void onLockTaskStateChangedLw(int lockTaskState) {
+        mImmersiveModeConfirmation.onLockTaskModeChangedLw(lockTaskState);
     }
 }

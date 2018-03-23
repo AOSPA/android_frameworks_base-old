@@ -16,6 +16,8 @@
 
 package android.media;
 
+import static android.media.MediaPlayerBase.PLAYER_STATE_IDLE;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -26,8 +28,8 @@ import android.content.Intent;
 import android.media.MediaPlayerBase.BuffState;
 import android.media.MediaPlayerBase.PlayerEventCallback;
 import android.media.MediaPlayerBase.PlayerState;
-import android.media.MediaSession2.PlaylistParams.RepeatMode;
-import android.media.MediaSession2.PlaylistParams.ShuffleMode;
+import android.media.MediaPlaylistAgent.RepeatMode;
+import android.media.MediaPlaylistAgent.ShuffleMode;
 import android.media.update.ApiLoader;
 import android.media.update.MediaSession2Provider;
 import android.media.update.MediaSession2Provider.BuilderBaseProvider;
@@ -38,7 +40,6 @@ import android.media.update.MediaSession2Provider.ControllerInfoProvider;
 import android.media.update.ProviderCreator;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
 import android.os.IInterface;
 import android.os.ResultReceiver;
 
@@ -61,7 +62,7 @@ import java.util.concurrent.Executor;
  * sessions can be created to provide finer grain controls of media.
  * <p>
  * If you want to support background playback, {@link MediaSessionService2} is preferred
- * instead. With it, your playback can be revived even after you've finished playback. See
+ * instead. With it, your playback can be revived even after playback is finished. See
  * {@link MediaSessionService2} for details.
  * <p>
  * A session can be obtained by {@link Builder}. The owner of the session may pass its session token
@@ -180,16 +181,6 @@ public class MediaSession2 implements AutoCloseable {
     public static final int COMMAND_CODE_PLAYBACK_ADJUST_VOLUME = 11;
 
     /**
-     * Command code for {@link MediaController2#setPlaylistParams(PlaylistParams)}.
-     * <p>
-     * Command would be sent directly to the player if the session doesn't reject the request
-     * through the {@link SessionCallback#onCommandRequest(MediaSession2, ControllerInfo, Command)}.
-     * @hide
-     */
-    // TODO(jaewan): Remove (b/74116823)
-    public static final int COMMAND_CODE_PLAYBACK_SET_PLAYLIST_PARAMS = 12;
-
-    /**
      * Command code for {@link MediaController2#skipToPlaylistItem(MediaItem2)}.
      * <p>
      * Command would be sent directly to the playlist agent if the session doesn't reject the
@@ -254,7 +245,7 @@ public class MediaSession2 implements AutoCloseable {
     public static final int COMMAND_CODE_PLAYLIST_GET_LIST = 18;
 
     /**
-     * Command code for {@link MediaController2#setPlaylist(List, MediaMetadata2).
+     * Command code for {@link MediaController2#setPlaylist(List, MediaMetadata2)}.
      * <p>
      * Command would be sent directly to the playlist agent if the session doesn't reject the
      * request through the
@@ -263,11 +254,8 @@ public class MediaSession2 implements AutoCloseable {
     public static final int COMMAND_CODE_PLAYLIST_SET_LIST = 19;
 
     /**
-     * Command code for {@link MediaController2#getPlaylistMetadata()} ()}. This will expose
+     * Command code for {@link MediaController2#getPlaylistMetadata()}. This will expose
      * metadata information to the controller.
-     * *
-     * Command code for {@link MediaController2#setPlaylist(List, MediaMetadata2)} and
-     * {@link MediaController2#updatePlaylistMetadata(MediaMetadata2)}.
      * <p>
      * Command would be sent directly to the playlist agent if the session doesn't reject the
      * request through the
@@ -315,6 +303,13 @@ public class MediaSession2 implements AutoCloseable {
     public static final int COMMAND_CODE_PREPARE_FROM_SEARCH = 27;
 
     /**
+     * Command code for {@link MediaController2#setRating(String, Rating2)}.
+     * @hide
+     */
+    // TODO(jaewan): Unhide
+    public static final int COMMAND_CODE_SET_RATING = 29;
+
+    /**
      * Command code for {@link MediaBrowser2} specific functions that allows navigation and search
      * from the {@link MediaLibraryService2}. This would be ignored for a {@link MediaSession2},
      * not {@link android.media.MediaLibraryService2.MediaLibrarySession}.
@@ -322,11 +317,6 @@ public class MediaSession2 implements AutoCloseable {
      * @see MediaBrowser2
      */
     public static final int COMMAND_CODE_BROWSER = 28;
-
-    /**
-     * @hide
-     */
-    public static final int COMMAND_CODE_MAX = 28;
 
     /**
      * @hide
@@ -453,6 +443,13 @@ public class MediaSession2 implements AutoCloseable {
                     .createMediaSession2Command(this, COMMAND_CODE_CUSTOM, action, extras);
         }
 
+        /**
+         * @hide
+         */
+        public CommandProvider getProvider() {
+            return mProvider;
+        }
+
         public int getCommandCode() {
             return mProvider.getCommandCode_impl();
         }
@@ -509,6 +506,13 @@ public class MediaSession2 implements AutoCloseable {
         public CommandGroup(@NonNull Context context, @Nullable CommandGroup others) {
             mProvider = ApiLoader.getProvider(context)
                     .createMediaSession2CommandGroup(context, this, others);
+        }
+
+        /**
+         * @hide
+         */
+        public CommandGroup(@NonNull CommandGroupProvider provider) {
+            mProvider = provider;
         }
 
         public void addCommand(@NonNull Command command) {
@@ -623,7 +627,6 @@ public class MediaSession2 implements AutoCloseable {
          * @see #COMMAND_CODE_PLAYBACK_REWIND
          * @see #COMMAND_CODE_PLAYBACK_SEEK_TO
          * @see #COMMAND_CODE_PLAYLIST_SKIP_TO_PLAYLIST_ITEM
-         * @see #COMMAND_CODE_PLAYBACK_SET_PLAYLIST_PARAMS
          * @see #COMMAND_CODE_PLAYLIST_ADD_ITEM
          * @see #COMMAND_CODE_PLAYLIST_REMOVE_ITEM
          * @see #COMMAND_CODE_PLAYLIST_GET_LIST
@@ -827,7 +830,11 @@ public class MediaSession2 implements AutoCloseable {
                 @NonNull MediaPlayerBase player, @NonNull MediaItem2 item, @BuffState int state) { }
 
         /**
-         * Called when a playlist is changed.
+         * Called when a playlist is changed from the {@link MediaPlaylistAgent}.
+         * <p>
+         * This is called when the underlying agent has called
+         * {@link MediaPlaylistAgent.PlaylistEventCallback#onPlaylistChanged(MediaPlaylistAgent,
+         * List, MediaMetadata2)}.
          *
          * @param session the session for this event
          * @param playlistAgent playlist agent for this event
@@ -1216,134 +1223,6 @@ public class MediaSession2 implements AutoCloseable {
     }
 
     /**
-     * Parameter for the playlist.
-     * @hide
-     */
-    // TODO(jaewan): Remove (b/74116823)
-    public final static class PlaylistParams {
-        /**
-         * @hide
-         */
-        @IntDef({REPEAT_MODE_NONE, REPEAT_MODE_ONE, REPEAT_MODE_ALL,
-                REPEAT_MODE_GROUP})
-        @Retention(RetentionPolicy.SOURCE)
-        public @interface RepeatMode {}
-
-        /**
-         * Playback will be stopped at the end of the playing media list.
-         */
-        public static final int REPEAT_MODE_NONE = 0;
-
-        /**
-         * Playback of the current playing media item will be repeated.
-         */
-        public static final int REPEAT_MODE_ONE = 1;
-
-        /**
-         * Playing media list will be repeated.
-         */
-        public static final int REPEAT_MODE_ALL = 2;
-
-        /**
-         * Playback of the playing media group will be repeated.
-         * A group is a logical block of media items which is specified in the section 5.7 of the
-         * Bluetooth AVRCP 1.6.
-         */
-        public static final int REPEAT_MODE_GROUP = 3;
-
-        /**
-         * @hide
-         */
-        @IntDef({SHUFFLE_MODE_NONE, SHUFFLE_MODE_ALL, SHUFFLE_MODE_GROUP})
-        @Retention(RetentionPolicy.SOURCE)
-        public @interface ShuffleMode {}
-
-        /**
-         * Media list will be played in order.
-         */
-        public static final int SHUFFLE_MODE_NONE = 0;
-
-        /**
-         * Media list will be played in shuffled order.
-         */
-        public static final int SHUFFLE_MODE_ALL = 1;
-
-        /**
-         * Media group will be played in shuffled order.
-         * A group is a logical block of media items which is specified in the section 5.7 of the
-         * Bluetooth AVRCP 1.6.
-         */
-        public static final int SHUFFLE_MODE_GROUP = 2;
-
-
-        private final MediaSession2Provider.PlaylistParamsProvider mProvider;
-
-        /**
-         * Instantiate {@link PlaylistParams}
-         *
-         * @param context context
-         * @param repeatMode repeat mode
-         * @param shuffleMode shuffle mode
-         * @param playlistMetadata metadata for the list
-         */
-        public PlaylistParams(@NonNull Context context, @RepeatMode int repeatMode,
-                @ShuffleMode int shuffleMode, @Nullable MediaMetadata2 playlistMetadata) {
-            mProvider = ApiLoader.getProvider(context).createMediaSession2PlaylistParams(
-                    context, this, repeatMode, shuffleMode, playlistMetadata);
-        }
-
-        /**
-         * Create a new bundle for this object.
-         *
-         * @return
-         */
-        public @NonNull Bundle toBundle() {
-            return mProvider.toBundle_impl();
-        }
-
-        /**
-         * Create a new playlist params from the bundle that was previously returned by
-         * {@link #toBundle}.
-         *
-         * @param context context
-         * @return a new playlist params. Can be {@code null} for error.
-         */
-        public static @Nullable PlaylistParams fromBundle(
-                @NonNull Context context, @Nullable Bundle bundle) {
-            return ApiLoader.getProvider(context).fromBundle_PlaylistParams(context, bundle);
-        }
-
-        /**
-         * Get repeat mode
-         *
-         * @return repeat mode
-         * @see #REPEAT_MODE_NONE, #REPEAT_MODE_ONE, #REPEAT_MODE_ALL, #REPEAT_MODE_GROUP
-         */
-        public @RepeatMode int getRepeatMode() {
-            return mProvider.getRepeatMode_impl();
-        }
-
-        /**
-         * Get shuffle mode
-         *
-         * @return shuffle mode
-         * @see #SHUFFLE_MODE_NONE, #SHUFFLE_MODE_ALL, #SHUFFLE_MODE_GROUP
-         */
-        public @ShuffleMode int getShuffleMode() {
-            return mProvider.getShuffleMode_impl();
-        }
-
-        /**
-         * Get metadata for the playlist
-         *
-         * @return metadata. Can be {@code null}
-         */
-        public @Nullable MediaMetadata2 getPlaylistMetadata() {
-            return mProvider.getPlaylistMetadata_impl();
-        }
-    }
-
-    /**
      * Constructor is hidden and apps can only instantiate indirectly through {@link Builder}.
      * <p>
      * This intended behavior and here's the reasons.
@@ -1539,14 +1418,14 @@ public class MediaSession2 implements AutoCloseable {
     }
 
     /**
-     * Start fast forwarding. If playback is already fast forwarding this may increase the rate.
+     * Fast forwards playback. If playback is already fast forwarding this may increase the rate.
      */
     public void fastForward() {
         mProvider.fastForward_impl();
     }
 
     /**
-     * Start rewinding. If playback is already rewinding this may increase the rate.
+     * Rewinds playback. If playback is already rewinding this may increase the rate.
      */
     public void rewind() {
         mProvider.rewind_impl();
@@ -1576,29 +1455,6 @@ public class MediaSession2 implements AutoCloseable {
     }
 
     /**
-     * Sets the {@link PlaylistParams} for the current play list. Repeat/shuffle mode and metadata
-     * for the list can be set by calling this method.
-     *
-     * @param params A {@link PlaylistParams} object to set.
-     * @throws IllegalArgumentException if given {@param param} is null.
-     * @hide
-     */
-    // TODO(jaewan): Remove (b/74116823)
-    public void setPlaylistParams(PlaylistParams params) {
-        mProvider.setPlaylistParams_impl(params);
-    }
-
-    /**
-     * Returns the {@link PlaylistParams} for the current play list.
-     * Returns {@code null} if not set.
-     * @hide
-     */
-    // TODO(jaewan): Remove (b/74116823)
-    public PlaylistParams getPlaylistParams() {
-        return mProvider.getPlaylistParams_impl();
-    }
-
-    /**
      * Notify errors to the connected controllers
      *
      * @param errorCode error code
@@ -1609,42 +1465,37 @@ public class MediaSession2 implements AutoCloseable {
     }
 
     /**
-     * Register {@link PlayerEventCallback} to listen changes in the underlying
-     * {@link MediaPlayerBase}, regardless of the change in the underlying player.
-     * <p>
-     * Registered callbacks will be also called when the underlying player is changed.
+     * Gets the current player state.
      *
-     * @param executor a callback Executor
-     * @param callback a EventCallback
-     * @throws IllegalArgumentException if executor or callback is {@code null}.
+     * @return the current player state
      * @hide
      */
-    // TODO(jaewan): Remove (b/74157064)
-    public void registerPlayerEventCallback(@NonNull @CallbackExecutor Executor executor,
-            @NonNull PlayerEventCallback callback) {
-        mProvider.registerPlayerEventCallback_impl(executor, callback);
+    // TODO(jaewan): Unhide (b/74578458)
+    public @PlayerState int getPlayerState() {
+        return mProvider.getPlayerState_impl();
     }
 
     /**
-     * Unregister the previously registered {@link PlayerEventCallback}.
+     * Gets the current position.
      *
-     * @param callback the callback to be removed
-     * @throws IllegalArgumentException if the callback is {@code null}.
+     * @return the current playback position in ms, or {@link MediaPlayerBase#UNKNOWN_TIME} if
+     *         unknown.
      * @hide
      */
-    // TODO(jaewan): Remove (b/74157064)
-    public void unregisterPlayerEventCallback(@NonNull PlayerEventCallback callback) {
-        mProvider.unregisterPlayerEventCallback_impl(callback);
+    // TODO(jaewan): Unhide (b/74578458)
+    public long getPosition() {
+        return mProvider.getPosition_impl();
     }
 
     /**
-     * Return the {@link PlaybackState2} from the player.
+     * Gets the buffered position, or {@link MediaPlayerBase#UNKNOWN_TIME} if unknown.
      *
-     * @return playback state
+     * @return the buffered position in ms, or {@link MediaPlayerBase#UNKNOWN_TIME}.
      * @hide
      */
-    public PlaybackState2 getPlaybackState() {
-        return mProvider.getPlaybackState_impl();
+    // TODO(jaewan): Unhide (b/74578458)
+    public long getBufferedPosition() {
+        return mProvider.getBufferedPosition_impl();
     }
 
     /**
@@ -1681,7 +1532,7 @@ public class MediaSession2 implements AutoCloseable {
      * <p>
      * If it's not set, playback wouldn't happen for the item without data source descriptor.
      * <p>
-     * The helper will be run on the executor that you've specified by the
+     * The helper will be run on the executor that was specified by
      * {@link Builder#setSessionCallback(Executor, SessionCallback)}.
      *
      * @param helper a data source missing helper.
@@ -1705,68 +1556,99 @@ public class MediaSession2 implements AutoCloseable {
     }
 
     /**
-     * Return the playlist which is lastly set.
+     * Returns the playlist from the {@link MediaPlaylistAgent}.
+     * <p>
+     * This list may differ with the list that was specified with
+     * {@link #setPlaylist(List, MediaMetadata2)} depending on the {@link MediaPlaylistAgent}
+     * implementation. Use media items returned here for other playlist agent APIs such as
+     * {@link MediaPlaylistAgent#skipToPlaylistItem(MediaItem2)}.
      *
      * @return playlist
+     * @see MediaPlaylistAgent#getPlaylist()
+     * @see SessionCallback#onPlaylistChanged(
+     *          MediaSession2, MediaPlaylistAgent, List, MediaMetadata2)
      */
     public List<MediaItem2> getPlaylist() {
         return mProvider.getPlaylist_impl();
     }
 
     /**
-     * Set a list of {@link MediaItem2} as the current play list.
-     *
-     * @param playlist A list of {@link MediaItem2} objects to set as a play list.
-     * @throws IllegalArgumentException if given {@param playlist} is null.
-     * @hide
-     */
-    // TODO(jaewan): Remove
-    public void setPlaylist(@NonNull List<MediaItem2> playlist) {
-        mProvider.setPlaylist_impl(playlist);
-    }
-
-    /**
-     * Set a list of {@link MediaItem2} as the current play list. Ensure uniqueness in the
-     * {@link MediaItem2} in the playlist so session can uniquely identity individual items.
+     * Sets a list of {@link MediaItem2} to the {@link MediaPlaylistAgent}. Ensure uniqueness of
+     * each {@link MediaItem2} in the playlist so the session can uniquely identity individual
+     * items.
      * <p>
-     * You may specify a {@link MediaItem2} without {@link DataSourceDesc}. However, in that case,
-     * you should set {@link OnDataSourceMissingHelper} for player to prepare.
+     * This may be an asynchronous call, and {@link MediaPlaylistAgent} may keep the copy of the
+     * list. Wait for {@link SessionCallback#onPlaylistChanged(MediaSession2, MediaPlaylistAgent,
+     * List, MediaMetadata2)} to know the operation finishes.
+     * <p>
+     * You may specify a {@link MediaItem2} without {@link DataSourceDesc}. In that case,
+     * {@link MediaPlaylistAgent} has responsibility to dynamically query {@link DataSourceDesc}
+     * when such media item is ready for preparation or play. Default implementation needs
+     * {@link OnDataSourceMissingHelper} for such case.
      *
      * @param list A list of {@link MediaItem2} objects to set as a play list.
-     * @throws IllegalArgumentException if given list is {@code null}, or has duplicated media item.
+     * @throws IllegalArgumentException if given list is {@code null}, or has duplicated media
+     * items.
+     * @see MediaPlaylistAgent#setPlaylist(List, MediaMetadata2)
+     * @see SessionCallback#onPlaylistChanged(
+     *          MediaSession2, MediaPlaylistAgent, List, MediaMetadata2)
      * @see #setOnDataSourceMissingHelper
      */
     public void setPlaylist(@NonNull List<MediaItem2> list, @Nullable MediaMetadata2 metadata) {
-        // TODO(jaewan): Handle metadata here (b/74174649)
-        // TODO(jaewan): Handle list change (b/74326040)
+        mProvider.setPlaylist_impl(list, metadata);
     }
 
     /**
-     * Skip to the item in the play list.
+     * Skips to the item in the playlist.
+     * <p>
+     * This calls {@link MediaPlaylistAgent#skipToPlaylistItem(MediaItem2)} and the behavior depends
+     * on the playlist agent implementation, especially with the shuffle/repeat mode.
      *
-     * @param item item in the play list you want to play
-     * @throws IllegalArgumentException if the play list is null
-     * @throws NullPointerException if index is outside play list range
+     * @param item The item in the playlist you want to play
+     * @see #getShuffleMode()
+     * @see #getRepeatMode()
      */
     public void skipToPlaylistItem(@NonNull MediaItem2 item) {
         mProvider.skipToPlaylistItem_impl(item);
     }
 
+    /**
+     * Skips to the previous item.
+     * <p>
+     * This calls {@link MediaPlaylistAgent#skipToPreviousItem()} and the behavior depends on the
+     * playlist agent implementation, especially with the shuffle/repeat mode.
+     *
+     * @see #getShuffleMode()
+     * @see #getRepeatMode()
+     **/
     public void skipToPreviousItem() {
         mProvider.skipToPreviousItem_impl();
     }
 
+    /**
+     * Skips to the next item.
+     * <p>
+     * This calls {@link MediaPlaylistAgent#skipToNextItem()} and the behavior depends on the
+     * playlist agent implementation, especially with the shuffle/repeat mode.
+     *
+     * @see #getShuffleMode()
+     * @see #getRepeatMode()
+     */
     public void skipToNextItem() {
         mProvider.skipToNextItem_impl();
     }
 
+    /**
+     * Gets the playlist metadata from the {@link MediaPlaylistAgent}.
+     *
+     * @return the playlist metadata
+     */
     public MediaMetadata2 getPlaylistMetadata() {
-        // TODO(jaewan): Implement (b/74174649)
-        return null;
+        return mProvider.getPlaylistMetadata_impl();
     }
 
     /**
-     * Add the media item to the play list at position index.
+     * Adds the media item to the playlist at position index.
      * <p>
      * This will not change the currently playing media item.
      * If index is less than or equal to the current index of the play list,
@@ -1774,26 +1656,25 @@ public class MediaSession2 implements AutoCloseable {
      *
      * @param index the index you want to add
      * @param item the media item you want to add
-     * @throws IndexOutOfBoundsException if index is outside play list range
      */
     public void addPlaylistItem(int index, @NonNull MediaItem2 item) {
         mProvider.addPlaylistItem_impl(index, item);
     }
 
     /**
-     * Remove the media item in the play list.
+     * Removes the media item in the playlist.
      * <p>
      * If the item is the currently playing item of the playlist, current playback
      * will be stopped and playback moves to next source in the list.
      *
-     * @throws IllegalArgumentException if the play list is null
+     * @param item the media item you want to add
      */
     public void removePlaylistItem(@NonNull MediaItem2 item) {
         mProvider.removePlaylistItem_impl(item);
     }
 
     /**
-     * Replace the media item at index in the playlist. This can be also used to update metadata of
+     * Replaces the media item at index in the playlist. This can be also used to update metadata of
      * an item.
      *
      * @param index the index of the item to replace
@@ -1813,25 +1694,62 @@ public class MediaSession2 implements AutoCloseable {
         return mProvider.getCurrentPlaylistItem_impl();
     }
 
+    /**
+     * Updates the playlist metadata to the {@link MediaPlaylistAgent}.
+     *
+     * @param metadata metadata of the playlist
+     */
     public void updatePlaylistMetadata(@Nullable MediaMetadata2 metadata) {
-        // TODO(jaewan): Implement (b/74174649)
+        mProvider.updatePlaylistMetadata_impl(metadata);
     }
 
+    /**
+     * Gets the repeat mode from the {@link MediaPlaylistAgent}.
+     *
+     * @return repeat mode
+     * @see MediaPlaylistAgent#REPEAT_MODE_NONE
+     * @see MediaPlaylistAgent#REPEAT_MODE_ONE
+     * @see MediaPlaylistAgent#REPEAT_MODE_ALL
+     * @see MediaPlaylistAgent#REPEAT_MODE_GROUP
+     */
     public @RepeatMode int getRepeatMode() {
-        // TODO(jaewan): Implement (b/74118768)
-        return 0;
+        return mProvider.getRepeatMode_impl();
     }
 
+    /**
+     * Sets the repeat mode to the {@link MediaPlaylistAgent}.
+     *
+     * @param repeatMode repeat mode
+     * @see MediaPlaylistAgent#REPEAT_MODE_NONE
+     * @see MediaPlaylistAgent#REPEAT_MODE_ONE
+     * @see MediaPlaylistAgent#REPEAT_MODE_ALL
+     * @see MediaPlaylistAgent#REPEAT_MODE_GROUP
+     */
     public void setRepeatMode(@RepeatMode int repeatMode) {
-        // TODO(jaewan): Implement (b/74118768)
+        mProvider.setRepeatMode_impl(repeatMode);
     }
 
+    /**
+     * Gets the shuffle mode from the {@link MediaPlaylistAgent}.
+     *
+     * @return The shuffle mode
+     * @see MediaPlaylistAgent#SHUFFLE_MODE_NONE
+     * @see MediaPlaylistAgent#SHUFFLE_MODE_ALL
+     * @see MediaPlaylistAgent#SHUFFLE_MODE_GROUP
+     */
     public @ShuffleMode int getShuffleMode() {
-        // TODO(jaewan): Implement (b/74118768)
-        return 0;
+        return mProvider.getShuffleMode_impl();
     }
 
+    /**
+     * Sets the shuffle mode to the {@link MediaPlaylistAgent}.
+     *
+     * @param shuffleMode The shuffle mode
+     * @see MediaPlaylistAgent#SHUFFLE_MODE_NONE
+     * @see MediaPlaylistAgent#SHUFFLE_MODE_ALL
+     * @see MediaPlaylistAgent#SHUFFLE_MODE_GROUP
+     */
     public void setShuffleMode(@ShuffleMode int shuffleMode) {
-        // TODO(jaewan): Implement (b/74118768)
+        mProvider.setShuffleMode_impl(shuffleMode);
     }
 }

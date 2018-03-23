@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static com.android.systemui.ScreenDecorations.DisplayCutoutView.boundsFromDirection;
+
 import android.annotation.ColorInt;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -24,8 +26,10 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
+import android.util.Pair;
 import android.util.TypedValue;
 import android.view.DisplayCutout;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
@@ -209,6 +213,7 @@ public class KeyguardStatusBarView extends RelativeLayout
 
     @Override
     public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        mLayoutState = LAYOUT_NONE;
         if (updateLayoutConsideringCutout()) {
             requestLayout();
         }
@@ -217,10 +222,21 @@ public class KeyguardStatusBarView extends RelativeLayout
 
     private boolean updateLayoutConsideringCutout() {
         DisplayCutout dc = getRootWindowInsets().getDisplayCutout();
-        if (dc == null) {
+        Pair<Integer, Integer> cornerCutoutMargins =
+                PhoneStatusBarView.cornerCutoutMargins(dc, getDisplay());
+        updateCornerCutoutPadding(cornerCutoutMargins);
+        if (dc == null || cornerCutoutMargins != null) {
             return updateLayoutParamsNoCutout();
         } else {
             return updateLayoutParamsForCutout(dc);
+        }
+    }
+
+    private void updateCornerCutoutPadding(Pair<Integer, Integer> cornerCutoutMargins) {
+        if (cornerCutoutMargins != null) {
+            setPadding(cornerCutoutMargins.first, 0, cornerCutoutMargins.second, 0);
+        } else {
+            setPadding(0, 0, 0, 0);
         }
     }
 
@@ -258,10 +274,13 @@ public class KeyguardStatusBarView extends RelativeLayout
             updateLayoutParamsNoCutout();
         }
 
+        Rect bounds = new Rect();
+        boundsFromDirection(dc, Gravity.TOP, bounds);
+
         mCutoutSpace.setVisibility(View.VISIBLE);
         RelativeLayout.LayoutParams lp = (LayoutParams) mCutoutSpace.getLayoutParams();
-        lp.width = dc.getBoundingRect().width();
-        lp.height = dc.getBoundingRect().height();
+        lp.width = bounds.width();
+        lp.height = bounds.height();
         lp.addRule(RelativeLayout.CENTER_IN_PARENT);
 
         lp = (LayoutParams) mCarrierLabel.getLayoutParams();

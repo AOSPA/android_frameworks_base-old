@@ -1407,6 +1407,15 @@ public final class AutofillManager {
         return client;
     }
 
+    /**
+     * Check if autofill ui is showing, must be called on UI thread.
+     * @hide
+     */
+    public boolean isAutofillUiShowing() {
+        final AutofillClient client = mContext.getAutofillClient();
+        return client != null && client.autofillClientIsFillUiShowing();
+    }
+
     /** @hide */
     public void onAuthenticationResult(int authenticationId, Intent data, View focusView) {
         if (!hasAutofillFeature()) {
@@ -2531,6 +2540,10 @@ public final class AutofillManager {
             ArraySet<AutofillId> updatedVisibleTrackedIds = null;
             ArraySet<AutofillId> updatedInvisibleTrackedIds = null;
             if (client != null) {
+                if (sVerbose) {
+                    Log.v(TAG, "onVisibleForAutofillChangedLocked(): inv= " + mInvisibleTrackedIds
+                            + " vis=" + mVisibleTrackedIds);
+                }
                 if (mInvisibleTrackedIds != null) {
                     final ArrayList<AutofillId> orderedInvisibleIds =
                             new ArrayList<>(mInvisibleTrackedIds);

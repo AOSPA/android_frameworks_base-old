@@ -17,7 +17,6 @@
 package android.media.update;
 
 import android.media.MediaItem2;
-import android.media.PlaybackState2;
 
 /**
  * @hide
@@ -35,5 +34,8 @@ public interface TransportControlProvider {
     void seekTo_impl(long pos);
     void skipToPlaylistItem_impl(MediaItem2 item);
 
-    PlaybackState2 getPlaybackState_impl();
+    int getRepeatMode_impl();
+    void setRepeatMode_impl(int repeatMode);
+    int getShuffleMode_impl();
+    void setShuffleMode_impl(int shuffleMode);
 }

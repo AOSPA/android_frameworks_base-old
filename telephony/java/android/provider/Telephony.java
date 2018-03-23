@@ -3212,8 +3212,8 @@ public final class Telephony {
             values.put(RIL_VOICE_RADIO_TECHNOLOGY, state.getRilVoiceRadioTechnology());
             values.put(RIL_DATA_RADIO_TECHNOLOGY, state.getRilDataRadioTechnology());
             values.put(CSS_INDICATOR, state.getCssIndicator());
-            values.put(NETWORK_ID, state.getNetworkId());
-            values.put(SYSTEM_ID, state.getSystemId());
+            values.put(NETWORK_ID, state.getCdmaNetworkId());
+            values.put(SYSTEM_ID, state.getCdmaSystemId());
             values.put(CDMA_ROAMING_INDICATOR, state.getCdmaRoamingIndicator());
             values.put(CDMA_DEFAULT_ROAMING_INDICATOR, state.getCdmaDefaultRoamingIndicator());
             values.put(CDMA_ERI_ICON_INDEX, state.getCdmaEriIconIndex());
@@ -3343,13 +3343,13 @@ public final class Telephony {
         public static final String CSS_INDICATOR = "css_indicator";
 
         /**
-         * This is the same as {@link ServiceState#getNetworkId()}.
+         * This is the same as {@link ServiceState#getCdmaNetworkId()}.
          * @hide
          */
         public static final String NETWORK_ID = "network_id";
 
         /**
-         * This is the same as {@link ServiceState#getSystemId()}.
+         * This is the same as {@link ServiceState#getCdmaSystemId()}.
          * @hide
          */
         public static final String SYSTEM_ID = "system_id";
@@ -3427,7 +3427,7 @@ public final class Telephony {
          * on the given subscriptionId
          * <p>
          * Use this {@link Uri} with a {@link ContentObserver} to be notified of changes to the
-         * carrier identity {@link TelephonyManager#getAndroidCarrierIdForSubscription()}
+         * carrier identity {@link TelephonyManager#getSimCarrierId()}
          * while your app is running. You can also use a {@link JobService} to ensure your app
          * is notified of changes to the {@link Uri} even when it is not running.
          * Note, however, that using a {@link JobService} does not guarantee timely delivery of
@@ -3443,14 +3443,14 @@ public final class Telephony {
 
         /**
          * A user facing carrier name.
-         * @see TelephonyManager#getAndroidCarrierNameForSubscription()
+         * @see TelephonyManager#getSimCarrierIdName()
          * <P>Type: TEXT </P>
          */
         public static final String CARRIER_NAME = "carrier_name";
 
         /**
          * A unique carrier id
-         * @see TelephonyManager#getAndroidCarrierIdForSubscription()
+         * @see TelephonyManager#getSimCarrierId()
          * <P>Type: INTEGER </P>
          */
         public static final String CARRIER_ID = "carrier_id";

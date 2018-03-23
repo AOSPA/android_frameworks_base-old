@@ -461,6 +461,11 @@ public final class Bitmap implements Parcelable {
          *
          * This configuration may be useful when using opaque bitmaps
          * that do not require high color fidelity.
+         *
+         * <p>Use this formula to pack into 16 bits:</p>
+         * <pre class="prettyprint">
+         * short color = (R & 0x1f) << 11 | (G & 0x3f) << 5 | (B & 0x1f);
+         * </pre>
          */
         RGB_565     (3),
 
@@ -493,6 +498,11 @@ public final class Bitmap implements Parcelable {
          *
          * This configuration is very flexible and offers the best
          * quality. It should be used whenever possible.
+         *
+         * <p>Use this formula to pack into 32 bits:</p>
+         * <pre class="prettyprint">
+         * int color = (A & 0xff) << 24 | (B & 0xff) << 16 | (G & 0xff) << 8 | (R & 0xff);
+         * </pre>
          */
         ARGB_8888   (5),
 
@@ -503,6 +513,11 @@ public final class Bitmap implements Parcelable {
          *
          * This configuration is particularly suited for wide-gamut and
          * HDR content.
+         *
+         * <p>Use this formula to pack into 64 bits:</p>
+         * <pre class="prettyprint">
+         * long color = (A & 0xffff) << 48 | (B & 0xffff) << 32 | (G & 0xffff) << 16 | (R & 0xffff);
+         * </pre>
          */
         RGBA_F16    (6),
 
@@ -1654,6 +1669,8 @@ public final class Bitmap implements Parcelable {
         if (mColorSpace == null) {
             if (nativeIsSRGB(mNativePtr)) {
                 mColorSpace = ColorSpace.get(ColorSpace.Named.SRGB);
+            } else if (getConfig() == Config.HARDWARE && nativeIsSRGBLinear(mNativePtr)) {
+                mColorSpace = ColorSpace.get(ColorSpace.Named.LINEAR_EXTENDED_SRGB);
             } else {
                 float[] xyz = new float[9];
                 float[] params = new float[7];
@@ -2077,5 +2094,6 @@ public final class Bitmap implements Parcelable {
     private static native GraphicBuffer nativeCreateGraphicBufferHandle(long nativeBitmap);
     private static native boolean nativeGetColorSpace(long nativePtr, float[] xyz, float[] params);
     private static native boolean nativeIsSRGB(long nativePtr);
+    private static native boolean nativeIsSRGBLinear(long nativePtr);
     private static native void nativeCopyColorSpace(long srcBitmap, long dstBitmap);
 }

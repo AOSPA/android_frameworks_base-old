@@ -6546,7 +6546,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             } finally {
                 // Set it to already called so it's not called twice when called by
                 // performClickInternal()
-                mPrivateFlags |= ~PFLAG_NOTIFY_AUTOFILL_MANAGER_ON_CLICK;
+                mPrivateFlags &= ~PFLAG_NOTIFY_AUTOFILL_MANAGER_ON_CLICK;
             }
         }
     }
@@ -8910,7 +8910,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 if (node != null) {
                     return node.isVisibleToUser();
                 }
+                // if node is null, assume it's not visible anymore
+            } else {
+                Log.w(VIEW_LOG_TAG, "isVisibleToUserForAutofill(" + virtualId + "): no provider");
             }
+            return false;
         }
         return true;
     }

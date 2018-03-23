@@ -83,7 +83,6 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.MemoryIntArray;
-import android.util.StatsLog;
 import android.view.textservice.TextServicesManager;
 
 import com.android.internal.annotations.GuardedBy;
@@ -1715,6 +1714,34 @@ public final class Settings {
     })
     public @interface ResetMode{}
 
+
+    /**
+     * User has not started setup personalization.
+     * @hide
+     */
+    public static final int USER_SETUP_PERSONALIZATION_NOT_STARTED = 0;
+
+    /**
+     * User has not yet completed setup personalization.
+     * @hide
+     */
+    public static final int USER_SETUP_PERSONALIZATION_STARTED = 1;
+
+    /**
+     * User has completed setup personalization.
+     * @hide
+     */
+    public static final int USER_SETUP_PERSONALIZATION_COMPLETE = 10;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+            USER_SETUP_PERSONALIZATION_NOT_STARTED,
+            USER_SETUP_PERSONALIZATION_STARTED,
+            USER_SETUP_PERSONALIZATION_COMPLETE
+    })
+    public @interface UserSetupPersonalization {}
+
     /**
      * Activity Extra: Number of certificates
      * <p>
@@ -1914,11 +1941,7 @@ public final class Settings {
                     arg.putBoolean(CALL_METHOD_MAKE_DEFAULT_KEY, true);
                 }
                 IContentProvider cp = mProviderHolder.getProvider(cr);
-                String prevValue = getStringForUser(cr, name, userHandle);
                 cp.call(cr.getPackageName(), mCallSetCommand, name, arg);
-                String newValue = getStringForUser(cr, name, userHandle);
-                StatsLog.write(StatsLog.SETTING_CHANGED, name, value, newValue, prevValue, tag,
-                        makeDefault, userHandle);
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't set key " + name + " in " + mUri, e);
                 return false;
@@ -3727,7 +3750,7 @@ public final class Settings {
         public static final Validator SOUND_EFFECTS_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
-         * Whether the haptic feedback (long presses, ...) are enabled. The value is
+         * Whether haptic feedback (Vibrate on tap) is enabled. The value is
          * boolean (1 or 0).
          */
         public static final String HAPTIC_FEEDBACK_ENABLED = "haptic_feedback_enabled";
@@ -5439,6 +5462,15 @@ public final class Settings {
          */
         @TestApi
         public static final String USER_SETUP_COMPLETE = "user_setup_complete";
+
+        /**
+         * The current state of device personalization.
+         *
+         * @hide
+         * @see UserSetupPersonalization
+         */
+        public static final String USER_SETUP_PERSONALIZATION_STATE =
+                "user_setup_personalization_state";
 
         /**
          * Whether the current user has been set up via setup wizard (0 = false, 1 = true)
@@ -8753,21 +8785,6 @@ public final class Settings {
             "location_background_throttle_package_whitelist";
 
         /**
-         * The interval in milliseconds at which wifi scan requests will be throttled when they are
-         * coming from the background.
-         * @hide
-         */
-        public static final String WIFI_SCAN_BACKGROUND_THROTTLE_INTERVAL_MS =
-                "wifi_scan_background_throttle_interval_ms";
-
-        /**
-         * Packages that are whitelisted to be exempt for wifi background throttling.
-         * @hide
-         */
-        public static final String WIFI_SCAN_BACKGROUND_THROTTLE_PACKAGE_WHITELIST =
-                "wifi_scan_background_throttle_package_whitelist";
-
-        /**
         * Whether TV will switch to MHL port when a mobile device is plugged in.
         * (0 = false, 1 = true)
         * @hide
@@ -9518,6 +9535,12 @@ public final class Settings {
          */
         public static final String BLE_SCAN_LOW_LATENCY_INTERVAL_MS =
                 "ble_scan_low_latency_interval_ms";
+
+        /**
+         * The mode that BLE scanning clients will be moved to when in the background.
+         * @hide
+         */
+        public static final String BLE_SCAN_BACKGROUND_MODE = "ble_scan_background_mode";
 
        /**
         * Used to save the Wifi_ON state prior to tethering.
@@ -10271,31 +10294,6 @@ public final class Settings {
                 "battery_saver_device_specific_constants";
 
         /**
-         * Battery anomaly detection specific settings
-         * This is encoded as a key=value list, separated by commas.
-         * wakeup_blacklisted_tags is a string, encoded as a set of tags, encoded via
-         * {@link Uri#encode(String)}, separated by colons. Ex:
-         *
-         * "anomaly_detection_enabled=true,wakelock_threshold=2000,wakeup_alarm_enabled=true,"
-         * "wakeup_alarm_threshold=10,wakeup_blacklisted_tags=tag1:tag2:with%2Ccomma:with%3Acolon"
-         *
-         * The following keys are supported:
-         *
-         * <pre>
-         * anomaly_detection_enabled       (boolean)
-         * wakelock_enabled                (boolean)
-         * wakelock_threshold              (long)
-         * wakeup_alarm_enabled            (boolean)
-         * wakeup_alarm_threshold          (long)
-         * wakeup_blacklisted_tags         (string)
-         * bluetooth_scan_enabled          (boolean)
-         * bluetooth_scan_threshold        (long)
-         * </pre>
-         * @hide
-         */
-        public static final String ANOMALY_DETECTION_CONSTANTS = "anomaly_detection_constants";
-
-        /**
          * Battery tip specific settings
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -10322,6 +10320,31 @@ public final class Settings {
          * @hide
          */
         public static final String BATTERY_TIP_CONSTANTS = "battery_tip_constants";
+
+        /**
+         * Battery anomaly detection specific settings
+         * This is encoded as a key=value list, separated by commas.
+         * wakeup_blacklisted_tags is a string, encoded as a set of tags, encoded via
+         * {@link Uri#encode(String)}, separated by colons. Ex:
+         *
+         * "anomaly_detection_enabled=true,wakelock_threshold=2000,wakeup_alarm_enabled=true,"
+         * "wakeup_alarm_threshold=10,wakeup_blacklisted_tags=tag1:tag2:with%2Ccomma:with%3Acolon"
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * anomaly_detection_enabled       (boolean)
+         * wakelock_enabled                (boolean)
+         * wakelock_threshold              (long)
+         * wakeup_alarm_enabled            (boolean)
+         * wakeup_alarm_threshold          (long)
+         * wakeup_blacklisted_tags         (string)
+         * bluetooth_scan_enabled          (boolean)
+         * bluetooth_scan_threshold        (long)
+         * </pre>
+         * @hide
+         */
+        public static final String ANOMALY_DETECTION_CONSTANTS = "anomaly_detection_constants";
 
         /**
          * An integer to show the version of the anomaly config. Ex: 1, which means
@@ -10376,6 +10399,17 @@ public final class Settings {
         * @hide
         */
         public static final String SYS_UIDCPUPOWER = "sys_uidcpupower";
+
+        /**
+        * traced global setting. This controls weather the deamons: traced and
+        * traced_probes run. This links the sys.traced system property.
+        * The following values are supported:
+        * 0 -> traced and traced_probes are disabled
+        * 1 -> traced and traced_probes are enabled
+        * Any other value defaults to disabled.
+        * @hide
+        */
+        public static final String SYS_TRACED = "sys_traced";
 
         /**
          * An integer to reduce the FPS by this factor. Only for experiments. Need to reboot the
@@ -10598,7 +10632,7 @@ public final class Settings {
          * Default: 1
          * @hide
          */
-        public static final java.lang.String APP_STANDBY_ENABLED = "app_standby_enabled";
+        public static final String APP_STANDBY_ENABLED = "app_standby_enabled";
 
         /**
          * Whether or not app auto restriction is enabled. When it is enabled, settings app will
@@ -10609,7 +10643,7 @@ public final class Settings {
          *
          * @hide
          */
-        public static final java.lang.String APP_AUTO_RESTRICTION_ENABLED =
+        public static final String APP_AUTO_RESTRICTION_ENABLED =
                 "app_auto_restriction_enabled";
 
         private static final Validator APP_AUTO_RESTRICTION_ENABLED_VALIDATOR =
@@ -10659,13 +10693,21 @@ public final class Settings {
                 = "wifi_on_when_proxy_disconnected";
 
         /**
-         * Whether or not to enable Time Only Mode for watch type devices.
-         * Type: int (0 for false, 1 for true)
-         * Default: 0
+         * Time Only Mode specific settings.
+         * This is encoded as a key=value list, separated by commas. Ex: "foo=1,bar=true"
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * enabled                  (boolean)
+         * disable_tilt_to_wake     (boolean)
+         * disable_touch_to_wake    (boolean)
+         * </pre>
+         * Type: string
          * @hide
          */
-        public static final String TIME_ONLY_MODE_ENABLED
-                = "time_only_mode_enabled";
+        public static final String TIME_ONLY_MODE_CONSTANTS
+                = "time_only_mode_constants";
 
         /**
          * Whether or not Network Watchlist feature is enabled.
@@ -11195,6 +11237,20 @@ public final class Settings {
         public static final String ZEN_MODE_CONFIG_ETAG = "zen_mode_config_etag";
 
         /**
+         * If 0, turning on dnd manually will last indefinitely.
+         * Else if non-negative, turning on dnd manually will last for this many minutes.
+         * Else (if negative), turning on dnd manually will surface a dialog that prompts
+         * user to specify a duration.
+         * @hide
+         */
+        public static final String ZEN_DURATION = "zen_duration";
+
+        private static final Validator ZEN_DURATION_VALIDATOR = ANY_INTEGER_VALIDATOR;
+
+        /** @hide */ public static final int ZEN_DURATION_PROMPT = -1;
+        /** @hide */ public static final int ZEN_DURATION_FOREVER = 0;
+
+        /**
          * Defines global heads up toggle.  One of HEADS_UP_OFF, HEADS_UP_ON.
          *
          * @hide
@@ -11510,7 +11566,14 @@ public final class Settings {
 
         /**
          * The packages whitelisted to be run in autofill compatibility mode. The list
-         * of packages is ":" colon delimited.
+         * of packages is {@code ":"} colon delimited, and each entry has the name of the
+         * package and an optional list of url bar resource ids (the list is delimited by
+         * brackets&mdash{@code [} and {@code ]}&mdash and is also comma delimited).
+         *
+         * <p>For example, a list with 3 packages {@code p1}, {@code p2}, and {@code p3}, where
+         * package {@code p1} have one id ({@code url_bar}, {@code p2} has none, and {@code p3 }
+         * have 2 ids {@code url_foo} and {@code url_bas}) would be
+         * {@code p1[url_bar]:p2:p3[url_foo,url_bas]}
          *
          * @hide
          */
@@ -11527,6 +11590,24 @@ public final class Settings {
         @TestApi
         public static final String HIDDEN_API_BLACKLIST_EXEMPTIONS =
                 "hidden_api_blacklist_exemptions";
+
+        /**
+         * Timeout for a single {@link android.media.soundtrigger.SoundTriggerDetectionService}
+         * operation (in ms).
+         *
+         * @hide
+         */
+        public static final String SOUND_TRIGGER_DETECTION_SERVICE_OP_TIMEOUT =
+                "sound_trigger_detection_service_op_timeout";
+
+        /**
+         * Maximum number of {@link android.media.soundtrigger.SoundTriggerDetectionService}
+         * operations per day.
+         *
+         * @hide
+         */
+        public static final String MAX_SOUND_TRIGGER_DETECTION_SERVICE_OPS_PER_DAY =
+                "max_sound_trigger_detection_service_ops_per_day";
 
         /**
          * Settings to backup. This is here so that it's in the same place as the settings
@@ -11568,7 +11649,8 @@ public final class Settings {
             BLUETOOTH_ON,
             PRIVATE_DNS_MODE,
             PRIVATE_DNS_SPECIFIER,
-            SOFT_AP_TIMEOUT_ENABLED
+            SOFT_AP_TIMEOUT_ENABLED,
+            ZEN_DURATION,
         };
 
         /**
@@ -11609,6 +11691,7 @@ public final class Settings {
             VALIDATORS.put(WIFI_CARRIER_NETWORKS_AVAILABLE_NOTIFICATION_ON,
                     WIFI_CARRIER_NETWORKS_AVAILABLE_NOTIFICATION_ON_VALIDATOR);
             VALIDATORS.put(APP_AUTO_RESTRICTION_ENABLED, APP_AUTO_RESTRICTION_ENABLED_VALIDATOR);
+            VALIDATORS.put(ZEN_DURATION, ZEN_DURATION_VALIDATOR);
         }
 
         /**
@@ -12262,6 +12345,16 @@ public final class Settings {
                 "zram_enabled";
 
         /**
+         * Whether we have enable CPU frequency scaling for this device.
+         * For Wear, default is disable.
+         *
+         * The value is "1" for enable, "0" for disable.
+         * @hide
+         */
+        public static final String CPU_SCALING_ENABLED =
+                "cpu_frequency_scaling_enabled";
+
+        /**
          * Configuration flags for smart replies in notifications.
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -12304,6 +12397,28 @@ public final class Settings {
          * @hide
          */
         public static final String SHOW_ZEN_UPGRADE_NOTIFICATION = "show_zen_upgrade_notification";
+
+        /**
+         * Backup and restore agent timeout parameters.
+         * These parameters are represented by a comma-delimited key-value list.
+         *
+         * The following strings are supported as keys:
+         * <pre>
+         *     kv_backup_agent_timeout_millis         (long)
+         *     full_backup_agent_timeout_millis       (long)
+         *     shared_backup_agent_timeout_millis     (long)
+         *     restore_agent_timeout_millis           (long)
+         *     restore_agent_finished_timeout_millis  (long)
+         * </pre>
+         *
+         * They map to milliseconds represented as longs.
+         *
+         * Ex: "kv_backup_agent_timeout_millis=30000,full_backup_agent_timeout_millis=300000"
+         *
+         * @hide
+         */
+        public static final String BACKUP_AGENT_TIMEOUT_PARAMETERS =
+                "backup_agent_timeout_parameters";
     }
 
     /**
