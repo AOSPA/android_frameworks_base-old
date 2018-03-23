@@ -96,6 +96,9 @@ public class RecentsOnboarding {
         public void onTaskStackChanged() {
             ActivityManager.RunningTaskInfo info = ActivityManagerWrapper.getInstance()
                     .getRunningTask(ACTIVITY_TYPE_UNDEFINED /* ignoreActivityType */);
+            if (info == null) {
+                return;
+            }
             if (mBlacklistedPackages.contains(info.baseActivity.getPackageName())) {
                 hide(true);
                 return;
@@ -189,7 +192,7 @@ public class RecentsOnboarding {
         }
     }
 
-    public void onRecentsAnimationStarted() {
+    public void onQuickStepStarted() {
         boolean alreadySeenRecentsOnboarding = Prefs.getBoolean(mContext,
                 Prefs.Key.HAS_SEEN_RECENTS_ONBOARDING, false);
         if (!alreadySeenRecentsOnboarding) {

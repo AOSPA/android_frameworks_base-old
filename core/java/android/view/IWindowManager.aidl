@@ -181,9 +181,10 @@ interface IWindowManager
     void setStrictModeVisualIndicatorPreference(String enabled);
 
     /**
-     * Set whether screen capture is disabled for all windows of a specific user
+     * Set whether screen capture is disabled for all windows of a specific user from
+     * the device policy cache.
      */
-    void setScreenCaptureDisabled(int userId, boolean disabled);
+    void refreshScreenCaptureDisabled(int userId);
 
     // These can only be called with the SET_ORIENTATION permission.
     /**
@@ -283,7 +284,12 @@ interface IWindowManager
      */
     oneway void setPipVisibility(boolean visible);
 
-   /**
+    /**
+     * Called by System UI to notify of changes to the visibility and height of the shelf.
+     */
+    void setShelfHeight(boolean visible, int shelfHeight);
+
+    /**
      * Called by System UI to enable or disable haptic feedback on the navigation bar buttons.
      */
     void setNavBarVirtualKeyHapticFeedbackEnabled(boolean enabled);
@@ -294,8 +300,8 @@ interface IWindowManager
     boolean hasNavigationBar();
 
     /**
-    * Get the position of the nav bar
-    */
+     * Get the position of the nav bar
+     */
     int getNavBarPosition();
 
     /**
@@ -422,4 +428,14 @@ interface IWindowManager
      * on the next user activity.
      */
     void requestUserActivityNotification();
+
+    /**
+     * Notify WindowManager that it should not override the info in DisplayManager for the specified
+     * display. This can disable letter- or pillar-boxing applied in DisplayManager when the metrics
+     * of the logical display reported from WindowManager do not correspond to the metrics of the
+     * physical display it is based on.
+     *
+     * @param displayId The id of the display.
+     */
+    void dontOverrideDisplayInfo(int displayId);
 }

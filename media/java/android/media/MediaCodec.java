@@ -1602,7 +1602,9 @@ final public class MediaCodec {
     private EventHandler mCallbackHandler;
     private Callback mCallback;
     private OnFrameRenderedListener mOnFrameRenderedListener;
-    private Object mListenerLock = new Object();
+    private final Object mListenerLock = new Object();
+    private MediaCodecInfo mCodecInfo;
+    private final Object mCodecInfoLock = new Object();
 
     private static final int EVENT_CALLBACK = 1;
     private static final int EVENT_SET_CALLBACK = 2;
@@ -3469,8 +3471,24 @@ final public class MediaCodec {
      */
     @NonNull
     public MediaCodecInfo getCodecInfo() {
-        return MediaCodecList.getInfoFor(getName());
+        // Get the codec name first. If the codec is already released,
+        // IllegalStateException will be thrown here.
+        String name = getName();
+        synchronized (mCodecInfoLock) {
+            if (mCodecInfo == null) {
+                // Get the codec info for this codec itself first. Only initialize
+                // the full codec list if this somehow fails because it can be slow.
+                mCodecInfo = getOwnCodecInfo();
+                if (mCodecInfo == null) {
+                    mCodecInfo = MediaCodecList.getInfoFor(name);
+                }
+            }
+            return mCodecInfo;
+        }
     }
+
+    @NonNull
+    private native final MediaCodecInfo getOwnCodecInfo();
 
     @NonNull
     private native final ByteBuffer[] getBuffers(boolean input);
@@ -3510,6 +3528,8 @@ final public class MediaCodec {
 
         private final static int TYPE_YUV = 1;
 
+        private final int mTransform = 0; //Default no transform
+
         @Override
         public int getFormat() {
             throwISEIfImageIsInvalid();
@@ -3526,6 +3546,12 @@ final public class MediaCodec {
         public int getWidth() {
             throwISEIfImageIsInvalid();
             return mWidth;
+        }
+
+        @Override
+        public int getTransform() {
+            throwISEIfImageIsInvalid();
+            return mTransform;
         }
 
         @Override

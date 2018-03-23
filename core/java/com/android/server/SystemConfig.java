@@ -22,6 +22,7 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.pm.FeatureInfo;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Environment;
 import android.os.Process;
 import android.os.storage.StorageManager;
@@ -276,16 +277,20 @@ public class SystemConfig {
         readPermissions(Environment.buildPath(
                 Environment.getRootDirectory(), "etc", "permissions"), ALLOW_ALL);
 
-        // Allow Vendor to customize system configs around libs, features, permissions and apps
-        int vendorPermissionFlag = ALLOW_LIBS | ALLOW_FEATURES | ALLOW_PERMISSIONS |
-                ALLOW_APP_CONFIGS | ALLOW_PRIVAPP_PERMISSIONS;
+        // Vendors are only allowed to customze libs, features and privapp permissions
+        int vendorPermissionFlag = ALLOW_LIBS | ALLOW_FEATURES | ALLOW_PRIVAPP_PERMISSIONS;
+        if (Build.VERSION.FIRST_SDK_INT <= Build.VERSION_CODES.O_MR1) {
+            // For backward compatibility
+            vendorPermissionFlag |= (ALLOW_PERMISSIONS | ALLOW_APP_CONFIGS);
+        }
         readPermissions(Environment.buildPath(
                 Environment.getVendorDirectory(), "etc", "sysconfig"), vendorPermissionFlag);
         readPermissions(Environment.buildPath(
                 Environment.getVendorDirectory(), "etc", "permissions"), vendorPermissionFlag);
 
-        // Allow ODM to customize system configs around libs, features and apps
-        int odmPermissionFlag = ALLOW_LIBS | ALLOW_FEATURES | ALLOW_APP_CONFIGS;
+        // Allow ODM to customize system configs as much as Vendor, because /odm is another
+        // vendor partition other than /vendor.
+        int odmPermissionFlag = vendorPermissionFlag;
         readPermissions(Environment.buildPath(
                 Environment.getOdmDirectory(), "etc", "sysconfig"), odmPermissionFlag);
         readPermissions(Environment.buildPath(
@@ -631,7 +636,9 @@ public class SystemConfig {
                     // granting permissions to priv apps in the system partition and vice
                     // versa.
                     boolean vendor = permFile.toPath().startsWith(
-                            Environment.getVendorDirectory().toPath());
+                            Environment.getVendorDirectory().toPath())
+                            || permFile.toPath().startsWith(
+                                Environment.getOdmDirectory().toPath());
                     boolean product = permFile.toPath().startsWith(
                             Environment.getProductDirectory().toPath());
                     if (vendor) {
@@ -656,6 +663,8 @@ public class SystemConfig {
                     }
                     XmlUtils.skipCurrentTag(parser);
                 } else {
+                    Slog.w(TAG, "Tag " + name + " is unknown or not allowed in "
+                            + permFile.getParent());
                     XmlUtils.skipCurrentTag(parser);
                     continue;
                 }

@@ -29,6 +29,8 @@ public class RecentsAnimationControllerCompat {
 
     private IRecentsAnimationController mAnimationController;
 
+    public RecentsAnimationControllerCompat() { }
+
     public RecentsAnimationControllerCompat(IRecentsAnimationController animationController) {
         mAnimationController = animationController;
     }
@@ -48,6 +50,14 @@ public class RecentsAnimationControllerCompat {
             mAnimationController.setInputConsumerEnabled(enabled);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to set input consumer enabled state", e);
+        }
+    }
+
+    public void setAnimationTargetsBehindSystemBars(boolean behindSystemBars) {
+        try {
+            mAnimationController.setAnimationTargetsBehindSystemBars(behindSystemBars);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Failed to set whether animation targets are behind system bars", e);
         }
     }
 

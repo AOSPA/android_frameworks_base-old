@@ -20,6 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.pm.ParceledListSlice;
 import android.os.RemoteException;
@@ -32,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Provides access to device usage history and statistics. Usage data is aggregated into
@@ -105,25 +107,35 @@ public final class UsageStatsManager {
     public static final int STANDBY_BUCKET_EXEMPTED = 5;
 
     /**
-     * The app was used very recently, currently in use or likely to be used very soon.
+     * The app was used very recently, currently in use or likely to be used very soon. Standby
+     * bucket values that are &le; {@link #STANDBY_BUCKET_ACTIVE} will not be throttled by the
+     * system while they are in this bucket. Buckets &gt; {@link #STANDBY_BUCKET_ACTIVE} will most
+     * likely be restricted in some way. For instance, jobs and alarms may be deferred.
      * @see #getAppStandbyBucket()
      */
     public static final int STANDBY_BUCKET_ACTIVE = 10;
 
     /**
-     * The app was used recently and/or likely to be used in the next few hours.
+     * The app was used recently and/or likely to be used in the next few hours. Restrictions will
+     * apply to these apps, such as deferral of jobs and alarms.
      * @see #getAppStandbyBucket()
      */
     public static final int STANDBY_BUCKET_WORKING_SET = 20;
 
     /**
      * The app was used in the last few days and/or likely to be used in the next few days.
+     * Restrictions will apply to these apps, such as deferral of jobs and alarms. The delays may be
+     * greater than for apps in higher buckets (lower bucket value). Bucket values &gt;
+     * {@link #STANDBY_BUCKET_FREQUENT} may additionally have network access limited.
      * @see #getAppStandbyBucket()
      */
     public static final int STANDBY_BUCKET_FREQUENT = 30;
 
     /**
      * The app has not be used for several days and/or is unlikely to be used for several days.
+     * Apps in this bucket will have the most restrictions, including network restrictions, except
+     * during certain short periods (at a minimum, once a day) when they are allowed to execute
+     * jobs, access the network, etc.
      * @see #getAppStandbyBucket()
      */
     public static final int STANDBY_BUCKET_RARE = 40;
@@ -178,6 +190,31 @@ public final class UsageStatsManager {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface StandbyBuckets {}
+
+    /**
+     * Observer id of the registered observer for the group of packages that reached the usage
+     * time limit. Included as an extra in the PendingIntent that was registered.
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_OBSERVER_ID = "android.app.usage.extra.OBSERVER_ID";
+
+    /**
+     * Original time limit in milliseconds specified by the registered observer for the group of
+     * packages that reached the usage time limit. Included as an extra in the PendingIntent that
+     * was registered.
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_TIME_LIMIT = "android.app.usage.extra.TIME_LIMIT";
+
+    /**
+     * Actual usage time in milliseconds for the group of packages that reached the specified time
+     * limit. Included as an extra in the PendingIntent that was registered.
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_TIME_USED = "android.app.usage.extra.TIME_USED";
 
     private static final UsageEvents sEmptyResults = new UsageEvents();
 
@@ -366,11 +403,19 @@ public final class UsageStatsManager {
     /**
      * Returns the current standby bucket of the calling app. The system determines the standby
      * state of the app based on app usage patterns. Standby buckets determine how much an app will
-     * be restricted from running background tasks such as jobs, alarms and certain PendingIntent
-     * callbacks.
+     * be restricted from running background tasks such as jobs and alarms.
      * <p>Restrictions increase progressively from {@link #STANDBY_BUCKET_ACTIVE} to
      * {@link #STANDBY_BUCKET_RARE}, with {@link #STANDBY_BUCKET_ACTIVE} being the least
      * restrictive. The battery level of the device might also affect the restrictions.
+     * <p>Apps in buckets &le; {@link #STANDBY_BUCKET_ACTIVE} have no standby restrictions imposed.
+     * Apps in buckets &gt; {@link #STANDBY_BUCKET_FREQUENT} may have network access restricted when
+     * running in the background.
+     * <p>The standby state of an app can change at any time either due to a user interaction or a
+     * system interaction or some algorithm determining that the app can be restricted for a period
+     * of time before the user has a need for it.
+     * <p>You can also query the recent history of standby bucket changes by calling
+     * {@link #queryEventsForSelf(long, long)} and searching for
+     * {@link UsageEvents.Event#STANDBY_BUCKET_CHANGED}.
      *
      * @return the current standby bucket of the calling app. One of STANDBY_BUCKET_* constants.
      */
@@ -466,6 +511,53 @@ public final class UsageStatsManager {
         final ParceledListSlice<AppStandbyInfo> slice = new ParceledListSlice<>(bucketInfoList);
         try {
             mService.setAppStandbyBuckets(slice, mContext.getUserId());
+        } catch (RemoteException e) {
+        }
+    }
+
+    /**
+     * @hide
+     * Register an app usage limit observer that receives a callback on the provided intent when
+     * the sum of usages of apps in the packages array exceeds the timeLimit specified. The
+     * observer will automatically be unregistered when the time limit is reached and the intent
+     * is delivered.
+     * @param observerId A unique id associated with the group of apps to be monitored. There can
+     *                  be multiple groups with common packages and different time limits.
+     * @param packages The list of packages to observe for foreground activity time. Must include
+     *                 at least one package.
+     * @param timeLimit The total time the set of apps can be in the foreground before the
+     *                  callbackIntent is delivered. Must be greater than 0.
+     * @param timeUnit The unit for time specified in timeLimit.
+     * @param callbackIntent The PendingIntent that will be dispatched when the time limit is
+     *                       exceeded by the group of apps. The delivered Intent will also contain
+     *                       the extras {@link #EXTRA_OBSERVER_ID}, {@link #EXTRA_TIME_LIMIT} and
+     *                       {@link #EXTRA_TIME_USED}.
+     * @throws SecurityException if the caller doesn't have the PACKAGE_USAGE_STATS permission.
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS)
+    public void registerAppUsageObserver(int observerId, String[] packages, long timeLimit,
+            TimeUnit timeUnit, PendingIntent callbackIntent) {
+        try {
+            mService.registerAppUsageObserver(observerId, packages, timeUnit.toMillis(timeLimit),
+                    callbackIntent, mContext.getOpPackageName());
+        } catch (RemoteException e) {
+        }
+    }
+
+    /**
+     * @hide
+     * Unregister the app usage observer specified by the observerId. This will only apply to any
+     * observer registered by this application. Unregistering an observer that was already
+     * unregistered or never registered will have no effect.
+     * @param observerId The id of the observer that was previously registered.
+     * @throws SecurityException if the caller doesn't have the PACKAGE_USAGE_STATS permission.
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.PACKAGE_USAGE_STATS)
+    public void unregisterAppUsageObserver(int observerId) {
+        try {
+            mService.unregisterAppUsageObserver(observerId, mContext.getOpPackageName());
         } catch (RemoteException e) {
         }
     }

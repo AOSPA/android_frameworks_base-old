@@ -176,6 +176,7 @@ import android.content.pm.PackageParser.PackageLite;
 import android.content.pm.PackageParser.PackageParserException;
 import android.content.pm.PackageParser.ParseFlags;
 import android.content.pm.PackageParser.ServiceIntentInfo;
+import android.content.pm.PackageParser.SigningDetails;
 import android.content.pm.PackageParser.SigningDetails.SignatureSchemeVersion;
 import android.content.pm.PackageStats;
 import android.content.pm.PackageUserState;
@@ -2593,7 +2594,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     | SCAN_AS_PRIVILEGED,
                     0);
 
-            // Collected privileged system packages.
+            // Collect privileged system packages.
             final File privilegedAppDir = new File(Environment.getRootDirectory(), "priv-app");
             scanDirTracedLI(privilegedAppDir,
                     mDefParseFlags
@@ -2612,7 +2613,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     | SCAN_AS_SYSTEM,
                     0);
 
-            // Collected privileged vendor packages.
+            // Collect privileged vendor packages.
             File privilegedVendorAppDir = new File(Environment.getVendorDirectory(), "priv-app");
             try {
                 privilegedVendorAppDir = privilegedVendorAppDir.getCanonicalFile();
@@ -2636,6 +2637,40 @@ public class PackageManagerService extends IPackageManager.Stub
                 // failed to look up canonical path, continue with original one
             }
             scanDirTracedLI(vendorAppDir,
+                    mDefParseFlags
+                    | PackageParser.PARSE_IS_SYSTEM_DIR,
+                    scanFlags
+                    | SCAN_AS_SYSTEM
+                    | SCAN_AS_VENDOR,
+                    0);
+
+            // Collect privileged odm packages. /odm is another vendor partition
+            // other than /vendor.
+            File privilegedOdmAppDir = new File(Environment.getOdmDirectory(),
+                        "priv-app");
+            try {
+                privilegedOdmAppDir = privilegedOdmAppDir.getCanonicalFile();
+            } catch (IOException e) {
+                // failed to look up canonical path, continue with original one
+            }
+            scanDirTracedLI(privilegedOdmAppDir,
+                    mDefParseFlags
+                    | PackageParser.PARSE_IS_SYSTEM_DIR,
+                    scanFlags
+                    | SCAN_AS_SYSTEM
+                    | SCAN_AS_VENDOR
+                    | SCAN_AS_PRIVILEGED,
+                    0);
+
+            // Collect ordinary odm packages. /odm is another vendor partition
+            // other than /vendor.
+            File odmAppDir = new File(Environment.getOdmDirectory(), "app");
+            try {
+                odmAppDir = odmAppDir.getCanonicalFile();
+            } catch (IOException e) {
+                // failed to look up canonical path, continue with original one
+            }
+            scanDirTracedLI(odmAppDir,
                     mDefParseFlags
                     | PackageParser.PARSE_IS_SYSTEM_DIR,
                     scanFlags
@@ -2867,7 +2902,8 @@ public class PackageManagerService extends IPackageManager.Stub
                             rescanFlags =
                                     scanFlags
                                     | SCAN_AS_SYSTEM;
-                        } else if (FileUtils.contains(privilegedVendorAppDir, scanFile)) {
+                        } else if (FileUtils.contains(privilegedVendorAppDir, scanFile)
+                                || FileUtils.contains(privilegedOdmAppDir, scanFile)) {
                             reparseFlags =
                                     mDefParseFlags |
                                     PackageParser.PARSE_IS_SYSTEM_DIR;
@@ -2876,7 +2912,8 @@ public class PackageManagerService extends IPackageManager.Stub
                                     | SCAN_AS_SYSTEM
                                     | SCAN_AS_VENDOR
                                     | SCAN_AS_PRIVILEGED;
-                        } else if (FileUtils.contains(vendorAppDir, scanFile)) {
+                        } else if (FileUtils.contains(vendorAppDir, scanFile)
+                                || FileUtils.contains(odmAppDir, scanFile)) {
                             reparseFlags =
                                     mDefParseFlags |
                                     PackageParser.PARSE_IS_SYSTEM_DIR;
@@ -4074,14 +4111,24 @@ public class PackageManagerService extends IPackageManager.Stub
             @Nullable ComponentName component, @ComponentType int type) {
         if (type == TYPE_ACTIVITY) {
             final PackageParser.Activity activity = mActivities.mActivities.get(component);
-            return activity != null
-                    ? (activity.info.flags & ActivityInfo.FLAG_VISIBLE_TO_INSTANT_APP) != 0
-                    : false;
+            if (activity == null) {
+                return false;
+            }
+            final boolean visibleToInstantApp =
+                    (activity.info.flags & ActivityInfo.FLAG_VISIBLE_TO_INSTANT_APP) != 0;
+            final boolean explicitlyVisibleToInstantApp =
+                    (activity.info.flags & ActivityInfo.FLAG_IMPLICITLY_VISIBLE_TO_INSTANT_APP) == 0;
+            return visibleToInstantApp && explicitlyVisibleToInstantApp;
         } else if (type == TYPE_RECEIVER) {
             final PackageParser.Activity activity = mReceivers.mActivities.get(component);
-            return activity != null
-                    ? (activity.info.flags & ActivityInfo.FLAG_VISIBLE_TO_INSTANT_APP) != 0
-                    : false;
+            if (activity == null) {
+                return false;
+            }
+            final boolean visibleToInstantApp =
+                    (activity.info.flags & ActivityInfo.FLAG_VISIBLE_TO_INSTANT_APP) != 0;
+            final boolean explicitlyVisibleToInstantApp =
+                    (activity.info.flags & ActivityInfo.FLAG_IMPLICITLY_VISIBLE_TO_INSTANT_APP) == 0;
+            return visibleToInstantApp && !explicitlyVisibleToInstantApp;
         } else if (type == TYPE_SERVICE) {
             final PackageParser.Service service = mServices.mServices.get(component);
             return service != null
@@ -4126,6 +4173,10 @@ public class PackageManagerService extends IPackageManager.Stub
             return false;
         }
         if (callerIsInstantApp) {
+            // both caller and target are both instant, but, different applications, filter
+            if (ps.getInstantApp(userId)) {
+                return true;
+            }
             // request for a specific component; if it hasn't been explicitly exposed through
             // property or instrumentation target, filter
             if (component != null) {
@@ -4138,7 +4189,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 return !isComponentVisibleToInstantApp(component, componentType);
             }
             // request for application; if no components have been explicitly exposed, filter
-            return ps.getInstantApp(userId) || !ps.pkg.visibleToInstantApps;
+            return !ps.pkg.visibleToInstantApps;
         }
         if (ps.getInstantApp(userId)) {
             // caller can see all components of all instant applications, don't filter
@@ -8672,6 +8723,7 @@ public class PackageManagerService extends IPackageManager.Stub
                             disabledPkgSetting /* pkgSetting */, null /* disabledPkgSetting */,
                             null /* originalPkgSetting */, null, parseFlags, scanFlags,
                             (pkg == mPlatformPackage), user);
+                    applyPolicy(pkg, parseFlags, scanFlags);
                     scanPackageOnlyLI(request, mFactoryTest, -1L);
                 }
             }
@@ -9961,6 +10013,10 @@ public class PackageManagerService extends IPackageManager.Stub
         return scanFlags;
     }
 
+    // TODO: scanPackageNewLI() and scanPackageOnly() should be merged. But, first, commiting
+    // the results / removing app data needs to be moved up a level to the callers of this
+    // method. Also, we need to solve the problem of potentially creating a new shared user
+    // setting. That can probably be done later and patch things up after the fact.
     @GuardedBy("mInstallLock")
     private PackageParser.Package scanPackageNewLI(@NonNull PackageParser.Package pkg,
             final @ParseFlags int parseFlags, @ScanFlags int scanFlags, long currentTime,
@@ -11785,6 +11841,8 @@ public class PackageManagerService extends IPackageManager.Stub
             codeRoot = Environment.getOemDirectory();
         } else if (FileUtils.contains(Environment.getVendorDirectory(), codePath)) {
             codeRoot = Environment.getVendorDirectory();
+        } else if (FileUtils.contains(Environment.getOdmDirectory(), codePath)) {
+            codeRoot = Environment.getOdmDirectory();
         } else if (FileUtils.contains(Environment.getProductDirectory(), codePath)) {
             codeRoot = Environment.getProductDirectory();
         } else {
@@ -18214,9 +18272,11 @@ public class PackageManagerService extends IPackageManager.Stub
         try {
             final File privilegedAppDir = new File(Environment.getRootDirectory(), "priv-app");
             final File privilegedVendorAppDir = new File(Environment.getVendorDirectory(), "priv-app");
+            final File privilegedOdmAppDir = new File(Environment.getOdmDirectory(), "priv-app");
             final File privilegedProductAppDir = new File(Environment.getProductDirectory(), "priv-app");
             return path.startsWith(privilegedAppDir.getCanonicalPath())
                     || path.startsWith(privilegedVendorAppDir.getCanonicalPath())
+                    || path.startsWith(privilegedOdmAppDir.getCanonicalPath())
                     || path.startsWith(privilegedProductAppDir.getCanonicalPath());
         } catch (IOException e) {
             Slog.e(TAG, "Unable to access code path " + path);
@@ -18235,7 +18295,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     static boolean locationIsVendor(String path) {
         try {
-            return path.startsWith(Environment.getVendorDirectory().getCanonicalPath());
+            return path.startsWith(Environment.getVendorDirectory().getCanonicalPath())
+                    || path.startsWith(Environment.getOdmDirectory().getCanonicalPath());
         } catch (IOException e) {
             Slog.e(TAG, "Unable to access code path " + path);
         }
@@ -23373,6 +23434,36 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         }
 
         @Override
+        public boolean isDataRestoreSafe(byte[] restoringFromSigHash, String packageName) {
+            SigningDetails sd = getSigningDetails(packageName);
+            if (sd == null) {
+                return false;
+            }
+            return sd.hasSha256Certificate(restoringFromSigHash,
+                    SigningDetails.CertCapabilities.INSTALLED_DATA);
+        }
+
+        @Override
+        public boolean isDataRestoreSafe(Signature restoringFromSig, String packageName) {
+            SigningDetails sd = getSigningDetails(packageName);
+            if (sd == null) {
+                return false;
+            }
+            return sd.hasCertificate(restoringFromSig,
+                    SigningDetails.CertCapabilities.INSTALLED_DATA);
+        }
+
+        private SigningDetails getSigningDetails(@NonNull String packageName) {
+            synchronized (mPackages) {
+                PackageParser.Package p = mPackages.get(packageName);
+                if (p == null) {
+                    return null;
+                }
+                return p.mSigningDetails;
+            }
+        }
+
+        @Override
         public int getPermissionFlagsTEMP(String permName, String packageName, int userId) {
             return PackageManagerService.this.getPermissionFlags(permName, packageName, userId);
         }
@@ -23834,6 +23925,15 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         @Override
         public boolean canAccessInstantApps(int callingUid, int userId) {
             return PackageManagerService.this.canViewInstantApps(callingUid, userId);
+        }
+
+        @Override
+        public boolean canAccessComponent(int callingUid, ComponentName component, int userId) {
+            synchronized (mPackages) {
+                final PackageSetting ps = mSettings.mPackages.get(component.getPackageName());
+                return !PackageManagerService.this.filterAppAccessLPr(
+                        ps, callingUid, component, TYPE_UNKNOWN, userId);
+            }
         }
 
         @Override

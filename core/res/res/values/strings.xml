@@ -148,25 +148,25 @@
     <string name="CLIRPermanent">You can\'t change the caller ID setting.</string>
 
     <!-- Notification title to tell the user that data service is blocked by access control. -->
-    <string name="RestrictedOnDataTitle">No data service</string>
+    <string name="RestrictedOnDataTitle">No mobile data service</string>
     <!-- Notification title to tell the user that emergency calling is blocked by access control. -->
-    <string name="RestrictedOnEmergencyTitle">No emergency calling</string>
+    <string name="RestrictedOnEmergencyTitle">Emergency calling unavailable</string>
     <!-- Notification title to tell the user that normal service is blocked by access control. -->
     <string name="RestrictedOnNormalTitle">No voice service</string>
     <!-- Notification title to tell the user that all emergency and normal voice services are blocked by access control. -->
-    <string name="RestrictedOnAllVoiceTitle">No voice/emergency service</string>
+    <string name="RestrictedOnAllVoiceTitle">No voice service or emergency calling</string>
 
     <!-- Notification content to tell the user that voice/data/emergency service is blocked by access control. -->
-    <string name="RestrictedStateContent">Temporarily not offered by the mobile network at your location</string>
+    <string name="RestrictedStateContent">Temporarily turned off by your carrier</string>
 
     <!-- Displayed to tell the user that they should switch their network preference. -->
-    <string name="NetworkPreferenceSwitchTitle">Can\u2019t reach network</string>
+    <string name="NetworkPreferenceSwitchTitle">Can\u2019t reach mobile network</string>
     <!-- Displayed to tell the user that they should switch their network preference. -->
-    <string name="NetworkPreferenceSwitchSummary">To improve reception, try changing the type selected at Settings &gt; Network &amp; internet &gt; Mobile networks &gt; Preferred network type."</string>
+    <string name="NetworkPreferenceSwitchSummary">Try changing preferred network. Tap to change.</string>
     <!-- Displayed to tell the user that emergency calls might not be available. -->
-    <string name="EmergencyCallWarningTitle">Wi\u2011Fi calling is active</string>
+    <string name="EmergencyCallWarningTitle">Emergency calling unavailable</string>
     <!-- Displayed to tell the user that emergency calls might not be available. -->
-    <string name="EmergencyCallWarningSummary">Emergency calls require a mobile network.</string>
+    <string name="EmergencyCallWarningSummary">Can\u2019t make emergency calls over Wi\u2011Fi</string>
 
     <!-- Telephony notification channel name for a channel containing network alert notifications. -->
     <string name="notification_channel_network_alert">Alerts</string>
@@ -319,9 +319,9 @@
     <!-- A notification is shown when there is a sync error.  This is the text that will scroll through the notification bar (will be seen by the user as he uses another application). -->
     <string name="contentServiceSync">Sync</string>
     <!-- A notification is shown when there is a sync error.  This is the title of the notification.  It will be seen in the pull-down notification tray. -->
-    <string name="contentServiceSyncNotificationTitle">Sync</string>
+    <string name="contentServiceSyncNotificationTitle">Can\'t sync</string>
     <!-- A notification is shown when there is a sync error.  This is the message of the notification.  It describes the error, in this case is there were too many deletes. The argument is the type of content, for example Gmail or Calendar. It will be seen in the pull-down notification tray. -->
-    <string name="contentServiceTooManyDeletesNotificationDesc">Too many <xliff:g id="content_type">%s</xliff:g> deletes.</string>
+    <string name="contentServiceTooManyDeletesNotificationDesc">Attempted to delete too many <xliff:g id="content_type">%s</xliff:g>.</string>
 
     <!-- If MMS discovers there isn't much space left on the device, it will show a toast with this message. -->
     <string name="low_memory" product="tablet">Tablet storage is full. Delete some files to free space.</string>
@@ -352,9 +352,6 @@
     <!-- Work profile deleted notification--> <skip />
     <!-- Shows up in the notification's title when the system deletes the work profile. [CHAR LIMIT=NONE] -->
     <string name="work_profile_deleted">Work profile deleted</string>
-    <!-- Content text for a notification. The Title of the notification is "Work profile deleted".
-        This says that the profile is deleted by the system as a result of the current profile owner gone missing. [CHAR LIMIT=100]-->
-    <string name="work_profile_deleted_description">Work profile deleted due to missing admin app</string>
     <!-- Content text for an expanded notification. The Title of the notification is "Work profile deleted".
         This further explains that the profile is deleted by the system as a result of the current profile admin gone missing. [CHAR LIMIT=NONE]-->
     <string name="work_profile_deleted_details">The work profile admin app is either missing or corrupted.
@@ -673,7 +670,7 @@
     <string name="permgroupdesc_contacts">access your contacts</string>
     <!-- Message shown to the user when the apps requests permission from this group -->
     <string name="permgrouprequest_contacts">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your contacts</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your contacts?</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_location">Location</string>
@@ -681,7 +678,7 @@
     <string name="permgroupdesc_location">access this device\'s location</string>
     <!-- Message shown to the user when the apps requests permission from this group -->
     <string name="permgrouprequest_location">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access this device\'s location</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access this device\'s location?</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_calendar">Calendar</string>
@@ -689,7 +686,7 @@
     <string name="permgroupdesc_calendar">access your calendar</string>
     <!-- Message shown to the user when the apps requests permission from this group -->
     <string name="permgrouprequest_calendar">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your calendar</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your calendar?</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_sms">SMS</string>
@@ -697,7 +694,7 @@
     <string name="permgroupdesc_sms">send and view SMS messages</string>
     <!-- Message shown to the user when the apps requests permission from this group -->
     <string name="permgrouprequest_sms">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to send and view SMS messages</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to send and view SMS messages?</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_storage">Storage</string>
@@ -705,7 +702,7 @@
     <string name="permgroupdesc_storage">access photos, media, and files on your device</string>
     <!-- Message shown to the user when the apps requests permission from this group -->
     <string name="permgrouprequest_storage">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access photos, media, and files on your device</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access photos, media, and files on your device?</string>
 
     <!-- Title of a category of application permissioncds, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_microphone">Microphone</string>
@@ -713,7 +710,7 @@
     <string name="permgroupdesc_microphone">record audio</string>
     <!-- Message shown to the user when the apps requests permission from this group -->
     <string name="permgrouprequest_microphone">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to record audio</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to record audio?</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_camera">Camera</string>
@@ -721,7 +718,7 @@
     <string name="permgroupdesc_camera">take pictures and record video</string>
     <!-- Message shown to the user when the apps requests permission from this group -->
     <string name="permgrouprequest_camera">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to take pictures and record video</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to take pictures and record video?</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_phone">Phone</string>
@@ -729,7 +726,7 @@
     <string name="permgroupdesc_phone">make and manage phone calls</string>
     <!-- Message shown to the user when the apps requests permission from this group -->
     <string name="permgrouprequest_phone">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to make and manage phone calls</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to make and manage phone calls?</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_sensors">Body Sensors</string>
@@ -737,7 +734,7 @@
     <string name="permgroupdesc_sensors">access sensor data about your vital signs</string>
     <!-- Message shown to the user when the apps requests permission from this group -->
     <string name="permgrouprequest_sensors">Allow
-        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access sensor data about your vital signs</string>
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access sensor data about your vital signs?</string>
 
     <!-- Title for the capability of an accessibility service to retrieve window content. -->
     <string name="capability_title_canRetrieveWindowContent">Retrieve window content</string>
@@ -2447,6 +2444,18 @@
     <string name="more_item_label">More</string>
     <!-- Prepended to the shortcut for a menu item to indicate that the user should hold the MENU button together with the shortcut to invoke the item. For example, if the shortcut to open a new tab in browser is MENU and B together, then this would be prepended to the letter "B" -->
     <string name="prepend_shortcut_label">Menu+</string>
+    <!-- Prepended to the shortcut for a menu item to indicate that the user should hold the META key together with the shortcut to invoke the item. -->
+    <string name="menu_meta_shortcut_label">Meta+</string>
+    <!-- Prepended to the shortcut for a menu item to indicate that the user should hold the CTRL key together with the shortcut to invoke the item. -->
+    <string name="menu_ctrl_shortcut_label">Ctrl+</string>
+    <!-- Prepended to the shortcut for a menu item to indicate that the user should hold the ALT key together with the shortcut to invoke the item. -->
+    <string name="menu_alt_shortcut_label">Alt+</string>
+    <!-- Prepended to the shortcut for a menu item to indicate that the user should hold the SHIFT key together with the shortcut to invoke the item. -->
+    <string name="menu_shift_shortcut_label">Shift+</string>
+    <!-- Prepended to the shortcut for a menu item to indicate that the user should hold the SYM key together with the shortcut to invoke the item. -->
+    <string name="menu_sym_shortcut_label">Sym+</string>
+    <!-- Prepended to the shortcut for a menu item to indicate that the user should hold the FUNCTION key together with the shortcut to invoke the item. -->
+    <string name="menu_function_shortcut_label">Function+</string>
     <!-- Displayed in place of the regular shortcut letter when a menu item has Menu+space for the shortcut. -->
     <string name="menu_space_shortcut_label">space</string>
     <!-- Displayed in place of the regular shortcut letter when a menu item has Menu+enter for the shortcut. -->
@@ -2998,8 +3007,7 @@
         limit</string>
 
     <!-- Notification details to tell the user that a process has exceeded its memory limit. -->
-    <string name="dump_heap_notification_detail">Heap dump has been collected;
-        tap to share</string>
+    <string name="dump_heap_notification_detail">Heap dump collected. Tap to share.</string>
 
     <!-- Title of dialog prompting the user to share a heap dump. -->
     <string name="dump_heap_title">Share heap dump?</string>
@@ -3270,7 +3278,7 @@
     <!-- USB_PREFERENCES: Notification for when the user connects the phone to a computer via USB in MIDI mode.  This is the title -->
     <string name="usb_midi_notification_title">MIDI via USB turned on</string>
     <!-- USB_PREFERENCES: Notification for when a USB accessory is attached.  This is the title -->
-    <string name="usb_accessory_notification_title">USB accessory mode turned on</string>
+    <string name="usb_accessory_notification_title">USB accessory connected</string>
     <!-- See USB_PREFERENCES. This is the message. -->
     <string name="usb_notification_message">Tap for more options.</string>
     <!-- See USB_PREFERENCES. This is the message when a data mode is turned on (mtp, ptp, midi) and the device is supplying power.. -->
@@ -3284,7 +3292,7 @@
     <!-- Title of notification shown when ADB is actively connected to the phone. -->
     <string name="adb_active_notification_title">USB debugging connected</string>
     <!-- Message of notification shown when ADB is actively connected to the phone. -->
-    <string name="adb_active_notification_message">Tap to disable USB debugging.</string>
+    <string name="adb_active_notification_message">Tap to turn off USB debugging</string>
     <string name="adb_active_notification_message" product="tv">Select to disable USB debugging.</string>
 
     <!-- Title of notification shown to indicate that bug report is being collected. -->
@@ -3565,7 +3573,7 @@
     <string name="vpn_lockdown_disconnected">Disconnected from always-on VPN</string>
     <!-- Notification title when error connecting to always-on VPN, a VPN that's set to always stay
          connected. -->
-    <string name="vpn_lockdown_error">Always-on VPN error</string>
+    <string name="vpn_lockdown_error">Couldn\'t connect to always-on VPN</string>
     <!-- Notification body that indicates user can touch to configure always-on VPN, a VPN that's
          set to always stay connected. -->
     <string name="vpn_lockdown_config">Change network or VPN settings</string>
@@ -3582,8 +3590,8 @@
 
     <!-- Strings for car mode notification -->
     <!-- Shown when car mode is enabled -->
-    <string name="car_mode_disable_notification_title">Car mode enabled</string>
-    <string name="car_mode_disable_notification_message">Tap to exit car mode.</string>
+    <string name="car_mode_disable_notification_title">Driving app is running</string>
+    <string name="car_mode_disable_notification_message">Tap to exit driving app.</string>
 
     <!-- Strings for tethered notification -->
     <!-- Shown when the device is tethered -->
@@ -4490,7 +4498,7 @@
 
     <!-- Zen mode condition - summary: time duration in hours. [CHAR LIMIT=NONE] -->
     <plurals name="zen_mode_duration_hours_summary">
-        <item quantity="one">For one hour (until <xliff:g id="formattedTime" example="10:00 PM">%2$s</xliff:g>)</item>
+        <item quantity="one">For 1 hour (until <xliff:g id="formattedTime" example="10:00 PM">%2$s</xliff:g>)</item>
         <item quantity="other">For %1$d hours (until <xliff:g id="formattedTime" example="10:00 PM">%2$s</xliff:g>)</item>
     </plurals>
 
@@ -4514,7 +4522,7 @@
 
     <!-- Zen mode condition - line one: time duration in hours. [CHAR LIMIT=NONE] -->
     <plurals name="zen_mode_duration_hours">
-        <item quantity="one">For one hour</item>
+        <item quantity="one">For 1 hour</item>
         <item quantity="other">For %d hours</item>
     </plurals>
 
@@ -4880,10 +4888,21 @@
     <!-- Notification action for editing a screenshot (drawing on it, cropping it, etc) -->
     <string name="screenshot_edit">Edit</string>
 
-    <!-- Title for the notification channel notifying user of settings system changes (i.e. Do Not Disturb has changed). [CHAR LIMIT=NONE] -->
+    <!-- Title for the notification channel notifying user of settings system changes. [CHAR LIMIT=NONE] -->
     <string name="notification_channel_system_changes">System changes</string>
-    <!-- Title of notification indicating do not disturb settings have changed when upgrading to P -->
-    <string name="zen_upgrade_notification_title">Do Not Disturb is hiding notifications to help you focus</string>
+    <!-- Title for the notification channel notifying user of do not disturb system changes (i.e. Do Not Disturb has changed). [CHAR LIMIT=NONE] -->
+    <string name="notification_channel_do_not_disturb">Do Not Disturb</string>
+    <!-- Title of notification indicating do not disturb visual interruption settings have changed when upgrading to P -->
+    <string name="zen_upgrade_notification_visd_title">Do Not Disturb is hiding notifications to help you focus</string>
     <!-- Content of notification indicating users can tap on the notification to go to dnd behavior settings -->
-    <string name="zen_upgrade_notification_content">This is a new feature from the latest system update. Tap to change.</string>
+    <string name="zen_upgrade_notification_visd_content">This is new behavior. Tap to change.</string>
+    <!-- Title of notification indicating do not disturb settings have changed when upgrading to P -->
+    <string name="zen_upgrade_notification_title">Do Not Disturb has changed</string>
+    <!-- Content of notification indicating users can tap on the notification to go to dnd behavior settings -->
+    <string name="zen_upgrade_notification_content">Tap to check what\'s blocked.</string>
+
+    <!-- Application name displayed in notifications [CHAR LIMIT=60] -->
+    <string name="notification_app_name_system">System</string>
+    <!-- Application name displayed in notifications [CHAR LIMIT=60] -->
+    <string name="notification_app_name_settings">Settings</string>
 </resources>

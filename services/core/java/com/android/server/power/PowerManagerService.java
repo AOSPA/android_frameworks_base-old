@@ -69,7 +69,6 @@ import android.service.dreams.DreamManagerInternal;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
 import android.util.KeyValueListParser;
-import android.util.MathUtils;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -408,7 +407,7 @@ public final class PowerManagerService extends SystemService
     private boolean mDreamsActivateOnDockSetting;
 
     // True if doze should not be started until after the screen off transition.
-    private boolean mDozeAfterScreenOffConfig;
+    private boolean mDozeAfterScreenOff;
 
     // The minimum screen off timeout, in milliseconds.
     private long mMinimumScreenOffTimeoutConfig;
@@ -486,6 +485,9 @@ public final class PowerManagerService extends SystemService
 
     // The screen brightness to use while dozing.
     private int mDozeScreenBrightnessOverrideFromDreamManager = PowerManager.BRIGHTNESS_DEFAULT;
+
+    // Keep display state when dozing.
+    private boolean mDrawWakeLockOverrideFromSidekick;
 
     // Time when we last logged a warning about calling userActivity() without permission.
     private long mLastWarningAboutUserActivityPermission = Long.MIN_VALUE;
@@ -893,7 +895,7 @@ public final class PowerManagerService extends SystemService
                 com.android.internal.R.integer.config_dreamsBatteryLevelMinimumWhenNotPowered);
         mDreamsBatteryLevelDrainCutoffConfig = resources.getInteger(
                 com.android.internal.R.integer.config_dreamsBatteryLevelDrainCutoff);
-        mDozeAfterScreenOffConfig = resources.getBoolean(
+        mDozeAfterScreenOff = resources.getBoolean(
                 com.android.internal.R.bool.config_dozeAfterScreenOff);
         mMinimumScreenOffTimeoutConfig = resources.getInteger(
                 com.android.internal.R.integer.config_minimumScreenOffTimeout);
@@ -2423,7 +2425,8 @@ public final class PowerManagerService extends SystemService
 
             if (mDisplayPowerRequest.policy == DisplayPowerRequest.POLICY_DOZE) {
                 mDisplayPowerRequest.dozeScreenState = mDozeScreenStateOverrideFromDreamManager;
-                if ((mWakeLockSummary & WAKE_LOCK_DRAW) != 0) {
+                if ((mWakeLockSummary & WAKE_LOCK_DRAW) != 0
+                        && !mDrawWakeLockOverrideFromSidekick) {
                     if (mDisplayPowerRequest.dozeScreenState == Display.STATE_DOZE_SUSPEND) {
                         mDisplayPowerRequest.dozeScreenState = Display.STATE_DOZE;
                     }
@@ -2503,7 +2506,7 @@ public final class PowerManagerService extends SystemService
             if ((mWakeLockSummary & WAKE_LOCK_DOZE) != 0) {
                 return DisplayPowerRequest.POLICY_DOZE;
             }
-            if (mDozeAfterScreenOffConfig) {
+            if (mDozeAfterScreenOff) {
                 return DisplayPowerRequest.POLICY_OFF;
             }
             // Fall through and preserve the current screen policy if not configured to
@@ -3090,6 +3093,12 @@ public final class PowerManagerService extends SystemService
         light.setFlashing(color, Light.LIGHT_FLASH_HARDWARE, (on ? 3 : 0), 0);
     }
 
+    private void setDozeAfterScreenOffInternal(boolean on) {
+        synchronized (mLock) {
+            mDozeAfterScreenOff = on;
+        }
+    }
+
     private void boostScreenBrightnessInternal(long eventTime, int uid) {
         synchronized (mLock) {
             if (!mSystemReady || mWakefulness == WAKEFULNESS_ASLEEP
@@ -3170,6 +3179,16 @@ public final class PowerManagerService extends SystemService
                     || mDozeScreenBrightnessOverrideFromDreamManager != screenBrightness) {
                 mDozeScreenStateOverrideFromDreamManager = screenState;
                 mDozeScreenBrightnessOverrideFromDreamManager = screenBrightness;
+                mDirty |= DIRTY_SETTINGS;
+                updatePowerStateLocked();
+            }
+        }
+    }
+
+    private void setDrawWakeLockOverrideFromSidekickInternal(boolean keepState) {
+        synchronized (mLock) {
+            if (mDrawWakeLockOverrideFromSidekick != keepState) {
+                mDrawWakeLockOverrideFromSidekick = keepState;
                 mDirty |= DIRTY_SETTINGS;
                 updatePowerStateLocked();
             }
@@ -3358,7 +3377,7 @@ public final class PowerManagerService extends SystemService
             pw.println("  mDreamsEnabledSetting=" + mDreamsEnabledSetting);
             pw.println("  mDreamsActivateOnSleepSetting=" + mDreamsActivateOnSleepSetting);
             pw.println("  mDreamsActivateOnDockSetting=" + mDreamsActivateOnDockSetting);
-            pw.println("  mDozeAfterScreenOffConfig=" + mDozeAfterScreenOffConfig);
+            pw.println("  mDozeAfterScreenOff=" + mDozeAfterScreenOff);
             pw.println("  mLowPowerModeSetting=" + mLowPowerModeSetting);
             pw.println("  mAutoLowPowerModeConfigured=" + mAutoLowPowerModeConfigured);
             pw.println("  mAutoLowPowerModeSnoozing=" + mAutoLowPowerModeSnoozing);
@@ -3381,6 +3400,7 @@ public final class PowerManagerService extends SystemService
                     + mUserInactiveOverrideFromWindowManager);
             pw.println("  mDozeScreenStateOverrideFromDreamManager="
                     + mDozeScreenStateOverrideFromDreamManager);
+            pw.println("  mDrawWakeLockOverrideFromSidekick=" + mDrawWakeLockOverrideFromSidekick);
             pw.println("  mDozeScreenBrightnessOverrideFromDreamManager="
                     + mDozeScreenBrightnessOverrideFromDreamManager);
             pw.println("  mScreenBrightnessSettingMinimum=" + mScreenBrightnessSettingMinimum);
@@ -3641,7 +3661,7 @@ public final class PowerManagerService extends SystemService
                     mDreamsActivateOnDockSetting);
             proto.write(
                     PowerServiceSettingsAndConfigurationDumpProto.IS_DOZE_AFTER_SCREEN_OFF_CONFIG,
-                    mDozeAfterScreenOffConfig);
+                    mDozeAfterScreenOff);
             proto.write(
                     PowerServiceSettingsAndConfigurationDumpProto.IS_LOW_POWER_MODE_SETTING,
                     mLowPowerModeSetting);
@@ -3715,6 +3735,10 @@ public final class PowerManagerService extends SystemService
                     PowerServiceSettingsAndConfigurationDumpProto
                             .DOZE_SCREEN_STATE_OVERRIDE_FROM_DREAM_MANAGER,
                     mDozeScreenStateOverrideFromDreamManager);
+            proto.write(
+                    PowerServiceSettingsAndConfigurationDumpProto
+                            .DRAW_WAKE_LOCK_OVERRIDE_FROM_SIDEKICK,
+                    mDrawWakeLockOverrideFromSidekick);
             proto.write(
                     PowerServiceSettingsAndConfigurationDumpProto
                             .DOZED_SCREEN_BRIGHTNESS_OVERRIDE_FROM_DREAM_MANAGER,
@@ -4584,6 +4608,19 @@ public final class PowerManagerService extends SystemService
         }
 
         @Override // Binder call
+        public void setDozeAfterScreenOff(boolean on) {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.DEVICE_POWER, null);
+
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                setDozeAfterScreenOffInternal(on);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+
+        @Override // Binder call
         public void boostScreenBrightness(long eventTime) {
             if (eventTime > SystemClock.uptimeMillis()) {
                 throw new IllegalArgumentException("event time must not be in the future");
@@ -4700,6 +4737,11 @@ public final class PowerManagerService extends SystemService
         @Override
         public void setUserActivityTimeoutOverrideFromWindowManager(long timeoutMillis) {
             setUserActivityTimeoutOverrideFromWindowManagerInternal(timeoutMillis);
+        }
+
+        @Override
+        public void setDrawWakeLockOverrideFromSidekick(boolean keepState) {
+            setDrawWakeLockOverrideFromSidekickInternal(keepState);
         }
 
         @Override

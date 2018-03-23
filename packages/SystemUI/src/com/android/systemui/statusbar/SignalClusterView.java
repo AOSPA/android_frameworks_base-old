@@ -106,7 +106,6 @@ public class SignalClusterView extends LinearLayout implements NetworkController
 
     private final int mMobileSignalGroupEndPadding;
     private final int mMobileDataIconStartPadding;
-    private final int mWideTypeIconStartPadding;
     private final int mSecondaryTelephonyPadding;
     private final int mEndPadding;
     private final int mEndPaddingNothingVisible;
@@ -139,7 +138,6 @@ public class SignalClusterView extends LinearLayout implements NetworkController
                 res.getDimensionPixelSize(R.dimen.mobile_signal_group_end_padding);
         mMobileDataIconStartPadding =
                 res.getDimensionPixelSize(R.dimen.mobile_data_icon_start_padding);
-        mWideTypeIconStartPadding = res.getDimensionPixelSize(R.dimen.wide_type_icon_start_padding);
         mSecondaryTelephonyPadding = res.getDimensionPixelSize(R.dimen.secondary_telephony_padding);
         mEndPadding = res.getDimensionPixelSize(R.dimen.signal_cluster_battery_padding);
         mEndPaddingNothingVisible = res.getDimensionPixelSize(
@@ -309,7 +307,6 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         state.mMobileTypeId = statusType;
         state.mMobileDescription = statusIcon.contentDescription;
         state.mMobileTypeDescription = typeContentDescription;
-        state.mIsMobileTypeIconWide = statusType != 0 && isWide;
         state.mRoaming = roaming;
         state.mActivityIn = activityIn && mActivityEnabled;
         state.mActivityOut = activityOut && mActivityEnabled;
@@ -638,16 +635,17 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         private int mMobileStrengthId = 0, mMobileTypeId = 0;
         private int mLastMobileStrengthId = -1;
         private int mLastMobileTypeId = -1;
-        private boolean mIsMobileTypeIconWide;
         private String mMobileDescription, mMobileTypeDescription;
 
         private ViewGroup mMobileGroup;
-        private ImageView mMobile, mMobileDark, mMobileType, mMobileRoaming;
+        private ImageView mMobile, mMobileType, mMobileRoaming;
+        private View mMobileRoamingSpace;
         public boolean mRoaming;
         private ImageView mMobileActivityIn;
         private ImageView mMobileActivityOut;
         public boolean mActivityIn;
         public boolean mActivityOut;
+        private SignalDrawable mMobileSignalDrawable;
 
         private int mDataActivityId = 0;
         private int mStackedDataId = 0, mStackedVoiceId = 0;
@@ -664,16 +662,13 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         public void setViews(ViewGroup root) {
             mMobileGroup    = root;
             mMobile         = root.findViewById(R.id.mobile_signal);
-            mMobileDark     = root.findViewById(R.id.mobile_signal_dark);
             mMobileType     = root.findViewById(R.id.mobile_type);
             mMobileRoaming  = root.findViewById(R.id.mobile_roaming);
+            mMobileRoamingSpace  = root.findViewById(R.id.mobile_roaming_space);
             mMobileActivityIn = root.findViewById(R.id.mobile_in);
             mMobileActivityOut = root.findViewById(R.id.mobile_out);
-            // TODO: Remove the 2 instances because now the drawable can handle darkness.
-            mMobile.setImageDrawable(new SignalDrawable(mMobile.getContext()));
-            SignalDrawable drawable = new SignalDrawable(mMobileDark.getContext());
-            drawable.setDarkIntensity(1);
-            mMobileDark.setImageDrawable(drawable);
+            mMobileSignalDrawable = new SignalDrawable(mMobile.getContext());
+            mMobile.setImageDrawable(mMobileSignalDrawable);
             mDataActivity   = (ImageView) root.findViewById(R.id.data_inout);
             mStackedData    = (ImageView) root.findViewById(R.id.mobile_signal_data);
             mStackedVoice   = (ImageView) root.findViewById(R.id.mobile_signal_voice);
@@ -686,10 +681,8 @@ public class SignalClusterView extends LinearLayout implements NetworkController
                 if (mLastMobileStrengthId != mMobileStrengthId) {
                     if (mReadIconsFromXML) {
                         setIconForView(mMobile, mMobileStrengthId);
-                        setIconForView(mMobileDark, mMobileStrengthId);
                     }else {
                         mMobile.getDrawable().setLevel(mMobileStrengthId);
-                        mMobileDark.getDrawable().setLevel(mMobileStrengthId);
                     }
                     mLastMobileStrengthId = mMobileStrengthId;
                 }
@@ -723,18 +716,14 @@ public class SignalClusterView extends LinearLayout implements NetworkController
             // When this isn't next to wifi, give it some extra padding between the signals.
             mMobileGroup.setPaddingRelative(isSecondaryIcon ? mSecondaryTelephonyPadding : 0,
                     0, 0, 0);
-            mMobile.setPaddingRelative(
-                    mIsMobileTypeIconWide ? mWideTypeIconStartPadding : mMobileDataIconStartPadding,
-                    0, 0, 0);
-            mMobileDark.setPaddingRelative(
-                    mIsMobileTypeIconWide ? mWideTypeIconStartPadding : mMobileDataIconStartPadding,
-                    0, 0, 0);
+            mMobile.setPaddingRelative(mMobileDataIconStartPadding, 0, 0, 0);
 
             if (DEBUG) Log.d(TAG, String.format("mobile: %s sig=%d typ=%d",
                         (mMobileVisible ? "VISIBLE" : "GONE"), mMobileStrengthId, mMobileTypeId));
 
             mMobileType.setVisibility(mMobileTypeId != 0 ? View.VISIBLE : View.GONE);
             mMobileRoaming.setVisibility((mRoaming && !mReadIconsFromXML)? View.VISIBLE : View.GONE);
+            mMobileRoamingSpace.setVisibility((mRoaming && !mReadIconsFromXML) ? View.VISIBLE : View.GONE);
             mMobileActivityIn.setVisibility(mActivityIn ? View.VISIBLE : View.GONE);
             mMobileActivityOut.setVisibility(mActivityOut ? View.VISIBLE : View.GONE);
             mDataActivity.setVisibility(mDataActivityId != 0 ? View.VISIBLE : View.GONE);
@@ -750,9 +739,7 @@ public class SignalClusterView extends LinearLayout implements NetworkController
         }
 
         public void setIconTint(int tint, float darkIntensity, Rect tintArea) {
-            applyDarkIntensity(
-                    DarkIconDispatcher.getDarkIntensity(tintArea, mMobile, darkIntensity),
-                    mMobile, mMobileDark);
+            mMobileSignalDrawable.setDarkIntensity(darkIntensity);
             setTint(mMobileType, DarkIconDispatcher.getTint(tintArea, mMobileType, tint));
             setTint(mMobileRoaming, DarkIconDispatcher.getTint(tintArea, mMobileRoaming,
                     tint));

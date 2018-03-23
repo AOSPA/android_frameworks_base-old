@@ -55,7 +55,6 @@ struct DurationBucket {
     uint64_t mBucketStartNs;
     uint64_t mBucketEndNs;
     uint64_t mDuration;
-    uint64_t mBucketNum;
 };
 
 class DurationTracker {
@@ -129,11 +128,11 @@ protected:
         }
     }
 
-    // Stops the anomaly alarm.
-    void stopAnomalyAlarm() {
+    // Stops the anomaly alarm. If it should have already fired, declare the anomaly now.
+    void stopAnomalyAlarm(const uint64_t timestamp) {
         for (auto& anomalyTracker : mAnomalyTrackers) {
             if (anomalyTracker != nullptr) {
-                anomalyTracker->stopAlarm(mEventKey);
+                anomalyTracker->stopAlarm(mEventKey, timestamp);
             }
         }
     }
@@ -152,14 +151,6 @@ protected:
             if (anomalyTracker != nullptr) {
                 anomalyTracker->detectAndDeclareAnomaly(timestamp, currBucketNum, mEventKey,
                                                         currentBucketValue);
-            }
-        }
-    }
-
-    void declareAnomalyIfAlarmExpired(const uint64_t& timestamp) {
-        for (auto& anomalyTracker : mAnomalyTrackers) {
-            if (anomalyTracker != nullptr) {
-                anomalyTracker->declareAnomalyIfAlarmExpired(mEventKey, timestamp);
             }
         }
     }

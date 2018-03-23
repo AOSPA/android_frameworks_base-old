@@ -31,6 +31,8 @@ enum Position {
   LAST = 2;
 
   ANY = 3;
+
+  ALL = 4;
 }
 
 enum TimeUnit {
@@ -295,6 +297,7 @@ message PerfettoDetails {
 
 message BroadcastSubscriberDetails {
   optional int64 subscriber_id = 1;
+  repeated string cookie = 2;
 }
 
 message Subscription {

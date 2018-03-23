@@ -80,7 +80,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_TOKEN_MOVEMENT;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
-import static com.android.server.wm.WindowManagerDebugConfig.SHOW_LIGHT_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_STACK_CRAWLS;
 import static com.android.server.wm.WindowManagerDebugConfig.SHOW_TRANSACTIONS;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -154,6 +153,7 @@ import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.view.IInputMethodClient;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.utils.RotationCache;
+import com.android.server.wm.utils.WmDisplayCutout;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -214,7 +214,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     int mInitialDisplayDensity = 0;
 
     DisplayCutout mInitialDisplayCutout;
-    private final RotationCache<DisplayCutout, DisplayCutout> mDisplayCutoutCache
+    private final RotationCache<DisplayCutout, WmDisplayCutout> mDisplayCutoutCache
             = new RotationCache<>(this::calculateDisplayCutoutForRotationUncached);
 
     /**
@@ -257,7 +257,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * Current rotation of the display.
      * Constants as per {@link android.view.Surface.Rotation}.
      *
-     * @see #updateRotationUnchecked(boolean)
+     * @see #updateRotationUnchecked()
      */
     private int mRotation = 0;
 
@@ -273,7 +273,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * Flag indicating that the application is receiving an orientation that has different metrics
      * than it expected. E.g. Portrait instead of Landscape.
      *
-     * @see #updateRotationUnchecked(boolean)
+     * @see #updateRotationUnchecked()
      */
     private boolean mAltOrientation = false;
 
@@ -305,6 +305,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
     int pendingLayoutChanges;
     // TODO(multi-display): remove some of the usages.
     boolean isDefaultDisplay;
+    /**
+     * Flag indicating whether WindowManager should override info for this display in
+     * DisplayManager.
+     */
+    boolean mShouldOverrideDisplayConfiguration = true;
 
     /** Window tokens that are in the process of exiting, but still on screen for animations. */
     final ArrayList<WindowToken> mExitingTokens = new ArrayList<>();
@@ -557,6 +562,10 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     w.updateLastInsetValues();
                 }
 
+                if (w.mAppToken != null) {
+                    w.mAppToken.layoutLetterbox(w);
+                }
+
                 if (DEBUG_LAYOUT) Slog.v(TAG, "  LAYOUT: mFrame=" + w.mFrame
                         + " mContainingFrame=" + w.mContainingFrame
                         + " mDisplayFrame=" + w.mDisplayFrame);
@@ -696,7 +705,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
         final AppWindowToken atoken = w.mAppToken;
         if (atoken != null) {
-            atoken.updateLetterbox(w);
+            atoken.updateLetterboxSurface(w);
             final boolean updateAllDrawn = atoken.updateDrawnWindowStates(w);
             if (updateAllDrawn && !mTmpUpdateAllDrawn.contains(atoken)) {
                 mTmpUpdateAllDrawn.add(atoken);
@@ -735,7 +744,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         display.getDisplayInfo(mDisplayInfo);
         display.getMetrics(mDisplayMetrics);
         isDefaultDisplay = mDisplayId == DEFAULT_DISPLAY;
-        mDisplayFrames = new DisplayFrames(mDisplayId, mDisplayInfo);
+        mDisplayFrames = new DisplayFrames(mDisplayId, mDisplayInfo,
+                calculateDisplayCutoutForRotation(mDisplayInfo.rotation));
         initializeDisplayBaseInfo();
         mDividerControllerLocked = new DockedStackDividerController(service, this);
         mPinnedStackControllerLocked = new PinnedStackController(service, this);
@@ -924,7 +934,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      * Returns true if the rotation has been changed.  In this case YOU MUST CALL
      * {@link WindowManagerService#sendNewConfiguration(int)} TO UNFREEZE THE SCREEN.
      */
-    boolean updateRotationUnchecked(boolean inTransaction) {
+    boolean updateRotationUnchecked() {
         if (mService.mDeferredRotationPauseCount > 0) {
             // Rotation updates have been paused temporarily.  Defer the update until
             // updates have been resumed.
@@ -1028,7 +1038,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mService.mPolicy.selectRotationAnimationLw(anim);
 
         if (!rotateSeamlessly) {
-            mService.startFreezingDisplayLocked(inTransaction, anim[0], anim[1], this);
+            mService.startFreezingDisplayLocked(anim[0], anim[1], this);
             // startFreezingDisplayLocked can reset the ScreenRotationAnimation.
             screenRotationAnimation = mService.mAnimator.getScreenRotationAnimationLocked(
                     mDisplayId);
@@ -1039,9 +1049,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             // to their rotated state independently and without a freeze required.
             screenRotationAnimation = null;
 
-            // We have to reset this in case a window was removed before it
-            // finished seamless rotation.
-            mService.mSeamlessRotationCount = 0;
+            mService.startSeamlessRotation();
         }
 
         // We need to update our screen size information to match the new rotation. If the rotation
@@ -1051,39 +1059,26 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         // #computeScreenConfiguration() later.
         updateDisplayAndOrientation(getConfiguration().uiMode);
 
-        if (!inTransaction) {
-            if (SHOW_TRANSACTIONS) {
-                Slog.i(TAG_WM, ">>> OPEN TRANSACTION setRotationUnchecked");
-            }
-            mService.openSurfaceTransaction();
-        }
-        try {
-            // NOTE: We disable the rotation in the emulator because
-            //       it doesn't support hardware OpenGL emulation yet.
-            if (CUSTOM_SCREEN_ROTATION && screenRotationAnimation != null
-                    && screenRotationAnimation.hasScreenshot()) {
-                if (screenRotationAnimation.setRotationInTransaction(rotation,
-                        MAX_ANIMATION_DURATION, mService.getTransitionAnimationScaleLocked(),
-                        mDisplayInfo.logicalWidth, mDisplayInfo.logicalHeight)) {
-                    mService.scheduleAnimationLocked();
-                }
-            }
-
-            if (rotateSeamlessly) {
-                forAllWindows(w -> {
-                    w.mWinAnimator.seamlesslyRotateWindow(oldRotation, rotation);
-                }, true /* traverseTopToBottom */);
-            }
-
-            mService.mDisplayManagerInternal.performTraversalInTransactionFromWindowManager();
-        } finally {
-            if (!inTransaction) {
-                mService.closeSurfaceTransaction("setRotationUnchecked");
-                if (SHOW_LIGHT_TRANSACTIONS) {
-                    Slog.i(TAG_WM, "<<< CLOSE TRANSACTION setRotationUnchecked");
-                }
+        // NOTE: We disable the rotation in the emulator because
+        //       it doesn't support hardware OpenGL emulation yet.
+        if (CUSTOM_SCREEN_ROTATION && screenRotationAnimation != null
+                && screenRotationAnimation.hasScreenshot()) {
+            if (screenRotationAnimation.setRotation(getPendingTransaction(), rotation,
+                    MAX_ANIMATION_DURATION, mService.getTransitionAnimationScaleLocked(),
+                    mDisplayInfo.logicalWidth, mDisplayInfo.logicalHeight)) {
+                mService.scheduleAnimationLocked();
             }
         }
+
+        if (rotateSeamlessly) {
+            forAllWindows(w -> {
+                    w.mWinAnimator.seamlesslyRotateWindow(getPendingTransaction(),
+                            oldRotation, rotation);
+            }, true /* traverseTopToBottom */);
+        }
+
+        mService.mDisplayManagerInternal.performTraversal(getPendingTransaction());
+        scheduleAnimation();
 
         forAllWindows(w -> {
             if (w.mHasSurface && !rotateSeamlessly) {
@@ -1128,7 +1123,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         mService.mPolicy.setInitialDisplaySize(getDisplay(),
                 mBaseDisplayWidth, mBaseDisplayHeight, mBaseDisplayDensity);
 
-        mDisplayFrames.onDisplayInfoUpdated(mDisplayInfo);
+        mDisplayFrames.onDisplayInfoUpdated(mDisplayInfo,
+                calculateDisplayCutoutForRotation(mDisplayInfo.rotation));
     }
 
     /**
@@ -1161,8 +1157,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
 
         // Update application display metrics.
-        final DisplayCutout displayCutout = calculateDisplayCutoutForRotation(
-                mRotation);
+        final WmDisplayCutout wmDisplayCutout = calculateDisplayCutoutForRotation(mRotation);
+        final DisplayCutout displayCutout = wmDisplayCutout.getDisplayCutout();
+
         final int appWidth = mService.mPolicy.getNonDecorDisplayWidth(dw, dh, mRotation, uiMode,
                 mDisplayId, displayCutout);
         final int appHeight = mService.mPolicy.getNonDecorDisplayHeight(dw, dh, mRotation, uiMode,
@@ -1177,7 +1174,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mDisplayInfo.getLogicalMetrics(mRealDisplayMetrics,
                     CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO, null);
         }
-        mDisplayInfo.displayCutout = displayCutout;
+        mDisplayInfo.displayCutout = displayCutout.isEmpty() ? null : displayCutout;
         mDisplayInfo.getAppMetrics(mDisplayMetrics);
         if (mDisplayScalingDisabled) {
             mDisplayInfo.flags |= Display.FLAG_SCALING_DISABLED;
@@ -1185,8 +1182,14 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mDisplayInfo.flags &= ~Display.FLAG_SCALING_DISABLED;
         }
 
+        // We usually set the override info in DisplayManager so that we get consistent display
+        // metrics values when displays are changing and don't send out new values until WM is aware
+        // of them. However, we don't do this for displays that serve as containers for ActivityView
+        // because we don't want letter-/pillar-boxing during resize.
+        final DisplayInfo overrideDisplayInfo = mShouldOverrideDisplayConfiguration
+                ? mDisplayInfo : null;
         mService.mDisplayManagerInternal.setDisplayInfoOverrideFromWindowManager(mDisplayId,
-                mDisplayInfo);
+                overrideDisplayInfo);
 
         mBaseDisplayRect.set(0, 0, dw, dh);
 
@@ -1199,24 +1202,25 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         return mDisplayInfo;
     }
 
-    DisplayCutout calculateDisplayCutoutForRotation(int rotation) {
+    WmDisplayCutout calculateDisplayCutoutForRotation(int rotation) {
         return mDisplayCutoutCache.getOrCompute(mInitialDisplayCutout, rotation);
     }
 
-    private DisplayCutout calculateDisplayCutoutForRotationUncached(
+    private WmDisplayCutout calculateDisplayCutoutForRotationUncached(
             DisplayCutout cutout, int rotation) {
         if (cutout == null || cutout == DisplayCutout.NO_CUTOUT) {
-            return cutout;
+            return WmDisplayCutout.NO_CUTOUT;
         }
         if (rotation == ROTATION_0) {
-            return cutout.computeSafeInsets(mInitialDisplayWidth, mInitialDisplayHeight);
+            return WmDisplayCutout.computeSafeInsets(
+                    cutout, mInitialDisplayWidth, mInitialDisplayHeight);
         }
         final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
         final Path bounds = cutout.getBounds().getBoundaryPath();
         transformPhysicalToLogicalCoordinates(rotation, mInitialDisplayWidth, mInitialDisplayHeight,
                 mTmpMatrix);
         bounds.transform(mTmpMatrix);
-        return DisplayCutout.fromBounds(bounds).computeSafeInsets(
+        return WmDisplayCutout.computeSafeInsets(DisplayCutout.fromBounds(bounds),
                 rotated ? mInitialDisplayHeight : mInitialDisplayWidth,
                 rotated ? mInitialDisplayWidth : mInitialDisplayHeight);
     }
@@ -1441,7 +1445,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
     private void adjustDisplaySizeRanges(DisplayInfo displayInfo, int displayId, int rotation,
             int uiMode, int dw, int dh) {
-        final DisplayCutout displayCutout = calculateDisplayCutoutForRotation(rotation);
+        final DisplayCutout displayCutout = calculateDisplayCutoutForRotation(
+                rotation).getDisplayCutout();
         final int width = mService.mPolicy.getConfigDisplayWidth(dw, dh, rotation, uiMode,
                 displayId, displayCutout);
         if (width < displayInfo.smallestNominalAppWidth) {
@@ -2802,7 +2807,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
 
             if (isDefaultDisplay && (pendingLayoutChanges & FINISH_LAYOUT_REDO_CONFIG) != 0) {
                 if (DEBUG_LAYOUT) Slog.v(TAG, "Computing new config from layout");
-                if (mService.updateOrientationFromAppTokensLocked(true, mDisplayId)) {
+                if (mService.updateOrientationFromAppTokensLocked(mDisplayId)) {
                     setLayoutNeeded();
                     mService.mH.obtainMessage(SEND_NEW_CONFIGURATION, mDisplayId).sendToTarget();
                 }
@@ -2910,7 +2915,8 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             Slog.v(TAG, "performLayout: needed=" + isLayoutNeeded() + " dw=" + dw + " dh=" + dh);
         }
 
-        mDisplayFrames.onDisplayInfoUpdated(mDisplayInfo);
+        mDisplayFrames.onDisplayInfoUpdated(mDisplayInfo,
+                calculateDisplayCutoutForRotation(mDisplayInfo.rotation));
         // TODO: Not sure if we really need to set the rotation here since we are updating from the
         // display info above...
         mDisplayFrames.mRotation = mRotation;

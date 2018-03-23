@@ -16,10 +16,15 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static com.android.keyguard.KeyguardHostView.OnDismissAction;
+import static com.android.keyguard.KeyguardSecurityModel.SecurityMode;
+
 import android.content.Context;
 import android.os.Handler;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.util.Log;
+import android.util.MathUtils;
 import android.util.Slog;
 import android.util.StatsLog;
 import android.view.KeyEvent;
@@ -28,7 +33,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
 import android.view.WindowInsets;
-import android.view.accessibility.AccessibilityEvent;
 
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardHostView;
@@ -41,15 +45,13 @@ import com.android.systemui.DejankUtils;
 import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 
-import static com.android.keyguard.KeyguardHostView.OnDismissAction;
-import static com.android.keyguard.KeyguardSecurityModel.SecurityMode;
-
 /**
  * A class which manages the bouncer on the lockscreen.
  */
 public class KeyguardBouncer {
 
-    final static private String TAG = "KeyguardBouncer";
+    private static final String TAG = "KeyguardBouncer";
+    static final float ALPHA_EXPANSION_THRESHOLD = 0.95f;
 
     protected final Context mContext;
     protected final ViewMediatorCallback mCallback;
@@ -74,25 +76,46 @@ public class KeyguardBouncer {
 
     public KeyguardBouncer(Context context, ViewMediatorCallback callback,
             LockPatternUtils lockPatternUtils, ViewGroup container,
-            DismissCallbackRegistry dismissCallbackRegistry) {
+            DismissCallbackRegistry dismissCallbackRegistry, FalsingManager falsingManager) {
         mContext = context;
         mCallback = callback;
         mLockPatternUtils = lockPatternUtils;
         mContainer = container;
         KeyguardUpdateMonitor.getInstance(mContext).registerCallback(mUpdateMonitorCallback);
-        mFalsingManager = FalsingManager.getInstance(mContext);
+        mFalsingManager = falsingManager;
         mDismissCallbackRegistry = dismissCallbackRegistry;
         mHandler = new Handler();
     }
 
     public void show(boolean resetSecuritySelection) {
+        show(resetSecuritySelection, true /* notifyFalsing */);
+    }
+
+    /**
+     * Shows the bouncer.
+     *
+     * @param resetSecuritySelection Cleans keyguard view
+     * @param animated true when the bouncer show show animated, false when the user will be
+     *                 dragging it and animation should be deferred.
+     */
+    public void show(boolean resetSecuritySelection, boolean animated) {
         final int keyguardUserId = KeyguardUpdateMonitor.getCurrentUser();
         if (keyguardUserId == UserHandle.USER_SYSTEM && UserManager.isSplitSystemUser()) {
             // In split system user mode, we never unlock system user.
             return;
         }
-        mFalsingManager.onBouncerShown();
         ensureView();
+
+        // On the keyguard, we want to show the bouncer when the user drags up, but it's
+        // not correct to end the falsing session. We still need to verify if those touches
+        // are valid.
+        // Later, at the end of the animation, when the bouncer is at the top of the screen,
+        // onFullyShown() will be called and FalsingManager will stop recording touches.
+        if (animated) {
+            mFalsingManager.onBouncerShown();
+            setExpansion(0);
+        }
+
         if (resetSecuritySelection) {
             // showPrimarySecurityScreen() updates the current security method. This is needed in
             // case we are already showing and the current security method changed.
@@ -124,6 +147,30 @@ public class KeyguardBouncer {
         DejankUtils.postAfterTraversal(mShowRunnable);
 
         mCallback.onBouncerVisiblityChanged(true /* shown */);
+    }
+
+    /**
+     * This method must be called at the end of the bouncer animation when
+     * the translation is performed manually by the user, otherwise FalsingManager
+     * will never be notified and its internal state will be out of sync.
+     */
+    public void onFullyShown() {
+        mFalsingManager.onBouncerShown();
+    }
+
+    /**
+     * This method must be called at the end of the bouncer animation when
+     * the translation is performed manually by the user, otherwise FalsingManager
+     * will never be notified and its internal state will be out of sync.
+     */
+    public void onFullyHidden() {
+        if (!mShowingSoon) {
+            cancelShowRunnable();
+            if (mRoot != null) {
+                mRoot.setVisibility(View.INVISIBLE);
+            }
+            mFalsingManager.onBouncerHidden();
+        }
     }
 
     private final Runnable mShowRunnable = new Runnable() {
@@ -166,11 +213,19 @@ public class KeyguardBouncer {
      *               and {@link KeyguardSecurityView#PROMPT_REASON_RESTART}
      */
     public void showPromptReason(int reason) {
-        mKeyguardView.showPromptReason(reason);
+        if (mKeyguardView != null) {
+            mKeyguardView.showPromptReason(reason);
+        } else {
+            Log.w(TAG, "Trying to show prompt reason on empty bouncer");
+        }
     }
 
     public void showMessage(String message, int color) {
-        mKeyguardView.showMessage(message, color);
+        if (mKeyguardView != null) {
+            mKeyguardView.showMessage(message, color);
+        } else {
+            Log.w(TAG, "Trying to show message on empty bouncer");
+        }
     }
 
     private void cancelShowRunnable() {
@@ -245,6 +300,19 @@ public class KeyguardBouncer {
             mKeyguardView.showPrimarySecurityScreen();
         }
         mBouncerPromptReason = mCallback.getBouncerPromptReason();
+    }
+
+    /**
+     * Current notification panel expansion
+     * @param fraction 0 when notification panel is collapsed and 1 when expanded.
+     * @see StatusBarKeyguardViewManager#onPanelExpansionChanged
+     */
+    public void setExpansion(float fraction) {
+        if (mKeyguardView != null) {
+            float alpha = MathUtils.map(ALPHA_EXPANSION_THRESHOLD, 1, 1, 0, fraction);
+            mKeyguardView.setAlpha(MathUtils.constrain(alpha, 0f, 1f));
+            mKeyguardView.setTranslationY(fraction * mKeyguardView.getHeight());
+        }
     }
 
     protected void ensureView() {

@@ -25,7 +25,6 @@ import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
 import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED;
-import static android.content.Intent.ACTION_USER_REMOVED;
 import static android.content.Intent.EXTRA_USER_HANDLE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.Process.SYSTEM_UID;
@@ -122,6 +121,7 @@ import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.IAssistDataReceiver;
+import android.app.admin.DevicePolicyCache;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -387,14 +387,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 case ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED:
                     mKeyguardDisableHandler.sendEmptyMessage(KEYGUARD_POLICY_CHANGED);
                     break;
-                case ACTION_USER_REMOVED:
-                    final int userId = intent.getIntExtra(EXTRA_USER_HANDLE, USER_NULL);
-                    if (userId != USER_NULL) {
-                        synchronized (mWindowMap) {
-                            mScreenCaptureDisabled.remove(userId);
-                        }
-                    }
-                    break;
             }
         }
     };
@@ -525,13 +517,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     /** List of window currently causing non-system overlay windows to be hidden. */
     private ArrayList<WindowState> mHidingNonSystemOverlayWindows = new ArrayList<>();
-
-    /**
-     * Stores for each user whether screencapture is disabled
-     * This array is essentially a cache for all userId for
-     * {@link android.app.admin.DevicePolicyManager#getScreenCaptureDisabled}
-     */
-    private SparseArray<Boolean> mScreenCaptureDisabled = new SparseArray<>();
 
     IInputMethodManager mInputMethodManager;
 
@@ -674,11 +659,18 @@ public class WindowManagerService extends IWindowManager.Stub
     WindowManagerInternal.OnHardKeyboardStatusChangeListener mHardKeyboardStatusChangeListener;
     SettingsObserver mSettingsObserver;
 
-    // A count of the windows which are 'seamlessly rotated', e.g. a surface
-    // at an old orientation is being transformed. We freeze orientation updates
-    // while any windows are seamlessly rotated, so we need to track when this
-    // hits zero so we can apply deferred orientation updates.
-    int mSeamlessRotationCount = 0;
+    /**
+     * A count of the windows which are 'seamlessly rotated', e.g. a surface
+     * at an old orientation is being transformed. We freeze orientation updates
+     * while any windows are seamlessly rotated, so we need to track when this
+     * hits zero so we can apply deferred orientation updates.
+     */
+    private int mSeamlessRotationCount = 0;
+    /**
+     * True in the interval from starting seamless rotation until the last rotated
+     * window draws in the new orientation.
+     */
+    private boolean mRotatingSeamlessly = false;
 
     private final class SettingsObserver extends ContentObserver {
         private final Uri mDisplayInversionEnabledUri =
@@ -815,6 +807,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
     SurfaceBuilderFactory mSurfaceBuilderFactory = SurfaceControl.Builder::new;
     TransactionFactory mTransactionFactory = SurfaceControl.Transaction::new;
+
+    private final SurfaceControl.Transaction mTransaction = mTransactionFactory.make();
 
     static void boostPriorityForLockedSection() {
         sThreadPriorityBooster.boost();
@@ -1037,8 +1031,6 @@ public class WindowManagerService extends IWindowManager.Stub
         IntentFilter filter = new IntentFilter();
         // Track changes to DevicePolicyManager state so we can enable/disable keyguard.
         filter.addAction(ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
-        // Listen to user removal broadcasts so that we can remove the user-specific data.
-        filter.addAction(Intent.ACTION_USER_REMOVED);
         mContext.registerReceiver(mBroadcastReceiver, filter);
 
         mLatencyTracker = LatencyTracker.getInstance(context);
@@ -1134,17 +1126,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 throw new IllegalStateException("Display has not been initialialized");
             }
 
-            DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-
-            // Adding a window is an exception where the WindowManagerService can create the
-            // display instead of waiting for the ActivityManagerService to drive creation.
-            if (displayContent == null) {
-                final Display display = mDisplayManager.getDisplay(displayId);
-
-                if (display != null) {
-                    displayContent = mRoot.createDisplayContent(display, null /* controller */);
-                }
-            }
+            final DisplayContent displayContent = getDisplayContentOrCreate(displayId);
 
             if (displayContent == null) {
                 Slog.w(TAG_WM, "Attempted to add window to a display that does not exist: "
@@ -1447,7 +1429,9 @@ public class WindowManagerService extends IWindowManager.Stub
 
             final DisplayFrames displayFrames = displayContent.mDisplayFrames;
             // TODO: Not sure if onDisplayInfoUpdated() call is needed.
-            displayFrames.onDisplayInfoUpdated(displayContent.getDisplayInfo());
+            final DisplayInfo displayInfo = displayContent.getDisplayInfo();
+            displayFrames.onDisplayInfoUpdated(displayInfo,
+                    displayContent.calculateDisplayCutoutForRotation(displayInfo.rotation));
             final Rect taskBounds;
             if (atoken != null && atoken.getTask() != null) {
                 taskBounds = mTmpRect;
@@ -1494,7 +1478,7 @@ public class WindowManagerService extends IWindowManager.Stub
             if (localLOGV || DEBUG_ADD_REMOVE) Slog.v(TAG_WM, "addWindow: New client "
                     + client.asBinder() + ": window=" + win + " Callers=" + Debug.getCallers(5));
 
-            if (win.isVisibleOrAdding() && updateOrientationFromAppTokensLocked(false, displayId)) {
+            if (win.isVisibleOrAdding() && updateOrientationFromAppTokensLocked(displayId)) {
                 reportNewConfig = true;
             }
         }
@@ -1506,6 +1490,32 @@ public class WindowManagerService extends IWindowManager.Stub
         Binder.restoreCallingIdentity(origId);
 
         return res;
+    }
+
+    /**
+     * Get existing {@link DisplayContent} or create a new one if the display is registered in
+     * DisplayManager.
+     *
+     * NOTE: This should only be used in cases when there is a chance that a {@link DisplayContent}
+     * that corresponds to a display just added to DisplayManager has not yet been created. This
+     * usually means that the call of this method was initiated from outside of Activity or Window
+     * Manager. In most cases the regular getter should be used.
+     * @see RootWindowContainer#getDisplayContent(int)
+     */
+    private DisplayContent getDisplayContentOrCreate(int displayId) {
+        DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+
+        // Create an instance if possible instead of waiting for the ActivityManagerService to drive
+        // the creation.
+        if (displayContent == null) {
+            final Display display = mDisplayManager.getDisplay(displayId);
+
+            if (display != null) {
+                displayContent = mRoot.createDisplayContent(display, null /* controller */);
+            }
+        }
+
+        return displayContent;
     }
 
     private boolean doesAddToastWindowRequireToken(String packageName, int callingUid,
@@ -1570,41 +1580,32 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    /**
-     * Returns whether screen capture is disabled for all windows of a specific user.
-     */
-    boolean isScreenCaptureDisabledLocked(int userId) {
-        Boolean disabled = mScreenCaptureDisabled.get(userId);
-        if (disabled == null) {
-            return false;
-        }
-        return disabled;
-    }
-
     boolean isSecureLocked(WindowState w) {
         if ((w.mAttrs.flags&WindowManager.LayoutParams.FLAG_SECURE) != 0) {
             return true;
         }
-        if (isScreenCaptureDisabledLocked(UserHandle.getUserId(w.mOwnerUid))) {
+        if (DevicePolicyCache.getInstance().getScreenCaptureDisabled(
+                UserHandle.getUserId(w.mOwnerUid))) {
             return true;
         }
         return false;
     }
 
     /**
-     * Set mScreenCaptureDisabled for specific user
+     * Set whether screen capture is disabled for all windows of a specific user from
+     * the device policy cache.
      */
     @Override
-    public void setScreenCaptureDisabled(int userId, boolean disabled) {
+    public void refreshScreenCaptureDisabled(int userId) {
         int callingUid = Binder.getCallingUid();
         if (callingUid != SYSTEM_UID) {
-            throw new SecurityException("Only system can call setScreenCaptureDisabled.");
+            throw new SecurityException("Only system can call refreshScreenCaptureDisabled.");
         }
 
         synchronized(mWindowMap) {
-            mScreenCaptureDisabled.put(userId, disabled);
             // Update secure surface for all windows belonging to this user.
-            mRoot.setSecureSurfaceState(userId, disabled);
+            mRoot.setSecureSurfaceState(userId,
+                    DevicePolicyCache.getInstance().getScreenCaptureDisabled(userId));
         }
     }
 
@@ -2056,7 +2057,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER,
                     "relayoutWindow: updateOrientationFromAppTokens");
-            configChanged = updateOrientationFromAppTokensLocked(false, displayId);
+            configChanged = updateOrientationFromAppTokensLocked(displayId);
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
 
             if (toBeDisplayed && win.mIsWallpaper) {
@@ -2106,7 +2107,7 @@ public class WindowManagerService extends IWindowManager.Stub
             win.mLastRelayoutContentInsets.set(win.mContentInsets);
             outVisibleInsets.set(win.mVisibleInsets);
             outStableInsets.set(win.mStableInsets);
-            outCutout.set(win.mDisplayCutout);
+            outCutout.set(win.mDisplayCutout.getDisplayCutout());
             outOutsets.set(win.mOutsets);
             outBackdropFrame.set(win.getBackdropFrame(win.mFrame));
             if (localLOGV) Slog.v(
@@ -2347,7 +2348,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
         Configuration config = null;
 
-        if (updateOrientationFromAppTokensLocked(false, displayId)) {
+        if (updateOrientationFromAppTokensLocked(displayId)) {
             // If we changed the orientation but mOrientationChangeComplete is already true,
             // we used seamless rotation, and we don't need to freeze the screen.
             if (freezeThisOneIfNeeded != null && !mRoot.mOrientationChangeComplete) {
@@ -2374,7 +2375,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 int anim[] = new int[2];
                 mPolicy.selectRotationAnimationLw(anim);
 
-                startFreezingDisplayLocked(false, anim[0], anim[1], displayContent);
+                startFreezingDisplayLocked(anim[0], anim[1], displayContent);
                 config = new Configuration(mTempConfiguration);
             }
         }
@@ -2394,7 +2395,7 @@ public class WindowManagerService extends IWindowManager.Stub
      * tokens.
      * @see android.view.IWindowManager#updateOrientationFromAppTokens(Configuration, IBinder, int)
      */
-    boolean updateOrientationFromAppTokensLocked(boolean inTransaction, int displayId) {
+    boolean updateOrientationFromAppTokensLocked(int displayId) {
         long ident = Binder.clearCallingIdentity();
         try {
             final DisplayContent dc = mRoot.getDisplayContent(displayId);
@@ -2407,7 +2408,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 if (dc.isDefaultDisplay) {
                     mPolicy.setCurrentOrientationLw(req);
                 }
-                if (dc.updateRotationUnchecked(inTransaction)) {
+                if (dc.updateRotationUnchecked()) {
                     // changed
                     return true;
                 }
@@ -2675,6 +2676,7 @@ public class WindowManagerService extends IWindowManager.Stub
         synchronized (mWindowMap) {
             mRecentsAnimationController = new RecentsAnimationController(this,
                     recentsAnimationRunner, callbacks, displayId);
+            mAppTransition.updateBooster();
             mRecentsAnimationController.initialize(recentTaskIds);
         }
     }
@@ -2711,6 +2713,7 @@ public class WindowManagerService extends IWindowManager.Stub
             if (mRecentsAnimationController != null) {
                 mRecentsAnimationController.cleanupAnimation();
                 mRecentsAnimationController = null;
+                mAppTransition.updateBooster();
             }
         }
     }
@@ -2880,7 +2883,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 mClientFreezingScreen = true;
                 final long origId = Binder.clearCallingIdentity();
                 try {
-                    startFreezingDisplayLocked(false, exitAnim, enterAnim);
+                    startFreezingDisplayLocked(exitAnim, enterAnim);
                     mH.removeMessages(H.CLIENT_FREEZE_TIMEOUT);
                     mH.sendEmptyMessageDelayed(H.CLIENT_FREEZE_TIMEOUT, 5000);
                 } finally {
@@ -3211,6 +3214,12 @@ public class WindowManagerService extends IWindowManager.Stub
             // Switch state: AKEY_STATE_UNKNOWN.
             return CAMERA_LENS_COVER_ABSENT;
         }
+    }
+
+    // Called by window manager policy.  Not exposed externally.
+    @Override
+    public void switchKeyboardLayout(int deviceId, int direction) {
+        mInputManager.switchKeyboardLayout(deviceId, direction);
     }
 
     // Called by window manager policy.  Not exposed externally.
@@ -3801,8 +3810,7 @@ public class WindowManagerService extends IWindowManager.Stub
             if (mDeferredRotationPauseCount == 0) {
                 // TODO(multi-display): Update rotation for different displays separately.
                 final DisplayContent displayContent = getDefaultDisplayContentLocked();
-                final boolean changed = displayContent.updateRotationUnchecked(
-                        false /* inTransaction */);
+                final boolean changed = displayContent.updateRotationUnchecked();
                 if (changed) {
                     mH.obtainMessage(H.SEND_NEW_CONFIGURATION, displayContent.getDisplayId())
                             .sendToTarget();
@@ -3827,8 +3835,7 @@ public class WindowManagerService extends IWindowManager.Stub
             synchronized (mWindowMap) {
                 final DisplayContent displayContent = getDefaultDisplayContentLocked();
                 Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "updateRotation: display");
-                rotationChanged = displayContent.updateRotationUnchecked(
-                        false /* inTransaction */);
+                rotationChanged = displayContent.updateRotationUnchecked();
                 Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
                 if (!rotationChanged || forceRelayout) {
                     displayContent.setLayoutNeeded();
@@ -5353,8 +5360,7 @@ public class WindowManagerService extends IWindowManager.Stub
         displayContent.setLayoutNeeded();
 
         final int displayId = displayContent.getDisplayId();
-        boolean configChanged = updateOrientationFromAppTokensLocked(false /* inTransaction */,
-                displayId);
+        boolean configChanged = updateOrientationFromAppTokensLocked(displayId);
         final Configuration currentDisplayConfig = displayContent.getConfiguration();
         mTempConfiguration.setTo(currentDisplayConfig);
         displayContent.computeScreenConfiguration(mTempConfiguration);
@@ -5362,7 +5368,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
         if (configChanged) {
             mWaitingForConfig = true;
-            startFreezingDisplayLocked(false /* inTransaction */, 0 /* exitAnim */,
+            startFreezingDisplayLocked(0 /* exitAnim */,
                     0 /* enterAnim */, displayContent);
             mH.obtainMessage(H.SEND_NEW_CONFIGURATION, displayId).sendToTarget();
         }
@@ -5678,14 +5684,14 @@ public class WindowManagerService extends IWindowManager.Stub
         return false;
     }
 
-    void startFreezingDisplayLocked(boolean inTransaction, int exitAnim, int enterAnim) {
-        startFreezingDisplayLocked(inTransaction, exitAnim, enterAnim,
+    void startFreezingDisplayLocked(int exitAnim, int enterAnim) {
+        startFreezingDisplayLocked(exitAnim, enterAnim,
                 getDefaultDisplayContentLocked());
     }
 
-    void startFreezingDisplayLocked(boolean inTransaction, int exitAnim, int enterAnim,
+    void startFreezingDisplayLocked(int exitAnim, int enterAnim,
             DisplayContent displayContent) {
-        if (mDisplayFrozen) {
+        if (mDisplayFrozen || mRotatingSeamlessly) {
             return;
         }
 
@@ -5696,8 +5702,8 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         if (DEBUG_ORIENTATION) Slog.d(TAG_WM,
-                "startFreezingDisplayLocked: inTransaction=" + inTransaction
-                + " exitAnim=" + exitAnim + " enterAnim=" + enterAnim
+                "startFreezingDisplayLocked: exitAnim="
+                + exitAnim + " enterAnim=" + enterAnim
                 + " called by " + Debug.getCallers(8));
         mScreenFrozenLock.acquire();
 
@@ -5741,7 +5747,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
             displayContent.updateDisplayInfo();
             screenRotationAnimation = new ScreenRotationAnimation(mContext, displayContent,
-                    inTransaction, mPolicy.isDefaultOrientationForced(), isSecure,
+                    mPolicy.isDefaultOrientationForced(), isSecure,
                     this);
             mAnimator.setScreenRotationAnimationLocked(mFrozenDisplayId,
                     screenRotationAnimation);
@@ -5804,9 +5810,10 @@ public class WindowManagerService extends IWindowManager.Stub
             if (!mPolicy.validateRotationAnimationLw(mExitAnimId, mEnterAnimId, false)) {
                 mExitAnimId = mEnterAnimId = 0;
             }
-            if (screenRotationAnimation.dismiss(MAX_ANIMATION_DURATION,
+            if (screenRotationAnimation.dismiss(mTransaction, MAX_ANIMATION_DURATION,
                     getTransitionAnimationScaleLocked(), displayInfo.logicalWidth,
                         displayInfo.logicalHeight, mExitAnimId, mEnterAnimId)) {
+                mTransaction.apply();
                 scheduleAnimationLocked();
             } else {
                 screenRotationAnimation.kill();
@@ -5829,7 +5836,7 @@ public class WindowManagerService extends IWindowManager.Stub
         // to avoid inconsistent states.  However, something interesting
         // could have actually changed during that time so re-evaluate it
         // now to catch that.
-        configChanged = updateOrientationFromAppTokensLocked(false, displayId);
+        configChanged = updateOrientationFromAppTokensLocked(displayId);
 
         // A little kludge: a lot could have happened while the
         // display was frozen, so now that we are coming back we
@@ -5843,8 +5850,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
         if (updateRotation) {
             if (DEBUG_ORIENTATION) Slog.d(TAG_WM, "Performing post-rotate rotation");
-            configChanged |= displayContent.updateRotationUnchecked(
-                    false /* inTransaction */);
+            configChanged |= displayContent.updateRotationUnchecked();
         }
 
         if (configChanged) {
@@ -5933,6 +5939,16 @@ public class WindowManagerService extends IWindowManager.Stub
 
         synchronized (mWindowMap) {
             mPolicy.setPipVisibilityLw(visible);
+        }
+    }
+
+    @Override
+    public void setShelfHeight(boolean visible, int shelfHeight) {
+        mAmInternal.enforceCallerIsRecentsOrHasPermission(android.Manifest.permission.STATUS_BAR,
+                "setShelfHeight()");
+        synchronized (mWindowMap) {
+            getDefaultDisplayContentLocked().getPinnedStackController().setAdjustedForShelf(visible,
+                    shelfHeight);
         }
     }
 
@@ -7022,6 +7038,24 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
+    public void dontOverrideDisplayInfo(int displayId) {
+        synchronized (mWindowMap) {
+            final DisplayContent dc = getDisplayContentOrCreate(displayId);
+            if (dc == null) {
+                throw new IllegalArgumentException(
+                        "Trying to register a non existent display.");
+            }
+            // We usually set the override info in DisplayManager so that we get consistent
+            // values when displays are changing. However, we don't do this for displays that
+            // serve as containers for ActivityViews because we don't want letter-/pillar-boxing
+            // during resize.
+            dc.mShouldOverrideDisplayConfiguration = false;
+            mDisplayManagerInternal.setDisplayInfoOverrideFromWindowManager(displayId,
+                    null /* info */);
+        }
+    }
+
+    @Override
     public void registerShortcutKey(long shortcutCode, IShortcutService shortcutKeyReceiver)
             throws RemoteException {
         if (!checkCallingPermission(REGISTER_WINDOW_MANAGER_LISTENERS, "registerShortcutKey")) {
@@ -7054,8 +7088,10 @@ public class WindowManagerService extends IWindowManager.Stub
             if (DEBUG_ORIENTATION) {
                 Slog.i(TAG, "Performing post-rotate rotation after seamless rotation");
             }
+            finishSeamlessRotation();
+
             final DisplayContent displayContent = w.getDisplayContent();
-            if (displayContent.updateRotationUnchecked(false /* inTransaction */)) {
+            if (displayContent.updateRotationUnchecked()) {
                 mH.obtainMessage(H.SEND_NEW_CONFIGURATION, displayContent.getDisplayId())
                         .sendToTarget();
             }
@@ -7465,5 +7501,31 @@ public class WindowManagerService extends IWindowManager.Stub
         mH.obtainMessage(H.SET_RUNNING_REMOTE_ANIMATION, pid, runningRemoteAnimation ? 1 : 0)
                 .sendToTarget();
     }
-}
 
+    void startSeamlessRotation() {
+        // We are careful to reset this in case a window was removed before it finished
+        // seamless rotation.
+        mSeamlessRotationCount = 0;
+
+        mRotatingSeamlessly = true;
+    }
+
+    void finishSeamlessRotation() {
+        mRotatingSeamlessly = false;
+    }
+
+    /**
+     * Called when the state of lock task mode changes. This should be used to disable immersive
+     * mode confirmation.
+     *
+     * @param lockTaskState the new lock task mode state. One of
+     *                      {@link ActivityManager#LOCK_TASK_MODE_NONE},
+     *                      {@link ActivityManager#LOCK_TASK_MODE_LOCKED},
+     *                      {@link ActivityManager#LOCK_TASK_MODE_PINNED}.
+     */
+    public void onLockTaskStateChanged(int lockTaskState) {
+        synchronized (mWindowMap) {
+            mPolicy.onLockTaskStateChangedLw(lockTaskState);
+        }
+    }
+}

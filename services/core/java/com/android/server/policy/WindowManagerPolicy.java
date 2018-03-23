@@ -66,6 +66,7 @@ import static java.lang.annotation.RetentionPolicy.SOURCE;
 import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.CompatibilityInfo;
@@ -93,6 +94,7 @@ import android.view.animation.Animation;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
 import com.android.server.wm.DisplayFrames;
+import com.android.server.wm.utils.WmDisplayCutout;
 
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
@@ -217,11 +219,14 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
          * @param stableFrame The frame around which stable system decoration is positioned.
          * @param outsetFrame The frame that includes areas that aren't part of the surface but we
          * want to treat them as such.
-         * @param displayCutout the display displayCutout
+         * @param displayCutout the display cutout
+         * @param parentFrameWasClippedByDisplayCutout true if the parent frame would have been
+         * different if there was no display cutout.
          */
         public void computeFrameLw(Rect parentFrame, Rect displayFrame,
                 Rect overlayFrame, Rect contentFrame, Rect visibleFrame, Rect decorFrame,
-                Rect stableFrame, @Nullable Rect outsetFrame, DisplayCutout displayCutout);
+                Rect stableFrame, @Nullable Rect outsetFrame, WmDisplayCutout displayCutout,
+                boolean parentFrameWasClippedByDisplayCutout);
 
         /**
          * Retrieve the current frame of the window that has been assigned by
@@ -445,6 +450,14 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
             return false;
         }
 
+        /**
+         * Returns true if the window has a letterbox and any part of that letterbox overlaps with
+         * the given {@code rect}.
+         */
+        default boolean isLetterboxedOverlappingWith(Rect rect) {
+            return false;
+        }
+
         /** @return the current windowing mode of this window. */
         int getWindowingMode();
 
@@ -543,6 +556,12 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
          * Returns a code that descripbes whether the camera lens is covered or not.
          */
         public int getCameraLensCoverState();
+
+        /**
+         * Switch the keyboard layout for the given device.
+         * Direction should be +1 or -1 to go to the next or previous keyboard layout.
+         */
+        public void switchKeyboardLayout(int deviceId, int direction);
 
         /**
          * Switch the input method, to be precise, input method subtype.
@@ -1724,4 +1743,15 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * on the next user activity.
      */
     public void requestUserActivityNotification();
+
+    /**
+     * Called when the state of lock task mode changes. This should be used to disable immersive
+     * mode confirmation.
+     *
+     * @param lockTaskState the new lock task mode state. One of
+     *                      {@link ActivityManager#LOCK_TASK_MODE_NONE},
+     *                      {@link ActivityManager#LOCK_TASK_MODE_LOCKED},
+     *                      {@link ActivityManager#LOCK_TASK_MODE_PINNED}.
+     */
+    void onLockTaskStateChangedLw(int lockTaskState);
 }

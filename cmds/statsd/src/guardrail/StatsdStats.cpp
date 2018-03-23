@@ -21,6 +21,7 @@
 #include <android/util/ProtoOutputStream.h>
 #include "../stats_log_util.h"
 #include "statslog.h"
+#include "storage/StorageManager.h"
 
 namespace android {
 namespace os {
@@ -90,18 +91,6 @@ const int FIELD_ID_UID_MAP_CHANGES = 2;
 const int FIELD_ID_UID_MAP_BYTES_USED = 3;
 const int FIELD_ID_UID_MAP_DROPPED_SNAPSHOTS = 4;
 const int FIELD_ID_UID_MAP_DROPPED_CHANGES = 5;
-
-std::map<int, long> StatsdStats::kPullerCooldownMap = {
-        {android::util::KERNEL_WAKELOCK, 1},
-        {android::util::WIFI_BYTES_TRANSFER, 1},
-        {android::util::MOBILE_BYTES_TRANSFER, 1},
-        {android::util::WIFI_BYTES_TRANSFER_BY_FG_BG, 1},
-        {android::util::MOBILE_BYTES_TRANSFER_BY_FG_BG, 1},
-        {android::util::SUBSYSTEM_SLEEP_STATE, 1},
-        {android::util::CPU_TIME_PER_FREQ, 1},
-        {android::util::CPU_TIME_PER_UID, 1},
-        {android::util::CPU_TIME_PER_UID_FREQ, 1},
-};
 
 // TODO: add stats for pulled atoms.
 StatsdStats::StatsdStats() {
@@ -415,6 +404,8 @@ void StatsdStats::dumpStats(FILE* out) const {
             fprintf(out, "alert %lld declared %d times\n", (long long)stats.first, stats.second);
         }
     }
+    fprintf(out, "********Disk Usage stats***********\n");
+    StorageManager::printStats(out);
     fprintf(out, "********Pushed Atom stats***********\n");
     const size_t atomCounts = mPushedAtomStats.size();
     for (size_t i = 2; i < atomCounts; i++) {

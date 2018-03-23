@@ -499,13 +499,14 @@ public class AppOpsManager {
     public static final String OPSTR_RUN_ANY_IN_BACKGROUND = "android:run_any_in_background";
     /** @hide */
     @SystemApi @TestApi
-    public static final String OPSTR_CHANGE_WIFI_STATE = "change_wifi_state";
+    public static final String OPSTR_CHANGE_WIFI_STATE = "android:change_wifi_state";
     /** @hide */
     @SystemApi @TestApi
-    public static final String OPSTR_REQUEST_DELETE_PACKAGES = "request_delete_packages";
+    public static final String OPSTR_REQUEST_DELETE_PACKAGES = "android:request_delete_packages";
     /** @hide */
     @SystemApi @TestApi
-    public static final String OPSTR_BIND_ACCESSIBILITY_SERVICE = "bind_accessibility_service";
+    public static final String OPSTR_BIND_ACCESSIBILITY_SERVICE =
+            "android:bind_accessibility_service";
 
     // Warning: If an permission is added here it also has to be added to
     // com.android.packageinstaller.permission.utils.EventLogger
@@ -1609,6 +1610,7 @@ public class AppOpsManager {
      * @param mode The app op mode to set.
      * @hide
      */
+    @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setUidMode(int code, int uid, int mode) {
         try {
             mService.setUidMode(code, uid, mode);
@@ -1628,7 +1630,7 @@ public class AppOpsManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.UPDATE_APP_OPS_STATS)
+    @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setUidMode(String appOp, int uid, int mode) {
         try {
             mService.setUidMode(AppOpsManager.strOpToOp(appOp), uid, mode);
@@ -1660,9 +1662,31 @@ public class AppOpsManager {
 
     /** @hide */
     @TestApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setMode(int code, int uid, String packageName, int mode) {
         try {
             mService.setMode(code, uid, packageName, mode);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Change the operating mode for the given op in the given app package.  You must pass
+     * in both the uid and name of the application whose mode is being modified; if these
+     * do not match, the modification will not be applied.
+     *
+     * @param op The operation to modify.  One of the OPSTR_* constants.
+     * @param uid The user id of the application whose mode will be changed.
+     * @param packageName The name of the application package name whose mode will
+     * be changed.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
+    public void setMode(String op, int uid, String packageName, int mode) {
+        try {
+            mService.setMode(strOpToOp(op), uid, packageName, mode);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1679,6 +1703,7 @@ public class AppOpsManager {
      * @param exceptionPackages Optional list of packages to exclude from the restriction.
      * @hide
      */
+    @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void setRestriction(int code, @AttributeUsage int usage, int mode,
             String[] exceptionPackages) {
         try {
@@ -1690,6 +1715,7 @@ public class AppOpsManager {
     }
 
     /** @hide */
+    @RequiresPermission(android.Manifest.permission.MANAGE_APP_OPS_MODES)
     public void resetAllModes() {
         try {
             mService.resetAllModes(mContext.getUserId(), null);

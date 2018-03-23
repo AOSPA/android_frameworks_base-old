@@ -1,3 +1,12 @@
+package android {
+
+  public static final class Manifest.permission {
+    field public static final java.lang.String BRIGHTNESS_SLIDER_USAGE = "android.permission.BRIGHTNESS_SLIDER_USAGE";
+    field public static final java.lang.String CONFIGURE_DISPLAY_BRIGHTNESS = "android.permission.CONFIGURE_DISPLAY_BRIGHTNESS";
+  }
+
+}
+
 package android.animation {
 
   public class ValueAnimator extends android.animation.Animator {
@@ -65,8 +74,8 @@ package android.app {
     field public static final java.lang.String OPSTR_AUDIO_NOTIFICATION_VOLUME = "android:audio_notification_volume";
     field public static final java.lang.String OPSTR_AUDIO_RING_VOLUME = "android:audio_ring_volume";
     field public static final java.lang.String OPSTR_AUDIO_VOICE_VOLUME = "android:audio_voice_volume";
-    field public static final java.lang.String OPSTR_BIND_ACCESSIBILITY_SERVICE = "bind_accessibility_service";
-    field public static final java.lang.String OPSTR_CHANGE_WIFI_STATE = "change_wifi_state";
+    field public static final java.lang.String OPSTR_BIND_ACCESSIBILITY_SERVICE = "android:bind_accessibility_service";
+    field public static final java.lang.String OPSTR_CHANGE_WIFI_STATE = "android:change_wifi_state";
     field public static final java.lang.String OPSTR_GET_ACCOUNTS = "android:get_accounts";
     field public static final java.lang.String OPSTR_GPS = "android:gps";
     field public static final java.lang.String OPSTR_INSTANT_APP_START_FOREGROUND = "android:instant_app_start_foreground";
@@ -78,7 +87,7 @@ package android.app {
     field public static final java.lang.String OPSTR_READ_CLIPBOARD = "android:read_clipboard";
     field public static final java.lang.String OPSTR_READ_ICC_SMS = "android:read_icc_sms";
     field public static final java.lang.String OPSTR_RECEIVE_EMERGENCY_BROADCAST = "android:receive_emergency_broadcast";
-    field public static final java.lang.String OPSTR_REQUEST_DELETE_PACKAGES = "request_delete_packages";
+    field public static final java.lang.String OPSTR_REQUEST_DELETE_PACKAGES = "android:request_delete_packages";
     field public static final java.lang.String OPSTR_REQUEST_INSTALL_PACKAGES = "android:request_install_packages";
     field public static final java.lang.String OPSTR_RUN_ANY_IN_BACKGROUND = "android:run_any_in_background";
     field public static final java.lang.String OPSTR_RUN_IN_BACKGROUND = "android:run_in_background";
@@ -361,7 +370,9 @@ package android.hardware.display {
 
   public final class DisplayManager {
     method public java.util.List<android.hardware.display.AmbientBrightnessDayStats> getAmbientBrightnessStats();
+    method public android.hardware.display.BrightnessConfiguration getBrightnessConfiguration();
     method public java.util.List<android.hardware.display.BrightnessChangeEvent> getBrightnessEvents();
+    method public android.hardware.display.BrightnessConfiguration getDefaultBrightnessConfiguration();
     method public android.graphics.Point getStableDisplaySize();
     method public void setBrightnessConfiguration(android.hardware.display.BrightnessConfiguration);
   }
@@ -464,7 +475,6 @@ package android.os {
 
   public class IncidentManager {
     method public void reportIncident(android.os.IncidentReportArgs);
-    method public void reportIncident(java.lang.String, byte[]);
   }
 
   public final class IncidentReportArgs implements android.os.Parcelable {
@@ -475,7 +485,6 @@ package android.os {
     method public boolean containsSection(int);
     method public int describeContents();
     method public boolean isAll();
-    method public static android.os.IncidentReportArgs parseSetting(java.lang.String) throws java.lang.IllegalArgumentException;
     method public void readFromParcel(android.os.Parcel);
     method public int sectionCount();
     method public void setAll(boolean);
@@ -750,7 +759,7 @@ package android.telephony {
   }
 
   public class ServiceState implements android.os.Parcelable {
-    method public void setSystemAndNetworkId(int, int);
+    method public void setCdmaSystemAndNetworkId(int, int);
   }
 
 }
