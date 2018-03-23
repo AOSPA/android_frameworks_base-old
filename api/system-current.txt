@@ -32,6 +32,7 @@ package android {
     field public static final java.lang.String BIND_RESOLVER_RANKER_SERVICE = "android.permission.BIND_RESOLVER_RANKER_SERVICE";
     field public static final java.lang.String BIND_RUNTIME_PERMISSION_PRESENTER_SERVICE = "android.permission.BIND_RUNTIME_PERMISSION_PRESENTER_SERVICE";
     field public static final java.lang.String BIND_SETTINGS_SUGGESTIONS_SERVICE = "android.permission.BIND_SETTINGS_SUGGESTIONS_SERVICE";
+    field public static final java.lang.String BIND_SOUND_TRIGGER_DETECTION_SERVICE = "android.permission.BIND_SOUND_TRIGGER_DETECTION_SERVICE";
     field public static final java.lang.String BIND_TELEPHONY_DATA_SERVICE = "android.permission.BIND_TELEPHONY_DATA_SERVICE";
     field public static final java.lang.String BIND_TELEPHONY_NETWORK_SERVICE = "android.permission.BIND_TELEPHONY_NETWORK_SERVICE";
     field public static final java.lang.String BIND_TEXTCLASSIFIER_SERVICE = "android.permission.BIND_TEXTCLASSIFIER_SERVICE";
@@ -99,6 +100,7 @@ package android {
     field public static final java.lang.String MANAGE_CARRIER_OEM_UNLOCK_STATE = "android.permission.MANAGE_CARRIER_OEM_UNLOCK_STATE";
     field public static final java.lang.String MANAGE_CA_CERTIFICATES = "android.permission.MANAGE_CA_CERTIFICATES";
     field public static final java.lang.String MANAGE_DEVICE_ADMINS = "android.permission.MANAGE_DEVICE_ADMINS";
+    field public static final java.lang.String MANAGE_SOUND_TRIGGER = "android.permission.MANAGE_SOUND_TRIGGER";
     field public static final java.lang.String MANAGE_SUBSCRIPTION_PLANS = "android.permission.MANAGE_SUBSCRIPTION_PLANS";
     field public static final java.lang.String MANAGE_USB = "android.permission.MANAGE_USB";
     field public static final java.lang.String MANAGE_USERS = "android.permission.MANAGE_USERS";
@@ -261,6 +263,7 @@ package android.app {
 
   public class AppOpsManager {
     method public static java.lang.String[] getOpStrs();
+    method public void setMode(java.lang.String, int, java.lang.String, int);
     method public void setUidMode(java.lang.String, int, int);
     field public static final java.lang.String OPSTR_ACCEPT_HANDOVER = "android:accept_handover";
     field public static final java.lang.String OPSTR_ACCESS_NOTIFICATIONS = "android:access_notifications";
@@ -275,8 +278,8 @@ package android.app {
     field public static final java.lang.String OPSTR_AUDIO_NOTIFICATION_VOLUME = "android:audio_notification_volume";
     field public static final java.lang.String OPSTR_AUDIO_RING_VOLUME = "android:audio_ring_volume";
     field public static final java.lang.String OPSTR_AUDIO_VOICE_VOLUME = "android:audio_voice_volume";
-    field public static final java.lang.String OPSTR_BIND_ACCESSIBILITY_SERVICE = "bind_accessibility_service";
-    field public static final java.lang.String OPSTR_CHANGE_WIFI_STATE = "change_wifi_state";
+    field public static final java.lang.String OPSTR_BIND_ACCESSIBILITY_SERVICE = "android:bind_accessibility_service";
+    field public static final java.lang.String OPSTR_CHANGE_WIFI_STATE = "android:change_wifi_state";
     field public static final java.lang.String OPSTR_GET_ACCOUNTS = "android:get_accounts";
     field public static final java.lang.String OPSTR_GPS = "android:gps";
     field public static final java.lang.String OPSTR_INSTANT_APP_START_FOREGROUND = "android:instant_app_start_foreground";
@@ -288,7 +291,7 @@ package android.app {
     field public static final java.lang.String OPSTR_READ_CLIPBOARD = "android:read_clipboard";
     field public static final java.lang.String OPSTR_READ_ICC_SMS = "android:read_icc_sms";
     field public static final java.lang.String OPSTR_RECEIVE_EMERGENCY_BROADCAST = "android:receive_emergency_broadcast";
-    field public static final java.lang.String OPSTR_REQUEST_DELETE_PACKAGES = "request_delete_packages";
+    field public static final java.lang.String OPSTR_REQUEST_DELETE_PACKAGES = "android:request_delete_packages";
     field public static final java.lang.String OPSTR_REQUEST_INSTALL_PACKAGES = "android:request_install_packages";
     field public static final java.lang.String OPSTR_RUN_ANY_IN_BACKGROUND = "android:run_any_in_background";
     field public static final java.lang.String OPSTR_RUN_IN_BACKGROUND = "android:run_in_background";
@@ -335,6 +338,9 @@ package android.app {
   }
 
   public class Notification implements android.os.Parcelable {
+    field public static final java.lang.String CATEGORY_CAR_EMERGENCY = "car_emergency";
+    field public static final java.lang.String CATEGORY_CAR_INFORMATION = "car_information";
+    field public static final java.lang.String CATEGORY_CAR_WARNING = "car_warning";
     field public static final java.lang.String EXTRA_ALLOW_DURING_SETUP = "android.allowDuringSetup";
     field public static final java.lang.String EXTRA_SUBSTITUTE_APP_NAME = "android.substName";
     field public static final int FLAG_AUTOGROUP_SUMMARY = 1024; // 0x400
@@ -369,7 +375,6 @@ package android.app {
   }
 
   public final class StatsManager {
-    method public boolean addConfiguration(long, byte[], java.lang.String, java.lang.String);
     method public boolean addConfiguration(long, byte[]);
     method public byte[] getData(long);
     method public byte[] getMetadata();
@@ -377,6 +382,7 @@ package android.app {
     method public boolean setBroadcastSubscriber(long, long, android.app.PendingIntent);
     method public boolean setDataFetchOperation(long, android.app.PendingIntent);
     field public static final java.lang.String ACTION_STATSD_STARTED = "android.app.action.STATSD_STARTED";
+    field public static final java.lang.String EXTRA_STATS_BROADCAST_SUBSCRIBER_COOKIES = "android.app.extra.STATS_BROADCAST_SUBSCRIBER_COOKIES";
     field public static final java.lang.String EXTRA_STATS_CONFIG_KEY = "android.app.extra.STATS_CONFIG_KEY";
     field public static final java.lang.String EXTRA_STATS_CONFIG_UID = "android.app.extra.STATS_CONFIG_UID";
     field public static final java.lang.String EXTRA_STATS_DIMENSIONS_VALUE = "android.app.extra.STATS_DIMENSIONS_VALUE";
@@ -716,17 +722,23 @@ package android.app.usage {
   }
 
   public static final class UsageEvents.Event {
-    method public int getStandbyBucket();
+    method public java.lang.String getNotificationChannelId();
+    field public static final int NOTIFICATION_INTERRUPTION = 12; // 0xc
     field public static final int NOTIFICATION_SEEN = 10; // 0xa
-    field public static final int STANDBY_BUCKET_CHANGED = 11; // 0xb
+    field public static final int SYSTEM_INTERACTION = 6; // 0x6
   }
 
   public final class UsageStatsManager {
     method public int getAppStandbyBucket(java.lang.String);
     method public java.util.Map<java.lang.String, java.lang.Integer> getAppStandbyBuckets();
+    method public void registerAppUsageObserver(int, java.lang.String[], long, java.util.concurrent.TimeUnit, android.app.PendingIntent);
     method public void setAppStandbyBucket(java.lang.String, int);
     method public void setAppStandbyBuckets(java.util.Map<java.lang.String, java.lang.Integer>);
+    method public void unregisterAppUsageObserver(int);
     method public void whitelistAppTemporarily(java.lang.String, long, android.os.UserHandle);
+    field public static final java.lang.String EXTRA_OBSERVER_ID = "android.app.usage.extra.OBSERVER_ID";
+    field public static final java.lang.String EXTRA_TIME_LIMIT = "android.app.usage.extra.TIME_LIMIT";
+    field public static final java.lang.String EXTRA_TIME_USED = "android.app.usage.extra.TIME_USED";
     field public static final int STANDBY_BUCKET_EXEMPTED = 5; // 0x5
     field public static final int STANDBY_BUCKET_NEVER = 50; // 0x32
   }
@@ -1223,7 +1235,9 @@ package android.hardware.display {
 
   public final class DisplayManager {
     method public java.util.List<android.hardware.display.AmbientBrightnessDayStats> getAmbientBrightnessStats();
+    method public android.hardware.display.BrightnessConfiguration getBrightnessConfiguration();
     method public java.util.List<android.hardware.display.BrightnessChangeEvent> getBrightnessEvents();
+    method public android.hardware.display.BrightnessConfiguration getDefaultBrightnessConfiguration();
     method public android.graphics.Point getStableDisplaySize();
     method public void setBrightnessConfiguration(android.hardware.display.BrightnessConfiguration);
   }
@@ -2210,6 +2224,21 @@ package android.hardware.radio {
 
 }
 
+package android.hardware.soundtrigger {
+
+  public class SoundTrigger {
+    field public static final int STATUS_OK = 0; // 0x0
+  }
+
+  public static class SoundTrigger.RecognitionEvent {
+    method public android.media.AudioFormat getCaptureFormat();
+    method public int getCaptureSession();
+    method public byte[] getData();
+    method public boolean isCaptureAvailable();
+  }
+
+}
+
 package android.hardware.usb {
 
   public class UsbDeviceConnection {
@@ -2725,6 +2754,16 @@ package android.media.session {
 
 package android.media.soundtrigger {
 
+  public abstract class SoundTriggerDetectionService extends android.app.Service {
+    ctor public SoundTriggerDetectionService();
+    method public void onConnected(java.util.UUID, android.os.Bundle);
+    method public void onDisconnected(java.util.UUID, android.os.Bundle);
+    method public void onError(java.util.UUID, android.os.Bundle, int, int);
+    method public void onGenericRecognitionEvent(java.util.UUID, android.os.Bundle, int, android.hardware.soundtrigger.SoundTrigger.RecognitionEvent);
+    method public abstract void onStopOperation(java.util.UUID, android.os.Bundle, int);
+    method public final void operationFinished(java.util.UUID, int);
+  }
+
   public final class SoundTriggerDetector {
     method public boolean startRecognition(int);
     method public boolean stopRecognition();
@@ -2749,6 +2788,7 @@ package android.media.soundtrigger {
   public final class SoundTriggerManager {
     method public android.media.soundtrigger.SoundTriggerDetector createSoundTriggerDetector(java.util.UUID, android.media.soundtrigger.SoundTriggerDetector.Callback, android.os.Handler);
     method public void deleteModel(java.util.UUID);
+    method public int getDetectionServiceOperationsTimeout();
     method public android.media.soundtrigger.SoundTriggerManager.Model getModel(java.util.UUID);
     method public void updateModel(android.media.soundtrigger.SoundTriggerManager.Model);
   }
@@ -3760,7 +3800,6 @@ package android.os {
 
   public class IncidentManager {
     method public void reportIncident(android.os.IncidentReportArgs);
-    method public void reportIncident(java.lang.String, byte[]);
   }
 
   public final class IncidentReportArgs implements android.os.Parcelable {
@@ -3771,7 +3810,6 @@ package android.os {
     method public boolean containsSection(int);
     method public int describeContents();
     method public boolean isAll();
-    method public static android.os.IncidentReportArgs parseSetting(java.lang.String) throws java.lang.IllegalArgumentException;
     method public void readFromParcel(android.os.Parcel);
     method public int sectionCount();
     method public void setAll(boolean);
@@ -4322,11 +4360,14 @@ package android.security.keystore.recovery {
     method public deprecated java.util.List<java.lang.String> getAliases(java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public java.util.List<java.lang.String> getAliases() throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public static android.security.keystore.recovery.RecoveryController getInstance(android.content.Context);
+    method public java.security.Key getKey(java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException, java.security.UnrecoverableKeyException;
+    method public android.security.keystore.recovery.KeyChainSnapshot getKeyChainSnapshot() throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public int[] getPendingRecoverySecretTypes() throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public deprecated android.security.keystore.recovery.KeyChainSnapshot getRecoveryData() throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public int[] getRecoverySecretTypes() throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public deprecated int getRecoveryStatus(java.lang.String, java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public int getRecoveryStatus(java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException;
+    method public java.security.Key importKey(java.lang.String, byte[]) throws android.security.keystore.recovery.InternalRecoveryServiceException, android.security.keystore.recovery.LockScreenRequiredException;
     method public deprecated void initRecoveryService(java.lang.String, byte[]) throws java.security.cert.CertificateException, android.security.keystore.recovery.InternalRecoveryServiceException;
     method public void initRecoveryService(java.lang.String, byte[], byte[]) throws java.security.cert.CertificateException, android.security.keystore.recovery.InternalRecoveryServiceException;
     method public void recoverySecretAvailable(android.security.keystore.recovery.KeyChainProtectionParams) throws android.security.keystore.recovery.InternalRecoveryServiceException;
@@ -4703,9 +4744,11 @@ package android.service.textclassifier {
 
   public abstract class TextClassifierService extends android.app.Service {
     ctor public TextClassifierService();
+    method public final android.view.textclassifier.TextClassifier getLocalTextClassifier();
     method public final android.os.IBinder onBind(android.content.Intent);
     method public abstract void onClassifyText(java.lang.CharSequence, int, int, android.view.textclassifier.TextClassification.Options, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextClassification>);
     method public abstract void onGenerateLinks(java.lang.CharSequence, android.view.textclassifier.TextLinks.Options, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextLinks>);
+    method public void onSelectionEvent(android.view.textclassifier.SelectionEvent);
     method public abstract void onSuggestSelection(java.lang.CharSequence, int, int, android.view.textclassifier.TextSelection.Options, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextSelection>);
     field public static final java.lang.String SERVICE_INTERFACE = "android.service.textclassifier.TextClassifierService";
   }
@@ -5256,12 +5299,13 @@ package android.telephony {
   }
 
   public class UiccSlotInfo implements android.os.Parcelable {
-    ctor public UiccSlotInfo(boolean, boolean, java.lang.String, int, int);
+    ctor public UiccSlotInfo(boolean, boolean, java.lang.String, int, int, boolean);
     method public int describeContents();
     method public java.lang.String getCardId();
     method public int getCardStateInfo();
     method public boolean getIsActive();
     method public boolean getIsEuicc();
+    method public boolean getIsExtendedApduSupported();
     method public int getLogicalSlotIdx();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final int CARD_STATE_INFO_ABSENT = 1; // 0x1
@@ -5429,6 +5473,7 @@ package android.telephony.euicc {
 
   public class EuiccManager {
     method public void continueOperation(android.content.Intent, android.os.Bundle);
+    method public void eraseSubscriptions(android.app.PendingIntent);
     method public void getDefaultDownloadableSubscriptionList(android.app.PendingIntent);
     method public void getDownloadableSubscriptionMetadata(android.telephony.euicc.DownloadableSubscription, android.app.PendingIntent);
     method public int getOtaStatus();
@@ -5500,6 +5545,9 @@ package android.telephony.ims {
   }
 
   public final class ImsCallProfile implements android.os.Parcelable {
+    ctor public ImsCallProfile();
+    ctor public ImsCallProfile(int, int);
+    ctor public ImsCallProfile(int, int, android.os.Bundle, android.telephony.ims.ImsStreamMediaProfile);
     method public int describeContents();
     method public java.lang.String getCallExtra(java.lang.String);
     method public java.lang.String getCallExtra(java.lang.String, java.lang.String);
@@ -5523,6 +5571,7 @@ package android.telephony.ims {
     method public void setCallExtraInt(java.lang.String, int);
     method public void updateCallExtras(android.telephony.ims.ImsCallProfile);
     method public void updateCallType(android.telephony.ims.ImsCallProfile);
+    method public void updateMediaProfile(android.telephony.ims.ImsCallProfile);
     method public void writeToParcel(android.os.Parcel, int);
     field public static final int CALL_RESTRICT_CAUSE_DISABLED = 2; // 0x2
     field public static final int CALL_RESTRICT_CAUSE_HD = 3; // 0x3
@@ -5860,6 +5909,7 @@ package android.telephony.ims {
   }
 
   public final class ImsStreamMediaProfile implements android.os.Parcelable {
+    ctor public ImsStreamMediaProfile(int, int, int, int, int);
     method public void copyFrom(android.telephony.ims.ImsStreamMediaProfile);
     method public int describeContents();
     method public int getAudioDirection();
@@ -6117,17 +6167,22 @@ package android.telephony.ims.stub {
   }
 
   public final class ImsFeatureConfiguration implements android.os.Parcelable {
-    ctor public ImsFeatureConfiguration();
     method public int describeContents();
-    method public int[] getServiceFeatures();
+    method public java.util.Set<android.telephony.ims.stub.ImsFeatureConfiguration.FeatureSlotPair> getServiceFeatures();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.telephony.ims.stub.ImsFeatureConfiguration> CREATOR;
   }
 
   public static class ImsFeatureConfiguration.Builder {
     ctor public ImsFeatureConfiguration.Builder();
-    method public android.telephony.ims.stub.ImsFeatureConfiguration.Builder addFeature(int);
+    method public android.telephony.ims.stub.ImsFeatureConfiguration.Builder addFeature(int, int);
     method public android.telephony.ims.stub.ImsFeatureConfiguration build();
+  }
+
+  public static final class ImsFeatureConfiguration.FeatureSlotPair {
+    ctor public ImsFeatureConfiguration.FeatureSlotPair(int, int);
+    field public final int featureType;
+    field public final int slotId;
   }
 
   public class ImsMultiEndpointImplBase {
@@ -6667,6 +6722,7 @@ package android.webkit {
     method public abstract android.view.View findFocus(android.view.View);
     method public abstract android.view.accessibility.AccessibilityNodeProvider getAccessibilityNodeProvider();
     method public abstract android.os.Handler getHandler(android.os.Handler);
+    method public default boolean isVisibleToUserForAutofill(int);
     method public abstract void onActivityResult(int, int, android.content.Intent);
     method public abstract void onAttachedToWindow();
     method public default boolean onCheckIsTextEditor();

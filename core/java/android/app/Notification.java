@@ -89,6 +89,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -763,6 +764,11 @@ public class Notification implements Parcelable
     public static final String CATEGORY_CALL = "call";
 
     /**
+     * Notification category: map turn-by-turn navigation.
+     */
+    public static final String CATEGORY_NAVIGATION = "navigation";
+
+    /**
      * Notification category: incoming direct message (SMS, instant message, etc.).
      */
     public static final String CATEGORY_MESSAGE = "msg";
@@ -833,6 +839,27 @@ public class Notification implements Parcelable
      * Notification category: user-scheduled reminder.
      */
     public static final String CATEGORY_REMINDER = "reminder";
+
+    /**
+     * Notification category: extreme car emergencies.
+     * @hide
+     */
+    @SystemApi
+    public static final String CATEGORY_CAR_EMERGENCY = "car_emergency";
+
+    /**
+     * Notification category: car warnings.
+     * @hide
+     */
+    @SystemApi
+    public static final String CATEGORY_CAR_WARNING = "car_warning";
+
+    /**
+     * Notification category: general car system information.
+     * @hide
+     */
+    @SystemApi
+    public static final String CATEGORY_CAR_INFORMATION = "car_information";
 
     /**
      * One of the predefined notification categories (see the <code>CATEGORY_*</code> constants)
@@ -2573,6 +2600,80 @@ public class Notification implements Parcelable
     };
 
     /**
+     * @hide
+     */
+    public static boolean areActionsVisiblyDifferent(Notification first, Notification second) {
+        Notification.Action[] firstAs = first.actions;
+        Notification.Action[] secondAs = second.actions;
+        if (firstAs == null && secondAs != null || firstAs != null && secondAs == null) {
+            return true;
+        }
+        if (firstAs != null && secondAs != null) {
+            if (firstAs.length != secondAs.length) {
+                return true;
+            }
+            for (int i = 0; i < firstAs.length; i++) {
+                if (!Objects.equals(firstAs[i].title, secondAs[i].title)) {
+                    return true;
+                }
+                RemoteInput[] firstRs = firstAs[i].getRemoteInputs();
+                RemoteInput[] secondRs = secondAs[i].getRemoteInputs();
+                if (firstRs == null) {
+                    firstRs = new RemoteInput[0];
+                }
+                if (secondRs == null) {
+                    secondRs = new RemoteInput[0];
+                }
+                if (firstRs.length != secondRs.length) {
+                    return true;
+                }
+                for (int j = 0; j < firstRs.length; j++) {
+                    if (!Objects.equals(firstRs[j].getLabel(), secondRs[j].getLabel())) {
+                        return true;
+                    }
+                    CharSequence[] firstCs = firstRs[i].getChoices();
+                    CharSequence[] secondCs = secondRs[i].getChoices();
+                    if (firstCs == null) {
+                        firstCs = new CharSequence[0];
+                    }
+                    if (secondCs == null) {
+                        secondCs = new CharSequence[0];
+                    }
+                    if (firstCs.length != secondCs.length) {
+                        return true;
+                    }
+                    for (int k = 0; k < firstCs.length; k++) {
+                        if (!Objects.equals(firstCs[k], secondCs[k])) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @hide
+     */
+    public static boolean areStyledNotificationsVisiblyDifferent(Builder first, Builder second) {
+        if (first.getStyle() == null) {
+            return second.getStyle() != null;
+        }
+        if (second.getStyle() == null) {
+            return true;
+        }
+        return first.getStyle().areNotificationsVisiblyDifferent(second.getStyle());
+    }
+
+    /**
+     * @hide
+     */
+    public static boolean areRemoteViewsChanged(Builder first, Builder second) {
+        return !first.usesStandardHeader() || !second.usesStandardHeader();
+    }
+
+    /**
      * Parcelling creates multiple copies of objects in {@code extras}. Fix them.
      * <p>
      * For backwards compatibility {@code extras} holds some references to "real" member data such
@@ -4010,6 +4111,13 @@ public class Notification implements Parcelable
                 }
             }
             return this;
+        }
+
+        /**
+         * Returns the style set by {@link #setStyle(Style)}.
+         */
+        public Style getStyle() {
+            return mStyle;
         }
 
         /**
@@ -5469,6 +5577,24 @@ public class Notification implements Parcelable
         public void setRebuildStyledRemoteViews(boolean rebuild) {
             mRebuildStyledRemoteViews = rebuild;
         }
+
+        /**
+         * Get the text that should be displayed in the statusBar when heads upped. This is
+         * usually just the app name, but may be different depending on the style.
+         *
+         * @param publicMode If true, return a text that is safe to display in public.
+         *
+         * @hide
+         */
+        public CharSequence getHeadsUpStatusBarText(boolean publicMode) {
+            if (mStyle != null && !publicMode) {
+                CharSequence text = mStyle.getHeadsUpStatusBarText();
+                if (!TextUtils.isEmpty(text)) {
+                    return text;
+                }
+            }
+            return loadHeaderAppName();
+        }
     }
 
     /**
@@ -5841,6 +5967,21 @@ public class Notification implements Parcelable
          */
         public void validate(Context context) {
         }
+
+        /**
+         * @hide
+         */
+        public abstract boolean areNotificationsVisiblyDifferent(Style other);
+        
+        /**
+         * @return the the text that should be displayed in the statusBar when heads-upped.
+         * If {@code null} is returned, the default implementation will be used.
+         *
+         * @hide
+         */
+        public CharSequence getHeadsUpStatusBarText() {
+            return null;
+        }
     }
 
     /**
@@ -5891,6 +6032,13 @@ public class Notification implements Parcelable
         public BigPictureStyle setSummaryText(CharSequence cs) {
             internalSetSummaryText(safeCharSequence(cs));
             return this;
+        }
+
+        /**
+         * @hide
+         */
+        public Bitmap getBigPicture() {
+            return mPicture;
         }
 
         /**
@@ -6033,6 +6181,18 @@ public class Notification implements Parcelable
         public boolean hasSummaryInHeader() {
             return false;
         }
+
+        /**
+         * @hide
+         */
+        @Override
+        public boolean areNotificationsVisiblyDifferent(Style other) {
+            if (other == null || getClass() != other.getClass()) {
+                return true;
+            }
+            BigPictureStyle otherS = (BigPictureStyle) other;
+            return !Objects.equals(getBigPicture(), otherS.getBigPicture());
+        }
     }
 
     /**
@@ -6091,6 +6251,13 @@ public class Notification implements Parcelable
         public BigTextStyle bigText(CharSequence cs) {
             mBigText = safeCharSequence(cs);
             return this;
+        }
+
+        /**
+         * @hide
+         */
+        public CharSequence getBigText() {
+            return mBigText;
         }
 
         /**
@@ -6163,6 +6330,18 @@ public class Notification implements Parcelable
             applyBigTextContentView(mBuilder, contentView, bigTextText);
 
             return contentView;
+        }
+
+        /**
+         * @hide
+         */
+        @Override
+        public boolean areNotificationsVisiblyDifferent(Style other) {
+            if (other == null || getClass() != other.getClass()) {
+                return true;
+            }
+            BigTextStyle newS = (BigTextStyle) other;
+            return !Objects.equals(getBigText(), newS.getBigText());
         }
 
         static void applyBigTextContentView(Builder builder,
@@ -6249,6 +6428,23 @@ public class Notification implements Parcelable
                     >= Build.VERSION_CODES.P && (mUser == null || mUser.getName() == null)) {
                 throw new RuntimeException("User must be valid and have a name.");
             }
+        }
+
+        /**
+         * @return the the text that should be displayed in the statusBar when heads upped.
+         * If {@code null} is returned, the default implementation will be used.
+         *
+         * @hide
+         */
+        @Override
+        public CharSequence getHeadsUpStatusBarText() {
+            CharSequence conversationTitle = !TextUtils.isEmpty(super.mBigContentTitle)
+                    ? super.mBigContentTitle
+                    : mConversationTitle;
+            if (!TextUtils.isEmpty(conversationTitle) && !hasOnlyWhiteSpaceSenders()) {
+                return conversationTitle;
+            }
+            return null;
         }
 
         /**
@@ -6505,6 +6701,58 @@ public class Notification implements Parcelable
             mBuilder.mActions = mBuilder.mOriginalActions;
             mBuilder.mOriginalActions = null;
             return remoteViews;
+        }
+
+        /**
+         * @hide
+         */
+        @Override
+        public boolean areNotificationsVisiblyDifferent(Style other) {
+            if (other == null || getClass() != other.getClass()) {
+                return true;
+            }
+            MessagingStyle newS = (MessagingStyle) other;
+            List<MessagingStyle.Message> oldMs = getMessages();
+            List<MessagingStyle.Message> newMs = newS.getMessages();
+
+            if (oldMs == null) {
+                oldMs = new ArrayList<>();
+            }
+            if (newMs == null) {
+                newMs = new ArrayList<>();
+            }
+
+            int n = oldMs.size();
+            if (n != newMs.size()) {
+                return true;
+            }
+            for (int i = 0; i < n; i++) {
+                MessagingStyle.Message oldM = oldMs.get(i);
+                MessagingStyle.Message newM = newMs.get(i);
+                if (!Objects.equals(oldM.getText(), newM.getText())) {
+                    return true;
+                }
+                if (!Objects.equals(oldM.getDataUri(), newM.getDataUri())) {
+                    return true;
+                }
+                CharSequence oldSender = oldM.getSenderPerson() == null ? oldM.getSender()
+                        : oldM.getSenderPerson().getName();
+                CharSequence newSender = newM.getSenderPerson() == null ? newM.getSender()
+                        : newM.getSenderPerson().getName();
+                if (!Objects.equals(oldSender, newSender)) {
+                    return true;
+                }
+
+                String oldKey = oldM.getSenderPerson() == null
+                        ? null : oldM.getSenderPerson().getKey();
+                String newKey = newM.getSenderPerson() == null
+                        ? null : newM.getSenderPerson().getKey();
+                if (!Objects.equals(oldKey, newKey)) {
+                    return true;
+                }
+                // Other fields (like timestamp) intentionally excluded
+            }
+            return false;
         }
 
         private Message findLatestIncomingMessage() {
@@ -6938,6 +7186,13 @@ public class Notification implements Parcelable
         /**
          * @hide
          */
+        public ArrayList<CharSequence> getLines() {
+            return mTexts;
+        }
+
+        /**
+         * @hide
+         */
         public void addExtras(Bundle extras) {
             super.addExtras(extras);
 
@@ -7014,6 +7269,18 @@ public class Notification implements Parcelable
             }
 
             return contentView;
+        }
+
+        /**
+         * @hide
+         */
+        @Override
+        public boolean areNotificationsVisiblyDifferent(Style other) {
+            if (other == null || getClass() != other.getClass()) {
+                return true;
+            }
+            InboxStyle newS = (InboxStyle) other;
+            return !Objects.equals(getLines(), newS.getLines());
         }
 
         private void handleInboxImageMargin(RemoteViews contentView, int id, boolean first) {
@@ -7177,6 +7444,18 @@ public class Notification implements Parcelable
             if (extras.containsKey(EXTRA_COMPACT_ACTIONS)) {
                 mActionsToShowInCompact = extras.getIntArray(EXTRA_COMPACT_ACTIONS);
             }
+        }
+
+        /**
+         * @hide
+         */
+        @Override
+        public boolean areNotificationsVisiblyDifferent(Style other) {
+            if (other == null || getClass() != other.getClass()) {
+                return true;
+            }
+            // All fields to compare are on the Notification object
+            return false;
         }
 
         private RemoteViews generateMediaActionButton(Action action, int color) {
@@ -7388,6 +7667,18 @@ public class Notification implements Parcelable
             }
             remoteViews.setViewLayoutMarginEndDimen(R.id.notification_main_column, endMargin);
         }
+
+        /**
+         * @hide
+         */
+        @Override
+        public boolean areNotificationsVisiblyDifferent(Style other) {
+            if (other == null || getClass() != other.getClass()) {
+                return true;
+            }
+            // Comparison done for all custom RemoteViews, independent of style
+            return false;
+        }
     }
 
     /**
@@ -7478,6 +7769,18 @@ public class Notification implements Parcelable
             return makeBigContentViewWithCustomContent(customRemoteView);
         }
 
+        /**
+         * @hide
+         */
+        @Override
+        public boolean areNotificationsVisiblyDifferent(Style other) {
+            if (other == null || getClass() != other.getClass()) {
+                return true;
+            }
+            // Comparison done for all custom RemoteViews, independent of style
+            return false;
+        }
+
         private RemoteViews buildIntoRemoteView(RemoteViews remoteViews, int id,
                 RemoteViews customContent) {
             if (customContent != null) {
@@ -7501,6 +7804,8 @@ public class Notification implements Parcelable
         @Nullable private Icon mIcon;
         @Nullable private String mUri;
         @Nullable private String mKey;
+        private boolean mBot;
+        private boolean mImportant;
 
         protected Person(Parcel in) {
             mName = in.readCharSequence();
@@ -7509,6 +7814,8 @@ public class Notification implements Parcelable
             }
             mUri = in.readString();
             mKey = in.readString();
+            mImportant = in.readBoolean();
+            mBot = in.readBoolean();
         }
 
         /**
@@ -7585,6 +7892,27 @@ public class Notification implements Parcelable
             return this;
         }
 
+        /**
+         * Sets whether this is an important person. Use this method to denote users who frequently
+         * interact with the user of this device, when it is not possible to refer to the user
+         * by {@link android.provider.ContactsContract.Contacts#CONTENT_LOOKUP_URI}.
+         *
+         * @param isImportant {@code true} if this is an important person, {@code false} otherwise.
+         */
+        public Person setImportant(boolean isImportant) {
+            mImportant = isImportant;
+            return this;
+        }
+
+        /**
+         * Sets whether this person is a machine rather than a human.
+         *
+         * @param isBot {@code true}  if this person is a machine, {@code false} otherwise.
+         */
+        public Person setBot(boolean isBot) {
+            mBot = isBot;
+            return this;
+        }
 
         /**
          * @return the uri provided for this person or {@code null} if no Uri was provided
@@ -7619,6 +7947,20 @@ public class Notification implements Parcelable
         }
 
         /**
+         * @return whether this Person is a machine.
+         */
+        public boolean isBot() {
+            return mBot;
+        }
+
+        /**
+         * @return whether this Person is important.
+         */
+        public boolean isImportant() {
+            return mImportant;
+        }
+
+        /**
          * @return the URI associated with this person, or "name:mName" otherwise
          *  @hide
          */
@@ -7648,6 +7990,8 @@ public class Notification implements Parcelable
             }
             dest.writeString(mUri);
             dest.writeString(mKey);
+            dest.writeBoolean(mImportant);
+            dest.writeBoolean(mBot);
         }
 
         public static final Creator<Person> CREATOR = new Creator<Person>() {

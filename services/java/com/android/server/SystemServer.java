@@ -202,6 +202,8 @@ public final class SystemServer {
             "com.android.server.search.SearchManagerService$Lifecycle";
     private static final String THERMAL_OBSERVER_CLASS =
             "com.google.android.clockwork.ThermalObserver";
+    private static final String WEAR_CONFIG_SERVICE_CLASS =
+            "com.google.android.clockwork.WearConfigManagerService";
     private static final String WEAR_CONNECTIVITY_SERVICE_CLASS =
             "com.android.clockwork.connectivity.WearConnectivityService";
     private static final String WEAR_SIDEKICK_SERVICE_CLASS =
@@ -698,11 +700,6 @@ public final class SystemServer {
      * Starts some essential services that are not tangled up in the bootstrap process.
      */
     private void startCoreServices() {
-        // Records errors and logs, for example wtf()
-        traceBeginAndSlog("StartDropBoxManager");
-        mSystemServiceManager.startService(DropBoxManagerService.class);
-        traceEnd();
-
         traceBeginAndSlog("StartBatteryService");
         // Tracks the battery level.  Requires LightService.
         mSystemServiceManager.startService(BatteryService.class);
@@ -830,6 +827,13 @@ public final class SystemServer {
             mActivityManagerService.installSystemProviders();
             // Now that SettingsProvider is ready, reactivate SQLiteCompatibilityWalFlags
             SQLiteCompatibilityWalFlags.reset();
+            traceEnd();
+
+            // Records errors and logs, for example wtf()
+            // Currently this service indirectly depends on SettingsProvider so do this after
+            // InstallSystemProviders.
+            traceBeginAndSlog("StartDropBoxManager");
+            mSystemServiceManager.startService(DropBoxManagerService.class);
             traceEnd();
 
             traceBeginAndSlog("StartVibratorService");
@@ -1584,6 +1588,10 @@ public final class SystemServer {
         }
 
         if (isWatch) {
+            traceBeginAndSlog("StartWearConfigService");
+            mSystemServiceManager.startService(WEAR_CONFIG_SERVICE_CLASS);
+            traceEnd();
+
             traceBeginAndSlog("StartWearConnectivityService");
             mSystemServiceManager.startService(WEAR_CONNECTIVITY_SERVICE_CLASS);
             traceEnd();

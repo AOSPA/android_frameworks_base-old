@@ -18,21 +18,27 @@ package com.android.systemui.statusbar.phone;
 
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 
+import static com.android.systemui.ScreenDecorations.DisplayCutoutView.boundsFromDirection;
+
 import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.util.EventLog;
+import android.util.Pair;
+import android.view.Display;
 import android.view.DisplayCutout;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
 import android.view.accessibility.AccessibilityEvent;
-
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+
 import com.android.systemui.Dependency;
 import com.android.systemui.EventLogTags;
 import com.android.systemui.R;
@@ -281,29 +287,35 @@ public class PhoneStatusBarView extends PanelBar {
     }
 
     private void updateLayoutForCutout() {
-        updateCutoutLocation();
-        updateSafeInsets();
+        Pair<Integer, Integer> cornerCutoutMargins = cornerCutoutMargins(mDisplayCutout,
+                getDisplay());
+        updateCutoutLocation(cornerCutoutMargins);
+        updateSafeInsets(cornerCutoutMargins);
     }
 
-    private void updateCutoutLocation() {
+    private void updateCutoutLocation(Pair<Integer, Integer> cornerCutoutMargins) {
         // Not all layouts have a cutout (e.g., Car)
         if (mCutoutSpace == null) {
             return;
         }
 
         if (mDisplayCutout == null || mDisplayCutout.isEmpty()
-                    || mLastOrientation != ORIENTATION_PORTRAIT) {
+                    || mLastOrientation != ORIENTATION_PORTRAIT || cornerCutoutMargins != null) {
             mCutoutSpace.setVisibility(View.GONE);
             return;
         }
 
         mCutoutSpace.setVisibility(View.VISIBLE);
         LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) mCutoutSpace.getLayoutParams();
-        lp.width = mDisplayCutout.getBoundingRect().width();
-        lp.height = mDisplayCutout.getBoundingRect().height();
+
+        Rect bounds = new Rect();
+        boundsFromDirection(mDisplayCutout, Gravity.TOP, bounds);
+
+        lp.width = bounds.width();
+        lp.height = bounds.height();
     }
 
-    private void updateSafeInsets() {
+    private void updateSafeInsets(Pair<Integer, Integer> cornerCutoutMargins) {
         // Depending on our rotation, we may have to work around a cutout in the middle of the view,
         // or letterboxing from the right or left sides.
 
@@ -316,5 +328,30 @@ public class PhoneStatusBarView extends PanelBar {
 
         lp.leftMargin = mDisplayCutout.getSafeInsetLeft();
         lp.rightMargin = mDisplayCutout.getSafeInsetRight();
+
+        if (cornerCutoutMargins != null) {
+            lp.leftMargin = Math.max(lp.leftMargin, cornerCutoutMargins.first);
+            lp.rightMargin = Math.max(lp.rightMargin, cornerCutoutMargins.second);
+        }
+    }
+
+    public static Pair<Integer, Integer> cornerCutoutMargins(DisplayCutout cutout,
+            Display display) {
+        if (cutout == null) {
+            return null;
+        }
+        Point size = new Point();
+        display.getRealSize(size);
+
+        Rect bounds = new Rect();
+        boundsFromDirection(cutout, Gravity.TOP, bounds);
+
+        if (bounds.left <= 0) {
+            return new Pair<>(bounds.right, 0);
+        }
+        if (bounds.right >= size.x) {
+            return new Pair<>(0, size.x - bounds.left);
+        }
+        return null;
     }
 }

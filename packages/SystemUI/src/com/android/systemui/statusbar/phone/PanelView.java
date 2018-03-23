@@ -23,14 +23,8 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.database.ContentObserver;
-import android.os.AsyncTask;
-import android.os.Handler;
 import android.os.SystemClock;
-import android.os.UserHandle;
 import android.os.VibrationEffect;
-import android.os.Vibrator;
-import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.InputDevice;
@@ -44,6 +38,7 @@ import android.widget.FrameLayout;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.LatencyTracker;
 import com.android.systemui.DejankUtils;
+import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingManager;
@@ -56,6 +51,7 @@ import android.util.BoostFramework;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.function.BiConsumer;
 
 public abstract class PanelView extends FrameLayout {
     public static final boolean DEBUG = PanelBar.DEBUG;
@@ -70,6 +66,7 @@ public abstract class PanelView extends FrameLayout {
     private boolean mVibrateOnOpening;
     protected boolean mLaunchingNotification;
     private int mFixedDuration = NO_FIXED_DURATION;
+    private BiConsumer<Float, Boolean> mExpansionListener;
 
     private final void logf(String fmt, Object... args) {
         Log.v(TAG, (mViewName != null ? (mViewName + ": ") : "") + String.format(fmt, args));
@@ -218,7 +215,7 @@ public abstract class PanelView extends FrameLayout {
         mFalsingManager = FalsingManager.getInstance(context);
         mNotificationsDragEnabled =
                 getResources().getBoolean(R.bool.config_enableNotificationShadeDrag);
-        mVibratorHelper = new VibratorHelper(context);
+        mVibratorHelper = Dependency.get(VibratorHelper.class);
         mVibrateOnOpening = mContext.getResources().getBoolean(
                 R.bool.config_vibrateOnIconAnimation);
 
@@ -334,7 +331,8 @@ public abstract class PanelView extends FrameLayout {
                     cancelPeek();
                     onTrackingStarted();
                 }
-                if (isFullyCollapsed() && !mHeadsUpManager.hasPinnedHeadsUp()) {
+                if (isFullyCollapsed() && !mHeadsUpManager.hasPinnedHeadsUp()
+                        && !mStatusBar.isBouncerShowing()) {
                     startOpening(event);
                 }
                 break;
@@ -498,7 +496,8 @@ public abstract class PanelView extends FrameLayout {
             if (mUpdateFlingOnLayout) {
                 mUpdateFlingVelocity = vel;
             }
-        } else if (mPanelClosedOnDown && !mHeadsUpManager.hasPinnedHeadsUp() && !mTracking) {
+        } else if (mPanelClosedOnDown && !mHeadsUpManager.hasPinnedHeadsUp() && !mTracking
+                && !mStatusBar.isBouncerShowing()) {
             long timePassed = SystemClock.uptimeMillis() - mDownTime;
             if (timePassed < ViewConfiguration.getLongPressTimeout()) {
                 // Lets show the user that he can actually expand the panel
@@ -507,7 +506,7 @@ public abstract class PanelView extends FrameLayout {
                 // We need to collapse the panel since we peeked to the small height.
                 postOnAnimation(mPostCollapseRunnable);
             }
-        } else {
+        } else if (!mStatusBar.isBouncerShowing()) {
             boolean expands = onEmptySpaceClick(mInitialTouchX);
             onTrackingStopped(expands);
         }
@@ -967,6 +966,17 @@ public abstract class PanelView extends FrameLayout {
         return mClosing || mLaunchingNotification;
     }
 
+    /**
+     * Bouncer might need a scrim when you double tap on notifications or edit QS.
+     * On other cases, when you drag up the bouncer with the finger or just fling,
+     * the scrim should be hidden to avoid occluding the clock.
+     *
+     * @return true when we need a scrim to show content on top of the notification panel.
+     */
+    public boolean needsScrimming() {
+        return !isTracking() && !isCollapsing() && !isFullyCollapsed();
+    }
+
     public boolean isTracking() {
         return mTracking;
     }
@@ -1117,6 +1127,10 @@ public abstract class PanelView extends FrameLayout {
         mStatusBar.onUnlockHintStarted();
     }
 
+    public boolean isUnlockHintRunning() {
+        return mHintAnimationRunning;
+    }
+
     /**
      * Phase 1: Move everything upwards.
      */
@@ -1208,6 +1222,13 @@ public abstract class PanelView extends FrameLayout {
         mBar.panelExpansionChanged(mExpandedFraction, mExpandedFraction > 0f
                 || mPeekAnimator != null || mInstantExpanding || isPanelVisibleBecauseOfHeadsUp()
                 || mTracking || mHeightAnimator != null);
+        if (mExpansionListener != null) {
+            mExpansionListener.accept(mExpandedFraction, mTracking);
+        }
+    }
+
+    public void setExpansionListener(BiConsumer<Float, Boolean> consumer) {
+        mExpansionListener = consumer;
     }
 
     protected abstract boolean isPanelVisibleBecauseOfHeadsUp();

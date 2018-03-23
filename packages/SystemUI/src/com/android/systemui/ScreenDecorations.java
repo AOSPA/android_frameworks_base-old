@@ -31,7 +31,9 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
+import android.graphics.Region;
 import android.hardware.display.DisplayManager;
+import android.os.SystemProperties;
 import android.provider.Settings.Secure;
 import android.support.annotation.VisibleForTesting;
 import android.util.DisplayMetrics;
@@ -64,6 +66,8 @@ import com.android.systemui.tuner.TunerService.Tunable;
 public class ScreenDecorations extends SystemUI implements Tunable {
     public static final String SIZE = "sysui_rounded_size";
     public static final String PADDING = "sysui_rounded_content_padding";
+    private static final boolean DEBUG_SCREENSHOT_ROUNDED_CORNERS =
+            SystemProperties.getBoolean("debug.screenshot_rounded_corners", false);
 
     private int mRoundedDefault;
     private View mOverlay;
@@ -236,7 +240,12 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT);
         lp.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS
-                | WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
+                | WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
+
+        if (!DEBUG_SCREENSHOT_ROUNDED_CORNERS) {
+            lp.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
+        }
+
         lp.setTitle("ScreenDecorOverlay");
         lp.gravity = Gravity.TOP | Gravity.LEFT;
         lp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
@@ -312,6 +321,7 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
         private final DisplayInfo mInfo = new DisplayInfo();
         private final Paint mPaint = new Paint();
+        private final Region mBounds = new Region();
         private final Rect mBoundingRect = new Rect();
         private final Path mBoundingPath = new Path();
         private final int[] mLocation = new int[2];
@@ -370,12 +380,15 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         private void update() {
             requestLayout();
             getDisplay().getDisplayInfo(mInfo);
+            mBounds.setEmpty();
             mBoundingRect.setEmpty();
             mBoundingPath.reset();
             int newVisible;
             if (hasCutout()) {
-                mBoundingRect.set(mInfo.displayCutout.getBoundingRect());
+                mBounds.set(mInfo.displayCutout.getBounds());
+                localBounds(mBoundingRect);
                 mInfo.displayCutout.getBounds().getBoundaryPath(mBoundingPath);
+                invalidate();
                 newVisible = VISIBLE;
             } else {
                 newVisible = GONE;
@@ -402,13 +415,58 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            if (mBoundingRect.isEmpty()) {
+            if (mBounds.isEmpty()) {
                 super.onMeasure(widthMeasureSpec, heightMeasureSpec);
                 return;
             }
             setMeasuredDimension(
                     resolveSizeAndState(mBoundingRect.width(), widthMeasureSpec, 0),
                     resolveSizeAndState(mBoundingRect.height(), heightMeasureSpec, 0));
+        }
+
+        public static void boundsFromDirection(DisplayCutout displayCutout, int gravity, Rect out) {
+            Region bounds = displayCutout.getBounds();
+            switch (gravity) {
+                case Gravity.TOP:
+                    bounds.op(0, 0, Integer.MAX_VALUE, displayCutout.getSafeInsetTop(),
+                            Region.Op.INTERSECT);
+                    out.set(bounds.getBounds());
+                    break;
+                case Gravity.LEFT:
+                    bounds.op(0, 0, displayCutout.getSafeInsetLeft(), Integer.MAX_VALUE,
+                            Region.Op.INTERSECT);
+                    out.set(bounds.getBounds());
+                    break;
+                case Gravity.BOTTOM:
+                    bounds.op(0, displayCutout.getSafeInsetTop() + 1, Integer.MAX_VALUE,
+                            Integer.MAX_VALUE, Region.Op.INTERSECT);
+                    out.set(bounds.getBounds());
+                    break;
+                case Gravity.RIGHT:
+                    bounds.op(displayCutout.getSafeInsetLeft() + 1, 0, Integer.MAX_VALUE,
+                            Integer.MAX_VALUE, Region.Op.INTERSECT);
+                    out.set(bounds.getBounds());
+                    break;
+            }
+            bounds.recycle();
+        }
+
+        private void localBounds(Rect out) {
+            final DisplayCutout displayCutout = mInfo.displayCutout;
+
+            if (mStart) {
+                if (displayCutout.getSafeInsetLeft() > 0) {
+                    boundsFromDirection(displayCutout, Gravity.LEFT, out);
+                } else if (displayCutout.getSafeInsetTop() > 0) {
+                    boundsFromDirection(displayCutout, Gravity.TOP, out);
+                }
+            } else {
+                if (displayCutout.getSafeInsetRight() > 0) {
+                    boundsFromDirection(displayCutout, Gravity.RIGHT, out);
+                } else if (displayCutout.getSafeInsetBottom() > 0) {
+                    boundsFromDirection(displayCutout, Gravity.BOTTOM, out);
+                }
+            }
         }
     }
 }

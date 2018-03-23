@@ -45,6 +45,7 @@ import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertPath;
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -148,6 +149,11 @@ public class KeySyncTask implements Runnable {
             mPlatformKeyManager.invalidatePlatformKey(mUserId, generation);
             return;
         }
+        if (isCustomLockScreen()) {
+            Log.w(TAG, "Unsupported credential type " + mCredentialType + "for user " + mUserId);
+            mRecoverableKeyStoreDb.invalidateKeysForUserIdOnCustomScreenLock(mUserId);
+            return;
+        }
 
         List<Integer> recoveryAgents = mRecoverableKeyStoreDb.getRecoveryAgents(mUserId);
         for (int uid : recoveryAgents) {
@@ -158,9 +164,15 @@ public class KeySyncTask implements Runnable {
         }
     }
 
+    private boolean isCustomLockScreen() {
+        return mCredentialType != LockPatternUtils.CREDENTIAL_TYPE_NONE
+            && mCredentialType != LockPatternUtils.CREDENTIAL_TYPE_PATTERN
+            && mCredentialType != LockPatternUtils.CREDENTIAL_TYPE_PASSWORD;
+    }
+
     private void syncKeysForAgent(int recoveryAgentUid) {
         boolean recreateCurrentVersion = false;
-        if (!shoudCreateSnapshot(recoveryAgentUid)) {
+        if (!shouldCreateSnapshot(recoveryAgentUid)) {
             recreateCurrentVersion =
                     (mRecoverableKeyStoreDb.getSnapshotVersion(mUserId, recoveryAgentUid) != null)
                     && (mRecoverySnapshotStorage.get(recoveryAgentUid) == null);
@@ -170,11 +182,6 @@ public class KeySyncTask implements Runnable {
                 Log.d(TAG, "Key sync not needed.");
                 return;
             }
-        }
-
-        if (!mSnapshotListenersStorage.hasListener(recoveryAgentUid)) {
-            Log.w(TAG, "No pending intent registered for recovery agent " + recoveryAgentUid);
-            return;
         }
 
         PublicKey publicKey;
@@ -284,18 +291,23 @@ public class KeySyncTask implements Runnable {
         // If application keys are not updated, snapshot will not be created on next unlock.
         mRecoverableKeyStoreDb.setShouldCreateSnapshot(mUserId, recoveryAgentUid, false);
 
-        mRecoverySnapshotStorage.put(recoveryAgentUid, new KeyChainSnapshot.Builder()
+        KeyChainSnapshot.Builder keyChainSnapshotBuilder = new KeyChainSnapshot.Builder()
                 .setSnapshotVersion(getSnapshotVersion(recoveryAgentUid, recreateCurrentVersion))
                 .setMaxAttempts(TRUSTED_HARDWARE_MAX_ATTEMPTS)
                 .setCounterId(counterId)
                 .setTrustedHardwarePublicKey(SecureBox.encodePublicKey(publicKey))
-                .setTrustedHardwareCertPath(certPath)
                 .setServerParams(vaultHandle)
                 .setKeyChainProtectionParams(metadataList)
                 .setWrappedApplicationKeys(createApplicationKeyEntries(encryptedApplicationKeys))
-                .setEncryptedRecoveryKeyBlob(encryptedRecoveryKey)
-                .build());
-
+                .setEncryptedRecoveryKeyBlob(encryptedRecoveryKey);
+        try {
+            keyChainSnapshotBuilder.setTrustedHardwareCertPath(certPath);
+        } catch(CertificateException e) {
+            // Should not happen, as it's just deserialized from bytes stored in the db
+            Log.wtf(TAG, "Cannot serialize CertPath when calling setTrustedHardwareCertPath", e);
+            return;
+        }
+        mRecoverySnapshotStorage.put(recoveryAgentUid, keyChainSnapshotBuilder.build());
         mSnapshotListenersStorage.recoverySnapshotAvailable(recoveryAgentUid);
     }
 
@@ -336,7 +348,7 @@ public class KeySyncTask implements Runnable {
      * Returns {@code true} if a sync is pending.
      * @param recoveryAgentUid uid of the recovery agent.
      */
-    private boolean shoudCreateSnapshot(int recoveryAgentUid) {
+    private boolean shouldCreateSnapshot(int recoveryAgentUid) {
         int[] types = mRecoverableKeyStoreDb.getRecoverySecretTypes(mUserId, recoveryAgentUid);
         if (!ArrayUtils.contains(types, KeyChainProtectionParams.TYPE_LOCKSCREEN)) {
             // Only lockscreen type is supported.

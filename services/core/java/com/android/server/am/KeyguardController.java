@@ -86,16 +86,8 @@ class KeyguardController {
      *         display, false otherwise
      */
     boolean isKeyguardShowing(int displayId) {
-        return isKeyguardActive(displayId) && !mKeyguardGoingAway;
-    }
-
-    /**
-     * @return true if Keyguard is showing and not occluded. We ignore whether it is going away or
-     *         not here.
-     */
-    boolean isKeyguardActive(int displayId) {
-        return mKeyguardShowing && (displayId == DEFAULT_DISPLAY ? !mOccluded
-                : displayId == mSecondaryDisplayShowing);
+        return mKeyguardShowing && !mKeyguardGoingAway &&
+                (displayId == DEFAULT_DISPLAY ? !mOccluded : displayId == mSecondaryDisplayShowing);
     }
 
     /**
@@ -103,6 +95,14 @@ class KeyguardController {
      */
     boolean isKeyguardLocked() {
         return mKeyguardShowing && !mKeyguardGoingAway;
+    }
+
+    /**
+     * @return {@code true} if the keyguard is going away, {@code false} otherwise.
+     */
+    boolean isKeyguardGoingAway() {
+        // Also check keyguard showing in case value is stale.
+        return mKeyguardGoingAway && mKeyguardShowing;
     }
 
     /**

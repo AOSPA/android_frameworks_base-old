@@ -16,7 +16,6 @@
 #pragma once
 
 #include "config/ConfigKey.h"
-#include "frameworks/base/cmds/statsd/src/stats_log_common.pb.h"
 #include "statslog.h"
 
 #include <gtest/gtest_prod.h>
@@ -110,13 +109,6 @@ public:
 
     /* Min period between two checks of byte size per config key in nanoseconds. */
     static const unsigned long long kMinByteSizeCheckPeriodNs = 10 * NS_PER_SEC;
-
-    // Default minimum interval between pulls for an atom. Pullers can return cached values if
-    // another pull request happens within this interval.
-    static std::map<int, long> kPullerCooldownMap;
-
-    // Default cooldown time for a puller
-    static const long kDefaultPullerCooldown = 1;
 
     // Maximum age (30 days) that files on disk can exist in seconds.
     static const int kMaxAgeSecond = 60 * 60 * 24 * 30;

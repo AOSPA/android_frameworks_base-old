@@ -198,8 +198,12 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
     // How long we wait for the activity to tell us it has stopped before
     // giving up.  This is a good amount of time because we really need this
-    // from the application in order to get its saved state.
-    private static final int STOP_TIMEOUT = 10 * 1000;
+    // from the application in order to get its saved state. Once the stop
+    // is complete we may start destroying client resources triggering
+    // crashes if the UI thread was hung. We put this timeout one second behind
+    // the ANR timeout so these situations will generate ANR instead of
+    // Surface lost or other errors.
+    private static final int STOP_TIMEOUT = 11 * 1000;
 
     // How long we wait until giving up on an activity telling us it has
     // finished destroying itself.
@@ -1357,17 +1361,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             if (DEBUG_USER_LEAVING) Slog.v(TAG_USER_LEAVING,
                     "Sleep => pause with userLeaving=false");
 
-            // If we are in the middle of resuming the top activity in
-            // {@link #resumeTopActivityUncheckedLocked}, mResumedActivity will be set but not
-            // resumed yet. We must not proceed pausing the activity here. This method will be
-            // called again if necessary as part of {@link #checkReadyForSleep} or
-            // {@link ActivityStackSupervisor#checkReadyForSleepLocked}.
-            if (mStackSupervisor.inResumeTopActivity) {
-                if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "In the middle of resuming top activity "
-                        + mResumedActivity);
-            } else {
-                startPausingLocked(false, true, null, false);
-            }
+            startPausingLocked(false, true, null, false);
             shouldSleep = false ;
         } else if (mPausingActivity != null) {
             // Still waiting for something to pause; can't sleep yet.
@@ -2734,9 +2728,12 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     if (DEBUG_STATES) Slog.v(TAG_STATES, "Resume failed; resetting state to "
                             + lastState + ": " + next);
                     next.setState(lastState, "resumeTopActivityInnerLocked");
-                    if (lastStack != null) {
+
+                    // lastResumedActivity being non-null implies there is a lastStack present.
+                    if (lastResumedActivity != null) {
                         lastResumedActivity.setState(RESUMED, "resumeTopActivityInnerLocked");
                     }
+
                     Slog.i(TAG, "Restarting because process died: " + next);
                     if (!next.hasBeenLaunched) {
                         next.hasBeenLaunched = true;
@@ -3446,7 +3443,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     }
 
     /** Find next proper focusable stack and make it focused. */
-    private boolean adjustFocusToNextFocusableStack(String reason) {
+    boolean adjustFocusToNextFocusableStack(String reason) {
         return adjustFocusToNextFocusableStack(reason, false /* allowFocusSelf */);
     }
 
@@ -3851,14 +3848,6 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         final ActivityState prevState = r.getState();
         if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to FINISHING: " + r);
 
-        // We are already destroying / have already destroyed the activity. Do not continue to
-        // modify it. Note that we do not use ActivityRecord#finishing here as finishing is not
-        // indicative of destruction (though destruction is indicative of finishing) as finishing
-        // can be delayed below.
-        if (r.isState(DESTROYING, DESTROYED)) {
-            return null;
-        }
-
         r.setState(FINISHING, "finishCurrentActivityLocked");
         final boolean finishingActivityInNonFocusedStack
                 = r.getStack() != mStackSupervisor.getFocusedStack()
@@ -4077,26 +4066,16 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
      * state to destroy so only the cleanup here is needed.
      *
      * Note: Call before #removeActivityFromHistoryLocked.
-     *
-     * @param r             The {@link ActivityRecord} to cleanup.
-     * @param cleanServices Whether services bound to the {@link ActivityRecord} should also be
-     *                      cleaned up.
-     * @param destroy       Whether the {@link ActivityRecord} should be destroyed.
-     * @param clearProcess  Whether the client process should be cleared.
      */
-    private void cleanUpActivityLocked(ActivityRecord r, boolean cleanServices, boolean destroy,
-            boolean clearProcess) {
+    private void cleanUpActivityLocked(ActivityRecord r, boolean cleanServices, boolean setState) {
         onActivityRemovedFromStack(r);
 
         r.deferRelaunchUntilPaused = false;
         r.frozenBeforeDestroy = false;
 
-        if (destroy) {
+        if (setState) {
             if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to DESTROYED: " + r + " (cleaning up)");
             r.setState(DESTROYED, "cleanupActivityLocked");
-        }
-
-        if (clearProcess) {
             if (DEBUG_APP) Slog.v(TAG_APP, "Clearing app during cleanUp for activity " + r);
             r.app = null;
         }
@@ -4311,7 +4290,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                         + ", app=" + (r.app != null ? r.app.processName : "(null)"));
 
         if (r.isState(DESTROYING, DESTROYED)) {
-            if (DEBUG_STATES) Slog.v(TAG_STATES, "activity " + r + " already finishing."
+            if (DEBUG_STATES) Slog.v(TAG_STATES, "activity " + r + " already destroying."
                     + "skipping request with reason:" + reason);
             return false;
         }
@@ -4322,8 +4301,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
         boolean removedFromHistory = false;
 
-        cleanUpActivityLocked(r, false /* cleanServices */, false /* destroy */,
-                false /*clearProcess*/);
+        cleanUpActivityLocked(r, false, false);
 
         final boolean hadApp = r.app != null;
 
@@ -4420,6 +4398,10 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         }
     }
 
+    /**
+     * This method is to only be called from the client via binder when the activity is destroyed
+     * AND finished.
+     */
     final void activityDestroyedLocked(ActivityRecord record, String reason) {
         if (record != null) {
             mHandler.removeMessages(DESTROY_TIMEOUT_MSG, record);
@@ -4429,8 +4411,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
         if (isInStackLocked(record) != null) {
             if (record.isState(DESTROYING, DESTROYED)) {
-                cleanUpActivityLocked(record, true /* cleanServices */, false /* destroy */,
-                        false /*clearProcess*/);
+                cleanUpActivityLocked(record, true, false);
                 removeActivityFromHistoryLocked(record, reason);
             }
         }
@@ -4539,8 +4520,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                             r.icicle = null;
                         }
                     }
-                    cleanUpActivityLocked(r, true /* cleanServices */, remove /* destroy */,
-                            true /*clearProcess*/);
+                    cleanUpActivityLocked(r, true, true);
                     if (remove) {
                         removeActivityFromHistoryLocked(r, "appDied");
                     }
@@ -5336,6 +5316,14 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
     boolean shouldSleepActivities() {
         final ActivityDisplay display = getDisplay();
+
+        // Do not sleep activities in this stack if we're marked as focused and the keyguard
+        // is in the process of going away.
+        if (mStackSupervisor.getFocusedStack() == this
+                && mStackSupervisor.getKeyguardController().isKeyguardGoingAway()) {
+            return false;
+        }
+
         return display != null ? display.isSleeping() : mService.isSleepingLocked();
     }
 

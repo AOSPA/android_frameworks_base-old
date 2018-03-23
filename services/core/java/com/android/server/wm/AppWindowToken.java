@@ -24,7 +24,6 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.SurfaceControl.HIDDEN;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.FLAG_SECURE;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
@@ -187,6 +186,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     StartingSurface startingSurface;
     boolean startingDisplayed;
     boolean startingMoved;
+
     // True if the hidden state of this token was forced to false due to a transferred starting
     // window.
     private boolean mHiddenSetFromTransferredStartingWindow;
@@ -251,6 +251,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     private final Point mTmpPoint = new Point();
     private final Rect mTmpRect = new Rect();
     private RemoteAnimationDefinition mRemoteAnimationDefinition;
+    private AnimatingAppWindowTokenRegistry mAnimatingAppWindowTokenRegistry;
 
     AppWindowToken(WindowManagerService service, IApplicationToken token, boolean voiceInteraction,
             DisplayContent dc, long inputDispatchingTimeoutNanos, boolean fullscreen,
@@ -449,6 +450,12 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
         if (isReallyAnimating()) {
             delayed = true;
+        } else {
+
+            // We aren't animating anything, but exiting windows rely on the animation finished
+            // callback being called in case the AppWindowToken was pretending to be animating,
+            // which we might have done because we were in closing/opening apps list.
+            onAnimationFinished();
         }
 
         for (int i = mChildren.size() - 1; i >= 0 && !delayed; i--) {
@@ -705,7 +712,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (destroyedSomething) {
             final DisplayContent dc = getDisplayContent();
             dc.assignWindowLayers(true /*setLayoutNeeded*/);
-            updateLetterbox(null);
+            updateLetterboxSurface(null);
         }
     }
 
@@ -774,6 +781,16 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 task.mStack.mExitingAppTokens.remove(this);
             }
         }
+        final TaskStack stack = getStack();
+
+        // If we reparent, make sure to remove ourselves from the old animation registry.
+        if (mAnimatingAppWindowTokenRegistry != null) {
+            mAnimatingAppWindowTokenRegistry.notifyFinished(this);
+        }
+        mAnimatingAppWindowTokenRegistry = stack != null
+                ? stack.getAnimatingAppWindowTokenRegistry()
+                : null;
+
         mLastParent = task;
     }
 
@@ -972,7 +989,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     void removeChild(WindowState child) {
         super.removeChild(child);
         checkKeyguardFlagsChanged();
-        updateLetterbox(child);
+        updateLetterboxSurface(child);
     }
 
     private boolean waitingForReplacement() {
@@ -1091,7 +1108,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 mService.registerAppFreezeListener(this);
                 mService.mAppsFreezingScreen++;
                 if (mService.mAppsFreezingScreen == 1) {
-                    mService.startFreezingDisplayLocked(false, 0, 0, getDisplayContent());
+                    mService.startFreezingDisplayLocked(0, 0, getDisplayContent());
                     mService.mH.removeMessages(H.APP_FREEZE_TIMEOUT);
                     mService.mH.sendEmptyMessageDelayed(H.APP_FREEZE_TIMEOUT, 2000);
                 }
@@ -1134,6 +1151,25 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     public void onAppFreezeTimeout() {
         Slog.w(TAG_WM, "Force clearing freeze: " + this);
         stopFreezingScreen(true, true);
+    }
+
+    /**
+     * Tries to transfer the starting window from a token that's above ourselves in the task but
+     * not visible anymore. This is a common scenario apps use: Trampoline activity T start main
+     * activity M in the same task. Now, when reopening the task, T starts on top of M but then
+     * immediately finishes after, so we have to transfer T to M.
+     */
+    void transferStartingWindowFromHiddenAboveTokenIfNeeded() {
+        final Task task = getTask();
+        for (int i = task.mChildren.size() - 1; i >= 0; i--) {
+            final AppWindowToken fromToken = task.mChildren.get(i);
+            if (fromToken == this) {
+                return;
+            }
+            if (fromToken.hiddenRequested && transferStartingWindow(fromToken.token)) {
+                return;
+            }
+        }
     }
 
     boolean transferStartingWindow(IBinder transferFrom) {
@@ -1444,7 +1480,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         return isInterestingAndDrawn;
     }
 
-    void updateLetterbox(WindowState winHint) {
+    void layoutLetterbox(WindowState winHint) {
         final WindowState w = findMainWindow();
         if (w != winHint && winHint != null && w != null) {
             return;
@@ -1455,19 +1491,20 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             if (mLetterbox == null) {
                 mLetterbox = new Letterbox(() -> makeChildSurface(null));
             }
-            mLetterbox.setDimensions(mPendingTransaction, getParent().getBounds(), w.mFrame);
+            mLetterbox.layout(getParent().getBounds(), w.mFrame);
         } else if (mLetterbox != null) {
-            final SurfaceControl.Transaction t = new SurfaceControl.Transaction();
-            // Make sure we have a transaction here, in case we're called outside of a transaction.
-            // This does not use mPendingTransaction, because SurfaceAnimator uses a
-            // global transaction in onAnimationEnd.
-            SurfaceControl.openTransaction();
-            try {
-                mLetterbox.hide(t);
-            } finally {
-                SurfaceControl.mergeToGlobalTransaction(t);
-                SurfaceControl.closeTransaction();
-            }
+            mLetterbox.hide();
+        }
+    }
+
+    void updateLetterboxSurface(WindowState winHint) {
+        final WindowState w = findMainWindow();
+        if (w != winHint && winHint != null && w != null) {
+            return;
+        }
+        layoutLetterbox(winHint);
+        if (mLetterbox != null && mLetterbox.needsApplySurfaceChanges()) {
+            mLetterbox.applySurfaceChanges(mPendingTransaction);
         }
     }
 
@@ -1758,6 +1795,21 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     @Override
+    public boolean shouldDeferAnimationFinish(Runnable endDeferFinishCallback) {
+        return mAnimatingAppWindowTokenRegistry != null
+                && mAnimatingAppWindowTokenRegistry.notifyAboutToFinish(
+                        this, endDeferFinishCallback);
+    }
+
+    @Override
+    public void onAnimationLeashDestroyed(Transaction t) {
+        super.onAnimationLeashDestroyed(t);
+        if (mAnimatingAppWindowTokenRegistry != null) {
+            mAnimatingAppWindowTokenRegistry.notifyFinished(this);
+        }
+    }
+
+    @Override
     protected void setLayer(Transaction t, int layer) {
         if (!mSurfaceAnimator.hasLeash()) {
             t.setLayer(mSurfaceControl, layer);
@@ -1799,6 +1851,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
 
         final DisplayContent dc = getDisplayContent();
         dc.assignStackOrdering(t);
+        if (mAnimatingAppWindowTokenRegistry != null) {
+            mAnimatingAppWindowTokenRegistry.notifyStarting(this);
+        }
     }
 
     /**
@@ -2053,6 +2108,13 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         super.prepareSurfaces();
     }
 
+    /**
+     * @return Whether our {@link #getSurfaceControl} is currently showing.
+     */
+    boolean isSurfaceShowing() {
+        return mLastSurfaceShowing;
+    }
+
     boolean isFreezingScreen() {
         return mFreezingScreen;
     }
@@ -2129,5 +2191,13 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         } else {
             return new Rect();
         }
+    }
+
+    /**
+     * @eturn true if there is a letterbox and any part of that letterbox overlaps with
+     * the given {@code rect}.
+     */
+    boolean isLetterboxOverlappingWith(Rect rect) {
+        return mLetterbox != null && mLetterbox.isOverlappingWith(rect);
     }
 }

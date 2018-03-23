@@ -66,7 +66,7 @@ public:
      * Appends ConfigMetricsReport found on disk to the specific proto and
      * delete it.
      */
-    static void appendConfigMetricsReport(ProtoOutputStream& proto);
+    static void appendConfigMetricsReport(const ConfigKey& key, ProtoOutputStream* proto);
 
     /**
      * Call to load the saved configs from disk.
@@ -78,6 +78,23 @@ public:
      * files, accumulation of outdated files.
      */
     static void trimToFit(const char* dir);
+
+    /**
+     * Returns true if there already exists identical configuration on device.
+     */
+    static bool hasIdenticalConfig(const ConfigKey& key,
+                                   const vector<uint8_t>& config);
+
+    /**
+     * Prints disk usage statistics related to statsd.
+     */
+    static void printStats(FILE* out);
+
+private:
+    /**
+     * Prints disk usage statistics about a directory related to statsd.
+     */
+    static void printDirStats(FILE* out, const char* path);
 };
 
 }  // namespace statsd

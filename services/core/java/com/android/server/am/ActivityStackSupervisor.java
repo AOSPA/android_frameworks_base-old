@@ -2471,18 +2471,19 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
                 if (currentWindowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY
                         && candidate == null && stack.inSplitScreenPrimaryWindowingMode()) {
-                    // If the currently focused stack is in split-screen secondary we would prefer
-                    // the focus to move to another split-screen secondary stack or fullscreen stack
-                    // over the primary split screen stack to avoid:
-                    // - Moving the focus to the primary split-screen stack when it can't be focused
-                    //   because it will be minimized, but AM doesn't know that yet
-                    // - primary split-screen stack overlapping with a fullscreen stack when a
-                    //   fullscreen stack is higher in z than the next split-screen stack. Assistant
-                    //   stack, I am looking at you...
+                    // If the currently focused stack is in split-screen secondary we save off the
+                    // top primary split-screen stack as a candidate for focus because we might
+                    // prefer focus to move to an other stack to avoid primary split-screen stack
+                    // overlapping with a fullscreen stack when a fullscreen stack is higher in z
+                    // than the next split-screen stack. Assistant stack, I am looking at you...
                     // We only move the focus to the primary-split screen stack if there isn't a
                     // better alternative.
                     candidate = stack;
                     continue;
+                }
+                if (candidate != null && stack.inSplitScreenSecondaryWindowingMode()) {
+                    // Use the candidate stack since we are now at the secondary split-screen.
+                    return candidate;
                 }
                 return stack;
             }
@@ -3419,10 +3420,11 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 } else {
                     stack.awakeFromSleepingLocked();
                     if (isFocusedStack(stack)
-                            && !mKeyguardController.isKeyguardActive(display.mDisplayId)) {
-                        // If there is no keyguard on this display - resume immediately. Otherwise
-                        // we'll wait for keyguard visibility callback and resume while ensuring
-                        // activities visibility
+                            && !mKeyguardController.isKeyguardShowing(display.mDisplayId)) {
+                        // If the keyguard is unlocked - resume immediately.
+                        // It is possible that the display will not be awake at the time we
+                        // process the keyguard going away, which can happen before the sleep token
+                        // is released. As a result, it is important we resume the activity here.
                         resumeFocusedStackTopActivityLocked();
                     }
                 }
@@ -4465,6 +4467,14 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
     void setDockedStackMinimized(boolean minimized) {
         mIsDockMinimized = minimized;
+        if (mIsDockMinimized) {
+            final ActivityStack current = getFocusedStack();
+            if (current.inSplitScreenPrimaryWindowingMode()) {
+                // The primary split-screen stack can't be focused while it is minimize, so move
+                // focus to something else.
+                current.adjustFocusToNextFocusableStack("setDockedStackMinimized");
+            }
+        }
     }
 
     void wakeUp(String reason) {

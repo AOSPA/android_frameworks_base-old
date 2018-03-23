@@ -19,6 +19,7 @@ package com.android.systemui.qs.tiles;
 import static android.provider.Settings.Global.ZEN_MODE_ALARMS;
 import static android.provider.Settings.Global.ZEN_MODE_OFF;
 
+import android.app.ActivityManager;
 import android.app.Dialog;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -28,6 +29,7 @@ import android.content.SharedPreferences;
 import android.content.SharedPreferences.OnSharedPreferenceChangeListener;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.provider.Settings.Global;
@@ -139,15 +141,29 @@ public class DndTile extends QSTileImpl<BooleanState> {
 
     @Override
     public void showDetail(boolean show) {
-        mUiHandler.post(() -> {
-            Dialog mDialog = new EnableZenModeDialog(mContext).createDialog();
-            mDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
-            SystemUIDialog.setShowForAllUsers(mDialog, true);
-            SystemUIDialog.registerDismissListener(mDialog);
-            SystemUIDialog.setWindowOnTop(mDialog);
-            mUiHandler.post(() -> mDialog.show());
-            mHost.collapsePanels();
-        });
+        int zenDuration = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.ZEN_DURATION, 0);
+        switch (zenDuration) {
+            case Settings.Global.ZEN_DURATION_PROMPT:
+                mUiHandler.post(() -> {
+                    Dialog mDialog = new EnableZenModeDialog(mContext).createDialog();
+                    mDialog.getWindow().setType(WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG);
+                    SystemUIDialog.setShowForAllUsers(mDialog, true);
+                    SystemUIDialog.registerDismissListener(mDialog);
+                    SystemUIDialog.setWindowOnTop(mDialog);
+                    mUiHandler.post(() -> mDialog.show());
+                    mHost.collapsePanels();
+                });
+                break;
+            case Settings.Global.ZEN_DURATION_FOREVER:
+                mController.setZen(Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS, null, TAG);
+                break;
+            default:
+                Uri conditionId = ZenModeConfig.toTimeCondition(mContext, zenDuration,
+                        ActivityManager.getCurrentUser(), true).id;
+                mController.setZen(Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS,
+                        conditionId, TAG);
+        }
     }
 
     @Override
@@ -199,15 +215,18 @@ public class DndTile extends QSTileImpl<BooleanState> {
         switch (zen) {
             case Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS:
                 state.contentDescription = mContext.getString(
-                        R.string.accessibility_quick_settings_dnd_priority_on);
+                        R.string.accessibility_quick_settings_dnd_priority_on) + ", "
+                        + state.secondaryLabel;
                 break;
             case Global.ZEN_MODE_NO_INTERRUPTIONS:
                 state.contentDescription = mContext.getString(
-                        R.string.accessibility_quick_settings_dnd_none_on);
+                        R.string.accessibility_quick_settings_dnd_none_on) + ", "
+                        + state.secondaryLabel;
                 break;
             case ZEN_MODE_ALARMS:
                 state.contentDescription = mContext.getString(
-                        R.string.accessibility_quick_settings_dnd_alarms_on);
+                        R.string.accessibility_quick_settings_dnd_alarms_on) + ", "
+                        + state.secondaryLabel;
                 break;
             default:
                 state.contentDescription = mContext.getString(
@@ -240,7 +259,6 @@ public class DndTile extends QSTileImpl<BooleanState> {
     public void handleSetListening(boolean listening) {
         if (mListening == listening) return;
         mListening = listening;
-        if (mController == null) return;
         if (mListening) {
             mController.addCallback(mZenCallback);
             Prefs.registerListener(mContext, mPrefListener);

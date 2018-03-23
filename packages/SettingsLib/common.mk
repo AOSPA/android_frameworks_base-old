@@ -16,11 +16,11 @@
 ifeq ($(LOCAL_USE_AAPT2),true)
 LOCAL_STATIC_JAVA_LIBRARIES += \
     android-support-annotations \
-    apptoolkit-lifecycle-common
+    android-arch-lifecycle-common
 
 LOCAL_STATIC_ANDROID_LIBRARIES += \
     android-support-v4 \
-    apptoolkit-lifecycle-runtime \
+    android-arch-lifecycle-runtime \
     android-support-v7-recyclerview \
     android-support-v7-preference \
     android-support-v7-appcompat \
@@ -34,21 +34,21 @@ LOCAL_RESOURCE_DIR += $(call my-dir)/res
 
 # Include support-v7-appcompat, if not already included
 ifeq (,$(findstring android-support-v7-appcompat,$(LOCAL_STATIC_JAVA_LIBRARIES)))
-LOCAL_RESOURCE_DIR += frameworks/support/v7/appcompat/res
+LOCAL_RESOURCE_DIR += prebuilts/sdk/current/support/v7/appcompat/res
 LOCAL_AAPT_FLAGS += --extra-packages android.support.v7.appcompat
 LOCAL_STATIC_JAVA_LIBRARIES += android-support-v7-appcompat
 endif
 
 # Include support-v7-recyclerview, if not already included
 ifeq (,$(findstring android-support-v7-recyclerview,$(LOCAL_STATIC_JAVA_LIBRARIES)))
-LOCAL_RESOURCE_DIR += frameworks/support/v7/recyclerview/res
+LOCAL_RESOURCE_DIR += prebuilts/sdk/current/support/v7/recyclerview/res
 LOCAL_AAPT_FLAGS += --extra-packages android.support.v7.recyclerview
 LOCAL_STATIC_JAVA_LIBRARIES += android-support-v7-recyclerview
 endif
 
 # Include android-support-v7-preference, if not already included
 ifeq (,$(findstring android-support-v7-preference,$(LOCAL_STATIC_JAVA_LIBRARIES)))
-LOCAL_RESOURCE_DIR += frameworks/support/preference/res
+LOCAL_RESOURCE_DIR += prebuilts/sdk/current/support/v7/preference/res
 LOCAL_AAPT_FLAGS += --extra-packages android.support.v7.preference
 LOCAL_STATIC_JAVA_LIBRARIES += android-support-v7-preference
 endif

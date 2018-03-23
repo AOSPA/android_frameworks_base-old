@@ -247,7 +247,8 @@ class TaskSnapshotController {
                 // Ensure at least one window for the top app is visible before attempting to take
                 // a screenshot. Visible here means that the WSA surface is shown and has an alpha
                 // greater than 0.
-                ws -> ws.mWinAnimator != null && ws.mWinAnimator.getShown()
+                ws -> (ws.mAppToken == null || ws.mAppToken.isSurfaceShowing())
+                        && ws.mWinAnimator != null && ws.mWinAnimator.getShown()
                         && ws.mWinAnimator.mLastAlpha > 0f, true);
 
         if (!hasVisibleChild) {
@@ -273,7 +274,8 @@ class TaskSnapshotController {
         }
         return new TaskSnapshot(buffer, top.getConfiguration().orientation,
                 getInsetsFromTaskBounds(mainWindow, task),
-                isLowRamDevice /* reduced */, scaleFraction /* scale */);
+                isLowRamDevice /* reduced */, scaleFraction /* scale */,
+                true /* isRealSnapshot */);
     }
 
     private boolean shouldDisableSnapshots() {
@@ -369,7 +371,8 @@ class TaskSnapshotController {
         }
         return new TaskSnapshot(hwBitmap.createGraphicBufferHandle(),
                 topChild.getConfiguration().orientation, mainWindow.mStableInsets,
-                ActivityManager.isLowRamDeviceStatic() /* reduced */, 1.0f /* scale */);
+                ActivityManager.isLowRamDeviceStatic() /* reduced */, 1.0f /* scale */,
+                false /* isRealSnapshot */);
     }
 
     /**

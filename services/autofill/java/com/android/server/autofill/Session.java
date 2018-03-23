@@ -274,11 +274,13 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 }
                 if (mCompatMode) {
                     // Sanitize URL bar, if needed
-                    final String urlBarId = mService.getUrlBarResourceIdForCompatModeLocked(
+                    final String[] urlBarIds = mService.getUrlBarResourceIdsForCompatMode(
                             mComponentName.getPackageName());
-                    if (sDebug) Slog.d(TAG, "url_bar in compat mode: " + urlBarId);
-                    if (urlBarId != null) {
-                        Helper.sanitizeUrlBar(structure, urlBarId);
+                    if (sDebug) {
+                        Slog.d(TAG, "url_bars in compat mode: " + Arrays.toString(urlBarIds));
+                    }
+                    if (urlBarIds != null) {
+                        Helper.sanitizeUrlBar(structure, urlBarIds);
                     }
                 }
                 structure.sanitizeForParceling(true);
@@ -1436,11 +1438,25 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 final AutofillValue filledValue = viewState.getAutofilledValue();
 
                 if (!value.equals(filledValue)) {
-                    if (sDebug) {
-                        Slog.d(TAG, "found a change on required " + id + ": " + filledValue
-                                + " => " + value);
+                    boolean changed = true;
+                    if (filledValue == null) {
+                        // Dataset was not autofilled, make sure initial value didn't change.
+                        final AutofillValue initialValue = getValueFromContextsLocked(id);
+                        if (initialValue != null && initialValue.equals(value)) {
+                            if (sDebug) {
+                                Slog.d(TAG, "id " + id + " is part of dataset but initial value "
+                                        + "didn't change: " + value);
+                            }
+                            changed = false;
+                        }
                     }
-                    atLeastOneChanged = true;
+                    if (changed) {
+                        if (sDebug) {
+                            Slog.d(TAG, "found a change on required " + id + ": " + filledValue
+                                    + " => " + value);
+                        }
+                        atLeastOneChanged = true;
+                    }
                 }
             }
         }
@@ -1872,7 +1888,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                         isIgnored ? ViewState.STATE_IGNORED : ViewState.STATE_INITIAL);
                 mViewStates.put(id, viewState);
 
-                // TODO(b/70407264): for optimization purposes, should also ignore if change is
+                // TODO(b/73648631): for optimization purposes, should also ignore if change is
                 // detectable, and batch-send them when the session is finished (but that will
                 // require tracking detectable fields on AutofillManager)
                 if (isIgnored) {

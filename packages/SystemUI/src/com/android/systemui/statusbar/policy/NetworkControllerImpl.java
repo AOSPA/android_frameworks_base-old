@@ -198,7 +198,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             }
         });
         mWifiSignalController = new WifiSignalController(mContext, mHasMobileDataFeature,
-                mCallbackHandler, this);
+                mCallbackHandler, this, mWifiManager);
 
         mEthernetSignalController = new EthernetSignalController(mContext, mCallbackHandler, this);
 
@@ -308,6 +308,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         return mDefaultSignalController;
     }
 
+    @Override
     public String getMobileDataNetworkName() {
         MobileSignalController controller = getDataController();
         return controller != null ? controller.getState().networkNameData : "";
@@ -884,6 +885,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
                             datatype.equals("e") ? TelephonyIcons.E :
                             datatype.equals("g") ? TelephonyIcons.G :
                             datatype.equals("h") ? TelephonyIcons.H :
+                            datatype.equals("h+") ? TelephonyIcons.H_PLUS :
                             datatype.equals("lte") ? TelephonyIcons.LTE :
                             datatype.equals("lte+") ? TelephonyIcons.LTE_PLUS :
                             datatype.equals("dis") ? TelephonyIcons.DATA_DISABLED :

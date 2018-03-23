@@ -37,12 +37,15 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import android.app.servertransaction.DestroyActivityItem;
 import android.content.pm.ActivityInfo;
+import android.os.Debug;
 import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
 import android.support.test.filters.SmallTest;
@@ -92,24 +95,6 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertNotNull(mTask.getWindowContainerController());
         mStack.removeTask(mTask, "testOccupiedTaskCleanupOnRemove", REMOVE_TASK_MODE_DESTROYING);
         assertNotNull(mTask.getWindowContainerController());
-    }
-
-    @Test
-    public void testNoPauseDuringResumeTopActivity() throws Exception {
-        final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
-
-        // Simulate the a resumed activity set during
-        // {@link ActivityStack#resumeTopActivityUncheckedLocked}.
-        mSupervisor.inResumeTopActivity = true;
-        r.setState(RESUMED, "testNoPauseDuringResumeTopActivity");
-
-        final boolean waiting = mStack.goToSleepIfPossible(false);
-
-        // Ensure we report not being ready for sleep.
-        assertFalse(waiting);
-
-        // Make sure the resumed activity is untouched.
-        assertEquals(mStack.getResumedActivity(), r);
     }
 
     @Test
@@ -479,28 +464,6 @@ public class ActivityStackTests extends ActivityTestsBase {
     }
 
     @Test
-    public void testSuppressMultipleDestroy() throws Exception {
-        final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
-        final ClientLifecycleManager lifecycleManager = mock(ClientLifecycleManager.class);
-        final ProcessRecord app = r.app;
-
-        // The mocked lifecycle manager must be set on the ActivityStackSupervisor's reference to
-        // the service rather than mService as mService is a spy and setting the value will not
-        // propagate as ActivityManagerService hands its own reference to the
-        // ActivityStackSupervisor during construction.
-        ((TestActivityManagerService) mSupervisor.mService).setLifecycleManager(lifecycleManager);
-
-        mStack.destroyActivityLocked(r, true, "first invocation");
-        verify(lifecycleManager, times(1)).scheduleTransaction(eq(app.thread),
-                eq(r.appToken), any(DestroyActivityItem.class));
-        assertTrue(r.isState(DESTROYED, DESTROYING));
-
-        mStack.destroyActivityLocked(r, true, "second invocation");
-        verify(lifecycleManager, times(1)).scheduleTransaction(eq(app.thread),
-                eq(r.appToken), any(DestroyActivityItem.class));
-    }
-
-    @Test
     public void testFinishDisabledPackageActivities() throws Exception {
         final ActivityRecord firstActivity = new ActivityBuilder(mService).setTask(mTask).build();
         final ActivityRecord secondActivity = new ActivityBuilder(mService).setTask(mTask).build();
@@ -540,4 +503,37 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertTrue(mTask.mActivities.isEmpty());
         assertTrue(mStack.getAllTasks().isEmpty());
     }
+
+    @Test
+    public void testShouldSleepActivities() throws Exception {
+        // When focused activity and keyguard is going away, we should not sleep regardless
+        // of the display state
+        verifyShouldSleepActivities(true /* focusedStack */, true /*keyguardGoingAway*/,
+                true /* displaySleeping */, false /* expected*/);
+
+        // When not the focused stack, defer to display sleeping state.
+        verifyShouldSleepActivities(false /* focusedStack */, true /*keyguardGoingAway*/,
+                true /* displaySleeping */, true /* expected*/);
+
+        // If keyguard is going away, defer to the display sleeping state.
+        verifyShouldSleepActivities(true /* focusedStack */, false /*keyguardGoingAway*/,
+                true /* displaySleeping */, true /* expected*/);
+        verifyShouldSleepActivities(true /* focusedStack */, false /*keyguardGoingAway*/,
+                false /* displaySleeping */, false /* expected*/);
+    }
+
+    private void verifyShouldSleepActivities(boolean focusedStack,
+            boolean keyguardGoingAway, boolean displaySleeping, boolean expected) {
+        mSupervisor.mFocusedStack = focusedStack ? mStack : null;
+
+        final ActivityDisplay display = mock(ActivityDisplay.class);
+        final KeyguardController keyguardController = mSupervisor.getKeyguardController();
+
+        doReturn(display).when(mSupervisor).getActivityDisplay(anyInt());
+        doReturn(keyguardGoingAway).when(keyguardController).isKeyguardGoingAway();
+        doReturn(displaySleeping).when(display).isSleeping();
+
+        assertEquals(expected, mStack.shouldSleepActivities());
+    }
+
 }

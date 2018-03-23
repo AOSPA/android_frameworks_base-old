@@ -152,7 +152,6 @@ cc_library_shared {
         "libstagefright_timedtext",
         "libunwindstack",
         "libutilscallstack",
-        "libvndksupport",
         "libz",
         "libziparchive",
     ],

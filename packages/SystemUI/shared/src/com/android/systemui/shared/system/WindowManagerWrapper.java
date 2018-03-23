@@ -18,11 +18,11 @@ package com.android.systemui.shared.system;
 
 import static android.view.Display.DEFAULT_DISPLAY;
 
+import android.app.WindowConfiguration;
 import android.graphics.Rect;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.util.Log;
-import android.view.RemoteAnimationAdapter;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 
@@ -57,6 +57,8 @@ public class WindowManagerWrapper {
             WindowManager.TRANSIT_KEYGUARD_GOING_AWAY_ON_WALLPAPER;
     public static final int TRANSIT_KEYGUARD_OCCLUDE = WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
     public static final int TRANSIT_KEYGUARD_UNOCCLUDE = WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
+
+    public static final int ACTIVITY_TYPE_STANDARD = WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 
     private static final WindowManagerWrapper sInstance = new WindowManagerWrapper();
 
@@ -119,6 +121,14 @@ public class WindowManagerWrapper {
                     .setNavBarVirtualKeyHapticFeedbackEnabled(enabled);
         } catch (RemoteException e) {
             Log.w(TAG, "Failed to enable or disable navigation bar button haptics: ", e);
+        }
+    }
+
+    public void setShelfHeight(boolean visible, int shelfHeight) {
+        try {
+            WindowManagerGlobal.getWindowManagerService().setShelfHeight(visible, shelfHeight);
+        } catch (RemoteException e) {
+            Log.w(TAG, "Failed to set shelf height");
         }
     }
 }

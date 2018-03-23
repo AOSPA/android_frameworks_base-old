@@ -1280,6 +1280,19 @@ public final class PowerManager {
     }
 
     /**
+     * If true, the doze component is not started until after the screen has been
+     * turned off and the screen off animation has been performed.
+     * @hide
+     */
+    public void setDozeAfterScreenOff(boolean dozeAfterScreenOf) {
+        try {
+            mService.setDozeAfterScreenOff(dozeAfterScreenOf);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Returns the reason the phone was last shutdown. Calling app must have the
      * {@link android.Manifest.permission#DEVICE_POWER} permission to request this information.
      * @return Reason for shutdown as an int, {@link #SHUTDOWN_REASON_UNKNOWN} if the file could
@@ -1643,12 +1656,12 @@ public final class PowerManager {
         public void writeToProto(ProtoOutputStream proto, long fieldId) {
             synchronized (mToken) {
                 final long token = proto.start(fieldId);
-                proto.write(PowerManagerProto.WakeLockProto.HEX_STRING,
-                        Integer.toHexString(System.identityHashCode(this)));
-                proto.write(PowerManagerProto.WakeLockProto.HELD, mHeld);
-                proto.write(PowerManagerProto.WakeLockProto.INTERNAL_COUNT, mInternalCount);
+                proto.write(PowerManagerProto.WakeLock.TAG, mTag);
+                proto.write(PowerManagerProto.WakeLock.PACKAGE_NAME, mPackageName);
+                proto.write(PowerManagerProto.WakeLock.HELD, mHeld);
+                proto.write(PowerManagerProto.WakeLock.INTERNAL_COUNT, mInternalCount);
                 if (mWorkSource != null) {
-                    mWorkSource.writeToProto(proto, PowerManagerProto.WakeLockProto.WORK_SOURCE);
+                    mWorkSource.writeToProto(proto, PowerManagerProto.WakeLock.WORK_SOURCE);
                 }
                 proto.end(token);
             }
