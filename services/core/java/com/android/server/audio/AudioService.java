@@ -1849,7 +1849,16 @@ public class AudioService extends IAudioService.Stub
                 }
                 mUserSelectedVolumeControlStream = false;
             } else {
-                mForceControlStreamClient = new ForceControlStreamClient(cb);
+                if (null == mForceControlStreamClient) {
+                    mForceControlStreamClient = new ForceControlStreamClient(cb);
+                } else {
+                    if (mForceControlStreamClient.getBinder() == cb) {
+                        Log.d(TAG, "forceVolumeControlStream cb:" + cb + " is already linked.");
+                    } else {
+                        mForceControlStreamClient.release();
+                        mForceControlStreamClient = new ForceControlStreamClient(cb);
+                    }
+                }
             }
         }
     }
@@ -1888,6 +1897,10 @@ public class AudioService extends IAudioService.Stub
                 mCb.unlinkToDeath(this, 0);
                 mCb = null;
             }
+        }
+
+        public IBinder getBinder() {
+            return mCb;
         }
     }
 
@@ -3451,6 +3464,16 @@ public class AudioService extends IAudioService.Stub
                             mScoAudioState == SCO_STATE_DEACTIVATE_EXT_REQ) {
                         boolean status = false;
                         if (mBluetoothHeadsetDevice != null) {
+                            // Get correct mScoAudioMode
+                            mScoAudioMode = new Integer(Settings.Global.getInt(
+                                                        mContentResolver,
+                                                        "bluetooth_sco_channel_"+
+                                                        mBluetoothHeadsetDevice.getAddress(),
+                                                        SCO_MODE_VIRTUAL_CALL));
+                            if (mScoAudioMode > SCO_MODE_MAX || mScoAudioMode < 0) {
+                                mScoAudioMode = SCO_MODE_VIRTUAL_CALL;
+                            }
+
                             switch (mScoAudioState) {
                             case SCO_STATE_ACTIVATE_REQ:
                                 mScoAudioState = SCO_STATE_ACTIVE_INTERNAL;
