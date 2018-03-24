@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "7d502496_c9d3049f",
+        "filename": "packages/SystemUI/src/com/android/systemui/globalactions/GlobalActionsDialog.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 1131,
+      "author": {
+        "id": 1000011
+      },
+      "writtenOn": "2018-03-24T22:03:18Z",
+      "side": 1,
+      "message": "Why check mAirplaneModeOn here?",
+      "revId": "f739f971fb36822498b9a8a9a8e39b4d0dd9e479",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
