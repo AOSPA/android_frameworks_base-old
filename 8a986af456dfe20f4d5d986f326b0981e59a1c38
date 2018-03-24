@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "fb613e7d_69e5ce42",
+        "filename": "core/java/android/preference/MultiSelectListPreference.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 219,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-03-24T19:55:02Z",
+      "side": 1,
+      "message": "This isn\u0027t a result of this commit, but fixing these extras spaces in this commit would be nice.",
+      "revId": "8a986af456dfe20f4d5d986f326b0981e59a1c38",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
