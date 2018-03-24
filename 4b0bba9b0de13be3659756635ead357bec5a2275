@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ca22706e_255b2ce4",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBarWindowView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 96,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2018-03-24T11:13:04Z",
+      "side": 1,
+      "message": "unnecessary blank line",
+      "revId": "4b0bba9b0de13be3659756635ead357bec5a2275",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
