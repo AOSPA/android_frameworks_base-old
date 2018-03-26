@@ -21918,6 +21918,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         "com.android.frameworks.locationtests",
         "com.android.frameworks.coretests.privacy",
         "com.android.settings.ui",
+        "com.android.perftests.core",
+        "com.android.perftests.multiuser",
     };
 
     public boolean startInstrumentation(ComponentName className,
@@ -26856,6 +26858,19 @@ public class ActivityManagerService extends IActivityManager.Stub
             try {
                 mActivityStartController.registerRemoteAnimationForNextActivityStart(packageName,
                         adapter);
+            } finally {
+                Binder.restoreCallingIdentity(origId);
+            }
+        }
+    }
+
+    /** @see android.app.ActivityManager#alwaysShowUnsupportedCompileSdkWarning */
+    @Override
+    public void alwaysShowUnsupportedCompileSdkWarning(ComponentName activity) {
+        synchronized (this) {
+            final long origId = Binder.clearCallingIdentity();
+            try {
+                mAppWarnings.alwaysShowUnsupportedCompileSdkWarning(activity);
             } finally {
                 Binder.restoreCallingIdentity(origId);
             }

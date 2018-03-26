@@ -97,6 +97,9 @@ public class AppOpsService extends IAppOpsService.Stub {
     // Write at most every 30 minutes.
     static final long WRITE_DELAY = DEBUG ? 1000 : 30*60*1000;
 
+    // Constant meaning that any UID should be matched when dispatching callbacks
+    private static final int UID_ANY = -2;
+
     Context mContext;
     final AtomicFile mFile;
     final Handler mHandler;
@@ -766,7 +769,7 @@ public class AppOpsService extends IAppOpsService.Stub {
 
     private void notifyOpChanged(ModeCallback callback, int code,
             int uid, String packageName) {
-        if (callback.mUid >= 0 && callback.mUid != uid) {
+        if (uid != UID_ANY && callback.mUid >= 0 && callback.mUid != uid) {
             return;
         }
         // There are components watching for mode changes such as window manager
@@ -1114,7 +1117,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
 
         mHandler.sendMessage(PooledLambda.obtainMessage(
-                AppOpsService::notifyWatchersOfChange, this, code));
+                AppOpsService::notifyWatchersOfChange, this, code, UID_ANY));
     }
 
     @Override
@@ -1346,8 +1349,24 @@ public class AppOpsService extends IAppOpsService.Stub {
                 return;
             }
             if (!client.mStartedOps.remove(op)) {
-                Slog.wtf(TAG, "Operation not started: uid" + op.uid
-                        + " pkg=" + op.packageName + " op=" + op.op);
+                // We finish ops when packages get removed to guarantee no dangling
+                // started ops. However, some part of the system may asynchronously
+                // finish ops for an already gone package. Hence, finishing an op
+                // for a non existing package is fine and we don't log as a wtf.
+                final long identity = Binder.clearCallingIdentity();
+                try {
+                    if (LocalServices.getService(PackageManagerInternal.class).getPackageUid(
+                            resolvedPackageName, 0, UserHandle.getUserId(uid)) < 0) {
+                        Slog.i(TAG, "Finishing op=" + AppOpsManager.opToName(code)
+                                + " for non-existing package=" + resolvedPackageName
+                                + " in uid=" + uid);
+                        return;
+                    }
+                } finally {
+                    Binder.restoreCallingIdentity(identity);
+                }
+                Slog.wtf(TAG, "Operation not started: uid=" + op.uid + " pkg="
+                        + op.packageName + " op=" + AppOpsManager.opToName(op.op));
                 return;
             }
             finishOperationLocked(op, /*finishNested*/ false);
@@ -2682,7 +2701,7 @@ public class AppOpsService extends IAppOpsService.Stub {
 
             if (restrictionState.setRestriction(code, restricted, exceptionPackages, userHandle)) {
                 mHandler.sendMessage(PooledLambda.obtainMessage(
-                        AppOpsService::notifyWatchersOfChange, this, code));
+                        AppOpsService::notifyWatchersOfChange, this, code, UID_ANY));
             }
 
             if (restrictionState.isDefault()) {
@@ -2692,7 +2711,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
     }
 
-    private void notifyWatchersOfChange(int code) {
+    private void notifyWatchersOfChange(int code, int uid) {
         final ArraySet<ModeCallback> clonedCallbacks;
         synchronized (this) {
             ArraySet<ModeCallback> callbacks = mOpModeWatchers.get(code);
@@ -2702,7 +2721,7 @@ public class AppOpsService extends IAppOpsService.Stub {
             clonedCallbacks = new ArraySet<>(callbacks);
         }
 
-        notifyOpChanged(clonedCallbacks,  code, -1, null);
+        notifyOpChanged(clonedCallbacks,  code, uid, null);
     }
 
     @Override
@@ -2937,7 +2956,7 @@ public class AppOpsService extends IAppOpsService.Stub {
                     for (int j = 0; j < restrictionCount; j++) {
                         if (restrictions[j]) {
                             final int changedCode = j;
-                            mHandler.post(() -> notifyWatchersOfChange(changedCode));
+                            mHandler.post(() -> notifyWatchersOfChange(changedCode, UID_ANY));
                         }
                     }
                 }
