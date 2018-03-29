@@ -11,18 +11,28 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License.
+ * limitations under the License
  */
-package android.hardware.fingerprint;
 
-import android.hardware.fingerprint.Fingerprint;
-import android.os.Bundle;
-import android.os.UserHandle;
+package com.android.server.wm.utils;
+
+import android.graphics.Rect;
 
 /**
- * Communication channel from the FingerprintDialog (SysUI) back to AuthenticationClient.
- * @hide
+ * Utility methods to handle insets represented as rects.
  */
-oneway interface IFingerprintDialogReceiver {
-    void onDialogDismissed(int reason);
+public class InsetUtils {
+
+    private InsetUtils() {
+    }
+
+    /**
+     * Adds {@code insetsToAdd} to {@code inOutInsets}.
+     */
+    public static void addInsets(Rect inOutInsets, Rect insetsToAdd) {
+        inOutInsets.left += insetsToAdd.left;
+        inOutInsets.top += insetsToAdd.top;
+        inOutInsets.right += insetsToAdd.right;
+        inOutInsets.bottom += insetsToAdd.bottom;
+    }
 }

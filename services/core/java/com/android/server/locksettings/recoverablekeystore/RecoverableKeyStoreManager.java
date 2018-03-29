@@ -176,6 +176,20 @@ public class RecoverableKeyStoreManager {
         checkRecoverKeyStorePermission();
         int userId = UserHandle.getCallingUserId();
         int uid = Binder.getCallingUid();
+        rootCertificateAlias = replaceEmptyValueWithSecureDefault(rootCertificateAlias);
+
+        // Always set active alias to the argument of the last call to initRecoveryService method,
+        // even if cert file is incorrect.
+        String activeRootAlias = mDatabase.getActiveRootOfTrust(userId, uid);
+        if (activeRootAlias == null) {
+            Log.d(TAG, "Root of trust for recovery agent + " + uid
+                + " is assigned for the first time to " + rootCertificateAlias);
+            mDatabase.setActiveRootOfTrust(userId, uid, rootCertificateAlias);
+        } else if (!activeRootAlias.equals(rootCertificateAlias)) {
+            Log.i(TAG, "Root of trust for recovery agent " + uid + " is changed to "
+                    + rootCertificateAlias + " from  " + activeRootAlias);
+            mDatabase.setActiveRootOfTrust(userId, uid, rootCertificateAlias);
+        }
 
         CertXml certXml;
         try {
@@ -194,7 +208,7 @@ public class RecoverableKeyStoreManager {
 
         // Check serial number
         long newSerial = certXml.getSerial();
-        Long oldSerial = mDatabase.getRecoveryServiceCertSerial(userId, uid);
+        Long oldSerial = mDatabase.getRecoveryServiceCertSerial(userId, uid, rootCertificateAlias);
         if (oldSerial != null && oldSerial >= newSerial) {
             if (oldSerial == newSerial) {
                 Log.i(TAG, "The cert file serial number is the same, so skip updating.");
@@ -217,12 +231,20 @@ public class RecoverableKeyStoreManager {
                     ERROR_INVALID_CERTIFICATE, "Failed to validate certificate.");
         }
 
+        boolean wasInitialized = mDatabase.getRecoveryServiceCertPath(userId, uid,
+                rootCertificateAlias) != null;
+
         // Save the chosen and validated certificate into database
         try {
             Log.d(TAG, "Saving the randomly chosen endpoint certificate to database");
-            if (mDatabase.setRecoveryServiceCertPath(userId, uid, certPath) > 0) {
-                mDatabase.setRecoveryServiceCertSerial(userId, uid, newSerial);
-                mDatabase.setShouldCreateSnapshot(userId, uid, true);
+            if (mDatabase.setRecoveryServiceCertPath(userId, uid, rootCertificateAlias,
+                    certPath) > 0) {
+                mDatabase.setRecoveryServiceCertSerial(userId, uid, rootCertificateAlias,
+                        newSerial);
+                if (wasInitialized) {
+                    Log.i(TAG, "This is a certificate change. Snapshot pending.");
+                    mDatabase.setShouldCreateSnapshot(userId, uid, true);
+                }
                 mDatabase.setCounterId(userId, uid, new SecureRandom().nextLong());
             }
         } catch (CertificateEncodingException e) {
@@ -248,9 +270,7 @@ public class RecoverableKeyStoreManager {
             @NonNull byte[] recoveryServiceSigFile)
             throws RemoteException {
         checkRecoverKeyStorePermission();
-        if (rootCertificateAlias == null) {
-            Log.e(TAG, "rootCertificateAlias is null");
-        }
+        rootCertificateAlias = replaceEmptyValueWithSecureDefault(rootCertificateAlias);
         Preconditions.checkNotNull(recoveryServiceCertFile, "recoveryServiceCertFile is null");
         Preconditions.checkNotNull(recoveryServiceSigFile, "recoveryServiceSigFile is null");
 
@@ -382,10 +402,26 @@ public class RecoverableKeyStoreManager {
         Preconditions.checkNotNull(secretTypes, "secretTypes is null");
         int userId = UserHandle.getCallingUserId();
         int uid = Binder.getCallingUid();
-        long updatedRows = mDatabase.setRecoverySecretTypes(userId, uid, secretTypes);
-        if (updatedRows > 0) {
-            mDatabase.setShouldCreateSnapshot(userId, uid, true);
+
+        int[] currentSecretTypes = mDatabase.getRecoverySecretTypes(userId, uid);
+        if (Arrays.equals(secretTypes, currentSecretTypes)) {
+            Log.v(TAG, "Not updating secret types - same as old value.");
+            return;
         }
+
+        long updatedRows = mDatabase.setRecoverySecretTypes(userId, uid, secretTypes);
+        if (updatedRows < 1) {
+            throw new ServiceSpecificException(ERROR_SERVICE_INTERNAL_ERROR,
+                    "Database error trying to set secret types.");
+        }
+
+        if (currentSecretTypes.length == 0) {
+            Log.i(TAG, "Initialized secret types.");
+            return;
+        }
+
+        Log.i(TAG, "Updated secret types. Snapshot pending.");
+        mDatabase.setShouldCreateSnapshot(userId, uid, true);
     }
 
     /**
@@ -488,9 +524,7 @@ public class RecoverableKeyStoreManager {
             @NonNull List<KeyChainProtectionParams> secrets)
             throws RemoteException {
         checkRecoverKeyStorePermission();
-        if (rootCertificateAlias == null) {
-            Log.e(TAG, "rootCertificateAlias is null");
-        }
+        rootCertificateAlias = replaceEmptyValueWithSecureDefault(rootCertificateAlias);
         Preconditions.checkNotNull(sessionId, "invalid session");
         Preconditions.checkNotNull(verifierCertPath, "verifierCertPath is null");
         Preconditions.checkNotNull(vaultParams, "vaultParams is null");
@@ -932,11 +966,7 @@ public class RecoverableKeyStoreManager {
     }
 
     private X509Certificate getRootCertificate(String rootCertificateAlias) throws RemoteException {
-        if (rootCertificateAlias == null || rootCertificateAlias.isEmpty()) {
-            // Use the default Google Key Vault Service CA certificate if the alias is not provided
-            rootCertificateAlias = TrustedRootCertificates.GOOGLE_CLOUD_KEY_VAULT_SERVICE_V1_ALIAS;
-        }
-
+        rootCertificateAlias = replaceEmptyValueWithSecureDefault(rootCertificateAlias);
         X509Certificate rootCertificate =
                 TrustedRootCertificates.getRootCertificate(rootCertificateAlias);
         if (rootCertificate == null) {
@@ -944,6 +974,16 @@ public class RecoverableKeyStoreManager {
                     ERROR_INVALID_CERTIFICATE, "The provided root certificate alias is invalid");
         }
         return rootCertificate;
+    }
+
+    private @NonNull String replaceEmptyValueWithSecureDefault(
+            @Nullable String rootCertificateAlias) {
+        if (rootCertificateAlias == null || rootCertificateAlias.isEmpty()) {
+            Log.e(TAG, "rootCertificateAlias is null or empty");
+            // Use the default Google Key Vault Service CA certificate if the alias is not provided
+            rootCertificateAlias = TrustedRootCertificates.GOOGLE_CLOUD_KEY_VAULT_SERVICE_V1_ALIAS;
+        }
+        return rootCertificateAlias;
     }
 
     private void checkRecoverKeyStorePermission() {

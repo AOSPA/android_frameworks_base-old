@@ -385,6 +385,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      */
     private int mSurfaceSize;
 
+    /**
+     * Sequence number for the current layout pass.
+     */
+    int mLayoutSeq = 0;
+
     /** Temporary float array to retrieve 3x3 matrix values. */
     private final float[] mTmpFloats = new float[9];
 
@@ -554,7 +559,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 w.prelayout();
                 final boolean firstLayout = !w.isLaidOut();
                 mService.mPolicy.layoutWindowLw(w, null, mDisplayFrames);
-                w.mLayoutSeq = mService.mLayoutSeq;
+                w.mLayoutSeq = mLayoutSeq;
 
                 // If this is the first layout, we need to initialize the last inset values as
                 // otherwise we'd immediately cause an unnecessary resize.
@@ -593,7 +598,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 w.mLayoutNeeded = false;
                 w.prelayout();
                 mService.mPolicy.layoutWindowLw(w, w.getParentWindow(), mDisplayFrames);
-                w.mLayoutSeq = mService.mLayoutSeq;
+                w.mLayoutSeq = mLayoutSeq;
                 if (DEBUG_LAYOUT) Slog.v(TAG, " LAYOUT: mFrame=" + w.mFrame
                         + " mContainingFrame=" + w.mContainingFrame
                         + " mDisplayFrame=" + w.mDisplayFrame);
@@ -2219,6 +2224,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             pw.println(" mTouchExcludeRegion=" + mTouchExcludeRegion);
 
         pw.println();
+        pw.print(prefix); pw.print("mLayoutSeq="); pw.println(mLayoutSeq);
+
+        pw.println();
         pw.println(prefix + "Application tokens in top down Z order:");
         for (int stackNdx = mTaskStackContainers.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
             final TaskStack stack = mTaskStackContainers.getChildAt(stackNdx);
@@ -2927,9 +2935,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             mService.mScreenRect.set(0, 0, dw, dh);
         }
 
-        int seq = mService.mLayoutSeq + 1;
+        int seq = mLayoutSeq + 1;
         if (seq < 0) seq = 0;
-        mService.mLayoutSeq = seq;
+        mLayoutSeq = seq;
 
         // Used to indicate that we have processed the dream window and all additional windows are
         // behind it.
@@ -3172,6 +3180,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
          * A control placed at the appropriate level for transitions to occur.
          */
         SurfaceControl mAppAnimationLayer = null;
+        SurfaceControl mBoostedAppAnimationLayer = null;
 
         /**
          * Given that the split-screen divider does not have an AppWindowToken, it
@@ -3523,12 +3532,14 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
 
         void assignStackOrdering(SurfaceControl.Transaction t) {
+
             final int HOME_STACK_STATE = 0;
             final int NORMAL_STACK_STATE = 1;
             final int ALWAYS_ON_TOP_STATE = 2;
 
             int layer = 0;
             int layerForAnimationLayer = 0;
+            int layerForBoostedAnimationLayer = 0;
 
             for (int state = 0; state <= ALWAYS_ON_TOP_STATE; state++) {
                 for (int i = 0; i < mChildren.size(); i++) {
@@ -3550,16 +3561,22 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                         // highest animating stack and no higher.
                         layerForAnimationLayer = layer++;
                     }
+                    if (state != ALWAYS_ON_TOP_STATE) {
+                        layerForBoostedAnimationLayer = layer++;
+                    }
                 }
             }
             if (mAppAnimationLayer != null) {
                 t.setLayer(mAppAnimationLayer, layerForAnimationLayer);
             }
+            if (mBoostedAppAnimationLayer != null) {
+                t.setLayer(mBoostedAppAnimationLayer, layerForBoostedAnimationLayer);
+            }
         }
 
         @Override
-        SurfaceControl getAppAnimationLayer() {
-            return mAppAnimationLayer;
+        SurfaceControl getAppAnimationLayer(boolean boosted) {
+            return boosted ? mBoostedAppAnimationLayer : mAppAnimationLayer;
         }
 
         SurfaceControl getSplitScreenDividerAnchor() {
@@ -3573,16 +3590,22 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                 mAppAnimationLayer = makeChildSurface(null)
                         .setName("animationLayer")
                         .build();
+                mBoostedAppAnimationLayer = makeChildSurface(null)
+                        .setName("boostedAnimationLayer")
+                        .build();
                 mSplitScreenDividerAnchor = makeChildSurface(null)
                         .setName("splitScreenDividerAnchor")
                         .build();
                 getPendingTransaction()
                         .show(mAppAnimationLayer)
+                        .show(mBoostedAppAnimationLayer)
                         .show(mSplitScreenDividerAnchor);
                 scheduleAnimation();
             } else {
                 mAppAnimationLayer.destroy();
                 mAppAnimationLayer = null;
+                mBoostedAppAnimationLayer.destroy();
+                mBoostedAppAnimationLayer = null;
                 mSplitScreenDividerAnchor.destroy();
                 mSplitScreenDividerAnchor = null;
             }
@@ -3864,7 +3887,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         super.prepareSurfaces();
     }
 
-    void assignStackOrdering(SurfaceControl.Transaction t) {
-        mTaskStackContainers.assignStackOrdering(t);
+    void assignStackOrdering() {
+        mTaskStackContainers.assignStackOrdering(getPendingTransaction());
     }
 }

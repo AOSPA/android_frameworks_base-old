@@ -89,6 +89,8 @@
     <protected-broadcast android:name="android.intent.action.OVERLAY_REMOVED" />
     <protected-broadcast android:name="android.intent.action.OVERLAY_PRIORITY_CHANGED" />
     <protected-broadcast android:name="android.intent.action.USER_ACTIVITY_NOTIFICATION" />
+    <protected-broadcast android:name="android.intent.action.MY_PACKAGE_SUSPENDED" />
+    <protected-broadcast android:name="android.intent.action.MY_PACKAGE_UNSUSPENDED" />
 
     <protected-broadcast android:name="android.os.action.POWER_SAVE_MODE_CHANGED" />
     <protected-broadcast android:name="android.os.action.POWER_SAVE_MODE_CHANGING" />
@@ -1123,11 +1125,22 @@
 
     <!-- Allows an app to use fingerprint hardware.
          <p>Protection level: normal
+         @deprecated Applications should request {@link
+         android.Manifest.permission#USE_BIOMETRIC} instead
     -->
     <permission android:name="android.permission.USE_FINGERPRINT"
         android:permissionGroup="android.permission-group.SENSORS"
         android:label="@string/permlab_useFingerprint"
         android:description="@string/permdesc_useFingerprint"
+        android:protectionLevel="normal" />
+
+    <!-- Allows an app to use device supported biometric modalities.
+         <p>Protection level: normal
+    -->
+    <permission android:name="android.permission.USE_BIOMETRIC"
+        android:permissionGroup="android.permission-group.SENSORS"
+        android:label="@string/permlab_useBiometric"
+        android:description="@string/permdesc_useBiometric"
         android:protectionLevel="normal" />
 
     <!-- ====================================================================== -->
@@ -4245,9 +4258,19 @@
                   android:exported="false">
         </receiver>
 
-        <receiver android:name="com.android.server.stats.StatsCompanionService$PollingAlarmReceiver"
+        <receiver android:name="com.android.server.stats.StatsCompanionService$PullingAlarmReceiver"
                   android:permission="android.permission.STATSCOMPANION"
                   android:exported="false">
+        </receiver>
+
+        <receiver android:name="com.android.server.am.BatteryStatsService$UsbConnectionReceiver"
+                  android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_STATE" />
+            </intent-filter>
         </receiver>
 
         <service android:name="android.hardware.location.GeofenceHardwareService"
