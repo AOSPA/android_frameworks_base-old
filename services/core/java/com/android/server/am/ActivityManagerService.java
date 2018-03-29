@@ -1280,6 +1280,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
     }
 
+    boolean mSystemProvidersInstalled;
+
     CoreSettingsObserver mCoreSettingsObserver;
 
     FontScaleSettingObserver mFontScaleSettingObserver;
@@ -12221,6 +12223,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                             "Attempt to launch content provider before system ready");
                 }
 
+                // If system providers are not installed yet we aggressively crash to avoid
+                // creating multiple instance of these providers and then bad things happen!
+                if (!mSystemProvidersInstalled && cpi.applicationInfo.isSystemApp()
+                        && "system".equals(cpi.processName)) {
+                    throw new IllegalStateException("Cannot access system provider: '"
+                            + cpi.authority + "' before system providers are installed!");
+                }
+
                 // Make sure that the user who owns this provider is running.  If not,
                 // we don't want to allow it to run.
                 if (!mUserController.isUserRunning(userId, 0)) {
@@ -12772,6 +12782,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
         if (providers != null) {
             mSystemThread.installSystemProviders(providers);
+        }
+
+        synchronized (this) {
+            mSystemProvidersInstalled = true;
         }
 
         mConstants.start(mContext.getContentResolver());
