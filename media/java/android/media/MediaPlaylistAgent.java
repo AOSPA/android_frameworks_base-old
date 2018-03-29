@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.concurrent.Executor;
 
 /**
+ * @hide
  * MediaPlaylistAgent is the abstract class an application needs to derive from to pass an object
  * to a MediaSession2 that will override default playlist handling behaviors. It contains a set of
  * notify methods to signal MediaSession2 that playlist-related state has changed.
@@ -148,7 +149,7 @@ public abstract class MediaPlaylistAgent {
     }
 
     public MediaPlaylistAgent(@NonNull Context context) {
-        mProvider = ApiLoader.getProvider(context).createMediaPlaylistAgent(context, this);
+        mProvider = ApiLoader.getProvider().createMediaPlaylistAgent(context, this);
     }
 
     /**
@@ -228,10 +229,15 @@ public abstract class MediaPlaylistAgent {
     }
 
     /**
-     * Adds the media item to the playlist at the index
+     * Adds the media item to the playlist at position index. Index equals or greater than
+     * the current playlist size will add the item at the end of the playlist.
+     * <p>
+     * This will not change the currently playing media item.
+     * If index is less than or equal to the current index of the playlist,
+     * the current index of the playlist will be incremented correspondingly.
      *
-     * @param index index
-     * @param item media item to add
+     * @param index the index you want to add
+     * @param item the media item you want to add
      */
     public void addPlaylistItem(int index, @NonNull MediaItem2 item) {
         mProvider.addPlaylistItem_impl(index, item);
@@ -331,16 +337,21 @@ public abstract class MediaPlaylistAgent {
     }
 
     /**
-     * Gets a {@link MediaItem2} in the playlist that matches given {@code dsd}.
-     * You can override this method to have more finer control of updating {@link DataSourceDesc}
-     * on items in the playlist.
+     * Called by {@link MediaSession2} when it wants to translate {@link DataSourceDesc} from the
+     * {@link MediaPlayerBase.PlayerEventCallback} to the {@link MediaItem2}. Override this method
+     * if you want to create {@link DataSourceDesc}s dynamically, instead of specifying them with
+     * {@link #setPlaylist(List, MediaMetadata2)}.
+     * <p>
+     * Session would throw an exception if this returns {@code null} for {@param dsd} from the
+     * {@link MediaPlayerBase.PlayerEventCallback}.
+     * <p>
+     * Default implementation calls the {@link #getPlaylist()} and searches the {@link MediaItem2}
+     * with the {@param dsd}.
      *
+     * @param dsd The dsd to query.
      * @return A {@link MediaItem2} object in the playlist that matches given {@code dsd}.
-     *         {@code null} if playlist is not set, or if the playlist has no matching item.
      * @throws IllegalArgumentException if {@code dsd} is null
-     * @hide
      */
-    // TODO(jaewan): Unhide
     public @Nullable MediaItem2 getMediaItem(@NonNull DataSourceDesc dsd) {
         return mProvider.getMediaItem_impl(dsd);
     }
