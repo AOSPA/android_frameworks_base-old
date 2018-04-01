@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
@@ -39,10 +40,8 @@ import android.os.Looper;
 import android.support.test.filters.SmallTest;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
-import android.view.Choreographer;
 import android.view.View;
 
-import com.android.internal.util.Preconditions;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.ScrimView;
@@ -75,7 +74,7 @@ public class ScrimControllerTest extends SysuiTestCase {
     @Before
     public void setup() {
         mLightBarController = mock(LightBarController.class);
-        mScrimBehind = new ScrimView(getContext());
+        mScrimBehind = spy(new ScrimView(getContext()));
         mScrimInFront = new ScrimView(getContext());
         mWakeLock = mock(WakeLock.class);
         mAlarmManager = mock(AlarmManager.class);
@@ -212,8 +211,10 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.finishAnimationsImmediately();
 
         final float scrimAlpha = mScrimBehind.getViewAlpha();
+        reset(mScrimBehind);
         mScrimController.setExpansionAffectsAlpha(false);
         mScrimController.setPanelExpansion(0.8f);
+        verifyZeroInteractions(mScrimBehind);
         Assert.assertEquals("Scrim opacity shouldn't change when setExpansionAffectsAlpha "
                 + "is false", scrimAlpha, mScrimBehind.getViewAlpha(), 0.01f);
 
@@ -557,8 +558,8 @@ public class ScrimControllerTest extends SysuiTestCase {
          * @param callback What to execute.
          */
         @Override
-        protected void doOnTheNextFrame(Choreographer.FrameCallback callback) {
-            callback.doFrame(0);
+        protected void doOnTheNextFrame(Runnable callback) {
+            callback.run();
         }
     }
 

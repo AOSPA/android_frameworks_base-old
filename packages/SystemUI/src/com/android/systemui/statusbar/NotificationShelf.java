@@ -85,6 +85,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
     private boolean mAnimationsEnabled = true;
     private boolean mShowNotificationShelf;
     private float mFirstElementRoundness;
+    private Rect mClipRect = new Rect();
 
     public NotificationShelf(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -226,7 +227,6 @@ public class NotificationShelf extends ActivatableNotificationView implements
             expandAmount = Math.min(1.0f, expandAmount);
         }
         //  find the first view that doesn't overlap with the shelf
-        int notificationIndex = 0;
         int notGoneIndex = 0;
         int colorOfViewBeforeLast = NO_COLOR;
         boolean backgroundForceHidden = false;
@@ -246,13 +246,15 @@ public class NotificationShelf extends ActivatableNotificationView implements
         int baseZHeight = mAmbientState.getBaseZHeight();
         int backgroundTop = 0;
         float firstElementRoundness = 0.0f;
-        while (notificationIndex < mHostLayout.getChildCount()) {
-            ExpandableView child = (ExpandableView) mHostLayout.getChildAt(notificationIndex);
-            notificationIndex++;
+
+        for (int i = 0; i < mHostLayout.getChildCount(); i++) {
+            ExpandableView child = (ExpandableView) mHostLayout.getChildAt(i);
+
             if (!(child instanceof ExpandableNotificationRow)
                     || child.getVisibility() == GONE) {
                 continue;
             }
+
             ExpandableNotificationRow row = (ExpandableNotificationRow) child;
             float notificationClipEnd;
             boolean aboveShelf = ViewState.getFinalTranslationZ(row) > baseZHeight
@@ -314,6 +316,9 @@ public class NotificationShelf extends ActivatableNotificationView implements
             notGoneIndex++;
             previousColor = ownColorUntinted;
         }
+
+        clipTransientViews();
+
         setBackgroundTop(backgroundTop);
         setFirstElementRoundness(firstElementRoundness);
         mShelfIcons.setSpeedBumpIndex(mAmbientState.getSpeedBumpIndex());
@@ -333,6 +338,25 @@ public class NotificationShelf extends ActivatableNotificationView implements
         setHideBackground(hideBackground || backgroundForceHidden);
         if (mNotGoneIndex == -1) {
             mNotGoneIndex = notGoneIndex;
+        }
+    }
+
+    /**
+     * Clips transient views to the top of the shelf - Transient views are only used for
+     * disappearing views/animations and need to be clipped correctly by the shelf to ensure they
+     * don't show underneath the notification stack when something is animating and the user
+     * swipes quickly.
+     */
+    private void clipTransientViews() {
+        for (int i = 0; i < mHostLayout.getTransientViewCount(); i++) {
+            View transientView = mHostLayout.getTransientView(i);
+            if (transientView instanceof ExpandableNotificationRow) {
+                ExpandableNotificationRow transientRow = (ExpandableNotificationRow) transientView;
+                updateNotificationClipHeight(transientRow, getTranslationY());
+            } else {
+                Log.e(TAG, "NotificationShelf.clipTransientViews(): "
+                        + "Trying to clip non-row transient view");
+            }
         }
     }
 
@@ -672,6 +696,11 @@ public class NotificationShelf extends ActivatableNotificationView implements
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
         updateRelativeOffset();
+
+        // we always want to clip to our sides, such that nothing can draw outside of these bounds
+        int height = getResources().getDisplayMetrics().heightPixels;
+        mClipRect.set(0, -height, getWidth(), height);
+        mShelfIcons.setClipBounds(mClipRect);
     }
 
     private void updateRelativeOffset() {

@@ -242,7 +242,9 @@ public class Build {
          * Possible values are defined in {@link Build.VERSION_CODES}.
          *
          * @see #SDK_INT
+         * @hide
          */
+        @TestApi
         public static final int FIRST_SDK_INT = SystemProperties
                 .getInt("ro.product.first_api_level", 0);
 
@@ -293,8 +295,10 @@ public class Build {
 
         /**
          * The current lowest supported value of app target SDK. Applications targeting
-         * lower values will fail to install and run. Its possible values are defined
-         * in {@link Build.VERSION_CODES}.
+         * lower values may not function on devices running this SDK version. Its possible
+         * values are defined in {@link Build.VERSION_CODES}.
+         *
+         * @hide
          */
         public static final int MIN_SUPPORTED_TARGET_SDK_INT = SystemProperties.getInt(
                 "ro.build.version.min_supported_target_sdk", 0);

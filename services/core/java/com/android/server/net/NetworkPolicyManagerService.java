@@ -1141,7 +1141,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         // TODO: support shared UIDs
         if (maxBytes > 0 && maxBytes > totalBytes / 2) {
             final String[] packageNames = mContext.getPackageManager().getPackagesForUid(maxUid);
-            if (packageNames.length == 1) {
+            if (packageNames != null && packageNames.length == 1) {
                 try {
                     return mContext.getPackageManager().getApplicationInfo(packageNames[0],
                             MATCH_ANY_USER | MATCH_DISABLED_COMPONENTS | MATCH_DIRECT_BOOT_AWARE
@@ -2338,7 +2338,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     }
 
     private void setUidPolicyUncheckedUL(int uid, int oldPolicy, int policy, boolean persist) {
-        setUidPolicyUncheckedUL(uid, policy, persist);
+        setUidPolicyUncheckedUL(uid, policy, false);
 
         final boolean notifyApp;
         if (!isUidValidForWhitelistRules(uid)) {
@@ -2361,6 +2361,11 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         }
         mHandler.obtainMessage(MSG_POLICIES_CHANGED, uid, policy, Boolean.valueOf(notifyApp))
                 .sendToTarget();
+        if (persist) {
+            synchronized (mNetworkPoliciesSecondLock) {
+                writePolicyAL();
+            }
+        }
     }
 
     private void setUidPolicyUncheckedUL(int uid, int policy, boolean persist) {

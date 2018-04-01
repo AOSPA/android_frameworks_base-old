@@ -17,6 +17,7 @@
 package com.android.server.pm;
 
 import static android.Manifest.permission.DELETE_PACKAGES;
+import static android.Manifest.permission.MANAGE_DEVICE_ADMINS;
 import static android.Manifest.permission.SET_HARMFUL_APP_WARNINGS;
 import static android.Manifest.permission.INSTALL_PACKAGES;
 import static android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS;
@@ -91,6 +92,7 @@ import static com.android.internal.app.IntentForwarderActivity.FORWARD_INTENT_TO
 import static com.android.internal.app.IntentForwarderActivity.FORWARD_INTENT_TO_PARENT;
 import static com.android.internal.content.NativeLibraryHelper.LIB64_DIR_NAME;
 import static com.android.internal.content.NativeLibraryHelper.LIB_DIR_NAME;
+import static com.android.internal.util.ArrayUtils.appendElement;
 import static com.android.internal.util.ArrayUtils.appendInt;
 import static com.android.server.pm.InstructionSets.getAppDexInstructionSets;
 import static com.android.server.pm.InstructionSets.getDexCodeInstructionSet;
@@ -115,6 +117,7 @@ import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
@@ -777,8 +780,14 @@ public class PackageManagerService extends IPackageManager.Stub
             return PackageManagerService.this.hasSystemFeature(feature, 0);
         }
 
-        final List<PackageParser.Package> getStaticOverlayPackagesLocked(
+        final List<PackageParser.Package> getStaticOverlayPackages(
                 Collection<PackageParser.Package> allPackages, String targetPackageName) {
+            if ("android".equals(targetPackageName)) {
+                // Static RROs targeting to "android", ie framework-res.apk, are already applied by
+                // native AssetManager.
+                return null;
+            }
+
             List<PackageParser.Package> overlayPackages = null;
             for (PackageParser.Package p : allPackages) {
                 if (targetPackageName.equals(p.mOverlayTarget) && p.mOverlayIsStatic) {
@@ -799,16 +808,8 @@ public class PackageManagerService extends IPackageManager.Stub
             return overlayPackages;
         }
 
-        @GuardedBy("mInstallLock")
-        final String[] getStaticOverlayPathsLocked(Collection<PackageParser.Package> allPackages,
-                String targetPackageName, String targetPath) {
-            if ("android".equals(targetPackageName)) {
-                // Static RROs targeting to "android", ie framework-res.apk, are already applied by
-                // native AssetManager.
-                return null;
-            }
-            List<PackageParser.Package> overlayPackages =
-                    getStaticOverlayPackagesLocked(allPackages, targetPackageName);
+        final String[] getStaticOverlayPaths(List<PackageParser.Package> overlayPackages,
+                String targetPath, Object installLock) {
             if (overlayPackages == null || overlayPackages.isEmpty()) {
                 return null;
             }
@@ -828,9 +829,20 @@ public class PackageManagerService extends IPackageManager.Stub
                     //
                     // OverlayManagerService will update each of them with a correct gid from its
                     // target package app id.
-                    mInstaller.idmap(targetPath, overlayPackage.baseCodePath,
-                            UserHandle.getSharedAppGid(
-                                    UserHandle.getUserGid(UserHandle.USER_SYSTEM)));
+                    if (installLock != null) {
+                        synchronized (installLock) {
+                            mInstaller.idmap(targetPath, overlayPackage.baseCodePath,
+                                    UserHandle.getSharedAppGid(
+                                            UserHandle.getUserGid(UserHandle.USER_SYSTEM)));
+                        }
+                    } else {
+                        // We can call mInstaller without holding mInstallLock because mInstallLock
+                        // is held before running parallel parsing.
+                        // Moreover holding mInstallLock on each parsing thread causes dead-lock.
+                        mInstaller.idmap(targetPath, overlayPackage.baseCodePath,
+                                UserHandle.getSharedAppGid(
+                                        UserHandle.getUserGid(UserHandle.USER_SYSTEM)));
+                    }
                     if (overlayPathList == null) {
                         overlayPathList = new ArrayList<String>();
                     }
@@ -844,10 +856,14 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         String[] getStaticOverlayPaths(String targetPackageName, String targetPath) {
+            List<PackageParser.Package> overlayPackages;
             synchronized (mPackages) {
-                return getStaticOverlayPathsLocked(
-                        mPackages.values(), targetPackageName, targetPath);
+                overlayPackages = getStaticOverlayPackages(
+                        mPackages.values(), targetPackageName);
             }
+            // It is safe to keep overlayPackages without holding mPackages because static overlay
+            // packages can't be uninstalled or disabled.
+            return getStaticOverlayPaths(overlayPackages, targetPath, mInstallLock);
         }
 
         @Override public final String[] getOverlayApks(String targetPackageName) {
@@ -882,7 +898,9 @@ public class PackageManagerService extends IPackageManager.Stub
             // can't happen while running parallel parsing.
             // Moreover holding mPackages on each parsing thread causes dead-lock.
             return mOverlayPackages == null ? null :
-                    getStaticOverlayPathsLocked(mOverlayPackages, targetPackageName, targetPath);
+                    getStaticOverlayPaths(
+                            getStaticOverlayPackages(mOverlayPackages, targetPackageName),
+                            targetPath, null);
         }
     }
 
@@ -10384,7 +10402,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         if (Build.IS_DEBUGGABLE &&
                 pkg.isPrivileged() &&
-                !SystemProperties.getBoolean(PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB, true)) {
+                SystemProperties.getBoolean(PROPERTY_NAME_PM_DEXOPT_PRIV_APPS_OOB, false)) {
             PackageManagerServiceUtils.logPackageHasUncompressedCode(pkg);
         }
 
@@ -14016,18 +14034,15 @@ public class PackageManagerService extends IPackageManager.Stub
             return packageNames;
         }
 
-        // List of package names for whom the suspended state has changed.
-        final List<String> changedPackages = new ArrayList<>(packageNames.length);
-        // List of package names for whom the suspended state is not set as requested in this
-        // method.
+        final List<String> changedPackagesList = new ArrayList<>(packageNames.length);
         final List<String> unactionedPackages = new ArrayList<>(packageNames.length);
         final long callingId = Binder.clearCallingIdentity();
         try {
             synchronized (mPackages) {
                 for (int i = 0; i < packageNames.length; i++) {
                     final String packageName = packageNames[i];
-                    if (packageName == callingPackage) {
-                        Slog.w(TAG, "Calling package: " + callingPackage + "trying to "
+                    if (callingPackage.equals(packageName)) {
+                        Slog.w(TAG, "Calling package: " + callingPackage + " trying to "
                                 + (suspended ? "" : "un") + "suspend itself. Ignoring");
                         unactionedPackages.add(packageName);
                         continue;
@@ -14047,17 +14062,18 @@ public class PackageManagerService extends IPackageManager.Stub
                         }
                         pkgSetting.setSuspended(suspended, callingPackage, appExtras,
                                 launcherExtras, userId);
-                        changedPackages.add(packageName);
+                        changedPackagesList.add(packageName);
                     }
                 }
             }
         } finally {
             Binder.restoreCallingIdentity(callingId);
         }
-        // TODO (b/75036698): Also send each package a broadcast when suspended state changed
-        if (!changedPackages.isEmpty()) {
-            sendPackagesSuspendedForUser(changedPackages.toArray(
-                    new String[changedPackages.size()]), userId, suspended);
+        if (!changedPackagesList.isEmpty()) {
+            final String[] changedPackages = changedPackagesList.toArray(
+                    new String[changedPackagesList.size()]);
+            sendPackagesSuspendedForUser(changedPackages, userId, suspended);
+            sendMyPackageSuspendedOrUnsuspended(changedPackages, suspended, appExtras, userId);
             synchronized (mPackages) {
                 scheduleWritePackageRestrictionsLocked(userId);
             }
@@ -14067,7 +14083,7 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     @Override
-    public PersistableBundle getPackageSuspendedAppExtras(String packageName, int userId) {
+    public PersistableBundle getSuspendedPackageAppExtras(String packageName, int userId) {
         final int callingUid = Binder.getCallingUid();
         if (getPackageUid(packageName, 0, userId) != callingUid) {
             mContext.enforceCallingOrSelfPermission(Manifest.permission.SUSPEND_APPS, null);
@@ -14078,7 +14094,10 @@ public class PackageManagerService extends IPackageManager.Stub
                 throw new IllegalArgumentException("Unknown target package: " + packageName);
             }
             final PackageUserState packageUserState = ps.readUserState(userId);
-            return packageUserState.suspended ? packageUserState.suspendedAppExtras : null;
+            if (packageUserState.suspended) {
+                return packageUserState.suspendedAppExtras;
+            }
+            return null;
         }
     }
 
@@ -14094,10 +14113,47 @@ public class PackageManagerService extends IPackageManager.Stub
             }
             final PackageUserState packageUserState = ps.readUserState(userId);
             if (packageUserState.suspended) {
-                // TODO (b/75036698): Also send this package a broadcast with the new app extras
                 packageUserState.suspendedAppExtras = appExtras;
+                sendMyPackageSuspendedOrUnsuspended(new String[] {packageName}, true, appExtras,
+                        userId);
             }
         }
+    }
+
+    private void sendMyPackageSuspendedOrUnsuspended(String[] affectedPackages, boolean suspended,
+            PersistableBundle appExtras, int userId) {
+        final String action;
+        final Bundle intentExtras = new Bundle();
+        if (suspended) {
+            action = Intent.ACTION_MY_PACKAGE_SUSPENDED;
+            if (appExtras != null) {
+                final Bundle bundledAppExtras = new Bundle(appExtras.deepCopy());
+                intentExtras.putBundle(Intent.EXTRA_SUSPENDED_PACKAGE_EXTRAS, bundledAppExtras);
+            }
+        } else {
+            action = Intent.ACTION_MY_PACKAGE_UNSUSPENDED;
+        }
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    final IActivityManager am = ActivityManager.getService();
+                    if (am == null) {
+                        Slog.wtf(TAG, "IActivityManager null. Cannot send MY_PACKAGE_ "
+                                + (suspended ? "" : "UN") + "SUSPENDED broadcasts");
+                        return;
+                    }
+                    final int[] targetUserIds = new int[] {userId};
+                    for (String packageName : affectedPackages) {
+                        doSendBroadcast(am, action, null, intentExtras,
+                                Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND, packageName, null,
+                                targetUserIds, false);
+                    }
+                } catch (RemoteException ex) {
+                    // Shouldn't happen as AMS is in the same process.
+                }
+            }
+        });
     }
 
     @Override
@@ -18919,7 +18975,7 @@ public class PackageManagerService extends IPackageManager.Stub
         return true;
     }
 
-    private static final class ClearStorageConnection implements ServiceConnection {
+    private final class ClearStorageConnection implements ServiceConnection {
         IMediaContainerService mContainerService;
 
         @Override
@@ -21640,37 +21696,35 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
                 // the given package is involved with.
                 if (dumpState.onTitlePrinted()) pw.println();
 
-                try (final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120)) {
-                    ipw.println();
-                    ipw.println("Frozen packages:");
-                    ipw.increaseIndent();
-                    if (mFrozenPackages.size() == 0) {
-                        ipw.println("(none)");
-                    } else {
-                        for (int i = 0; i < mFrozenPackages.size(); i++) {
-                            ipw.println(mFrozenPackages.valueAt(i));
-                        }
+                final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120);
+                ipw.println();
+                ipw.println("Frozen packages:");
+                ipw.increaseIndent();
+                if (mFrozenPackages.size() == 0) {
+                    ipw.println("(none)");
+                } else {
+                    for (int i = 0; i < mFrozenPackages.size(); i++) {
+                        ipw.println(mFrozenPackages.valueAt(i));
                     }
-                    ipw.decreaseIndent();
                 }
+                ipw.decreaseIndent();
             }
 
             if (!checkin && dumpState.isDumping(DumpState.DUMP_VOLUMES) && packageName == null) {
                 if (dumpState.onTitlePrinted()) pw.println();
 
-                try (final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120)) {
-                    ipw.println();
-                    ipw.println("Loaded volumes:");
-                    ipw.increaseIndent();
-                    if (mLoadedVolumes.size() == 0) {
-                        ipw.println("(none)");
-                    } else {
-                        for (int i = 0; i < mLoadedVolumes.size(); i++) {
-                            ipw.println(mLoadedVolumes.valueAt(i));
-                        }
+                final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ", 120);
+                ipw.println();
+                ipw.println("Loaded volumes:");
+                ipw.increaseIndent();
+                if (mLoadedVolumes.size() == 0) {
+                    ipw.println("(none)");
+                } else {
+                    for (int i = 0; i < mLoadedVolumes.size(); i++) {
+                        ipw.println(mLoadedVolumes.valueAt(i));
                     }
-                    ipw.decreaseIndent();
                 }
+                ipw.decreaseIndent();
             }
 
             if (!checkin && dumpState.isDumping(DumpState.DUMP_SERVICE_PERMISSIONS)
@@ -21799,63 +21853,61 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
     }
 
     private void dumpDexoptStateLPr(PrintWriter pw, String packageName) {
-        try (final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ")) {
-            ipw.println();
-            ipw.println("Dexopt state:");
-            ipw.increaseIndent();
-            Collection<PackageParser.Package> packages = null;
-            if (packageName != null) {
-                PackageParser.Package targetPackage = mPackages.get(packageName);
-                if (targetPackage != null) {
-                    packages = Collections.singletonList(targetPackage);
-                } else {
-                    ipw.println("Unable to find package: " + packageName);
-                    return;
-                }
+        final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
+        ipw.println();
+        ipw.println("Dexopt state:");
+        ipw.increaseIndent();
+        Collection<PackageParser.Package> packages = null;
+        if (packageName != null) {
+            PackageParser.Package targetPackage = mPackages.get(packageName);
+            if (targetPackage != null) {
+                packages = Collections.singletonList(targetPackage);
             } else {
-                packages = mPackages.values();
+                ipw.println("Unable to find package: " + packageName);
+                return;
             }
+        } else {
+            packages = mPackages.values();
+        }
 
-            for (PackageParser.Package pkg : packages) {
-                ipw.println("[" + pkg.packageName + "]");
-                ipw.increaseIndent();
-                mPackageDexOptimizer.dumpDexoptState(ipw, pkg,
-                        mDexManager.getPackageUseInfoOrDefault(pkg.packageName));
-                ipw.decreaseIndent();
-            }
+        for (PackageParser.Package pkg : packages) {
+            ipw.println("[" + pkg.packageName + "]");
+            ipw.increaseIndent();
+            mPackageDexOptimizer.dumpDexoptState(ipw, pkg,
+                    mDexManager.getPackageUseInfoOrDefault(pkg.packageName));
+            ipw.decreaseIndent();
         }
     }
 
     private void dumpCompilerStatsLPr(PrintWriter pw, String packageName) {
-        try (final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ")) {
-            ipw.println();
-            ipw.println("Compiler stats:");
-            ipw.increaseIndent();
-            Collection<PackageParser.Package> packages = null;
-            if (packageName != null) {
-                PackageParser.Package targetPackage = mPackages.get(packageName);
-                if (targetPackage != null) {
-                    packages = Collections.singletonList(targetPackage);
-                } else {
-                    ipw.println("Unable to find package: " + packageName);
-                    return;
-                }
+        final IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
+        ipw.println();
+        ipw.println("Compiler stats:");
+        ipw.increaseIndent();
+        Collection<PackageParser.Package> packages = null;
+        if (packageName != null) {
+            PackageParser.Package targetPackage = mPackages.get(packageName);
+            if (targetPackage != null) {
+                packages = Collections.singletonList(targetPackage);
             } else {
-                packages = mPackages.values();
+                ipw.println("Unable to find package: " + packageName);
+                return;
             }
+        } else {
+            packages = mPackages.values();
+        }
 
-            for (PackageParser.Package pkg : packages) {
-                ipw.println("[" + pkg.packageName + "]");
-                ipw.increaseIndent();
+        for (PackageParser.Package pkg : packages) {
+            ipw.println("[" + pkg.packageName + "]");
+            ipw.increaseIndent();
 
-                CompilerStats.PackageStats stats = getCompilerPackageStats(pkg.packageName);
-                if (stats == null) {
-                    ipw.println("(No recorded stats)");
-                } else {
-                    stats.dump(ipw);
-                }
-                ipw.decreaseIndent();
+            CompilerStats.PackageStats stats = getCompilerPackageStats(pkg.packageName);
+            if (stats == null) {
+                ipw.println("(No recorded stats)");
+            } else {
+                stats.dump(ipw);
             }
+            ipw.decreaseIndent();
         }
     }
 
@@ -24082,6 +24134,33 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         }
     }
 
+    @Override
+    public void grantDefaultPermissionsToActiveLuiApp(String packageName, int userId) {
+        enforceSystemOrPhoneCaller("grantDefaultPermissionsToActiveLuiApp");
+        synchronized (mPackages) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                mDefaultPermissionPolicy.grantDefaultPermissionsToActiveLuiApp(
+                        packageName, userId);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+    }
+
+    @Override
+    public void revokeDefaultPermissionsFromLuiApps(String[] packageNames, int userId) {
+        enforceSystemOrPhoneCaller("revokeDefaultPermissionsFromLuiApps");
+        synchronized (mPackages) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                mDefaultPermissionPolicy.revokeDefaultPermissionsFromLuiApps(packageNames, userId);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+    }
+
     private static void enforceSystemOrPhoneCaller(String tag) {
         int callingUid = Binder.getCallingUid();
         if (callingUid != Process.PHONE_UID && callingUid != Process.SYSTEM_UID) {
@@ -24345,6 +24424,23 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         synchronized(mPackages) {
             return mSettings.getHarmfulAppWarningLPr(packageName, userId);
         }
+    }
+
+    @Override
+    public boolean isPackageStateProtected(@NonNull String packageName, @UserIdInt int userId) {
+        final int callingUid = Binder.getCallingUid();
+        final int callingAppId = UserHandle.getAppId(callingUid);
+
+        mPermissionManager.enforceCrossUserPermission(callingUid, userId,
+                false /*requireFullPermission*/, true /*checkShell*/, "isPackageStateProtected");
+
+        if (callingAppId != Process.SYSTEM_UID && callingAppId != Process.ROOT_UID
+                && checkUidPermission(MANAGE_DEVICE_ADMINS, callingUid) != PERMISSION_GRANTED) {
+            throw new SecurityException("Caller must have the "
+                    + MANAGE_DEVICE_ADMINS + " permission.");
+        }
+
+        return mProtectedPackages.isPackageStateProtected(userId, packageName);
     }
 }
 

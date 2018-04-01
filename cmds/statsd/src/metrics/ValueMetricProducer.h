@@ -93,7 +93,7 @@ private:
     void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
 
     // Internal interface to handle sliced condition change.
-    void onSlicedConditionMayChangeLocked(const uint64_t eventTime) override;
+    void onSlicedConditionMayChangeLocked(bool overallCondition, const uint64_t eventTime) override;
 
     // Internal function to calculate the current used bytes.
     size_t byteSizeLocked() const override;
@@ -148,6 +148,10 @@ private:
     bool hitGuardRailLocked(const MetricDimensionKey& newKey);
 
     static const size_t kBucketSize = sizeof(ValueBucket{});
+
+    const size_t mDimensionSoftLimit;
+
+    const size_t mDimensionHardLimit;
 
     FRIEND_TEST(ValueMetricProducerTest, TestNonDimensionalEvents);
     FRIEND_TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition);

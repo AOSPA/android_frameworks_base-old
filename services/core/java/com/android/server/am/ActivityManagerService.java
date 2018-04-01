@@ -281,6 +281,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.ApplicationInfo.HiddenApiEnforcementPolicy;
 import android.content.pm.ConfigurationInfo;
 import android.content.pm.IPackageDataObserver;
 import android.content.pm.IPackageManager;
@@ -833,7 +834,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     public boolean canShowErrorDialogs() {
         return mShowDialogs && !mSleeping && !mShuttingDown
-                && !mKeyguardController.isKeyguardShowing(DEFAULT_DISPLAY)
+                && !mKeyguardController.isKeyguardOrAodShowing(DEFAULT_DISPLAY)
                 && !mUserController.hasUserRestriction(UserManager.DISALLOW_SYSTEM_ERROR_DIALOGS,
                         mUserController.getCurrentUserId())
                 && !(UserManager.isDeviceInDemoMode(mContext)
@@ -1275,10 +1276,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         public static GrantUri resolve(int defaultSourceUserHandle, Uri uri) {
-            return new GrantUri(ContentProvider.getUserIdFromUri(uri, defaultSourceUserHandle),
-                    ContentProvider.getUriWithoutUserId(uri), false);
+            if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
+                return new GrantUri(ContentProvider.getUserIdFromUri(uri, defaultSourceUserHandle),
+                        ContentProvider.getUriWithoutUserId(uri), false);
+            } else {
+                return new GrantUri(defaultSourceUserHandle, uri, false);
+            }
         }
     }
+
+    boolean mSystemProvidersInstalled;
 
     CoreSettingsObserver mCoreSettingsObserver;
 
@@ -4234,12 +4241,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                 runtimeFlags |= Zygote.ONLY_USE_SYSTEM_OAT_FILES;
             }
 
-            if (!app.info.isAllowedToUseHiddenApi() &&
-                    !disableHiddenApiChecks &&
-                    !mHiddenApiBlacklist.isDisabled()) {
-                // This app is not allowed to use undocumented and private APIs, or blacklisting is
-                // enabled. Set up its runtime with the appropriate flag.
-                runtimeFlags |= Zygote.ENABLE_HIDDEN_API_CHECKS;
+            if (!disableHiddenApiChecks && !mHiddenApiBlacklist.isDisabled()) {
+                @HiddenApiEnforcementPolicy int policy =
+                        app.info.getHiddenApiEnforcementPolicy();
+                int policyBits = (policy << Zygote.API_ENFORCEMENT_POLICY_SHIFT);
+                if ((policyBits & Zygote.API_ENFORCEMENT_POLICY_MASK) != policyBits) {
+                    throw new IllegalStateException("Invalid API policy: " + policy);
+                }
+                runtimeFlags |= policyBits;
             }
 
             String invokeWith = null;
@@ -10707,8 +10716,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                         intent.addFlags(Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS);
                     }
                 }
-                final ActivityInfo ainfo = AppGlobals.getPackageManager().getActivityInfo(comp, 0,
-                        UserHandle.getUserId(callingUid));
+                final ActivityInfo ainfo = AppGlobals.getPackageManager().getActivityInfo(comp,
+                        STOCK_PM_FLAGS, UserHandle.getUserId(callingUid));
                 if (ainfo.applicationInfo.uid != callingUid) {
                     throw new SecurityException(
                             "Can't add task for another application: target uid="
@@ -12221,6 +12230,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                             "Attempt to launch content provider before system ready");
                 }
 
+                // If system providers are not installed yet we aggressively crash to avoid
+                // creating multiple instance of these providers and then bad things happen!
+                if (!mSystemProvidersInstalled && cpi.applicationInfo.isSystemApp()
+                        && "system".equals(cpi.processName)) {
+                    throw new IllegalStateException("Cannot access system provider: '"
+                            + cpi.authority + "' before system providers are installed!");
+                }
+
                 // Make sure that the user who owns this provider is running.  If not,
                 // we don't want to allow it to run.
                 if (!mUserController.isUserRunning(userId, 0)) {
@@ -12774,6 +12791,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             mSystemThread.installSystemProviders(providers);
         }
 
+        synchronized (this) {
+            mSystemProvidersInstalled = true;
+        }
+
         mConstants.start(mContext.getContentResolver());
         mCoreSettingsObserver = new CoreSettingsObserver(this);
         mFontScaleSettingObserver = new FontScaleSettingObserver();
@@ -13140,6 +13161,22 @@ public class ActivityManagerService extends IActivityManager.Stub
         return mSleeping;
     }
 
+    void reportGlobalUsageEventLocked(int event) {
+        mUsageStatsService.reportEvent("android", mUserController.getCurrentUserId(), event);
+        int[] profiles = mUserController.getCurrentProfileIds();
+        if (profiles != null) {
+            for (int i = profiles.length - 1; i >= 0; i--) {
+                mUsageStatsService.reportEvent((String)null, profiles[i], event);
+            }
+        }
+    }
+
+    void reportCurWakefulnessUsageEventLocked() {
+        reportGlobalUsageEventLocked(mWakefulness == PowerManagerInternal.WAKEFULNESS_AWAKE
+                ? UsageEvents.Event.SCREEN_INTERACTIVE
+                : UsageEvents.Event.SCREEN_NON_INTERACTIVE);
+    }
+
     void onWakefulnessChanged(int wakefulness) {
         synchronized(this) {
             boolean wasAwake = mWakefulness == PowerManagerInternal.WAKEFULNESS_AWAKE;
@@ -13149,6 +13186,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (wasAwake != isAwake) {
                 // Also update state in a special way for running foreground services UI.
                 mServices.updateScreenStateLocked(isAwake);
+                reportCurWakefulnessUsageEventLocked();
                 mHandler.obtainMessage(DISPATCH_SCREEN_AWAKE_MSG, isAwake ? 1 : 0, 0)
                         .sendToTarget();
             }
@@ -13296,7 +13334,8 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public void setLockScreenShown(boolean showing, int secondaryDisplayShowing) {
+    public void setLockScreenShown(boolean keyguardShowing, boolean aodShowing,
+            int secondaryDisplayShowing) {
         if (checkCallingPermission(android.Manifest.permission.DEVICE_POWER)
                 != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Requires permission "
@@ -13306,13 +13345,14 @@ public class ActivityManagerService extends IActivityManager.Stub
         synchronized(this) {
             long ident = Binder.clearCallingIdentity();
             try {
-                mKeyguardController.setKeyguardShown(showing, secondaryDisplayShowing);
+                mKeyguardController.setKeyguardShown(keyguardShowing, aodShowing,
+                        secondaryDisplayShowing);
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
         }
 
-        mHandler.obtainMessage(DISPATCH_SCREEN_KEYGUARD_MSG, showing ? 1 : 0, 0)
+        mHandler.obtainMessage(DISPATCH_SCREEN_KEYGUARD_MSG, keyguardShowing ? 1 : 0, 0)
                 .sendToTarget();
     }
 
@@ -14119,6 +14159,18 @@ public class ActivityManagerService extends IActivityManager.Stub
     public void unregisterUidObserver(IUidObserver observer) {
         synchronized (this) {
             mUidObservers.unregister(observer);
+        }
+    }
+
+    @Override
+    public boolean isUidActive(int uid, String callingPackage) {
+        if (!hasUsageStatsPermission(callingPackage)) {
+            enforceCallingPermission(android.Manifest.permission.PACKAGE_USAGE_STATS,
+                    "getPackageProcessState");
+        }
+        synchronized (this) {
+            final UidRecord uidRecord = mActiveUids.get(uid);
+            return uidRecord != null && !uidRecord.setIdle;
         }
     }
 
@@ -21293,7 +21345,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         ApplicationInfo aInfo = null;
                         try {
                             aInfo = AppGlobals.getPackageManager()
-                                    .getApplicationInfo(ssp, 0 /*flags*/, userId);
+                                    .getApplicationInfo(ssp, STOCK_PM_FLAGS, userId);
                         } catch (RemoteException ignore) {}
                         if (aInfo == null) {
                             Slog.w(TAG, "Dropping ACTION_PACKAGE_REPLACED for non-existent pkg:"
@@ -21318,7 +21370,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                         try {
                             ApplicationInfo ai = AppGlobals.getPackageManager().
-                                    getApplicationInfo(ssp, 0, 0);
+                                    getApplicationInfo(ssp, STOCK_PM_FLAGS, 0);
                             mBatteryStatsService.notePackageInstalled(ssp,
                                     ai != null ? ai.versionCode : 0);
                         } catch (RemoteException e) {

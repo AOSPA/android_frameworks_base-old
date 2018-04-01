@@ -22,6 +22,7 @@ import static android.app.usage.UsageStatsManager.REASON_MAIN_MASK;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_PREDICTED;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_TIMEOUT;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_USAGE;
+import static android.app.usage.UsageStatsManager.REASON_SUB_PREDICTED_RESTORED;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_ACTIVE_TIMEOUT;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_MOVE_TO_BACKGROUND;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_MOVE_TO_FOREGROUND;
@@ -30,13 +31,14 @@ import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_SYNC_ADAPTER;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_SYSTEM_INTERACTION;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_SYSTEM_UPDATE;
 import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_USER_INTERACTION;
+import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_SLICE_PINNED;
+import static android.app.usage.UsageStatsManager.REASON_SUB_USAGE_SLICE_PINNED_PRIV;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_ACTIVE;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_EXEMPTED;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_FREQUENT;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_NEVER;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_RARE;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_WORKING_SET;
-
 import static com.android.server.SystemService.PHASE_BOOT_COMPLETED;
 import static com.android.server.SystemService.PHASE_SYSTEM_SERVICES_READY;
 
@@ -198,6 +200,10 @@ public class AppStandbyController {
     long mSystemUpdateUsageTimeoutMillis;
     /** Maximum time to wait for a prediction before using simple timeouts to downgrade buckets. */
     long mPredictionTimeoutMillis;
+    /** Maximum time a sync adapter associated with a CP should keep the buckets elevated. */
+    long mSyncAdapterTimeoutMillis;
+    /** Maximum time a system interaction should keep the buckets elevated. */
+    long mSystemInteractionTimeoutMillis;
 
     volatile boolean mAppIdleEnabled;
     boolean mAppIdleTempParoled;
@@ -357,8 +363,8 @@ public class AppStandbyController {
                     synchronized (mAppIdleLock) {
                         AppUsageHistory appUsage = mAppIdleHistory.reportUsage(packageName, userId,
                                 STANDBY_BUCKET_ACTIVE, REASON_SUB_USAGE_SYNC_ADAPTER,
-                                elapsedRealtime,
-                                elapsedRealtime + mStrongUsageTimeoutMillis);
+                                0,
+                                elapsedRealtime + mSyncAdapterTimeoutMillis);
                         maybeInformListeners(packageName, userId, elapsedRealtime,
                                 appUsage.currentBucket, appUsage.bucketingReason, false);
                     }
@@ -534,19 +540,30 @@ public class AppStandbyController {
                 }
                 final int oldBucket = app.currentBucket;
                 int newBucket = Math.max(oldBucket, STANDBY_BUCKET_ACTIVE); // Undo EXEMPTED
-                boolean predictionLate = false;
+                boolean predictionLate = predictionTimedOut(app, elapsedRealtime);
                 // Compute age-based bucket
                 if (oldMainReason == REASON_MAIN_DEFAULT
                         || oldMainReason == REASON_MAIN_USAGE
                         || oldMainReason == REASON_MAIN_TIMEOUT
-                        || (predictionLate = predictionTimedOut(app, elapsedRealtime))) {
-                    newBucket = getBucketForLocked(packageName, userId,
-                            elapsedRealtime);
-                    if (DEBUG) {
-                        Slog.d(TAG, "Evaluated AOSP newBucket = " + newBucket);
+                        || predictionLate) {
+
+                    if (!predictionLate && app.lastPredictedBucket >= STANDBY_BUCKET_ACTIVE
+                            && app.lastPredictedBucket <= STANDBY_BUCKET_RARE) {
+                        newBucket = app.lastPredictedBucket;
+                        reason = REASON_MAIN_PREDICTED | REASON_SUB_PREDICTED_RESTORED;
+                        if (DEBUG) {
+                            Slog.d(TAG, "Restored predicted newBucket = " + newBucket);
+                        }
+                    } else {
+                        newBucket = getBucketForLocked(packageName, userId,
+                                elapsedRealtime);
+                        if (DEBUG) {
+                            Slog.d(TAG, "Evaluated AOSP newBucket = " + newBucket);
+                        }
+                        reason = REASON_MAIN_TIMEOUT;
                     }
-                    reason = REASON_MAIN_TIMEOUT;
                 }
+
                 // Check if the app is within one of the timeouts for forced bucket elevation
                 final long elapsedTimeAdjusted = mAppIdleHistory.getElapsedTime(elapsedRealtime);
                 if (newBucket >= STANDBY_BUCKET_ACTIVE
@@ -583,8 +600,7 @@ public class AppStandbyController {
 
     /** Returns true if there hasn't been a prediction for the app in a while. */
     private boolean predictionTimedOut(AppIdleHistory.AppUsageHistory app, long elapsedRealtime) {
-        return (app.bucketingReason & REASON_MAIN_MASK) == REASON_MAIN_PREDICTED
-                && app.lastPredictedTime > 0
+        return app.lastPredictedTime > 0
                 && mAppIdleHistory.getElapsedTime(elapsedRealtime)
                     - app.lastPredictedTime > mPredictionTimeoutMillis;
     }
@@ -708,7 +724,11 @@ public class AppStandbyController {
                             STANDBY_BUCKET_WORKING_SET, subReason,
                             0, elapsedRealtime + mNotificationSeenTimeoutMillis);
                     nextCheckTime = mNotificationSeenTimeoutMillis;
-
+                } else if (event.mEventType == UsageEvents.Event.SYSTEM_INTERACTION) {
+                    mAppIdleHistory.reportUsage(appHistory, event.mPackage,
+                            STANDBY_BUCKET_ACTIVE, subReason,
+                            0, elapsedRealtime + mSystemInteractionTimeoutMillis);
+                    nextCheckTime = mSystemInteractionTimeoutMillis;
                 } else {
                     mAppIdleHistory.reportUsage(appHistory, event.mPackage,
                             STANDBY_BUCKET_ACTIVE, subReason,
@@ -739,6 +759,8 @@ public class AppStandbyController {
             case UsageEvents.Event.SYSTEM_INTERACTION: return REASON_SUB_USAGE_SYSTEM_INTERACTION;
             case UsageEvents.Event.USER_INTERACTION: return REASON_SUB_USAGE_USER_INTERACTION;
             case UsageEvents.Event.NOTIFICATION_SEEN: return REASON_SUB_USAGE_NOTIFICATION_SEEN;
+            case UsageEvents.Event.SLICE_PINNED: return REASON_SUB_USAGE_SLICE_PINNED;
+            case UsageEvents.Event.SLICE_PINNED_PRIV: return REASON_SUB_USAGE_SLICE_PINNED_PRIV;
             default: return 0;
         }
     }
@@ -1024,6 +1046,10 @@ public class AppStandbyController {
             if (predicted) {
                 // Check if the app is within one of the timeouts for forced bucket elevation
                 final long elapsedTimeAdjusted = mAppIdleHistory.getElapsedTime(elapsedRealtime);
+                // In case of not using the prediction, just keep track of it for applying after
+                // ACTIVE or WORKING_SET timeout.
+                mAppIdleHistory.updateLastPrediction(app, elapsedTimeAdjusted, newBucket);
+
                 if (newBucket > STANDBY_BUCKET_ACTIVE
                         && app.bucketActiveTimeoutTime > elapsedTimeAdjusted) {
                     newBucket = STANDBY_BUCKET_ACTIVE;
@@ -1523,6 +1549,14 @@ public class AppStandbyController {
         private static final String KEY_SYSTEM_UPDATE_HOLD_DURATION =
                 "system_update_usage_duration";
         private static final String KEY_PREDICTION_TIMEOUT = "prediction_timeout";
+        private static final String KEY_SYNC_ADAPTER_HOLD_DURATION = "sync_adapter_duration";
+        private static final String KEY_SYSTEM_INTERACTION_HOLD_DURATION =
+                "system_interaction_duration";
+        public static final long DEFAULT_STRONG_USAGE_TIMEOUT = 1 * ONE_HOUR;
+        public static final long DEFAULT_NOTIFICATION_TIMEOUT = 12 * ONE_HOUR;
+        public static final long DEFAULT_SYSTEM_UPDATE_TIMEOUT = 2 * ONE_HOUR;
+        public static final long DEFAULT_SYSTEM_INTERACTION_TIMEOUT = 10 * ONE_MINUTE;
+        public static final long DEFAULT_SYNC_ADAPTER_TIMEOUT = 10 * ONE_MINUTE;
 
         private final KeyValueListParser mParser = new KeyValueListParser(',');
 
@@ -1585,16 +1619,22 @@ public class AppStandbyController {
                         COMPRESS_TIME ? ONE_MINUTE : 4 * 60 * ONE_MINUTE); // 4 hours
                 mStrongUsageTimeoutMillis = mParser.getDurationMillis
                         (KEY_STRONG_USAGE_HOLD_DURATION,
-                                COMPRESS_TIME ? ONE_MINUTE : 1 * ONE_HOUR);
+                                COMPRESS_TIME ? ONE_MINUTE : DEFAULT_STRONG_USAGE_TIMEOUT);
                 mNotificationSeenTimeoutMillis = mParser.getDurationMillis
                         (KEY_NOTIFICATION_SEEN_HOLD_DURATION,
-                                COMPRESS_TIME ? 12 * ONE_MINUTE : 12 * ONE_HOUR);
+                                COMPRESS_TIME ? 12 * ONE_MINUTE : DEFAULT_NOTIFICATION_TIMEOUT);
                 mSystemUpdateUsageTimeoutMillis = mParser.getDurationMillis
                         (KEY_SYSTEM_UPDATE_HOLD_DURATION,
-                                COMPRESS_TIME ? 2 * ONE_MINUTE : 2 * ONE_HOUR);
+                                COMPRESS_TIME ? 2 * ONE_MINUTE : DEFAULT_SYSTEM_UPDATE_TIMEOUT);
                 mPredictionTimeoutMillis = mParser.getDurationMillis
                         (KEY_PREDICTION_TIMEOUT,
                                 COMPRESS_TIME ? 10 * ONE_MINUTE : DEFAULT_PREDICTION_TIMEOUT);
+                mSyncAdapterTimeoutMillis = mParser.getDurationMillis
+                        (KEY_SYNC_ADAPTER_HOLD_DURATION,
+                                COMPRESS_TIME ? ONE_MINUTE : DEFAULT_SYNC_ADAPTER_TIMEOUT);
+                mSystemInteractionTimeoutMillis = mParser.getDurationMillis
+                        (KEY_SYSTEM_INTERACTION_HOLD_DURATION,
+                                COMPRESS_TIME ? ONE_MINUTE : DEFAULT_SYSTEM_INTERACTION_TIMEOUT);
             }
         }
 

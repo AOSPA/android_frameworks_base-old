@@ -19,7 +19,6 @@ package android.media;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringDef;
-import android.content.Context;
 import android.graphics.Bitmap;
 import android.media.update.ApiLoader;
 import android.media.update.MediaMetadata2Provider;
@@ -357,28 +356,6 @@ public final class MediaMetadata2 {
     public static final String METADATA_KEY_MEDIA_URI = "android.media.metadata.MEDIA_URI";
 
     /**
-     * The metadata key for a {@link Float} typed value to retrieve the information about the
-     * radio frequency if this metadata represents radio content.
-     *
-     * @see Builder#putFloat(String, float)
-     * @see #getFloat(String)
-     */
-    public static final String METADATA_KEY_RADIO_FREQUENCY =
-            "android.media.metadata.RADIO_FREQUENCY";
-
-    /**
-     * The metadata key for a {@link CharSequence} or {@link String} typed value to retrieve the
-     * information about the radio callsign if this metadata represents radio content.
-     *
-     * @see Builder#putText(String, CharSequence)
-     * @see Builder#putString(String, String)
-     * @see #getText(String)
-     * @see #getString(String)
-     */
-    public static final String METADATA_KEY_RADIO_CALLSIGN =
-            "android.media.metadata.RADIO_CALLSIGN";
-
-    /**
      * The metadata key for a {@link Long} typed value to retrieve the information about the
      * bluetooth folder type of the media specified in the section 6.10.2.2 of the Bluetooth
      * AVRCP 1.5. It should be one of the following:
@@ -502,7 +479,7 @@ public final class MediaMetadata2 {
             METADATA_KEY_DATE, METADATA_KEY_GENRE, METADATA_KEY_ALBUM_ARTIST, METADATA_KEY_ART_URI,
             METADATA_KEY_ALBUM_ART_URI, METADATA_KEY_DISPLAY_TITLE, METADATA_KEY_DISPLAY_SUBTITLE,
             METADATA_KEY_DISPLAY_DESCRIPTION, METADATA_KEY_DISPLAY_ICON_URI,
-            METADATA_KEY_MEDIA_ID, METADATA_KEY_MEDIA_URI, METADATA_KEY_RADIO_CALLSIGN})
+            METADATA_KEY_MEDIA_ID, METADATA_KEY_MEDIA_URI})
     @Retention(RetentionPolicy.SOURCE)
     public @interface TextKey {}
 
@@ -532,7 +509,7 @@ public final class MediaMetadata2 {
     /**
      * @hide
      */
-    @StringDef({METADATA_KEY_RADIO_FREQUENCY})
+    // TODO(jaewan): Add predefined float key.
     @Retention(RetentionPolicy.SOURCE)
     public @interface FloatKey {}
 
@@ -679,13 +656,11 @@ public final class MediaMetadata2 {
      * Creates the {@link MediaMetadata2} from the bundle that previously returned by
      * {@link #toBundle()}.
      *
-     * @param context context
      * @param bundle bundle for the metadata
      * @return a new MediaMetadata2
      */
-    public static @NonNull MediaMetadata2 fromBundle(@NonNull Context context,
-            @Nullable Bundle bundle) {
-        return ApiLoader.getProvider().fromBundle_MediaMetadata2(context, bundle);
+    public static @NonNull MediaMetadata2 fromBundle(@Nullable Bundle bundle) {
+        return ApiLoader.getProvider().fromBundle_MediaMetadata2(bundle);
     }
 
     /**
@@ -699,8 +674,8 @@ public final class MediaMetadata2 {
          * Create an empty Builder. Any field that should be included in the
          * {@link MediaMetadata2} must be added.
          */
-        public Builder(@NonNull Context context) {
-            mProvider = ApiLoader.getProvider().createMediaMetadata2Builder(context, this);
+        public Builder() {
+            mProvider = ApiLoader.getProvider().createMediaMetadata2Builder(this);
         }
 
         /**
@@ -710,8 +685,8 @@ public final class MediaMetadata2 {
          *
          * @param source
          */
-        public Builder(@NonNull Context context, @NonNull MediaMetadata2 source) {
-            mProvider = ApiLoader.getProvider().createMediaMetadata2Builder(context, this, source);
+        public Builder(@NonNull MediaMetadata2 source) {
+            mProvider = ApiLoader.getProvider().createMediaMetadata2Builder(this, source);
         }
 
         /**
@@ -741,7 +716,6 @@ public final class MediaMetadata2 {
          * <li>{@link #METADATA_KEY_DISPLAY_SUBTITLE}</li>
          * <li>{@link #METADATA_KEY_DISPLAY_DESCRIPTION}</li>
          * <li>{@link #METADATA_KEY_DISPLAY_ICON_URI}</li>
-         * <li>{@link #METADATA_KEY_RADIO_CALLSIGN}</li>
          * </ul>
          *
          * @param key The key for referencing this value
@@ -773,7 +747,6 @@ public final class MediaMetadata2 {
          * <li>{@link #METADATA_KEY_DISPLAY_SUBTITLE}</li>
          * <li>{@link #METADATA_KEY_DISPLAY_DESCRIPTION}</li>
          * <li>{@link #METADATA_KEY_DISPLAY_ICON_URI}</li>
-         * <li>{@link #METADATA_KEY_RADIO_CALLSIGN}</li>
          * </ul>
          *
          * @param key The key for referencing this value
@@ -848,12 +821,7 @@ public final class MediaMetadata2 {
         }
 
         /**
-         * Put a float value into the metadata. Custom keys may be used, but if
-         * the METADATA_KEYs defined in this class are used they may only be one
-         * of the following:
-         * <ul>
-         * <li>{@link #METADATA_KEY_RADIO_FREQUENCY}</li>
-         * </ul>
+         * Put a float value into the metadata. Custom keys may be used.
          *
          * @param key The key for referencing this value
          * @param value The float value to store

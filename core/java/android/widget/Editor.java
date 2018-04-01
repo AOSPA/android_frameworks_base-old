@@ -23,6 +23,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.PendingIntent;
 import android.app.PendingIntent.CanceledException;
+import android.app.RemoteAction;
 import android.content.ClipData;
 import android.content.ClipData.Item;
 import android.content.Context;
@@ -289,6 +290,7 @@ public class Editor {
     boolean mShowSoftInputOnFocus = true;
     private boolean mPreserveSelection;
     private boolean mRestartActionModeOnNextRefresh;
+    private boolean mRequestingLinkActionMode;
 
     private SelectionActionModeHelper mSelectionActionModeHelper;
 
@@ -2127,6 +2129,7 @@ public class Editor {
             return;
         }
         stopTextActionMode();
+        mRequestingLinkActionMode = true;
         getSelectionActionModeHelper().startLinkActionModeAsync(start, end);
     }
 
@@ -2212,7 +2215,9 @@ public class Editor {
         mTextActionMode = mTextView.startActionMode(actionModeCallback, ActionMode.TYPE_FLOATING);
 
         final boolean selectionStarted = mTextActionMode != null;
-        if (selectionStarted && !mTextView.isTextSelectable() && mShowSoftInputOnFocus) {
+        if (selectionStarted
+                && mTextView.isTextEditable() && !mTextView.isTextSelectable()
+                && mShowSoftInputOnFocus) {
             // Show the IME to be able to replace text, except when selecting non editable text.
             final InputMethodManager imm = InputMethodManager.peekInstance();
             if (imm != null) {
@@ -2322,10 +2327,14 @@ public class Editor {
         if (!selectAllGotFocus && text.length() > 0) {
             // Move cursor
             final int offset = mTextView.getOffsetForPosition(event.getX(), event.getY());
-            Selection.setSelection((Spannable) text, offset);
-            if (mSpellChecker != null) {
-                // When the cursor moves, the word that was typed may need spell check
-                mSpellChecker.onSelectionChanged();
+
+            final boolean shouldInsertCursor = !mRequestingLinkActionMode;
+            if (shouldInsertCursor) {
+                Selection.setSelection((Spannable) text, offset);
+                if (mSpellChecker != null) {
+                    // When the cursor moves, the word that was typed may need spell check
+                    mSpellChecker.onSelectionChanged();
+                }
             }
 
             if (!extractedTextModeWillBeStarted()) {
@@ -2335,16 +2344,17 @@ public class Editor {
                         mTextView.removeCallbacks(mInsertionActionModeRunnable);
                     }
 
-                    mShowSuggestionRunnable = new Runnable() {
-                        public void run() {
-                            replace();
-                        }
-                    };
+                    mShowSuggestionRunnable = this::replace;
+
                     // removeCallbacks is performed on every touch
                     mTextView.postDelayed(mShowSuggestionRunnable,
                             ViewConfiguration.getDoubleTapTimeout());
                 } else if (hasInsertionController()) {
-                    getInsertionController().show();
+                    if (shouldInsertCursor) {
+                        getInsertionController().show();
+                    } else {
+                        getInsertionController().hide();
+                    }
                 }
             }
         }
@@ -4036,41 +4046,44 @@ public class Editor {
             if (textClassification == null) {
                 return;
             }
-            final OnClickListener onClick = getSupportedOnClickListener(
-                    textClassification.getIcon(),
-                    textClassification.getLabel(),
-                    textClassification.getIntent());
-            if (onClick != null) {
+            if (!textClassification.getActions().isEmpty()) {
+                // Primary assist action (Always shown).
+                final MenuItem item = addAssistMenuItem(menu,
+                        textClassification.getActions().get(0), TextView.ID_ASSIST,
+                        MENU_ITEM_ORDER_ASSIST, MenuItem.SHOW_AS_ACTION_ALWAYS);
+                item.setIntent(textClassification.getIntent());
+            } else if (hasLegacyAssistItem(textClassification)) {
+                // Legacy primary assist action (Always shown).
                 final MenuItem item = menu.add(
                         TextView.ID_ASSIST, TextView.ID_ASSIST, MENU_ITEM_ORDER_ASSIST,
                         textClassification.getLabel())
                         .setIcon(textClassification.getIcon())
                         .setIntent(textClassification.getIntent());
                 item.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
-                mAssistClickHandlers.put(
-                        item, TextClassification.createIntentOnClickListener(
-                                mTextView.getContext(), textClassification.getIntent()));
+                mAssistClickHandlers.put(item, TextClassification.createIntentOnClickListener(
+                        TextClassification.createPendingIntent(mTextView.getContext(),
+                                textClassification.getIntent())));
             }
-            final int count = textClassification.getSecondaryActionsCount();
-            for (int i = 0; i < count; i++) {
-                final OnClickListener onClick1 = getSupportedOnClickListener(
-                        textClassification.getSecondaryIcon(i),
-                        textClassification.getSecondaryLabel(i),
-                        textClassification.getSecondaryIntent(i));
-                if (onClick1 == null) {
-                    continue;
-                }
-                final int order = MENU_ITEM_ORDER_SECONDARY_ASSIST_ACTIONS_START + i;
-                final MenuItem item = menu.add(
-                        TextView.ID_ASSIST, Menu.NONE, order,
-                        textClassification.getSecondaryLabel(i))
-                        .setIcon(textClassification.getSecondaryIcon(i))
-                        .setIntent(textClassification.getSecondaryIntent(i));
-                item.setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
-                mAssistClickHandlers.put(item,
-                        TextClassification.createIntentOnClickListener(
-                                mTextView.getContext(), textClassification.getSecondaryIntent(i)));
+            final int count = textClassification.getActions().size();
+            for (int i = 1; i < count; i++) {
+                // Secondary assist action (Never shown).
+                addAssistMenuItem(menu, textClassification.getActions().get(i), Menu.NONE,
+                        MENU_ITEM_ORDER_SECONDARY_ASSIST_ACTIONS_START + i - 1,
+                        MenuItem.SHOW_AS_ACTION_NEVER);
             }
+        }
+
+        private MenuItem addAssistMenuItem(Menu menu, RemoteAction action, int intemId, int order,
+                int showAsAction) {
+            final MenuItem item = menu.add(TextView.ID_ASSIST, intemId, order, action.getTitle())
+                    .setContentDescription(action.getContentDescription());
+            if (action.shouldShowIcon()) {
+                item.setIcon(action.getIcon().loadDrawable(mTextView.getContext()));
+            }
+            item.setShowAsAction(showAsAction);
+            mAssistClickHandlers.put(item,
+                    TextClassification.createIntentOnClickListener(action.getActionIntent()));
+            return item;
         }
 
         private void clearAssistMenuItems(Menu menu) {
@@ -4085,15 +4098,11 @@ public class Editor {
             }
         }
 
-        @Nullable
-        private OnClickListener getSupportedOnClickListener(
-                Drawable icon, CharSequence label, Intent intent) {
-            final boolean hasUi = icon != null || !TextUtils.isEmpty(label);
-            if (hasUi) {
-                return TextClassification.createIntentOnClickListener(
-                        mTextView.getContext(), intent);
-            }
-            return null;
+        private boolean hasLegacyAssistItem(TextClassification classification) {
+            // Check whether we have the UI data and and action.
+            return (classification.getIcon() != null || !TextUtils.isEmpty(
+                    classification.getLabel())) && (classification.getIntent() != null
+                    || classification.getOnClickListener() != null);
         }
 
         private boolean onAssistMenuItemClicked(MenuItem assistMenuItem) {
@@ -4111,7 +4120,7 @@ public class Editor {
                 final Intent intent = assistMenuItem.getIntent();
                 if (intent != null) {
                     onClickListener = TextClassification.createIntentOnClickListener(
-                            mTextView.getContext(), intent);
+                            TextClassification.createPendingIntent(mTextView.getContext(), intent));
                 }
             }
             if (onClickListener != null) {
@@ -4170,6 +4179,7 @@ public class Editor {
             }
 
             mAssistClickHandlers.clear();
+            mRequestingLinkActionMode = false;
         }
 
         @Override
@@ -4814,13 +4824,23 @@ public class Editor {
             return true;
         }
 
+        private boolean tooLargeTextForMagnifier() {
+            final float magnifierContentHeight = Math.round(
+                    mMagnifierAnimator.mMagnifier.getHeight()
+                            / mMagnifierAnimator.mMagnifier.getZoom());
+            final Paint.FontMetrics fontMetrics = mTextView.getPaint().getFontMetrics();
+            final float glyphHeight = fontMetrics.descent - fontMetrics.ascent;
+            return glyphHeight > magnifierContentHeight;
+        }
+
         protected final void updateMagnifier(@NonNull final MotionEvent event) {
             if (mMagnifierAnimator == null) {
                 return;
             }
 
             final PointF showPosInView = new PointF();
-            final boolean shouldShow = obtainMagnifierShowCoordinates(event, showPosInView);
+            final boolean shouldShow = !tooLargeTextForMagnifier()
+                    && obtainMagnifierShowCoordinates(event, showPosInView);
             if (shouldShow) {
                 // Make the cursor visible and stop blinking.
                 mRenderCursorRegardlessTiming = true;

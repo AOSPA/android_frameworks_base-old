@@ -1348,10 +1348,18 @@ public final class Settings {
             = "android.settings.NOTIFICATION_SETTINGS";
 
     /**
+     * Activity Action: Show app listing settings, filtered by those that send notifications.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_ALL_APPS_NOTIFICATION_SETTINGS =
+            "android.settings.ALL_APPS_NOTIFICATION_SETTINGS";
+
+    /**
      * Activity Action: Show notification settings for a single app.
      * <p>
-     *     Input: {@link #EXTRA_APP_PACKAGE}, the package containing the channel to display.
-     *     Input: Optionally, {@link #EXTRA_CHANNEL_ID}, to highlight that channel.
+     *     Input: {@link #EXTRA_APP_PACKAGE}, the package to display.
      * <p>
      * Output: Nothing.
      */
@@ -7793,6 +7801,14 @@ public final class Settings {
                 "low_power_warning_acknowledged";
 
         /**
+         * 0 (default) Auto battery saver suggestion has not been suppressed. 1) it has been
+         * suppressed.
+         * @hide
+         */
+        public static final String SUPPRESS_AUTO_BATTERY_SAVER_SUGGESTION =
+                "suppress_auto_battery_saver_suggestion";
+
+        /**
          * This are the settings to be backed up.
          *
          * NOTE: Settings are backed up and restored in the order they appear
@@ -11004,11 +11020,19 @@ public final class Settings {
         public static final String SHOW_PROCESSES = "show_processes";
 
         /**
-         * If 1 low power mode is enabled.
+         * If 1 low power mode (aka battery saver) is enabled.
          * @hide
          */
         @TestApi
         public static final String LOW_POWER_MODE = "low_power";
+
+        /**
+         * If 1, battery saver ({@link #LOW_POWER_MODE}) will be re-activated after the device
+         * is unplugged from a charger or rebooted.
+         * @hide
+         */
+        @TestApi
+        public static final String LOW_POWER_MODE_STICKY = "low_power_sticky";
 
         /**
          * Battery level [1-100] at which low power mode automatically turns on.

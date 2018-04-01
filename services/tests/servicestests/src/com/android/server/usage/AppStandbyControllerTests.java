@@ -19,6 +19,7 @@ package com.android.server.usage;
 import static android.app.usage.UsageEvents.Event.NOTIFICATION_SEEN;
 import static android.app.usage.UsageEvents.Event.SLICE_PINNED;
 import static android.app.usage.UsageEvents.Event.SLICE_PINNED_PRIV;
+import static android.app.usage.UsageEvents.Event.SYSTEM_INTERACTION;
 import static android.app.usage.UsageEvents.Event.USER_INTERACTION;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_DEFAULT;
 import static android.app.usage.UsageStatsManager.REASON_MAIN_FORCED;
@@ -280,6 +281,7 @@ public class AppStandbyControllerTests {
         MyContextWrapper myContext = new MyContextWrapper(InstrumentationRegistry.getContext());
         mInjector = new MyInjector(myContext, Looper.getMainLooper());
         mController = setupController();
+        setChargingState(mController, false);
     }
 
     @Test
@@ -380,8 +382,6 @@ public class AppStandbyControllerTests {
 
     @Test
     public void testForcedIdle() throws Exception {
-        setChargingState(mController, false);
-
         mController.forceIdleState(PACKAGE_1, USER_ID, true);
         assertEquals(STANDBY_BUCKET_RARE, getStandbyBucket(mController));
         assertTrue(mController.isAppIdleFiltered(PACKAGE_1, UID_1, USER_ID, 0));
@@ -394,8 +394,6 @@ public class AppStandbyControllerTests {
 
     @Test
     public void testNotificationEvent() throws Exception {
-        setChargingState(mController, false);
-
         reportEvent(mController, USER_INTERACTION, 0);
         assertEquals(STANDBY_BUCKET_ACTIVE, getStandbyBucket(mController));
         mInjector.mElapsedRealtime = 1;
@@ -409,8 +407,6 @@ public class AppStandbyControllerTests {
 
     @Test
     public void testSlicePinnedEvent() throws Exception {
-        setChargingState(mController, false);
-
         reportEvent(mController, USER_INTERACTION, 0);
         assertEquals(STANDBY_BUCKET_ACTIVE, getStandbyBucket(mController));
         mInjector.mElapsedRealtime = 1;
@@ -424,8 +420,6 @@ public class AppStandbyControllerTests {
 
     @Test
     public void testSlicePinnedPrivEvent() throws Exception {
-        setChargingState(mController, false);
-
         mController.forceIdleState(PACKAGE_1, USER_ID, true);
         reportEvent(mController, SLICE_PINNED_PRIV, mInjector.mElapsedRealtime);
         assertEquals(STANDBY_BUCKET_ACTIVE, getStandbyBucket(mController));
@@ -433,14 +427,13 @@ public class AppStandbyControllerTests {
 
     @Test
     public void testPredictionTimedout() throws Exception {
-        setChargingState(mController, false);
         // Set it to timeout or usage, so that prediction can override it
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_RARE,
-                REASON_MAIN_TIMEOUT, 1 * HOUR_MS);
+                REASON_MAIN_TIMEOUT, HOUR_MS);
         assertEquals(STANDBY_BUCKET_RARE, getStandbyBucket(mController));
 
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_ACTIVE,
-                REASON_MAIN_PREDICTED, 1 * HOUR_MS);
+                REASON_MAIN_PREDICTED, HOUR_MS);
         assertEquals(STANDBY_BUCKET_ACTIVE, getStandbyBucket(mController));
 
         // Fast forward 12 hours
@@ -463,7 +456,6 @@ public class AppStandbyControllerTests {
 
     @Test
     public void testOverrides() throws Exception {
-        setChargingState(mController, false);
         // Can force to NEVER
         mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_NEVER,
                 REASON_MAIN_FORCED, 1 * HOUR_MS);
@@ -493,8 +485,6 @@ public class AppStandbyControllerTests {
 
     @Test
     public void testTimeout() throws Exception {
-        setChargingState(mController, false);
-
         reportEvent(mController, USER_INTERACTION, 0);
         assertBucket(STANDBY_BUCKET_ACTIVE);
 
@@ -504,19 +494,19 @@ public class AppStandbyControllerTests {
         assertBucket(STANDBY_BUCKET_ACTIVE);
 
         // bucketing works after timeout
-        mInjector.mElapsedRealtime = FREQUENT_THRESHOLD - 100;
+        mInjector.mElapsedRealtime = mController.mPredictionTimeoutMillis - 100;
         mController.checkIdleStates(USER_ID);
-        assertBucket(STANDBY_BUCKET_WORKING_SET);
-
-        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
-                REASON_MAIN_PREDICTED, mInjector.mElapsedRealtime);
+        // Use recent prediction
         assertBucket(STANDBY_BUCKET_FREQUENT);
+
+        // Way past prediction timeout, use system thresholds
+        mInjector.mElapsedRealtime = RARE_THRESHOLD * 4;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_RARE);
     }
 
     @Test
     public void testCascadingTimeouts() throws Exception {
-        setChargingState(mController, false);
-
         reportEvent(mController, USER_INTERACTION, 0);
         assertBucket(STANDBY_BUCKET_ACTIVE);
 
@@ -538,8 +528,6 @@ public class AppStandbyControllerTests {
 
     @Test
     public void testOverlappingTimeouts() throws Exception {
-        setChargingState(mController, false);
-
         reportEvent(mController, USER_INTERACTION, 0);
         assertBucket(STANDBY_BUCKET_ACTIVE);
 
@@ -569,9 +557,32 @@ public class AppStandbyControllerTests {
     }
 
     @Test
-    public void testPredictionNotOverridden() throws Exception {
+    public void testSystemInteractionTimeout() throws Exception {
         setChargingState(mController, false);
 
+        reportEvent(mController, USER_INTERACTION, 0);
+        // Fast forward to RARE
+        mInjector.mElapsedRealtime = RARE_THRESHOLD + 100;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_RARE);
+
+        // Trigger a SYSTEM_INTERACTION and verify bucket
+        reportEvent(mController, SYSTEM_INTERACTION, mInjector.mElapsedRealtime);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        // Verify it's still in ACTIVE close to end of timeout
+        mInjector.mElapsedRealtime += mController.mSystemInteractionTimeoutMillis - 100;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        // Verify bucket moves to RARE after timeout
+        mInjector.mElapsedRealtime += 200;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_RARE);
+    }
+
+    @Test
+    public void testPredictionNotOverridden() throws Exception {
         reportEvent(mController, USER_INTERACTION, 0);
         assertBucket(STANDBY_BUCKET_ACTIVE);
 
@@ -594,6 +605,31 @@ public class AppStandbyControllerTests {
         mInjector.mElapsedRealtime += 1000;
         mController.checkIdleStates(USER_ID);
         assertBucket(STANDBY_BUCKET_ACTIVE);
+    }
+
+    @Test
+    public void testPredictionStrikesBack() throws Exception {
+        reportEvent(mController, USER_INTERACTION, 0);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        // Predict to FREQUENT
+        mInjector.mElapsedRealtime = RARE_THRESHOLD;
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_FREQUENT,
+                REASON_MAIN_PREDICTED, mInjector.mElapsedRealtime);
+        assertBucket(STANDBY_BUCKET_FREQUENT);
+
+        // Add a short timeout event
+        mInjector.mElapsedRealtime += 1000;
+        reportEvent(mController, SYSTEM_INTERACTION, mInjector.mElapsedRealtime);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+        mInjector.mElapsedRealtime += 1000;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        // Verify it reverted to predicted
+        mInjector.mElapsedRealtime += WORKING_SET_THRESHOLD / 2;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_FREQUENT);
     }
 
     @Test

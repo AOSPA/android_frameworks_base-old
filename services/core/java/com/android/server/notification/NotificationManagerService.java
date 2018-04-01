@@ -1877,13 +1877,13 @@ public class NotificationManagerService extends SystemService {
         return newSuppressedVisualEffects;
     }
 
-    // TODO: log visual differences, not just audible ones
     @GuardedBy("mNotificationLock")
     protected void maybeRecordInterruptionLocked(NotificationRecord r) {
         if (r.isInterruptive()) {
             mAppUsageStats.reportInterruptiveNotification(r.sbn.getPackageName(),
                     r.getChannel().getId(),
                     getRealUserId(r.sbn.getUserId()));
+            logRecentLocked(r);
         }
     }
 
@@ -4344,10 +4344,6 @@ public class NotificationManagerService extends SystemService {
 
                     mNotificationsByKey.put(n.getKey(), r);
 
-                    if (!r.isUpdate) {
-                        logRecentLocked(r);
-                    }
-
                     // Ensure if this is a foreground service that the proper additional
                     // flags are set.
                     if ((notification.flags & Notification.FLAG_FOREGROUND_SERVICE) != 0) {
@@ -5973,6 +5969,7 @@ public class NotificationManagerService extends SystemService {
     }
 
     private boolean isPackageSuspendedForUser(String pkg, int uid) {
+        final long identity = Binder.clearCallingIdentity();
         int userId = UserHandle.getUserId(uid);
         try {
             return mPackageManager.isPackageSuspendedForUser(pkg, userId);
@@ -5981,6 +5978,8 @@ public class NotificationManagerService extends SystemService {
         } catch (IllegalArgumentException ex) {
             // Package not found.
             return false;
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
     }
 

@@ -35,6 +35,7 @@ import android.util.Log;
 import android.view.ActionMode;
 import android.view.textclassifier.Logger;
 import android.view.textclassifier.SelectionEvent;
+import android.view.textclassifier.SelectionEvent.InvocationMethod;
 import android.view.textclassifier.TextClassification;
 import android.view.textclassifier.TextClassificationConstants;
 import android.view.textclassifier.TextClassificationManager;
@@ -71,7 +72,7 @@ public final class SelectionActionModeHelper {
     private final TextClassificationHelper mTextClassificationHelper;
     private final TextClassificationConstants mTextClassificationSettings;
 
-    private TextClassification mTextClassification;
+    @Nullable private TextClassification mTextClassification;
     private AsyncTask mTextClassificationAsyncTask;
 
     private final SelectionTracker mSelectionTracker;
@@ -86,7 +87,7 @@ public final class SelectionActionModeHelper {
         mTextClassificationSettings = TextClassificationManager.getSettings(mTextView.getContext());
         mTextClassificationHelper = new TextClassificationHelper(
                 mTextView.getContext(),
-                mTextView.getTextClassifier(),
+                mTextView::getTextClassifier,
                 getText(mTextView),
                 0, 1, mTextView.getTextLocales());
         mSelectionTracker = new SelectionTracker(mTextView);
@@ -124,7 +125,8 @@ public final class SelectionActionModeHelper {
                             : mTextClassificationHelper::classifyText,
                     mSmartSelectSprite != null
                             ? this::startSelectionActionModeWithSmartSelectAnimation
-                            : this::startSelectionActionMode)
+                            : this::startSelectionActionMode,
+                    mTextClassificationHelper::getOriginalSelection)
                     .execute();
         }
     }
@@ -143,7 +145,8 @@ public final class SelectionActionModeHelper {
                     mTextView,
                     mTextClassificationHelper.getTimeoutDuration(),
                     mTextClassificationHelper::classifyText,
-                    this::startLinkActionMode)
+                    this::startLinkActionMode,
+                    mTextClassificationHelper::getOriginalSelection)
                     .execute();
         }
     }
@@ -158,7 +161,8 @@ public final class SelectionActionModeHelper {
                     mTextView,
                     mTextClassificationHelper.getTimeoutDuration(),
                     mTextClassificationHelper::classifyText,
-                    this::invalidateActionMode)
+                    this::invalidateActionMode,
+                    mTextClassificationHelper::getOriginalSelection)
                     .execute();
         }
     }
@@ -218,7 +222,7 @@ public final class SelectionActionModeHelper {
 
     private boolean skipTextClassification() {
         // No need to make an async call for a no-op TextClassifier.
-        final boolean noOpTextClassifier = mTextView.getTextClassifier() == TextClassifier.NO_OP;
+        final boolean noOpTextClassifier = mTextView.usesNoOpTextClassifier();
         // Do not call the TextClassifier if there is no selection.
         final boolean noSelection = mTextView.getSelectionEnd() == mTextView.getSelectionStart();
         // Do not call the TextClassifier if this is a password field.
@@ -444,7 +448,7 @@ public final class SelectionActionModeHelper {
             selectionEnd = mTextView.getSelectionEnd();
         }
         mTextClassificationHelper.init(
-                mTextView.getTextClassifier(),
+                mTextView::getTextClassifier,
                 getText(mTextView),
                 selectionStart, selectionEnd,
                 mTextView.getTextLocales());
@@ -657,6 +661,7 @@ public final class SelectionActionModeHelper {
         private static final String LOG_TAG = "SelectionMetricsLogger";
         private static final Pattern PATTERN_WHITESPACE = Pattern.compile("\\s+");
 
+        private final Supplier<TextClassifier> mTextClassificationSession;
         private final Logger mLogger;
         private final boolean mEditTextLogger;
         private final BreakIterator mTokenIterator;
@@ -665,26 +670,27 @@ public final class SelectionActionModeHelper {
 
         SelectionMetricsLogger(TextView textView) {
             Preconditions.checkNotNull(textView);
+            mTextClassificationSession = textView::getTextClassificationSession;
             mLogger = textView.getTextClassifier().getLogger(
                     new Logger.Config(textView.getContext(), getWidetType(textView), null));
             mEditTextLogger = textView.isTextEditable();
             mTokenIterator = mLogger.getTokenIterator(textView.getTextLocale());
         }
 
-        @Logger.WidgetType
+        @TextClassifier.WidgetType
         private static String getWidetType(TextView textView) {
             if (textView.isTextEditable()) {
-                return Logger.WIDGET_EDITTEXT;
+                return TextClassifier.WIDGET_TYPE_EDITTEXT;
             }
             if (textView.isTextSelectable()) {
-                return Logger.WIDGET_TEXTVIEW;
+                return TextClassifier.WIDGET_TYPE_TEXTVIEW;
             }
-            return Logger.WIDGET_UNSELECTABLE_TEXTVIEW;
+            return TextClassifier.WIDGET_TYPE_UNSELECTABLE_TEXTVIEW;
         }
 
         public void logSelectionStarted(
                 CharSequence text, int index,
-                @SelectionEvent.InvocationMethod int invocationMethod) {
+                @InvocationMethod int invocationMethod) {
             try {
                 Preconditions.checkNotNull(text);
                 Preconditions.checkArgumentInRange(index, 0, text.length(), "index");
@@ -694,9 +700,12 @@ public final class SelectionActionModeHelper {
                 mTokenIterator.setText(mText);
                 mStartIndex = index;
                 mLogger.logSelectionStartedEvent(invocationMethod, 0);
+                // TODO: Remove the above legacy logging.
+                mTextClassificationSession.get().onSelectionEvent(
+                        SelectionEvent.createSelectionStartedEvent(invocationMethod, 0));
             } catch (Exception e) {
                 // Avoid crashes due to logging.
-                Log.d(LOG_TAG, e.getMessage());
+                Log.e(LOG_TAG, "" + e.getMessage(), e);
             }
         }
 
@@ -709,16 +718,28 @@ public final class SelectionActionModeHelper {
                 if (selection != null) {
                     mLogger.logSelectionModifiedEvent(
                             wordIndices[0], wordIndices[1], selection);
+                    // TODO: Remove the above legacy logging.
+                    mTextClassificationSession.get().onSelectionEvent(
+                            SelectionEvent.createSelectionModifiedEvent(
+                                    wordIndices[0], wordIndices[1], selection));
                 } else if (classification != null) {
                     mLogger.logSelectionModifiedEvent(
                             wordIndices[0], wordIndices[1], classification);
+                    // TODO: Remove the above legacy logging.
+                    mTextClassificationSession.get().onSelectionEvent(
+                            SelectionEvent.createSelectionModifiedEvent(
+                                    wordIndices[0], wordIndices[1], classification));
                 } else {
                     mLogger.logSelectionModifiedEvent(
                             wordIndices[0], wordIndices[1]);
+                    // TODO: Remove the above legacy logging.
+                    mTextClassificationSession.get().onSelectionEvent(
+                            SelectionEvent.createSelectionModifiedEvent(
+                                    wordIndices[0], wordIndices[1]));
                 }
             } catch (Exception e) {
                 // Avoid crashes due to logging.
-                Log.d(LOG_TAG, e.getMessage());
+                Log.e(LOG_TAG, "" + e.getMessage(), e);
             }
         }
 
@@ -733,13 +754,25 @@ public final class SelectionActionModeHelper {
                 if (classification != null) {
                     mLogger.logSelectionActionEvent(
                             wordIndices[0], wordIndices[1], action, classification);
+                    // TODO: Remove the above legacy logging.
+                    mTextClassificationSession.get().onSelectionEvent(
+                            SelectionEvent.createSelectionActionEvent(
+                                    wordIndices[0], wordIndices[1], action, classification));
                 } else {
                     mLogger.logSelectionActionEvent(
                             wordIndices[0], wordIndices[1], action);
+                    // TODO: Remove the above legacy logging.
+                    mTextClassificationSession.get().onSelectionEvent(
+                            SelectionEvent.createSelectionActionEvent(
+                                    wordIndices[0], wordIndices[1], action));
                 }
             } catch (Exception e) {
                 // Avoid crashes due to logging.
-                Log.d(LOG_TAG, e.getMessage());
+                Log.e(LOG_TAG, "" + e.getMessage(), e);
+            } finally {
+                if (SelectionEvent.isTerminal(action)) {
+                    mTextClassificationSession.get().destroy();
+                }
             }
         }
 
@@ -822,6 +855,7 @@ public final class SelectionActionModeHelper {
         private final int mTimeOutDuration;
         private final Supplier<SelectionResult> mSelectionResultSupplier;
         private final Consumer<SelectionResult> mSelectionResultCallback;
+        private final Supplier<SelectionResult> mTimeOutResultSupplier;
         private final TextView mTextView;
         private final String mOriginalText;
 
@@ -830,16 +864,19 @@ public final class SelectionActionModeHelper {
          * @param timeOut time in milliseconds to timeout the query if it has not completed
          * @param selectionResultSupplier fetches the selection results. Runs on a background thread
          * @param selectionResultCallback receives the selection results. Runs on the UiThread
+         * @param timeOutResultSupplier default result if the task times out
          */
         TextClassificationAsyncTask(
                 @NonNull TextView textView, int timeOut,
                 @NonNull Supplier<SelectionResult> selectionResultSupplier,
-                @NonNull Consumer<SelectionResult> selectionResultCallback) {
+                @NonNull Consumer<SelectionResult> selectionResultCallback,
+                @NonNull Supplier<SelectionResult> timeOutResultSupplier) {
             super(textView != null ? textView.getHandler() : null);
             mTextView = Preconditions.checkNotNull(textView);
             mTimeOutDuration = timeOut;
             mSelectionResultSupplier = Preconditions.checkNotNull(selectionResultSupplier);
             mSelectionResultCallback = Preconditions.checkNotNull(selectionResultCallback);
+            mTimeOutResultSupplier = Preconditions.checkNotNull(timeOutResultSupplier);
             // Make a copy of the original text.
             mOriginalText = getText(mTextView).toString();
         }
@@ -863,7 +900,7 @@ public final class SelectionActionModeHelper {
 
         private void onTimeOut() {
             if (getStatus() == Status.RUNNING) {
-                onPostExecute(null);
+                onPostExecute(mTimeOutResultSupplier.get());
             }
             cancel(true);
         }
@@ -880,7 +917,7 @@ public final class SelectionActionModeHelper {
 
         private final Context mContext;
         private final boolean mDarkLaunchEnabled;
-        private TextClassifier mTextClassifier;
+        private Supplier<TextClassifier> mTextClassifier;
 
         /** The original TextView text. **/
         private String mText;
@@ -912,7 +949,7 @@ public final class SelectionActionModeHelper {
         /** Whether the TextClassifier has been initialized. */
         private boolean mHot;
 
-        TextClassificationHelper(Context context, TextClassifier textClassifier,
+        TextClassificationHelper(Context context, Supplier<TextClassifier> textClassifier,
                 CharSequence text, int selectionStart, int selectionEnd, LocaleList locales) {
             init(textClassifier, text, selectionStart, selectionEnd, locales);
             mContext = Preconditions.checkNotNull(context);
@@ -921,7 +958,7 @@ public final class SelectionActionModeHelper {
         }
 
         @UiThread
-        public void init(TextClassifier textClassifier, CharSequence text,
+        public void init(Supplier<TextClassifier> textClassifier, CharSequence text,
                 int selectionStart, int selectionEnd, LocaleList locales) {
             mTextClassifier = Preconditions.checkNotNull(textClassifier);
             mText = Preconditions.checkNotNull(text).toString();
@@ -946,11 +983,11 @@ public final class SelectionActionModeHelper {
             trimText();
             final TextSelection selection;
             if (mContext.getApplicationInfo().targetSdkVersion > Build.VERSION_CODES.O_MR1) {
-                selection = mTextClassifier.suggestSelection(
+                selection = mTextClassifier.get().suggestSelection(
                         mTrimmedText, mRelativeStart, mRelativeEnd, mSelectionOptions);
             } else {
                 // Use old APIs.
-                selection = mTextClassifier.suggestSelection(
+                selection = mTextClassifier.get().suggestSelection(
                         mTrimmedText, mRelativeStart, mRelativeEnd,
                         mSelectionOptions.getDefaultLocales());
             }
@@ -961,6 +998,10 @@ public final class SelectionActionModeHelper {
                         mText.length(), selection.getSelectionEndIndex() + mTrimStart);
             }
             return performClassification(selection);
+        }
+
+        public SelectionResult getOriginalSelection() {
+            return new SelectionResult(mSelectionStart, mSelectionEnd, null, null);
         }
 
         /**
@@ -995,11 +1036,11 @@ public final class SelectionActionModeHelper {
                 trimText();
                 final TextClassification classification;
                 if (mContext.getApplicationInfo().targetSdkVersion > Build.VERSION_CODES.O_MR1) {
-                    classification = mTextClassifier.classifyText(
+                    classification = mTextClassifier.get().classifyText(
                             mTrimmedText, mRelativeStart, mRelativeEnd, mClassificationOptions);
                 } else {
                     // Use old APIs.
-                    classification = mTextClassifier.classifyText(
+                    classification = mTextClassifier.get().classifyText(
                             mTrimmedText, mRelativeStart, mRelativeEnd,
                             mClassificationOptions.getDefaultLocales());
                 }
@@ -1025,14 +1066,14 @@ public final class SelectionActionModeHelper {
     private static final class SelectionResult {
         private final int mStart;
         private final int mEnd;
-        private final TextClassification mClassification;
+        @Nullable private final TextClassification mClassification;
         @Nullable private final TextSelection mSelection;
 
         SelectionResult(int start, int end,
-                TextClassification classification, @Nullable TextSelection selection) {
+                @Nullable TextClassification classification, @Nullable TextSelection selection) {
             mStart = start;
             mEnd = end;
-            mClassification = Preconditions.checkNotNull(classification);
+            mClassification = classification;
             mSelection = selection;
         }
     }

@@ -1423,6 +1423,7 @@ public class AudioService extends IAudioService.Stub
                     + ", flags=" + flags + ", caller=" + caller
                     + ", volControlStream=" + mVolumeControlStream
                     + ", userSelect=" + mUserSelectedVolumeControlStream);
+            // Request lock in case mVolumeControlStream is changed by other thread.
             if (mUserSelectedVolumeControlStream) { // implies mVolumeControlStream != -1
                 streamType = mVolumeControlStream;
             } else {

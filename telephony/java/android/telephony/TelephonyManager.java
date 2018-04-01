@@ -40,6 +40,7 @@ import android.os.BatteryStats;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.PersistableBundle;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
@@ -212,6 +213,10 @@ public class TelephonyManager {
             return mContext.getOpPackageName();
         }
         return ActivityThread.currentOpPackageName();
+    }
+
+    private boolean isSystemProcess() {
+        return Process.myUid() == Process.SYSTEM_UID;
     }
 
     /**
@@ -2866,15 +2871,18 @@ public class TelephonyManager {
             IPhoneSubInfo info = getSubscriberInfo();
             if (info == null) {
                 Rlog.e(TAG, "IMSI error: Subscriber Info is null");
+                if (!isSystemProcess()) {
+                    throw new RuntimeException("IMSI error: Subscriber Info is null");
+                }
                 return;
             }
             int subId = getSubId(SubscriptionManager.getDefaultDataSubscriptionId());
             info.resetCarrierKeysForImsiEncryption(subId, mContext.getOpPackageName());
         } catch (RemoteException ex) {
             Rlog.e(TAG, "getCarrierInfoForImsiEncryption RemoteException" + ex);
-        } catch (NullPointerException ex) {
-            // This could happen before phone restarts due to crashing
-            Rlog.e(TAG, "getCarrierInfoForImsiEncryption NullPointerException" + ex);
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
         }
     }
 
@@ -3863,11 +3871,18 @@ public class TelephonyManager {
     public void sendDialerSpecialCode(String inputCode) {
         try {
             final ITelephony telephony = getITelephony();
+            if (telephony == null) {
+                if (!isSystemProcess()) {
+                    throw new RuntimeException("Telephony service unavailable");
+                }
+                return;
+            }
             telephony.sendDialerSpecialCode(mContext.getOpPackageName(), inputCode);
         } catch (RemoteException ex) {
             // This could happen if binder process crashes.
-        } catch (NullPointerException ex) {
-            // This could happen before phone restarts due to crashing
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
         }
     }
 
@@ -6334,34 +6349,39 @@ public class TelephonyManager {
      *
      * @param enable Whether to enable mobile data.
      *
-     * @deprecated use {@link #setUserMobileDataEnabled(boolean)} instead.
      */
-    @Deprecated
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setDataEnabled(boolean enable) {
-        setUserMobileDataEnabled(enable);
+        setDataEnabled(getSubId(SubscriptionManager.getDefaultDataSubscriptionId()), enable);
     }
 
     /**
      * @hide
-     * @deprecated use {@link #setUserMobileDataEnabled(boolean)} instead.
+     * @deprecated use {@link #setDataEnabled(boolean)} instead.
     */
     @SystemApi
     @Deprecated
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setDataEnabled(int subId, boolean enable) {
-        setUserMobileDataEnabled(subId, enable);
+        try {
+            Log.d(TAG, "setDataEnabled: enabled=" + enable);
+            ITelephony telephony = getITelephony();
+            if (telephony != null)
+                telephony.setUserDataEnabled(subId, enable);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#setUserDataEnabled", e);
+        }
     }
 
     /**
-     * @deprecated use {@link #isUserMobileDataEnabled()} instead.
+     * @deprecated use {@link #isDataEnabled()} instead.
      * @hide
      */
     @SystemApi
     @Deprecated
     public boolean getDataEnabled() {
-        return isUserMobileDataEnabled();
+        return isDataEnabled();
     }
 
     /**
@@ -6381,22 +6401,28 @@ public class TelephonyManager {
      * {@link ConnectivityManager#getRestrictBackgroundStatus}.
      *
      * @return true if mobile data is enabled.
-     *
-     * @deprecated use {@link #isUserMobileDataEnabled()} instead.
      */
-    @Deprecated
     public boolean isDataEnabled() {
-        return isUserMobileDataEnabled();
+        return getDataEnabled(getSubId(SubscriptionManager.getDefaultDataSubscriptionId()));
     }
 
     /**
-     * @deprecated use {@link #isUserMobileDataEnabled()} instead.
+     * @deprecated use {@link #isDataEnabled()} instead.
      * @hide
      */
     @Deprecated
     @SystemApi
     public boolean getDataEnabled(int subId) {
-        return isUserMobileDataEnabled(subId);
+        boolean retVal = false;
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null)
+                retVal = telephony.isUserDataEnabled(subId);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Error calling ITelephony#isUserDataEnabled", e);
+        } catch (NullPointerException e) {
+        }
+        return retVal;
     }
 
     /** @hide */
@@ -7669,56 +7695,12 @@ public class TelephonyManager {
     }
 
     /**
-     * Turns mobile data on or off.
-     * If the {@link TelephonyManager} object has been created with
-     * {@link #createForSubscriptionId}, this API applies to the given subId.
-     * Otherwise, it applies to {@link SubscriptionManager#getDefaultDataSubscriptionId()}
-     *
-     * <p>Requires Permission:
-     * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} or that the calling
-     * app has carrier privileges (see {@link #hasCarrierPrivileges}.
-     *
-     * @param enable Whether to enable mobile data.
-     */
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    public void setUserMobileDataEnabled(boolean enable) {
-        setUserMobileDataEnabled(
-                getSubId(SubscriptionManager.getDefaultDataSubscriptionId()), enable);
-    }
-
-    /**
-     * Returns whether mobile data is enabled or not per user setting. There are other factors
-     * that could disable mobile data, but they are not considered here.
-     *
-     * If this object has been created with {@link #createForSubscriptionId}, applies to the given
-     * subId. Otherwise, applies to {@link SubscriptionManager#getDefaultDataSubscriptionId()}
-     *
-     * <p>Requires one of the following permissions:
-     * {@link android.Manifest.permission#ACCESS_NETWORK_STATE ACCESS_NETWORK_STATE},
-     * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE}, or that the
-     * calling app has carrier privileges (see {@link #hasCarrierPrivileges}.
-     *
-     * <p>Note that this does not take into account any data restrictions that may be present on the
-     * calling app. Such restrictions may be inspected with
-     * {@link ConnectivityManager#getRestrictBackgroundStatus}.
-     *
-     * @return true if mobile data is enabled.
-     */
-    @RequiresPermission(anyOf = {
-            android.Manifest.permission.ACCESS_NETWORK_STATE,
-            android.Manifest.permission.MODIFY_PHONE_STATE
-    })
-    public boolean isUserMobileDataEnabled() {
-        return isUserMobileDataEnabled(
-                getSubId(SubscriptionManager.getDefaultDataSubscriptionId()));
-    }
-
-    /**
      * @hide
-     * Unlike isUserMobileDataEnabled, this API also evaluates carrierDataEnabled,
-     * policyDataEnabled etc to give a final decision.
+     * It's similar to isDataEnabled, but unlike isDataEnabled, this API also evaluates
+     * carrierDataEnabled, policyDataEnabled etc to give a final decision of whether mobile data is
+     * capable of using.
      */
-    public boolean isMobileDataEnabled() {
+    public boolean isDataCapable() {
         boolean retVal = false;
         try {
             int subId = getSubId(SubscriptionManager.getDefaultDataSubscriptionId());
@@ -7730,35 +7712,6 @@ public class TelephonyManager {
         } catch (NullPointerException e) {
         }
         return retVal;
-    }
-
-    /**
-     * Utility class of {@link #isUserMobileDataEnabled()};
-     */
-    private boolean isUserMobileDataEnabled(int subId) {
-        boolean retVal = false;
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null)
-                retVal = telephony.isUserDataEnabled(subId);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#isUserDataEnabled", e);
-        } catch (NullPointerException e) {
-        }
-        return retVal;
-    }
-
-    /** Utility method of {@link #setUserMobileDataEnabled(boolean)} */
-    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
-    private void setUserMobileDataEnabled(int subId, boolean enable) {
-        try {
-            Log.d(TAG, "setUserMobileDataEnabled: enabled=" + enable);
-            ITelephony telephony = getITelephony();
-            if (telephony != null)
-                telephony.setUserDataEnabled(subId, enable);
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error calling ITelephony#setUserDataEnabled", e);
-        }
     }
 
     /**
@@ -7799,11 +7752,25 @@ public class TelephonyManager {
      */
     public static final int INDICATION_FILTER_DATA_CALL_DORMANCY_CHANGED    = 0x4;
 
+    /**
+     * The indication for link capacity estimate update.
+     * @hide
+     */
+    public static final int INDICATION_FILTER_LINK_CAPACITY_ESTIMATE        = 0x8;
+
+    /**
+     * The indication for physical channel config update.
+     * @hide
+     */
+    public static final int INDICATION_FILTER_PHYSICAL_CHANNEL_CONFIG       = 0x10;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "INDICATION_FILTER_" }, value = {
             INDICATION_FILTER_SIGNAL_STRENGTH,
             INDICATION_FILTER_FULL_NETWORK_STATE,
-            INDICATION_FILTER_DATA_CALL_DORMANCY_CHANGED
+            INDICATION_FILTER_DATA_CALL_DORMANCY_CHANGED,
+            INDICATION_FILTER_LINK_CAPACITY_ESTIMATE,
+            INDICATION_FILTER_PHYSICAL_CHANNEL_CONFIG
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface IndicationFilters{}
@@ -7836,6 +7803,9 @@ public class TelephonyManager {
             }
         } catch (RemoteException ex) {
             // This could happen if binder process crashes.
+            if (!isSystemProcess()) {
+                ex.rethrowAsRuntimeException();
+            }
         }
     }
 }
