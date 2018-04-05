@@ -191,6 +191,7 @@ public class Tethering extends BaseNetworkObserver {
     private boolean mRndisEnabled;       // track the RNDIS function enabled state
     // True iff. WiFi tethering should be started when soft AP is ready.
     private boolean mWifiTetherRequested;
+    private boolean mV6OnlyTetherEnabled;
 
     public Tethering(Context context, INetworkManagementService nmService,
             INetworkStatsService statsService, INetworkPolicyManager policyManager,
@@ -207,6 +208,9 @@ public class Tethering extends BaseNetworkObserver {
         mPublicSync = new Object();
 
         mTetherStates = new ArrayMap<>();
+
+        mV6OnlyTetherEnabled = (Settings.Global.getInt(mContext.
+                getContentResolver(), "enable_v6_only_tethering", 0) == 1);
 
         mTetherMasterSM = new TetherMasterSM("TetherMaster", mLooper);
         mTetherMasterSM.start();
@@ -1267,7 +1271,8 @@ public class Tethering extends BaseNetworkObserver {
             addState(mSetDnsForwardersErrorState);
 
             mNotifyList = new ArrayList<>();
-            mIPv6TetheringCoordinator = new IPv6TetheringCoordinator(mNotifyList, mLog);
+            mIPv6TetheringCoordinator = new IPv6TetheringCoordinator
+                    (mNotifyList, mLog, mV6OnlyTetherEnabled);
             mOffload = new OffloadWrapper();
 
             setInitialState(mInitialState);
@@ -1376,7 +1381,10 @@ public class Tethering extends BaseNetworkObserver {
                 final String iface6 = getIPv6DefaultRouteInterface(ns);
                 mLog.i("IPv4/IPv6 upstream interface(s): " + iface4 + "/" + iface6);
 
-                iface = (iface4 != null) ? iface4 : null /* TODO: iface6 */;
+                iface = (iface4 != null) ? iface4 : null;
+                if (iface == null && mV6OnlyTetherEnabled && iface6 != null) {
+                    iface = iface6;
+                }
             }
 
             if (iface != null) {
@@ -2003,7 +2011,7 @@ public class Tethering extends BaseNetworkObserver {
         final TetherState tetherState = new TetherState(
                 new TetherInterfaceStateMachine(
                     iface, mLooper, interfaceType, mLog, mNMService, mStatsService,
-                    makeControlCallback(iface)));
+                    makeControlCallback(iface), mV6OnlyTetherEnabled));
         mTetherStates.put(iface, tetherState);
         tetherState.stateMachine.start();
     }
