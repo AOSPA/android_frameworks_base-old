@@ -30,6 +30,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.bluetooth.BluetoothAdapter;
 import android.support.annotation.VisibleForTesting;
+import android.os.SystemProperties;
 
 import com.android.settingslib.R;
 
@@ -125,6 +126,23 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private boolean mIsActiveDeviceA2dp = false;
     private boolean mIsActiveDeviceHeadset = false;
     private boolean mIsActiveDeviceHearingAid = false;
+
+    /* Gets Device for seondary TWS device
+     * @param mDevice Primary TWS device  to get secondary
+     * @return Description of the device
+     */
+
+    private BluetoothDevice getTwsPeerDevice() {
+      BluetoothAdapter bluetoothAdapter;
+      BluetoothDevice peerDevice = null;
+      if (mDevice.isTwsPlusDevice()) {
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+        String peerAddress = mDevice.getTwsPlusPeerAddress();
+        peerDevice = bluetoothAdapter.getRemoteDevice(peerAddress);
+      }
+      return peerDevice;
+    }
+
     /**
      * Describes the current device and profile for logging.
      *
@@ -344,6 +362,17 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
         if (state != BluetoothDevice.BOND_NONE) {
             final BluetoothDevice dev = mDevice;
+            if (mDevice.isTwsPlusDevice()) {
+               BluetoothDevice peerDevice = getTwsPeerDevice();
+               if (peerDevice != null) {
+                   final boolean peersuccessful = peerDevice.removeBond();
+                   if (peersuccessful) {
+                       if (Utils.D) {
+                           Log.d(TAG, "Command sent successfully:REMOVE_BOND " + peerDevice.getName());
+                       }
+                   }
+                }
+            }
             if (dev != null) {
                 final boolean successful = dev.removeBond();
                 if (successful) {
@@ -710,8 +739,13 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         if (bondState == BluetoothDevice.BOND_BONDED) {
             if (mDevice.isBluetoothDock()) {
                 onBondingDockConnect();
+            } else if (SystemProperties.getBoolean("persist.vendor.bt.connect.peer_earbud", true)) {
+                Log.d(TAG, "Initiating connection to" + mDevice);
+                if (mDevice.isBondingInitiatedLocally() || mDevice.isTwsPlusDevice()) {
+                    connect(false);
+                }
             } else if (mDevice.isBondingInitiatedLocally()) {
-                connect(false);
+                 connect(false);
             }
         }
     }
