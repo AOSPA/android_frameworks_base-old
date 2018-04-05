@@ -35,6 +35,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
+import android.media.session.MediaSession;
 import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
@@ -61,6 +62,7 @@ public class NotificationDataTest extends SysuiTestCase {
     private static final int UID_NORMAL = 123;
     private static final int UID_ALLOW_DURING_SETUP = 456;
     private static final String TEST_HIDDEN_NOTIFICATION_KEY = "testHiddenNotificationKey";
+    private static final String TEST_EXEMPT_DND_VISUAL_SUPPRESSION_KEY = "exempt";
 
     private final StatusBarNotification mMockStatusBarNotification =
             mock(StatusBarNotification.class);
@@ -137,32 +139,7 @@ public class NotificationDataTest extends SysuiTestCase {
         Assert.assertTrue(mRow.getEntry().channel != null);
     }
 
-    @Test
-    public void testAdd_appOpsAdded() {
-        ArraySet<Integer> expected = new ArraySet<>();
-        expected.add(3);
-        expected.add(235);
-        expected.add(1);
-        when(mFsc.getAppOps(mRow.getEntry().notification.getUserId(),
-                mRow.getEntry().notification.getPackageName())).thenReturn(expected);
 
-        mNotificationData.add(mRow.getEntry());
-        assertEquals(expected.size(),
-                mNotificationData.get(mRow.getEntry().key).mActiveAppOps.size());
-        for (int op : expected) {
-            assertTrue(" entry missing op " + op,
-                    mNotificationData.get(mRow.getEntry().key).mActiveAppOps.contains(op));
-        }
-    }
-
-    @Test
-    public void testAdd_noExistingAppOps() {
-        when(mFsc.getAppOps(mRow.getEntry().notification.getUserId(),
-                mRow.getEntry().notification.getPackageName())).thenReturn(null);
-
-        mNotificationData.add(mRow.getEntry());
-        assertEquals(0, mNotificationData.get(mRow.getEntry().key).mActiveAppOps.size());
-    }
 
     @Test
     public void testAllRelevantNotisTaggedWithAppOps() throws Exception {
@@ -179,7 +156,9 @@ public class NotificationDataTest extends SysuiTestCase {
 
         for (int op : expectedOps) {
             mNotificationData.updateAppOp(op, NotificationTestHelper.UID,
-                    NotificationTestHelper.PKG, true);
+                    NotificationTestHelper.PKG, mRow.getEntry().key, true);
+            mNotificationData.updateAppOp(op, NotificationTestHelper.UID,
+                    NotificationTestHelper.PKG, row2.getEntry().key, true);
         }
         for (int op : expectedOps) {
             assertTrue(mRow.getEntry().key + " doesn't have op " + op,
@@ -203,12 +182,12 @@ public class NotificationDataTest extends SysuiTestCase {
 
         for (int op : expectedOps) {
             mNotificationData.updateAppOp(op, NotificationTestHelper.UID,
-                    NotificationTestHelper.PKG, true);
+                    NotificationTestHelper.PKG, row2.getEntry().key, true);
         }
 
         expectedOps.remove(OP_ACCEPT_HANDOVER);
         mNotificationData.updateAppOp(OP_ACCEPT_HANDOVER, NotificationTestHelper.UID,
-                NotificationTestHelper.PKG, false);
+                NotificationTestHelper.PKG, row2.getEntry().key, false);
 
         assertTrue(mRow.getEntry().key + " doesn't have op " + OP_CAMERA,
                 mNotificationData.get(mRow.getEntry().key).mActiveAppOps.contains(OP_CAMERA));
@@ -275,6 +254,7 @@ public class NotificationDataTest extends SysuiTestCase {
 
     @Test
     public void testShouldFilterHiddenNotifications() {
+        initStatusBarNotification(false);
         // setup
         when(mFsc.isSystemAlertWarningNeeded(anyInt(), anyString())).thenReturn(false);
         when(mFsc.isSystemAlertNotification(any())).thenReturn(false);
@@ -287,6 +267,33 @@ public class NotificationDataTest extends SysuiTestCase {
         // not hidden
         when(mMockStatusBarNotification.getKey()).thenReturn("not hidden");
         assertFalse(mNotificationData.shouldFilterOut(mMockStatusBarNotification));
+    }
+
+    @Test
+    public void testIsExemptFromDndVisualSuppression_foreground() {
+        initStatusBarNotification(false);
+        when(mMockStatusBarNotification.getKey()).thenReturn(
+                TEST_EXEMPT_DND_VISUAL_SUPPRESSION_KEY);
+        Notification n = mMockStatusBarNotification.getNotification();
+        n.flags = Notification.FLAG_FOREGROUND_SERVICE;
+
+        assertTrue(mNotificationData.isExemptFromDndVisualSuppression(mMockStatusBarNotification));
+        assertFalse(mNotificationData.shouldSuppressAmbient(mMockStatusBarNotification));
+    }
+
+    @Test
+    public void testIsExemptFromDndVisualSuppression_media() {
+        initStatusBarNotification(false);
+        when(mMockStatusBarNotification.getKey()).thenReturn(
+                TEST_EXEMPT_DND_VISUAL_SUPPRESSION_KEY);
+        Notification n = mMockStatusBarNotification.getNotification();
+        Notification.Builder nb = Notification.Builder.recoverBuilder(mContext, n);
+        nb.setStyle(new Notification.MediaStyle().setMediaSession(mock(MediaSession.Token.class)));
+        n = nb.build();
+        when(mMockStatusBarNotification.getNotification()).thenReturn(n);
+
+        assertTrue(mNotificationData.isExemptFromDndVisualSuppression(mMockStatusBarNotification));
+        assertFalse(mNotificationData.shouldSuppressAmbient(mMockStatusBarNotification));
     }
 
     private void initStatusBarNotification(boolean allowDuringSetup) {
@@ -315,6 +322,13 @@ public class NotificationDataTest extends SysuiTestCase {
                 outRanking.populate(key, outRanking.getRank(),
                         outRanking.matchesInterruptionFilter(),
                         outRanking.getVisibilityOverride(), outRanking.getSuppressedVisualEffects(),
+                        outRanking.getImportance(), outRanking.getImportanceExplanation(),
+                        outRanking.getOverrideGroupKey(), outRanking.getChannel(), null, null,
+                        outRanking.canShowBadge(), outRanking.getUserSentiment(), true);
+            } else if (key.equals(TEST_EXEMPT_DND_VISUAL_SUPPRESSION_KEY)) {
+                outRanking.populate(key, outRanking.getRank(),
+                        outRanking.matchesInterruptionFilter(),
+                        outRanking.getVisibilityOverride(), 255,
                         outRanking.getImportance(), outRanking.getImportanceExplanation(),
                         outRanking.getOverrideGroupKey(), outRanking.getChannel(), null, null,
                         outRanking.canShowBadge(), outRanking.getUserSentiment(), true);

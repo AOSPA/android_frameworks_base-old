@@ -20,10 +20,12 @@
 #include "Properties.h"
 #include "RenderThread.h"
 #include "pipeline/skia/ShaderCache.h"
+#include "pipeline/skia/SkiaMemoryTracer.h"
 #include "renderstate/RenderState.h"
 
 #include <GrContextOptions.h>
 #include <SkExecutor.h>
+#include <SkGraphics.h>
 #include <gui/Surface.h>
 #include <math.h>
 #include <set>
@@ -149,7 +151,12 @@ void CacheManager::trimMemory(TrimMemoryMode mode) {
             mGrContext->freeGpuResources();
             break;
         case TrimMemoryMode::UiHidden:
-            mGrContext->purgeUnlockedResources(mMaxResourceBytes - mBackgroundResourceBytes, true);
+            // Here we purge all the unlocked scratch resources and then toggle the resources cache
+            // limits between the background and max amounts. This causes the unlocked resources
+            // that have persistent data to be purged in LRU order.
+            mGrContext->purgeUnlockedResources(true);
+            mGrContext->setResourceCacheLimits(mMaxResources, mBackgroundResourceBytes);
+            mGrContext->setResourceCacheLimits(mMaxResources, mMaxResourceBytes);
             break;
     }
 }
@@ -159,7 +166,10 @@ void CacheManager::trimStaleResources() {
         return;
     }
     mGrContext->flush();
-    mGrContext->purgeResourcesNotUsedInMs(std::chrono::seconds(30));
+    // Here we purge all the unlocked scratch resources (leaving those resources w/ persistent data)
+    // and then purge those w/ persistent data based on age.
+    mGrContext->purgeUnlockedResources(true);
+    mGrContext->purgeResourcesNotUsedInMs(std::chrono::seconds(10));
 }
 
 sp<skiapipeline::VectorDrawableAtlas> CacheManager::acquireVectorDrawableAtlas() {
@@ -178,12 +188,29 @@ void CacheManager::dumpMemoryUsage(String8& log, const RenderState* renderState)
         return;
     }
 
-    size_t bytesCached;
-    mGrContext->getResourceCacheUsage(nullptr, &bytesCached);
+    log.appendFormat("Font Cache (CPU):\n");
+    log.appendFormat("  Size: %.2f kB \n", SkGraphics::GetFontCacheUsed() / 1024.0f);
+    log.appendFormat("  Glyph Count: %d \n", SkGraphics::GetFontCacheCountUsed());
 
-    log.appendFormat("Caches:\n");
+    log.appendFormat("CPU Caches:\n");
+    std::vector<skiapipeline::ResourcePair> cpuResourceMap = {
+            {"skia/sk_resource_cache/bitmap_", "Bitmaps"},
+            {"skia/sk_resource_cache/rrect-blur_", "Masks"},
+            {"skia/sk_resource_cache/rects-blur_", "Masks"},
+            {"skia/sk_resource_cache/tessellated", "Shadows"},
+    };
+    skiapipeline::SkiaMemoryTracer cpuTracer(cpuResourceMap, false);
+    SkGraphics::DumpMemoryStatistics(&cpuTracer);
+    cpuTracer.logOutput(log);
+
+    log.appendFormat("GPU Caches:\n");
+    skiapipeline::SkiaMemoryTracer gpuTracer("category", true);
+    mGrContext->dumpMemoryStatistics(&gpuTracer);
+    gpuTracer.logOutput(log);
+
+    log.appendFormat("Other Caches:\n");
     log.appendFormat("                         Current / Maximum\n");
-    log.appendFormat("  VectorDrawableAtlas  %6.2f kB / %6.2f kB (entries = %zu)\n", 0.0f, 0.0f,
+    log.appendFormat("  VectorDrawableAtlas  %6.2f kB / %6.2f KB (entries = %zu)\n", 0.0f, 0.0f,
                      (size_t)0);
 
     if (renderState) {
@@ -200,14 +227,12 @@ void CacheManager::dumpMemoryUsage(String8& log, const RenderState* renderState)
                              layer->getHeight());
             layerMemoryTotal += layer->getWidth() * layer->getHeight() * 4;
         }
-        log.appendFormat("  Layers Total         %6.2f kB (numLayers = %zu)\n",
+        log.appendFormat("  Layers Total         %6.2f KB (numLayers = %zu)\n",
                          layerMemoryTotal / 1024.0f, renderState->mActiveLayers.size());
     }
 
-    log.appendFormat("Total memory usage:\n");
-    log.appendFormat("  %zu bytes, %.2f MB (%.2f MB is purgeable)\n", bytesCached,
-                     bytesCached / 1024.0f / 1024.0f,
-                     mGrContext->getResourceCachePurgeableBytes() / 1024.0f / 1024.0f);
+    log.appendFormat("Total GPU memory usage:\n");
+    gpuTracer.logTotals(log);
 }
 
 } /* namespace renderthread */

@@ -19,6 +19,7 @@ package android.net;
 import static android.net.NetworkStats.DEFAULT_NETWORK_ALL;
 import static android.net.NetworkStats.DEFAULT_NETWORK_NO;
 import static android.net.NetworkStats.DEFAULT_NETWORK_YES;
+import static android.net.NetworkStats.INTERFACES_ALL;
 import static android.net.NetworkStats.METERED_ALL;
 import static android.net.NetworkStats.METERED_NO;
 import static android.net.NetworkStats.METERED_YES;
@@ -31,14 +32,17 @@ import static android.net.NetworkStats.SET_DBG_VPN_IN;
 import static android.net.NetworkStats.SET_DBG_VPN_OUT;
 import static android.net.NetworkStats.SET_ALL;
 import static android.net.NetworkStats.IFACE_ALL;
+import static android.net.NetworkStats.TAG_ALL;
 import static android.net.NetworkStats.TAG_NONE;
 import static android.net.NetworkStats.UID_ALL;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import android.os.Process;
 import android.support.test.runner.AndroidJUnit4;
 import android.support.test.filters.SmallTest;
+import android.util.ArrayMap;
 
 import com.google.android.collect.Sets;
 
@@ -639,6 +643,218 @@ public class NetworkStatsTest {
                 ROAMING_NO, DEFAULT_NETWORK_NO, 500, 2L, 200L, 5L, 0L);
         assertContains(delta, underlyingIface, tunUid, SET_DBG_VPN_OUT, TAG_NONE, METERED_ALL,
                 ROAMING_ALL, DEFAULT_NETWORK_ALL, 50500L, 27L, 100200L, 55, 0);
+    }
+
+    @Test
+    public void testFilter_NoFilter() {
+        NetworkStats.Entry entry1 = new NetworkStats.Entry(
+                "test1", 10100, SET_DEFAULT, TAG_NONE, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry2 = new NetworkStats.Entry(
+                "test2", 10101, SET_DEFAULT, TAG_NONE, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry3 = new NetworkStats.Entry(
+                "test2", 10101, SET_DEFAULT, 123, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats stats = new NetworkStats(TEST_START, 3)
+                .addValues(entry1)
+                .addValues(entry2)
+                .addValues(entry3);
+
+        stats.filter(UID_ALL, INTERFACES_ALL, TAG_ALL);
+        assertEquals(3, stats.size());
+        assertEquals(entry1, stats.getValues(0, null));
+        assertEquals(entry2, stats.getValues(1, null));
+        assertEquals(entry3, stats.getValues(2, null));
+    }
+
+    @Test
+    public void testFilter_UidFilter() {
+        final int testUid = 10101;
+        NetworkStats.Entry entry1 = new NetworkStats.Entry(
+                "test1", 10100, SET_DEFAULT, TAG_NONE, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry2 = new NetworkStats.Entry(
+                "test2", testUid, SET_DEFAULT, TAG_NONE, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry3 = new NetworkStats.Entry(
+                "test2", testUid, SET_DEFAULT, 123, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats stats = new NetworkStats(TEST_START, 3)
+                .addValues(entry1)
+                .addValues(entry2)
+                .addValues(entry3);
+
+        stats.filter(testUid, INTERFACES_ALL, TAG_ALL);
+        assertEquals(2, stats.size());
+        assertEquals(entry2, stats.getValues(0, null));
+        assertEquals(entry3, stats.getValues(1, null));
+    }
+
+    @Test
+    public void testFilter_InterfaceFilter() {
+        final String testIf1 = "testif1";
+        final String testIf2 = "testif2";
+        NetworkStats.Entry entry1 = new NetworkStats.Entry(
+                testIf1, 10100, SET_DEFAULT, TAG_NONE, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry2 = new NetworkStats.Entry(
+                "otherif", 10101, SET_DEFAULT, TAG_NONE, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry3 = new NetworkStats.Entry(
+                testIf1, 10101, SET_DEFAULT, 123, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry4 = new NetworkStats.Entry(
+                testIf2, 10101, SET_DEFAULT, 123, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats stats = new NetworkStats(TEST_START, 4)
+                .addValues(entry1)
+                .addValues(entry2)
+                .addValues(entry3)
+                .addValues(entry4);
+
+        stats.filter(UID_ALL, new String[] { testIf1, testIf2 }, TAG_ALL);
+        assertEquals(3, stats.size());
+        assertEquals(entry1, stats.getValues(0, null));
+        assertEquals(entry3, stats.getValues(1, null));
+        assertEquals(entry4, stats.getValues(2, null));
+    }
+
+    @Test
+    public void testFilter_EmptyInterfaceFilter() {
+        NetworkStats.Entry entry1 = new NetworkStats.Entry(
+                "if1", 10100, SET_DEFAULT, TAG_NONE, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry2 = new NetworkStats.Entry(
+                "if2", 10101, SET_DEFAULT, TAG_NONE, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats stats = new NetworkStats(TEST_START, 3)
+                .addValues(entry1)
+                .addValues(entry2);
+
+        stats.filter(UID_ALL, new String[] { }, TAG_ALL);
+        assertEquals(0, stats.size());
+    }
+
+    @Test
+    public void testFilter_TagFilter() {
+        final int testTag = 123;
+        final int otherTag = 456;
+        NetworkStats.Entry entry1 = new NetworkStats.Entry(
+                "test1", 10100, SET_DEFAULT, testTag, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry2 = new NetworkStats.Entry(
+                "test2", 10101, SET_DEFAULT, testTag, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats.Entry entry3 = new NetworkStats.Entry(
+                "test2", 10101, SET_DEFAULT, otherTag, METERED_NO, ROAMING_NO,
+                DEFAULT_NETWORK_NO, 50000L, 25L, 100000L, 50L, 0L);
+
+        NetworkStats stats = new NetworkStats(TEST_START, 3)
+                .addValues(entry1)
+                .addValues(entry2)
+                .addValues(entry3);
+
+        stats.filter(UID_ALL, INTERFACES_ALL, testTag);
+        assertEquals(2, stats.size());
+        assertEquals(entry1, stats.getValues(0, null));
+        assertEquals(entry2, stats.getValues(1, null));
+    }
+
+    @Test
+    public void testApply464xlatAdjustments() {
+        final String v4Iface = "v4-wlan0";
+        final String baseIface = "wlan0";
+        final String otherIface = "other";
+        final int appUid = 10001;
+        final int rootUid = Process.ROOT_UID;
+        ArrayMap<String, String> stackedIface = new ArrayMap<>();
+        stackedIface.put(v4Iface, baseIface);
+
+        NetworkStats.Entry otherEntry = new NetworkStats.Entry(
+                otherIface, appUid, SET_DEFAULT, TAG_NONE,
+                2600  /* rxBytes */,
+                2 /* rxPackets */,
+                3800 /* txBytes */,
+                3 /* txPackets */,
+                0 /* operations */);
+
+        NetworkStats stats = new NetworkStats(TEST_START, 3)
+                .addValues(v4Iface, appUid, SET_DEFAULT, TAG_NONE,
+                        30501490  /* rxBytes */,
+                        22401 /* rxPackets */,
+                        876235 /* txBytes */,
+                        13805 /* txPackets */,
+                        0 /* operations */)
+                .addValues(baseIface, rootUid, SET_DEFAULT, TAG_NONE,
+                        31113087,
+                        22588,
+                        1169942,
+                        13902,
+                        0)
+                .addValues(otherEntry);
+
+        stats.apply464xlatAdjustments(stackedIface);
+
+        assertEquals(3, stats.size());
+        assertValues(stats, 0, v4Iface, appUid, SET_DEFAULT, TAG_NONE,
+                METERED_NO, ROAMING_NO, DEFAULT_NETWORK_NO,
+                30949510,
+                22401,
+                1152335,
+                13805,
+                0);
+        assertValues(stats, 1, baseIface, 0, SET_DEFAULT, TAG_NONE,
+                METERED_NO, ROAMING_NO, DEFAULT_NETWORK_NO,
+                163577,
+                187,
+                17607,
+                97,
+                0);
+        assertEquals(otherEntry, stats.getValues(2, null));
+    }
+
+    @Test
+    public void testApply464xlatAdjustments_noStackedIface() {
+        NetworkStats.Entry firstEntry = new NetworkStats.Entry(
+                "if1", 10002, SET_DEFAULT, TAG_NONE,
+                2600  /* rxBytes */,
+                2 /* rxPackets */,
+                3800 /* txBytes */,
+                3 /* txPackets */,
+                0 /* operations */);
+        NetworkStats.Entry secondEntry = new NetworkStats.Entry(
+                "if2", 10002, SET_DEFAULT, TAG_NONE,
+                5000  /* rxBytes */,
+                3 /* rxPackets */,
+                6000 /* txBytes */,
+                4 /* txPackets */,
+                0 /* operations */);
+
+        NetworkStats stats = new NetworkStats(TEST_START, 2)
+                .addValues(firstEntry)
+                .addValues(secondEntry);
+
+        // Empty map: no adjustment
+        stats.apply464xlatAdjustments(new ArrayMap<>());
+
+        assertEquals(2, stats.size());
+        assertEquals(firstEntry, stats.getValues(0, null));
+        assertEquals(secondEntry, stats.getValues(1, null));
     }
 
     private static void assertContains(NetworkStats stats,  String iface, int uid, int set,

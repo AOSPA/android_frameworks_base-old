@@ -42,7 +42,8 @@ public:
 
     void OnLogEvent(LogEvent* event);
 
-    void OnConfigUpdated(const ConfigKey& key, const StatsdConfig& config);
+    void OnConfigUpdated(const int64_t timestampNs, const ConfigKey& key,
+                         const StatsdConfig& config);
     void OnConfigRemoved(const ConfigKey& key);
 
     size_t GetMetricsSize(const ConfigKey& key) const;
@@ -51,12 +52,12 @@ public:
 
     /* Tells MetricsManager that the alarms in alarmSet have fired. Modifies anomaly alarmSet. */
     void onAnomalyAlarmFired(
-            const uint64_t timestampNs,
+            const uint64_t& timestampNs,
             unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet);
 
     /* Tells MetricsManager that the alarms in alarmSet have fired. Modifies periodic alarmSet. */
     void onPeriodicAlarmFired(
-            const uint64_t timestampNs,
+            const uint64_t& timestampNs,
             unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet);
 
     /* Flushes data to disk. Data on memory will be gone after written to disk. */
@@ -72,6 +73,10 @@ private:
     // For testing only.
     inline sp<AlarmMonitor> getAnomalyAlarmMonitor() const {
         return mAnomalyAlarmMonitor;
+    }
+
+    inline sp<AlarmMonitor> getPeriodicAlarmMonitor() const {
+        return mPeriodicAlarmMonitor;
     }
 
     mutable mutex mMetricsMutex;
@@ -147,6 +152,7 @@ private:
     FRIEND_TEST(AnomalyDetectionE2eTest, TestDurationMetric_SUM_single_bucket);
     FRIEND_TEST(AnomalyDetectionE2eTest, TestDurationMetric_SUM_multiple_buckets);
     FRIEND_TEST(AnomalyDetectionE2eTest, TestDurationMetric_SUM_long_refractory_period);
+    FRIEND_TEST(AlarmE2eTest, TestMultipleAlarms);
 };
 
 }  // namespace statsd

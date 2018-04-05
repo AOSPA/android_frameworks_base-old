@@ -294,6 +294,7 @@
   <java-symbol type="bool" name="split_action_bar_is_narrow" />
   <java-symbol type="bool" name="config_useVolumeKeySounds" />
   <java-symbol type="bool" name="config_enableWallpaperService" />
+  <java-symbol type="bool" name="config_checkWallpaperAtBoot" />
   <java-symbol type="string" name="config_wallpaperManagerServiceName" />
   <java-symbol type="bool" name="config_enableUpdateableTimeZoneRules" />
   <java-symbol type="bool" name="config_timeZoneRulesUpdateTrackingEnabled" />
@@ -1204,7 +1205,6 @@
   <java-symbol type="string" name="ssl_ca_cert_noti_by_administrator" />
   <java-symbol type="string" name="ssl_ca_cert_noti_managed" />
   <java-symbol type="string" name="work_profile_deleted" />
-  <java-symbol type="string" name="work_profile_deleted_description" />
   <java-symbol type="string" name="work_profile_deleted_details" />
   <java-symbol type="string" name="work_profile_deleted_description_dpm_wipe" />
   <java-symbol type="string" name="work_profile_deleted_reason_maximum_password_failure" />
@@ -1922,6 +1922,7 @@
   <java-symbol type="integer" name="config_networkWakeupPacketMask" />
   <java-symbol type="bool" name="config_apfDrop802_3Frames" />
   <java-symbol type="array" name="config_apfEthTypeBlackList" />
+  <java-symbol type="integer" name="config_networkDefaultDailyMultipathQuotaBytes" />
   <java-symbol type="integer" name="config_networkMeteredMultipathPreference" />
   <java-symbol type="integer" name="config_notificationsBatteryFullARGB" />
   <java-symbol type="integer" name="config_notificationsBatteryLedOff" />
@@ -2732,6 +2733,10 @@
   <java-symbol type="string" name="status_bar_alarm_clock" />
   <java-symbol type="string" name="status_bar_secure" />
   <java-symbol type="string" name="status_bar_clock" />
+  <java-symbol type="string" name="status_bar_airplane" />
+  <java-symbol type="string" name="status_bar_mobile" />
+  <java-symbol type="string" name="status_bar_ethernet" />
+  <java-symbol type="string" name="status_bar_vpn" />
 
   <!-- Locale picker -->
   <java-symbol type="id" name="locale_search_menu" />

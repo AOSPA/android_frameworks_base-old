@@ -47,6 +47,7 @@ import android.util.ArraySet;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
+import android.util.StatsLog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
@@ -741,8 +742,8 @@ class AppErrors {
             }
             mService.mStackSupervisor.resumeFocusedStackTopActivityLocked();
         } else {
-            TaskRecord affectedTask =
-                    mService.mStackSupervisor.finishTopRunningActivityLocked(app, reason);
+            final TaskRecord affectedTask =
+                    mService.mStackSupervisor.finishTopCrashedActivitiesLocked(app, reason);
             if (data != null) {
                 data.task = affectedTask;
             }
@@ -1039,6 +1040,16 @@ class AppErrors {
             Process.sendSignal(app.pid, Process.SIGNAL_QUIT);
         }
 
+        StatsLog.write(StatsLog.ANR_OCCURRED, app.uid, app.processName,
+                activity == null ? "unknown": activity.shortComponentName, annotation,
+                (app.info != null) ? (app.info.isInstantApp()
+                        ? StatsLog.ANROCCURRED__IS_INSTANT_APP__TRUE
+                        : StatsLog.ANROCCURRED__IS_INSTANT_APP__FALSE)
+                        : StatsLog.ANROCCURRED__IS_INSTANT_APP__UNAVAILABLE,
+                app != null ? (app.isInterestingToUserLocked()
+                        ? StatsLog.ANROCCURRED__FOREGROUND_STATE__FOREGROUND
+                        : StatsLog.ANROCCURRED__FOREGROUND_STATE__BACKGROUND)
+                        : StatsLog.ANROCCURRED__FOREGROUND_STATE__UNKNOWN);
         mService.addErrorToDropBox("anr", app, app.processName, activity, parent, annotation,
                 cpuInfo, tracesFile, null);
 

@@ -267,6 +267,7 @@ public class SettingsBackupTest {
                     Settings.Global.LOW_POWER_MODE,
                     Settings.Global.LOW_POWER_MODE_TRIGGER_LEVEL_MAX,
                     Settings.Global.LOW_POWER_MODE_STICKY,
+                    Settings.Global.LOW_POWER_MODE_SUGGESTION_PARAMS,
                     Settings.Global.LTE_SERVICE_FORCED,
                     Settings.Global.MAX_NOTIFICATION_ENQUEUE_RATE,
                     Settings.Global.MAX_SOUND_TRIGGER_DETECTION_SERVICE_OPS_PER_DAY,
@@ -300,6 +301,7 @@ public class SettingsBackupTest {
                     Settings.Global.NETSTATS_UID_TAG_PERSIST_BYTES,
                     Settings.Global.NETSTATS_UID_TAG_ROTATE_AGE,
                     Settings.Global.NETWORK_AVOID_BAD_WIFI,
+                    Settings.Global.NETWORK_DEFAULT_DAILY_MULTIPATH_QUOTA_BYTES,
                     Settings.Global.NETWORK_METERED_MULTIPATH_PREFERENCE,
                     Settings.Global.NETWORK_WATCHLIST_LAST_REPORT_TIME,
                     Settings.Global.NETWORK_PREFERENCE,
@@ -587,7 +589,8 @@ public class SettingsBackupTest {
                  Settings.Secure.BLUETOOTH_ON_WHILE_DRIVING,
                  Settings.Secure.LOW_POWER_MANUAL_ACTIVATION_COUNT,
                  Settings.Secure.LOW_POWER_WARNING_ACKNOWLEDGED,
-                 Settings.Secure.SUPPRESS_AUTO_BATTERY_SAVER_SUGGESTION);
+                 Settings.Secure.SUPPRESS_AUTO_BATTERY_SAVER_SUGGESTION,
+                 Settings.Secure.PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {

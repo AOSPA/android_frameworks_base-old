@@ -15,6 +15,8 @@
  */
 package com.android.server.notification;
 
+import static android.app.NotificationManager.IMPORTANCE_NONE;
+
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
@@ -569,7 +571,7 @@ public class RankingHelper implements RankingConfig {
 
     @Override
     public void createNotificationChannel(String pkg, int uid, NotificationChannel channel,
-            boolean fromTargetApp) {
+            boolean fromTargetApp, boolean hasDndAccess) {
         Preconditions.checkNotNull(pkg);
         Preconditions.checkNotNull(channel);
         Preconditions.checkNotNull(channel.getId());
@@ -610,21 +612,22 @@ public class RankingHelper implements RankingConfig {
                 existing.setImportance(channel.getImportance());
             }
 
-            // system apps can bypass dnd if the user hasn't changed any fields on the channel yet
-            if (existing.getUserLockedFields() == 0 & isSystemApp) {
+            // system apps and dnd access apps can bypass dnd if the user hasn't changed any
+            // fields on the channel yet
+            if (existing.getUserLockedFields() == 0 && (isSystemApp || hasDndAccess)) {
                 existing.setBypassDnd(channel.canBypassDnd());
             }
 
             updateConfig();
             return;
         }
-        if (channel.getImportance() < NotificationManager.IMPORTANCE_NONE
+        if (channel.getImportance() < IMPORTANCE_NONE
                 || channel.getImportance() > NotificationManager.IMPORTANCE_MAX) {
             throw new IllegalArgumentException("Invalid importance level");
         }
 
         // Reset fields that apps aren't allowed to set.
-        if (fromTargetApp && !isSystemApp) {
+        if (fromTargetApp && !(isSystemApp || hasDndAccess)) {
             channel.setBypassDnd(r.priority == Notification.PRIORITY_MAX);
         }
         if (fromTargetApp) {
@@ -958,6 +961,23 @@ public class RankingHelper implements RankingConfig {
         return deletedCount;
     }
 
+    public int getBlockedChannelCount(String pkg, int uid) {
+        Preconditions.checkNotNull(pkg);
+        int blockedCount = 0;
+        Record r = getRecord(pkg, uid);
+        if (r == null) {
+            return blockedCount;
+        }
+        int N = r.channels.size();
+        for (int i = 0; i < N; i++) {
+            final NotificationChannel nc = r.channels.valueAt(i);
+            if (!nc.isDeleted() && IMPORTANCE_NONE == nc.getImportance()) {
+                blockedCount++;
+            }
+        }
+        return blockedCount;
+    }
+
     /**
      * Sets importance.
      */
@@ -968,12 +988,12 @@ public class RankingHelper implements RankingConfig {
     }
 
     public void setEnabled(String packageName, int uid, boolean enabled) {
-        boolean wasEnabled = getImportance(packageName, uid) != NotificationManager.IMPORTANCE_NONE;
+        boolean wasEnabled = getImportance(packageName, uid) != IMPORTANCE_NONE;
         if (wasEnabled == enabled) {
             return;
         }
         setImportance(packageName, uid,
-                enabled ? DEFAULT_IMPORTANCE : NotificationManager.IMPORTANCE_NONE);
+                enabled ? DEFAULT_IMPORTANCE : IMPORTANCE_NONE);
     }
 
     @VisibleForTesting
@@ -1198,7 +1218,7 @@ public class RankingHelper implements RankingConfig {
             ArrayMap<Integer, String> packageBans = new ArrayMap<>(N);
             for (int i = 0; i < N; i++) {
                 final Record r = mRecords.valueAt(i);
-                if (r.importance == NotificationManager.IMPORTANCE_NONE) {
+                if (r.importance == IMPORTANCE_NONE) {
                     packageBans.put(r.uid, r.pkg);
                 }
             }

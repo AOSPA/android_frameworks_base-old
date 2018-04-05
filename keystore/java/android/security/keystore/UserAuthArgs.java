@@ -32,6 +32,6 @@ public interface UserAuthArgs {
     boolean isInvalidatedByBiometricEnrollment();
     boolean isUserConfirmationRequired();
     long getBoundToSpecificSecureUserId();
-    boolean isTrustedUserPresenceRequired();
-
+    boolean isUserPresenceRequired();
+    boolean isUnlockedDeviceRequired();
 }

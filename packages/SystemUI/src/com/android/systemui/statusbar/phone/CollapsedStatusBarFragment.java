@@ -14,10 +14,9 @@
 
 package com.android.systemui.statusbar.phone;
 
+import static android.app.StatusBarManager.DISABLE_CLOCK;
 import static android.app.StatusBarManager.DISABLE_NOTIFICATION_ICONS;
 import static android.app.StatusBarManager.DISABLE_SYSTEM_INFO;
-
-import static com.android.systemui.statusbar.phone.StatusBar.reinflateSignalCluster;
 
 import android.annotation.Nullable;
 import android.app.Fragment;
@@ -34,7 +33,6 @@ import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.SysUiServiceProvider;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.SignalClusterView;
 import com.android.systemui.statusbar.phone.StatusBarIconController.DarkIconManager;
 import com.android.systemui.statusbar.policy.DarkIconDispatcher;
 import com.android.systemui.statusbar.policy.EncryptionHelper;
@@ -63,7 +61,6 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     private int mDisabled1;
     private StatusBar mStatusBarComponent;
     private DarkIconManager mDarkIconManager;
-    private SignalClusterView mSignalClusterView;
     private View mOperatorNameFrame;
 
     private SignalCallback mSignalCallback = new SignalCallback() {
@@ -99,10 +96,8 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
         Dependency.get(StatusBarIconController.class).addIconGroup(mDarkIconManager);
         mSystemIconArea = mStatusBar.findViewById(R.id.system_icon_area);
         mClockView = mStatusBar.findViewById(R.id.clock);
-        mSignalClusterView = mStatusBar.findViewById(R.id.signal_cluster);
-        Dependency.get(DarkIconDispatcher.class).addDarkReceiver(mSignalClusterView);
-        // Default to showing until we know otherwise.
         showSystemIconArea(false);
+        showClock(false);
         initEmergencyCryptkeeperText();
         initOperatorName();
     }
@@ -128,7 +123,6 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        Dependency.get(DarkIconDispatcher.class).removeDarkReceiver(mSignalClusterView);
         Dependency.get(StatusBarIconController.class).removeIconGroup(mDarkIconManager);
         if (mNetworkController.hasEmergencyCryptKeeperText()) {
             mNetworkController.removeCallback(mSignalCallback);
@@ -171,6 +165,13 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
                 showNotificationIconArea(animate);
             }
         }
+        if ((diff1 & DISABLE_CLOCK) != 0) {
+            if ((state1 & DISABLE_CLOCK) != 0) {
+                hideClock(animate);
+            } else {
+                showClock(animate);
+            }
+        }
     }
 
     protected int adjustDisableFlags(int state) {
@@ -179,6 +180,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
                 && shouldHideNotificationIcons()) {
             state |= DISABLE_NOTIFICATION_ICONS;
             state |= DISABLE_SYSTEM_INFO;
+            state |= DISABLE_CLOCK;
         }
         if (mNetworkController != null && EncryptionHelper.IS_DATA_ENCRYPTED) {
             if (mNetworkController.hasEmergencyCryptKeeperText()) {
@@ -203,11 +205,17 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
 
     public void hideSystemIconArea(boolean animate) {
         animateHide(mSystemIconArea, animate);
-        animateHide(mClockView, animate);
     }
 
     public void showSystemIconArea(boolean animate) {
         animateShow(mSystemIconArea, animate);
+    }
+
+    public void hideClock(boolean animate) {
+        animateHide(mClockView, animate);
+    }
+
+    public void showClock(boolean animate) {
         animateShow(mClockView, animate);
     }
 

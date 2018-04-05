@@ -57,6 +57,7 @@ package android {
     field public static final java.lang.String CONFIGURE_DISPLAY_BRIGHTNESS = "android.permission.CONFIGURE_DISPLAY_BRIGHTNESS";
     field public static final java.lang.String CONNECTIVITY_INTERNAL = "android.permission.CONNECTIVITY_INTERNAL";
     field public static final java.lang.String CONNECTIVITY_USE_RESTRICTED_NETWORKS = "android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS";
+    field public static final java.lang.String CONTROL_DISPLAY_SATURATION = "android.permission.CONTROL_DISPLAY_SATURATION";
     field public static final java.lang.String CONTROL_INCALL_EXPERIENCE = "android.permission.CONTROL_INCALL_EXPERIENCE";
     field public static final java.lang.String CONTROL_LOCATION_UPDATES = "android.permission.CONTROL_LOCATION_UPDATES";
     field public static final java.lang.String CONTROL_VPN = "android.permission.CONTROL_VPN";
@@ -299,6 +300,7 @@ package android.app {
     field public static final java.lang.String OPSTR_REQUEST_INSTALL_PACKAGES = "android:request_install_packages";
     field public static final java.lang.String OPSTR_RUN_ANY_IN_BACKGROUND = "android:run_any_in_background";
     field public static final java.lang.String OPSTR_RUN_IN_BACKGROUND = "android:run_in_background";
+    field public static final java.lang.String OPSTR_START_FOREGROUND = "android:start_foreground";
     field public static final java.lang.String OPSTR_TAKE_AUDIO_FOCUS = "android:take_audio_focus";
     field public static final java.lang.String OPSTR_TAKE_MEDIA_BUTTONS = "android:take_media_buttons";
     field public static final java.lang.String OPSTR_TOAST_WINDOW = "android:toast_window";
@@ -1252,6 +1254,7 @@ package android.hardware.display {
     method public android.hardware.display.BrightnessConfiguration getDefaultBrightnessConfiguration();
     method public android.graphics.Point getStableDisplaySize();
     method public void setBrightnessConfiguration(android.hardware.display.BrightnessConfiguration);
+    method public void setSaturationLevel(float);
   }
 
 }
@@ -2101,6 +2104,7 @@ package android.hardware.radio {
     method public java.lang.String getVersion();
     method public boolean isBackgroundScanningSupported();
     method public boolean isCaptureSupported();
+    method public boolean isInitializationRequired();
     method public boolean isProgramIdentifierSupported(int);
     method public boolean isProgramTypeSupported(int);
     method public void writeToParcel(android.os.Parcel, int);
@@ -3100,6 +3104,10 @@ package android.net {
     field public static final int ERROR_HARDWARE_ERROR = 3; // 0x3
     field public static final int ERROR_HARDWARE_UNSUPPORTED = 2; // 0x2
     field public static final int ERROR_INVALID_NETWORK = 1; // 0x1
+  }
+
+  public final class NetworkCapabilities implements android.os.Parcelable {
+    field public static final int NET_CAPABILITY_OEM_PAID = 22; // 0x16
   }
 
   public class NetworkKey implements android.os.Parcelable {
@@ -4763,10 +4771,12 @@ package android.service.textclassifier {
     ctor public TextClassifierService();
     method public final android.view.textclassifier.TextClassifier getLocalTextClassifier();
     method public final android.os.IBinder onBind(android.content.Intent);
-    method public abstract void onClassifyText(java.lang.CharSequence, int, int, android.view.textclassifier.TextClassification.Options, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextClassification>);
-    method public abstract void onGenerateLinks(java.lang.CharSequence, android.view.textclassifier.TextLinks.Options, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextLinks>);
-    method public void onSelectionEvent(android.view.textclassifier.SelectionEvent);
-    method public abstract void onSuggestSelection(java.lang.CharSequence, int, int, android.view.textclassifier.TextSelection.Options, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextSelection>);
+    method public abstract void onClassifyText(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.TextClassification.Request, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextClassification>);
+    method public abstract void onCreateTextClassificationSession(android.view.textclassifier.TextClassificationContext, android.view.textclassifier.TextClassificationSessionId);
+    method public abstract void onDestroyTextClassificationSession(android.view.textclassifier.TextClassificationSessionId);
+    method public abstract void onGenerateLinks(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.TextLinks.Request, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextLinks>);
+    method public void onSelectionEvent(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.SelectionEvent);
+    method public abstract void onSuggestSelection(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.TextSelection.Request, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextSelection>);
     field public static final java.lang.String SERVICE_INTERFACE = "android.service.textclassifier.TextClassifierService";
   }
 
@@ -5549,6 +5559,7 @@ package android.telephony.euicc {
 package android.telephony.ims {
 
   public final class ImsCallForwardInfo implements android.os.Parcelable {
+    ctor public ImsCallForwardInfo(int, int, int, int, java.lang.String, int);
     method public int describeContents();
     method public int getCondition();
     method public java.lang.String getNumber();
@@ -5863,7 +5874,7 @@ package android.telephony.ims {
   }
 
   public final class ImsSsData implements android.os.Parcelable {
-    ctor public ImsSsData();
+    ctor public ImsSsData(int, int, int, int, int);
     method public int describeContents();
     method public boolean isTypeBarring();
     method public boolean isTypeCf();
@@ -5914,7 +5925,7 @@ package android.telephony.ims {
   }
 
   public final class ImsSsInfo implements android.os.Parcelable {
-    ctor public ImsSsInfo();
+    ctor public ImsSsInfo(int, java.lang.String);
     method public int describeContents();
     method public java.lang.String getIcbNum();
     method public int getStatus();

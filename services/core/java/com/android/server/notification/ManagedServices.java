@@ -110,7 +110,7 @@ abstract public class ManagedServices {
     protected final Object mMutex;
     private final UserProfiles mUserProfiles;
     private final IPackageManager mPm;
-    private final UserManager mUm;
+    protected final UserManager mUm;
     private final Config mConfig;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
 
@@ -982,7 +982,11 @@ abstract public class ManagedServices {
                     Slog.w(TAG, getCaption() + " binding died: " + name);
                     synchronized (mMutex) {
                         mServicesBinding.remove(servicesBindingTag);
-                        mContext.unbindService(this);
+                        try {
+                            mContext.unbindService(this);
+                        } catch (IllegalArgumentException e) {
+                            Slog.e(TAG, "failed to unbind " + name, e);
+                        }
                         if (!mServicesRebinding.contains(servicesBindingTag)) {
                             mServicesRebinding.add(servicesBindingTag);
                             mHandler.postDelayed(new Runnable() {

@@ -76,6 +76,10 @@ const int FIELD_ID_CONFIG_STATS_MATCHER_STATS = 13;
 const int FIELD_ID_CONFIG_STATS_CONDITION_STATS = 14;
 const int FIELD_ID_CONFIG_STATS_METRIC_STATS = 15;
 const int FIELD_ID_CONFIG_STATS_ALERT_STATS = 16;
+const int FIELD_ID_CONFIG_STATS_METRIC_DIMENSION_IN_CONDITION_STATS = 17;
+const int FIELD_ID_CONFIG_STATS_ANNOTATION = 18;
+const int FIELD_ID_CONFIG_STATS_ANNOTATION_INT64 = 1;
+const int FIELD_ID_CONFIG_STATS_ANNOTATION_INT32 = 2;
 
 const int FIELD_ID_MATCHER_STATS_ID = 1;
 const int FIELD_ID_MATCHER_STATS_COUNT = 2;
@@ -115,8 +119,10 @@ void StatsdStats::addToIceBoxLocked(shared_ptr<ConfigStats>& stats) {
     mIceBox.push_back(stats);
 }
 
-void StatsdStats::noteConfigReceived(const ConfigKey& key, int metricsCount, int conditionsCount,
-                                     int matchersCount, int alertsCount, bool isValid) {
+void StatsdStats::noteConfigReceived(
+        const ConfigKey& key, int metricsCount, int conditionsCount, int matchersCount,
+        int alertsCount, const std::list<std::pair<const int64_t, const int32_t>>& annotations,
+        bool isValid) {
     lock_guard<std::mutex> lock(mLock);
     int32_t nowTimeSec = getWallClockSec();
 
@@ -132,6 +138,9 @@ void StatsdStats::noteConfigReceived(const ConfigKey& key, int metricsCount, int
     configStats->matcher_count = matchersCount;
     configStats->alert_count = alertsCount;
     configStats->is_valid = isValid;
+    for (auto& v : annotations) {
+        configStats->annotations.emplace_back(v);
+    }
 
     if (isValid) {
         mConfigStats[key] = configStats;
@@ -255,6 +264,20 @@ void StatsdStats::noteMetricDimensionSize(const ConfigKey& key, const int64_t& i
     }
 }
 
+void StatsdStats::noteMetricDimensionInConditionSize(
+        const ConfigKey& key, const int64_t& id, int size) {
+    lock_guard<std::mutex> lock(mLock);
+    // if name doesn't exist before, it will create the key with count 0.
+    auto statsIt = mConfigStats.find(key);
+    if (statsIt == mConfigStats.end()) {
+        return;
+    }
+    auto& metricsDimensionMap = statsIt->second->metric_dimension_in_condition_stats;
+    if (size > metricsDimensionMap[id]) {
+        metricsDimensionMap[id] = size;
+    }
+}
+
 void StatsdStats::noteMatcherMatched(const ConfigKey& key, const int64_t& id) {
     lock_guard<std::mutex> lock(mLock);
 
@@ -336,9 +359,11 @@ void StatsdStats::resetInternalLocked() {
         config.second->broadcast_sent_time_sec.clear();
         config.second->data_drop_time_sec.clear();
         config.second->dump_report_time_sec.clear();
+        config.second->annotations.clear();
         config.second->matcher_stats.clear();
         config.second->condition_stats.clear();
         config.second->metric_stats.clear();
+        config.second->metric_dimension_in_condition_stats.clear();
         config.second->alert_stats.clear();
     }
 }
@@ -378,6 +403,11 @@ void StatsdStats::dumpStats(FILE* out) const {
                 configStats->deletion_time_sec, configStats->metric_count,
                 configStats->condition_count, configStats->matcher_count, configStats->alert_count,
                 configStats->is_valid);
+        for (const auto& annotation : configStats->annotations) {
+            fprintf(out, "\tannotation: %lld, %d\n", (long long)annotation.first,
+                    annotation.second);
+        }
+
         for (const auto& broadcastTime : configStats->broadcast_sent_time_sec) {
             fprintf(out, "\tbroadcast time: %d\n", broadcastTime);
         }
@@ -481,6 +511,15 @@ void addConfigStatsToProto(const ConfigStats& configStats, ProtoOutputStream* pr
                      dump);
     }
 
+    for (const auto& annotation : configStats.annotations) {
+        uint64_t token = proto->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED |
+                                      FIELD_ID_CONFIG_STATS_ANNOTATION);
+        proto->write(FIELD_TYPE_INT64 | FIELD_ID_CONFIG_STATS_ANNOTATION_INT64,
+                     (long long)annotation.first);
+        proto->write(FIELD_TYPE_INT32 | FIELD_ID_CONFIG_STATS_ANNOTATION_INT32, annotation.second);
+        proto->end(token);
+    }
+
     for (const auto& pair : configStats.matcher_stats) {
         uint64_t tmpToken = proto->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED |
                                           FIELD_ID_CONFIG_STATS_MATCHER_STATS);
@@ -500,6 +539,13 @@ void addConfigStatsToProto(const ConfigStats& configStats, ProtoOutputStream* pr
     for (const auto& pair : configStats.metric_stats) {
         uint64_t tmpToken = proto->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED |
                                           FIELD_ID_CONFIG_STATS_METRIC_STATS);
+        proto->write(FIELD_TYPE_INT64 | FIELD_ID_METRIC_STATS_ID, (long long)pair.first);
+        proto->write(FIELD_TYPE_INT32 | FIELD_ID_METRIC_STATS_COUNT, pair.second);
+        proto->end(tmpToken);
+    }
+    for (const auto& pair : configStats.metric_dimension_in_condition_stats) {
+        uint64_t tmpToken = proto->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED |
+                                         FIELD_ID_CONFIG_STATS_METRIC_DIMENSION_IN_CONDITION_STATS);
         proto->write(FIELD_TYPE_INT64 | FIELD_ID_METRIC_STATS_ID, (long long)pair.first);
         proto->write(FIELD_TYPE_INT32 | FIELD_ID_METRIC_STATS_COUNT, pair.second);
         proto->end(tmpToken);
