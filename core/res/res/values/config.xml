@@ -3420,4 +3420,7 @@
 
     <!-- Enable sms authorization framework-->
     <bool name="config_sms_authorization_enabled">false</bool>
+
+    <!-- whether to enable primarycard -->
+    <bool name="config_primarycard">false</bool>
 </resources>
