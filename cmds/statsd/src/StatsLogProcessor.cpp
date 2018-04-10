@@ -79,15 +79,13 @@ StatsLogProcessor::StatsLogProcessor(const sp<UidMap>& uidMap,
       mSendBroadcast(sendBroadcast),
       mTimeBaseSec(timeBaseSec),
       mLastLogTimestamp(0) {
-    StatsPullerManager statsPullerManager;
-    statsPullerManager.SetTimeBaseSec(mTimeBaseSec);
 }
 
 StatsLogProcessor::~StatsLogProcessor() {
 }
 
 void StatsLogProcessor::onAnomalyAlarmFired(
-        const uint64_t timestampNs,
+        const uint64_t& timestampNs,
         unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
     for (const auto& itr : mMetricsManagers) {
@@ -95,7 +93,7 @@ void StatsLogProcessor::onAnomalyAlarmFired(
     }
 }
 void StatsLogProcessor::onPeriodicAlarmFired(
-        const uint64_t timestampNs,
+        const uint64_t& timestampNs,
         unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet) {
 
     std::lock_guard<std::mutex> lock(mMetricsMutex);
@@ -177,7 +175,7 @@ void StatsLogProcessor::OnLogEvent(LogEvent* event) {
 
     uint64_t curTimeSec = getElapsedRealtimeSec();
     if (curTimeSec - mLastPullerCacheClearTimeSec > StatsdStats::kPullerCacheClearIntervalSec) {
-        mStatsPullerManager.ClearPullerCacheIfNecessary(curTimeSec);
+        mStatsPullerManager.ClearPullerCacheIfNecessary(curTimeSec * NS_PER_SEC);
         mLastPullerCacheClearTimeSec = curTimeSec;
     }
 
@@ -193,11 +191,12 @@ void StatsLogProcessor::OnLogEvent(LogEvent* event) {
     }
 }
 
-void StatsLogProcessor::OnConfigUpdated(const ConfigKey& key, const StatsdConfig& config) {
+void StatsLogProcessor::OnConfigUpdated(const int64_t timestampNs, const ConfigKey& key,
+                                        const StatsdConfig& config) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
     VLOG("Updated configuration for key %s", key.ToString().c_str());
     sp<MetricsManager> newMetricsManager =
-        new MetricsManager(key, config, mTimeBaseSec, mUidMap,
+        new MetricsManager(key, config, mTimeBaseSec, (timestampNs - 1) / NS_PER_SEC + 1, mUidMap,
                            mAnomalyAlarmMonitor, mPeriodicAlarmMonitor);
 
     if (newMetricsManager->isConfigValid()) {

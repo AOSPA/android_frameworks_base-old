@@ -30,7 +30,8 @@ namespace android {
 namespace os {
 namespace statsd {
 
-AlarmTracker::AlarmTracker(uint64_t startMillis,
+AlarmTracker::AlarmTracker(const uint64_t startMillis,
+                           const uint64_t currentMillis,
                            const Alarm& alarm, const ConfigKey& configKey,
                            const sp<AlarmMonitor>& alarmMonitor)
     : mAlarmConfig(alarm),
@@ -38,13 +39,19 @@ AlarmTracker::AlarmTracker(uint64_t startMillis,
       mAlarmMonitor(alarmMonitor) {
     VLOG("AlarmTracker() called");
     mAlarmSec = (startMillis + mAlarmConfig.offset_millis()) / MS_PER_SEC;
+    // startMillis is the time statsd is created. We need to find the 1st alarm timestamp after
+    // the config is added to statsd.
+    mAlarmSec = findNextAlarmSec(currentMillis / MS_PER_SEC);  // round up
     mInternalAlarm = new InternalAlarm{static_cast<uint32_t>(mAlarmSec)};
-    mAlarmMonitor->add(mInternalAlarm);
+    VLOG("AlarmTracker sets the periodic alarm at: %lld", (long long)mAlarmSec);
+    if (mAlarmMonitor != nullptr) {
+        mAlarmMonitor->add(mInternalAlarm);
+    }
 }
 
 AlarmTracker::~AlarmTracker() {
     VLOG("~AlarmTracker() called");
-    if (mInternalAlarm != nullptr) {
+    if (mInternalAlarm != nullptr && mAlarmMonitor != nullptr) {
         mAlarmMonitor->remove(mInternalAlarm);
     }
 }
@@ -53,25 +60,34 @@ void AlarmTracker::addSubscription(const Subscription& subscription) {
     mSubscriptions.push_back(subscription);
 }
 
-uint64_t AlarmTracker::findNextAlarmSec(uint64_t currentTimeSec) {
-    int periodsForward = (currentTimeSec - mAlarmSec) * MS_PER_SEC / mAlarmConfig.period_millis();
-    return mAlarmSec + (periodsForward + 1) * mAlarmConfig.period_millis() / MS_PER_SEC;
+int64_t AlarmTracker::findNextAlarmSec(int64_t currentTimeSec) {
+    if (currentTimeSec <= mAlarmSec) {
+        return mAlarmSec;
+    }
+    int64_t periodsForward =
+        ((currentTimeSec - mAlarmSec) * MS_PER_SEC - 1) / mAlarmConfig.period_millis() + 1;
+    return mAlarmSec + periodsForward * mAlarmConfig.period_millis() / MS_PER_SEC;
 }
 
 void AlarmTracker::informAlarmsFired(
         const uint64_t& timestampNs,
         unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>>& firedAlarms) {
-    if (firedAlarms.empty() || firedAlarms.find(mInternalAlarm) == firedAlarms.end()) {
+    if (firedAlarms.empty() || mInternalAlarm == nullptr ||
+        firedAlarms.find(mInternalAlarm) == firedAlarms.end()) {
         return;
     }
     if (!mSubscriptions.empty()) {
+        VLOG("AlarmTracker triggers the subscribers.");
         triggerSubscribers(mAlarmConfig.id(), DEFAULT_METRIC_DIMENSION_KEY, mConfigKey,
                            mSubscriptions);
     }
     firedAlarms.erase(mInternalAlarm);
-    mAlarmSec = findNextAlarmSec(timestampNs / NS_PER_SEC);
+    mAlarmSec = findNextAlarmSec((timestampNs-1) / NS_PER_SEC + 1); // round up
     mInternalAlarm = new InternalAlarm{static_cast<uint32_t>(mAlarmSec)};
-    mAlarmMonitor->add(mInternalAlarm);
+    VLOG("AlarmTracker sets the periodic alarm at: %lld", (long long)mAlarmSec);
+    if (mAlarmMonitor != nullptr) {
+        mAlarmMonitor->add(mInternalAlarm);
+    }
 }
 
 }  // namespace statsd

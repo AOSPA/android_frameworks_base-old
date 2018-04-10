@@ -124,7 +124,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     private TintedKeyButtonDrawable mRotateSuggestionIcon;
 
     private GestureHelper mGestureHelper;
-    private DeadZone mDeadZone;
+    private final DeadZone mDeadZone;
     private final NavigationBarTransitions mBarTransitions;
     private final OverviewProxyService mOverviewProxyService;
 
@@ -263,6 +263,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
                 new ButtonDispatcher(R.id.accessibility_button));
         mButtonDispatchers.put(R.id.rotate_suggestion,
                 new ButtonDispatcher(R.id.rotate_suggestion));
+        mDeadZone = new DeadZone(this);
     }
 
     public BarTransitions getBarTransitions() {
@@ -297,6 +298,10 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
+        if (mDeadZone.onTouchEvent(event)) {
+            // Consumed the touch event
+            return true;
+        }
         switch (event.getActionMasked()) {
             case ACTION_DOWN:
                 int x = (int) event.getX();
@@ -319,6 +324,10 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        if (mDeadZone.onTouchEvent(event)) {
+            // Consumed the touch event
+            return true;
+        }
         if (mGestureHelper.onTouchEvent(event)) {
             return true;
         }
@@ -389,7 +398,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
     public boolean isQuickScrubEnabled() {
         return SystemProperties.getBoolean("persist.quickstep.scrub.enabled", true)
-                && mOverviewProxyService.getProxy() != null && isOverviewEnabled()
+                && mOverviewProxyService.isEnabled() && isOverviewEnabled()
                 && ((mOverviewProxyService.getInteractionFlags() & FLAG_DISABLE_QUICK_SCRUB) == 0);
     }
 
@@ -424,13 +433,16 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
             mRecentIcon = getDrawable(ctx,
                     R.drawable.ic_sysbar_recent, R.drawable.ic_sysbar_recent_dark);
             mMenuIcon = getDrawable(ctx, R.drawable.ic_sysbar_menu, R.drawable.ic_sysbar_menu_dark);
-            mAccessibilityIcon = getDrawable(ctx, R.drawable.ic_sysbar_accessibility_button,
-                    R.drawable.ic_sysbar_accessibility_button_dark);
 
             int dualToneDarkTheme = Utils.getThemeAttr(ctx, R.attr.darkIconTheme);
             int dualToneLightTheme = Utils.getThemeAttr(ctx, R.attr.lightIconTheme);
             Context darkContext = new ContextThemeWrapper(ctx, dualToneDarkTheme);
             Context lightContext = new ContextThemeWrapper(ctx, dualToneLightTheme);
+
+            mAccessibilityIcon = getDrawable(darkContext, lightContext,
+                    R.drawable.ic_sysbar_accessibility_button,
+                    R.drawable.ic_sysbar_accessibility_button);
+
             mImeIcon = getDrawable(darkContext, lightContext,
                     R.drawable.ic_ime_switcher_default, R.drawable.ic_ime_switcher_default);
 
@@ -584,7 +596,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         // recents buttons when disconnected from launcher service in screen pinning mode,
         // as they are used for exiting.
         final boolean pinningActive = ActivityManagerWrapper.getInstance().isScreenPinningActive();
-        if (mOverviewProxyService.getProxy() != null) {
+        if (mOverviewProxyService.isEnabled()) {
             // Use interaction flags to show/hide navigation buttons but will be shown if required
             // to exit screen pinning.
             final int flags = mOverviewProxyService.getInteractionFlags();
@@ -815,6 +827,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     @Override
     protected void onDraw(Canvas canvas) {
         mGestureHelper.onDraw(canvas);
+        mDeadZone.onDraw(canvas);
         super.onDraw(canvas);
     }
 
@@ -886,10 +899,8 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     public void reorient() {
         updateCurrentView();
 
-        mDeadZone = (DeadZone) mCurrentView.findViewById(R.id.deadzone);
-
         ((NavigationBarFrame) getRootView()).setDeadZone(mDeadZone);
-        mDeadZone.setDisplayRotation(mCurrentRotation);
+        mDeadZone.onConfigurationChanged(mCurrentRotation);
 
         // force the low profile & disabled states into compliance
         mBarTransitions.init();

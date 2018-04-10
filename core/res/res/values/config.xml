@@ -30,33 +30,32 @@
         <item><xliff:g id="id">@string/status_bar_rotate</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_headset</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_data_saver</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_managed_profile</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_ime</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_sync_failing</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_sync_active</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_cast</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_hotspot</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_location</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_bluetooth</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_nfc</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_tty</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_speakerphone</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_zen</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_mute</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_volume</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_vpn</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_ethernet</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_wifi</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_mobile</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_airplane</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_cdma_eri</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_data_connection</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_phone_evdo_signal</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_phone_signal</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_battery</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_alarm_clock</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_secure</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_clock</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_alarm_clock</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_bluetooth</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_managed_profile</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_cast</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_vpn</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_location</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_hotspot</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_ethernet</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_wifi</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_mobile</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_airplane</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_battery</xliff:g></item>
     </string-array>
 
     <string translatable="false" name="status_bar_rotate">rotate</string>
@@ -327,6 +326,13 @@
          device behaviour is controlled by Settings.Global.NETWORK_METERED_MULTIPATH_PREFERENCE.
          This is the default value of that setting. -->
     <integer translatable="false" name="config_networkMeteredMultipathPreference">0</integer>
+
+    <!-- Default daily multipath budget used by ConnectivityManager.getMultipathPreference()
+         on metered networks. This default quota only used if quota could not be determined from
+         data plan or data limit/warning set by the user. The value that is actually used is
+         controlled by Settings.Global.NETWORK_DEFAULT_DAILY_MULTIPATH_QUOTA_BYTES. This is the
+         default value of that setting. -->
+    <integer translatable="false" name="config_networkDefaultDailyMultipathQuotaBytes">2500000</integer>
 
     <!-- List of regexpressions describing the interface (if any) that represent tetherable
          USB interfaces.  If the device doesn't want to support tethering over USB this should
@@ -1430,6 +1436,9 @@
 
     <!-- True if WallpaperService is enabled -->
     <bool name="config_enableWallpaperService">true</bool>
+
+    <!-- True if the device should block turning display on at boot until wallpaper is ready -->
+    <bool name="config_checkWallpaperAtBoot">true</bool>
 
     <!-- Class name of WallpaperManagerService. -->
     <string name="config_wallpaperManagerServiceName">com.android.server.wallpaper.WallpaperManagerService</string>

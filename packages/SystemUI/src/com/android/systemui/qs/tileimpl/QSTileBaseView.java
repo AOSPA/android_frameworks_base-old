@@ -179,7 +179,7 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
     protected void handleStateChanged(QSTile.State state) {
         int circleColor = getCircleColor(state.state);
         if (circleColor != mCircleColor) {
-            if (mBg.isShown()) {
+            if (mBg.isShown() && animationsEnabled()) {
                 ValueAnimator animator = ValueAnimator.ofArgb(mCircleColor, circleColor)
                         .setDuration(QS_ANIM_LENGTH);
                 animator.addUpdateListener(animation -> mBg.setImageTintList(ColorStateList.valueOf(
@@ -194,6 +194,7 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
         setClickable(state.state != Tile.STATE_UNAVAILABLE);
         mIcon.setIcon(state);
         setContentDescription(state.contentDescription);
+
         mAccessibilityClass = state.expandedAccessibilityClassName;
         if (state instanceof QSTile.BooleanState) {
             boolean newState = ((BooleanState) state).value;
@@ -202,6 +203,10 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
                 mTileState = newState;
             }
         }
+    }
+
+    protected boolean animationsEnabled() {
+        return true;
     }
 
     private int getCircleColor(int state) {
@@ -269,6 +274,10 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
                 info.setText(label);
                 info.setChecked(b);
                 info.setCheckable(true);
+                info.addAction(
+                        new AccessibilityNodeInfo.AccessibilityAction(
+                                AccessibilityNodeInfo.AccessibilityAction.ACTION_LONG_CLICK.getId(),
+                                getResources().getString(R.string.accessibility_long_click_tile)));
             }
         }
     }

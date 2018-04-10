@@ -22,10 +22,12 @@
 #include <android/util/EncodedBuffer.h>
 #include <utils/Errors.h>
 
-using namespace android;
+namespace android {
+namespace os {
+namespace incidentd {
+
 using namespace android::base;
 using namespace android::util;
-using namespace std;
 
 /**
  * Reads data from fd into a buffer, fd must be closed explicitly.
@@ -40,13 +42,13 @@ public:
      * Returns NO_ERROR if there were no errors or if we timed out.
      * Will mark the file O_NONBLOCK.
      */
-    status_t read(unique_fd* fd, int64_t timeoutMs);
+    status_t read(int fd, int64_t timeoutMs);
 
     /**
      * Read the data until we hit eof.
      * Returns NO_ERROR if there were no errors.
      */
-    status_t readFully(unique_fd* fd);
+    status_t readFully(int fd);
 
     /**
      * Read processed results by streaming data to a parsing process, e.g. incident helper.
@@ -58,8 +60,8 @@ public:
      *
      * Poll will return POLLERR if fd is from sysfs, handle this edge case.
      */
-    status_t readProcessedDataInStream(unique_fd* fd, unique_fd* toFd, unique_fd* fromFd,
-                                       int64_t timeoutMs, const bool isSysfs = false);
+    status_t readProcessedDataInStream(int fd, unique_fd toFd, unique_fd fromFd, int64_t timeoutMs,
+                                       const bool isSysfs = false);
 
     /**
      * Whether we timed out.
@@ -103,5 +105,9 @@ private:
     bool mTimedOut;
     bool mTruncated;
 };
+
+}  // namespace incidentd
+}  // namespace os
+}  // namespace android
 
 #endif  // FD_BUFFER_H

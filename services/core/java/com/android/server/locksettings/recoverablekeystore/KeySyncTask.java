@@ -19,12 +19,10 @@ package com.android.server.locksettings.recoverablekeystore;
 import static android.security.keystore.recovery.KeyChainProtectionParams.TYPE_LOCKSCREEN;
 
 import android.annotation.Nullable;
-import android.annotation.NonNull;
 import android.content.Context;
 import android.security.keystore.recovery.KeyChainProtectionParams;
 import android.security.keystore.recovery.KeyChainSnapshot;
 import android.security.keystore.recovery.KeyDerivationParams;
-import android.security.keystore.recovery.TrustedRootCertificates;
 import android.security.keystore.recovery.WrappedApplicationKey;
 import android.util.Log;
 
@@ -79,6 +77,7 @@ public class KeySyncTask implements Runnable {
     private final PlatformKeyManager mPlatformKeyManager;
     private final RecoverySnapshotStorage mRecoverySnapshotStorage;
     private final RecoverySnapshotListenersStorage mSnapshotListenersStorage;
+    private final TestOnlyInsecureCertificateHelper mTestOnlyInsecureCertificateHelper;
 
     public static KeySyncTask newInstance(
             Context context,
@@ -98,7 +97,8 @@ public class KeySyncTask implements Runnable {
                 credentialType,
                 credential,
                 credentialUpdated,
-                PlatformKeyManager.getInstance(context, recoverableKeyStoreDb));
+                PlatformKeyManager.getInstance(context, recoverableKeyStoreDb),
+                new TestOnlyInsecureCertificateHelper());
     }
 
     /**
@@ -110,6 +110,7 @@ public class KeySyncTask implements Runnable {
      * @param credential The credential, encoded as a {@link String}.
      * @param credentialUpdated signals weather credentials were updated.
      * @param platformKeyManager platform key manager
+     * @param TestOnlyInsecureCertificateHelper utility class used for end-to-end tests
      */
     @VisibleForTesting
     KeySyncTask(
@@ -120,7 +121,8 @@ public class KeySyncTask implements Runnable {
             int credentialType,
             String credential,
             boolean credentialUpdated,
-            PlatformKeyManager platformKeyManager) {
+            PlatformKeyManager platformKeyManager,
+            TestOnlyInsecureCertificateHelper TestOnlyInsecureCertificateHelper) {
         mSnapshotListenersStorage = recoverySnapshotListenersStorage;
         mRecoverableKeyStoreDb = recoverableKeyStoreDb;
         mUserId = userId;
@@ -129,6 +131,7 @@ public class KeySyncTask implements Runnable {
         mCredentialUpdated = credentialUpdated;
         mPlatformKeyManager = platformKeyManager;
         mRecoverySnapshotStorage = snapshotStorage;
+        mTestOnlyInsecureCertificateHelper = TestOnlyInsecureCertificateHelper;
     }
 
     @Override
@@ -189,8 +192,9 @@ public class KeySyncTask implements Runnable {
         PublicKey publicKey;
         String rootCertAlias =
                 mRecoverableKeyStoreDb.getActiveRootOfTrust(mUserId, recoveryAgentUid);
+        rootCertAlias = mTestOnlyInsecureCertificateHelper
+                .getDefaultCertificateAliasIfEmpty(rootCertAlias);
 
-        rootCertAlias = replaceEmptyValueWithSecureDefault(rootCertAlias);
         CertPath certPath = mRecoverableKeyStoreDb.getRecoveryServiceCertPath(mUserId,
                 recoveryAgentUid, rootCertAlias);
         if (certPath != null) {
@@ -212,12 +216,18 @@ public class KeySyncTask implements Runnable {
             return;
         }
 
-        // The only place in this class which uses credential value
-        if (!TrustedRootCertificates.GOOGLE_CLOUD_KEY_VAULT_SERVICE_V1_ALIAS.equals(
-                rootCertAlias)) {
-            // TODO: allow only whitelisted LSKF usage
-            Log.w(TAG, "Untrusted root certificate is used by recovery agent "
+        if (mTestOnlyInsecureCertificateHelper.isTestOnlyCertificateAlias(rootCertAlias)) {
+            Log.w(TAG, "Insecure root certificate is used by recovery agent "
                     + recoveryAgentUid);
+            if (mTestOnlyInsecureCertificateHelper.doesCredentialSupportInsecureMode(
+                    mCredentialType, mCredential)) {
+                Log.w(TAG, "Whitelisted credential is used to generate snapshot by "
+                        + "recovery agent "+ recoveryAgentUid);
+            } else {
+                Log.w(TAG, "Non whitelisted credential is used to generate recovery snapshot by "
+                        + recoveryAgentUid + " - ignore attempt.");
+                return; // User secret will not be used.
+            }
         }
 
         byte[] salt = generateSalt();
@@ -239,8 +249,10 @@ public class KeySyncTask implements Runnable {
             return;
         }
 
-        // TODO: filter raw keys based on the root of trust.
-        // It is the only place in the class where raw key material is used.
+        // Only include insecure key material for test
+        if (mTestOnlyInsecureCertificateHelper.isTestOnlyCertificateAlias(rootCertAlias)) {
+            rawKeys = mTestOnlyInsecureCertificateHelper.keepOnlyWhitelistedInsecureKeys(rawKeys);
+        }
         SecretKey recoveryKey;
         try {
             recoveryKey = generateRecoveryKey();
@@ -466,15 +478,5 @@ public class KeySyncTask implements Runnable {
                     .build());
         }
         return keyEntries;
-    }
-
-    private @NonNull String replaceEmptyValueWithSecureDefault(
-            @Nullable String rootCertificateAlias) {
-        if (rootCertificateAlias == null || rootCertificateAlias.isEmpty()) {
-            Log.e(TAG, "rootCertificateAlias is null or empty");
-            // Use the default Google Key Vault Service CA certificate if the alias is not provided
-            rootCertificateAlias = TrustedRootCertificates.GOOGLE_CLOUD_KEY_VAULT_SERVICE_V1_ALIAS;
-        }
-        return rootCertificateAlias;
     }
 }

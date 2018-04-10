@@ -31,6 +31,7 @@ import java.io.CharArrayWriter;
 import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -64,6 +65,9 @@ public class NetworkStats implements Parcelable {
     /** Debug {@link #set} value when the VPN stats are moved out of a vpn UID. */
     public static final int SET_DBG_VPN_OUT = 1002;
 
+    /** Include all interfaces when filtering */
+    public static final String[] INTERFACES_ALL = null;
+
     /** {@link #tag} value for total data across all tags. */
     // TODO: Rename TAG_NONE to TAG_ALL.
     public static final int TAG_NONE = 0;
@@ -93,6 +97,11 @@ public class NetworkStats implements Parcelable {
     public static final int STATS_PER_IFACE = 0;
     /** Denotes a request for stats at the interface and UID level. */
     public static final int STATS_PER_UID = 1;
+
+    private static final String CLATD_INTERFACE_PREFIX = "v4-";
+    // Delta between IPv4 header (20b) and IPv6 header (40b).
+    // Used for correct stats accounting on clatd interfaces.
+    private static final int IPV4V6_HEADER_DELTA = 20;
 
     // TODO: move fields to "mVariable" notation
 
@@ -366,21 +375,25 @@ public class NetworkStats implements Parcelable {
             capacity = newLength;
         }
 
-        iface[size] = entry.iface;
-        uid[size] = entry.uid;
-        set[size] = entry.set;
-        tag[size] = entry.tag;
-        metered[size] = entry.metered;
-        roaming[size] = entry.roaming;
-        defaultNetwork[size] = entry.defaultNetwork;
-        rxBytes[size] = entry.rxBytes;
-        rxPackets[size] = entry.rxPackets;
-        txBytes[size] = entry.txBytes;
-        txPackets[size] = entry.txPackets;
-        operations[size] = entry.operations;
+        setValues(size, entry);
         size++;
 
         return this;
+    }
+
+    private void setValues(int i, Entry entry) {
+        iface[i] = entry.iface;
+        uid[i] = entry.uid;
+        set[i] = entry.set;
+        tag[i] = entry.tag;
+        metered[i] = entry.metered;
+        roaming[i] = entry.roaming;
+        defaultNetwork[i] = entry.defaultNetwork;
+        rxBytes[i] = entry.rxBytes;
+        rxPackets[i] = entry.rxPackets;
+        txBytes[i] = entry.txBytes;
+        txPackets[i] = entry.txPackets;
+        operations[i] = entry.operations;
     }
 
     /**
@@ -752,6 +765,75 @@ public class NetworkStats implements Parcelable {
     }
 
     /**
+     * Calculate and apply adjustments to captured statistics for 464xlat traffic counted twice.
+     *
+     * <p>This mutates both base and stacked traffic stats, to account respectively for
+     * double-counted traffic and IPv4/IPv6 header size difference.
+     *
+     * <p>For 464xlat traffic, xt_qtaguid sees every IPv4 packet twice, once as a native IPv4
+     * packet on the stacked interface, and once as translated to an IPv6 packet on the
+     * base interface. For correct stats accounting on the base interface, every 464xlat
+     * packet needs to be subtracted from the root UID on the base interface both for tx
+     * and rx traffic (http://b/12249687, http:/b/33681750).
+     *
+     * <p>This method will behave fine if {@code stackedIfaces} is an non-synchronized but add-only
+     * {@code ConcurrentHashMap}
+     * @param baseTraffic Traffic on the base interfaces. Will be mutated.
+     * @param stackedTraffic Stats with traffic stacked on top of our ifaces. Will also be mutated.
+     * @param stackedIfaces Mapping ipv6if -> ipv4if interface where traffic is counted on both.
+     */
+    public static void apply464xlatAdjustments(NetworkStats baseTraffic,
+            NetworkStats stackedTraffic, Map<String, String> stackedIfaces) {
+        // Total 464xlat traffic to subtract from uid 0 on all base interfaces.
+        // stackedIfaces may grow afterwards, but NetworkStats will just be resized automatically.
+        final NetworkStats adjustments = new NetworkStats(0, stackedIfaces.size());
+
+        // For recycling
+        Entry entry = null;
+        Entry adjust = new NetworkStats.Entry(IFACE_ALL, 0, 0, 0, 0, 0, 0, 0L, 0L, 0L, 0L, 0L);
+
+        for (int i = 0; i < stackedTraffic.size; i++) {
+            entry = stackedTraffic.getValues(i, entry);
+            if (entry.iface == null || !entry.iface.startsWith(CLATD_INTERFACE_PREFIX)) {
+                continue;
+            }
+            final String baseIface = stackedIfaces.get(entry.iface);
+            if (baseIface == null) {
+                continue;
+            }
+            // Subtract any 464lat traffic seen for the root UID on the current base interface.
+            adjust.iface = baseIface;
+            adjust.rxBytes = -(entry.rxBytes + entry.rxPackets * IPV4V6_HEADER_DELTA);
+            adjust.txBytes = -(entry.txBytes + entry.txPackets * IPV4V6_HEADER_DELTA);
+            adjust.rxPackets = -entry.rxPackets;
+            adjust.txPackets = -entry.txPackets;
+            adjustments.combineValues(adjust);
+
+            // For 464xlat traffic, xt_qtaguid only counts the bytes of the native IPv4 packet sent
+            // on the stacked interface with prefix "v4-" and drops the IPv6 header size after
+            // unwrapping. To account correctly for on-the-wire traffic, add the 20 additional bytes
+            // difference for all packets (http://b/12249687, http:/b/33681750).
+            entry.rxBytes += entry.rxPackets * IPV4V6_HEADER_DELTA;
+            entry.txBytes += entry.txPackets * IPV4V6_HEADER_DELTA;
+            stackedTraffic.setValues(i, entry);
+        }
+
+        baseTraffic.combineAllValues(adjustments);
+    }
+
+    /**
+     * Calculate and apply adjustments to captured statistics for 464xlat traffic counted twice.
+     *
+     * <p>This mutates the object this method is called on. Equivalent to calling
+     * {@link #apply464xlatAdjustments(NetworkStats, NetworkStats, Map)} with {@code this} as
+     * base and stacked traffic.
+     * @param stackedIfaces Mapping ipv6if -> ipv4if interface where traffic is counted on both.
+     */
+    public void apply464xlatAdjustments(Map<String, String> stackedIfaces) {
+        apply464xlatAdjustments(this, this, stackedIfaces);
+    }
+
+    /**
      * Return total statistics grouped by {@link #iface}; doesn't mutate the
      * original structure.
      */
@@ -829,6 +911,39 @@ public class NetworkStats implements Parcelable {
         }
 
         return stats;
+    }
+
+    /**
+     * Only keep entries that match all specified filters.
+     *
+     * <p>This mutates the original structure in place. After this method is called,
+     * size is the number of matching entries, and capacity is the previous capacity.
+     * @param limitUid UID to filter for, or {@link #UID_ALL}.
+     * @param limitIfaces Interfaces to filter for, or {@link #INTERFACES_ALL}.
+     * @param limitTag Tag to filter for, or {@link #TAG_ALL}.
+     */
+    public void filter(int limitUid, String[] limitIfaces, int limitTag) {
+        if (limitUid == UID_ALL && limitTag == TAG_ALL && limitIfaces == INTERFACES_ALL) {
+            return;
+        }
+
+        Entry entry = new Entry();
+        int nextOutputEntry = 0;
+        for (int i = 0; i < size; i++) {
+            entry = getValues(i, entry);
+            final boolean matches =
+                    (limitUid == UID_ALL || limitUid == entry.uid)
+                    && (limitTag == TAG_ALL || limitTag == entry.tag)
+                    && (limitIfaces == INTERFACES_ALL
+                            || ArrayUtils.contains(limitIfaces, entry.iface));
+
+            if (matches) {
+                setValues(nextOutputEntry, entry);
+                nextOutputEntry++;
+            }
+        }
+
+        size = nextOutputEntry;
     }
 
     public void dump(String prefix, PrintWriter pw) {

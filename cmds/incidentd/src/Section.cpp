@@ -43,9 +43,12 @@
 #include "frameworks/base/core/proto/android/util/log.proto.h"
 #include "incidentd_util.h"
 
+namespace android {
+namespace os {
+namespace incidentd {
+
 using namespace android::base;
 using namespace android::util;
-using namespace std;
 
 // special section ids
 const int FIELD_ID_INCIDENT_HEADER = 1;
@@ -264,8 +267,9 @@ status_t FileSection::Execute(ReportRequestSet* requests) const {
     }
 
     // parent process
-    status_t readStatus = buffer.readProcessedDataInStream(
-            &fd, &p2cPipe.writeFd(), &c2pPipe.readFd(), this->timeoutMs, mIsSysfs);
+    status_t readStatus = buffer.readProcessedDataInStream(fd.get(), std::move(p2cPipe.writeFd()),
+                                                           std::move(c2pPipe.readFd()),
+                                                           this->timeoutMs, mIsSysfs);
 
     if (readStatus != NO_ERROR || buffer.timedOut()) {
         ALOGW("FileSection '%s' failed to read data from incident helper: %s, timedout: %s",
@@ -319,8 +323,10 @@ status_t GZipSection::Execute(ReportRequestSet* requests) const {
         index++;  // look at the next file.
     }
     VLOG("GZipSection is using file %s, fd=%d", mFilenames[index], fd.get());
-    if (fd.get() == -1) return -1;
-
+    if (fd.get() == -1) {
+        ALOGW("GZipSection %s can't open all the files", this->name.string());
+        return NO_ERROR;  // e.g. LAST_KMSG will reach here in user build.
+    }
     FdBuffer buffer;
     Fpipe p2cPipe;
     Fpipe c2pPipe;
@@ -354,9 +360,9 @@ status_t GZipSection::Execute(ReportRequestSet* requests) const {
     VLOG("GZipSection '%s' editPos=%zd, dataBeginAt=%zd", this->name.string(), editPos,
          dataBeginAt);
 
-    status_t readStatus =
-            buffer.readProcessedDataInStream(&fd, &p2cPipe.writeFd(), &c2pPipe.readFd(),
-                                             this->timeoutMs, isSysfs(mFilenames[index]));
+    status_t readStatus = buffer.readProcessedDataInStream(
+            fd.get(), std::move(p2cPipe.writeFd()), std::move(c2pPipe.readFd()), this->timeoutMs,
+            isSysfs(mFilenames[index]));
 
     if (readStatus != NO_ERROR || buffer.timedOut()) {
         ALOGW("GZipSection '%s' failed to read data from gzip: %s, timedout: %s",
@@ -466,7 +472,7 @@ status_t WorkerThreadSection::Execute(ReportRequestSet* requests) const {
     pthread_attr_destroy(&attr);
 
     // Loop reading until either the timeout or the worker side is done (i.e. eof).
-    err = buffer.read(&data->pipe.readFd(), this->timeoutMs);
+    err = buffer.read(data->pipe.readFd().get(), this->timeoutMs);
     if (err != NO_ERROR) {
         // TODO: Log this error into the incident report.
         ALOGW("WorkerThreadSection '%s' reader failed with error '%s'", this->name.string(),
@@ -573,7 +579,7 @@ status_t CommandSection::Execute(ReportRequestSet* requests) const {
     }
 
     cmdPipe.writeFd().reset();
-    status_t readStatus = buffer.read(&ihPipe.readFd(), this->timeoutMs);
+    status_t readStatus = buffer.read(ihPipe.readFd().get(), this->timeoutMs);
     if (readStatus != NO_ERROR || buffer.timedOut()) {
         ALOGW("CommandSection '%s' failed to read data from incident helper: %s, timedout: %s",
               this->name.string(), strerror(-readStatus), buffer.timedOut() ? "true" : "false");
@@ -892,7 +898,7 @@ status_t TombstoneSection::BlockingCall(int pipeWriteFd) const {
         // Parent process.
         // Read from the pipe concurrently to avoid blocking the child.
         FdBuffer buffer;
-        err = buffer.readFully(&dumpPipe.readFd());
+        err = buffer.readFully(dumpPipe.readFd().get());
         if (err != NO_ERROR) {
             ALOGW("TombstoneSection '%s' failed to read stack dump: %d", this->name.string(), err);
             dumpPipe.readFd().reset();
@@ -906,7 +912,7 @@ status_t TombstoneSection::BlockingCall(int pipeWriteFd) const {
             dump[i] = iterator.next();
             i++;
         }
-        long long token = proto.start(android::os::BackTraceProto::TRACES);
+        uint64_t token = proto.start(android::os::BackTraceProto::TRACES);
         proto.write(android::os::BackTraceProto::Stack::PID, pid);
         proto.write(android::os::BackTraceProto::Stack::DUMP, dump.get(), i);
         proto.write(android::os::BackTraceProto::Stack::DUMP_DURATION_NS,
@@ -918,3 +924,7 @@ status_t TombstoneSection::BlockingCall(int pipeWriteFd) const {
     proto.flush(pipeWriteFd);
     return err;
 }
+
+}  // namespace incidentd
+}  // namespace os
+}  // namespace android

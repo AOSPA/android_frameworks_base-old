@@ -7809,6 +7809,14 @@ public final class Settings {
                 "suppress_auto_battery_saver_suggestion";
 
         /**
+         * List of packages, which data need to be unconditionally cleared before full restore.
+         * Type: string
+         * @hide
+         */
+        public static final String PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE =
+                "packages_to_clear_data_before_full_restore";
+
+        /**
          * This are the settings to be backed up.
          *
          * NOTE: Settings are backed up and restored in the order they appear
@@ -9212,8 +9220,8 @@ public final class Settings {
         public static final String CARRIER_APP_WHITELIST = "carrier_app_whitelist";
 
         /**
-         * Map of package name to application names.  Package names must be lower cased as they are
-         * used as a key in the map.  The application names cannot and will not be localized.
+         * Map of package name to application names. The application names cannot and will not be
+         * localized. App names may not contain colons or semicolons.
          *
          * The value is "packageName1:appName1;packageName2:appName2;..."
          * @hide
@@ -9299,6 +9307,15 @@ public final class Settings {
         */
        public static final String NETWORK_METERED_MULTIPATH_PREFERENCE =
                "network_metered_multipath_preference";
+
+        /**
+         * Default daily multipath budget used by ConnectivityManager.getMultipathPreference()
+         * on metered networks. This default quota is only used if quota could not be determined
+         * from data plan or data limit/warning set by the user.
+         * @hide
+         */
+        public static final String NETWORK_DEFAULT_DAILY_MULTIPATH_QUOTA_BYTES =
+                "network_default_daily_multipath_quota_bytes";
 
         /**
          * Network watchlist last report time.
@@ -11053,7 +11070,14 @@ public final class Settings {
          */
         public static final String LOW_POWER_MODE_TRIGGER_LEVEL_MAX = "low_power_trigger_level_max";
 
-         /**
+        /**
+         * See com.android.settingslib.fuelgauge.BatterySaverUtils.
+         * @hide
+         */
+        public static final String LOW_POWER_MODE_SUGGESTION_PARAMS =
+                "low_power_mode_suggestion_params";
+
+        /**
          * If not 0, the activity manager will aggressively finish activities and
          * processes as soon as they are no longer needed.  If 0, the normal
          * extended lifetime is used.
