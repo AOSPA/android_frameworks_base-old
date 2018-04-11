@@ -163,6 +163,7 @@ package android {
     field public static final java.lang.String REVOKE_RUNTIME_PERMISSIONS = "android.permission.REVOKE_RUNTIME_PERMISSIONS";
     field public static final java.lang.String SCORE_NETWORKS = "android.permission.SCORE_NETWORKS";
     field public static final java.lang.String SEND_RESPOND_VIA_MESSAGE = "android.permission.SEND_RESPOND_VIA_MESSAGE";
+    field public static final java.lang.String SEND_SHOW_SUSPENDED_APP_DETAILS = "android.permission.SEND_SHOW_SUSPENDED_APP_DETAILS";
     field public static final java.lang.String SEND_SMS_NO_CONFIRMATION = "android.permission.SEND_SMS_NO_CONFIRMATION";
     field public static final java.lang.String SERIAL_PORT = "android.permission.SERIAL_PORT";
     field public static final java.lang.String SET_ACTIVITY_WATCHER = "android.permission.SET_ACTIVITY_WATCHER";
@@ -316,6 +317,7 @@ package android.app {
 
   public class BroadcastOptions {
     method public static android.app.BroadcastOptions makeBasic();
+    method public void setDontSendToRestrictedApps(boolean);
     method public void setTemporaryAppWhitelistDuration(long);
     method public android.os.Bundle toBundle();
   }
@@ -451,7 +453,7 @@ package android.app.admin {
     field public static final int STATE_USER_UNMANAGED = 0; // 0x0
   }
 
-  public class SystemUpdatePolicy implements android.os.Parcelable {
+  public final class SystemUpdatePolicy implements android.os.Parcelable {
     method public int describeContents();
     method public android.app.admin.SystemUpdatePolicy.InstallationOption getInstallationOptionAt(long);
     method public void writeToParcel(android.os.Parcel, int);
@@ -878,6 +880,7 @@ package android.content {
     field public static final java.lang.String ACTION_QUERY_PACKAGE_RESTART = "android.intent.action.QUERY_PACKAGE_RESTART";
     field public static final java.lang.String ACTION_RESOLVE_INSTANT_APP_PACKAGE = "android.intent.action.RESOLVE_INSTANT_APP_PACKAGE";
     field public static final java.lang.String ACTION_REVIEW_PERMISSIONS = "android.intent.action.REVIEW_PERMISSIONS";
+    field public static final java.lang.String ACTION_SHOW_SUSPENDED_APP_DETAILS = "android.intent.action.SHOW_SUSPENDED_APP_DETAILS";
     field public static final deprecated java.lang.String ACTION_SIM_STATE_CHANGED = "android.intent.action.SIM_STATE_CHANGED";
     field public static final java.lang.String ACTION_SPLIT_CONFIGURATION_CHANGED = "android.intent.action.SPLIT_CONFIGURATION_CHANGED";
     field public static final java.lang.String ACTION_UPGRADE_SETUP = "android.intent.action.UPGRADE_SETUP";
@@ -1024,7 +1027,6 @@ package android.content.pm {
     method public abstract java.util.List<android.content.pm.IntentFilterVerificationInfo> getIntentFilterVerifications(java.lang.String);
     method public abstract int getIntentVerificationStatusAsUser(java.lang.String, int);
     method public abstract int getPermissionFlags(java.lang.String, java.lang.String, android.os.UserHandle);
-    method public android.os.PersistableBundle getSuspendedPackageAppExtras(java.lang.String);
     method public abstract void grantRuntimePermission(java.lang.String, java.lang.String, android.os.UserHandle);
     method public abstract int installExistingPackage(java.lang.String) throws android.content.pm.PackageManager.NameNotFoundException;
     method public abstract int installExistingPackage(java.lang.String, int) throws android.content.pm.PackageManager.NameNotFoundException;
@@ -1036,7 +1038,6 @@ package android.content.pm {
     method public abstract boolean setDefaultBrowserPackageNameAsUser(java.lang.String, int);
     method public void setHarmfulAppWarning(java.lang.String, java.lang.CharSequence);
     method public java.lang.String[] setPackagesSuspended(java.lang.String[], boolean, android.os.PersistableBundle, android.os.PersistableBundle, java.lang.String);
-    method public void setSuspendedPackageAppExtras(java.lang.String, android.os.PersistableBundle);
     method public abstract void setUpdateAvailable(java.lang.String, boolean);
     method public abstract boolean updateIntentVerificationStatusAsUser(java.lang.String, int, int);
     method public abstract void updatePermissionFlags(java.lang.String, java.lang.String, int, int, android.os.UserHandle);
@@ -1252,6 +1253,7 @@ package android.hardware.display {
     method public android.hardware.display.BrightnessConfiguration getBrightnessConfiguration();
     method public java.util.List<android.hardware.display.BrightnessChangeEvent> getBrightnessEvents();
     method public android.hardware.display.BrightnessConfiguration getDefaultBrightnessConfiguration();
+    method public android.util.Pair<float[], float[]> getMinimumBrightnessCurve();
     method public android.graphics.Point getStableDisplaySize();
     method public void setBrightnessConfiguration(android.hardware.display.BrightnessConfiguration);
     method public void setSaturationLevel(float);
@@ -3081,10 +3083,10 @@ package android.net {
   }
 
   public static final class IpSecManager.IpSecTunnelInterface implements java.lang.AutoCloseable {
-    method public void addAddress(android.net.LinkAddress) throws java.io.IOException;
+    method public void addAddress(java.net.InetAddress, int) throws java.io.IOException;
     method public void close();
     method public java.lang.String getInterfaceName();
-    method public void removeAddress(android.net.LinkAddress) throws java.io.IOException;
+    method public void removeAddress(java.net.InetAddress, int) throws java.io.IOException;
   }
 
   public final class IpSecTransform implements java.lang.AutoCloseable {
@@ -4772,8 +4774,8 @@ package android.service.textclassifier {
     method public final android.view.textclassifier.TextClassifier getLocalTextClassifier();
     method public final android.os.IBinder onBind(android.content.Intent);
     method public abstract void onClassifyText(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.TextClassification.Request, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextClassification>);
-    method public abstract void onCreateTextClassificationSession(android.view.textclassifier.TextClassificationContext, android.view.textclassifier.TextClassificationSessionId);
-    method public abstract void onDestroyTextClassificationSession(android.view.textclassifier.TextClassificationSessionId);
+    method public void onCreateTextClassificationSession(android.view.textclassifier.TextClassificationContext, android.view.textclassifier.TextClassificationSessionId);
+    method public void onDestroyTextClassificationSession(android.view.textclassifier.TextClassificationSessionId);
     method public abstract void onGenerateLinks(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.TextLinks.Request, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextLinks>);
     method public void onSelectionEvent(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.SelectionEvent);
     method public abstract void onSuggestSelection(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.TextSelection.Request, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextSelection>);
@@ -5119,6 +5121,7 @@ package android.telephony {
   }
 
   public abstract class NetworkService extends android.app.Service {
+    ctor public NetworkService();
     method protected abstract android.telephony.NetworkService.NetworkServiceProvider createNetworkServiceProvider(int);
     field public static final java.lang.String NETWORK_SERVICE_EXTRA_SLOT_ID = "android.telephony.extra.SLOT_ID";
     field public static final java.lang.String NETWORK_SERVICE_INTERFACE = "android.telephony.NetworkService";
@@ -5187,7 +5190,7 @@ package android.telephony {
   }
 
   public final class SubscriptionPlan implements android.os.Parcelable {
-    method public java.util.Iterator<android.util.Pair<java.time.ZonedDateTime, java.time.ZonedDateTime>> cycleIterator();
+    method public java.util.Iterator<android.util.Range<java.time.ZonedDateTime>> cycleIterator();
     method public int describeContents();
     method public int getDataLimitBehavior();
     method public long getDataLimitBytes();
@@ -5209,9 +5212,10 @@ package android.telephony {
   public static class SubscriptionPlan.Builder {
     method public android.telephony.SubscriptionPlan build();
     method public static android.telephony.SubscriptionPlan.Builder createNonrecurring(java.time.ZonedDateTime, java.time.ZonedDateTime);
-    method public static android.telephony.SubscriptionPlan.Builder createRecurringDaily(java.time.ZonedDateTime);
-    method public static android.telephony.SubscriptionPlan.Builder createRecurringMonthly(java.time.ZonedDateTime);
-    method public static android.telephony.SubscriptionPlan.Builder createRecurringWeekly(java.time.ZonedDateTime);
+    method public static android.telephony.SubscriptionPlan.Builder createRecurring(java.time.ZonedDateTime, java.time.Period);
+    method public static deprecated android.telephony.SubscriptionPlan.Builder createRecurringDaily(java.time.ZonedDateTime);
+    method public static deprecated android.telephony.SubscriptionPlan.Builder createRecurringMonthly(java.time.ZonedDateTime);
+    method public static deprecated android.telephony.SubscriptionPlan.Builder createRecurringWeekly(java.time.ZonedDateTime);
     method public android.telephony.SubscriptionPlan.Builder setDataLimit(long, int);
     method public android.telephony.SubscriptionPlan.Builder setDataUsage(long, long);
     method public android.telephony.SubscriptionPlan.Builder setSummary(java.lang.CharSequence);
@@ -5400,6 +5404,7 @@ package android.telephony.data {
   }
 
   public abstract class DataService extends android.app.Service {
+    ctor public DataService();
     method public abstract android.telephony.data.DataService.DataServiceProvider createDataServiceProvider(int);
     field public static final java.lang.String DATA_SERVICE_EXTRA_SLOT_ID = "android.telephony.data.extra.SLOT_ID";
     field public static final java.lang.String DATA_SERVICE_INTERFACE = "android.telephony.data.DataService";

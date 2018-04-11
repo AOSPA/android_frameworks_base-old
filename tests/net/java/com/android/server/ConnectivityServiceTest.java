@@ -17,6 +17,9 @@
 package com.android.server;
 
 import static android.net.ConnectivityManager.CONNECTIVITY_ACTION;
+import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_OFF;
+import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_OPPORTUNISTIC;
+import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME;
 import static android.net.ConnectivityManager.TYPE_ETHERNET;
 import static android.net.ConnectivityManager.TYPE_MOBILE;
 import static android.net.ConnectivityManager.TYPE_MOBILE_FOTA;
@@ -70,6 +73,7 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 
@@ -157,6 +161,7 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -180,6 +185,9 @@ public class ConnectivityServiceTest {
 
     private static final int TIMEOUT_MS = 500;
     private static final int TEST_LINGER_DELAY_MS = 120;
+
+    private static final String MOBILE_IFNAME = "test_rmnet_data0";
+    private static final String WIFI_IFNAME = "test_wlan0";
 
     private MockContext mServiceContext;
     private WrappedConnectivityService mService;
@@ -751,7 +759,7 @@ public class ConnectivityServiceTest {
 
     // NetworkMonitor implementation allowing overriding of Internet connectivity probe result.
     private class WrappedNetworkMonitor extends NetworkMonitor {
-        public Handler connectivityHandler;
+        public final Handler connectivityHandler;
         // HTTP response code fed back to NetworkMonitor for Internet connectivity probe.
         public int gen204ProbeResult = 500;
         public String gen204ProbeRedirectUrl = null;
@@ -872,6 +880,10 @@ public class ConnectivityServiceTest {
             return mMetricsService;
         }
 
+        @Override
+        protected void registerNetdEventCallback() {
+        }
+
         public WrappedNetworkMonitor getLastCreatedWrappedNetworkMonitor() {
             return mLastCreatedNetworkMonitor;
         }
@@ -928,6 +940,7 @@ public class ConnectivityServiceTest {
         // Ensure that the default setting for Captive Portals is used for most tests
         setCaptivePortalMode(Settings.Global.CAPTIVE_PORTAL_MODE_PROMPT);
         setMobileDataAlwaysOn(false);
+        setPrivateDnsSettings(PRIVATE_DNS_MODE_OFF, "ignored.example.com");
     }
 
     @After
@@ -2582,6 +2595,14 @@ public class ConnectivityServiceTest {
         waitForIdle();
     }
 
+    private void setPrivateDnsSettings(String mode, String specifier) {
+        final ContentResolver cr = mServiceContext.getContentResolver();
+        Settings.Global.putString(cr, Settings.Global.PRIVATE_DNS_MODE, mode);
+        Settings.Global.putString(cr, Settings.Global.PRIVATE_DNS_SPECIFIER, specifier);
+        mService.updatePrivateDnsSettings();
+        waitForIdle();
+    }
+
     private boolean isForegroundNetwork(MockNetworkAgent network) {
         NetworkCapabilities nc = mCm.getNetworkCapabilities(network.getNetwork());
         assertNotNull(nc);
@@ -3583,7 +3604,7 @@ public class ConnectivityServiceTest {
         mCm.registerNetworkCallback(networkRequest, networkCallback);
 
         LinkProperties lp = new LinkProperties();
-        lp.setInterfaceName("wlan0");
+        lp.setInterfaceName(WIFI_IFNAME);
         LinkAddress myIpv4Address = new LinkAddress("192.168.12.3/24");
         RouteInfo myIpv4DefaultRoute = new RouteInfo((IpPrefix) null,
                 NetworkUtils.numericToInetAddress("192.168.12.1"), lp.getInterfaceName());
@@ -3672,51 +3693,62 @@ public class ConnectivityServiceTest {
 
     @Test
     public void testBasicDnsConfigurationPushed() throws Exception {
-        final String IFNAME = "test_rmnet_data0";
-        final String[] EMPTY_TLS_SERVERS = new String[0];
+        setPrivateDnsSettings(PRIVATE_DNS_MODE_OPPORTUNISTIC, "ignored.example.com");
+        ArgumentCaptor<String[]> tlsServers = ArgumentCaptor.forClass(String[].class);
+
+        // Clear any interactions that occur as a result of CS starting up.
+        reset(mNetworkManagementService);
+
+        final String[] EMPTY_STRING_ARRAY = new String[0];
         mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
         waitForIdle();
         verify(mNetworkManagementService, never()).setDnsConfigurationForNetwork(
-                anyInt(), any(), any(), any(), anyString(), eq(EMPTY_TLS_SERVERS));
+                anyInt(), eq(EMPTY_STRING_ARRAY), any(), any(), eq(""), eq(EMPTY_STRING_ARRAY));
+        verifyNoMoreInteractions(mNetworkManagementService);
 
         final LinkProperties cellLp = new LinkProperties();
-        cellLp.setInterfaceName(IFNAME);
+        cellLp.setInterfaceName(MOBILE_IFNAME);
         // Add IPv4 and IPv6 default routes, because DNS-over-TLS code does
         // "is-reachable" testing in order to not program netd with unreachable
         // nameservers that it might try repeated to validate.
         cellLp.addLinkAddress(new LinkAddress("192.0.2.4/24"));
-        cellLp.addRoute(new RouteInfo((IpPrefix) null, InetAddress.getByName("192.0.2.4"), IFNAME));
+        cellLp.addRoute(new RouteInfo((IpPrefix) null, InetAddress.getByName("192.0.2.4"),
+                MOBILE_IFNAME));
         cellLp.addLinkAddress(new LinkAddress("2001:db8:1::1/64"));
-        cellLp.addRoute(
-                new RouteInfo((IpPrefix) null, InetAddress.getByName("2001:db8:1::1"), IFNAME));
+        cellLp.addRoute(new RouteInfo((IpPrefix) null, InetAddress.getByName("2001:db8:1::1"),
+                MOBILE_IFNAME));
         mCellNetworkAgent.sendLinkProperties(cellLp);
         mCellNetworkAgent.connect(false);
         waitForIdle();
-        verify(mNetworkManagementService, times(1)).setDnsConfigurationForNetwork(
-                anyInt(), mStringArrayCaptor.capture(), any(), any(),
-                anyString(), eq(EMPTY_TLS_SERVERS));
         // CS tells netd about the empty DNS config for this network.
-        assertEmpty(mStringArrayCaptor.getValue());
+        verify(mNetworkManagementService, atLeastOnce()).setDnsConfigurationForNetwork(
+                anyInt(), eq(EMPTY_STRING_ARRAY), any(), any(), eq(""), eq(EMPTY_STRING_ARRAY));
         reset(mNetworkManagementService);
 
         cellLp.addDnsServer(InetAddress.getByName("2001:db8::1"));
         mCellNetworkAgent.sendLinkProperties(cellLp);
         waitForIdle();
-        verify(mNetworkManagementService, times(1)).setDnsConfigurationForNetwork(
+        verify(mNetworkManagementService, atLeastOnce()).setDnsConfigurationForNetwork(
                 anyInt(), mStringArrayCaptor.capture(), any(), any(),
-                anyString(), eq(EMPTY_TLS_SERVERS));
+                eq(""), tlsServers.capture());
         assertEquals(1, mStringArrayCaptor.getValue().length);
         assertTrue(ArrayUtils.contains(mStringArrayCaptor.getValue(), "2001:db8::1"));
+        // Opportunistic mode.
+        assertTrue(ArrayUtils.contains(tlsServers.getValue(), "2001:db8::1"));
         reset(mNetworkManagementService);
 
         cellLp.addDnsServer(InetAddress.getByName("192.0.2.1"));
         mCellNetworkAgent.sendLinkProperties(cellLp);
         waitForIdle();
-        verify(mNetworkManagementService, times(1)).setDnsConfigurationForNetwork(
+        verify(mNetworkManagementService, atLeastOnce()).setDnsConfigurationForNetwork(
                 anyInt(), mStringArrayCaptor.capture(), any(), any(),
-                anyString(), eq(EMPTY_TLS_SERVERS));
+                eq(""), tlsServers.capture());
         assertEquals(2, mStringArrayCaptor.getValue().length);
         assertTrue(ArrayUtils.containsAll(mStringArrayCaptor.getValue(),
+                new String[]{"2001:db8::1", "192.0.2.1"}));
+        // Opportunistic mode.
+        assertEquals(2, tlsServers.getValue().length);
+        assertTrue(ArrayUtils.containsAll(tlsServers.getValue(),
                 new String[]{"2001:db8::1", "192.0.2.1"}));
         reset(mNetworkManagementService);
 
@@ -3730,13 +3762,202 @@ public class ConnectivityServiceTest {
                 mCellNetworkAgent.getNetwork().netId,
                 new DnsManager.PrivateDnsConfig(TLS_SPECIFIER, TLS_IPS)));
         waitForIdle();
-        verify(mNetworkManagementService, times(1)).setDnsConfigurationForNetwork(
+        verify(mNetworkManagementService, atLeastOnce()).setDnsConfigurationForNetwork(
                 anyInt(), mStringArrayCaptor.capture(), any(), any(),
                 eq(TLS_SPECIFIER), eq(TLS_SERVERS));
         assertEquals(2, mStringArrayCaptor.getValue().length);
         assertTrue(ArrayUtils.containsAll(mStringArrayCaptor.getValue(),
                 new String[]{"2001:db8::1", "192.0.2.1"}));
         reset(mNetworkManagementService);
+    }
+
+    @Test
+    public void testPrivateDnsSettingsChange() throws Exception {
+        final String[] EMPTY_STRING_ARRAY = new String[0];
+        ArgumentCaptor<String[]> tlsServers = ArgumentCaptor.forClass(String[].class);
+
+        // Clear any interactions that occur as a result of CS starting up.
+        reset(mNetworkManagementService);
+
+        // The default on Android is opportunistic mode ("Automatic").
+        setPrivateDnsSettings(PRIVATE_DNS_MODE_OPPORTUNISTIC, "ignored.example.com");
+
+        final TestNetworkCallback cellNetworkCallback = new TestNetworkCallback();
+        final NetworkRequest cellRequest = new NetworkRequest.Builder()
+                .addTransportType(TRANSPORT_CELLULAR).build();
+        mCm.requestNetwork(cellRequest, cellNetworkCallback);
+
+        mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        waitForIdle();
+        // CS tells netd about the empty DNS config for this network.
+        verify(mNetworkManagementService, never()).setDnsConfigurationForNetwork(
+                anyInt(), eq(EMPTY_STRING_ARRAY), any(), any(), eq(""), eq(EMPTY_STRING_ARRAY));
+        verifyNoMoreInteractions(mNetworkManagementService);
+
+        final LinkProperties cellLp = new LinkProperties();
+        cellLp.setInterfaceName(MOBILE_IFNAME);
+        // Add IPv4 and IPv6 default routes, because DNS-over-TLS code does
+        // "is-reachable" testing in order to not program netd with unreachable
+        // nameservers that it might try repeated to validate.
+        cellLp.addLinkAddress(new LinkAddress("192.0.2.4/24"));
+        cellLp.addRoute(new RouteInfo((IpPrefix) null, InetAddress.getByName("192.0.2.4"),
+                MOBILE_IFNAME));
+        cellLp.addLinkAddress(new LinkAddress("2001:db8:1::1/64"));
+        cellLp.addRoute(new RouteInfo((IpPrefix) null, InetAddress.getByName("2001:db8:1::1"),
+                MOBILE_IFNAME));
+        cellLp.addDnsServer(InetAddress.getByName("2001:db8::1"));
+        cellLp.addDnsServer(InetAddress.getByName("192.0.2.1"));
+
+        mCellNetworkAgent.sendLinkProperties(cellLp);
+        mCellNetworkAgent.connect(false);
+        waitForIdle();
+        verify(mNetworkManagementService, atLeastOnce()).setDnsConfigurationForNetwork(
+                anyInt(), mStringArrayCaptor.capture(), any(), any(),
+                eq(""), tlsServers.capture());
+        assertEquals(2, mStringArrayCaptor.getValue().length);
+        assertTrue(ArrayUtils.containsAll(mStringArrayCaptor.getValue(),
+                new String[]{"2001:db8::1", "192.0.2.1"}));
+        // Opportunistic mode.
+        assertEquals(2, tlsServers.getValue().length);
+        assertTrue(ArrayUtils.containsAll(tlsServers.getValue(),
+                new String[]{"2001:db8::1", "192.0.2.1"}));
+        reset(mNetworkManagementService);
+        cellNetworkCallback.expectCallback(CallbackState.AVAILABLE, mCellNetworkAgent);
+        cellNetworkCallback.expectCallback(CallbackState.NETWORK_CAPABILITIES,
+                mCellNetworkAgent);
+        CallbackInfo cbi = cellNetworkCallback.expectCallback(
+                CallbackState.LINK_PROPERTIES, mCellNetworkAgent);
+        cellNetworkCallback.assertNoCallback();
+        assertFalse(((LinkProperties)cbi.arg).isPrivateDnsActive());
+        assertNull(((LinkProperties)cbi.arg).getPrivateDnsServerName());
+
+        setPrivateDnsSettings(PRIVATE_DNS_MODE_OFF, "ignored.example.com");
+        verify(mNetworkManagementService, times(1)).setDnsConfigurationForNetwork(
+                anyInt(), mStringArrayCaptor.capture(), any(), any(),
+                eq(""), eq(EMPTY_STRING_ARRAY));
+        assertEquals(2, mStringArrayCaptor.getValue().length);
+        assertTrue(ArrayUtils.containsAll(mStringArrayCaptor.getValue(),
+                new String[]{"2001:db8::1", "192.0.2.1"}));
+        reset(mNetworkManagementService);
+        cellNetworkCallback.assertNoCallback();
+
+        setPrivateDnsSettings(PRIVATE_DNS_MODE_OPPORTUNISTIC, "ignored.example.com");
+        verify(mNetworkManagementService, atLeastOnce()).setDnsConfigurationForNetwork(
+                anyInt(), mStringArrayCaptor.capture(), any(), any(),
+                eq(""), tlsServers.capture());
+        assertEquals(2, mStringArrayCaptor.getValue().length);
+        assertTrue(ArrayUtils.containsAll(mStringArrayCaptor.getValue(),
+                new String[]{"2001:db8::1", "192.0.2.1"}));
+        assertEquals(2, tlsServers.getValue().length);
+        assertTrue(ArrayUtils.containsAll(tlsServers.getValue(),
+                new String[]{"2001:db8::1", "192.0.2.1"}));
+        reset(mNetworkManagementService);
+        cellNetworkCallback.assertNoCallback();
+
+        setPrivateDnsSettings(PRIVATE_DNS_MODE_PROVIDER_HOSTNAME, "strict.example.com");
+        // Can't test dns configuration for strict mode without properly mocking
+        // out the DNS lookups, but can test that LinkProperties is updated.
+        cbi = cellNetworkCallback.expectCallback(CallbackState.LINK_PROPERTIES,
+                mCellNetworkAgent);
+        cellNetworkCallback.assertNoCallback();
+        assertTrue(((LinkProperties)cbi.arg).isPrivateDnsActive());
+        assertEquals("strict.example.com", ((LinkProperties)cbi.arg).getPrivateDnsServerName());
+    }
+
+    @Test
+    public void testLinkPropertiesWithPrivateDnsValidationEvents() throws Exception {
+        // The default on Android is opportunistic mode ("Automatic").
+        setPrivateDnsSettings(PRIVATE_DNS_MODE_OPPORTUNISTIC, "ignored.example.com");
+
+        final TestNetworkCallback cellNetworkCallback = new TestNetworkCallback();
+        final NetworkRequest cellRequest = new NetworkRequest.Builder()
+                .addTransportType(TRANSPORT_CELLULAR).build();
+        mCm.requestNetwork(cellRequest, cellNetworkCallback);
+
+        mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        waitForIdle();
+        LinkProperties lp = new LinkProperties();
+        mCellNetworkAgent.sendLinkProperties(lp);
+        mCellNetworkAgent.connect(false);
+        waitForIdle();
+        cellNetworkCallback.expectCallback(CallbackState.AVAILABLE, mCellNetworkAgent);
+        cellNetworkCallback.expectCallback(CallbackState.NETWORK_CAPABILITIES,
+                mCellNetworkAgent);
+        CallbackInfo cbi = cellNetworkCallback.expectCallback(
+                CallbackState.LINK_PROPERTIES, mCellNetworkAgent);
+        cellNetworkCallback.assertNoCallback();
+        assertFalse(((LinkProperties)cbi.arg).isPrivateDnsActive());
+        assertNull(((LinkProperties)cbi.arg).getPrivateDnsServerName());
+        Set<InetAddress> dnsServers = new HashSet<>();
+        checkDnsServers(cbi.arg, dnsServers);
+
+        // Send a validation event for a server that is not part of the current
+        // resolver config. The validation event should be ignored.
+        mService.mNetdEventCallback.onPrivateDnsValidationEvent(
+                mCellNetworkAgent.getNetwork().netId, "", "145.100.185.18", true);
+        cellNetworkCallback.assertNoCallback();
+
+        // Add a dns server to the LinkProperties.
+        LinkProperties lp2 = new LinkProperties(lp);
+        lp2.addDnsServer(InetAddress.getByName("145.100.185.16"));
+        mCellNetworkAgent.sendLinkProperties(lp2);
+        cbi = cellNetworkCallback.expectCallback(CallbackState.LINK_PROPERTIES,
+                mCellNetworkAgent);
+        cellNetworkCallback.assertNoCallback();
+        assertFalse(((LinkProperties)cbi.arg).isPrivateDnsActive());
+        assertNull(((LinkProperties)cbi.arg).getPrivateDnsServerName());
+        dnsServers.add(InetAddress.getByName("145.100.185.16"));
+        checkDnsServers(cbi.arg, dnsServers);
+
+        // Send a validation event containing a hostname that is not part of
+        // the current resolver config. The validation event should be ignored.
+        mService.mNetdEventCallback.onPrivateDnsValidationEvent(
+                mCellNetworkAgent.getNetwork().netId, "145.100.185.16", "hostname", true);
+        cellNetworkCallback.assertNoCallback();
+
+        // Send a validation event where validation failed.
+        mService.mNetdEventCallback.onPrivateDnsValidationEvent(
+                mCellNetworkAgent.getNetwork().netId, "145.100.185.16", "", false);
+        cellNetworkCallback.assertNoCallback();
+
+        // Send a validation event where validation succeeded for a server in
+        // the current resolver config. A LinkProperties callback with updated
+        // private dns fields should be sent.
+        mService.mNetdEventCallback.onPrivateDnsValidationEvent(
+                mCellNetworkAgent.getNetwork().netId, "145.100.185.16", "", true);
+        cbi = cellNetworkCallback.expectCallback(CallbackState.LINK_PROPERTIES,
+                mCellNetworkAgent);
+        cellNetworkCallback.assertNoCallback();
+        assertTrue(((LinkProperties)cbi.arg).isPrivateDnsActive());
+        assertNull(((LinkProperties)cbi.arg).getPrivateDnsServerName());
+        checkDnsServers(cbi.arg, dnsServers);
+
+        // The private dns fields in LinkProperties should be preserved when
+        // the network agent sends unrelated changes.
+        LinkProperties lp3 = new LinkProperties(lp2);
+        lp3.setMtu(1300);
+        mCellNetworkAgent.sendLinkProperties(lp3);
+        cbi = cellNetworkCallback.expectCallback(CallbackState.LINK_PROPERTIES,
+                mCellNetworkAgent);
+        cellNetworkCallback.assertNoCallback();
+        assertTrue(((LinkProperties)cbi.arg).isPrivateDnsActive());
+        assertNull(((LinkProperties)cbi.arg).getPrivateDnsServerName());
+        checkDnsServers(cbi.arg, dnsServers);
+        assertEquals(1300, ((LinkProperties)cbi.arg).getMtu());
+
+        // Removing the only validated server should affect the private dns
+        // fields in LinkProperties.
+        LinkProperties lp4 = new LinkProperties(lp3);
+        lp4.removeDnsServer(InetAddress.getByName("145.100.185.16"));
+        mCellNetworkAgent.sendLinkProperties(lp4);
+        cbi = cellNetworkCallback.expectCallback(CallbackState.LINK_PROPERTIES,
+                mCellNetworkAgent);
+        cellNetworkCallback.assertNoCallback();
+        assertFalse(((LinkProperties)cbi.arg).isPrivateDnsActive());
+        assertNull(((LinkProperties)cbi.arg).getPrivateDnsServerName());
+        dnsServers.remove(InetAddress.getByName("145.100.185.16"));
+        checkDnsServers(cbi.arg, dnsServers);
+        assertEquals(1300, ((LinkProperties)cbi.arg).getMtu());
     }
 
     private void checkDirectlyConnectedRoutes(Object callbackObj,
@@ -3754,6 +3975,13 @@ public class ConnectivityServiceTest {
         List<RouteInfo> observedRoutes = lp.getRoutes();
         assertEquals(expectedRoutes.size(), observedRoutes.size());
         assertTrue(observedRoutes.containsAll(expectedRoutes));
+    }
+
+    private static void checkDnsServers(Object callbackObj, Set<InetAddress> dnsServers) {
+        assertTrue(callbackObj instanceof LinkProperties);
+        LinkProperties lp = (LinkProperties) callbackObj;
+        assertEquals(dnsServers.size(), lp.getDnsServers().size());
+        assertTrue(lp.getDnsServers().containsAll(dnsServers));
     }
 
     private static <T> void assertEmpty(T[] ts) {

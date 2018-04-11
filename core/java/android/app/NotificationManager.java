@@ -1145,6 +1145,21 @@ public class NotificationManager {
                 SUPPRESSED_EFFECT_NOTIFICATION_LIST
         };
 
+        private static final int[] SCREEN_OFF_SUPPRESSED_EFFECTS = {
+                SUPPRESSED_EFFECT_SCREEN_OFF,
+                SUPPRESSED_EFFECT_FULL_SCREEN_INTENT,
+                SUPPRESSED_EFFECT_LIGHTS,
+                SUPPRESSED_EFFECT_AMBIENT,
+        };
+
+        private static final int[] SCREEN_ON_SUPPRESSED_EFFECTS = {
+                SUPPRESSED_EFFECT_SCREEN_ON,
+                SUPPRESSED_EFFECT_PEEK,
+                SUPPRESSED_EFFECT_STATUS_BAR,
+                SUPPRESSED_EFFECT_BADGE,
+                SUPPRESSED_EFFECT_NOTIFICATION_LIST
+        };
+
         /**
          * Visual effects to suppress for a notification that is filtered by Do Not Disturb mode.
          * Bitmask of SUPPRESSED_EFFECT_* constants.
@@ -1295,6 +1310,58 @@ public class NotificationManager {
                 }
             }
             return true;
+        }
+
+        /**
+         * @hide
+         */
+        public static boolean areAnyScreenOffEffectsSuppressed(int effects) {
+            for (int i = 0; i < SCREEN_OFF_SUPPRESSED_EFFECTS.length; i++) {
+                final int effect = SCREEN_OFF_SUPPRESSED_EFFECTS[i];
+                if ((effects & effect) != 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * @hide
+         */
+        public static boolean areAnyScreenOnEffectsSuppressed(int effects) {
+            for (int i = 0; i < SCREEN_ON_SUPPRESSED_EFFECTS.length; i++) {
+                final int effect = SCREEN_ON_SUPPRESSED_EFFECTS[i];
+                if ((effects & effect) != 0) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * @hide
+         */
+        public static int toggleScreenOffEffectsSuppressed(int currentEffects, boolean suppress) {
+            return toggleEffects(currentEffects, SCREEN_OFF_SUPPRESSED_EFFECTS, suppress);
+        }
+
+        /**
+         * @hide
+         */
+        public static int toggleScreenOnEffectsSuppressed(int currentEffects, boolean suppress) {
+            return toggleEffects(currentEffects, SCREEN_ON_SUPPRESSED_EFFECTS, suppress);
+        }
+
+        private static int toggleEffects(int currentEffects, int[] effects, boolean suppress) {
+            for (int i = 0; i < effects.length; i++) {
+                final int effect = effects[i];
+                if (suppress) {
+                    currentEffects |= effect;
+                } else {
+                    currentEffects &= ~effect;
+                }
+            }
+            return currentEffects;
         }
 
         public static String suppressedEffectsToString(int effects) {

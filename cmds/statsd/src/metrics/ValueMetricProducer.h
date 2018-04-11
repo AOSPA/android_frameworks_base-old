@@ -40,14 +40,14 @@ class ValueMetricProducer : public virtual MetricProducer, public virtual PullDa
 public:
     ValueMetricProducer(const ConfigKey& key, const ValueMetric& valueMetric,
                         const int conditionIndex, const sp<ConditionWizard>& wizard,
-                        const int pullTagId, const uint64_t startTimeNs);
+                        const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs);
 
     virtual ~ValueMetricProducer();
 
     void onDataPulled(const std::vector<std::shared_ptr<LogEvent>>& data) override;
 
     // ValueMetric needs special logic if it's a pulled atom.
-    void notifyAppUpgrade(const uint64_t& eventTimeNs, const string& apk, const int uid,
+    void notifyAppUpgrade(const int64_t& eventTimeNs, const string& apk, const int uid,
                           const int64_t version) override {
         std::lock_guard<std::mutex> lock(mMutex);
 
@@ -86,14 +86,15 @@ protected:
             const LogEvent& event) override;
 
 private:
-    void onDumpReportLocked(const uint64_t dumpTimeNs,
+    void onDumpReportLocked(const int64_t dumpTimeNs,
+                            const bool include_current_partial_bucket,
                             android::util::ProtoOutputStream* protoOutput) override;
 
     // Internal interface to handle condition change.
-    void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
+    void onConditionChangedLocked(const bool conditionMet, const int64_t eventTime) override;
 
     // Internal interface to handle sliced condition change.
-    void onSlicedConditionMayChangeLocked(bool overallCondition, const uint64_t eventTime) override;
+    void onSlicedConditionMayChangeLocked(bool overallCondition, const int64_t eventTime) override;
 
     // Internal function to calculate the current used bytes.
     size_t byteSizeLocked() const override;
@@ -101,11 +102,11 @@ private:
     void dumpStatesLocked(FILE* out, bool verbose) const override;
 
     // Util function to flush the old packet.
-    void flushIfNeededLocked(const uint64_t& eventTime) override;
+    void flushIfNeededLocked(const int64_t& eventTime) override;
 
-    void flushCurrentBucketLocked(const uint64_t& eventTimeNs) override;
+    void flushCurrentBucketLocked(const int64_t& eventTimeNs) override;
 
-    void dropDataLocked(const uint64_t dropTimeNs) override;
+    void dropDataLocked(const int64_t dropTimeNs) override;
 
     const FieldMatcher mValueField;
 
@@ -114,7 +115,7 @@ private:
     // for testing
     ValueMetricProducer(const ConfigKey& key, const ValueMetric& valueMetric,
                         const int conditionIndex, const sp<ConditionWizard>& wizard,
-                        const int pullTagId, const uint64_t startTimeNs,
+                        const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs,
                         std::shared_ptr<StatsPullerManager> statsPullerManager);
 
     // tagId for pulled data. -1 if this is not pulled
@@ -126,19 +127,22 @@ private:
     typedef struct {
         // Pulled data always come in pair of <start, end>. This holds the value
         // for start. The diff (end - start) is added to sum.
-        long start;
+        int64_t start;
         // Whether the start data point is updated
         bool startUpdated;
         // If end data point comes before the start, record this pair as tainted
         // and the value is not added to the running sum.
         int tainted;
         // Running sum of known pairs in this bucket
-        long sum;
+        int64_t sum;
+        // If this dimension has any non-tainted value. If not, don't report the
+        // dimension.
+        bool hasValue;
     } Interval;
 
     std::unordered_map<MetricDimensionKey, Interval> mCurrentSlicedBucket;
 
-    std::unordered_map<MetricDimensionKey, long> mCurrentFullBucket;
+    std::unordered_map<MetricDimensionKey, int64_t> mCurrentFullBucket;
 
     // Save the past buckets and we can clear when the StatsLogReport is dumped.
     // TODO: Add a lock to mPastBuckets.

@@ -89,7 +89,6 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     protected boolean mFirstUpdate = true;
     protected boolean mLastShowing;
     protected boolean mLastOccluded;
-    private boolean mLastTracking;
     private boolean mLastBouncerShowing;
     private boolean mLastBouncerDismissible;
     protected boolean mLastRemoteInputActive;
@@ -152,28 +151,19 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         // • The user quickly taps on the display and we show "swipe up to unlock."
         // • Keyguard will be dismissed by an action. a.k.a: FLAG_DISMISS_KEYGUARD_ACTIVITY
         // • Full-screen user switcher is displayed.
-        final boolean noLongerTracking = mLastTracking != tracking && !tracking;
         if (mOccluded || mNotificationPanelView.isUnlockHintRunning()
                 || mBouncer.willDismissWithAction()
                 || mStatusBar.isFullScreenUserSwitcherState()) {
             mBouncer.setExpansion(0);
         } else if (mShowing && mStatusBar.isKeyguardCurrentlySecure() && !mDozing) {
             mBouncer.setExpansion(expansion);
-            if (expansion == 1) {
-                mBouncer.onFullyHidden();
-            } else if (!mBouncer.isShowing() && !mBouncer.isAnimatingAway()) {
+            if (expansion != 1 && tracking && !mBouncer.isShowing()
+                    && !mBouncer.isAnimatingAway()) {
                 mBouncer.show(false /* resetSecuritySelection */, false /* animated */);
-            } else if (noLongerTracking) {
-                // Notify that falsing manager should stop its session when user stops touching,
-                // even before the animation ends, to guarantee that we're not recording sensitive
-                // data.
-                mBouncer.onFullyShown();
-            }
-            if (expansion == 0 || expansion == 1) {
+            } else if (expansion == 0 || expansion == 1) {
                 updateStates();
             }
         }
-        mLastTracking = tracking;
     }
 
     /**
@@ -522,12 +512,15 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     /**
      * Notifies this manager that the back button has been pressed.
      *
+     * @param hideImmediately Hide bouncer when {@code true}, keep it around otherwise.
+     *                        Non-scrimmed bouncers have a special animation tied to the expansion
+     *                        of the notification panel.
      * @return whether the back press has been handled
      */
-    public boolean onBackPressed() {
+    public boolean onBackPressed(boolean hideImmediately) {
         if (mBouncer.isShowing()) {
             mStatusBar.endAffordanceLaunch();
-            reset(true /* hideBouncerWhenShowing */);
+            reset(hideImmediately);
             return true;
         }
         return false;
@@ -595,6 +588,11 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         if (bouncerShowing != mLastBouncerShowing || mFirstUpdate) {
             mStatusBarWindowManager.setBouncerShowing(bouncerShowing);
             mStatusBar.setBouncerShowing(bouncerShowing);
+            if (bouncerShowing) {
+                mBouncer.onFullyShown();
+            } else {
+                mBouncer.onFullyHidden();
+            }
         }
 
         KeyguardUpdateMonitor updateMonitor = KeyguardUpdateMonitor.getInstance(mContext);

@@ -61,9 +61,9 @@ const int FIELD_ID_WALL_CLOCK_ATOM_TIMESTAMP = 5;
 GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric& metric,
                                          const int conditionIndex,
                                          const sp<ConditionWizard>& wizard, const int pullTagId,
-                                         const uint64_t startTimeNs,
+                                         const int64_t timeBaseNs, const int64_t startTimeNs,
                                          shared_ptr<StatsPullerManager> statsPullerManager)
-    : MetricProducer(metric.id(), key, startTimeNs, conditionIndex, wizard),
+    : MetricProducer(metric.id(), key, timeBaseNs, conditionIndex, wizard),
       mStatsPullerManager(statsPullerManager),
       mPullTagId(pullTagId),
       mDimensionSoftLimit(StatsdStats::kAtomDimensionKeySizeLimitMap.find(pullTagId) !=
@@ -110,14 +110,15 @@ GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric
     }
     mConditionSliced = (metric.links().size() > 0) || (mDimensionsInCondition.size() > 0);
 
+    flushIfNeededLocked(startTimeNs);
     // Kicks off the puller immediately.
     if (mPullTagId != -1 && mSamplingType == GaugeMetric::RANDOM_ONE_SAMPLE) {
         mStatsPullerManager->RegisterReceiver(
-                mPullTagId, this, mCurrentBucketStartTimeNs + mBucketSizeNs, mBucketSizeNs);
+                mPullTagId, this, getCurrentBucketEndTimeNs(), mBucketSizeNs);
     }
 
     VLOG("Gauge metric %lld created. bucket size %lld start_time: %lld sliced %d",
-         (long long)metric.id(), (long long)mBucketSizeNs, (long long)mStartTimeNs,
+         (long long)metric.id(), (long long)mBucketSizeNs, (long long)mTimeBaseNs,
          mConditionSliced);
 }
 
@@ -125,14 +126,14 @@ GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric
 GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric& metric,
                                          const int conditionIndex,
                                          const sp<ConditionWizard>& wizard, const int pullTagId,
-                                         const int64_t startTimeNs)
-    : GaugeMetricProducer(key, metric, conditionIndex, wizard, pullTagId, startTimeNs,
+                                         const int64_t timeBaseNs, const int64_t startTimeNs)
+    : GaugeMetricProducer(key, metric, conditionIndex, wizard, pullTagId, timeBaseNs, startTimeNs,
                           make_shared<StatsPullerManager>()) {
 }
 
 GaugeMetricProducer::~GaugeMetricProducer() {
     VLOG("~GaugeMetricProducer() called");
-    if (mPullTagId != -1) {
+    if (mPullTagId != -1 && mSamplingType == GaugeMetric::RANDOM_ONE_SAMPLE) {
         mStatsPullerManager->UnRegisterReceiver(mPullTagId, this);
     }
 }
@@ -155,9 +156,15 @@ void GaugeMetricProducer::dumpStatesLocked(FILE* out, bool verbose) const {
     }
 }
 
-void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
+void GaugeMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
+                                             const bool include_current_partial_bucket,
                                              ProtoOutputStream* protoOutput) {
     VLOG("Gauge metric %lld report now...", (long long)mMetricId);
+    if (include_current_partial_bucket) {
+        flushLocked(dumpTimeNs);
+    } else {
+        flushIfNeededLocked(dumpTimeNs);
+    }
 
     flushIfNeededLocked(dumpTimeNs);
     if (mPastBuckets.empty()) {
@@ -208,18 +215,20 @@ void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
                         android::util::AtomsInfo::kNotTruncatingTimestampAtomWhiteList.find(
                                 mTagId) ==
                         android::util::AtomsInfo::kNotTruncatingTimestampAtomWhiteList.end();
-                const int64_t wall_clock_ns = truncateTimestamp ?
-                    truncateTimestampNsToFiveMinutes(getWallClockNs()) : getWallClockNs();
                 for (const auto& atom : bucket.mGaugeAtoms) {
-                    int64_t timestampNs =  truncateTimestamp ?
-                        truncateTimestampNsToFiveMinutes(atom.mTimestamps) : atom.mTimestamps;
+                    const int64_t elapsedTimestampNs =  truncateTimestamp ?
+                        truncateTimestampNsToFiveMinutes(atom.mElapsedTimestamps) :
+                            atom.mElapsedTimestamps;
+                    const int64_t wallClockNs = truncateTimestamp ?
+                        truncateTimestampNsToFiveMinutes(atom.mWallClockTimestampNs) :
+                            atom.mWallClockTimestampNs;
                     protoOutput->write(
                         FIELD_TYPE_INT64 | FIELD_COUNT_REPEATED | FIELD_ID_ELAPSED_ATOM_TIMESTAMP,
-                        (long long)timestampNs);
+                        (long long)elapsedTimestampNs);
                     protoOutput->write(
                         FIELD_TYPE_INT64 | FIELD_COUNT_REPEATED |
                             FIELD_ID_WALL_CLOCK_ATOM_TIMESTAMP,
-                        (long long)wall_clock_ns);
+                        (long long)wallClockNs);
                 }
             }
             protoOutput->end(bucketInfoToken);
@@ -235,7 +244,7 @@ void GaugeMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
     // TODO: Clear mDimensionKeyMap once the report is dumped.
 }
 
-void GaugeMetricProducer::pullLocked() {
+void GaugeMetricProducer::pullLocked(const int64_t timestampNs) {
     bool triggerPuller = false;
     switch(mSamplingType) {
         // When the metric wants to do random sampling and there is already one gauge atom for the
@@ -256,7 +265,7 @@ void GaugeMetricProducer::pullLocked() {
     }
 
     vector<std::shared_ptr<LogEvent>> allData;
-    if (!mStatsPullerManager->Pull(mPullTagId, getElapsedRealtimeNs(), &allData)) {
+    if (!mStatsPullerManager->Pull(mPullTagId, timestampNs, &allData)) {
         ALOGE("Gauge Stats puller failed for tag: %d", mPullTagId);
         return;
     }
@@ -267,26 +276,26 @@ void GaugeMetricProducer::pullLocked() {
 }
 
 void GaugeMetricProducer::onConditionChangedLocked(const bool conditionMet,
-                                                   const uint64_t eventTime) {
+                                                   const int64_t eventTimeNs) {
     VLOG("GaugeMetric %lld onConditionChanged", (long long)mMetricId);
-    flushIfNeededLocked(eventTime);
+    flushIfNeededLocked(eventTimeNs);
     mCondition = conditionMet;
 
-    if (mPullTagId != -1) {
-        pullLocked();
+    if (mPullTagId != -1 && mCondition) {
+        pullLocked(eventTimeNs);
     }  // else: Push mode. No need to proactively pull the gauge data.
 }
 
 void GaugeMetricProducer::onSlicedConditionMayChangeLocked(bool overallCondition,
-                                                           const uint64_t eventTime) {
+                                                           const int64_t eventTimeNs) {
     VLOG("GaugeMetric %lld onSlicedConditionMayChange overall condition %d", (long long)mMetricId,
          overallCondition);
-    flushIfNeededLocked(eventTime);
+    flushIfNeededLocked(eventTimeNs);
     // If the condition is sliced, mCondition is true if any of the dimensions is true. And we will
     // pull for every dimension.
     mCondition = overallCondition;
     if (mPullTagId != -1) {
-        pullLocked();
+        pullLocked(eventTimeNs);
     }  // else: Push mode. No need to proactively pull the gauge data.
 }
 
@@ -336,7 +345,7 @@ void GaugeMetricProducer::onMatchedLogEventInternalLocked(
     if (condition == false) {
         return;
     }
-    uint64_t eventTimeNs = event.GetElapsedTimestampNs();
+    int64_t eventTimeNs = event.GetElapsedTimestampNs();
     mTagId = event.GetTagId();
     if (eventTimeNs < mCurrentBucketStartTimeNs) {
         VLOG("Gauge Skip event due to late arrival: %lld vs %lld", (long long)eventTimeNs,
@@ -354,7 +363,7 @@ void GaugeMetricProducer::onMatchedLogEventInternalLocked(
     if (hitGuardRailLocked(eventKey)) {
         return;
     }
-    GaugeAtom gaugeAtom(getGaugeFields(event), eventTimeNs);
+    GaugeAtom gaugeAtom(getGaugeFields(event), eventTimeNs, getWallClockNs());
     (*mCurrentSlicedBucket)[eventKey].push_back(gaugeAtom);
     // Anomaly detection on gauge metric only works when there is one numeric
     // field specified.
@@ -391,7 +400,7 @@ void GaugeMetricProducer::updateCurrentSlicedBucketForAnomaly() {
     }
 }
 
-void GaugeMetricProducer::dropDataLocked(const uint64_t dropTimeNs) {
+void GaugeMetricProducer::dropDataLocked(const int64_t dropTimeNs) {
     flushIfNeededLocked(dropTimeNs);
     mPastBuckets.clear();
 }
@@ -401,8 +410,8 @@ void GaugeMetricProducer::dropDataLocked(const uint64_t dropTimeNs) {
 // bucket.
 // if data is pushed, onMatchedLogEvent will only be called through onConditionChanged() inside
 // the GaugeMetricProducer while holding the lock.
-void GaugeMetricProducer::flushIfNeededLocked(const uint64_t& eventTimeNs) {
-    uint64_t currentBucketEndTimeNs = getCurrentBucketEndTimeNs();
+void GaugeMetricProducer::flushIfNeededLocked(const int64_t& eventTimeNs) {
+    int64_t currentBucketEndTimeNs = getCurrentBucketEndTimeNs();
 
     if (eventTimeNs < currentBucketEndTimeNs) {
         VLOG("Gauge eventTime is %lld, less than next bucket start time %lld",
@@ -420,8 +429,8 @@ void GaugeMetricProducer::flushIfNeededLocked(const uint64_t& eventTimeNs) {
          (long long)mCurrentBucketStartTimeNs);
 }
 
-void GaugeMetricProducer::flushCurrentBucketLocked(const uint64_t& eventTimeNs) {
-    uint64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();
+void GaugeMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs) {
+    int64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();
 
     GaugeBucket info;
     info.mBucketStartNs = mCurrentBucketStartTimeNs;

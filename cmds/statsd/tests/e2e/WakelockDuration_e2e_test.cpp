@@ -121,13 +121,13 @@ TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration1) 
     uint64_t bucketStartTimeNs = 10000000000;
     uint64_t bucketSizeNs =
             TimeUnitToBucketSizeInMillis(config.duration_metric(0).bucket()) * 1000000LL;
-    auto processor = CreateStatsLogProcessor(bucketStartTimeNs / NS_PER_SEC, config, cfgKey);
+    auto processor = CreateStatsLogProcessor(bucketStartTimeNs, bucketStartTimeNs, config, cfgKey);
     EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
     FeedEvents(config, processor);
     vector<uint8_t> buffer;
     ConfigMetricsReportList reports;
-    processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs - 1, &buffer);
+    processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs - 1, false, &buffer);
     EXPECT_TRUE(buffer.size() > 0);
     EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
 
@@ -154,14 +154,14 @@ TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration2) 
     uint64_t bucketStartTimeNs = 10000000000;
     uint64_t bucketSizeNs =
             TimeUnitToBucketSizeInMillis(config.duration_metric(0).bucket()) * 1000000LL;
-    auto processor = CreateStatsLogProcessor(bucketStartTimeNs / NS_PER_SEC, config, cfgKey);
+    auto processor = CreateStatsLogProcessor(bucketStartTimeNs, bucketStartTimeNs, config, cfgKey);
     EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
     FeedEvents(config, processor);
     vector<uint8_t> buffer;
     ConfigMetricsReportList reports;
 
-    processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, &buffer);
+    processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, false, &buffer);
     EXPECT_TRUE(buffer.size() > 0);
     EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
     EXPECT_EQ(reports.reports_size(), 1);
@@ -188,7 +188,7 @@ TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration3) 
     uint64_t bucketStartTimeNs = 10000000000;
     uint64_t bucketSizeNs =
             TimeUnitToBucketSizeInMillis(config.duration_metric(0).bucket()) * 1000000LL;
-    auto processor = CreateStatsLogProcessor(bucketStartTimeNs / NS_PER_SEC, config, cfgKey);
+    auto processor = CreateStatsLogProcessor(bucketStartTimeNs, bucketStartTimeNs, config, cfgKey);
     EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
     FeedEvents(config, processor);
@@ -208,7 +208,7 @@ TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForSumDuration3) 
         processor->OnLogEvent(event.get());
     }
 
-    processor->onDumpReport(cfgKey, bucketStartTimeNs + 6 * bucketSizeNs + 1, &buffer);
+    processor->onDumpReport(cfgKey, bucketStartTimeNs + 6 * bucketSizeNs + 1, false, &buffer);
     EXPECT_TRUE(buffer.size() > 0);
     EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
     EXPECT_EQ(reports.reports_size(), 1);
@@ -231,13 +231,13 @@ TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForMaxDuration1) 
     uint64_t bucketStartTimeNs = 10000000000;
     uint64_t bucketSizeNs =
             TimeUnitToBucketSizeInMillis(config.duration_metric(0).bucket()) * 1000000LL;
-    auto processor = CreateStatsLogProcessor(bucketStartTimeNs / NS_PER_SEC, config, cfgKey);
+    auto processor = CreateStatsLogProcessor(bucketStartTimeNs, bucketStartTimeNs, config, cfgKey);
     EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
     FeedEvents(config, processor);
     ConfigMetricsReportList reports;
     vector<uint8_t> buffer;
-    processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs - 1, &buffer);
+    processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs - 1, false, &buffer);
     EXPECT_TRUE(buffer.size() > 0);
 
     EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
@@ -256,13 +256,13 @@ TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForMaxDuration2) 
     uint64_t bucketStartTimeNs = 10000000000;
     uint64_t bucketSizeNs =
             TimeUnitToBucketSizeInMillis(config.duration_metric(0).bucket()) * 1000000LL;
-    auto processor = CreateStatsLogProcessor(bucketStartTimeNs / NS_PER_SEC, config, cfgKey);
+    auto processor = CreateStatsLogProcessor(bucketStartTimeNs, bucketStartTimeNs, config, cfgKey);
     EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
     FeedEvents(config, processor);
     ConfigMetricsReportList reports;
     vector<uint8_t> buffer;
-    processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, &buffer);
+    processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, false, &buffer);
     EXPECT_TRUE(buffer.size() > 0);
     EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
     EXPECT_EQ(reports.reports_size(), 1);
@@ -284,7 +284,7 @@ TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForMaxDuration3) 
     uint64_t bucketStartTimeNs = 10000000000;
     uint64_t bucketSizeNs =
             TimeUnitToBucketSizeInMillis(config.duration_metric(0).bucket()) * 1000000LL;
-    auto processor = CreateStatsLogProcessor(bucketStartTimeNs / NS_PER_SEC, config, cfgKey);
+    auto processor = CreateStatsLogProcessor(bucketStartTimeNs, bucketStartTimeNs, config, cfgKey);
     EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
     FeedEvents(config, processor);
@@ -304,7 +304,7 @@ TEST(WakelockDurationE2eTest, TestAggregatedPredicateDimensionsForMaxDuration3) 
         processor->OnLogEvent(event.get());
     }
 
-    processor->onDumpReport(cfgKey, bucketStartTimeNs + 6 * bucketSizeNs + 1, &buffer);
+    processor->onDumpReport(cfgKey, bucketStartTimeNs + 6 * bucketSizeNs + 1, false, &buffer);
     EXPECT_TRUE(buffer.size() > 0);
     EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
     EXPECT_EQ(reports.reports_size(), 1);

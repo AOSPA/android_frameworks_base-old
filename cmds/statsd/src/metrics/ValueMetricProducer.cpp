@@ -63,9 +63,9 @@ const int FIELD_ID_VALUE = 3;
 ValueMetricProducer::ValueMetricProducer(const ConfigKey& key, const ValueMetric& metric,
                                          const int conditionIndex,
                                          const sp<ConditionWizard>& wizard, const int pullTagId,
-                                         const uint64_t startTimeNs,
+                                         const int64_t timeBaseNs, const int64_t startTimestampNs,
                                          shared_ptr<StatsPullerManager> statsPullerManager)
-    : MetricProducer(metric.id(), key, startTimeNs, conditionIndex, wizard),
+    : MetricProducer(metric.id(), key, timeBaseNs, conditionIndex, wizard),
       mValueField(metric.value_field()),
       mStatsPullerManager(statsPullerManager),
       mPullTagId(pullTagId),
@@ -105,27 +105,28 @@ ValueMetricProducer::ValueMetricProducer(const ConfigKey& key, const ValueMetric
         }
     }
 
-    if (mValueField.child_size()) {
+    if (mValueField.child_size() > 0) {
         mField = mValueField.child(0).field();
     }
     mConditionSliced = (metric.links().size() > 0) || (mDimensionsInCondition.size() > 0);
 
     // Kicks off the puller immediately.
+    flushIfNeededLocked(startTimestampNs);
     if (mPullTagId != -1) {
         mStatsPullerManager->RegisterReceiver(
             mPullTagId, this, mCurrentBucketStartTimeNs + mBucketSizeNs, mBucketSizeNs);
     }
 
     VLOG("value metric %lld created. bucket size %lld start_time: %lld",
-        (long long)metric.id(), (long long)mBucketSizeNs, (long long)mStartTimeNs);
+        (long long)metric.id(), (long long)mBucketSizeNs, (long long)mTimeBaseNs);
 }
 
 // for testing
 ValueMetricProducer::ValueMetricProducer(const ConfigKey& key, const ValueMetric& metric,
                                          const int conditionIndex,
                                          const sp<ConditionWizard>& wizard, const int pullTagId,
-                                         const uint64_t startTimeNs)
-    : ValueMetricProducer(key, metric, conditionIndex, wizard, pullTagId, startTimeNs,
+                                         const int64_t timeBaseNs, const int64_t startTimeNs)
+    : ValueMetricProducer(key, metric, conditionIndex, wizard, pullTagId, timeBaseNs, startTimeNs,
                           make_shared<StatsPullerManager>()) {
 }
 
@@ -137,19 +138,24 @@ ValueMetricProducer::~ValueMetricProducer() {
 }
 
 void ValueMetricProducer::onSlicedConditionMayChangeLocked(bool overallCondition,
-                                                           const uint64_t eventTime) {
+                                                           const int64_t eventTime) {
     VLOG("Metric %lld onSlicedConditionMayChange", (long long)mMetricId);
 }
 
-void ValueMetricProducer::dropDataLocked(const uint64_t dropTimeNs) {
+void ValueMetricProducer::dropDataLocked(const int64_t dropTimeNs) {
     flushIfNeededLocked(dropTimeNs);
     mPastBuckets.clear();
 }
 
-void ValueMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
+void ValueMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
+                                             const bool include_current_partial_bucket,
                                              ProtoOutputStream* protoOutput) {
     VLOG("metric %lld dump report now...", (long long)mMetricId);
-    flushIfNeededLocked(dumpTimeNs);
+    if (include_current_partial_bucket) {
+        flushLocked(dumpTimeNs);
+    } else {
+        flushIfNeededLocked(dumpTimeNs);
+    }
     if (mPastBuckets.empty()) {
         return;
     }
@@ -193,11 +199,10 @@ void ValueMetricProducer::onDumpReportLocked(const uint64_t dumpTimeNs,
 
     VLOG("metric %lld dump report now...", (long long)mMetricId);
     mPastBuckets.clear();
-    // TODO: Clear mDimensionKeyMap once the report is dumped.
 }
 
 void ValueMetricProducer::onConditionChangedLocked(const bool condition,
-                                                   const uint64_t eventTimeNs) {
+                                                   const int64_t eventTimeNs) {
     mCondition = condition;
 
     if (eventTimeNs < mCurrentBucketStartTimeNs) {
@@ -231,9 +236,9 @@ void ValueMetricProducer::onDataPulled(const std::vector<std::shared_ptr<LogEven
         }
         // For scheduled pulled data, the effective event time is snap to the nearest
         // bucket boundary to make bucket finalize.
-        uint64_t realEventTime = allData.at(0)->GetElapsedTimestampNs();
-        uint64_t eventTime = mStartTimeNs +
-            ((realEventTime - mStartTimeNs) / mBucketSizeNs) * mBucketSizeNs;
+        int64_t realEventTime = allData.at(0)->GetElapsedTimestampNs();
+        int64_t eventTime = mTimeBaseNs +
+            ((realEventTime - mTimeBaseNs) / mBucketSizeNs) * mBucketSizeNs;
 
         mCondition = false;
         for (const auto& data : allData) {
@@ -290,7 +295,7 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(
         const size_t matcherIndex, const MetricDimensionKey& eventKey,
         const ConditionKey& conditionKey, bool condition,
         const LogEvent& event) {
-    uint64_t eventTimeNs = event.GetElapsedTimestampNs();
+    int64_t eventTimeNs = event.GetElapsedTimestampNs();
     if (eventTimeNs < mCurrentBucketStartTimeNs) {
         VLOG("Skip event due to late arrival: %lld vs %lld", (long long)eventTimeNs,
              (long long)mCurrentBucketStartTimeNs);
@@ -305,7 +310,7 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(
     Interval& interval = mCurrentSlicedBucket[eventKey];
 
     int error = 0;
-    const long value = event.GetLong(mField, &error);
+    const int64_t value = event.GetLong(mField, &error);
     if (error < 0) {
         return;
     }
@@ -329,14 +334,16 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(
                 } else {
                     interval.sum += value;
                 }
+                interval.hasValue = true;
                 interval.startUpdated = false;
             } else {
-                VLOG("No start for matching end %ld", value);
+                VLOG("No start for matching end %lld", (long long)value);
                 interval.tainted += 1;
             }
         }
     } else {    // for pushed events
         interval.sum += value;
+        interval.hasValue = true;
     }
 
     long wholeBucketVal = interval.sum;
@@ -349,10 +356,10 @@ void ValueMetricProducer::onMatchedLogEventInternalLocked(
     }
 }
 
-void ValueMetricProducer::flushIfNeededLocked(const uint64_t& eventTimeNs) {
-    uint64_t currentBucketEndTimeNs = getCurrentBucketEndTimeNs();
+void ValueMetricProducer::flushIfNeededLocked(const int64_t& eventTimeNs) {
+    int64_t currentBucketEndTimeNs = getCurrentBucketEndTimeNs();
 
-    if (currentBucketEndTimeNs > eventTimeNs) {
+    if (eventTimeNs < currentBucketEndTimeNs) {
         VLOG("eventTime is %lld, less than next bucket start time %lld", (long long)eventTimeNs,
              (long long)(currentBucketEndTimeNs));
         return;
@@ -371,10 +378,10 @@ void ValueMetricProducer::flushIfNeededLocked(const uint64_t& eventTimeNs) {
          (long long)mCurrentBucketStartTimeNs);
 }
 
-void ValueMetricProducer::flushCurrentBucketLocked(const uint64_t& eventTimeNs) {
+void ValueMetricProducer::flushCurrentBucketLocked(const int64_t& eventTimeNs) {
     VLOG("finalizing bucket for %ld, dumping %d slices", (long)mCurrentBucketStartTimeNs,
          (int)mCurrentSlicedBucket.size());
-    uint64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();
+    int64_t fullBucketEndTimeNs = getCurrentBucketEndTimeNs();
 
     ValueBucket info;
     info.mBucketStartNs = mCurrentBucketStartTimeNs;
@@ -388,10 +395,12 @@ void ValueMetricProducer::flushCurrentBucketLocked(const uint64_t& eventTimeNs) 
     for (const auto& slice : mCurrentSlicedBucket) {
         tainted += slice.second.tainted;
         tainted += slice.second.startUpdated;
-        info.mValue = slice.second.sum;
-        // it will auto create new vector of ValuebucketInfo if the key is not found.
-        auto& bucketList = mPastBuckets[slice.first];
-        bucketList.push_back(info);
+        if (slice.second.hasValue) {
+            info.mValue = slice.second.sum;
+            // it will auto create new vector of ValuebucketInfo if the key is not found.
+            auto& bucketList = mPastBuckets[slice.first];
+            bucketList.push_back(info);
+        }
     }
     VLOG("%d tainted pairs in the bucket", tainted);
 

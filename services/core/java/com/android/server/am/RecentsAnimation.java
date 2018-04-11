@@ -18,18 +18,20 @@ package com.android.server.am;
 
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NO_ANIMATION;
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static com.android.server.am.ActivityStackSupervisor.PRESERVE_WINDOWS;
-import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_HOME_TO_ORIGINAL_POSITION;
-import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_HOME_TO_TOP;
+import static com.android.server.wm.RecentsAnimationController.REORDER_KEEP_IN_PLACE;
+import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_ORIGINAL_POSITION;
+import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_TOP;
 
 import android.app.ActivityOptions;
 import android.content.ComponentName;
 import android.content.Intent;
-import android.os.Handler;
 import android.os.RemoteException;
 import android.os.Trace;
 import android.util.Slog;
@@ -44,22 +46,28 @@ import com.android.server.wm.WindowManagerService;
  */
 class RecentsAnimation implements RecentsAnimationCallbacks {
     private static final String TAG = RecentsAnimation.class.getSimpleName();
+    // TODO (b/73188263): Reset debugging flags
+    private static final boolean DEBUG = true;
 
     private final ActivityManagerService mService;
     private final ActivityStackSupervisor mStackSupervisor;
     private final ActivityStartController mActivityStartController;
     private final WindowManagerService mWindowManager;
     private final UserController mUserController;
+    private final ActivityDisplay mDefaultDisplay;
     private final int mCallingPid;
 
-    // The stack to restore the home stack behind when the animation is finished
-    private ActivityStack mRestoreHomeBehindStack;
+    private int mTargetActivityType;
+
+    // The stack to restore the target stack behind when the animation is finished
+    private ActivityStack mRestoreTargetBehindStack;
 
     RecentsAnimation(ActivityManagerService am, ActivityStackSupervisor stackSupervisor,
             ActivityStartController activityStartController, WindowManagerService wm,
             UserController userController, int callingPid) {
         mService = am;
         mStackSupervisor = stackSupervisor;
+        mDefaultDisplay = stackSupervisor.getDefaultDisplay();
         mActivityStartController = activityStartController;
         mWindowManager = wm;
         mUserController = userController;
@@ -68,23 +76,42 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
 
     void startRecentsActivity(Intent intent, IRecentsAnimationRunner recentsAnimationRunner,
             ComponentName recentsComponent, int recentsUid) {
+        if (DEBUG) Slog.d(TAG, "startRecentsActivity(): intent=" + intent);
         Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "RecentsAnimation#startRecentsActivity");
 
         if (!mWindowManager.canStartRecentsAnimation()) {
             notifyAnimationCancelBeforeStart(recentsAnimationRunner);
+            if (DEBUG) Slog.d(TAG, "Can't start recents animation, nextAppTransition="
+                        + mWindowManager.getPendingAppTransition());
             return;
         }
 
-        // If the existing home activity is already on top, then cancel
-        ActivityRecord homeActivity = mStackSupervisor.getHomeActivity();
-        final boolean hasExistingHomeActivity = homeActivity != null;
-        if (hasExistingHomeActivity) {
-            final ActivityDisplay display = homeActivity.getDisplay();
-            mRestoreHomeBehindStack = display.getStackAboveHome();
-            if (mRestoreHomeBehindStack == null) {
+        // If the activity is associated with the recents stack, then try and get that first
+        mTargetActivityType = intent.getComponent() != null
+                && recentsComponent.equals(intent.getComponent())
+                        ? ACTIVITY_TYPE_RECENTS
+                        : ACTIVITY_TYPE_HOME;
+        final ActivityStack targetStack = mDefaultDisplay.getStack(WINDOWING_MODE_UNDEFINED,
+                mTargetActivityType);
+        ActivityRecord targetActivity = targetStack != null
+                ? targetStack.getTopActivity()
+                : null;
+        final boolean hasExistingActivity = targetActivity != null;
+        if (hasExistingActivity) {
+            final ActivityDisplay display = targetActivity.getDisplay();
+            mRestoreTargetBehindStack = display.getStackAbove(targetStack);
+            if (mRestoreTargetBehindStack == null) {
                 notifyAnimationCancelBeforeStart(recentsAnimationRunner);
+                if (DEBUG) Slog.d(TAG, "No stack above target stack=" + targetStack);
                 return;
             }
+        }
+
+        // Send launch hint if we are actually launching the target. If it's already visible
+        // (shouldn't happen in general) we don't need to send it.
+        if (targetActivity == null || !targetActivity.visible) {
+            mStackSupervisor.sendPowerHintForLaunchStartIfNeeded(true /* forceSend */,
+                    targetActivity);
         }
 
         mStackSupervisor.getActivityMetricsLogger().notifyActivityLaunching();
@@ -94,48 +121,57 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
         mWindowManager.deferSurfaceLayout();
         try {
             final ActivityDisplay display;
-            if (hasExistingHomeActivity) {
-                // Move the home activity into place for the animation if it is not already top most
-                display = homeActivity.getDisplay();
-                display.moveHomeStackBehindBottomMostVisibleStack();
+            if (hasExistingActivity) {
+                // Move the recents activity into place for the animation if it is not top most
+                display = targetActivity.getDisplay();
+                display.moveStackBehindBottomMostVisibleStack(targetStack);
+                if (DEBUG) Slog.d(TAG, "Moved stack=" + targetStack + " behind stack="
+                            + display.getStackAbove(targetStack));
             } else {
-                // No home activity
-                final ActivityOptions opts = ActivityOptions.makeBasic();
-                opts.setLaunchActivityType(ACTIVITY_TYPE_HOME);
-                opts.setAvoidMoveToFront();
+                // No recents activity
+                ActivityOptions options = ActivityOptions.makeBasic();
+                options.setLaunchActivityType(mTargetActivityType);
+                options.setAvoidMoveToFront();
                 intent.addFlags(FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_NO_ANIMATION);
 
                 mActivityStartController
-                        .obtainStarter(intent, "startRecentsActivity_noHomeActivity")
+                        .obtainStarter(intent, "startRecentsActivity_noTargetActivity")
                         .setCallingUid(recentsUid)
                         .setCallingPackage(recentsComponent.getPackageName())
-                        .setActivityOptions(SafeActivityOptions.fromBundle(opts.toBundle()))
+                        .setActivityOptions(SafeActivityOptions.fromBundle(options.toBundle()))
                         .setMayWait(mUserController.getCurrentUserId())
                         .execute();
                 mWindowManager.prepareAppTransition(TRANSIT_NONE, false);
 
-                homeActivity = mStackSupervisor.getHomeActivity();
-                display = homeActivity.getDisplay();
+                targetActivity = mDefaultDisplay.getStack(WINDOWING_MODE_UNDEFINED,
+                        mTargetActivityType).getTopActivity();
+                display = targetActivity.getDisplay();
 
                 // TODO: Maybe wait for app to draw in this particular case?
+
+                if (DEBUG) Slog.d(TAG, "Started intent=" + intent);
             }
 
-            // Mark the home activity as launch-behind to bump its visibility for the
+            // Mark the target activity as launch-behind to bump its visibility for the
             // duration of the gesture that is driven by the recents component
-            homeActivity.mLaunchTaskBehind = true;
+            targetActivity.mLaunchTaskBehind = true;
 
             // Fetch all the surface controls and pass them to the client to get the animation
             // started
-            mWindowManager.cancelRecentsAnimation(REORDER_MOVE_HOME_TO_ORIGINAL_POSITION);
-            mWindowManager.initializeRecentsAnimation(recentsAnimationRunner, this,
-                    display.mDisplayId, mStackSupervisor.mRecentTasks.getRecentTaskIds());
+            mWindowManager.cancelRecentsAnimation(REORDER_MOVE_TO_ORIGINAL_POSITION,
+                    "startRecentsActivity");
+            mWindowManager.initializeRecentsAnimation(mTargetActivityType, recentsAnimationRunner,
+                    this, display.mDisplayId, mStackSupervisor.mRecentTasks.getRecentTaskIds());
 
             // If we updated the launch-behind state, update the visibility of the activities after
             // we fetch the visible tasks to be controlled by the animation
             mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, PRESERVE_WINDOWS);
 
             mStackSupervisor.getActivityMetricsLogger().notifyActivityLaunched(START_TASK_TO_FRONT,
-                    homeActivity);
+                    targetActivity);
+        } catch (Exception e) {
+            Slog.e(TAG, "Failed to start recents activity", e);
+            throw e;
         } finally {
             mWindowManager.continueSurfaceLayout();
             Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
@@ -145,7 +181,16 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
     @Override
     public void onAnimationFinished(@RecentsAnimationController.ReorderMode int reorderMode) {
         synchronized (mService) {
+            if (DEBUG) Slog.d(TAG, "onAnimationFinished(): controller="
+                        + mWindowManager.getRecentsAnimationController()
+                        + " reorderMode=" + reorderMode);
             if (mWindowManager.getRecentsAnimationController() == null) return;
+
+            // Just to be sure end the launch hint in case the target activity was never launched.
+            // However, if we're keeping the activity and making it visible, we can leave it on.
+            if (reorderMode != REORDER_KEEP_IN_PLACE) {
+                mStackSupervisor.sendPowerHintForLaunchEndIfNeeded();
+            }
 
             mService.setRunningRemoteAnimation(mCallingPid, false);
 
@@ -156,26 +201,47 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
                 try {
                     mWindowManager.cleanupRecentsAnimation(reorderMode);
 
-                    final ActivityRecord homeActivity = mStackSupervisor.getHomeActivity();
-                    if (homeActivity == null) {
+                    final ActivityStack targetStack = mDefaultDisplay.getStack(
+                            WINDOWING_MODE_UNDEFINED, mTargetActivityType);
+                    final ActivityRecord targetActivity = targetStack.getTopActivity();
+                    if (DEBUG) Slog.d(TAG, "onAnimationFinished(): targetStack=" + targetStack
+                            + " targetActivity=" + targetActivity
+                            + " mRestoreTargetBehindStack=" + mRestoreTargetBehindStack);
+                    if (targetActivity == null) {
                         return;
                     }
 
                     // Restore the launched-behind state
-                    homeActivity.mLaunchTaskBehind = false;
+                    targetActivity.mLaunchTaskBehind = false;
 
-                    if (reorderMode == REORDER_MOVE_HOME_TO_TOP) {
-                        // Bring the home stack to the front
-                        final ActivityStack homeStack = homeActivity.getStack();
-                        mStackSupervisor.mNoAnimActivities.add(homeActivity);
-                        homeStack.moveToFront("RecentsAnimation.onAnimationFinished()");
-                    } else if (reorderMode == REORDER_MOVE_HOME_TO_ORIGINAL_POSITION){
-                        // Restore the home stack to its previous position
-                        final ActivityDisplay display = homeActivity.getDisplay();
-                        display.moveHomeStackBehindStack(mRestoreHomeBehindStack);
+                    if (reorderMode == REORDER_MOVE_TO_TOP) {
+                        // Bring the target stack to the front
+                        mStackSupervisor.mNoAnimActivities.add(targetActivity);
+                        targetStack.moveToFront("RecentsAnimation.onAnimationFinished()");
+                        if (DEBUG) {
+                            final ActivityStack topStack = getTopNonAlwaysOnTopStack();
+                            if (topStack != targetStack) {
+                                Slog.w(TAG, "Expected target stack=" + targetStack
+                                        + " to be top most but found stack=" + topStack);
+                            }
+                        }
+                    } else if (reorderMode == REORDER_MOVE_TO_ORIGINAL_POSITION){
+                        // Restore the target stack to its previous position
+                        final ActivityDisplay display = targetActivity.getDisplay();
+                        display.moveStackBehindStack(targetStack, mRestoreTargetBehindStack);
+                        if (DEBUG) {
+                            final ActivityStack aboveTargetStack =
+                                    mDefaultDisplay.getStackAbove(targetStack);
+                            if (mRestoreTargetBehindStack != null
+                                    && aboveTargetStack != mRestoreTargetBehindStack) {
+                                Slog.w(TAG, "Expected target stack=" + targetStack
+                                        + " to restored behind stack=" + mRestoreTargetBehindStack
+                                        + " but it is behind stack=" + aboveTargetStack);
+                            }
+                        }
                     } else {
-                        // Keep home stack in place, nothing changes, so ignore the transition logic
-                        // below
+                        // Keep target stack in place, nothing changes, so ignore the transition
+                        // logic below
                         return;
                     }
 
@@ -188,9 +254,13 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
                     mWindowManager.executeAppTransition();
 
                     // After reordering the stacks, reset the minimized state. At this point, either
-                    // home is now top-most and we will stay minimized (if in split-screen), or we
-                    // will have returned to the app, and the minimized state should be reset
+                    // the target activity is now top-most and we will stay minimized (if in
+                    // split-screen), or we will have returned to the app, and the minimized state
+                    // should be reset
                     mWindowManager.checkSplitScreenMinimizedChanged(true /* animate */);
+                } catch (Exception e) {
+                    Slog.e(TAG, "Failed to clean up recents activity", e);
+                    throw e;
                 } finally {
                     mWindowManager.continueSurfaceLayout();
                     Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
@@ -208,5 +278,19 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
         } catch (RemoteException e) {
             Slog.e(TAG, "Failed to cancel recents animation before start", e);
         }
+    }
+
+    /**
+     * @return The top stack that is not always-on-top.
+     */
+    private ActivityStack getTopNonAlwaysOnTopStack() {
+        for (int i = mDefaultDisplay.getChildCount() - 1; i >= 0; i--) {
+            final ActivityStack s = mDefaultDisplay.getChildAt(i);
+            if (s.getWindowConfiguration().isAlwaysOnTop()) {
+                continue;
+            }
+            return s;
+        }
+        return null;
     }
 }

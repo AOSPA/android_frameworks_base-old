@@ -19,6 +19,7 @@ package android.security.keystore;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.TestApi;
 import android.app.KeyguardManager;
 import android.hardware.fingerprint.FingerprintManager;
 import android.security.GateKeeper;
@@ -445,6 +446,9 @@ public final class KeyProtection implements ProtectionParameter, UserAuthArgs {
     /**
      * Returns {@code true} if the key is authorized to be used only if a test of user presence has
      * been performed between the {@code Signature.initSign()} and {@code Signature.sign()} calls.
+     * It requires that the KeyStore implementation have a direct way to validate the user presence
+     * for example a KeyStore hardware backed strongbox can use a button press that is observable
+     * in hardware.
      */
     public boolean isUserPresenceRequired() {
         return mUserPresenceRequred;
@@ -493,6 +497,7 @@ public final class KeyProtection implements ProtectionParameter, UserAuthArgs {
      * @see KeymasterUtils#addUserAuthArgs
      * @hide
      */
+    @TestApi
     public long getBoundToSpecificSecureUserId() {
         return mBoundToSecureUserId;
     }
@@ -508,8 +513,8 @@ public final class KeyProtection implements ProtectionParameter, UserAuthArgs {
     }
 
     /**
-     * Returns {@code true} if the screen must be unlocked for this key to be used for encryption or
-     * signing. Decryption and signature verification will still be available when the screen is
+     * Returns {@code true} if the screen must be unlocked for this key to be used for decryption or
+     * signing. Encryption and signature verification will still be available when the screen is
      * locked.
      *
      * @see Builder#setUnlockedDeviceRequired(boolean)
@@ -910,6 +915,7 @@ public final class KeyProtection implements ProtectionParameter, UserAuthArgs {
          * @see KeyProtection#getBoundToSpecificSecureUserId()
          * @hide
          */
+        @TestApi
         public Builder setBoundToSpecificSecureUserId(long secureUserId) {
             mBoundToSecureUserId = secureUserId;
             return this;

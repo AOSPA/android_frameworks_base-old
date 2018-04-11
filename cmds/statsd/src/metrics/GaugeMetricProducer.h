@@ -33,11 +33,12 @@ namespace os {
 namespace statsd {
 
 struct GaugeAtom {
-    GaugeAtom(std::shared_ptr<vector<FieldValue>> fields, int64_t timeNs)
-        : mFields(fields), mTimestamps(timeNs) {
+    GaugeAtom(std::shared_ptr<vector<FieldValue>> fields, int64_t elapsedTimeNs, int wallClockNs)
+        : mFields(fields), mElapsedTimestamps(elapsedTimeNs), mWallClockTimestampNs(wallClockNs) {
     }
     std::shared_ptr<vector<FieldValue>> mFields;
-    int64_t mTimestamps;
+    int64_t mElapsedTimestamps;
+    int64_t mWallClockTimestampNs;
 };
 
 struct GaugeBucket {
@@ -57,7 +58,7 @@ class GaugeMetricProducer : public virtual MetricProducer, public virtual PullDa
 public:
     GaugeMetricProducer(const ConfigKey& key, const GaugeMetric& gaugeMetric,
                         const int conditionIndex, const sp<ConditionWizard>& wizard,
-                        const int pullTagId, const int64_t startTimeNs);
+                        const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs);
 
     virtual ~GaugeMetricProducer();
 
@@ -65,7 +66,7 @@ public:
     void onDataPulled(const std::vector<std::shared_ptr<LogEvent>>& data) override;
 
     // GaugeMetric needs to immediately trigger another pull when we create the partial bucket.
-    void notifyAppUpgrade(const uint64_t& eventTimeNs, const string& apk, const int uid,
+    void notifyAppUpgrade(const int64_t& eventTimeNs, const string& apk, const int uid,
                           const int64_t version) override {
         std::lock_guard<std::mutex> lock(mMutex);
 
@@ -76,7 +77,7 @@ public:
         flushCurrentBucketLocked(eventTimeNs);
         mCurrentBucketStartTimeNs = eventTimeNs;
         if (mPullTagId != -1) {
-            pullLocked();
+            pullLocked(eventTimeNs);
         }
     };
 
@@ -87,34 +88,36 @@ protected:
             const LogEvent& event) override;
 
 private:
-    void onDumpReportLocked(const uint64_t dumpTimeNs,
+    void onDumpReportLocked(const int64_t dumpTimeNs,
+                            const bool include_current_partial_bucket,
                             android::util::ProtoOutputStream* protoOutput) override;
 
     // for testing
     GaugeMetricProducer(const ConfigKey& key, const GaugeMetric& gaugeMetric,
                         const int conditionIndex, const sp<ConditionWizard>& wizard,
-                        const int pullTagId, const uint64_t startTimeNs,
+                        const int pullTagId,
+                        const int64_t timeBaseNs, const int64_t startTimeNs,
                         std::shared_ptr<StatsPullerManager> statsPullerManager);
 
     // Internal interface to handle condition change.
-    void onConditionChangedLocked(const bool conditionMet, const uint64_t eventTime) override;
+    void onConditionChangedLocked(const bool conditionMet, const int64_t eventTime) override;
 
     // Internal interface to handle sliced condition change.
-    void onSlicedConditionMayChangeLocked(bool overallCondition, const uint64_t eventTime) override;
+    void onSlicedConditionMayChangeLocked(bool overallCondition, const int64_t eventTime) override;
 
     // Internal function to calculate the current used bytes.
     size_t byteSizeLocked() const override;
 
     void dumpStatesLocked(FILE* out, bool verbose) const override;
 
-    void dropDataLocked(const uint64_t dropTimeNs) override;
+    void dropDataLocked(const int64_t dropTimeNs) override;
 
     // Util function to flush the old packet.
-    void flushIfNeededLocked(const uint64_t& eventTime) override;
+    void flushIfNeededLocked(const int64_t& eventTime) override;
 
-    void flushCurrentBucketLocked(const uint64_t& eventTimeNs) override;
+    void flushCurrentBucketLocked(const int64_t& eventTimeNs) override;
 
-    void pullLocked();
+    void pullLocked(const int64_t timestampNs);
 
     int mTagId;
 

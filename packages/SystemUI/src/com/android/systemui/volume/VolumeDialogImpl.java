@@ -212,7 +212,6 @@ public class VolumeDialogImpl implements VolumeDialog {
                     .setDuration(300)
                     .setInterpolator(new SystemUIInterpolators.LogDecelerateInterpolator())
                     .withEndAction(() -> {
-                        mWindow.getDecorView().requestAccessibilityFocus();
                         if (!Prefs.getBoolean(mContext, Prefs.Key.TOUCHED_RINGER_TOGGLE, false)) {
                             mRingerIcon.postOnAnimationDelayed(mSinglePress, 1500);
                         }
@@ -302,15 +301,8 @@ public class VolumeDialogImpl implements VolumeDialog {
         if (D.BUG) Slog.d(TAG, "Adding row for stream " + stream);
         VolumeRow row = new VolumeRow();
         initRow(row, stream, iconRes, iconMuteRes, important, defaultStream);
-        if (dynamic && mRows.size() > 2) {
-            // Dynamic Streams should be the first in the list, so they're shown to start of
-            // everything except a11y
-            mDialogRowsView.addView(row.view, 1);
-            mRows.add(1, row);
-        } else {
-            mDialogRowsView.addView(row.view);
-            mRows.add(row);
-        }
+        mDialogRowsView.addView(row.view);
+        mRows.add(row);
     }
 
     private void addExistingRows() {
@@ -604,7 +596,8 @@ public class VolumeDialogImpl implements VolumeDialog {
             return activeRow.stream == STREAM_RING
                     || activeRow.stream == STREAM_ALARM
                     || activeRow.stream == STREAM_VOICE_CALL
-                    || activeRow.stream == STREAM_ACCESSIBILITY;
+                    || activeRow.stream == STREAM_ACCESSIBILITY
+                    || mDynamic.get(activeRow.stream);
         }
 
         return false;

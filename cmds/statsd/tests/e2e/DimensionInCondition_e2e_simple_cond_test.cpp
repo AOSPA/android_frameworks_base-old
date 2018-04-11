@@ -80,7 +80,7 @@ TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_SimpleCondition) {
                     TimeUnitToBucketSizeInMillis(config.duration_metric(0).bucket()) * 1000000LL;
 
             auto processor = CreateStatsLogProcessor(
-                    bucketStartTimeNs / NS_PER_SEC, config, cfgKey);
+                    bucketStartTimeNs, bucketStartTimeNs, config, cfgKey);
             EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
             EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
 
@@ -142,7 +142,8 @@ TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_SimpleCondition) {
 
             ConfigMetricsReportList reports;
             vector<uint8_t> buffer;
-            processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, &buffer);
+            processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, false,
+                                    &buffer);
             EXPECT_TRUE(buffer.size() > 0);
             EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
 
@@ -362,7 +363,7 @@ TEST(DimensionInConditionE2eTest, TestDurationMetric_Link_SimpleCondition) {
                     TimeUnitToBucketSizeInMillis(config.duration_metric(0).bucket()) * 1000000LL;
 
             auto processor = CreateStatsLogProcessor(
-                    bucketStartTimeNs / NS_PER_SEC, config, cfgKey);
+                    bucketStartTimeNs, bucketStartTimeNs, config, cfgKey);
             EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
             EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
 
@@ -433,7 +434,8 @@ TEST(DimensionInConditionE2eTest, TestDurationMetric_Link_SimpleCondition) {
 
             ConfigMetricsReportList reports;
             vector<uint8_t> buffer;
-            processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, &buffer);
+            processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, false,
+                                    &buffer);
             EXPECT_TRUE(buffer.size() > 0);
             EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
 
@@ -580,7 +582,7 @@ TEST(DimensionInConditionE2eTest, TestDurationMetric_PartialLink_SimpleCondition
                 TimeUnitToBucketSizeInMillis(config.duration_metric(0).bucket()) * 1000000LL;
 
         auto processor = CreateStatsLogProcessor(
-                bucketStartTimeNs / NS_PER_SEC, config, cfgKey);
+                bucketStartTimeNs, bucketStartTimeNs, config, cfgKey);
         EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
         EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
 
@@ -650,7 +652,7 @@ TEST(DimensionInConditionE2eTest, TestDurationMetric_PartialLink_SimpleCondition
 
         ConfigMetricsReportList reports;
         vector<uint8_t> buffer;
-        processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, &buffer);
+        processor->onDumpReport(cfgKey, bucketStartTimeNs + 2 * bucketSizeNs + 1, false, &buffer);
         EXPECT_TRUE(buffer.size() > 0);
         EXPECT_TRUE(reports.ParseFromArray(&buffer[0], buffer.size()));
 

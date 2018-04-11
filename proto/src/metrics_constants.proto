@@ -4779,7 +4779,7 @@ message MetricsEvent {
     // CATEGORY: SETTINGS
     ACTION_MOBILE_NETWORK_MANUAL_SELECT_NETWORK = 1210;
 
-    // FIELD - Manually selected mobile network
+    // Not used anymore.
     FIELD_MOBILE_NETWORK = 1211;
 
     // OPEN: Settings > Network & Internet > Mobile network > Access Point Names
@@ -5571,6 +5571,52 @@ message MetricsEvent {
     // CATEGORY: SETTINGS
     // OS: P
     ACTION_SETTINGS_SLICE_CHANGED = 1372;
+
+    // OPEN: Settings > Network & Internet > Wi-Fi > Wi-Fi Preferences > Turn on Wi-Fi automatically
+    //       note: Wifi Scanning must be off for this dialog to show
+    // CATEGORY: SETTINGS
+    // OS: P
+    WIFI_SCANNING_NEEDED_DIALOG = 1373;
+
+    // OPEN: Settings > System > Gestures > Swipe up gesture
+    // CATEGORY: SETTINGS
+    // OS: P
+    SETTINGS_GESTURE_SWIPE_UP = 1374;
+
+    // OPEN: Settings > Storage > Dialog to format a storage volume
+    // CATEGORY: SETTINGS
+    // OS: P
+    DIALOG_VOLUME_FORMAT = 1375;
+
+    // OPEN: DND onboarding activity > screen on checkbox
+    // CATEGORY: SETTINGS
+    // OS: P
+    ACTION_ZEN_ONBOARDING_SCREEN_ON = 1376;
+
+    // OPEN: DND onboarding activity > screen off checkbox
+    // CATEGORY: SETTINGS
+    // OS: P
+    ACTION_ZEN_ONBOARDING_SCREEN_OFF = 1377;
+
+    // OPEN: DND onboarding activity > Ok button
+    // CATEGORY: SETTINGS
+    // OS: P
+    ACTION_ZEN_ONBOARDING_OK = 1378;
+
+    // OPEN: DND onboarding activity > Settings link
+    // CATEGORY: SETTINGS
+    // OS: P
+    ACTION_ZEN_ONBOARDING_SETTINGS = 1379;
+
+    // OPEN: DND onboarding activity
+    // CATEGORY: SETTINGS
+    // OS: P
+    SETTINGS_ZEN_ONBOARDING = 1380;
+
+    // OPEN: Settings > Display > Auto brightness
+    // CATEGORY: SETTINGS
+    // OS: P
+    SETTINGS_AUTO_BRIGHTNESS = 1381;
 
     // ---- End P Constants, all P constants go above this line ----
     // Add new aosp constants above this line.

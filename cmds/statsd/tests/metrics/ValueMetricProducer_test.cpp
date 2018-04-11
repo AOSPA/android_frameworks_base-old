@@ -68,7 +68,7 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillOnce(Return());
 
     ValueMetricProducer valueProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      tagId, bucketStartTimeNs, pullerManager);
+                                      tagId, bucketStartTimeNs, bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     vector<shared_ptr<LogEvent>> allData;
@@ -90,8 +90,7 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
     EXPECT_EQ(0, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
     EXPECT_EQ(11, curInterval.start);
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     allData.clear();
     event = make_shared<LogEvent>(tagId, bucket3StartTimeNs + 1);
@@ -108,7 +107,7 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
     EXPECT_EQ(0, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(2UL, valueProducer.mPastBuckets.begin()->second.size());
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
     EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second.back().mValue);
 
     allData.clear();
@@ -125,7 +124,7 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
     EXPECT_EQ(0, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(3UL, valueProducer.mPastBuckets.begin()->second.size());
+    EXPECT_EQ(2UL, valueProducer.mPastBuckets.begin()->second.size());
     EXPECT_EQ(13, valueProducer.mPastBuckets.begin()->second.back().mValue);
 }
 
@@ -169,7 +168,7 @@ TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition) {
             }));
 
     ValueMetricProducer valueProducer(kConfigKey, metric, 1, wizard, tagId, bucketStartTimeNs,
-                                      pullerManager);
+                                      bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
     valueProducer.onConditionChanged(true, bucketStartTimeNs + 8);
 
@@ -222,7 +221,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithUpgrade) {
     shared_ptr<MockStatsPullerManager> pullerManager =
             make_shared<StrictMock<MockStatsPullerManager>>();
     ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
-                                      pullerManager);
+                                      bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     shared_ptr<LogEvent> event1 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 10);
@@ -234,7 +233,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithUpgrade) {
 
     valueProducer.notifyAppUpgrade(eventUpgradeTimeNs, "ANY.APP", 1, 1);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
-    EXPECT_EQ((uint64_t)eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
 
     shared_ptr<LogEvent> event2 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 59 * NS_PER_SEC);
     event2->write(1);
@@ -242,7 +241,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithUpgrade) {
     event2->init();
     valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event2);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
-    EXPECT_EQ((uint64_t)eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
 
     // Next value should create a new bucket.
     shared_ptr<LogEvent> event3 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 65 * NS_PER_SEC);
@@ -251,7 +250,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithUpgrade) {
     event3->init();
     valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event3);
     EXPECT_EQ(2UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
-    EXPECT_EQ((uint64_t)bucketStartTimeNs + bucketSizeNs, valueProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(bucketStartTimeNs + bucketSizeNs, valueProducer.mCurrentBucketStartTimeNs);
 }
 
 TEST(ValueMetricProducerTest, TestPulledValueWithUpgrade) {
@@ -278,7 +277,7 @@ TEST(ValueMetricProducerTest, TestPulledValueWithUpgrade) {
                 return true;
             }));
     ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, tagId, bucketStartTimeNs,
-                                      pullerManager);
+                                      bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     vector<shared_ptr<LogEvent>> allData;
@@ -294,7 +293,7 @@ TEST(ValueMetricProducerTest, TestPulledValueWithUpgrade) {
 
     valueProducer.notifyAppUpgrade(eventUpgradeTimeNs, "ANY.APP", 1, 1);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
-    EXPECT_EQ((uint64_t)eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
     EXPECT_EQ(20L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mValue);
 
     allData.clear();
@@ -305,7 +304,7 @@ TEST(ValueMetricProducerTest, TestPulledValueWithUpgrade) {
     allData.push_back(event);
     valueProducer.onDataPulled(allData);
     EXPECT_EQ(2UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
-    EXPECT_EQ((uint64_t)bucket2StartTimeNs, valueProducer.mCurrentBucketStartTimeNs);
+    EXPECT_EQ(bucket2StartTimeNs, valueProducer.mCurrentBucketStartTimeNs);
     EXPECT_EQ(30L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][1].mValue);
 }
 
@@ -321,7 +320,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithoutCondition) {
             make_shared<StrictMock<MockStatsPullerManager>>();
 
     ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
-                                      pullerManager);
+                                      bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     shared_ptr<LogEvent> event1 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 10);
@@ -369,7 +368,7 @@ TEST(ValueMetricProducerTest, TestAnomalyDetection) {
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
     ValueMetricProducer valueProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      -1 /*not pulled*/, bucketStartTimeNs);
+                                      -1 /*not pulled*/, bucketStartTimeNs, bucketStartTimeNs);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     sp<AnomalyTracker> anomalyTracker = valueProducer.addAnomalyTracker(alert, alarmMonitor);
@@ -448,7 +447,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition) {
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillOnce(Return());
 
     ValueMetricProducer valueProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      tagId, bucketStartTimeNs, pullerManager);
+                                      tagId, bucketStartTimeNs, bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     vector<shared_ptr<LogEvent>> allData;
@@ -464,15 +463,13 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     // startUpdated:true tainted:0 sum:0 start:11
     EXPECT_EQ(true, curInterval.startUpdated);
     EXPECT_EQ(0, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
     EXPECT_EQ(11, curInterval.start);
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // pull 2 at correct time
     allData.clear();
@@ -490,7 +487,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition) {
     EXPECT_EQ(0, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(2UL, valueProducer.mPastBuckets.begin()->second.size());
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
     EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second.back().mValue);
 
     // pull 3 come late.
@@ -512,11 +509,8 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition) {
     EXPECT_EQ(36, curInterval.start);
     EXPECT_EQ(0, curInterval.sum);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(4UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[0].mValue);
-    EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second[1].mValue);
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[2].mValue);
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[3].mValue);
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
+    EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second.back().mValue);
 }
 
 /*
@@ -562,7 +556,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition) {
             }));
 
     ValueMetricProducer valueProducer(kConfigKey, metric, 1, wizard, tagId, bucketStartTimeNs,
-                                      pullerManager);
+                                      bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
     valueProducer.onConditionChanged(true, bucketStartTimeNs + 8);
 
@@ -582,9 +576,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition) {
     EXPECT_EQ(false, curInterval.startUpdated);
     EXPECT_EQ(1, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[0].mValue);
+    EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // Now the alarm is delivered.
     // since the condition turned to off before this pull finish, it has no effect
@@ -601,9 +593,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition) {
     EXPECT_EQ(false, curInterval.startUpdated);
     EXPECT_EQ(1, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[0].mValue);
+    EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 }
 
 /*
@@ -660,7 +650,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2) {
             }));
 
     ValueMetricProducer valueProducer(kConfigKey, metric, 1, wizard, tagId, bucketStartTimeNs,
-                                      pullerManager);
+                                      bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
     valueProducer.onConditionChanged(true, bucketStartTimeNs + 8);
 
@@ -680,9 +670,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2) {
     EXPECT_EQ(false, curInterval.startUpdated);
     EXPECT_EQ(1, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[0].mValue);
+    EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // condition changed to true again, before the pull alarm is delivered
     valueProducer.onConditionChanged(true, bucket2StartTimeNs + 25);
@@ -691,9 +679,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2) {
     EXPECT_EQ(130, curInterval.start);
     EXPECT_EQ(1, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[0].mValue);
+    EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // Now the alarm is delivered, but it is considered late, it has no effect
     vector<shared_ptr<LogEvent>> allData;
@@ -710,9 +696,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2) {
     EXPECT_EQ(130, curInterval.start);
     EXPECT_EQ(1, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[0].mValue);
+    EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 }
 
 /*
@@ -758,7 +742,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition3) {
             }));
 
     ValueMetricProducer valueProducer(kConfigKey, metric, 1, wizard, tagId, bucketStartTimeNs,
-                                      pullerManager);
+                                      bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
     valueProducer.onConditionChanged(true, bucketStartTimeNs + 8);
 
@@ -779,9 +763,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition3) {
     EXPECT_EQ(false, curInterval.startUpdated);
     EXPECT_EQ(1, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[0].mValue);
+    EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // Alarm is delivered in time, but the pull is very slow, and pullers are called in order,
     // so this one comes even later
@@ -798,9 +780,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition3) {
     EXPECT_EQ(false, curInterval.startUpdated);
     EXPECT_EQ(1, curInterval.tainted);
     EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
-    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(0, valueProducer.mPastBuckets.begin()->second[0].mValue);
+    EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 }
 
 }  // namespace statsd

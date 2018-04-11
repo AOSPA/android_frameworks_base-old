@@ -168,9 +168,6 @@ public class NetworkRequest implements Parcelable {
          * the requested network's required capabilities.  Note that when searching
          * for a network to satisfy a request, all capabilities requested must be
          * satisfied.
-         * <p>
-         * If the given capability was previously added to the list of unwanted capabilities
-         * then the capability will also be removed from the list of unwanted capabilities.
          *
          * @param capability The capability to add.
          * @return The builder to facilitate chaining
@@ -182,8 +179,7 @@ public class NetworkRequest implements Parcelable {
         }
 
         /**
-         * Removes (if found) the given capability from this builder instance from both required
-         * and unwanted capabilities lists.
+         * Removes (if found) the given capability from this builder instance.
          *
          * @param capability The capability to remove.
          * @return The builder to facilitate chaining.
@@ -231,6 +227,8 @@ public class NetworkRequest implements Parcelable {
          *
          * @param capability The capability to add to unwanted capability list.
          * @return The builder to facilitate chaining.
+         *
+         * @removed
          */
         public Builder addUnwantedCapability(@NetworkCapabilities.NetCapability int capability) {
             mNetworkCapabilities.addUnwantedCapability(capability);
@@ -433,6 +431,15 @@ public class NetworkRequest implements Parcelable {
      */
     public boolean hasCapability(@NetCapability int capability) {
         return networkCapabilities.hasCapability(capability);
+    }
+
+    /**
+     * @see Builder#addUnwantedCapability(int)
+     *
+     * @removed
+     */
+    public boolean hasUnwantedCapability(@NetCapability int capability) {
+        return networkCapabilities.hasUnwantedCapability(capability);
     }
 
     /**

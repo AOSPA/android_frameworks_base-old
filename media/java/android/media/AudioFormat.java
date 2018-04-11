@@ -18,6 +18,7 @@ package android.media;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.TestApi;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -462,6 +463,7 @@ public final class AudioFormat implements Parcelable {
      * @param mask a combination of the CHANNEL_IN_* definitions, even CHANNEL_IN_DEFAULT
      * @return number of channels for the mask
      */
+    @TestApi
     public static int channelCountFromInChannelMask(int mask) {
         return Integer.bitCount(mask);
     }
@@ -471,6 +473,7 @@ public final class AudioFormat implements Parcelable {
      * @param mask a combination of the CHANNEL_OUT_* definitions, but not CHANNEL_OUT_DEFAULT
      * @return number of channels for the mask
      */
+    @TestApi
     public static int channelCountFromOutChannelMask(int mask) {
         return Integer.bitCount(mask);
     }
@@ -522,6 +525,7 @@ public final class AudioFormat implements Parcelable {
     // CHANNEL_IN_ALL is not yet defined; if added then it should match AUDIO_CHANNEL_IN_ALL
 
     /** @hide */
+    @TestApi
     public static int getBytesPerSample(int audioFormat)
     {
         switch (audioFormat) {
@@ -607,6 +611,7 @@ public final class AudioFormat implements Parcelable {
     }
 
     /** @hide */
+    @TestApi
     public static boolean isEncodingLinearPcm(int audioFormat)
     {
         switch (audioFormat) {

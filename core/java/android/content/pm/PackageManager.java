@@ -2629,6 +2629,17 @@ public abstract class PackageManager {
             "android.hardware.strongbox_keystore";
 
     /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
+     * The device has a Keymaster implementation that supports Device ID attestation.
+     *
+     * @see DevicePolicyManager#isDeviceIdAttestationSupported
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_DEVICE_ID_ATTESTATION =
+            "android.software.device_id_attestation";
+
+    /**
      * Action to external storage service to clean out removed apps.
      * @hide
      */
@@ -3941,6 +3952,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @TestApi
     public abstract @NonNull String getServicesSystemSharedLibraryPackageName();
 
     /**
@@ -3950,6 +3962,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @TestApi
     public abstract @NonNull String getSharedSystemSharedLibraryPackageName();
 
     /**
@@ -5603,46 +5616,6 @@ public abstract class PackageManager {
     }
 
     /**
-     * Retrieve the {@link PersistableBundle} that was passed as {@code appExtras} when the given
-     * package was suspended.
-     *
-     * <p> The caller must hold permission {@link Manifest.permission#SUSPEND_APPS} to use this
-     * api.</p>
-     *
-     * @param packageName The package to retrieve extras for.
-     * @return The {@code appExtras} for the suspended package.
-     *
-     * @see #setPackagesSuspended(String[], boolean, PersistableBundle, PersistableBundle, String)
-     * @hide
-     */
-    @SystemApi
-    @RequiresPermission(Manifest.permission.SUSPEND_APPS)
-    public @Nullable PersistableBundle getSuspendedPackageAppExtras(String packageName) {
-        throw new UnsupportedOperationException("getSuspendedPackageAppExtras not implemented");
-    }
-
-    /**
-     * Set the app extras for a suspended package. This method can be used to update the appExtras
-     * for a package that was earlier suspended using
-     * {@link #setPackagesSuspended(String[], boolean, PersistableBundle, PersistableBundle,
-     * String)}
-     * Does nothing if the given package is not already in a suspended state.
-     *
-     * @param packageName The package for which the appExtras need to be updated
-     * @param appExtras The new appExtras for the given package
-     *
-     * @see #setPackagesSuspended(String[], boolean, PersistableBundle, PersistableBundle, String)
-     *
-     * @hide
-     */
-    @SystemApi
-    @RequiresPermission(Manifest.permission.SUSPEND_APPS)
-    public void setSuspendedPackageAppExtras(String packageName,
-            @Nullable PersistableBundle appExtras) {
-        throw new UnsupportedOperationException("setSuspendedPackageAppExtras not implemented");
-    }
-
-    /**
      * Returns any extra information supplied as {@code appExtras} to the system when the calling
      * app was suspended.
      *
@@ -6118,7 +6091,9 @@ public abstract class PackageManager {
      * signed.  This should be used instead of {@code getPackageInfo} with {@code GET_SIGNATURES}
      * since it takes into account the possibility of signing certificate rotation, except in the
      * case of packages that are signed by multiple certificates, for which signing certificate
-     * rotation is not supported.
+     * rotation is not supported.  This method is analogous to using {@code getPackageInfo} with
+     * {@code GET_SIGNING_CERTIFICATES} and then searching through the resulting {@code
+     * signingCertificateHistory} field to see if the desired certificate is present.
      *
      * @param packageName package whose signing certificates to check
      * @param certificate signing certificate for which to search
@@ -6132,13 +6107,19 @@ public abstract class PackageManager {
     }
 
     /**
-     * Searches the set of signing certificates by which the given uid has proven to have been
-     * signed.  This should be used instead of {@code getPackageInfo} with {@code GET_SIGNATURES}
+     * Searches the set of signing certificates by which the package(s) for the given uid has proven
+     * to have been signed.  For multiple packages sharing the same uid, this will return the
+     * signing certificates found in the signing history of the "newest" package, where "newest"
+     * indicates the package with the newest signing certificate in the shared uid group.  This
+     * method should be used instead of {@code getPackageInfo} with {@code GET_SIGNATURES}
      * since it takes into account the possibility of signing certificate rotation, except in the
      * case of packages that are signed by multiple certificates, for which signing certificate
-     * rotation is not supported.
+     * rotation is not supported. This method is analogous to using {@code getPackagesForUid}
+     * followed by {@code getPackageInfo} with {@code GET_SIGNING_CERTIFICATES}, selecting the
+     * {@code PackageInfo} of the newest-signed bpackage , and finally searching through the
+     * resulting {@code signingCertificateHistory} field to see if the desired certificate is there.
      *
-     * @param uid package whose signing certificates to check
+     * @param uid uid whose signing certificates to check
      * @param certificate signing certificate for which to search
      * @param type representation of the {@code certificate}
      * @return true if this package was or is signed by exactly the certificate {@code certificate}

@@ -245,6 +245,8 @@ package android.content.pm {
     method public abstract int getInstallReason(java.lang.String, android.os.UserHandle);
     method public abstract java.lang.String[] getNamesForUids(int[]);
     method public abstract java.lang.String getPermissionControllerPackageName();
+    method public abstract java.lang.String getServicesSystemSharedLibraryPackageName();
+    method public abstract java.lang.String getSharedSystemSharedLibraryPackageName();
     method public abstract boolean isPermissionReviewModeEnabled();
     field public static final java.lang.String FEATURE_ADOPTABLE_STORAGE = "android.software.adoptable_storage";
     field public static final java.lang.String FEATURE_FILE_BASED_ENCRYPTION = "android.software.file_based_encryption";
@@ -465,6 +467,70 @@ package android.location {
     method public void setType(int);
   }
 
+  public class LocationManager {
+    method public java.lang.String[] getBackgroundThrottlingWhitelist();
+  }
+
+}
+
+package android.media {
+
+  public final class AudioFocusRequest {
+    method public android.media.AudioManager.OnAudioFocusChangeListener getOnAudioFocusChangeListener();
+  }
+
+  public final class AudioFormat implements android.os.Parcelable {
+    method public static int channelCountFromInChannelMask(int);
+    method public static int channelCountFromOutChannelMask(int);
+    method public static int getBytesPerSample(int);
+    method public static boolean isEncodingLinearPcm(int);
+  }
+
+  public final class AudioPresentation {
+    ctor public AudioPresentation(int, int, java.util.Map<java.lang.String, java.lang.String>, java.lang.String, int, boolean, boolean, boolean);
+    method public int getPresentationId();
+    method public int getProgramId();
+  }
+
+  public final class PlaybackParams implements android.os.Parcelable {
+    method public int getAudioStretchMode();
+    method public android.media.PlaybackParams setAudioStretchMode(int);
+  }
+
+  public static final class VolumeShaper.Configuration.Builder {
+    method public android.media.VolumeShaper.Configuration.Builder setOptionFlags(int);
+  }
+
+}
+
+package android.media.audiofx {
+
+  public class AudioEffect {
+    method public static int byteArrayToInt(byte[]);
+    method public static short byteArrayToShort(byte[]);
+    method public int getParameter(byte[], byte[]) throws java.lang.IllegalStateException;
+    method public int getParameter(int, byte[]) throws java.lang.IllegalStateException;
+    method public int getParameter(int, int[]) throws java.lang.IllegalStateException;
+    method public int getParameter(int, short[]) throws java.lang.IllegalStateException;
+    method public int getParameter(int[], short[]) throws java.lang.IllegalStateException;
+    method public static byte[] intToByteArray(int);
+    method public static boolean isEffectTypeAvailable(java.util.UUID);
+    method public static boolean isError(int);
+    method public int setParameter(byte[], byte[]) throws java.lang.IllegalStateException;
+    method public int setParameter(int, int) throws java.lang.IllegalStateException;
+    method public int setParameter(int, short) throws java.lang.IllegalStateException;
+    method public int setParameter(int, byte[]) throws java.lang.IllegalStateException;
+    method public int setParameter(int[], int[]) throws java.lang.IllegalStateException;
+    method public int setParameter(int[], byte[]) throws java.lang.IllegalStateException;
+    method public void setParameterListener(android.media.audiofx.AudioEffect.OnParameterChangeListener);
+    method public static byte[] shortToByteArray(short);
+    field public static final java.util.UUID EFFECT_TYPE_NULL;
+  }
+
+  public static abstract interface AudioEffect.OnParameterChangeListener {
+    method public abstract void onParameterChange(android.media.audiofx.AudioEffect, int, byte[], byte[]);
+  }
+
 }
 
 package android.net {
@@ -487,6 +553,15 @@ package android.os {
   public static class Build.VERSION {
     field public static final int FIRST_SDK_INT;
     field public static final int RESOURCES_SDK_INT;
+  }
+
+  public class DeviceIdleManager {
+    method public java.lang.String[] getSystemPowerWhitelist();
+    method public java.lang.String[] getSystemPowerWhitelistExceptIdle();
+  }
+
+  public class Environment {
+    method public static java.io.File buildPath(java.io.File, java.lang.String...);
   }
 
   public class IncidentManager {
@@ -527,6 +602,7 @@ package android.os {
     field public static final int DETECT_VM_CURSOR_LEAKS = 256; // 0x100
     field public static final int DETECT_VM_FILE_URI_EXPOSURE = 8192; // 0x2000
     field public static final int DETECT_VM_INSTANCE_LEAKS = 2048; // 0x800
+    field public static final int DETECT_VM_NON_SDK_API_USAGE = 1073741824; // 0x40000000
     field public static final int DETECT_VM_REGISTRATION_LEAKS = 4096; // 0x1000
     field public static final int DETECT_VM_UNTAGGED_SOCKET = -2147483648; // 0x80000000
   }
@@ -555,12 +631,18 @@ package android.os {
     method public abstract void log(android.os.StrictMode.ViolationInfo);
   }
 
+  public class SystemProperties {
+    method public static java.lang.String get(java.lang.String, java.lang.String);
+  }
+
   public final class UserHandle implements android.os.Parcelable {
     method public static int getAppId(int);
     method public int getIdentifier();
+    field public static final android.os.UserHandle SYSTEM;
   }
 
   public class UserManager {
+    method public static boolean isSplitSystemUser();
     field public static final java.lang.String ACTION_USER_RESTRICTIONS_CHANGED = "android.os.action.USER_RESTRICTIONS_CHANGED";
   }
 
@@ -623,6 +705,14 @@ package android.security.keystore {
     field public static final int ID_TYPE_IMEI = 2; // 0x2
     field public static final int ID_TYPE_MEID = 3; // 0x3
     field public static final int ID_TYPE_SERIAL = 1; // 0x1
+  }
+
+  public final class KeyProtection implements java.security.KeyStore.ProtectionParameter {
+    method public long getBoundToSpecificSecureUserId();
+  }
+
+  public static final class KeyProtection.Builder {
+    method public android.security.keystore.KeyProtection.Builder setBoundToSpecificSecureUserId(long);
   }
 
 }
@@ -777,6 +867,10 @@ package android.telephony {
 
   public class ServiceState implements android.os.Parcelable {
     method public void setCdmaSystemAndNetworkId(int, int);
+    method public void setCellBandwidths(int[]);
+    method public void setChannelNumber(int);
+    method public void setRilDataRadioTechnology(int);
+    method public void setRilVoiceRadioTechnology(int);
   }
 
   public class TelephonyManager {

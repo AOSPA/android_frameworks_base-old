@@ -79,6 +79,11 @@ public class AutofillPopupWindow extends PopupWindow {
     public AutofillPopupWindow(@NonNull IAutofillWindowPresenter presenter) {
         mWindowPresenter = new WindowPresenter(presenter);
 
+        // We want to show the window as system controlled one so it covers app windows, but it has
+        // to be an application type (so it's contained inside the application area).
+        // Hence, we set it to the application type with the highest z-order, which currently
+        // is TYPE_APPLICATION_ABOVE_SUB_PANEL.
+        setWindowLayoutType(WindowManager.LayoutParams.TYPE_APPLICATION_ABOVE_SUB_PANEL);
         setTouchModal(false);
         setOutsideTouchable(true);
         setInputMethodMode(INPUT_METHOD_NOT_NEEDED);
