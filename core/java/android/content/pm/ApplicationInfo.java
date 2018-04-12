@@ -1724,7 +1724,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         if (mHiddenApiPolicy != HIDDEN_API_ENFORCEMENT_DEFAULT) {
             return mHiddenApiPolicy;
         }
-        if (targetSdkVersion <= Build.VERSION_CODES.O_MR1) {
+        if (targetSdkVersion < Build.VERSION_CODES.P) {
             return HIDDEN_API_ENFORCEMENT_BLACK;
         } else {
             return HIDDEN_API_ENFORCEMENT_DARK_GREY_AND_BLACK;
@@ -1758,9 +1758,9 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         if (isPackageWhitelistedForHiddenApis()) {
             return;
         }
-        if (targetSdkVersion <= Build.VERSION_CODES.O_MR1) {
+        if (targetSdkVersion < Build.VERSION_CODES.P) {
             setHiddenApiEnforcementPolicy(policyPreP);
-        } else if (targetSdkVersion > Build.VERSION_CODES.O_MR1) {
+        } else if (targetSdkVersion >= Build.VERSION_CODES.P) {
             setHiddenApiEnforcementPolicy(policyP);
         }
 

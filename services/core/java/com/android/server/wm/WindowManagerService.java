@@ -1844,10 +1844,9 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    public int relayoutWindow(Session session, IWindow client, int seq,
-            LayoutParams attrs, int requestedWidth,
-            int requestedHeight, int viewVisibility, int flags,
-            Rect outFrame, Rect outOverscanInsets, Rect outContentInsets,
+    public int relayoutWindow(Session session, IWindow client, int seq, LayoutParams attrs,
+            int requestedWidth, int requestedHeight, int viewVisibility, int flags,
+            long frameNumber, Rect outFrame, Rect outOverscanInsets, Rect outContentInsets,
             Rect outVisibleInsets, Rect outStableInsets, Rect outOutsets, Rect outBackdropFrame,
             DisplayCutout.ParcelableWrapper outCutout, MergedConfiguration mergedConfiguration,
             Surface outSurface) {
@@ -1874,6 +1873,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 win.setRequestedSize(requestedWidth, requestedHeight);
             }
 
+            win.setFrameNumber(frameNumber);
             int attrChanges = 0;
             int flagChanges = 0;
             if (attrs != null) {
