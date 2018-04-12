@@ -1447,7 +1447,6 @@ public class MediaRecorder implements AudioRouting
         int status = native_getActiveMicrophones(activeMicrophones);
         if (status != AudioManager.SUCCESS) {
             Log.e(TAG, "getActiveMicrophones failed:" + status);
-            return new ArrayList<MicrophoneInfo>();
         }
         AudioManager.setPortIdForMicrophones(activeMicrophones);
 
