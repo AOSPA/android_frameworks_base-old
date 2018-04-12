@@ -20,7 +20,6 @@ import static com.android.internal.util.Preconditions.checkNotNull;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
-import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
 import android.content.Context;
@@ -337,6 +336,9 @@ public final class IpSecManager {
      */
     public void applyTransportModeTransform(@NonNull Socket socket,
             @PolicyDirection int direction, @NonNull IpSecTransform transform) throws IOException {
+        // Ensure creation of FD. See b/77548890 for more details.
+        socket.getSoLinger();
+
         applyTransportModeTransform(socket.getFileDescriptor$(), direction, transform);
     }
 
@@ -441,6 +443,9 @@ public final class IpSecManager {
      * @throws IOException indicating that the transform could not be removed from the socket
      */
     public void removeTransportModeTransforms(@NonNull Socket socket) throws IOException {
+        // Ensure creation of FD. See b/77548890 for more details.
+        socket.getSoLinger();
+
         removeTransportModeTransforms(socket.getFileDescriptor$());
     }
 
@@ -660,7 +665,6 @@ public final class IpSecManager {
      * to create Network objects which are accessible to the Android system.
      * @hide
      */
-    @SystemApi
     public static final class IpSecTunnelInterface implements AutoCloseable {
         private final String mOpPackageName;
         private final IIpSecService mService;
@@ -684,14 +688,14 @@ public final class IpSecManager {
          * tunneled traffic.
          *
          * @param address the local address for traffic inside the tunnel
+         * @param prefixLen length of the InetAddress prefix
          * @hide
          */
-        @SystemApi
         @RequiresPermission(android.Manifest.permission.MANAGE_IPSEC_TUNNELS)
-        public void addAddress(@NonNull LinkAddress address) throws IOException {
+        public void addAddress(@NonNull InetAddress address, int prefixLen) throws IOException {
             try {
                 mService.addAddressToTunnelInterface(
-                        mResourceId, address, mOpPackageName);
+                        mResourceId, new LinkAddress(address, prefixLen), mOpPackageName);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -703,14 +707,14 @@ public final class IpSecManager {
          * <p>Remove an address which was previously added to the IpSecTunnelInterface
          *
          * @param address to be removed
+         * @param prefixLen length of the InetAddress prefix
          * @hide
          */
-        @SystemApi
         @RequiresPermission(android.Manifest.permission.MANAGE_IPSEC_TUNNELS)
-        public void removeAddress(@NonNull LinkAddress address) throws IOException {
+        public void removeAddress(@NonNull InetAddress address, int prefixLen) throws IOException {
             try {
                 mService.removeAddressFromTunnelInterface(
-                        mResourceId, address, mOpPackageName);
+                        mResourceId, new LinkAddress(address, prefixLen), mOpPackageName);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -801,7 +805,6 @@ public final class IpSecManager {
      * @throws ResourceUnavailableException indicating that too many encapsulation sockets are open
      * @hide
      */
-    @SystemApi
     @NonNull
     @RequiresPermission(android.Manifest.permission.MANAGE_IPSEC_TUNNELS)
     public IpSecTunnelInterface createIpSecTunnelInterface(@NonNull InetAddress localAddress,
@@ -828,7 +831,6 @@ public final class IpSecManager {
      *         layer failure.
      * @hide
      */
-    @SystemApi
     @RequiresPermission(android.Manifest.permission.MANAGE_IPSEC_TUNNELS)
     public void applyTunnelModeTransform(@NonNull IpSecTunnelInterface tunnel,
             @PolicyDirection int direction, @NonNull IpSecTransform transform) throws IOException {

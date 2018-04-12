@@ -20,8 +20,6 @@ import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
 import static android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED;
 
-import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
-
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IntentFilterVerificationInfo;
 import android.content.pm.PackageManager;
@@ -398,11 +396,12 @@ public abstract class PackageSettingBase extends SettingBase {
         return readUserState(userId).suspended;
     }
 
-    void setSuspended(boolean suspended, String suspendingPackage, PersistableBundle appExtras,
-            PersistableBundle launcherExtras, int userId) {
+    void setSuspended(boolean suspended, String suspendingPackage, String dialogMessage,
+            PersistableBundle appExtras, PersistableBundle launcherExtras, int userId) {
         final PackageUserState existingUserState = modifyUserState(userId);
         existingUserState.suspended = suspended;
         existingUserState.suspendingPackage = suspended ? suspendingPackage : null;
+        existingUserState.dialogMessage = suspended ? dialogMessage : null;
         existingUserState.suspendedAppExtras = suspended ? appExtras : null;
         existingUserState.suspendedLauncherExtras = suspended ? launcherExtras : null;
     }
@@ -425,8 +424,8 @@ public abstract class PackageSettingBase extends SettingBase {
 
     void setUserState(int userId, long ceDataInode, int enabled, boolean installed, boolean stopped,
             boolean notLaunched, boolean hidden, boolean suspended, String suspendingPackage,
-            PersistableBundle suspendedAppExtras, PersistableBundle suspendedLauncherExtras,
-            boolean instantApp,
+            String dialogMessage, PersistableBundle suspendedAppExtras,
+            PersistableBundle suspendedLauncherExtras, boolean instantApp,
             boolean virtualPreload, String lastDisableAppCaller,
             ArraySet<String> enabledComponents, ArraySet<String> disabledComponents,
             int domainVerifState, int linkGeneration, int installReason,
@@ -440,6 +439,7 @@ public abstract class PackageSettingBase extends SettingBase {
         state.hidden = hidden;
         state.suspended = suspended;
         state.suspendingPackage = suspendingPackage;
+        state.dialogMessage = dialogMessage;
         state.suspendedAppExtras = suspendedAppExtras;
         state.suspendedLauncherExtras = suspendedLauncherExtras;
         state.lastDisableAppCaller = lastDisableAppCaller;

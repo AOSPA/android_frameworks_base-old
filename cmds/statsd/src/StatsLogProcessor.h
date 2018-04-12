@@ -36,10 +36,13 @@ class StatsLogProcessor : public ConfigListener {
 public:
     StatsLogProcessor(const sp<UidMap>& uidMap, const sp<AlarmMonitor>& anomalyAlarmMonitor,
                       const sp<AlarmMonitor>& subscriberTriggerAlarmMonitor,
-                      const long timeBaseSec,
+                      const int64_t timeBaseNs,
                       const std::function<void(const ConfigKey&)>& sendBroadcast);
     virtual ~StatsLogProcessor();
 
+    void OnLogEvent(LogEvent* event, bool reconnectionStarts);
+
+    // for testing only.
     void OnLogEvent(LogEvent* event);
 
     void OnConfigUpdated(const int64_t timestampNs, const ConfigKey& key,
@@ -48,16 +51,17 @@ public:
 
     size_t GetMetricsSize(const ConfigKey& key) const;
 
-    void onDumpReport(const ConfigKey& key, const uint64_t dumpTimeNs, vector<uint8_t>* outData);
+    void onDumpReport(const ConfigKey& key, const int64_t dumpTimeNs,
+                      const bool include_current_partial_bucket, vector<uint8_t>* outData);
 
     /* Tells MetricsManager that the alarms in alarmSet have fired. Modifies anomaly alarmSet. */
     void onAnomalyAlarmFired(
-            const uint64_t& timestampNs,
+            const int64_t& timestampNs,
             unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet);
 
     /* Tells MetricsManager that the alarms in alarmSet have fired. Modifies periodic alarmSet. */
     void onPeriodicAlarmFired(
-            const uint64_t& timestampNs,
+            const int64_t& timestampNs,
             unordered_set<sp<const InternalAlarm>, SpHash<InternalAlarm>> alarmSet);
 
     /* Flushes data to disk. Data on memory will be gone after written to disk. */
@@ -68,6 +72,8 @@ public:
     }
 
     void dumpStates(FILE* out, bool verbose);
+
+    void informPullAlarmFired(const int64_t timestampNs);
 
 private:
     // For testing only.
@@ -96,12 +102,21 @@ private:
 
     sp<AlarmMonitor> mPeriodicAlarmMonitor;
 
-    void onConfigMetricsReportLocked(const ConfigKey& key, const uint64_t dumpTimeStampNs,
+    void resetIfConfigTtlExpiredLocked(const int64_t timestampNs);
+
+    void OnConfigUpdatedLocked(
+        const int64_t currentTimestampNs, const ConfigKey& key, const StatsdConfig& config);
+
+    void WriteDataToDiskLocked();
+    void WriteDataToDiskLocked(const ConfigKey& key);
+
+    void onConfigMetricsReportLocked(const ConfigKey& key, const int64_t dumpTimeStampNs,
+                                     const bool include_current_partial_bucket,
                                      util::ProtoOutputStream* proto);
 
     /* Check if we should send a broadcast if approaching memory limits and if we're over, we
      * actually delete the data. */
-    void flushIfNecessaryLocked(uint64_t timestampNs, const ConfigKey& key,
+    void flushIfNecessaryLocked(int64_t timestampNs, const ConfigKey& key,
                                 MetricsManager& metricsManager);
 
     // Maps the isolated uid in the log event to host uid if the log event contains uid fields.
@@ -110,16 +125,30 @@ private:
     // Handler over the isolated uid change event.
     void onIsolatedUidChangedEventLocked(const LogEvent& event);
 
+    void resetConfigsLocked(const int64_t timestampNs, const std::vector<ConfigKey>& configs);
+
     // Function used to send a broadcast so that receiver for the config key can call getData
     // to retrieve the stored data.
     std::function<void(const ConfigKey& key)> mSendBroadcast;
 
-    const long mTimeBaseSec;
+    const int64_t mTimeBaseNs;
 
-    int64_t mLastLogTimestamp;
+    // Largest timestamp of the events that we have processed.
+    int64_t mLargestTimestampSeen = 0;
+
+    int64_t mLastTimestampSeen = 0;
+
+    bool mInReconnection = false;
+
+    // Processed log count
+    uint64_t mLogCount = 0;
+
+    // Log loss detected count
+    int mLogLossCount = 0;
 
     long mLastPullerCacheClearTimeSec = 0;
 
+    FRIEND_TEST(StatsLogProcessorTest, TestOutOfOrderLogs);
     FRIEND_TEST(StatsLogProcessorTest, TestRateLimitByteSize);
     FRIEND_TEST(StatsLogProcessorTest, TestRateLimitBroadcast);
     FRIEND_TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge);
@@ -134,6 +163,12 @@ private:
     FRIEND_TEST(AttributionE2eTest, TestAttributionMatchAndSliceByFirstUid);
     FRIEND_TEST(AttributionE2eTest, TestAttributionMatchAndSliceByChain);
     FRIEND_TEST(GaugeMetricE2eTest, TestMultipleFieldsForPushedEvent);
+    FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEvents);
+    FRIEND_TEST(GaugeMetricE2eTest, TestRandomSamplePulledEvent_LateAlarm);
+    FRIEND_TEST(GaugeMetricE2eTest, TestAllConditionChangesSamplePulledEvents);
+    FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents);
+    FRIEND_TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm);
+
     FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_NoLink_OR_CombinationCondition);
     FRIEND_TEST(DimensionInConditionE2eTest, TestCreateCountMetric_Link_OR_CombinationCondition);
     FRIEND_TEST(DimensionInConditionE2eTest, TestDurationMetric_NoLink_OR_CombinationCondition);
@@ -152,7 +187,9 @@ private:
     FRIEND_TEST(AnomalyDetectionE2eTest, TestDurationMetric_SUM_single_bucket);
     FRIEND_TEST(AnomalyDetectionE2eTest, TestDurationMetric_SUM_multiple_buckets);
     FRIEND_TEST(AnomalyDetectionE2eTest, TestDurationMetric_SUM_long_refractory_period);
+
     FRIEND_TEST(AlarmE2eTest, TestMultipleAlarms);
+    FRIEND_TEST(ConfigTtlE2eTest, TestCountMetric);
 };
 
 }  // namespace statsd

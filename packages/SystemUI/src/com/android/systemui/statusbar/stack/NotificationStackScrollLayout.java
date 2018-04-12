@@ -96,6 +96,7 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.FakeShadowView;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.VisibilityLocationProvider;
+import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.ScrimController;
@@ -269,8 +270,6 @@ public class NotificationStackScrollLayout extends ViewGroup
      */
     private boolean mOnlyScrollingInThisMotion;
     private boolean mDisallowDismissInThisMotion;
-    private boolean mInterceptDelegateEnabled;
-    private boolean mDelegateToScrollView;
     private boolean mDisallowScrollingInThisMotion;
     private long mGoToFullShadeDelay;
     private ViewTreeObserver.OnPreDrawListener mChildrenUpdater
@@ -562,17 +561,17 @@ public class NotificationStackScrollLayout extends ViewGroup
             return;
         }
 
-        final int color;
-        if (mAmbientState.isDark()) {
-            color = Color.WHITE;
-        } else {
-            float alpha =
-                    BACKGROUND_ALPHA_DIMMED + (1 - BACKGROUND_ALPHA_DIMMED) * (1.0f - mDimAmount);
-            alpha *= 1f - mDarkAmount;
-            // We need to manually blend in the background color
-            int scrimColor = mScrimController.getBackgroundColor();
-            color = ColorUtils.blendARGB(scrimColor, mBgColor, alpha);
-        }
+        float alpha =
+                BACKGROUND_ALPHA_DIMMED + (1 - BACKGROUND_ALPHA_DIMMED) * (1.0f - mDimAmount);
+        alpha *= 1f - mDarkAmount;
+        // We need to manually blend in the background color.
+        int scrimColor = mScrimController.getBackgroundColor();
+        int awakeColor = ColorUtils.blendARGB(scrimColor, mBgColor, alpha);
+
+        // Interpolate between semi-transparent notification panel background color
+        // and white AOD separator.
+        float colorInterpolation = Interpolators.DECELERATE_QUINT.getInterpolation(mDarkAmount);
+        int color = ColorUtils.blendARGB(awakeColor, Color.WHITE, colorInterpolation);
 
         if (mCachedBackgroundColor != color) {
             mCachedBackgroundColor = color;
@@ -3023,6 +3022,11 @@ public class NotificationStackScrollLayout extends ViewGroup
     public void setAnimationsEnabled(boolean animationsEnabled) {
         mAnimationsEnabled = animationsEnabled;
         updateNotificationAnimationStates();
+        if (!animationsEnabled) {
+            mSwipedOutViews.clear();
+            mChildrenToRemoveAnimated.clear();
+            clearTemporaryViewsInGroup(this);
+        }
     }
 
     private void updateNotificationAnimationStates() {
@@ -3090,6 +3094,21 @@ public class NotificationStackScrollLayout extends ViewGroup
     @Override
     public void changeViewPosition(View child, int newIndex) {
         int currentIndex = indexOfChild(child);
+
+        if (currentIndex == -1) {
+            boolean isTransient = false;
+            if (child instanceof ExpandableNotificationRow
+                    && ((ExpandableNotificationRow)child).getTransientContainer() != null) {
+                isTransient = true;
+            }
+            Log.e(TAG, "Attempting to re-position "
+                    + (isTransient ? "transient" : "")
+                    + " view {"
+                    + child
+                    + "}");
+            return;
+        }
+
         if (child != null && child.getParent() == this && currentIndex != newIndex) {
             mChangePositionInProgress = true;
             ((ExpandableView)child).setChangingPosition(true);
@@ -3569,17 +3588,17 @@ public class NotificationStackScrollLayout extends ViewGroup
 
     private void clearTemporaryViews() {
         // lets make sure nothing is in the overlay / transient anymore
-        clearTemporaryViews(this);
+        clearTemporaryViewsInGroup(this);
         for (int i = 0; i < getChildCount(); i++) {
             ExpandableView child = (ExpandableView) getChildAt(i);
             if (child instanceof ExpandableNotificationRow) {
                 ExpandableNotificationRow row = (ExpandableNotificationRow) child;
-                clearTemporaryViews(row.getChildrenContainer());
+                clearTemporaryViewsInGroup(row.getChildrenContainer());
             }
         }
     }
 
-    private void clearTemporaryViews(ViewGroup viewGroup) {
+    private void clearTemporaryViewsInGroup(ViewGroup viewGroup) {
         while (viewGroup != null && viewGroup.getTransientViewCount() != 0) {
             viewGroup.removeTransientView(viewGroup.getTransientView(0));
         }
@@ -3922,12 +3941,11 @@ public class NotificationStackScrollLayout extends ViewGroup
         requestChildrenUpdate();
         applyCurrentBackgroundBounds();
         updateWillNotDraw();
-        updateAntiBurnInTranslation();
         notifyHeightChangeListener(mShelf);
     }
 
     private void updateAntiBurnInTranslation() {
-        setTranslationX(mAmbientState.isDark() ? mAntiBurnInOffsetX : 0);
+        setTranslationX(mAntiBurnInOffsetX * mDarkAmount);
     }
 
     /**
@@ -3942,12 +3960,18 @@ public class NotificationStackScrollLayout extends ViewGroup
 
     private void setDarkAmount(float darkAmount) {
         mDarkAmount = darkAmount;
-        final boolean fullyDark = darkAmount == 1;
-        if (mAmbientState.isFullyDark() != fullyDark) {
-            mAmbientState.setFullyDark(fullyDark);
+        boolean wasFullyDark = mAmbientState.isFullyDark();
+        mAmbientState.setDarkAmount(darkAmount);
+        if (mAmbientState.isFullyDark() != wasFullyDark) {
             updateContentHeight();
+            DozeParameters dozeParameters = DozeParameters.getInstance(mContext);
+            if (mAmbientState.isFullyDark() && dozeParameters.shouldControlScreenOff()) {
+                mShelf.fadeInTranslating();
+            }
         }
         updateBackgroundDimming();
+        updateAntiBurnInTranslation();
+        requestChildrenUpdate();
     }
 
     public float getDarkAmount() {

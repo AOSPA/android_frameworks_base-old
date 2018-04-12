@@ -93,8 +93,6 @@ import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_SWITCH;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_VISIBILITY;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.am.ActivityStack.ActivityState.DESTROYED;
-import static com.android.server.am.ActivityStack.ActivityState.DESTROYING;
 import static com.android.server.am.ActivityStack.ActivityState.INITIALIZING;
 import static com.android.server.am.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.am.ActivityStack.ActivityState.PAUSING;
@@ -154,6 +152,7 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.GraphicBuffer;
 import android.graphics.Rect;
+import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
@@ -783,11 +782,13 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
      * @param task The new parent {@link TaskRecord}.
      */
     void setTask(TaskRecord task) {
-        setTask(task, false /*reparenting*/);
+        setTask(task /* task */, false /* reparenting */);
     }
 
     /**
      * This method should only be called by {@link TaskRecord#removeActivity(ActivityRecord)}.
+     * @param task          The new parent task.
+     * @param reparenting   Whether we're in the middle of reparenting.
      */
     void setTask(TaskRecord task, boolean reparenting) {
         // Do nothing if the {@link TaskRecord} is the same as the current {@link getTask}.
@@ -795,12 +796,19 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             return;
         }
 
-        final ActivityStack stack = getStack();
+        final ActivityStack oldStack = getStack();
+        final ActivityStack newStack = task != null ? task.getStack() : null;
 
-        // If the new {@link TaskRecord} is from a different {@link ActivityStack}, remove this
-        // {@link ActivityRecord} from its current {@link ActivityStack}.
-        if (!reparenting && stack != null && (task == null || stack != task.getStack())) {
-            stack.onActivityRemovedFromStack(this);
+        // Inform old stack (if present) of activity removal and new stack (if set) of activity
+        // addition.
+        if (oldStack != newStack) {
+            if (!reparenting && oldStack != null) {
+                oldStack.onActivityRemovedFromStack(this);
+            }
+
+            if (newStack != null) {
+                newStack.onActivityAddedToStack(this);
+            }
         }
 
         this.task = task;
@@ -1077,8 +1085,15 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         // Must reparent first in window manager
         mWindowContainerController.reparent(newTask.getWindowContainerController(), position);
 
+        // Reparenting prevents informing the parent stack of activity removal in the case that
+        // the new stack has the same parent. we must manually signal here if this is not the case.
+        final ActivityStack prevStack = prevTask.getStack();
+
+        if (prevStack != newTask.getStack()) {
+            prevStack.onActivityRemovedFromStack(this);
+        }
         // Remove the activity from the old task and add it to the new task.
-        prevTask.removeActivity(this, true /*reparenting*/);
+        prevTask.removeActivity(this, true /* reparenting */);
 
         newTask.addActivityAtIndex(position, this);
     }
@@ -1202,10 +1217,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     boolean isFocusable() {
-        if (inSplitScreenPrimaryWindowingMode() && mStackSupervisor.mIsDockMinimized) {
-            return false;
-        }
-        return getWindowConfiguration().canReceiveKeys() || isAlwaysFocusable();
+        return mStackSupervisor.isFocusable(this, isAlwaysFocusable());
     }
 
     boolean isResizeable() {
@@ -1593,14 +1605,20 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     void pauseKeyDispatchingLocked() {
         if (!keysPaused) {
             keysPaused = true;
-            mWindowContainerController.pauseKeyDispatching();
+
+            if (mWindowContainerController != null) {
+                mWindowContainerController.pauseKeyDispatching();
+            }
         }
     }
 
     void resumeKeyDispatchingLocked() {
         if (keysPaused) {
             keysPaused = false;
-            mWindowContainerController.resumeKeyDispatching();
+
+            if (mWindowContainerController != null) {
+                mWindowContainerController.resumeKeyDispatching();
+            }
         }
     }
 
@@ -2891,7 +2909,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
         final ActivityManagerService service = stackSupervisor.mService;
         final ActivityInfo aInfo = stackSupervisor.resolveActivity(intent, resolvedType, 0, null,
-                userId);
+                userId, Binder.getCallingUid());
         if (aInfo == null) {
             throw new XmlPullParserException("restoreActivity resolver error. Intent=" + intent +
                     " resolvedType=" + resolvedType);

@@ -18,8 +18,8 @@ package com.android.systemui.fingerprint;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.hardware.biometrics.BiometricDialog;
-import android.hardware.biometrics.IBiometricDialogReceiver;
+import android.hardware.biometrics.BiometricPrompt;
+import android.hardware.biometrics.IBiometricPromptReceiver;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -48,7 +48,7 @@ public class FingerprintDialogImpl extends SystemUI implements CommandQueue.Call
 
     private FingerprintDialogView mDialogView;
     private WindowManager mWindowManager;
-    private IBiometricDialogReceiver mReceiver;
+    private IBiometricPromptReceiver mReceiver;
     private boolean mDialogShowing;
 
     private Handler mHandler = new Handler() {
@@ -97,7 +97,7 @@ public class FingerprintDialogImpl extends SystemUI implements CommandQueue.Call
     }
 
     @Override
-    public void showFingerprintDialog(Bundle bundle, IBiometricDialogReceiver receiver) {
+    public void showFingerprintDialog(Bundle bundle, IBiometricPromptReceiver receiver) {
         if (DEBUG) Log.d(TAG, "showFingerprintDialog");
         // Remove these messages as they are part of the previous client
         mHandler.removeMessages(MSG_FINGERPRINT_ERROR);
@@ -134,12 +134,15 @@ public class FingerprintDialogImpl extends SystemUI implements CommandQueue.Call
     }
 
     private void handleShowDialog(SomeArgs args) {
-        if (DEBUG) Log.d(TAG, "handleShowDialog");
-        if (mDialogShowing) {
+        if (DEBUG) Log.d(TAG, "handleShowDialog, isAnimatingAway: "
+                + mDialogView.isAnimatingAway());
+        if (mDialogView.isAnimatingAway()) {
+            mDialogView.forceRemove();
+        } else if (mDialogShowing) {
             Log.w(TAG, "Dialog already showing");
             return;
         }
-        mReceiver = (IBiometricDialogReceiver) args.arg2;
+        mReceiver = (IBiometricPromptReceiver) args.arg2;
         mDialogView.setBundle((Bundle)args.arg1);
         mWindowManager.addView(mDialogView, mDialogView.getLayoutParams());
         mDialogShowing = true;
@@ -168,7 +171,7 @@ public class FingerprintDialogImpl extends SystemUI implements CommandQueue.Call
     }
 
     private void handleHideDialog(boolean userCanceled) {
-        if (DEBUG) Log.d(TAG, "handleHideDialog");
+        if (DEBUG) Log.d(TAG, "handleHideDialog, userCanceled: " + userCanceled);
         if (!mDialogShowing) {
             // This can happen if there's a race and we get called from both
             // onAuthenticated and onError, etc.
@@ -177,7 +180,7 @@ public class FingerprintDialogImpl extends SystemUI implements CommandQueue.Call
         }
         if (userCanceled) {
             try {
-                mReceiver.onDialogDismissed(BiometricDialog.DISMISSED_REASON_USER_CANCEL);
+                mReceiver.onDialogDismissed(BiometricPrompt.DISMISSED_REASON_USER_CANCEL);
             } catch (RemoteException e) {
                 Log.e(TAG, "RemoteException when hiding dialog", e);
             }
@@ -193,7 +196,7 @@ public class FingerprintDialogImpl extends SystemUI implements CommandQueue.Call
             return;
         }
         try {
-            mReceiver.onDialogDismissed(BiometricDialog.DISMISSED_REASON_NEGATIVE);
+            mReceiver.onDialogDismissed(BiometricPrompt.DISMISSED_REASON_NEGATIVE);
         } catch (RemoteException e) {
             Log.e(TAG, "Remote exception when handling negative button", e);
         }
@@ -206,7 +209,7 @@ public class FingerprintDialogImpl extends SystemUI implements CommandQueue.Call
             return;
         }
         try {
-            mReceiver.onDialogDismissed(BiometricDialog.DISMISSED_REASON_POSITIVE);
+            mReceiver.onDialogDismissed(BiometricPrompt.DISMISSED_REASON_POSITIVE);
         } catch (RemoteException e) {
             Log.e(TAG, "Remote exception when handling positive button", e);
         }

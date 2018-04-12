@@ -17,7 +17,6 @@
 package android.telephony;
 
 import android.annotation.CallSuper;
-import android.annotation.SystemApi;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Handler;
@@ -47,7 +46,6 @@ import java.util.List;
  * </service>
  * @hide
  */
-@SystemApi
 public abstract class NetworkService extends Service {
 
     private final String TAG = NetworkService.class.getSimpleName();
@@ -206,8 +204,10 @@ public abstract class NetworkService extends Service {
         }
     }
 
-    /** @hide */
-    protected NetworkService() {
+    /**
+     * Default constructor.
+     */
+    public NetworkService() {
         mHandlerThread = new HandlerThread(TAG);
         mHandlerThread.start();
 

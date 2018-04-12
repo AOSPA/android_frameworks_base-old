@@ -1013,8 +1013,9 @@
     <string name="email_desc" msgid="3638665569546416795">"Enviar um email para o endereço selecionado"</string>
     <string name="dial" msgid="1253998302767701559">"Telefonar"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Telefonar para o número de telefone selecionado"</string>
-    <string name="map" msgid="6521159124535543457">"Localizar"</string>
-    <string name="map_desc" msgid="9036645769910215302">"Localizar o endereço selecionado"</string>
+    <string name="map" msgid="5441053548030107189">"Mapa"</string>
+    <!-- no translation found for map_desc (1836995341943772348) -->
+    <skip />
     <string name="browse" msgid="1245903488306147205">"Abrir"</string>
     <string name="browse_desc" msgid="8220976549618935044">"Abrir o URL selecionado"</string>
     <string name="sms" msgid="4560537514610063430">"Mensagem"</string>
@@ -1285,7 +1286,7 @@
     <string name="ext_media_badremoval_notification_title" msgid="3206248947375505416">"<xliff:g id="NAME">%s</xliff:g> foi removido inesperadamente"</string>
     <string name="ext_media_badremoval_notification_message" msgid="8556885808951260574">"Ejete o armazenamento multimédia antes de o remover para evitar a perda de conteúdos."</string>
     <string name="ext_media_nomedia_notification_title" msgid="6593814191061956856">"<xliff:g id="NAME">%s</xliff:g> removido"</string>
-    <string name="ext_media_nomedia_notification_message" msgid="2110883356419799994">"Algumas funcionalidades podem não funcionar corretamente. Insira um novo armazenamento."</string>
+    <string name="ext_media_nomedia_notification_message" msgid="2110883356419799994">"Algumas funcionalidades podem não funcionar corretamente. Insira um novo dispositivo de armazenamento."</string>
     <string name="ext_media_unmounting_notification_title" msgid="5046532339291216076">"A ejetar <xliff:g id="NAME">%s</xliff:g>…"</string>
     <string name="ext_media_unmounting_notification_message" msgid="1003926904442321115">"Não remova."</string>
     <string name="ext_media_init_action" msgid="7952885510091978278">"Configurar"</string>
@@ -1847,7 +1848,7 @@
     <string name="mmcc_illegal_ms" msgid="807334478177362062">"SIM não permitido para voz"</string>
     <string name="mmcc_illegal_me" msgid="1950705155760872972">"Telemóvel não permitido para voz"</string>
     <string name="mmcc_authentication_reject_msim_template" msgid="1217031195834766479">"SIM <xliff:g id="SIMNUMBER">%d</xliff:g> não autorizado"</string>
-    <string name="mmcc_imsi_unknown_in_hlr_msim_template" msgid="5636464607596778986">"SIM <xliff:g id="SIMNUMBER">%d</xliff:g> não aprovisionado"</string>
+    <string name="mmcc_imsi_unknown_in_hlr_msim_template" msgid="5636464607596778986">"SIM <xliff:g id="SIMNUMBER">%d</xliff:g> não fornecido"</string>
     <string name="mmcc_illegal_ms_msim_template" msgid="5994323296399913454">"SIM <xliff:g id="SIMNUMBER">%d</xliff:g> não autorizado"</string>
     <string name="mmcc_illegal_me_msim_template" msgid="5550259730350571826">"SIM <xliff:g id="SIMNUMBER">%d</xliff:g> não autorizado"</string>
     <string name="popup_window_default_title" msgid="4874318849712115433">"Janela pop-up"</string>

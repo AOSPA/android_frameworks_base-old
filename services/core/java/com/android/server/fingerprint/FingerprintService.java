@@ -38,7 +38,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
-import android.hardware.biometrics.IBiometricDialogReceiver;
+import android.hardware.biometrics.IBiometricPromptReceiver;
 import android.hardware.biometrics.fingerprint.V2_1.IBiometricsFingerprint;
 import android.hardware.biometrics.fingerprint.V2_1.IBiometricsFingerprintClientCallback;
 import android.hardware.fingerprint.Fingerprint;
@@ -230,10 +230,11 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
                 }
                 List<ActivityManager.RunningTaskInfo> runningTasks = mActivityManager.getTasks(1);
                 if (!runningTasks.isEmpty()) {
-                    if (runningTasks.get(0).topActivity.getPackageName()
-                            != mCurrentClient.getOwnerString()) {
+                    final String topPackage = runningTasks.get(0).topActivity.getPackageName();
+                    if (!topPackage.contentEquals(mCurrentClient.getOwnerString())) {
                         mCurrentClient.stop(false /* initiatedByClient */);
-                        Slog.e(TAG, "Stopping background authentication");
+                        Slog.e(TAG, "Stopping background authentication, top: " + topPackage
+                                + " currentClient: " + mCurrentClient.getOwnerString());
                     }
                 }
             } catch (RemoteException e) {
@@ -849,7 +850,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
 
     private void startAuthentication(IBinder token, long opId, int callingUserId, int groupId,
                 IFingerprintServiceReceiver receiver, int flags, boolean restricted,
-                String opPackageName, Bundle bundle, IBiometricDialogReceiver dialogReceiver) {
+                String opPackageName, Bundle bundle, IBiometricPromptReceiver dialogReceiver) {
         updateActiveGroup(groupId, opPackageName);
 
         if (DEBUG) Slog.v(TAG, "startAuthentication(" + opPackageName + ")");
@@ -1160,7 +1161,7 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
         public void authenticate(final IBinder token, final long opId, final int groupId,
                 final IFingerprintServiceReceiver receiver, final int flags,
                 final String opPackageName, final Bundle bundle,
-                final IBiometricDialogReceiver dialogReceiver) {
+                final IBiometricPromptReceiver dialogReceiver) {
             final int callingUid = Binder.getCallingUid();
             final int callingPid = Binder.getCallingPid();
             final int callingUserId = UserHandle.getCallingUserId();

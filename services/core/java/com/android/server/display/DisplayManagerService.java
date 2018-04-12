@@ -36,11 +36,13 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.ParceledListSlice;
 import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.graphics.Point;
 import android.hardware.SensorManager;
 import android.hardware.display.AmbientBrightnessDayStats;
 import android.hardware.display.BrightnessChangeEvent;
 import android.hardware.display.BrightnessConfiguration;
+import android.hardware.display.Curve;
 import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.display.DisplayViewport;
@@ -61,16 +63,21 @@ import android.os.Message;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
 import android.os.ServiceManager;
+import android.os.ShellCallback;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.IntArray;
+import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.Spline;
 import android.view.Display;
 import android.view.DisplayInfo;
 import android.view.Surface;
@@ -273,6 +280,11 @@ public final class DisplayManagerService extends SystemService {
 
     private final Injector mInjector;
 
+    // The minimum brightness curve, which guarantess that any brightness curve that dips below it
+    // is rejected by the system.
+    private final Curve mMinimumBrightnessCurve;
+    private final Spline mMinimumBrightnessSpline;
+
     public DisplayManagerService(Context context) {
         this(context, new Injector());
     }
@@ -286,8 +298,15 @@ public final class DisplayManagerService extends SystemService {
         mUiHandler = UiThread.getHandler();
         mDisplayAdapterListener = new DisplayAdapterListener();
         mSingleDisplayDemoMode = SystemProperties.getBoolean("persist.demo.singledisplay", false);
+        Resources resources = mContext.getResources();
         mDefaultDisplayDefaultColorMode = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_defaultDisplayDefaultColorMode);
+        float[] lux = getFloatArray(resources.obtainTypedArray(
+                com.android.internal.R.array.config_minimumBrightnessCurveLux));
+        float[] nits = getFloatArray(resources.obtainTypedArray(
+                com.android.internal.R.array.config_minimumBrightnessCurveNits));
+        mMinimumBrightnessCurve = new Curve(lux, nits);
+        mMinimumBrightnessSpline = Spline.createSpline(lux, nits);
 
         PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
         mGlobalDisplayBrightness = pm.getDefaultScreenBrightnessSetting();
@@ -1029,9 +1048,15 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
+    @VisibleForTesting
+    Curve getMinimumBrightnessCurveInternal() {
+        return mMinimumBrightnessCurve;
+    }
+
     private void setBrightnessConfigurationForUserInternal(
-            @NonNull BrightnessConfiguration c, @UserIdInt int userId,
+            @Nullable BrightnessConfiguration c, @UserIdInt int userId,
             @Nullable String packageName) {
+        validateBrightnessConfiguration(c);
         final int userSerial = getUserManager().getUserSerialNumber(userId);
         synchronized (mSyncRoot) {
             try {
@@ -1044,6 +1069,28 @@ public final class DisplayManagerService extends SystemService {
                 mDisplayPowerController.setBrightnessConfiguration(c);
             }
         }
+    }
+
+    @VisibleForTesting
+    void validateBrightnessConfiguration(BrightnessConfiguration config) {
+        if (config == null) {
+            return;
+        }
+        if (isBrightnessConfigurationTooDark(config)) {
+            throw new IllegalArgumentException("brightness curve is too dark");
+        }
+    }
+
+    private boolean isBrightnessConfigurationTooDark(BrightnessConfiguration config) {
+        Pair<float[], float[]> curve = config.getCurve();
+        float[] lux = curve.first;
+        float[] nits = curve.second;
+        for (int i = 0; i < lux.length; i++) {
+            if (nits[i] < mMinimumBrightnessSpline.interpolate(lux[i])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void loadBrightnessConfiguration() {
@@ -1364,6 +1411,16 @@ public final class DisplayManagerService extends SystemService {
             pw.println();
             mPersistentDataStore.dump(pw);
         }
+    }
+
+    private static float[] getFloatArray(TypedArray array) {
+        int length = array.length();
+        float[] floatArray = new float[length];
+        for (int i = 0; i < length; i++) {
+            floatArray[i] = array.getFloat(i, Float.NaN);
+        }
+        array.recycle();
+        return floatArray;
     }
 
     /**
@@ -1981,6 +2038,39 @@ public final class DisplayManagerService extends SystemService {
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
+        }
+
+        @Override // Binder call
+        public void onShellCommand(FileDescriptor in, FileDescriptor out,
+                FileDescriptor err, String[] args, ShellCallback callback,
+                ResultReceiver resultReceiver) {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                DisplayManagerShellCommand command = new DisplayManagerShellCommand(this);
+                command.exec(this, in, out, err, args, callback, resultReceiver);
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override // Binder call
+        public Curve getMinimumBrightnessCurve() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                return getMinimumBrightnessCurveInternal();
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        void setBrightness(int brightness) {
+            Settings.System.putIntForUser(mContext.getContentResolver(),
+                    Settings.System.SCREEN_BRIGHTNESS, brightness, UserHandle.USER_CURRENT);
+        }
+
+        void resetBrightnessConfiguration() {
+            setBrightnessConfigurationForUserInternal(null, mContext.getUserId(),
+                    mContext.getPackageName());
         }
 
         private boolean validatePackageName(int uid, String packageName) {

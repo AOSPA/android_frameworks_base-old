@@ -26,6 +26,7 @@ import android.service.notification.StatusBarNotification;
 import android.util.ArraySet;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.view.MotionEvent;
 import android.view.NotificationHeaderView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -79,7 +80,7 @@ public class NotificationContentView extends FrameLayout {
     private RemoteInputView mHeadsUpRemoteInput;
 
     private SmartReplyConstants mSmartReplyConstants;
-    private SmartReplyView mExpandedSmartReplyView;
+    private SmartReplyLogger mSmartReplyLogger;
 
     private NotificationViewWrapper mContractedWrapper;
     private NotificationViewWrapper mExpandedWrapper;
@@ -152,6 +153,7 @@ public class NotificationContentView extends FrameLayout {
         super(context, attrs);
         mHybridGroupManager = new HybridGroupManager(getContext(), this);
         mSmartReplyConstants = Dependency.get(SmartReplyConstants.class);
+        mSmartReplyLogger = Dependency.get(SmartReplyLogger.class);
         initView();
     }
 
@@ -1242,7 +1244,7 @@ public class NotificationContentView extends FrameLayout {
         }
 
         applyRemoteInput(entry, hasRemoteInput);
-        applySmartReplyView(remoteInputWithChoices, pendingIntentWithChoices);
+        applySmartReplyView(remoteInputWithChoices, pendingIntentWithChoices, entry);
     }
 
     private void applyRemoteInput(NotificationData.Entry entry, boolean hasRemoteInput) {
@@ -1343,13 +1345,21 @@ public class NotificationContentView extends FrameLayout {
         return null;
     }
 
-    private void applySmartReplyView(RemoteInput remoteInput, PendingIntent pendingIntent) {
-        mExpandedSmartReplyView = mExpandedChild == null ?
-                null : applySmartReplyView(mExpandedChild, remoteInput, pendingIntent);
+    private void applySmartReplyView(RemoteInput remoteInput, PendingIntent pendingIntent,
+            NotificationData.Entry entry) {
+        if (mExpandedChild != null) {
+            SmartReplyView view =
+                    applySmartReplyView(mExpandedChild, remoteInput, pendingIntent, entry);
+            if (view != null && remoteInput != null && remoteInput.getChoices() != null
+                    && remoteInput.getChoices().length > 0) {
+                mSmartReplyLogger.smartRepliesAdded(entry, remoteInput.getChoices().length);
+            }
+        }
     }
 
     private SmartReplyView applySmartReplyView(
-            View view, RemoteInput remoteInput, PendingIntent pendingIntent) {
+            View view, RemoteInput remoteInput, PendingIntent pendingIntent,
+            NotificationData.Entry entry) {
         View smartReplyContainerCandidate = view.findViewById(
                 com.android.internal.R.id.smart_reply_container);
         if (!(smartReplyContainerCandidate instanceof LinearLayout)) {
@@ -1371,7 +1381,8 @@ public class NotificationContentView extends FrameLayout {
             }
         }
         if (smartReplyView != null) {
-            smartReplyView.setRepliesFromRemoteInput(remoteInput, pendingIntent);
+            smartReplyView.setRepliesFromRemoteInput(remoteInput, pendingIntent,
+                    mSmartReplyLogger, entry);
             smartReplyContainer.setVisibility(View.VISIBLE);
         }
         return smartReplyView;
@@ -1627,6 +1638,42 @@ public class NotificationContentView extends FrameLayout {
         }
         if (mHeadsUpRemoteInput != null && mHeadsUpRemoteInput.isActive()) {
             return mHeadsUpRemoteInput.getText();
+        }
+        return null;
+    }
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        float y = ev.getY();
+        // We still want to distribute touch events to the remote input even if it's outside the
+        // view boundary. We're therefore manually dispatching these events to the remote view
+        RemoteInputView riv = getRemoteInputForView(getViewForVisibleType(mVisibleType));
+        if (riv != null && riv.getVisibility() == VISIBLE) {
+            int inputStart = mUnrestrictedContentHeight - riv.getHeight();
+            if (y <= mUnrestrictedContentHeight && y >= inputStart) {
+                ev.offsetLocation(0, -inputStart);
+                return riv.dispatchTouchEvent(ev);
+            }
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
+    /**
+     * Overridden to make sure touches to the reply action bar actually go through to this view
+     */
+    @Override
+    public boolean pointInView(float localX, float localY, float slop) {
+        float top = mClipTopAmount;
+        float bottom = mUnrestrictedContentHeight;
+        return localX >= -slop && localY >= top - slop && localX < ((mRight - mLeft) + slop) &&
+                localY < (bottom + slop);
+    }
+
+    private RemoteInputView getRemoteInputForView(View child) {
+        if (child == mExpandedChild) {
+            return mExpandedRemoteInput;
+        } else if (child == mHeadsUpChild) {
+            return mHeadsUpRemoteInput;
         }
         return null;
     }

@@ -365,8 +365,9 @@ sp<StatsLogProcessor> CreateStatsLogProcessor(const long timeBaseSec, const Stat
     sp<AlarmMonitor> anomalyAlarmMonitor;
     sp<AlarmMonitor> periodicAlarmMonitor;
     sp<StatsLogProcessor> processor = new StatsLogProcessor(
-        uidMap, anomalyAlarmMonitor, periodicAlarmMonitor, timeBaseSec, [](const ConfigKey&){});
-    processor->OnConfigUpdated(0, key, config);
+        uidMap, anomalyAlarmMonitor, periodicAlarmMonitor, timeBaseSec * NS_PER_SEC,
+        [](const ConfigKey&){});
+    processor->OnConfigUpdated(timeBaseSec * NS_PER_SEC, key, config);
     return processor;
 }
 

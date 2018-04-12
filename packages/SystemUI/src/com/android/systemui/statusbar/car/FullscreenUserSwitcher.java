@@ -18,14 +18,15 @@ package com.android.systemui.statusbar.car;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.content.res.Resources;
+import android.content.Context;
 import android.view.View;
 import android.view.ViewStub;
 import android.widget.ProgressBar;
 
+import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.policy.UserSwitcherController;
 
 /**
  * Manages the fullscreen user switcher.
@@ -33,42 +34,59 @@ import com.android.systemui.statusbar.policy.UserSwitcherController;
 public class FullscreenUserSwitcher {
     private final View mContainer;
     private final View mParent;
-    private final UserGridView mUserGridView;
-    private final UserSwitcherController mUserSwitcherController;
+    private final UserGridRecyclerView mUserGridView;
     private final ProgressBar mSwitchingUsers;
     private final int mShortAnimDuration;
+    private final StatusBar mStatusBar;
 
     private boolean mShowing;
 
-    public FullscreenUserSwitcher(StatusBar statusBar,
-            UserSwitcherController userSwitcherController,
-            ViewStub containerStub) {
-        mUserSwitcherController = userSwitcherController;
+    public FullscreenUserSwitcher(StatusBar statusBar, ViewStub containerStub, Context context) {
+        mStatusBar = statusBar;
         mParent = containerStub.inflate();
         mContainer = mParent.findViewById(R.id.container);
         mUserGridView = mContainer.findViewById(R.id.user_grid);
-        mUserGridView.init(statusBar, mUserSwitcherController, true /* overrideAlpha */);
-        mUserGridView.setUserSelectionListener(record -> {
-            if (!record.isCurrent) {
-                toggleSwitchInProgress(true);
-            }
-        });
+        GridLayoutManager layoutManager = new GridLayoutManager(context,
+                context.getResources().getInteger(R.integer.user_fullscreen_switcher_num_col));
+        mUserGridView.setLayoutManager(layoutManager);
+        mUserGridView.buildAdapter();
+        mUserGridView.setUserSelectionListener(this::onUserSelected);
 
-        PageIndicator pageIndicator = mContainer.findViewById(R.id.user_switcher_page_indicator);
-        pageIndicator.setupWithViewPager(mUserGridView);
-
-        Resources res = mContainer.getResources();
-        mShortAnimDuration = res.getInteger(android.R.integer.config_shortAnimTime);
-
-        mContainer.findViewById(R.id.start_driving).setOnClickListener(v -> {
-            automaticallySelectUser();
-        });
+        mShortAnimDuration = mContainer.getResources()
+            .getInteger(android.R.integer.config_shortAnimTime);
 
         mSwitchingUsers = mParent.findViewById(R.id.switching_users);
     }
 
+    public void show() {
+        if (mShowing) {
+            return;
+        }
+        mShowing = true;
+        mParent.setVisibility(View.VISIBLE);
+    }
+
+    public void hide() {
+        mShowing = false;
+        toggleSwitchInProgress(false);
+        mParent.setVisibility(View.GONE);
+    }
+
     public void onUserSwitched(int newUserId) {
-        mUserGridView.onUserSwitched(newUserId);
+        mParent.post(this::showOfflineAuthUi);
+    }
+
+    private void onUserSelected(UserGridRecyclerView.UserRecord record) {
+        if (record.mIsForeground) {
+            showOfflineAuthUi();
+            return;
+        }
+        toggleSwitchInProgress(true);
+    }
+
+    private void showOfflineAuthUi() {
+        mStatusBar.executeRunnableDismissingKeyguard(null/* runnable */, null /* cancelAction */,
+                true /* dismissShade */, true /* afterKeyguardGone */, true /* deferred */);
     }
 
     private void toggleSwitchInProgress(boolean inProgress) {
@@ -100,25 +118,5 @@ public class FullscreenUserSwitcher {
                     outgoing.setVisibility(View.GONE);
                 }
             });
-    }
-
-    public void show() {
-        if (mShowing) {
-            return;
-        }
-        mShowing = true;
-        mParent.setVisibility(View.VISIBLE);
-    }
-
-    public void hide() {
-        mShowing = false;
-        toggleSwitchInProgress(false);
-        mParent.setVisibility(View.GONE);
-    }
-
-    private void automaticallySelectUser() {
-        // TODO: Switch according to some policy. This implementation just tries to drop the
-        //       keyguard for the current user.
-        mUserGridView.showOfflineAuthUi();
     }
 }

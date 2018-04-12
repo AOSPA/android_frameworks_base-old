@@ -150,20 +150,6 @@ public final class SelectionEvent implements Parcelable {
         mInvocationMethod = invocationMethod;
     }
 
-    SelectionEvent(
-            int start, int end,
-            @EventType int eventType, @EntityType String entityType,
-            @InvocationMethod int invocationMethod, @Nullable String resultId,
-            Logger.Config config) {
-        this(start, end, eventType, entityType, invocationMethod, resultId);
-        Preconditions.checkNotNull(config);
-        setTextClassificationSessionContext(
-                new TextClassificationContext.Builder(
-                        config.getPackageName(), config.getWidgetType())
-                        .setWidgetVersion(config.getWidgetVersion())
-                        .build());
-    }
-
     private SelectionEvent(Parcel in) {
         mAbsoluteStart = in.readInt();
         mAbsoluteEnd = in.readInt();
@@ -362,6 +348,7 @@ public final class SelectionEvent implements Parcelable {
             case SelectionEvent.ACTION_ABANDON:  // fall through
             case SelectionEvent.ACTION_SELECT_ALL:  // fall through
             case SelectionEvent.ACTION_RESET:  // fall through
+            case SelectionEvent.ACTION_OTHER:  // fall through
                 return;
             default:
                 throw new IllegalArgumentException(

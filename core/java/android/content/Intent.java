@@ -40,6 +40,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.ResultReceiver;
 import android.os.ShellCommand;
@@ -1814,8 +1815,12 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_PACKAGE_NAME = "android.intent.extra.PACKAGE_NAME";
 
     /**
-     * Intent extra: A {@link Bundle} of extras for a package being suspended. Will be sent with
-     * {@link #ACTION_MY_PACKAGE_SUSPENDED}.
+     * Intent extra: A {@link Bundle} of extras for a package being suspended. Will be sent as an
+     * extra with {@link #ACTION_MY_PACKAGE_SUSPENDED}.
+     *
+     * <p>The contents of this {@link Bundle} are a contract between the suspended app and the
+     * suspending app, i.e. any app with the permission {@code android.permission.SUSPEND_APPS}.
+     * This is meant to enable the suspended app to better handle the state of being suspended.
      *
      * @see #ACTION_MY_PACKAGE_SUSPENDED
      * @see #ACTION_MY_PACKAGE_UNSUSPENDED
@@ -2280,6 +2285,34 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_MY_PACKAGE_SUSPENDED = "android.intent.action.MY_PACKAGE_SUSPENDED";
+
+    /**
+     * Activity Action: Started to show more details about why an application was suspended.
+     *
+     * <p>Whenever the system detects an activity launch for a suspended app, it shows a dialog to
+     * the user to inform them of the state and present them an affordance to start this activity
+     * action to show more details about the reason for suspension.
+     *
+     * <p>Apps holding {@link android.Manifest.permission#SUSPEND_APPS} must declare an activity
+     * handling this intent and protect it with
+     * {@link android.Manifest.permission#SEND_SHOW_SUSPENDED_APP_DETAILS}.
+     *
+     * <p>Includes an extra {@link #EXTRA_PACKAGE_NAME} which is the name of the suspended package.
+     *
+     * <p class="note">This is a protected intent that can only be sent
+     * by the system.
+     *
+     * @see PackageManager#setPackagesSuspended(String[], boolean, PersistableBundle,
+     * PersistableBundle, String)
+     * @see PackageManager#isPackageSuspended()
+     * @see #ACTION_PACKAGES_SUSPENDED
+     *
+     * @hide
+     */
+    @SystemApi
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_SHOW_SUSPENDED_APP_DETAILS =
+            "android.intent.action.SHOW_SUSPENDED_APP_DETAILS";
 
     /**
      * Broadcast Action: Sent to a package that has been unsuspended.
@@ -6788,6 +6821,9 @@ public class Intent implements Parcelable, Cloneable {
                 case "--activity-task-on-home":
                     intent.addFlags(Intent.FLAG_ACTIVITY_TASK_ON_HOME);
                     break;
+                case "--activity-match-external":
+                    intent.addFlags(Intent.FLAG_ACTIVITY_MATCH_EXTERNAL);
+                    break;
                 case "--receiver-registered-only":
                     intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY);
                     break;
@@ -6924,7 +6960,7 @@ public class Intent implements Parcelable, Cloneable {
                 "    [--activity-no-user-action] [--activity-previous-is-top]",
                 "    [--activity-reorder-to-front] [--activity-reset-task-if-needed]",
                 "    [--activity-single-top] [--activity-clear-task]",
-                "    [--activity-task-on-home]",
+                "    [--activity-task-on-home] [--activity-match-external]",
                 "    [--receiver-registered-only] [--receiver-replace-pending]",
                 "    [--receiver-foreground] [--receiver-no-abort]",
                 "    [--receiver-include-background]",

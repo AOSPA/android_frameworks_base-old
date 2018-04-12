@@ -20,7 +20,6 @@ import android.annotation.CallSuper;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.SystemApi;
 import android.app.Service;
 import android.content.Intent;
 import android.net.LinkProperties;
@@ -55,7 +54,6 @@ import java.util.List;
  * </service>
  * @hide
  */
-@SystemApi
 public abstract class DataService extends Service {
     private static final String TAG = DataService.class.getSimpleName();
 
@@ -429,8 +427,10 @@ public abstract class DataService extends Service {
         }
     }
 
-    /** @hide */
-    protected DataService() {
+    /**
+     * Default constructor.
+     */
+    public DataService() {
         mHandlerThread = new HandlerThread(TAG);
         mHandlerThread.start();
 

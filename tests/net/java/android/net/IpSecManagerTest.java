@@ -38,6 +38,7 @@ import android.system.Os;
 import com.android.server.IpSecService;
 
 import java.net.InetAddress;
+import java.net.Socket;
 import java.net.UnknownHostException;
 
 import org.junit.Before;
@@ -195,6 +196,33 @@ public class IpSecManagerTest {
     }
 
     @Test
+    public void testApplyTransportModeTransformEnsuresSocketCreation() throws Exception {
+        Socket socket = new Socket();
+        IpSecConfig dummyConfig = new IpSecConfig();
+        IpSecTransform dummyTransform = new IpSecTransform(null, dummyConfig);
+
+        // Even if underlying SocketImpl is not initalized, this should force the init, and
+        // thereby succeed.
+        mIpSecManager.applyTransportModeTransform(
+                socket, IpSecManager.DIRECTION_IN, dummyTransform);
+
+        // Check to make sure the FileDescriptor is non-null
+        assertNotNull(socket.getFileDescriptor$());
+    }
+
+    @Test
+    public void testRemoveTransportModeTransformsForcesSocketCreation() throws Exception {
+        Socket socket = new Socket();
+
+        // Even if underlying SocketImpl is not initalized, this should force the init, and
+        // thereby succeed.
+        mIpSecManager.removeTransportModeTransforms(socket);
+
+        // Check to make sure the FileDescriptor is non-null
+        assertNotNull(socket.getFileDescriptor$());
+    }
+
+    @Test
     public void testOpenEncapsulationSocketOnRandomPort() throws Exception {
         IpSecUdpEncapResponse udpEncapResp =
                 new IpSecUdpEncapResponse(
@@ -260,12 +288,14 @@ public class IpSecManagerTest {
         IpSecManager.IpSecTunnelInterface tunnelIntf =
                 createAndValidateVti(DUMMY_RESOURCE_ID, VTI_INTF_NAME);
 
-        tunnelIntf.addAddress(VTI_INNER_ADDRESS);
+        tunnelIntf.addAddress(VTI_INNER_ADDRESS.getAddress(),
+                VTI_INNER_ADDRESS.getPrefixLength());
         verify(mMockIpSecService)
                 .addAddressToTunnelInterface(
                         eq(DUMMY_RESOURCE_ID), eq(VTI_INNER_ADDRESS), anyString());
 
-        tunnelIntf.removeAddress(VTI_INNER_ADDRESS);
+        tunnelIntf.removeAddress(VTI_INNER_ADDRESS.getAddress(),
+                VTI_INNER_ADDRESS.getPrefixLength());
         verify(mMockIpSecService)
                 .addAddressToTunnelInterface(
                         eq(DUMMY_RESOURCE_ID), eq(VTI_INNER_ADDRESS), anyString());

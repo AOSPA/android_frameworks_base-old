@@ -163,6 +163,7 @@ package android {
     field public static final java.lang.String REVOKE_RUNTIME_PERMISSIONS = "android.permission.REVOKE_RUNTIME_PERMISSIONS";
     field public static final java.lang.String SCORE_NETWORKS = "android.permission.SCORE_NETWORKS";
     field public static final java.lang.String SEND_RESPOND_VIA_MESSAGE = "android.permission.SEND_RESPOND_VIA_MESSAGE";
+    field public static final java.lang.String SEND_SHOW_SUSPENDED_APP_DETAILS = "android.permission.SEND_SHOW_SUSPENDED_APP_DETAILS";
     field public static final java.lang.String SEND_SMS_NO_CONFIRMATION = "android.permission.SEND_SMS_NO_CONFIRMATION";
     field public static final java.lang.String SERIAL_PORT = "android.permission.SERIAL_PORT";
     field public static final java.lang.String SET_ACTIVITY_WATCHER = "android.permission.SET_ACTIVITY_WATCHER";
@@ -316,6 +317,7 @@ package android.app {
 
   public class BroadcastOptions {
     method public static android.app.BroadcastOptions makeBasic();
+    method public void setDontSendToRestrictedApps(boolean);
     method public void setTemporaryAppWhitelistDuration(long);
     method public android.os.Bundle toBundle();
   }
@@ -381,12 +383,18 @@ package android.app {
   }
 
   public final class StatsManager {
+    method public void addConfig(long, byte[]) throws android.app.StatsManager.StatsUnavailableException;
     method public boolean addConfiguration(long, byte[]);
     method public byte[] getData(long);
     method public byte[] getMetadata();
+    method public byte[] getReports(long) throws android.app.StatsManager.StatsUnavailableException;
+    method public byte[] getStatsMetadata() throws android.app.StatsManager.StatsUnavailableException;
+    method public void removeConfig(long) throws android.app.StatsManager.StatsUnavailableException;
     method public boolean removeConfiguration(long);
+    method public void setBroadcastSubscriber(android.app.PendingIntent, long, long) throws android.app.StatsManager.StatsUnavailableException;
     method public boolean setBroadcastSubscriber(long, long, android.app.PendingIntent);
     method public boolean setDataFetchOperation(long, android.app.PendingIntent);
+    method public void setFetchReportsOperation(android.app.PendingIntent, long) throws android.app.StatsManager.StatsUnavailableException;
     field public static final java.lang.String ACTION_STATSD_STARTED = "android.app.action.STATSD_STARTED";
     field public static final java.lang.String EXTRA_STATS_BROADCAST_SUBSCRIBER_COOKIES = "android.app.extra.STATS_BROADCAST_SUBSCRIBER_COOKIES";
     field public static final java.lang.String EXTRA_STATS_CONFIG_KEY = "android.app.extra.STATS_CONFIG_KEY";
@@ -394,6 +402,11 @@ package android.app {
     field public static final java.lang.String EXTRA_STATS_DIMENSIONS_VALUE = "android.app.extra.STATS_DIMENSIONS_VALUE";
     field public static final java.lang.String EXTRA_STATS_SUBSCRIPTION_ID = "android.app.extra.STATS_SUBSCRIPTION_ID";
     field public static final java.lang.String EXTRA_STATS_SUBSCRIPTION_RULE_ID = "android.app.extra.STATS_SUBSCRIPTION_RULE_ID";
+  }
+
+  public static class StatsManager.StatsUnavailableException extends android.util.AndroidException {
+    ctor public StatsManager.StatsUnavailableException(java.lang.String);
+    ctor public StatsManager.StatsUnavailableException(java.lang.String, java.lang.Throwable);
   }
 
   public class VrManager {
@@ -451,7 +464,7 @@ package android.app.admin {
     field public static final int STATE_USER_UNMANAGED = 0; // 0x0
   }
 
-  public class SystemUpdatePolicy implements android.os.Parcelable {
+  public final class SystemUpdatePolicy implements android.os.Parcelable {
     method public int describeContents();
     method public android.app.admin.SystemUpdatePolicy.InstallationOption getInstallationOptionAt(long);
     method public void writeToParcel(android.os.Parcel, int);
@@ -878,6 +891,7 @@ package android.content {
     field public static final java.lang.String ACTION_QUERY_PACKAGE_RESTART = "android.intent.action.QUERY_PACKAGE_RESTART";
     field public static final java.lang.String ACTION_RESOLVE_INSTANT_APP_PACKAGE = "android.intent.action.RESOLVE_INSTANT_APP_PACKAGE";
     field public static final java.lang.String ACTION_REVIEW_PERMISSIONS = "android.intent.action.REVIEW_PERMISSIONS";
+    field public static final java.lang.String ACTION_SHOW_SUSPENDED_APP_DETAILS = "android.intent.action.SHOW_SUSPENDED_APP_DETAILS";
     field public static final deprecated java.lang.String ACTION_SIM_STATE_CHANGED = "android.intent.action.SIM_STATE_CHANGED";
     field public static final java.lang.String ACTION_SPLIT_CONFIGURATION_CHANGED = "android.intent.action.SPLIT_CONFIGURATION_CHANGED";
     field public static final java.lang.String ACTION_UPGRADE_SETUP = "android.intent.action.UPGRADE_SETUP";
@@ -1024,11 +1038,10 @@ package android.content.pm {
     method public abstract java.util.List<android.content.pm.IntentFilterVerificationInfo> getIntentFilterVerifications(java.lang.String);
     method public abstract int getIntentVerificationStatusAsUser(java.lang.String, int);
     method public abstract int getPermissionFlags(java.lang.String, java.lang.String, android.os.UserHandle);
-    method public android.os.PersistableBundle getSuspendedPackageAppExtras(java.lang.String);
     method public abstract void grantRuntimePermission(java.lang.String, java.lang.String, android.os.UserHandle);
     method public abstract int installExistingPackage(java.lang.String) throws android.content.pm.PackageManager.NameNotFoundException;
     method public abstract int installExistingPackage(java.lang.String, int) throws android.content.pm.PackageManager.NameNotFoundException;
-    method public boolean isPackageSuspended(java.lang.String);
+    method public boolean isPackageSuspended(java.lang.String) throws android.content.pm.PackageManager.NameNotFoundException;
     method public java.util.List<android.content.pm.ResolveInfo> queryBroadcastReceiversAsUser(android.content.Intent, int, android.os.UserHandle);
     method public abstract void registerDexModule(java.lang.String, android.content.pm.PackageManager.DexModuleRegisterCallback);
     method public abstract void removeOnPermissionsChangeListener(android.content.pm.PackageManager.OnPermissionsChangedListener);
@@ -1036,7 +1049,6 @@ package android.content.pm {
     method public abstract boolean setDefaultBrowserPackageNameAsUser(java.lang.String, int);
     method public void setHarmfulAppWarning(java.lang.String, java.lang.CharSequence);
     method public java.lang.String[] setPackagesSuspended(java.lang.String[], boolean, android.os.PersistableBundle, android.os.PersistableBundle, java.lang.String);
-    method public void setSuspendedPackageAppExtras(java.lang.String, android.os.PersistableBundle);
     method public abstract void setUpdateAvailable(java.lang.String, boolean);
     method public abstract boolean updateIntentVerificationStatusAsUser(java.lang.String, int, int);
     method public abstract void updatePermissionFlags(java.lang.String, java.lang.String, int, int, android.os.UserHandle);
@@ -1252,6 +1264,7 @@ package android.hardware.display {
     method public android.hardware.display.BrightnessConfiguration getBrightnessConfiguration();
     method public java.util.List<android.hardware.display.BrightnessChangeEvent> getBrightnessEvents();
     method public android.hardware.display.BrightnessConfiguration getDefaultBrightnessConfiguration();
+    method public android.util.Pair<float[], float[]> getMinimumBrightnessCurve();
     method public android.graphics.Point getStableDisplaySize();
     method public void setBrightnessConfiguration(android.hardware.display.BrightnessConfiguration);
     method public void setSaturationLevel(float);
@@ -3075,37 +3088,6 @@ package android.net {
     method public void onTetheringStarted();
   }
 
-  public final class IpSecManager {
-    method public void applyTunnelModeTransform(android.net.IpSecManager.IpSecTunnelInterface, int, android.net.IpSecTransform) throws java.io.IOException;
-    method public android.net.IpSecManager.IpSecTunnelInterface createIpSecTunnelInterface(java.net.InetAddress, java.net.InetAddress, android.net.Network) throws java.io.IOException, android.net.IpSecManager.ResourceUnavailableException;
-  }
-
-  public static final class IpSecManager.IpSecTunnelInterface implements java.lang.AutoCloseable {
-    method public void addAddress(android.net.LinkAddress) throws java.io.IOException;
-    method public void close();
-    method public java.lang.String getInterfaceName();
-    method public void removeAddress(android.net.LinkAddress) throws java.io.IOException;
-  }
-
-  public final class IpSecTransform implements java.lang.AutoCloseable {
-    method public void startNattKeepalive(android.net.IpSecTransform.NattKeepaliveCallback, int, android.os.Handler) throws java.io.IOException;
-    method public void stopNattKeepalive();
-  }
-
-  public static class IpSecTransform.Builder {
-    method public android.net.IpSecTransform buildTunnelModeTransform(java.net.InetAddress, android.net.IpSecManager.SecurityParameterIndex) throws java.io.IOException, android.net.IpSecManager.ResourceUnavailableException, android.net.IpSecManager.SpiUnavailableException;
-  }
-
-  public static class IpSecTransform.NattKeepaliveCallback {
-    ctor public IpSecTransform.NattKeepaliveCallback();
-    method public void onError(int);
-    method public void onStarted();
-    method public void onStopped();
-    field public static final int ERROR_HARDWARE_ERROR = 3; // 0x3
-    field public static final int ERROR_HARDWARE_UNSUPPORTED = 2; // 0x2
-    field public static final int ERROR_INVALID_NETWORK = 1; // 0x1
-  }
-
   public final class NetworkCapabilities implements android.os.Parcelable {
     field public static final int NET_CAPABILITY_OEM_PAID = 22; // 0x16
   }
@@ -4394,6 +4376,7 @@ package android.security.keystore.recovery {
     method public java.security.Key importKey(java.lang.String, byte[]) throws android.security.keystore.recovery.InternalRecoveryServiceException, android.security.keystore.recovery.LockScreenRequiredException;
     method public deprecated void initRecoveryService(java.lang.String, byte[]) throws java.security.cert.CertificateException, android.security.keystore.recovery.InternalRecoveryServiceException;
     method public void initRecoveryService(java.lang.String, byte[], byte[]) throws java.security.cert.CertificateException, android.security.keystore.recovery.InternalRecoveryServiceException;
+    method public static boolean isRecoverableKeyStoreEnabled(android.content.Context);
     method public void removeKey(java.lang.String) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public void setRecoverySecretTypes(int[]) throws android.security.keystore.recovery.InternalRecoveryServiceException;
     method public deprecated void setRecoveryStatus(java.lang.String, java.lang.String, int) throws android.security.keystore.recovery.InternalRecoveryServiceException, android.content.pm.PackageManager.NameNotFoundException;
@@ -4772,8 +4755,8 @@ package android.service.textclassifier {
     method public final android.view.textclassifier.TextClassifier getLocalTextClassifier();
     method public final android.os.IBinder onBind(android.content.Intent);
     method public abstract void onClassifyText(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.TextClassification.Request, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextClassification>);
-    method public abstract void onCreateTextClassificationSession(android.view.textclassifier.TextClassificationContext, android.view.textclassifier.TextClassificationSessionId);
-    method public abstract void onDestroyTextClassificationSession(android.view.textclassifier.TextClassificationSessionId);
+    method public void onCreateTextClassificationSession(android.view.textclassifier.TextClassificationContext, android.view.textclassifier.TextClassificationSessionId);
+    method public void onDestroyTextClassificationSession(android.view.textclassifier.TextClassificationSessionId);
     method public abstract void onGenerateLinks(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.TextLinks.Request, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextLinks>);
     method public void onSelectionEvent(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.SelectionEvent);
     method public abstract void onSuggestSelection(android.view.textclassifier.TextClassificationSessionId, android.view.textclassifier.TextSelection.Request, android.os.CancellationSignal, android.service.textclassifier.TextClassifierService.Callback<android.view.textclassifier.TextSelection>);
@@ -5070,11 +5053,6 @@ package android.telecom {
 
 package android.telephony {
 
-  public static final class AccessNetworkConstants.TransportType {
-    field public static final int WLAN = 2; // 0x2
-    field public static final int WWAN = 1; // 0x1
-  }
-
   public class CarrierConfigManager {
     method public static android.os.PersistableBundle getDefaultConfig();
     method public void updateConfigForPhoneId(int, java.lang.String);
@@ -5087,65 +5065,6 @@ package android.telephony {
 
   public class MbmsStreamingSession implements java.lang.AutoCloseable {
     field public static final java.lang.String MBMS_STREAMING_SERVICE_ACTION = "android.telephony.action.EmbmsStreaming";
-  }
-
-  public class NetworkRegistrationState implements android.os.Parcelable {
-    ctor public NetworkRegistrationState(int, int, int, int, int, boolean, int[], android.telephony.CellIdentity);
-    ctor protected NetworkRegistrationState(android.os.Parcel);
-    method public int describeContents();
-    method public int getAccessNetworkTechnology();
-    method public int[] getAvailableServices();
-    method public android.telephony.CellIdentity getCellIdentity();
-    method public int getDomain();
-    method public int getReasonForDenial();
-    method public int getRegState();
-    method public int getTransportType();
-    method public boolean isEmergencyEnabled();
-    method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.telephony.NetworkRegistrationState> CREATOR;
-    field public static final int DOMAIN_CS = 1; // 0x1
-    field public static final int DOMAIN_PS = 2; // 0x2
-    field public static final int REG_STATE_DENIED = 3; // 0x3
-    field public static final int REG_STATE_HOME = 1; // 0x1
-    field public static final int REG_STATE_NOT_REG_NOT_SEARCHING = 0; // 0x0
-    field public static final int REG_STATE_NOT_REG_SEARCHING = 2; // 0x2
-    field public static final int REG_STATE_ROAMING = 5; // 0x5
-    field public static final int REG_STATE_UNKNOWN = 4; // 0x4
-    field public static final int SERVICE_TYPE_DATA = 2; // 0x2
-    field public static final int SERVICE_TYPE_EMERGENCY = 5; // 0x5
-    field public static final int SERVICE_TYPE_SMS = 3; // 0x3
-    field public static final int SERVICE_TYPE_VIDEO = 4; // 0x4
-    field public static final int SERVICE_TYPE_VOICE = 1; // 0x1
-  }
-
-  public abstract class NetworkService extends android.app.Service {
-    method protected abstract android.telephony.NetworkService.NetworkServiceProvider createNetworkServiceProvider(int);
-    field public static final java.lang.String NETWORK_SERVICE_EXTRA_SLOT_ID = "android.telephony.extra.SLOT_ID";
-    field public static final java.lang.String NETWORK_SERVICE_INTERFACE = "android.telephony.NetworkService";
-  }
-
-  public class NetworkService.NetworkServiceProvider {
-    ctor public NetworkService.NetworkServiceProvider(int);
-    method public void getNetworkRegistrationState(int, android.telephony.NetworkServiceCallback);
-    method public final int getSlotId();
-    method public final void notifyNetworkRegistrationStateChanged();
-    method protected void onDestroy();
-  }
-
-  public class NetworkServiceCallback {
-    method public void onGetNetworkRegistrationStateComplete(int, android.telephony.NetworkRegistrationState);
-    field public static final int RESULT_ERROR_BUSY = 3; // 0x3
-    field public static final int RESULT_ERROR_FAILED = 5; // 0x5
-    field public static final int RESULT_ERROR_ILLEGAL_STATE = 4; // 0x4
-    field public static final int RESULT_ERROR_INVALID_ARG = 2; // 0x2
-    field public static final int RESULT_ERROR_UNSUPPORTED = 1; // 0x1
-    field public static final int RESULT_SUCCESS = 0; // 0x0
-  }
-
-  public class ServiceState implements android.os.Parcelable {
-    method public java.util.List<android.telephony.NetworkRegistrationState> getNetworkRegistrationStates();
-    method public java.util.List<android.telephony.NetworkRegistrationState> getNetworkRegistrationStates(int);
-    method public android.telephony.NetworkRegistrationState getNetworkRegistrationStates(int, int);
   }
 
   public final class SmsManager {
@@ -5187,7 +5106,7 @@ package android.telephony {
   }
 
   public final class SubscriptionPlan implements android.os.Parcelable {
-    method public java.util.Iterator<android.util.Pair<java.time.ZonedDateTime, java.time.ZonedDateTime>> cycleIterator();
+    method public java.util.Iterator<android.util.Range<java.time.ZonedDateTime>> cycleIterator();
     method public int describeContents();
     method public int getDataLimitBehavior();
     method public long getDataLimitBytes();
@@ -5209,9 +5128,10 @@ package android.telephony {
   public static class SubscriptionPlan.Builder {
     method public android.telephony.SubscriptionPlan build();
     method public static android.telephony.SubscriptionPlan.Builder createNonrecurring(java.time.ZonedDateTime, java.time.ZonedDateTime);
-    method public static android.telephony.SubscriptionPlan.Builder createRecurringDaily(java.time.ZonedDateTime);
-    method public static android.telephony.SubscriptionPlan.Builder createRecurringMonthly(java.time.ZonedDateTime);
-    method public static android.telephony.SubscriptionPlan.Builder createRecurringWeekly(java.time.ZonedDateTime);
+    method public static android.telephony.SubscriptionPlan.Builder createRecurring(java.time.ZonedDateTime, java.time.Period);
+    method public static deprecated android.telephony.SubscriptionPlan.Builder createRecurringDaily(java.time.ZonedDateTime);
+    method public static deprecated android.telephony.SubscriptionPlan.Builder createRecurringMonthly(java.time.ZonedDateTime);
+    method public static deprecated android.telephony.SubscriptionPlan.Builder createRecurringWeekly(java.time.ZonedDateTime);
     method public android.telephony.SubscriptionPlan.Builder setDataLimit(long, int);
     method public android.telephony.SubscriptionPlan.Builder setDataUsage(long, long);
     method public android.telephony.SubscriptionPlan.Builder setSummary(java.lang.CharSequence);
@@ -5345,93 +5265,6 @@ package android.telephony {
   public abstract class VisualVoicemailService extends android.app.Service {
     method public static final void sendVisualVoicemailSms(android.content.Context, android.telecom.PhoneAccountHandle, java.lang.String, short, java.lang.String, android.app.PendingIntent);
     method public static final void setSmsFilterSettings(android.content.Context, android.telecom.PhoneAccountHandle, android.telephony.VisualVoicemailSmsFilterSettings);
-  }
-
-}
-
-package android.telephony.data {
-
-  public final class DataCallResponse implements android.os.Parcelable {
-    ctor public DataCallResponse(int, int, int, int, java.lang.String, java.lang.String, java.util.List<android.net.LinkAddress>, java.util.List<java.net.InetAddress>, java.util.List<java.net.InetAddress>, java.util.List<java.lang.String>, int);
-    ctor public DataCallResponse(android.os.Parcel);
-    method public int describeContents();
-    method public int getActive();
-    method public java.util.List<android.net.LinkAddress> getAddresses();
-    method public int getCallId();
-    method public java.util.List<java.net.InetAddress> getDnses();
-    method public java.util.List<java.net.InetAddress> getGateways();
-    method public java.lang.String getIfname();
-    method public int getMtu();
-    method public java.util.List<java.lang.String> getPcscfs();
-    method public int getStatus();
-    method public int getSuggestedRetryTime();
-    method public java.lang.String getType();
-    method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.telephony.data.DataCallResponse> CREATOR;
-  }
-
-  public final class DataProfile implements android.os.Parcelable {
-    ctor public DataProfile(int, java.lang.String, java.lang.String, int, java.lang.String, java.lang.String, int, int, int, int, boolean, int, java.lang.String, int, int, java.lang.String, java.lang.String, boolean);
-    ctor public DataProfile(android.os.Parcel);
-    method public int describeContents();
-    method public java.lang.String getApn();
-    method public int getAuthType();
-    method public int getBearerBitmap();
-    method public int getMaxConns();
-    method public int getMaxConnsTime();
-    method public int getMtu();
-    method public java.lang.String getMvnoMatchData();
-    method public java.lang.String getMvnoType();
-    method public java.lang.String getPassword();
-    method public int getProfileId();
-    method public java.lang.String getProtocol();
-    method public java.lang.String getRoamingProtocol();
-    method public int getSupportedApnTypesBitmap();
-    method public int getType();
-    method public java.lang.String getUserName();
-    method public int getWaitTime();
-    method public boolean isEnabled();
-    method public boolean isModemCognitive();
-    method public void writeToParcel(android.os.Parcel, int);
-    field public static final android.os.Parcelable.Creator<android.telephony.data.DataProfile> CREATOR;
-    field public static final int TYPE_3GPP = 1; // 0x1
-    field public static final int TYPE_3GPP2 = 2; // 0x2
-    field public static final int TYPE_COMMON = 0; // 0x0
-  }
-
-  public abstract class DataService extends android.app.Service {
-    method public abstract android.telephony.data.DataService.DataServiceProvider createDataServiceProvider(int);
-    field public static final java.lang.String DATA_SERVICE_EXTRA_SLOT_ID = "android.telephony.data.extra.SLOT_ID";
-    field public static final java.lang.String DATA_SERVICE_INTERFACE = "android.telephony.data.DataService";
-    field public static final int REQUEST_REASON_HANDOVER = 3; // 0x3
-    field public static final int REQUEST_REASON_NORMAL = 1; // 0x1
-    field public static final int REQUEST_REASON_SHUTDOWN = 2; // 0x2
-  }
-
-  public class DataService.DataServiceProvider {
-    ctor public DataService.DataServiceProvider(int);
-    method public void deactivateDataCall(int, int, android.telephony.data.DataServiceCallback);
-    method public void getDataCallList(android.telephony.data.DataServiceCallback);
-    method public final int getSlotId();
-    method public final void notifyDataCallListChanged(java.util.List<android.telephony.data.DataCallResponse>);
-    method protected void onDestroy();
-    method public void setDataProfile(java.util.List<android.telephony.data.DataProfile>, boolean, android.telephony.data.DataServiceCallback);
-    method public void setInitialAttachApn(android.telephony.data.DataProfile, boolean, android.telephony.data.DataServiceCallback);
-    method public void setupDataCall(int, android.telephony.data.DataProfile, boolean, boolean, int, android.net.LinkProperties, android.telephony.data.DataServiceCallback);
-  }
-
-  public class DataServiceCallback {
-    method public void onDataCallListChanged(java.util.List<android.telephony.data.DataCallResponse>);
-    method public void onDeactivateDataCallComplete(int);
-    method public void onGetDataCallListComplete(int, java.util.List<android.telephony.data.DataCallResponse>);
-    method public void onSetDataProfileComplete(int);
-    method public void onSetInitialAttachApnComplete(int);
-    method public void onSetupDataCallComplete(int, android.telephony.data.DataCallResponse);
-    field public static final int RESULT_ERROR_BUSY = 3; // 0x3
-    field public static final int RESULT_ERROR_ILLEGAL_STATE = 4; // 0x4
-    field public static final int RESULT_ERROR_INVALID_ARG = 2; // 0x2
-    field public static final int RESULT_ERROR_UNSUPPORTED = 1; // 0x1
-    field public static final int RESULT_SUCCESS = 0; // 0x0
   }
 
 }

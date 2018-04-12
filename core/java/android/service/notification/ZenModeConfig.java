@@ -83,7 +83,8 @@ public class ZenModeConfig implements Parcelable {
     private static final int DAY_MINUTES = 24 * 60;
     private static final int ZERO_VALUE_MS = 10 * SECONDS_MS;
 
-    // Default allow categories set in readXml() from default_zen_mode_config.xml, fallback values:
+    // Default allow categories set in readXml() from default_zen_mode_config.xml,
+    // fallback/upgrade values:
     private static final boolean DEFAULT_ALLOW_ALARMS = true;
     private static final boolean DEFAULT_ALLOW_MEDIA = true;
     private static final boolean DEFAULT_ALLOW_SYSTEM = false;
@@ -97,7 +98,7 @@ public class ZenModeConfig implements Parcelable {
     private static final int DEFAULT_SUPPRESSED_VISUAL_EFFECTS =
             Policy.getAllSuppressedVisualEffects();
 
-    public static final int XML_VERSION = 6;
+    public static final int XML_VERSION = 7;
     public static final String ZEN_TAG = "zen";
     private static final String ZEN_ATT_VERSION = "version";
     private static final String ZEN_ATT_USER = "user";
@@ -1487,14 +1488,18 @@ public class ZenModeConfig implements Parcelable {
     /**
      * Returns a description of the current do not disturb settings from config.
      * - If turned on manually and end time is known, returns end time.
+     * - If turned on manually and end time is on forever until turned off, return null if
+     * describeForeverCondition is false, else return String describing indefinite behavior
      * - If turned on by an automatic rule, returns the automatic rule name.
      * - If on due to an app, returns the app name.
      * - If there's a combination of rules/apps that trigger, then shows the one that will
      *  last the longest if applicable.
-     * @return null if do not disturb is off.
+     * @return null if DND is off or describeForeverCondition is false and
+     * DND is on forever (until turned off)
      */
-    public static String getDescription(Context context, boolean zenOn, ZenModeConfig config) {
-        if (!zenOn) {
+    public static String getDescription(Context context, boolean zenOn, ZenModeConfig config,
+            boolean describeForeverCondition) {
+        if (!zenOn || config == null) {
             return null;
         }
 
@@ -1513,8 +1518,11 @@ public class ZenModeConfig implements Parcelable {
             } else {
                 if (id == null) {
                     // Do not disturb manually triggered to remain on forever until turned off
-                    // No subtext
-                    return null;
+                    if (describeForeverCondition) {
+                        return context.getString(R.string.zen_mode_forever);
+                    } else {
+                        return null;
+                    }
                 } else {
                     latestEndTime = tryParseCountdownConditionId(id);
                     if (latestEndTime > 0) {

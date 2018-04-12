@@ -1169,8 +1169,16 @@ public class DevicePolicyManager {
      * Constant to indicate the feature of mandatory backups. Used as argument to
      * {@link #createAdminSupportIntent(String)}.
      * @see #setMandatoryBackupTransport(ComponentName, ComponentName)
+     * @hide
      */
     public static final String POLICY_MANDATORY_BACKUPS = "policy_mandatory_backups";
+
+    /**
+     * Constant to indicate the feature of suspending app. Use it as the value of
+     * {@link #EXTRA_RESTRICTION}.
+     * @hide
+     */
+    public static final String POLICY_SUSPEND_PACKAGES = "policy_suspend_packages";
 
     /**
      * A String indicating a specific restricted feature. Can be a user restriction from the
@@ -4211,6 +4219,15 @@ public class DevicePolicyManager {
         return null;
     }
 
+    /**
+     * Returns {@code true} if the device supports attestation of device identifiers in addition
+     * to key attestation.
+     * @return {@code true} if Device ID attestation is supported.
+     */
+    public boolean isDeviceIdAttestationSupported() {
+        PackageManager pm = mContext.getPackageManager();
+        return pm.hasSystemFeature(PackageManager.FEATURE_DEVICE_ID_ATTESTATION);
+    }
 
     /**
      * Called by a device or profile owner, or delegated certificate installer, to associate
@@ -6182,6 +6199,7 @@ public class DevicePolicyManager {
      * @hide
      */
      @SystemApi
+     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
      public @Nullable List<String> getPermittedAccessibilityServices(int userId) {
         throwIfParentInstance("getPermittedAccessibilityServices");
         if (mService != null) {
@@ -6826,8 +6844,7 @@ public class DevicePolicyManager {
      * @param restriction Indicates for which feature the dialog should be displayed. Can be a
      *            user restriction from {@link UserManager}, e.g.
      *            {@link UserManager#DISALLOW_ADJUST_VOLUME}, or one of the constants
-     *            {@link #POLICY_DISABLE_CAMERA}, {@link #POLICY_DISABLE_SCREEN_CAPTURE} or
-     *            {@link #POLICY_MANDATORY_BACKUPS}.
+     *            {@link #POLICY_DISABLE_CAMERA}, {@link #POLICY_DISABLE_SCREEN_CAPTURE}.
      * @return Intent An intent to be used to start the dialog-activity if the restriction is
      *            set by an admin, or null if the restriction does not exist or no admin set it.
      */
@@ -8774,13 +8791,6 @@ public class DevicePolicyManager {
      *
      * <p> Backup service is off by default when device owner is present.
      *
-     * <p> If backups are made mandatory by specifying a non-null mandatory backup transport using
-     * the {@link DevicePolicyManager#setMandatoryBackupTransport} method, the backup service is
-     * automatically enabled.
-     *
-     * <p> If the backup service is disabled using this method after the mandatory backup transport
-     * has been set, the mandatory backup transport is cleared.
-     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.
      * @param enabled {@code true} to enable the backup service, {@code false} to disable it.
      * @throws SecurityException if {@code admin} is not a device owner.
@@ -8818,6 +8828,8 @@ public class DevicePolicyManager {
      * <p>Only device owner can call this method.
      * <p>If backups were disabled and a non-null backup transport {@link ComponentName} is
      * specified, backups will be enabled.
+     * <p> If the backup service is disabled after the mandatory backup transport has been set, the
+     * mandatory backup transport is cleared.
      *
      * <p>NOTE: The method shouldn't be called on the main thread.
      *
@@ -8825,6 +8837,7 @@ public class DevicePolicyManager {
      * @param backupTransportComponent The backup transport layer to be used for mandatory backups.
      * @return {@code true} if the backup transport was successfully set; {@code false} otherwise.
      * @throws SecurityException if {@code admin} is not a device owner.
+     * @hide
      */
     @WorkerThread
     public boolean setMandatoryBackupTransport(
@@ -8844,6 +8857,7 @@ public class DevicePolicyManager {
      *
      * @return a {@link ComponentName} of the backup transport layer to be used if backups are
      *         mandatory or {@code null} if backups are not mandatory.
+     * @hide
      */
     public ComponentName getMandatoryBackupTransport() {
         throwIfParentInstance("getMandatoryBackupTransport");

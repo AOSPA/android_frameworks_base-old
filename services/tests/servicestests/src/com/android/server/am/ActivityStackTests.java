@@ -24,8 +24,6 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 
-import static com.android.server.am.ActivityStack.ActivityState.DESTROYED;
-import static com.android.server.am.ActivityStack.ActivityState.DESTROYING;
 import static com.android.server.am.ActivityStack.ActivityState.PAUSING;
 import static com.android.server.am.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.am.ActivityStack.REMOVE_TASK_MODE_DESTROYING;
@@ -43,9 +41,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import android.app.servertransaction.DestroyActivityItem;
 import android.content.pm.ActivityInfo;
-import android.os.Debug;
 import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
 import android.support.test.filters.SmallTest;
@@ -67,6 +63,7 @@ import org.junit.Test;
 public class ActivityStackTests extends ActivityTestsBase {
     private ActivityManagerService mService;
     private ActivityStackSupervisor mSupervisor;
+    private ActivityDisplay mDefaultDisplay;
     private ActivityStack mStack;
     private TaskRecord mTask;
 
@@ -77,8 +74,9 @@ public class ActivityStackTests extends ActivityTestsBase {
 
         mService = createActivityManagerService();
         mSupervisor = mService.mStackSupervisor;
-        mStack = mService.mStackSupervisor.getDefaultDisplay().createStack(
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        mDefaultDisplay = mService.mStackSupervisor.getDefaultDisplay();
+        mStack = mDefaultDisplay.createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
         mTask = new TaskBuilder(mSupervisor).setStack(mStack).build();
     }
 
@@ -105,16 +103,50 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertEquals(mStack.getResumedActivity(), r);
         r.setState(PAUSING, "testResumedActivity");
         assertEquals(mStack.getResumedActivity(), null);
+    }
 
+    @Test
+    public void testResumedActivityFromTaskReparenting() {
+        final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
+        // Ensure moving task between two stacks updates resumed activity
+        r.setState(RESUMED, "testResumedActivityFromTaskReparenting");
+        assertEquals(mStack.getResumedActivity(), r);
+
+        final ActivityStack destStack = mService.mStackSupervisor.getDefaultDisplay().createStack(
+                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+
+        mTask.reparent(destStack, true /* toTop */, TaskRecord.REPARENT_KEEP_STACK_AT_FRONT,
+                false /* animate */, true /* deferResume*/,
+                "testResumedActivityFromTaskReparenting");
+
+        assertEquals(mStack.getResumedActivity(), null);
+        assertEquals(destStack.getResumedActivity(), r);
+    }
+
+    @Test
+    public void testResumedActivityFromActivityReparenting() {
+        final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
+        // Ensure moving task between two stacks updates resumed activity
+        r.setState(RESUMED, "testResumedActivityFromActivityReparenting");
+        assertEquals(mStack.getResumedActivity(), r);
+
+        final ActivityStack destStack = mService.mStackSupervisor.getDefaultDisplay().createStack(
+                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        final TaskRecord destTask = new TaskBuilder(mSupervisor).setStack(destStack).build();
+
+        mTask.removeActivity(r);
+        destTask.addActivityToTop(r);
+
+        assertEquals(mStack.getResumedActivity(), null);
+        assertEquals(destStack.getResumedActivity(), r);
     }
 
     @Test
     public void testPrimarySplitScreenToFullscreenWhenMovedToBack() throws Exception {
         // Create primary splitscreen stack. This will create secondary stacks and places the
         // existing fullscreen stack on the bottom.
-        final ActivityStack primarySplitScreen = mService.mStackSupervisor.getDefaultDisplay()
-                .createStack(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD,
-                        true /* onTop */);
+        final ActivityStack primarySplitScreen = mDefaultDisplay.createStack(
+                WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Assert windowing mode.
         assertEquals(primarySplitScreen.getWindowingMode(), WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
@@ -124,8 +156,7 @@ public class ActivityStackTests extends ActivityTestsBase {
                 null /* task */);
 
         // Assert that stack is at the bottom.
-        assertEquals(mService.mStackSupervisor.getDefaultDisplay().getIndexOf(primarySplitScreen),
-                0);
+        assertEquals(mDefaultDisplay.getIndexOf(primarySplitScreen), 0);
 
         // Ensure no longer in splitscreen.
         assertEquals(primarySplitScreen.getWindowingMode(), WINDOWING_MODE_FULLSCREEN);
@@ -165,16 +196,15 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testShouldBeVisible_Fullscreen() throws Exception {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
-        final ActivityStack pinnedStack = createStackForShouldBeVisibleTest(display,
+        final ActivityStack pinnedStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_PINNED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         assertTrue(homeStack.shouldBeVisible(null /* starting */));
         assertTrue(pinnedStack.shouldBeVisible(null /* starting */));
 
-        final TestActivityStack fullscreenStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack fullscreenStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
         // Home stack shouldn't be visible behind an opaque fullscreen stack, but pinned stack
         // should be visible since it is always on-top.
@@ -191,14 +221,13 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testShouldBeVisible_SplitScreen() throws Exception {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
         // Home stack should always be fullscreen for this test.
         homeStack.setSupportsSplitScreen(false);
-        final TestActivityStack splitScreenPrimary = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack splitScreenPrimary = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack splitScreenSecondary = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack splitScreenSecondary = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         // Home stack shouldn't be visible if both halves of split-screen are opaque.
@@ -214,7 +243,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertTrue(splitScreenPrimary.shouldBeVisible(null /* starting */));
         assertTrue(splitScreenSecondary.shouldBeVisible(null /* starting */));
 
-        final TestActivityStack splitScreenSecondary2 = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack splitScreenSecondary2 = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
         // First split-screen secondary shouldn't be visible behind another opaque split-split
         // secondary.
@@ -228,7 +257,7 @@ public class ActivityStackTests extends ActivityTestsBase {
         assertTrue(splitScreenSecondary.shouldBeVisible(null /* starting */));
         assertTrue(splitScreenSecondary2.shouldBeVisible(null /* starting */));
 
-        final TestActivityStack assistantStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack assistantStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_ASSISTANT, true /* onTop */);
 
         // Split-screen stacks shouldn't be visible behind an opaque fullscreen stack.
@@ -258,11 +287,11 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testShouldBeVisible_Finishing() throws Exception {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
-        final TestActivityStack translucentStack = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        final TestActivityStack translucentStack = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
         translucentStack.setIsTranslucent(true);
 
         assertTrue(homeStack.shouldBeVisible(null /* starting */));
@@ -286,76 +315,74 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     @Test
     public void testMoveHomeStackBehindBottomMostVisibleStack_NoMoveHomeBehindFullscreen() {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        display.removeChild(mStack);
+        mDefaultDisplay.removeChild(mStack);
 
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
-        final TestActivityStack fullscreenStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack fullscreenStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         homeStack.setIsTranslucent(false);
         fullscreenStack.setIsTranslucent(false);
 
         // Ensure that we don't move the home stack if it is already behind the top fullscreen stack
-        int homeStackIndex = display.getIndexOf(homeStack);
-        assertTrue(display.getStackAboveHome() == fullscreenStack);
-        display.moveHomeStackBehindBottomMostVisibleStack();
-        assertTrue(display.getIndexOf(homeStack) == homeStackIndex);
+        int homeStackIndex = mDefaultDisplay.getIndexOf(homeStack);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack);
+        mDefaultDisplay.moveStackBehindBottomMostVisibleStack(homeStack);
+        assertTrue(mDefaultDisplay.getIndexOf(homeStack) == homeStackIndex);
     }
 
     @Test
     public void testMoveHomeStackBehindBottomMostVisibleStack_NoMoveHomeBehindTranslucent() {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        display.removeChild(mStack);
+        mDefaultDisplay.removeChild(mStack);
 
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
-        final TestActivityStack fullscreenStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack fullscreenStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         homeStack.setIsTranslucent(false);
         fullscreenStack.setIsTranslucent(true);
 
         // Ensure that we don't move the home stack if it is already behind the top fullscreen stack
-        int homeStackIndex = display.getIndexOf(homeStack);
-        assertTrue(display.getStackAboveHome() == fullscreenStack);
-        display.moveHomeStackBehindBottomMostVisibleStack();
-        assertTrue(display.getIndexOf(homeStack) == homeStackIndex);
+        int homeStackIndex = mDefaultDisplay.getIndexOf(homeStack);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack);
+        mDefaultDisplay.moveStackBehindBottomMostVisibleStack(homeStack);
+        assertTrue(mDefaultDisplay.getIndexOf(homeStack) == homeStackIndex);
     }
 
     @Test
     public void testMoveHomeStackBehindBottomMostVisibleStack_NoMoveHomeOnTop() {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        display.removeChild(mStack);
+        mDefaultDisplay.removeChild(mStack);
 
-        final TestActivityStack fullscreenStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack fullscreenStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
 
         homeStack.setIsTranslucent(false);
         fullscreenStack.setIsTranslucent(false);
 
         // Ensure we don't move the home stack if it is already on top
-        int homeStackIndex = display.getIndexOf(homeStack);
-        assertTrue(display.getStackAboveHome() == null);
-        display.moveHomeStackBehindBottomMostVisibleStack();
-        assertTrue(display.getIndexOf(homeStack) == homeStackIndex);
+        int homeStackIndex = mDefaultDisplay.getIndexOf(homeStack);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == null);
+        mDefaultDisplay.moveStackBehindBottomMostVisibleStack(homeStack);
+        assertTrue(mDefaultDisplay.getIndexOf(homeStack) == homeStackIndex);
     }
 
     @Test
     public void testMoveHomeStackBehindBottomMostVisibleStack_MoveHomeBehindFullscreen() {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        display.removeChild(mStack);
+        mDefaultDisplay.removeChild(mStack);
 
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
-        final TestActivityStack fullscreenStack1 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack fullscreenStack2 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack pinnedStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack fullscreenStack1 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack fullscreenStack2 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack pinnedStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_PINNED, ACTIVITY_TYPE_STANDARD, true /* onTop */);
 
         homeStack.setIsTranslucent(false);
@@ -364,22 +391,23 @@ public class ActivityStackTests extends ActivityTestsBase {
 
         // Ensure that we move the home stack behind the bottom most fullscreen stack, ignoring the
         // pinned stack
-        assertTrue(display.getStackAboveHome() == fullscreenStack1);
-        display.moveHomeStackBehindBottomMostVisibleStack();
-        assertTrue(display.getStackAboveHome() == fullscreenStack2);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack1);
+        mDefaultDisplay.moveStackBehindBottomMostVisibleStack(homeStack);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack2);
     }
 
     @Test
     public void testMoveHomeStackBehindBottomMostVisibleStack_MoveHomeBehindFullscreenAndTranslucent() {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        display.removeChild(mStack);
+        mDefaultDisplay.removeChild(mStack);
 
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
-        final TestActivityStack fullscreenStack1 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack fullscreenStack2 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
+        final TestActivityStack fullscreenStack1 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack fullscreenStack2 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
 
         homeStack.setIsTranslucent(false);
         fullscreenStack1.setIsTranslucent(false);
@@ -387,21 +415,22 @@ public class ActivityStackTests extends ActivityTestsBase {
 
         // Ensure that we move the home stack behind the bottom most non-translucent fullscreen
         // stack
-        assertTrue(display.getStackAboveHome() == fullscreenStack1);
-        display.moveHomeStackBehindBottomMostVisibleStack();
-        assertTrue(display.getStackAboveHome() == fullscreenStack1);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack1);
+        mDefaultDisplay.moveStackBehindBottomMostVisibleStack(homeStack);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack1);
     }
 
     @Test
     public void testMoveHomeStackBehindStack_BehindHomeStack() {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        display.removeChild(mStack);
+        mDefaultDisplay.removeChild(mStack);
 
-        final TestActivityStack fullscreenStack1 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack fullscreenStack2 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack fullscreenStack1 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack fullscreenStack2 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
 
         homeStack.setIsTranslucent(false);
@@ -409,45 +438,49 @@ public class ActivityStackTests extends ActivityTestsBase {
         fullscreenStack2.setIsTranslucent(false);
 
         // Ensure we don't move the home stack behind itself
-        int homeStackIndex = display.getIndexOf(homeStack);
-        display.moveHomeStackBehindStack(homeStack);
-        assertTrue(display.getIndexOf(homeStack) == homeStackIndex);
+        int homeStackIndex = mDefaultDisplay.getIndexOf(homeStack);
+        mDefaultDisplay.moveStackBehindStack(homeStack, homeStack);
+        assertTrue(mDefaultDisplay.getIndexOf(homeStack) == homeStackIndex);
     }
 
     @Test
     public void testMoveHomeStackBehindStack() {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        display.removeChild(mStack);
+        mDefaultDisplay.removeChild(mStack);
 
-        final TestActivityStack fullscreenStack1 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack fullscreenStack2 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack fullscreenStack3 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack fullscreenStack4 = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack fullscreenStack1 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack fullscreenStack2 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack fullscreenStack3 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack fullscreenStack4 = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack homeStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, true /* onTop */);
 
-        display.moveHomeStackBehindStack(fullscreenStack1);
-        assertTrue(display.getStackAboveHome() == fullscreenStack1);
-        display.moveHomeStackBehindStack(fullscreenStack2);
-        assertTrue(display.getStackAboveHome() == fullscreenStack2);
-        display.moveHomeStackBehindStack(fullscreenStack4);
-        assertTrue(display.getStackAboveHome() == fullscreenStack4);
-        display.moveHomeStackBehindStack(fullscreenStack2);
-        assertTrue(display.getStackAboveHome() == fullscreenStack2);
+        mDefaultDisplay.moveStackBehindStack(homeStack, fullscreenStack1);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack1);
+        mDefaultDisplay.moveStackBehindStack(homeStack, fullscreenStack2);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack2);
+        mDefaultDisplay.moveStackBehindStack(homeStack, fullscreenStack4);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack4);
+        mDefaultDisplay.moveStackBehindStack(homeStack, fullscreenStack2);
+        assertTrue(mDefaultDisplay.getStackAbove(homeStack) == fullscreenStack2);
     }
 
     @Test
     public void testSplitScreenMoveToFront() throws Exception {
-        final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
-        final TestActivityStack splitScreenPrimary = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack splitScreenSecondary = createStackForShouldBeVisibleTest(display,
-                WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        final TestActivityStack assistantStack = createStackForShouldBeVisibleTest(display,
+        final TestActivityStack splitScreenPrimary = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack splitScreenSecondary = createStackForShouldBeVisibleTest(
+                mDefaultDisplay, WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, ACTIVITY_TYPE_STANDARD,
+                true /* onTop */);
+        final TestActivityStack assistantStack = createStackForShouldBeVisibleTest(mDefaultDisplay,
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_ASSISTANT, true /* onTop */);
 
         splitScreenPrimary.setIsTranslucent(false);
@@ -545,5 +578,4 @@ public class ActivityStackTests extends ActivityTestsBase {
 
         assertEquals(expected, mStack.shouldSleepActivities());
     }
-
 }

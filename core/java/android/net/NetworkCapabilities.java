@@ -254,9 +254,8 @@ public final class NetworkCapabilities implements Parcelable {
     /**
      * Indicates that this network is not congested.
      * <p>
-     * When a network is congested, the device should defer network traffic that
-     * can be done at a later time without breaking developer contracts.
-     * @hide
+     * When a network is congested, applications should defer network traffic
+     * that can be done at a later time, such as uploading analytics.
      */
     public static final int NET_CAPABILITY_NOT_CONGESTED = 20;
 
@@ -318,7 +317,7 @@ public final class NetworkCapabilities implements Parcelable {
 
     /**
      * Capabilities that suggest that a network is restricted.
-     * {@see #maybeMarkCapabilitiesRestricted}.
+     * {@see #maybeMarkCapabilitiesRestricted}, {@see #FORCE_RESTRICTED_CAPABILITIES}
      */
     @VisibleForTesting
     /* package */ static final long RESTRICTED_CAPABILITIES =
@@ -329,7 +328,13 @@ public final class NetworkCapabilities implements Parcelable {
             (1 << NET_CAPABILITY_IA) |
             (1 << NET_CAPABILITY_IMS) |
             (1 << NET_CAPABILITY_RCS) |
-            (1 << NET_CAPABILITY_XCAP) |
+            (1 << NET_CAPABILITY_XCAP);
+
+    /**
+     * Capabilities that force network to be restricted.
+     * {@see #maybeMarkCapabilitiesRestricted}.
+     */
+    private static final long FORCE_RESTRICTED_CAPABILITIES =
             (1 << NET_CAPABILITY_OEM_PAID);
 
     /**
@@ -533,16 +538,21 @@ public final class NetworkCapabilities implements Parcelable {
      * @hide
      */
     public void maybeMarkCapabilitiesRestricted() {
+        // Check if we have any capability that forces the network to be restricted.
+        final boolean forceRestrictedCapability =
+                (mNetworkCapabilities & FORCE_RESTRICTED_CAPABILITIES) != 0;
+
         // Verify there aren't any unrestricted capabilities.  If there are we say
-        // the whole thing is unrestricted.
+        // the whole thing is unrestricted unless it is forced to be restricted.
         final boolean hasUnrestrictedCapabilities =
-                ((mNetworkCapabilities & UNRESTRICTED_CAPABILITIES) != 0);
+                (mNetworkCapabilities & UNRESTRICTED_CAPABILITIES) != 0;
 
         // Must have at least some restricted capabilities.
         final boolean hasRestrictedCapabilities =
-                ((mNetworkCapabilities & RESTRICTED_CAPABILITIES) != 0);
+                (mNetworkCapabilities & RESTRICTED_CAPABILITIES) != 0;
 
-        if (hasRestrictedCapabilities && !hasUnrestrictedCapabilities) {
+        if (forceRestrictedCapability
+                || (hasRestrictedCapabilities && !hasUnrestrictedCapabilities)) {
             removeCapability(NET_CAPABILITY_NOT_RESTRICTED);
         }
     }

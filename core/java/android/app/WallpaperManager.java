@@ -401,7 +401,8 @@ public class WallpaperManager {
                 }
             }
             synchronized (this) {
-                if (mCachedWallpaper != null && mCachedWallpaperUserId == userId) {
+                if (mCachedWallpaper != null && mCachedWallpaperUserId == userId
+                        && !mCachedWallpaper.isRecycled()) {
                     return mCachedWallpaper;
                 }
                 mCachedWallpaper = null;
@@ -412,7 +413,7 @@ public class WallpaperManager {
                 } catch (OutOfMemoryError e) {
                     Log.w(TAG, "Out of memory loading the current wallpaper: " + e);
                 } catch (SecurityException e) {
-                    if (context.getApplicationInfo().targetSdkVersion <= Build.VERSION_CODES.O) {
+                    if (context.getApplicationInfo().targetSdkVersion < Build.VERSION_CODES.O_MR1) {
                         Log.w(TAG, "No permission to access wallpaper, suppressing"
                                 + " exception to avoid crashing legacy app.");
                     } else {
@@ -976,7 +977,7 @@ public class WallpaperManager {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             } catch (SecurityException e) {
-                if (mContext.getApplicationInfo().targetSdkVersion <= Build.VERSION_CODES.O) {
+                if (mContext.getApplicationInfo().targetSdkVersion < Build.VERSION_CODES.O_MR1) {
                     Log.w(TAG, "No permission to access wallpaper, suppressing"
                             + " exception to avoid crashing legacy app.");
                     return null;

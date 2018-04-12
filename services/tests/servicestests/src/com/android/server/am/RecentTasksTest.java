@@ -39,6 +39,7 @@ import static org.mockito.Mockito.spy;
 
 import static java.lang.Integer.MAX_VALUE;
 
+import android.annotation.TestApi;
 import android.app.ActivityManager;
 import android.app.ActivityManager.RecentTaskInfo;
 import android.app.ActivityManager.RunningTaskInfo;
@@ -327,6 +328,33 @@ public class RecentTasksTest extends ActivityTestsBase {
     }
 
     @Test
+    public void testAddTaskCompatibleActivityTypeDifferentUser_expectNoRemove() throws Exception {
+        Configuration config1 = new Configuration();
+        config1.windowConfiguration.setActivityType(ACTIVITY_TYPE_UNDEFINED);
+        TaskRecord task1 = createTaskBuilder(".Task1")
+                .setFlags(FLAG_ACTIVITY_NEW_TASK)
+                .setStack(mStack)
+                .setUserId(TEST_USER_0_ID)
+                .build();
+        task1.onConfigurationChanged(config1);
+        assertTrue(task1.getActivityType() == ACTIVITY_TYPE_UNDEFINED);
+        mRecentTasks.add(task1);
+        mCallbacksRecorder.clear();
+
+        TaskRecord task2 = createTaskBuilder(".Task1")
+                .setFlags(FLAG_ACTIVITY_NEW_TASK)
+                .setStack(mStack)
+                .setUserId(TEST_USER_1_ID)
+                .build();
+        assertTrue(task2.getActivityType() == ACTIVITY_TYPE_STANDARD);
+        mRecentTasks.add(task2);
+        assertTrue(mCallbacksRecorder.added.size() == 1);
+        assertTrue(mCallbacksRecorder.added.contains(task2));
+        assertTrue(mCallbacksRecorder.trimmed.isEmpty());
+        assertTrue(mCallbacksRecorder.removed.isEmpty());
+    }
+
+    @Test
     public void testUsersTasks() throws Exception {
         mRecentTasks.setOnlyTestVisibleRange();
 
@@ -567,6 +595,23 @@ public class RecentTasksTest extends ActivityTestsBase {
     }
 
     @Test
+    public void testRemovePackageByName() throws Exception {
+        // Add a number of tasks with the same package name
+        mRecentTasks.add(createTaskBuilder("com.android.pkg1", ".Task1").build());
+        mRecentTasks.add(createTaskBuilder("com.android.pkg2", ".Task2").build());
+        mRecentTasks.add(createTaskBuilder("com.android.pkg3", ".Task3").build());
+        mRecentTasks.add(createTaskBuilder("com.android.pkg1", ".Task4").build());
+        mRecentTasks.removeTasksByPackageName("com.android.pkg1", TEST_USER_0_ID);
+
+        final ArrayList<TaskRecord> tasks = mRecentTasks.getRawTasks();
+        for (int i = 0; i < tasks.size(); i++) {
+            if (tasks.get(i).intent.getComponent().getPackageName().equals("com.android.pkg1")) {
+                fail("Expected com.android.pkg1 tasks to be removed");
+            }
+        }
+    }
+
+    @Test
     public void testNotRecentsComponent_denyApiAccess() throws Exception {
         doReturn(PackageManager.PERMISSION_DENIED).when(mService).checkPermission(anyString(),
                 anyInt(), anyInt());
@@ -650,6 +695,8 @@ public class RecentTasksTest extends ActivityTestsBase {
         assertSecurityException(expectCallable, () -> mService.startRecentsActivity(null, null,
                 null));
         assertSecurityException(expectCallable, () -> mService.cancelRecentsAnimation(true));
+        assertSecurityException(expectCallable, () -> mService.stopAppSwitches());
+        assertSecurityException(expectCallable, () -> mService.resumeAppSwitches());
     }
 
     private void testGetTasksApis(boolean expectCallable) {
@@ -665,8 +712,12 @@ public class RecentTasksTest extends ActivityTestsBase {
     }
 
     private TaskBuilder createTaskBuilder(String className) {
+        return createTaskBuilder(mContext.getPackageName(), className);
+    }
+
+    private TaskBuilder createTaskBuilder(String packageName, String className) {
         return new TaskBuilder(mService.mStackSupervisor)
-                .setComponent(new ComponentName(mContext.getPackageName(), className))
+                .setComponent(new ComponentName(packageName, className))
                 .setStack(mStack)
                 .setTaskId(LAST_TASK_ID++)
                 .setUserId(TEST_USER_0_ID);

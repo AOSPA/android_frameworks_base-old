@@ -212,7 +212,6 @@ public class VolumeDialogImpl implements VolumeDialog {
                     .setDuration(300)
                     .setInterpolator(new SystemUIInterpolators.LogDecelerateInterpolator())
                     .withEndAction(() -> {
-                        mWindow.getDecorView().requestAccessibilityFocus();
                         if (!Prefs.getBoolean(mContext, Prefs.Key.TOUCHED_RINGER_TOGGLE, false)) {
                             mRingerIcon.postOnAnimationDelayed(mSinglePress, 1500);
                         }
@@ -302,15 +301,8 @@ public class VolumeDialogImpl implements VolumeDialog {
         if (D.BUG) Slog.d(TAG, "Adding row for stream " + stream);
         VolumeRow row = new VolumeRow();
         initRow(row, stream, iconRes, iconMuteRes, important, defaultStream);
-        if (dynamic && mRows.size() > 2) {
-            // Dynamic Streams should be the first in the list, so they're shown to start of
-            // everything except a11y
-            mDialogRowsView.addView(row.view, 1);
-            mRows.add(1, row);
-        } else {
-            mDialogRowsView.addView(row.view);
-            mRows.add(row);
-        }
+        mDialogRowsView.addView(row.view);
+        mRows.add(row);
     }
 
     private void addExistingRows() {
@@ -423,6 +415,7 @@ public class VolumeDialogImpl implements VolumeDialog {
         mSettingsView.setVisibility(
                 mDeviceProvisionedController.isDeviceProvisioned() ? VISIBLE : GONE);
         mSettingsIcon.setOnClickListener(v -> {
+            Events.writeEvent(mContext, Events.EVENT_SETTINGS_CLICK);
             Intent intent = new Intent(Settings.ACTION_SOUND_SETTINGS);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             dismissH(DISMISS_REASON_SETTINGS_CLICKED);
@@ -432,8 +425,6 @@ public class VolumeDialogImpl implements VolumeDialog {
 
     public void initRingerH() {
         mRingerIcon.setOnClickListener(v -> {
-            Events.writeEvent(mContext, Events.EVENT_ICON_CLICK, AudioManager.STREAM_RING,
-                    mRingerIcon.getTag());
             Prefs.putBoolean(mContext, Prefs.Key.TOUCHED_RINGER_TOGGLE, true);
             final StreamState ss = mState.states.get(AudioManager.STREAM_RING);
             if (ss == null) {
@@ -457,6 +448,7 @@ public class VolumeDialogImpl implements VolumeDialog {
                     mController.setStreamVolume(AudioManager.STREAM_RING, 1);
                 }
             }
+            Events.writeEvent(mContext, Events.EVENT_RINGER_TOGGLE, newRingerMode);
             updateRingerH();
             provideTouchFeedbackH(newRingerMode);
             mController.setRingerMode(newRingerMode, false);
@@ -604,7 +596,8 @@ public class VolumeDialogImpl implements VolumeDialog {
             return activeRow.stream == STREAM_RING
                     || activeRow.stream == STREAM_ALARM
                     || activeRow.stream == STREAM_VOICE_CALL
-                    || activeRow.stream == STREAM_ACCESSIBILITY;
+                    || activeRow.stream == STREAM_ACCESSIBILITY
+                    || mDynamic.get(activeRow.stream);
         }
 
         return false;

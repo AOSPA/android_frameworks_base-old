@@ -20,7 +20,7 @@ import android.content.ComponentName;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.service.notification.StatusBarNotification;
-import android.hardware.biometrics.IBiometricDialogReceiver;
+import android.hardware.biometrics.IBiometricPromptReceiver;
 
 import com.android.internal.statusbar.IStatusBar;
 import com.android.internal.statusbar.StatusBarIcon;
@@ -64,6 +64,8 @@ interface IStatusBarService
             in NotificationVisibility[] noLongerVisibleKeys);
     void onNotificationExpansionChanged(in String key, in boolean userAction, in boolean expanded);
     void onNotificationDirectReplied(String key);
+    void onNotificationSmartRepliesAdded(in String key, in int replyCount);
+    void onNotificationSmartReplySent(in String key, in int replyIndex);
     void onNotificationSettingsViewed(String key);
     void setSystemUiVisibility(int vis, int mask, String cause);
 
@@ -88,7 +90,7 @@ interface IStatusBarService
     void showPinningEscapeToast();
 
     // Used to show the dialog when FingerprintService starts authentication
-    void showFingerprintDialog(in Bundle bundle, IBiometricDialogReceiver receiver);
+    void showFingerprintDialog(in Bundle bundle, IBiometricPromptReceiver receiver);
     // Used to hide the dialog when a finger is authenticated
     void onFingerprintAuthenticated();
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc

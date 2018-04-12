@@ -173,6 +173,8 @@ class TaskSnapshotSurface implements StartingSurface {
             windowFlags = topFullscreenWindow.getAttrs().flags;
             windowPrivateFlags = topFullscreenWindow.getAttrs().privateFlags;
 
+            layoutParams.packageName = mainWindow.getAttrs().packageName;
+            layoutParams.windowAnimations = mainWindow.getAttrs().windowAnimations;
             layoutParams.dimAmount = mainWindow.getAttrs().dimAmount;
             layoutParams.type = TYPE_APPLICATION_STARTING;
             layoutParams.format = snapshot.getSnapshot().getFormat();
@@ -213,8 +215,8 @@ class TaskSnapshotSurface implements StartingSurface {
                 currentOrientation);
         window.setOuter(snapshotSurface);
         try {
-            session.relayout(window, window.mSeq, layoutParams, -1, -1, View.VISIBLE, 0, tmpFrame,
-                    tmpRect, tmpContentInsets, tmpRect, tmpStableInsets, tmpRect, tmpRect,
+            session.relayout(window, window.mSeq, layoutParams, -1, -1, View.VISIBLE, 0, -1,
+                    tmpFrame, tmpRect, tmpContentInsets, tmpRect, tmpStableInsets, tmpRect, tmpRect,
                     tmpCutout, tmpMergedConfiguration, surface);
         } catch (RemoteException e) {
             // Local call.

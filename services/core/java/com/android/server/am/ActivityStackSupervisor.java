@@ -673,6 +673,14 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         return mFocusedStack;
     }
 
+    boolean isFocusable(ConfigurationContainer container, boolean alwaysFocusable) {
+        if (container.inSplitScreenPrimaryWindowingMode() && mIsDockMinimized) {
+            return false;
+        }
+
+        return container.getWindowConfiguration().canReceiveKeys() || alwaysFocusable;
+    }
+
     ActivityStack getLastStack() {
         return mLastFocusedStack;
     }
@@ -1270,10 +1278,11 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     }
 
     ResolveInfo resolveIntent(Intent intent, String resolvedType, int userId) {
-        return resolveIntent(intent, resolvedType, userId, 0);
+        return resolveIntent(intent, resolvedType, userId, 0, Binder.getCallingUid());
     }
 
-    ResolveInfo resolveIntent(Intent intent, String resolvedType, int userId, int flags) {
+    ResolveInfo resolveIntent(Intent intent, String resolvedType, int userId, int flags,
+            int filterCallingUid) {
         synchronized (mService) {
             try {
                 Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "resolveIntent");
@@ -1284,7 +1293,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     modifiedFlags |= PackageManager.MATCH_INSTANT;
                 }
                 return mService.getPackageManagerInternalLocked().resolveIntent(
-                        intent, resolvedType, modifiedFlags, userId, true);
+                        intent, resolvedType, modifiedFlags, userId, true, filterCallingUid);
 
             } finally {
                 Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
@@ -1293,8 +1302,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
     }
 
     ActivityInfo resolveActivity(Intent intent, String resolvedType, int startFlags,
-            ProfilerInfo profilerInfo, int userId) {
-        final ResolveInfo rInfo = resolveIntent(intent, resolvedType, userId);
+            ProfilerInfo profilerInfo, int userId, int filterCallingUid) {
+        final ResolveInfo rInfo = resolveIntent(intent, resolvedType, userId, 0, filterCallingUid);
         return resolveActivity(intent, rInfo, startFlags, profilerInfo);
     }
 
@@ -1377,12 +1386,13 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
             mService.updateLruProcessLocked(app, true, null);
             mService.updateOomAdjLocked();
 
+            final LockTaskController lockTaskController = mService.getLockTaskController();
             if (task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE
                     || task.mLockTaskAuth == LOCK_TASK_AUTH_LAUNCHABLE_PRIV
                     || (task.mLockTaskAuth == LOCK_TASK_AUTH_WHITELISTED
-                            && mService.mLockTaskController.getLockTaskModeState()
-                            == LOCK_TASK_MODE_LOCKED)) {
-                mService.mLockTaskController.startLockTaskMode(task, false, 0 /* blank UID */);
+                            && lockTaskController.getLockTaskModeState()
+                                    == LOCK_TASK_MODE_LOCKED)) {
+                lockTaskController.startLockTaskMode(task, false, 0 /* blank UID */);
             }
 
             try {
@@ -1585,7 +1595,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     // to run in multiple processes, because this is actually
                     // part of the framework so doesn't make sense to track as a
                     // separate apk in the process.
-                    app.addPackage(r.info.packageName, r.info.applicationInfo.versionCode,
+                    app.addPackage(r.info.packageName, r.info.applicationInfo.longVersionCode,
                             mService.mProcessStats);
                 }
                 realStartActivityLocked(r, app, andResume, checkConfig);
@@ -2915,7 +2925,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         if (tr != null) {
             tr.removeTaskActivitiesLocked(pauseImmediately, reason);
             cleanUpRemovedTaskLocked(tr, killProcess, removeFromRecents);
-            mService.mLockTaskController.clearLockedTask(tr);
+            mService.getLockTaskController().clearLockedTask(tr);
             if (tr.isPersistable) {
                 mService.notifyTaskPersisterLocked(null, true);
             }
@@ -3856,7 +3866,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         pw.print(mRecentTasks.isRecentsComponentHomeActivity(mCurrentUser));
 
         getKeyguardController().dump(pw, prefix);
-        mService.mLockTaskController.dump(pw, prefix);
+        mService.getLockTaskController().dump(pw, prefix);
     }
 
     public void writeToProto(ProtoOutputStream proto, long fieldId) {

@@ -697,6 +697,7 @@ import java.util.function.Predicate;
  * security policy. See also {@link MotionEvent#FLAG_WINDOW_IS_OBSCURED}.
  * </p>
  *
+ * @attr ref android.R.styleable#View_accessibilityHeading
  * @attr ref android.R.styleable#View_alpha
  * @attr ref android.R.styleable#View_background
  * @attr ref android.R.styleable#View_clickable
@@ -2955,7 +2956,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *     1                             PFLAG3_SCREEN_READER_FOCUSABLE
      *    1                              PFLAG3_AGGREGATED_VISIBLE
      *   1                               PFLAG3_AUTOFILLID_EXPLICITLY_SET
-     *  1                                available
+     *  1                                PFLAG3_ACCESSIBILITY_HEADING
      * |-------|-------|-------|-------|
      */
 
@@ -3251,6 +3252,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link #setAutofillId(AutofillId)}.
      */
     private static final int PFLAG3_AUTOFILLID_EXPLICITLY_SET = 0x40000000;
+
+    /**
+     * Indicates if the View is a heading for accessibility purposes
+     */
+    private static final int PFLAG3_ACCESSIBILITY_HEADING = 0x80000000;
 
     /* End of masks for mPrivateFlags3 */
 
@@ -5475,6 +5481,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 case R.styleable.View_outlineAmbientShadowColor:
                     setOutlineAmbientShadowColor(a.getColor(attr, Color.BLACK));
                     break;
+                case com.android.internal.R.styleable.View_accessibilityHeading:
+                    setAccessibilityHeading(a.getBoolean(attr, false));
             }
         }
 
@@ -8795,6 +8803,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         info.addAction(AccessibilityAction.ACTION_SHOW_ON_SCREEN);
         populateAccessibilityNodeInfoDrawingOrderInParent(info);
         info.setPaneTitle(mAccessibilityPaneTitle);
+        info.setHeading(isAccessibilityHeading());
     }
 
     /**
@@ -10398,7 +10407,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @param willNotCacheDrawing true if this view does not cache its
      *        drawing, false otherwise
+     *
+     * @deprecated The view drawing cache was largely made obsolete with the introduction of
+     * hardware-accelerated rendering in API 11. With hardware-acceleration, intermediate cache
+     * layers are largely unnecessary and can easily result in a net loss in performance due to the
+     * cost of creating and updating the layer. In the rare cases where caching layers are useful,
+     * such as for alpha animations, {@link #setLayerType(int, Paint)} handles this with hardware
+     * rendering. For software-rendered snapshots of a small part of the View hierarchy or
+     * individual Views it is recommended to create a {@link Canvas} from either a {@link Bitmap} or
+     * {@link android.graphics.Picture} and call {@link #draw(Canvas)} on the View. However these
+     * software-rendered usages are discouraged and have compatibility issues with hardware-only
+     * rendering features such as {@link android.graphics.Bitmap.Config#HARDWARE Config.HARDWARE}
+     * bitmaps, real-time shadows, and outline clipping. For screenshots of the UI for feedback
+     * reports or unit testing the {@link PixelCopy} API is recommended.
      */
+    @Deprecated
     public void setWillNotCacheDrawing(boolean willNotCacheDrawing) {
         setFlags(willNotCacheDrawing ? WILL_NOT_CACHE_DRAWING : 0, WILL_NOT_CACHE_DRAWING);
     }
@@ -10407,8 +10430,22 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Returns whether or not this View can cache its drawing or not.
      *
      * @return true if this view does not cache its drawing, false otherwise
+     *
+     * @deprecated The view drawing cache was largely made obsolete with the introduction of
+     * hardware-accelerated rendering in API 11. With hardware-acceleration, intermediate cache
+     * layers are largely unnecessary and can easily result in a net loss in performance due to the
+     * cost of creating and updating the layer. In the rare cases where caching layers are useful,
+     * such as for alpha animations, {@link #setLayerType(int, Paint)} handles this with hardware
+     * rendering. For software-rendered snapshots of a small part of the View hierarchy or
+     * individual Views it is recommended to create a {@link Canvas} from either a {@link Bitmap} or
+     * {@link android.graphics.Picture} and call {@link #draw(Canvas)} on the View. However these
+     * software-rendered usages are discouraged and have compatibility issues with hardware-only
+     * rendering features such as {@link android.graphics.Bitmap.Config#HARDWARE Config.HARDWARE}
+     * bitmaps, real-time shadows, and outline clipping. For screenshots of the UI for feedback
+     * reports or unit testing the {@link PixelCopy} API is recommended.
      */
     @ViewDebug.ExportedProperty(category = "drawing")
+    @Deprecated
     public boolean willNotCacheDrawing() {
         return (mViewFlags & WILL_NOT_CACHE_DRAWING) == WILL_NOT_CACHE_DRAWING;
     }
@@ -10754,11 +10791,37 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                              accessibility tools.
      */
     public void setScreenReaderFocusable(boolean screenReaderFocusable) {
+        updatePflags3AndNotifyA11yIfChanged(PFLAG3_SCREEN_READER_FOCUSABLE, screenReaderFocusable);
+    }
+
+    /**
+     * Gets whether this view is a heading for accessibility purposes.
+     *
+     * @return {@code true} if the view is a heading, {@code false} otherwise.
+     *
+     * @attr ref android.R.styleable#View_accessibilityHeading
+     */
+    public boolean isAccessibilityHeading() {
+        return (mPrivateFlags3 & PFLAG3_ACCESSIBILITY_HEADING) != 0;
+    }
+
+    /**
+     * Set if view is a heading for a section of content for accessibility purposes.
+     *
+     * @param isHeading {@code true} if the view is a heading, {@code false} otherwise.
+     *
+     * @attr ref android.R.styleable#View_accessibilityHeading
+     */
+    public void setAccessibilityHeading(boolean isHeading) {
+        updatePflags3AndNotifyA11yIfChanged(PFLAG3_ACCESSIBILITY_HEADING, isHeading);
+    }
+
+    private void updatePflags3AndNotifyA11yIfChanged(int mask, boolean newValue) {
         int pflags3 = mPrivateFlags3;
-        if (screenReaderFocusable) {
-            pflags3 |= PFLAG3_SCREEN_READER_FOCUSABLE;
+        if (newValue) {
+            pflags3 |= mask;
         } else {
-            pflags3 &= ~PFLAG3_SCREEN_READER_FOCUSABLE;
+            pflags3 &= ~mask;
         }
 
         if (pflags3 != mPrivateFlags3) {
@@ -11760,6 +11823,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 return mParent.getParentForAccessibility();
             }
         }
+        return null;
+    }
+
+    /** @hide */
+    View getSelfOrParentImportantForA11y() {
+        if (isImportantForAccessibility()) return this;
+        ViewParent parent = getParentForAccessibility();
+        if (parent instanceof View) return (View) parent;
         return null;
     }
 
@@ -14978,10 +15049,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     public void setAlpha(@FloatRange(from=0.0, to=1.0) float alpha) {
         ensureTransformationInfo();
         if (mTransformationInfo.mAlpha != alpha) {
-            // Report visibility changes, which can affect children, to accessibility
-            if ((alpha == 0) ^ (mTransformationInfo.mAlpha == 0)) {
-                notifySubtreeAccessibilityStateChangedIfNeeded();
-            }
+            float oldAlpha = mTransformationInfo.mAlpha;
             mTransformationInfo.mAlpha = alpha;
             if (onSetAlpha((int) (alpha * 255))) {
                 mPrivateFlags |= PFLAG_ALPHA_SET;
@@ -14992,6 +15060,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 mPrivateFlags &= ~PFLAG_ALPHA_SET;
                 invalidateViewProperty(true, false);
                 mRenderNode.setAlpha(getFinalAlpha());
+            }
+            // Report visibility changes, which can affect children, to accessibility
+            if ((alpha == 0) ^ (oldAlpha == 0)) {
+                notifySubtreeAccessibilityStateChangedIfNeeded();
             }
         }
     }

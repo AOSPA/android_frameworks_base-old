@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
+import android.os.UserHandle;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
@@ -37,11 +38,17 @@ public class CarFacetButton extends LinearLayout {
     private AlphaOptimizedImageButton mIcon;
     private AlphaOptimizedImageButton mMoreIcon;
     private boolean mSelected = false;
+    private String[] mComponentNames;
     /** App categories that are to be used with this widget */
     private String[] mFacetCategories;
     /** App packages that are allowed to be used with this widget */
     private String[] mFacetPackages;
     private int mIconResourceId;
+    /**
+     * If defined in the xml this will be the icon that's rendered when the button is marked as
+     * selected
+     */
+    private int mSelectedIconResourceId;
     private boolean mUseMoreIcon = true;
     private float mSelectedAlpha = 1f;
     private float mUnselectedAlpha = 1f;
@@ -70,6 +77,8 @@ public class CarFacetButton extends LinearLayout {
         String longPressIntentString = typedArray.getString(R.styleable.CarFacetButton_longIntent);
         String categoryString = typedArray.getString(R.styleable.CarFacetButton_categories);
         String packageString = typedArray.getString(R.styleable.CarFacetButton_packages);
+        String componentNameString =
+                typedArray.getString(R.styleable.CarFacetButton_componentNames);
         try {
             final Intent intent = Intent.parseUri(intentString, Intent.URI_INTENT_SCHEME);
             intent.putExtra(EXTRA_FACET_ID, Integer.toString(getId()));
@@ -82,17 +91,20 @@ public class CarFacetButton extends LinearLayout {
                 mFacetCategories = categoryString.split(FACET_FILTER_DELIMITER);
                 intent.putExtra(EXTRA_FACET_CATEGORIES, mFacetCategories);
             }
+            if (componentNameString != null) {
+                mComponentNames = componentNameString.split(FACET_FILTER_DELIMITER);
+            }
 
             setOnClickListener(v -> {
                 intent.putExtra(EXTRA_FACET_LAUNCH_PICKER, mSelected);
-                mContext.startActivity(intent);
+                mContext.startActivityAsUser(intent, UserHandle.CURRENT);
             });
 
             if (longPressIntentString != null) {
                 final Intent longPressIntent = Intent.parseUri(longPressIntentString,
                         Intent.URI_INTENT_SCHEME);
                 setOnLongClickListener(v -> {
-                    mContext.startActivity(longPressIntent);
+                    mContext.startActivityAsUser(longPressIntent, UserHandle.CURRENT);
                     return true;
                 });
             }
@@ -112,10 +124,9 @@ public class CarFacetButton extends LinearLayout {
         mIcon.setClickable(false);
         mIcon.setAlpha(mUnselectedAlpha);
         mIconResourceId = styledAttributes.getResourceId(R.styleable.CarFacetButton_icon, 0);
-        if (mIconResourceId == 0)  {
-            throw new RuntimeException("specified icon resource was not found and is required");
-        }
         mIcon.setImageResource(mIconResourceId);
+        mSelectedIconResourceId = styledAttributes.getResourceId(
+                R.styleable.CarFacetButton_selectedIcon, mIconResourceId);
 
         mMoreIcon = findViewById(R.id.car_nav_button_more_icon);
         mMoreIcon.setClickable(false);
@@ -144,6 +155,13 @@ public class CarFacetButton extends LinearLayout {
         return mFacetPackages;
     }
 
+    public String[] getComponentName() {
+        if (mComponentNames == null) {
+            return new String[0];
+        }
+        return mComponentNames;
+    }
+
     /**
      * Updates the alpha of the icons to "selected" and shows the "More icon"
      * @param selected true if the view must be selected, false otherwise
@@ -161,22 +179,10 @@ public class CarFacetButton extends LinearLayout {
      */
     public void setSelected(boolean selected, boolean showMoreIcon) {
         mSelected = selected;
-        if (selected) {
-            if (mUseMoreIcon) {
-                mMoreIcon.setVisibility(showMoreIcon ? VISIBLE : GONE);
-            }
-            mIcon.setAlpha(mSelectedAlpha);
-        } else {
-            mMoreIcon.setVisibility(GONE);
-            mIcon.setAlpha(mUnselectedAlpha);
-        }
-    }
-
-    public void setIcon(Drawable d) {
-        if (d != null) {
-            mIcon.setImageDrawable(d);
-        } else {
-            mIcon.setImageResource(mIconResourceId);
+        mIcon.setAlpha(mSelected ? mSelectedAlpha : mUnselectedAlpha);
+        mIcon.setImageResource(mSelected ? mSelectedIconResourceId : mIconResourceId);
+        if (mUseMoreIcon) {
+            mMoreIcon.setVisibility(showMoreIcon ? VISIBLE : GONE);
         }
     }
 }

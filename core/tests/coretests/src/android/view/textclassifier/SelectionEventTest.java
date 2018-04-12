@@ -19,7 +19,6 @@ package android.view.textclassifier;
 import static org.junit.Assert.assertEquals;
 
 import android.os.Parcel;
-import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 
@@ -31,20 +30,34 @@ import org.junit.runner.RunWith;
 public class SelectionEventTest {
 
     @Test
+    public void testCreateSelectionActionEvent_valid() {
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_OVERTYPE);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_COPY);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_PASTE);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_CUT);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_SHARE);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_SMART_SHARE);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_DRAG);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_ABANDON);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_OTHER);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_SELECT_ALL);
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.ACTION_RESET);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testCreateSelectionActionEvent_badRange() {
+        SelectionEvent.createSelectionActionEvent(0, -1, SelectionEvent.ACTION_OVERTYPE);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testCreateSelectionActionEvent_badAction() {
+        SelectionEvent.createSelectionActionEvent(0, 1, SelectionEvent.EVENT_SELECTION_STARTED);
+    }
+
+    @Test
     public void testParcel() {
-        final SelectionEvent[] captured = new SelectionEvent[1];
-        final Logger logger = new Logger(
-                new Logger.Config(
-                        InstrumentationRegistry.getTargetContext(),
-                        TextClassifier.WIDGET_TYPE_TEXTVIEW,
-                        null)) {
-            @Override
-            public void writeEvent(SelectionEvent event) {
-                captured[0] = event;
-            }
-        };
-        logger.logSelectionStartedEvent(SelectionEvent.INVOCATION_MANUAL, 0);
-        final SelectionEvent event = captured[0];
+        final SelectionEvent event = SelectionEvent.createSelectionStartedEvent(
+                SelectionEvent.INVOCATION_MANUAL, 0);
         final Parcel parcel = Parcel.obtain();
         event.writeToParcel(parcel, event.describeContents());
         parcel.setDataPosition(0);

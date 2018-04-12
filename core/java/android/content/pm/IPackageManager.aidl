@@ -273,15 +273,12 @@ interface IPackageManager {
     void clearCrossProfileIntentFilters(int sourceUserId, String ownerPackage);
 
     String[] setPackagesSuspendedAsUser(in String[] packageNames, boolean suspended,
-            in PersistableBundle launcherExtras, in PersistableBundle appExtras,
-            String callingPackage, int userId);
+            in PersistableBundle appExtras, in PersistableBundle launcherExtras,
+            String dialogMessage, String callingPackage, int userId);
 
     boolean isPackageSuspendedForUser(String packageName, int userId);
 
     PersistableBundle getSuspendedPackageAppExtras(String packageName, int userId);
-
-    void setSuspendedPackageAppExtras(String packageName, in PersistableBundle appExtras,
-            int userId);
 
     /**
      * Backup/restore support - only the system uid may use these.

@@ -2155,19 +2155,10 @@ public class ApplicationPackageManager extends PackageManager {
     public String[] setPackagesSuspended(String[] packageNames, boolean suspended,
             PersistableBundle appExtras, PersistableBundle launcherExtras,
             String dialogMessage) {
-        // TODO (b/75332201): Pass in the dialogMessage and use it in the interceptor dialog
         try {
             return mPM.setPackagesSuspendedAsUser(packageNames, suspended, appExtras,
-                    launcherExtras, mContext.getOpPackageName(), mContext.getUserId());
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    @Override
-    public PersistableBundle getSuspendedPackageAppExtras(String packageName) {
-        try {
-            return mPM.getSuspendedPackageAppExtras(packageName, mContext.getUserId());
+                    launcherExtras, dialogMessage, mContext.getOpPackageName(),
+                    mContext.getUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2175,17 +2166,14 @@ public class ApplicationPackageManager extends PackageManager {
 
     @Override
     public Bundle getSuspendedPackageAppExtras() {
-        final PersistableBundle extras = getSuspendedPackageAppExtras(mContext.getOpPackageName());
-        return extras != null ? new Bundle(extras.deepCopy()) : null;
-    }
-
-    @Override
-    public void setSuspendedPackageAppExtras(String packageName, PersistableBundle appExtras) {
+        final PersistableBundle extras;
         try {
-            mPM.setSuspendedPackageAppExtras(packageName, appExtras, mContext.getUserId());
+            extras = mPM.getSuspendedPackageAppExtras(mContext.getOpPackageName(),
+                    mContext.getUserId());
         } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
+            throw e.rethrowFromSystemServer();
         }
+        return extras != null ? new Bundle(extras.deepCopy()) : null;
     }
 
     @Override
@@ -2199,8 +2187,12 @@ public class ApplicationPackageManager extends PackageManager {
 
     /** @hide */
     @Override
-    public boolean isPackageSuspended(String packageName) {
-        return isPackageSuspendedForUser(packageName, mContext.getUserId());
+    public boolean isPackageSuspended(String packageName) throws NameNotFoundException {
+        try {
+            return isPackageSuspendedForUser(packageName, mContext.getUserId());
+        } catch (IllegalArgumentException ie) {
+            throw new NameNotFoundException(packageName);
+        }
     }
 
     @Override

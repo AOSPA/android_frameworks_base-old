@@ -19,14 +19,14 @@ package com.android.systemui.fingerprint;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
-import android.graphics.PorterDuff;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
-import android.hardware.biometrics.BiometricDialog;
+import android.hardware.biometrics.BiometricPrompt;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.KeyEvent;
@@ -75,8 +75,28 @@ public class FingerprintDialogView extends LinearLayout {
     private Bundle mBundle;
     private final LinearLayout mDialog;
     private int mLastState;
+    private boolean mAnimatingAway;
+    private boolean mWasForceRemoved;
 
     private final float mDisplayWidth;
+
+    private final Runnable mShowAnimationRunnable = new Runnable() {
+        @Override
+        public void run() {
+            mLayout.animate()
+                    .alpha(1f)
+                    .setDuration(ANIMATION_DURATION_SHOW)
+                    .setInterpolator(mLinearOutSlowIn)
+                    .withLayer()
+                    .start();
+            mDialog.animate()
+                    .translationY(0)
+                    .setDuration(ANIMATION_DURATION_SHOW)
+                    .setInterpolator(mLinearOutSlowIn)
+                    .withLayer()
+                    .start();
+        }
+    };
 
     public FingerprintDialogView(Context context, Handler handler) {
         super(context);
@@ -161,29 +181,29 @@ public class FingerprintDialogView extends LinearLayout {
         mLastState = STATE_NONE;
         updateFingerprintIcon(STATE_FINGERPRINT);
 
-        title.setText(mBundle.getCharSequence(BiometricDialog.KEY_TITLE));
+        title.setText(mBundle.getCharSequence(BiometricPrompt.KEY_TITLE));
         title.setSelected(true);
 
-        final CharSequence subtitleText = mBundle.getCharSequence(BiometricDialog.KEY_SUBTITLE);
-        if (subtitleText == null) {
+        final CharSequence subtitleText = mBundle.getCharSequence(BiometricPrompt.KEY_SUBTITLE);
+        if (TextUtils.isEmpty(subtitleText)) {
             subtitle.setVisibility(View.GONE);
         } else {
             subtitle.setVisibility(View.VISIBLE);
             subtitle.setText(subtitleText);
         }
 
-        final CharSequence descriptionText = mBundle.getCharSequence(BiometricDialog.KEY_DESCRIPTION);
-        if (descriptionText == null) {
-            subtitle.setVisibility(View.VISIBLE);
+        final CharSequence descriptionText = mBundle.getCharSequence(BiometricPrompt.KEY_DESCRIPTION);
+        if (TextUtils.isEmpty(descriptionText)) {
             description.setVisibility(View.GONE);
         } else {
-            description.setText(mBundle.getCharSequence(BiometricDialog.KEY_DESCRIPTION));
+            description.setVisibility(View.VISIBLE);
+            description.setText(descriptionText);
         }
 
-        negative.setText(mBundle.getCharSequence(BiometricDialog.KEY_NEGATIVE_TEXT));
+        negative.setText(mBundle.getCharSequence(BiometricPrompt.KEY_NEGATIVE_TEXT));
 
         final CharSequence positiveText =
-                mBundle.getCharSequence(BiometricDialog.KEY_POSITIVE_TEXT);
+                mBundle.getCharSequence(BiometricPrompt.KEY_POSITIVE_TEXT);
         positive.setText(positiveText); // needs to be set for marquee to work
         if (positiveText != null) {
             positive.setVisibility(View.VISIBLE);
@@ -191,26 +211,20 @@ public class FingerprintDialogView extends LinearLayout {
             positive.setVisibility(View.GONE);
         }
 
-        // Dim the background and slide the dialog up
-        mDialog.setTranslationY(mAnimationTranslationOffset);
-        mLayout.setAlpha(0f);
-        postOnAnimation(new Runnable() {
-            @Override
-            public void run() {
-                mLayout.animate()
-                        .alpha(1f)
-                        .setDuration(ANIMATION_DURATION_SHOW)
-                        .setInterpolator(mLinearOutSlowIn)
-                        .withLayer()
-                        .start();
-                mDialog.animate()
-                        .translationY(0)
-                        .setDuration(ANIMATION_DURATION_SHOW)
-                        .setInterpolator(mLinearOutSlowIn)
-                        .withLayer()
-                        .start();
-            }
-        });
+        if (!mWasForceRemoved) {
+            // Dim the background and slide the dialog up
+            mDialog.setTranslationY(mAnimationTranslationOffset);
+            mLayout.setAlpha(0f);
+            postOnAnimation(mShowAnimationRunnable);
+        } else {
+            // Show the dialog immediately
+            mLayout.animate().cancel();
+            mDialog.animate().cancel();
+            mDialog.setAlpha(1.0f);
+            mDialog.setTranslationY(0);
+            mLayout.setAlpha(1.0f);
+        }
+        mWasForceRemoved = false;
     }
 
     private void setDismissesDialog(View v) {
@@ -223,10 +237,13 @@ public class FingerprintDialogView extends LinearLayout {
     }
 
     public void startDismiss() {
+        mAnimatingAway = true;
+
         final Runnable endActionRunnable = new Runnable() {
             @Override
             public void run() {
                 mWindowManager.removeView(FingerprintDialogView.this);
+                mAnimatingAway = false;
             }
         };
 
@@ -250,6 +267,23 @@ public class FingerprintDialogView extends LinearLayout {
         });
     }
 
+    /**
+     * Force remove the window, cancelling any animation that's happening. This should only be
+     * called if we want to quickly show the dialog again (e.g. on rotation). Calling this method
+     * will cause the dialog to show without an animation the next time it's attached.
+     */
+    public void forceRemove() {
+        mLayout.animate().cancel();
+        mDialog.animate().cancel();
+        mWindowManager.removeView(FingerprintDialogView.this);
+        mAnimatingAway = false;
+        mWasForceRemoved = true;
+    }
+
+    public boolean isAnimatingAway() {
+        return mAnimatingAway;
+    }
+
     public void setBundle(Bundle bundle) {
         mBundle = bundle;
     }
@@ -269,7 +303,7 @@ public class FingerprintDialogView extends LinearLayout {
         mErrorText.setTextColor(mErrorColor);
         mErrorText.setContentDescription(message);
         mHandler.sendMessageDelayed(mHandler.obtainMessage(FingerprintDialogImpl.MSG_CLEAR_MESSAGE),
-                BiometricDialog.HIDE_DIALOG_DELAY);
+                BiometricPrompt.HIDE_DIALOG_DELAY);
     }
 
     public void showHelpMessage(String message) {
@@ -279,7 +313,7 @@ public class FingerprintDialogView extends LinearLayout {
     public void showErrorMessage(String error) {
         showTemporaryMessage(error);
         mHandler.sendMessageDelayed(mHandler.obtainMessage(FingerprintDialogImpl.MSG_HIDE_DIALOG,
-                false /* userCanceled */), BiometricDialog.HIDE_DIALOG_DELAY);
+                false /* userCanceled */), BiometricPrompt.HIDE_DIALOG_DELAY);
     }
 
     private void updateFingerprintIcon(int newState) {
