@@ -3598,6 +3598,7 @@ public class AudioService extends IAudioService.Stub
         if (btDevice == null) {
             return true;
         }
+
         String address = btDevice.getAddress();
         BluetoothClass btClass = btDevice.getBluetoothClass();
         int outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO;
@@ -3619,9 +3620,40 @@ public class AudioService extends IAudioService.Stub
         }
 
         String btDeviceName =  btDevice.getName();
+
+        Slog.i(TAG, "handleBtScoActiveDeviceChange: isActive " + isActive +
+             " outDevice " + outDevice + " address " + address + " btDevicename " + btDeviceName);
+
         boolean result = handleDeviceConnection(isActive, outDevice, address, btDeviceName);
+        Slog.i(TAG, "for outDevice " + outDevice + " result is " + result);
+
+        /* When BT process is killed, getting device class may fail during cleanup.
+         * This results in outDevice assigned to DEVICE_OUT_BLUETOOTH_SCO. If
+         * outDevice was added as different device than DEVICE_OUT_BLUETOOTH_SCO
+         * during connection, removal will fail during disconnection. Attempt to
+         * remove outDevice with other possible SCO devices.
+         */
+        if (isActive == false && result == false) {
+           outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET;
+           Slog.w(TAG, "handleBtScoActiveDeviceChange: retrying with outDevice " + outDevice);
+
+           result = handleDeviceConnection(isActive, outDevice, address, btDeviceName);
+
+           Slog.w(TAG, "for outDevice "+ outDevice + " result is " + result);
+        }
+
+        if (isActive == false && result == false) {
+           outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT;
+           Slog.w(TAG, "handleBtScoActiveDeviceChange: retrying with outDevice " + outDevice);
+
+           result = handleDeviceConnection(isActive, outDevice, address, btDeviceName);
+
+           Slog.w(TAG, "for outDevice "+ outDevice + " result is " + result);
+        }
+
         // handleDeviceConnection() && result to make sure the method get executed
         result = handleDeviceConnection(isActive, inDevice, address, btDeviceName) && result;
+        Slog.i(TAG, "for inDevice" + inDevice + " result is " + result);
         return result;
     }
 
@@ -5984,6 +6016,8 @@ public class AudioService extends IAudioService.Stub
                 return true;
             }
         }
+
+        Slog.e(TAG, "handleDeviceConnection: returning false");
         return false;
     }
 
