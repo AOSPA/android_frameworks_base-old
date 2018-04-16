@@ -921,7 +921,6 @@ public final class PowerManagerService extends SystemService
 
     private void updateSettingsLocked() {
         final ContentResolver resolver = mContext.getContentResolver();
-        final Resources resources = mContext.getResources();
 
         mDreamsEnabledSetting = (Settings.Secure.getIntForUser(resolver,
                 Settings.Secure.SCREENSAVER_ENABLED,
@@ -1013,11 +1012,8 @@ public final class PowerManagerService extends SystemService
                 mButtonBrightnessEnabled = buttonBrightnessEnabled;
         }
 
-        final boolean defaultToNavigationBar = resources
-                .getBoolean(com.android.internal.R.bool.config_defaultToNavigationBar);
         final boolean navBarEnabled = Settings.System.getIntForUser(resolver,
-                Settings.System.NAVIGATION_BAR_ENABLED, defaultToNavigationBar ? 1 : 0,
-                        UserHandle.USER_CURRENT) != 0;
+                Settings.System.NAVIGATION_BAR_ENABLED, 0, UserHandle.USER_CURRENT) != 0;
         mButtonBrightnessEnabled &= !navBarEnabled;
 
         mDirty |= DIRTY_SETTINGS;
