@@ -461,6 +461,7 @@ public class Instrumentation {
      */
     @NonNull
     public Activity startActivitySync(@NonNull Intent intent, @Nullable Bundle options) {
+        android.util.SeempLog.record_str(376, intent.toString());
         validateNotAppThread();
 
         synchronized (mSync) {
@@ -1626,6 +1627,7 @@ public class Instrumentation {
     public ActivityResult execStartActivity(
             Context who, IBinder contextThread, IBinder token, Activity target,
             Intent intent, int requestCode, Bundle options) {
+        android.util.SeempLog.record_str(377, intent.toString());
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         Uri referrer = target != null ? target.onProvideReferrer() : null;
         if (referrer != null) {
@@ -1697,6 +1699,7 @@ public class Instrumentation {
     public int execStartActivitiesAsUser(Context who, IBinder contextThread,
             IBinder token, Activity target, Intent[] intents, Bundle options,
             int userId) {
+        android.util.SeempLog.record_str(378, intents.toString());
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (mActivityMonitors != null) {
             synchronized (mSync) {
@@ -1768,6 +1771,7 @@ public class Instrumentation {
     public ActivityResult execStartActivity(
         Context who, IBinder contextThread, IBinder token, String target,
         Intent intent, int requestCode, Bundle options) {
+        android.util.SeempLog.record_str(377, intent.toString());
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (mActivityMonitors != null) {
             synchronized (mSync) {
@@ -1835,6 +1839,7 @@ public class Instrumentation {
     public ActivityResult execStartActivity(
             Context who, IBinder contextThread, IBinder token, String resultWho,
             Intent intent, int requestCode, Bundle options, UserHandle user) {
+        android.util.SeempLog.record_str(377, intent.toString());
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (mActivityMonitors != null) {
             synchronized (mSync) {
@@ -1881,6 +1886,7 @@ public class Instrumentation {
             Context who, IBinder contextThread, IBinder token, Activity target,
             Intent intent, int requestCode, Bundle options, boolean ignoreTargetSecurity,
             int userId) {
+        android.util.SeempLog.record_str(379, intent.toString());
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (mActivityMonitors != null) {
             synchronized (mSync) {
@@ -1926,6 +1932,7 @@ public class Instrumentation {
     public void execStartActivityFromAppTask(
             Context who, IBinder contextThread, IAppTask appTask,
             Intent intent, Bundle options) {
+        android.util.SeempLog.record_str(380, intent.toString());
         IApplicationThread whoThread = (IApplicationThread) contextThread;
         if (mActivityMonitors != null) {
             synchronized (mSync) {
