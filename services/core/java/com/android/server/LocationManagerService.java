@@ -427,7 +427,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                             Log.d(TAG, "request from uid " + uid + " is now "
                                     + (foreground ? "foreground" : "background)"));
                         }
-                        record.mIsForegroundUid = foreground;
+                        record.updateForeground(foreground);
 
                         if (!isThrottlingExemptLocked(record.mReceiver.mIdentity)) {
                             affectedProviders.add(provider);
@@ -970,7 +970,8 @@ public class LocationManagerService extends ILocationManager.Stub {
                         // synchronize to ensure incrementPendingBroadcastsLocked()
                         // is called before decrementPendingBroadcasts()
                         mPendingIntent.send(mContext, 0, statusChanged, this, mLocationHandler,
-                                getResolutionPermission(mAllowedResolutionLevel));
+                                getResolutionPermission(mAllowedResolutionLevel),
+                                PendingIntentUtils.createDontSendToRestrictedAppsBundle(null));
                         // call this after broadcasting so we do not increment
                         // if we throw an exeption.
                         incrementPendingBroadcastsLocked();
@@ -1005,7 +1006,8 @@ public class LocationManagerService extends ILocationManager.Stub {
                         // synchronize to ensure incrementPendingBroadcastsLocked()
                         // is called before decrementPendingBroadcasts()
                         mPendingIntent.send(mContext, 0, locationChanged, this, mLocationHandler,
-                                getResolutionPermission(mAllowedResolutionLevel));
+                                getResolutionPermission(mAllowedResolutionLevel),
+                                PendingIntentUtils.createDontSendToRestrictedAppsBundle(null));
                         // call this after broadcasting so we do not increment
                         // if we throw an exeption.
                         incrementPendingBroadcastsLocked();
@@ -1047,7 +1049,8 @@ public class LocationManagerService extends ILocationManager.Stub {
                         // synchronize to ensure incrementPendingBroadcastsLocked()
                         // is called before decrementPendingBroadcasts()
                         mPendingIntent.send(mContext, 0, providerIntent, this, mLocationHandler,
-                                getResolutionPermission(mAllowedResolutionLevel));
+                                getResolutionPermission(mAllowedResolutionLevel),
+                                PendingIntentUtils.createDontSendToRestrictedAppsBundle(null));
                         // call this after broadcasting so we do not increment
                         // if we throw an exeption.
                         incrementPendingBroadcastsLocked();
@@ -1912,7 +1915,17 @@ public class LocationManagerService extends ILocationManager.Stub {
 
             // Update statistics for historical location requests by package/provider
             mRequestStatistics.startRequesting(
-                    mReceiver.mIdentity.mPackageName, provider, request.getInterval());
+                    mReceiver.mIdentity.mPackageName, provider, request.getInterval(),
+                    mIsForegroundUid);
+        }
+
+        /**
+         * Method to be called when record changes foreground/background
+         */
+        void updateForeground(boolean isForeground){
+            mIsForegroundUid = isForeground;
+            mRequestStatistics.updateForeground(
+                    mReceiver.mIdentity.mPackageName, mProvider, isForeground);
         }
 
         /**

@@ -918,12 +918,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         ScrimView scrimInFront = mStatusBarWindow.findViewById(R.id.scrim_in_front);
         mScrimController = SystemUIFactory.getInstance().createScrimController(
                 scrimBehind, scrimInFront, mLockscreenWallpaper,
-                scrimBehindAlpha -> {
-                    mLightBarController.setScrimAlpha(scrimBehindAlpha);
-                },
-                scrimInFrontColor -> {
-                    mLightBarController.setScrimColor(scrimInFrontColor);
-                },
+                (state, alpha, color) -> mLightBarController.setScrimState(state, alpha, color),
                 scrimsVisible -> {
                     if (mStatusBarWindowManager != null) {
                         mStatusBarWindowManager.setScrimsVisibility(scrimsVisible);
@@ -2766,6 +2761,10 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         if (mScrimController != null) {
             mScrimController.dump(fd, pw, args);
+        }
+
+        if (mStatusBarKeyguardViewManager != null) {
+            mStatusBarKeyguardViewManager.dump(pw);
         }
 
         if (DUMPTRUCK) {
@@ -4884,7 +4883,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         @Override
         public void setAodDimmingScrim(float scrimOpacity) {
-            ScrimState.AOD.setAodFrontScrimAlpha(scrimOpacity);
+            mScrimController.setAodFrontScrimAlpha(scrimOpacity);
         }
 
         public void dispatchDoubleTap(float viewX, float viewY) {

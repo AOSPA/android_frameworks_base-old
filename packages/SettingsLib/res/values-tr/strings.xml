@@ -141,7 +141,7 @@
     <string name="launch_defaults_some" msgid="313159469856372621">"Bazı varsayılan tercihler ayarlandı"</string>
     <string name="launch_defaults_none" msgid="4241129108140034876">"Hiçbir varsayılan tercih ayarlanmadı"</string>
     <string name="tts_settings" msgid="8186971894801348327">"Metin-konuşma ayarları"</string>
-    <string name="tts_settings_title" msgid="1237820681016639683">"Metin-konuşma çıktısı"</string>
+    <string name="tts_settings_title" msgid="1237820681016639683">"Metin okuma çıkışı"</string>
     <string name="tts_default_rate_title" msgid="6030550998379310088">"Konuşma hızı"</string>
     <string name="tts_default_rate_summary" msgid="4061815292287182801">"Metnin konuşulduğu hız"</string>
     <string name="tts_default_pitch_title" msgid="6135942113172488671">"Perde"</string>
@@ -155,7 +155,7 @@
     <string name="tts_install_data_title" msgid="4264378440508149986">"Ses verilerini yükle"</string>
     <string name="tts_install_data_summary" msgid="5742135732511822589">"Konuşma sentezi için gereken ses verilerini yükle"</string>
     <string name="tts_engine_security_warning" msgid="8786238102020223650">"Bu konuşma sentezi motoru, şifreler ve kredi kartı numaraları gibi kişisel veriler de dahil konuşulan tüm metni toplayabilir. <xliff:g id="TTS_PLUGIN_ENGINE_NAME">%s</xliff:g> motorundan gelmektedir. Bu konuşma sentezi motorunun kullanımı etkinleştirilsin mi?"</string>
-    <string name="tts_engine_network_required" msgid="1190837151485314743">"Bu dil, metin-konuşma çıktısı için bir ağ bağlantısı gerektirir."</string>
+    <string name="tts_engine_network_required" msgid="1190837151485314743">"Bu dil, metin okuma çıkışı için bir ağ bağlantısı gerektirir."</string>
     <string name="tts_default_sample_string" msgid="4040835213373086322">"Bu bir konuşma sentezi örneğidir"</string>
     <string name="tts_status_title" msgid="7268566550242584413">"Varsayılan dil durumu"</string>
     <string name="tts_status_ok" msgid="1309762510278029765">"<xliff:g id="LOCALE">%1$s</xliff:g> tamamen destekleniyor"</string>
@@ -216,20 +216,15 @@
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"Bluetooth AVRCP Sürümü"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"Bluetooth AVRCP Sürümünü seçin"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"Bluetooth Ses Codec\'i"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_type_dialog_title (8436224899475822557) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="8436224899475822557">"Bluetooth Ses Codec\'i Tetikleme\nSeçimi"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"Bluetooth Ses Örnek Hızı"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_sample_rate_dialog_title (8010380028880963535) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"Bluetooth Ses Codec\'i Tetikleme\nSeçimi: Örnek Hızı"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample" msgid="2099645202720164141">"Bluetooth Ses Örnek Başına Bit Sayısı"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_bits_per_sample_dialog_title (8063859754619484760) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="8063859754619484760">"Bluetooth Ses Codec\'i Tetikleme\nSeçimi: Örnek Başına Bit Sayısı"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"Bluetooth Ses Kanalı Modu"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_channel_mode_dialog_title (7234956835280563341) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="7234956835280563341">"Bluetooth Ses Codec\'i Tetikleme\nSeçimi: Kanal Modu"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"Bluetooth Ses LDAC Codec\'i: Oynatma Kalitesi"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title (7595776220458732825) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="7595776220458732825">"Bluetooth Ses LDAC Codec\'i Tetikleme\nSeçimi: Oynatma Kalitesi"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"Akış: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"Gizli DNS"</string>
     <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"Gizli DNS Modunu Seçin"</string>
@@ -289,7 +284,7 @@
     <string name="show_touches" msgid="2642976305235070316">"Dokunmayı göster"</string>
     <string name="show_touches_summary" msgid="6101183132903926324">"Dokunmalarda görsel geri bildirim göster"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Yüzey güncellemelerini göster"</string>
-    <string name="show_screen_updates_summary" msgid="2569622766672785529">"Güncelleme sırasında tüm pencere yüzeylerini çiz"</string>
+    <string name="show_screen_updates_summary" msgid="2569622766672785529">"Güncellenirken tüm pencere yüzeylerini yakıp söndür"</string>
     <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU görünüm güncellemelerini göster"</string>
     <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU ile çizim yapılırken pencerelerdeki görünümleri çiz"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Donanım katmanı güncellemelerini göster"</string>

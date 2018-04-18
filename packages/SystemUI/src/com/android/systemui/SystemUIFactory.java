@@ -24,6 +24,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.util.function.TriConsumer;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.colorextraction.ColorExtractor.GradientColors;
 import com.android.keyguard.ViewMediatorCallback;
@@ -53,6 +54,7 @@ import com.android.systemui.statusbar.phone.LockscreenWallpaper;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
 import com.android.systemui.statusbar.phone.NotificationIconAreaController;
 import com.android.systemui.statusbar.phone.ScrimController;
+import com.android.systemui.statusbar.phone.ScrimState;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
@@ -97,19 +99,20 @@ public class SystemUIFactory {
     }
 
     public KeyguardBouncer createKeyguardBouncer(Context context, ViewMediatorCallback callback,
-            LockPatternUtils lockPatternUtils,
-            ViewGroup container, DismissCallbackRegistry dismissCallbackRegistry) {
+            LockPatternUtils lockPatternUtils,  ViewGroup container,
+            DismissCallbackRegistry dismissCallbackRegistry,
+            KeyguardBouncer.BouncerExpansionCallback expansionCallback) {
         return new KeyguardBouncer(context, callback, lockPatternUtils, container,
-                dismissCallbackRegistry, FalsingManager.getInstance(context));
+                dismissCallbackRegistry, FalsingManager.getInstance(context), expansionCallback);
     }
 
     public ScrimController createScrimController(ScrimView scrimBehind, ScrimView scrimInFront,
-            LockscreenWallpaper lockscreenWallpaper, Consumer<Float> scrimBehindAlphaListener,
-            Consumer<GradientColors> scrimInFrontColorListener,
+            LockscreenWallpaper lockscreenWallpaper,
+            TriConsumer<ScrimState, Float, GradientColors> scrimStateListener,
             Consumer<Integer> scrimVisibleListener, DozeParameters dozeParameters,
             AlarmManager alarmManager) {
-        return new ScrimController(scrimBehind, scrimInFront, scrimBehindAlphaListener,
-                scrimInFrontColorListener, scrimVisibleListener, dozeParameters, alarmManager);
+        return new ScrimController(scrimBehind, scrimInFront, scrimStateListener,
+                scrimVisibleListener, dozeParameters, alarmManager);
     }
 
     public NotificationIconAreaController createNotificationIconAreaController(Context context,
