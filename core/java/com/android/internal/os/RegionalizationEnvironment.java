@@ -44,8 +44,7 @@ import android.util.Log;
 public class RegionalizationEnvironment {
     private final static String TAG = "RegionalizationEnvironment";
 
-    private final static boolean SUPPORTED = SystemProperties.getBoolean(
-            "ro.vendor.regionalization.support", false);
+    private final static boolean SUPPORTED = false;
     private final static boolean DEBUG = true;
 
     private static IRegionalizationService mRegionalizationService = null;
