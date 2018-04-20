@@ -76,10 +76,11 @@ public final class WrappedApplicationKey implements Parcelable {
 
         /**
          * @deprecated AOSP does not associate keys with accounts. This may be done by system app.
+         * @removed
          */
         @Deprecated
         public Builder setAccount(@NonNull byte[] account) {
-            return this;
+            throw new UnsupportedOperationException();
         }
 
         /**
@@ -134,10 +135,11 @@ public final class WrappedApplicationKey implements Parcelable {
 
     /**
      * @deprecated AOSP does not associate keys with accounts. This may be done by system app.
+     * @removed
      */
     @Deprecated
     public @NonNull byte[] getAccount() {
-        return new byte[0];
+        throw new UnsupportedOperationException();
     }
 
     public static final Parcelable.Creator<WrappedApplicationKey> CREATOR =

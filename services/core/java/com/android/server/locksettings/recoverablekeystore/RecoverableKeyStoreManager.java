@@ -167,9 +167,10 @@ public class RecoverableKeyStoreManager {
     }
 
     /**
-     * @deprecated Use {@link #initRecoveryServiceWithSigFile(String, byte[], byte[])} instead.
+     * Used by {@link #initRecoveryServiceWithSigFile(String, byte[], byte[])}.
      */
-    public void initRecoveryService(
+    @VisibleForTesting
+    void initRecoveryService(
             @NonNull String rootCertificateAlias, @NonNull byte[] recoveryServiceCertFile)
             throws RemoteException {
         checkRecoverKeyStorePermission();
@@ -232,9 +233,6 @@ public class RecoverableKeyStoreManager {
             throw new ServiceSpecificException(ERROR_INVALID_CERTIFICATE, e.getMessage());
         }
 
-        boolean wasInitialized = mDatabase.getRecoveryServiceCertPath(userId, uid,
-                rootCertificateAlias) != null;
-
         // Save the chosen and validated certificate into database
         try {
             Log.d(TAG, "Saving the randomly chosen endpoint certificate to database");
@@ -242,9 +240,11 @@ public class RecoverableKeyStoreManager {
                     certPath) > 0) {
                 mDatabase.setRecoveryServiceCertSerial(userId, uid, rootCertificateAlias,
                         newSerial);
-                if (wasInitialized) {
-                    Log.i(TAG, "This is a certificate change. Snapshot pending.");
+                if (mDatabase.getSnapshotVersion(userId, uid) != null) {
                     mDatabase.setShouldCreateSnapshot(userId, uid, true);
+                    Log.i(TAG, "This is a certificate change. Snapshot must be updated");
+                } else {
+                    Log.i(TAG, "This is a certificate change. Snapshot didn't exist");
                 }
                 mDatabase.setCounterId(userId, uid, new SecureRandom().nextLong());
             }
@@ -350,8 +350,12 @@ public class RecoverableKeyStoreManager {
             return;
         }
 
-        Log.i(TAG, "Updated server params. Snapshot pending.");
-        mDatabase.setShouldCreateSnapshot(userId, uid, true);
+        if (mDatabase.getSnapshotVersion(userId, uid) != null) {
+            mDatabase.setShouldCreateSnapshot(userId, uid, true);
+            Log.i(TAG, "Updated server params. Snapshot must be updated");
+        } else {
+            Log.i(TAG, "Updated server params. Snapshot didn't exist");
+        }
     }
 
     /**
@@ -407,7 +411,12 @@ public class RecoverableKeyStoreManager {
         }
 
         Log.i(TAG, "Updated secret types. Snapshot pending.");
-        mDatabase.setShouldCreateSnapshot(userId, uid, true);
+        if (mDatabase.getSnapshotVersion(userId, uid) != null) {
+            mDatabase.setShouldCreateSnapshot(userId, uid, true);
+            Log.i(TAG, "Updated secret types. Snapshot must be updated");
+        } else {
+            Log.i(TAG, "Updated secret types. Snapshot didn't exist");
+        }
     }
 
     /**
@@ -436,7 +445,8 @@ public class RecoverableKeyStoreManager {
      *
      * @hide
      */
-    public @NonNull byte[] startRecoverySession(
+    @VisibleForTesting
+    @NonNull byte[] startRecoverySession(
             @NonNull String sessionId,
             @NonNull byte[] verifierPublicKey,
             @NonNull byte[] vaultParams,
@@ -540,45 +550,6 @@ public class RecoverableKeyStoreManager {
 
         return startRecoverySession(
                 sessionId, verifierPublicKey, vaultParams, vaultChallenge, secrets);
-    }
-
-    /**
-     * Invoked by a recovery agent after a successful recovery claim is sent to the remote vault
-     * service.
-     *
-     * @param sessionId The session ID used to generate the claim. See
-     *     {@link #startRecoverySession(String, byte[], byte[], byte[], List)}.
-     * @param encryptedRecoveryKey The encrypted recovery key blob returned by the remote vault
-     *     service.
-     * @param applicationKeys The encrypted key blobs returned by the remote vault service. These
-     *     were wrapped with the recovery key.
-     * @return Map from alias to raw key material.
-     * @throws RemoteException if an error occurred recovering the keys.
-     */
-    public @NonNull Map<String, byte[]> recoverKeys(
-            @NonNull String sessionId,
-            @NonNull byte[] encryptedRecoveryKey,
-            @NonNull List<WrappedApplicationKey> applicationKeys)
-            throws RemoteException {
-        checkRecoverKeyStorePermission();
-        Preconditions.checkNotNull(sessionId, "invalid session");
-        Preconditions.checkNotNull(encryptedRecoveryKey, "encryptedRecoveryKey is null");
-        Preconditions.checkNotNull(applicationKeys, "encryptedRecoveryKey is null");
-        int uid = Binder.getCallingUid();
-        RecoverySessionStorage.Entry sessionEntry = mRecoverySessionStorage.get(uid, sessionId);
-        if (sessionEntry == null) {
-            throw new ServiceSpecificException(ERROR_SESSION_EXPIRED,
-                    String.format(Locale.US,
-                    "Application uid=%d does not have pending session '%s'", uid, sessionId));
-        }
-
-        try {
-            byte[] recoveryKey = decryptRecoveryKey(sessionEntry, encryptedRecoveryKey);
-            return recoverApplicationKeys(recoveryKey, applicationKeys);
-        } finally {
-            sessionEntry.destroy();
-            mRecoverySessionStorage.remove(uid);
-        }
     }
 
     /**

@@ -98,6 +98,8 @@ import android.app.NotificationManager;
 import android.app.NotificationManager.Policy;
 import android.app.PendingIntent;
 import android.app.StatusBarManager;
+import android.app.admin.DeviceAdminInfo;
+import android.app.admin.DevicePolicyManagerInternal;
 import android.app.backup.BackupManager;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManagerInternal;
@@ -366,6 +368,7 @@ public class NotificationManagerService extends SystemService {
 
     private AppOpsManager mAppOps;
     private UsageStatsManagerInternal mAppUsageStats;
+    private DevicePolicyManagerInternal mDpm;
 
     private Archive mArchive;
 
@@ -779,18 +782,8 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void onNotificationError(int callingUid, int callingPid, String pkg, String tag, int id,
                 int uid, int initialPid, String message, int userId) {
-            Slog.d(TAG, "onNotification error pkg=" + pkg + " tag=" + tag + " id=" + id
-                    + "; will crashApplication(uid=" + uid + ", pid=" + initialPid + ")");
             cancelNotification(callingUid, callingPid, pkg, tag, id, 0, 0, false, userId,
                     REASON_ERROR, null);
-            long ident = Binder.clearCallingIdentity();
-            try {
-                ActivityManager.getService().crashApplication(uid, initialPid, pkg, -1,
-                        "Bad notification posted from package " + pkg
-                        + ": " + message);
-            } catch (RemoteException e) {
-            }
-            Binder.restoreCallingIdentity(ident);
         }
 
         @Override
@@ -1355,7 +1348,7 @@ public class NotificationManagerService extends SystemService {
             ICompanionDeviceManager companionManager, SnoozeHelper snoozeHelper,
             NotificationUsageStats usageStats, AtomicFile policyFile,
             ActivityManager activityManager, GroupHelper groupHelper, IActivityManager am,
-            UsageStatsManagerInternal appUsageStats) {
+            UsageStatsManagerInternal appUsageStats, DevicePolicyManagerInternal dpm) {
         Resources resources = getContext().getResources();
         mMaxPackageEnqueueRate = Settings.Global.getFloat(getContext().getContentResolver(),
                 Settings.Global.MAX_NOTIFICATION_ENQUEUE_RATE,
@@ -1374,6 +1367,8 @@ public class NotificationManagerService extends SystemService {
         mActivityManager = activityManager;
         mDeviceIdleController = IDeviceIdleController.Stub.asInterface(
                 ServiceManager.getService(Context.DEVICE_IDLE_CONTROLLER));
+        mDpm = dpm;
+
         try {
             mPermissionOwner = mAm.newUriPermissionOwner("notification");
         } catch (RemoteException e) {
@@ -1512,7 +1507,8 @@ public class NotificationManagerService extends SystemService {
                 new AtomicFile(new File(systemDir, "notification_policy.xml"), "notification-policy"),
                 (ActivityManager) getContext().getSystemService(Context.ACTIVITY_SERVICE),
                 getGroupHelper(), ActivityManager.getService(),
-                LocalServices.getService(UsageStatsManagerInternal.class));
+                LocalServices.getService(UsageStatsManagerInternal.class),
+                LocalServices.getService(DevicePolicyManagerInternal.class));
 
         // register for various Intents
         IntentFilter filter = new IntentFilter();
@@ -1883,7 +1879,6 @@ public class NotificationManagerService extends SystemService {
             if ((newSuppressedVisualEffects & SUPPRESSED_EFFECT_SCREEN_OFF) != 0) {
                 newSuppressedVisualEffects |= SUPPRESSED_EFFECT_LIGHTS;
                 newSuppressedVisualEffects |= SUPPRESSED_EFFECT_FULL_SCREEN_INTENT;
-                newSuppressedVisualEffects |= SUPPRESSED_EFFECT_AMBIENT;
             }
             if ((newSuppressedVisualEffects & SUPPRESSED_EFFECT_SCREEN_ON) != 0) {
                 newSuppressedVisualEffects |= SUPPRESSED_EFFECT_PEEK;
@@ -2131,6 +2126,26 @@ public class NotificationManagerService extends SystemService {
         }
 
         /**
+         * Updates the enabled state for notifications for the given package (and uid).
+         * Additionally, this method marks the app importance as locked by the user, which means
+         * that notifications from the app will <b>not</b> be considered for showing a
+         * blocking helper.
+         *
+         * @param pkg package that owns the notifications to update
+         * @param uid uid of the app providing notifications
+         * @param enabled whether notifications should be enabled for the app
+         *
+         * @see #setNotificationsEnabledForPackage(String, int, boolean)
+         */
+        @Override
+        public void setNotificationsEnabledWithImportanceLockForPackage(
+                String pkg, int uid, boolean enabled) {
+            setNotificationsEnabledForPackage(pkg, uid, enabled);
+
+            mRankingHelper.setAppImportanceLocked(pkg, uid);
+        }
+
+        /**
          * Use this when you just want to know if notifications are OK for this package.
          */
         @Override
@@ -2372,6 +2387,12 @@ public class NotificationManagerService extends SystemService {
                         mRecentApps.getOrDefault(userId, new ArrayList<>()));
                 return new ParceledListSlice<>(apps);
             }
+        }
+
+        @Override
+        public int getBlockedAppCount(int userId) {
+            checkCallerIsSystem();
+            return mRankingHelper.getBlockedAppCount(userId);
         }
 
         @Override
@@ -3065,8 +3086,8 @@ public class NotificationManagerService extends SystemService {
 
         private boolean checkPolicyAccess(String pkg) {
             try {
-                int uid = getContext().getPackageManager().getPackageUidAsUser(
-                        pkg, UserHandle.getCallingUserId());
+                int uid = getContext().getPackageManager().getPackageUidAsUser(pkg,
+                        UserHandle.getCallingUserId());
                 if (PackageManager.PERMISSION_GRANTED == ActivityManager.checkComponentPermission(
                         android.Manifest.permission.MANAGE_NOTIFICATIONS, uid,
                         -1, true)) {
@@ -3075,7 +3096,11 @@ public class NotificationManagerService extends SystemService {
             } catch (NameNotFoundException e) {
                 return false;
             }
-            return checkPackagePolicyAccess(pkg) || mListeners.isComponentEnabledForPackage(pkg);
+            return checkPackagePolicyAccess(pkg)
+                    || mListeners.isComponentEnabledForPackage(pkg)
+                    || (mDpm != null &&
+                            mDpm.isActiveAdminWithPolicy(Binder.getCallingUid(),
+                                    DeviceAdminInfo.USES_POLICY_PROFILE_OWNER));
         }
 
         @Override
@@ -3616,6 +3641,8 @@ public class NotificationManagerService extends SystemService {
                                 System.currentTimeMillis());
                 summaryRecord = new NotificationRecord(getContext(), summarySbn,
                         notificationRecord.getChannel());
+                summaryRecord.setIsAppImportanceLocked(
+                        notificationRecord.getIsAppImportanceLocked());
                 summaries.put(pkg, summarySbn.getKey());
             }
         }
@@ -4012,6 +4039,7 @@ public class NotificationManagerService extends SystemService {
                 pkg, opPkg, id, tag, notificationUid, callingPid, notification,
                 user, null, System.currentTimeMillis());
         final NotificationRecord r = new NotificationRecord(getContext(), n, channel);
+        r.setIsAppImportanceLocked(mRankingHelper.getIsAppImportanceLocked(pkg, callingUid));
 
         if ((notification.flags & Notification.FLAG_FOREGROUND_SERVICE) != 0
                 && (channel.getUserLockedFields() & NotificationChannel.USER_LOCKED_IMPORTANCE) == 0
@@ -4735,7 +4763,9 @@ public class NotificationManagerService extends SystemService {
 
         // Suppressed because another notification in its group handles alerting
         if (record.sbn.isGroup()) {
-            return notification.suppressAlertingDueToGrouping();
+            if (notification.suppressAlertingDueToGrouping()) {
+                return true;
+            }
         }
 
         // Suppressed for being too recently noisy

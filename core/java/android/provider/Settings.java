@@ -142,6 +142,22 @@ public final class Settings {
             "android.settings.LOCATION_SOURCE_SETTINGS";
 
     /**
+     * Activity Action: Show scanning settings to allow configuration of Wi-Fi
+     * and Bluetooth scanning settings.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_LOCATION_SCANNING_SETTINGS =
+            "android.settings.LOCATION_SCANNING_SETTINGS";
+
+    /**
      * Activity Action: Show settings to allow configuration of users.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -2339,6 +2355,7 @@ public final class Settings {
         /** @hide */
         public static String getStringForUser(ContentResolver resolver, String name,
                 int userHandle) {
+            android.util.SeempLog.record(android.util.SeempLog.getSeempGetApiIdFromValue(name));
             if (MOVED_TO_SECURE.contains(name)) {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
                         + " to android.provider.Settings.Secure, returning read-only value.");
@@ -2366,6 +2383,7 @@ public final class Settings {
         /** @hide */
         public static boolean putStringForUser(ContentResolver resolver, String name, String value,
                 int userHandle) {
+            android.util.SeempLog.record(android.util.SeempLog.getSeempPutApiIdFromValue(name));
             if (MOVED_TO_SECURE.contains(name)) {
                 Log.w(TAG, "Setting " + name + " has moved from android.provider.Settings.System"
                         + " to android.provider.Settings.Secure, value is unchanged.");
@@ -8742,6 +8760,17 @@ public final class Settings {
          */
         @SystemApi
         public static final String EUICC_PROVISIONED = "euicc_provisioned";
+
+        /**
+         * List of ISO country codes in which eUICC UI is shown. Country codes should be separated
+         * by comma.
+         *
+         * <p>Used to hide eUICC UI from users who are currently in countries no carriers support
+         * eUICC.
+         * @hide
+         */
+        //TODO(b/77914569) Changes this to System Api.
+        public static final String EUICC_SUPPORTED_COUNTRIES = "euicc_supported_countries";
 
         /**
          * Whether any activity can be resized. When this is true, any

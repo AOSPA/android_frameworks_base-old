@@ -216,20 +216,15 @@
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"Версия на AVRCP за Bluetooth"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"Избиране на версия на AVRCP за Bluetooth"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"Аудиокодек за Bluetooth"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_type_dialog_title (8436224899475822557) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="8436224899475822557">"Задействане на аудиокодек за Bluetooth\nИзбор"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"Честота на дискретизация за звука през Bluetooth"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_sample_rate_dialog_title (8010380028880963535) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"Задействане на аудиокодек за Bluetooth\nИзбор: Честота на дискретизация"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample" msgid="2099645202720164141">"Битове на дискрет за звука през Bluetooth"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_bits_per_sample_dialog_title (8063859754619484760) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="8063859754619484760">"Задействане на аудиокодек за Bluetooth\nИзбор: Битове на дискрет"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"Режим на канала на звука през Bluetooth"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_channel_mode_dialog_title (7234956835280563341) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="7234956835280563341">"Задействане на аудиокодек за Bluetooth\nИзбор: Режим на канала"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"Кодек за звука през Bluetooth с технологията LDAC: Качество на възпроизвеждане"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title (7595776220458732825) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="7595776220458732825">"Задействане на аудиокодек за Bluetooth с технологията LDAC\nИзбор: Качество на възпроизвеждане"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"Поточно предаване: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"Частен DNS"</string>
     <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"Изберете режим на частния DNS"</string>
@@ -325,13 +320,13 @@
     <string name="show_all_anrs_summary" msgid="6636514318275139826">"Показване на диалоговия прозорец за грешки от типа ANR за приложенията на заден план"</string>
     <string name="show_notification_channel_warnings" msgid="1399948193466922683">"Предупрежд. за канала за известия"</string>
     <string name="show_notification_channel_warnings_summary" msgid="5536803251863694895">"Показва се предупреждение, когато приложение публикува известие без валиден канал"</string>
-    <string name="force_allow_on_external" msgid="3215759785081916381">"Външно хран.: Принуд. разрешаване на приложенията"</string>
-    <string name="force_allow_on_external_summary" msgid="3640752408258034689">"Прави всички приложения да отговарят на условията да бъдат записвани във външното хранилище независимо от стойностите в манифеста"</string>
+    <string name="force_allow_on_external" msgid="3215759785081916381">"Външно хран.: принуд. разрешаване на приложенията"</string>
+    <string name="force_allow_on_external_summary" msgid="3640752408258034689">"Всички приложения ще отговарят на условията да бъдат записвани във външното хранилище независимо от стойностите в манифеста"</string>
     <string name="force_resizable_activities" msgid="8615764378147824985">"Възможност за преоразмеряване на активностите"</string>
     <string name="force_resizable_activities_summary" msgid="6667493494706124459">"Дава възможност за преоразмеряване на всички активности в режима за няколко прозореца независимо от стойностите в манифеста."</string>
     <string name="enable_freeform_support" msgid="1461893351278940416">"Активиране на прозорците в свободна форма"</string>
     <string name="enable_freeform_support_summary" msgid="8247310463288834487">"Активиране на поддръжката за експерименталните прозорци в свободна форма."</string>
-    <string name="local_backup_password_title" msgid="3860471654439418822">"Наст. комп.: Парола"</string>
+    <string name="local_backup_password_title" msgid="3860471654439418822">"Парола за резервни копия"</string>
     <string name="local_backup_password_summary_none" msgid="6951095485537767956">"Понастоящем пълните резервни копия за настолен компютър не са защитени"</string>
     <string name="local_backup_password_summary_change" msgid="5376206246809190364">"Докоснете, за да промените или премахнете паролата за пълни резервни копия на настолния компютър"</string>
     <string name="local_backup_password_toast_success" msgid="582016086228434290">"Зададена е нова парола за резервно копие"</string>

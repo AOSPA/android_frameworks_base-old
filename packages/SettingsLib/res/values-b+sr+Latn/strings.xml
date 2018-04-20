@@ -182,8 +182,8 @@
     <string name="choose_profile" msgid="6921016979430278661">"Izaberite profil"</string>
     <string name="category_personal" msgid="1299663247844969448">"Lično"</string>
     <string name="category_work" msgid="8699184680584175622">"Posao"</string>
-    <string name="development_settings_title" msgid="215179176067683667">"Opcije za programera"</string>
-    <string name="development_settings_enable" msgid="542530994778109538">"Omogući opcije za programera"</string>
+    <string name="development_settings_title" msgid="215179176067683667">"Opcije za programere"</string>
+    <string name="development_settings_enable" msgid="542530994778109538">"Omogući opcije za programere"</string>
     <string name="development_settings_summary" msgid="1815795401632854041">"Podešavanje opcija za programiranje aplikacije"</string>
     <string name="development_settings_not_available" msgid="4308569041701535607">"Opcije za programere nisu dostupne za ovog korisnika"</string>
     <string name="vpn_settings_not_available" msgid="956841430176985598">"Podešavanja VPN-a nisu dostupna za ovog korisnika"</string>
@@ -216,20 +216,15 @@
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"Verzija Bluetooth AVRCP-a"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"Izaberite verziju Bluetooth AVRCP-a"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"Bluetooth audio kodek"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_type_dialog_title (8436224899475822557) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="8436224899475822557">"Izaberite Bluetooth audio kodek\n"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"Brzina uzorkovanja za Bluetooth audio"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_sample_rate_dialog_title (8010380028880963535) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"Izaberite Bluetooth audio kodek:\n brzina uzorkovanja"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample" msgid="2099645202720164141">"Bitova po uzorku za Bluetooth audio"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_bits_per_sample_dialog_title (8063859754619484760) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="8063859754619484760">"Izaberite Bluetooth audio kodek:\n broj bitova po uzorku"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"Režim kanala za Bluetooth audio"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_channel_mode_dialog_title (7234956835280563341) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="7234956835280563341">"Izaberite Bluetooth audio kodek:\n režim kanala"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"Bluetooth audio kodek LDAC: kvalitet reprodukcije"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title (7595776220458732825) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="7595776220458732825">"Izaberite Bluetooth audio LDAC kodek:\n kvalitet snimka"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"Strimovanje: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"Privatni DNS"</string>
     <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"Izaberite režim privatnog DNS-a"</string>
@@ -295,12 +290,12 @@
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Prikaži ažuriranja hardverskih slojeva"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Hardverski slojevi trepere zeleno kada se ažuriraju"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Otkloni greške GPU preklapanja"</string>
-    <string name="disable_overlays" msgid="2074488440505934665">"Onemog. HW post. elemente"</string>
+    <string name="disable_overlays" msgid="2074488440505934665">"Onemogući HW postavljene elemente"</string>
     <string name="disable_overlays_summary" msgid="3578941133710758592">"Uvek koristi GPU za komponovanje ekrana"</string>
     <string name="simulate_color_space" msgid="6745847141353345872">"Simuliraj prostor boje"</string>
     <string name="enable_opengl_traces_title" msgid="6790444011053219871">"Omogući OpenGL tragove"</string>
     <string name="usb_audio_disable_routing" msgid="8114498436003102671">"Onemogući USB preusm. zvuka"</string>
-    <string name="usb_audio_disable_routing_summary" msgid="980282760277312264">"Onemogući automat. preusmer. na USB audio periferne uređaje"</string>
+    <string name="usb_audio_disable_routing_summary" msgid="980282760277312264">"Onemogući aut. preusm. na USB audio periferne uređaje"</string>
     <string name="debug_layout" msgid="5981361776594526155">"Prikaži granice rasporeda"</string>
     <string name="debug_layout_summary" msgid="2001775315258637682">"Prikaži granice klipa, margine itd."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Nametni smer rasporeda zdesna nalevo"</string>
@@ -312,7 +307,7 @@
     <string name="show_non_rect_clip" msgid="505954950474595172">"Otkloni greške u vezi sa radnjama za isecanje oblasti koje nisu pravougaonog oblika"</string>
     <string name="track_frame_time" msgid="6146354853663863443">"Prikaži profil pomoću GPU"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Omogući slojeve za otklanjanje grešaka GPU-a"</string>
-    <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Omogući učitavanje sloj. za otk. greš. GPU-a u apl. za otk. greš."</string>
+    <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Omogući učitavanje otk. greš. GPU-a u apl. za otk. greš."</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Razmera animacije prozora"</string>
     <string name="transition_animation_scale_title" msgid="387527540523595875">"Razmera animacije prelaza"</string>
     <string name="animator_duration_scale_title" msgid="3406722410819934083">"Animatorova razmera trajanja"</string>
@@ -321,7 +316,7 @@
     <string name="immediately_destroy_activities" msgid="1579659389568133959">"Ne čuvaj aktivnosti"</string>
     <string name="immediately_destroy_activities_summary" msgid="3592221124808773368">"Uništi svaku aktivnost čim je korisnik napusti"</string>
     <string name="app_process_limit_title" msgid="4280600650253107163">"Ograničenje pozadinskih procesa"</string>
-    <string name="show_all_anrs" msgid="4924885492787069007">"Prikaži ANR-ove u pozad."</string>
+    <string name="show_all_anrs" msgid="4924885492787069007">"Prikaži ANR-ove u pozadini"</string>
     <string name="show_all_anrs_summary" msgid="6636514318275139826">"Prikaži dijalog Aplikacija ne reaguje za aplikacije u pozadini"</string>
     <string name="show_notification_channel_warnings" msgid="1399948193466922683">"Prikazuj upozorenja zbog kanala za obaveštenja"</string>
     <string name="show_notification_channel_warnings_summary" msgid="5536803251863694895">"Prikazuje upozorenje na ekranu kada aplikacija postavi obaveštenje bez važećeg kanala"</string>
@@ -399,7 +394,7 @@
     <string name="battery_info_status_charging_lower" msgid="8689770213898117994">"puni se"</string>
     <string name="battery_info_status_discharging" msgid="310932812698268588">"Ne puni se"</string>
     <string name="battery_info_status_not_charging" msgid="8523453668342598579">"Priključeno je, ali punjenje trenutno nije moguće"</string>
-    <string name="battery_info_status_full" msgid="2824614753861462808">"Puno"</string>
+    <string name="battery_info_status_full" msgid="2824614753861462808">"Puna"</string>
     <string name="disabled_by_admin_summary_text" msgid="6750513964908334617">"Kontroliše administrator"</string>
     <string name="enabled_by_admin" msgid="5302986023578399263">"Omogućio je administrator"</string>
     <string name="disabled_by_admin" msgid="8505398946020816620">"Administrator je onemogućio"</string>
