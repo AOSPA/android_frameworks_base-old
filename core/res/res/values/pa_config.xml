@@ -157,4 +157,10 @@
     <integer name="config_twoFingerSwipeDefault">0</integer>
 
     <bool name="config_enableKeyHandler">false</bool>
+
+    <!-- Whether device has screen with higher aspect ratio -->
+    <bool name="config_haveHigherAspectRatioScreen">false</bool>
+    <!-- Aspect ratio of screen -->
+    <item name="config_screenAspectRatio" format="float" type="dimen">2.1</item>
+
 </resources>
