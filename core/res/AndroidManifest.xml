@@ -575,6 +575,11 @@
     <protected-broadcast android:name="android.bluetooth.input.profile.action.HANDSHAKE" />
     <protected-broadcast android:name="android.bluetooth.input.profile.action.REPORT" />
 
+    <protected-broadcast android:name="android.bluetooth.bat.profile.action.BA_STATE_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.bat.profile.action.BA_ENC_KEY_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.bat.profile.action.BA_DIV_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.bat.profile.action.BA_STR_ID_CHANGED" />
+
     <protected-broadcast android:name="android.intent.action.TWILIGHT_CHANGED" />
 
     <protected-broadcast android:name="com.android.server.fingerprint.ACTION_LOCKOUT_RESET" />
