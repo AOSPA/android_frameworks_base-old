@@ -120,7 +120,6 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
 
     /* Valid settings for extended global actions keys.
      * see aoscp_config.xml config_extendedGlobalActionsList */
-    private static final String GLOBAL_ACTION_KEY_QUICK_RESTART = "quick_restart";
     private static final String GLOBAL_ACTION_KEY_RECOVERY = "recovery";
     private static final String GLOBAL_ACTION_KEY_BOOTLOADER = "bootloader";
 
@@ -413,9 +412,7 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
                 // If we already have added this, don't add it again.
                 continue;
             }
-            if (GLOBAL_ACTION_KEY_QUICK_RESTART.equals(actionKey)) {
-                mItems.add(new QuickRestartAction());
-            } else if (GLOBAL_ACTION_KEY_RECOVERY.equals(actionKey)) {
+            if (GLOBAL_ACTION_KEY_RECOVERY.equals(actionKey)) {
                 mItems.add(new RecoveryAction());
             } else if (GLOBAL_ACTION_KEY_BOOTLOADER.equals(actionKey)) {
                 mItems.add(new BootloaderAction());
@@ -424,7 +421,6 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
             }
             // Add here so we don't add more than one.
             addedKeys.add(actionKey);
-        }
 
         mAdapter = new MyAdapter();
 
@@ -573,37 +569,6 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener, DialogIn
                     R.string.bugreport_status,
                     Build.VERSION.RELEASE,
                     Build.ID);
-        }
-    }
-
-    private class QuickRestartAction extends SinglePressAction {
-
-        public QuickRestartAction() {
-            super(R.drawable.ic_restart_quick, R.string.global_action_quick_restart);
-        }
-
-        @Override
-        public void onPress() {
-            // don't actually trigger the bugreport if we are running stability
-            // tests via monkey
-            try {
-                final IActivityManager am =
-                      ActivityManagerNative.asInterface(ServiceManager.checkService("activity"));
-                if (am != null) {
-                    am.restart();
-                }
-            } catch (RemoteException e) {
-                Log.e(TAG, "failure trying to perform hot reboot", e);
-            }
-        }
-
-        public boolean showDuringKeyguard() {
-            return true;
-        }
-
-        @Override
-        public boolean showBeforeProvisioning() {
-            return false;
         }
     }
 

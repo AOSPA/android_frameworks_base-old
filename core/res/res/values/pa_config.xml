@@ -35,7 +35,7 @@
          "bootloader" = Restart the device to bootloader
          -->
     <string-array translatable="false" name="config_extendedGlobalActionsList">
-        <item>quick_restart</item>
+        <item>restart</item>
         <item>recovery</item>
         <item>bootloader</item>
     </string-array>
