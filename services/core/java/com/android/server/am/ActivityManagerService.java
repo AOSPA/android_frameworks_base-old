@@ -2993,7 +2993,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                             ? Collections.emptyList()
                             : Arrays.asList(exemptions.split(","));
                 }
-                zygoteProcess.setApiBlacklistExemptions(mExemptions);
+                if (!zygoteProcess.setApiBlacklistExemptions(mExemptions)) {
+                  Slog.e(TAG, "Failed to set API blacklist exemptions!");
+                  // leave mExemptionsStr as is, so we don't try to send the same list again.
+                  mExemptions = Collections.emptyList();
+                }
             }
             int logSampleRate = Settings.Global.getInt(mContext.getContentResolver(),
                     Settings.Global.HIDDEN_API_ACCESS_LOG_SAMPLING_RATE, -1);
@@ -11551,6 +11555,19 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mStackSupervisor.resizeDockedStackLocked(dockedBounds, tempDockedTaskBounds,
                         tempDockedTaskInsetBounds, tempOtherTaskBounds, tempOtherTaskInsetBounds,
                         PRESERVE_WINDOWS);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
+    @Override
+    public void setSplitScreenResizing(boolean resizing) {
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "setSplitScreenResizing()");
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            synchronized (this) {
+                mStackSupervisor.setSplitScreenResizing(resizing);
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -26797,6 +26814,11 @@ public class ActivityManagerService extends IActivityManager.Stub
         @Override
         public boolean isRecentsComponentHomeActivity(int userId) {
             return getRecentTasks().isRecentsComponentHomeActivity(userId);
+        }
+
+        @Override
+        public void cancelRecentsAnimation(boolean restoreHomeStackPosition) {
+            ActivityManagerService.this.cancelRecentsAnimation(restoreHomeStackPosition);
         }
 
         @Override
