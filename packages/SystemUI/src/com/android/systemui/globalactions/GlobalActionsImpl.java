@@ -100,7 +100,7 @@ public class GlobalActionsImpl implements GlobalActions {
         message.setTextColor(color);
         String rebootMessage = mContext.getResources().getString(R.string.shutdown_progress);
         if (reason != null && reason.equals(PowerManager.REBOOT_REQUESTED_BY_DEVICE_OWNER)) {
-            rebootMessage = mContext.getResources().getString(R.string.global_restart_message);
+            rebootMessage = mContext.getResources().getString(R.string.reboot_to_reset_message);
         } else if (reason != null && reason.equals(PowerManager.REBOOT_RECOVERY)) {
             rebootMessage = mContext.getResources().getString(R.string.global_restart_recovery_message);
         } else if (reason != null && reason.equals(PowerManager.REBOOT_BOOTLOADER)) {

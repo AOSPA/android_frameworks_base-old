@@ -390,8 +390,8 @@ public final class ShutdownThread extends Thread {
             if (showSysuiReboot()) {
                 return null;
             }
-            pd.setTitle(context.getText(com.android.internal.R.string.global_restart));
-            pd.setMessage(context.getText(com.android.internal.R.string.global_restart_message));
+            pd.setTitle(context.getText(com.android.internal.R.string.sim_restart_button));
+            pd.setMessage(context.getText(com.android.internal.R.string.reboot_to_reset_message));
             pd.setIndeterminate(true);
         } else if (mReason != null && mReason.equals(PowerManager.REBOOT_RECOVERY)) {
             if (showSysuiReboot()) {
@@ -411,8 +411,8 @@ public final class ShutdownThread extends Thread {
             if (showSysuiReboot()) {
                 return null;
             }
-            pd.setTitle(context.getText(com.android.internal.R.string.global_restart));
-            pd.setMessage(context.getText(com.android.internal.R.string.global_restart_message));
+            pd.setTitle(context.getText(com.android.internal.R.string.sim_restart_button));
+            pd.setMessage(context.getText(com.android.internal.R.string.reboot_to_reset_message));
         } else {
             if (showSysuiReboot()) {
                 return null;
