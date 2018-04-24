@@ -165,7 +165,7 @@ static void verifySystemIdmaps(const char* overlay_dir)
                 }
 
                 // Generic idmap parameters
-                const char* argv[8];
+                const char* argv[9];
                 int argc = 0;
                 struct stat st;
 
@@ -189,6 +189,10 @@ static void verifySystemIdmaps(const char* overlay_dir)
                 if (stat(overlay_dir, &st) == 0) {
                     argv[argc++] = overlay_dir;
                 }
+
+               if (stat("/product/overlay/", &st) == 0) {
+                   argv[argc++] = "/product/overlay";
+               }
 
                 // Finally, invoke idmap (if any overlay directory exists)
                 if (argc > 5) {
