@@ -2464,7 +2464,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 installer, mInstallLock);
         mDexManager = new DexManager(this, mPackageDexOptimizer, installer, mInstallLock,
                 dexManagerListener);
-        mArtManagerService = new ArtManagerService(this, installer, mInstallLock);
+        mArtManagerService = new ArtManagerService(mContext, this, installer, mInstallLock);
         mMoveCallbacks = new MoveCallbacks(FgThread.get().getLooper());
 
         mOnPermissionChangeListeners = new OnPermissionChangeListeners(
@@ -23693,7 +23693,8 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
 
         private SigningDetails getSigningDetails(int uid) {
             synchronized (mPackages) {
-                final Object obj = mSettings.getUserIdLPr(uid);
+                final int appId = UserHandle.getAppId(uid);
+                final Object obj = mSettings.getUserIdLPr(appId);
                 if (obj != null) {
                     if (obj instanceof SharedUserSetting) {
                         return ((SharedUserSetting) obj).signatures.mSigningDetails;
