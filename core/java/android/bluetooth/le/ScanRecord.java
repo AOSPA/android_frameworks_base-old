@@ -50,6 +50,9 @@ public final class ScanRecord {
     private static final int DATA_TYPE_SERVICE_DATA_16_BIT = 0x16;
     private static final int DATA_TYPE_SERVICE_DATA_32_BIT = 0x20;
     private static final int DATA_TYPE_SERVICE_DATA_128_BIT = 0x21;
+    private static final int DATA_TYPE_SERVICE_SOLICITATION_UUIDS_16_BIT = 0x14;
+    private static final int DATA_TYPE_SERVICE_SOLICITATION_UUIDS_32_BIT = 0x1F;
+    private static final int DATA_TYPE_SERVICE_SOLICITATION_UUIDS_128_BIT = 0x15;
     private static final int DATA_TYPE_MANUFACTURER_SPECIFIC_DATA = 0xFF;
 
     // Flags of the advertising data.
@@ -57,6 +60,8 @@ public final class ScanRecord {
 
     @Nullable
     private final List<ParcelUuid> mServiceUuids;
+    @Nullable
+    private final List<ParcelUuid> mServiceSolicitationUuids;
 
     private final SparseArray<byte[]> mManufacturerSpecificData;
 
@@ -85,6 +90,15 @@ public final class ScanRecord {
      */
     public List<ParcelUuid> getServiceUuids() {
         return mServiceUuids;
+    }
+
+    /**
+     * Returns a list of service solicitation UUIDs within the advertisement that are used to
+     * identify the bluetooth GATT services.
+     * @hide
+     */
+    public List<ParcelUuid> getServiceSolicitationUuids() {
+        return mServiceSolicitationUuids;
     }
 
     /**
@@ -150,10 +164,12 @@ public final class ScanRecord {
     }
 
     private ScanRecord(List<ParcelUuid> serviceUuids,
+            List<ParcelUuid> serviceSolicitationUuids,
             SparseArray<byte[]> manufacturerData,
             Map<ParcelUuid, byte[]> serviceData,
             int advertiseFlags, int txPowerLevel,
             String localName, byte[] bytes) {
+        mServiceSolicitationUuids = serviceSolicitationUuids;
         mServiceUuids = serviceUuids;
         mManufacturerSpecificData = manufacturerData;
         mServiceData = serviceData;
@@ -182,6 +198,7 @@ public final class ScanRecord {
         int currentPos = 0;
         int advertiseFlag = -1;
         List<ParcelUuid> serviceUuids = new ArrayList<ParcelUuid>();
+        List<ParcelUuid> serviceSolicitationUuids = new ArrayList<ParcelUuid>();
         String localName = null;
         int txPowerLevel = Integer.MIN_VALUE;
 
@@ -217,6 +234,18 @@ public final class ScanRecord {
                     case DATA_TYPE_SERVICE_UUIDS_128_BIT_COMPLETE:
                         parseServiceUuid(scanRecord, currentPos, dataLength,
                                 BluetoothUuid.UUID_BYTES_128_BIT, serviceUuids);
+                        break;
+                    case DATA_TYPE_SERVICE_SOLICITATION_UUIDS_16_BIT:
+                        parseServiceSolicitationUuid(scanRecord, currentPos, dataLength,
+                                BluetoothUuid.UUID_BYTES_16_BIT, serviceSolicitationUuids);
+                        break;
+                    case DATA_TYPE_SERVICE_SOLICITATION_UUIDS_32_BIT:
+                        parseServiceSolicitationUuid(scanRecord, currentPos, dataLength,
+                                BluetoothUuid.UUID_BYTES_32_BIT, serviceSolicitationUuids);
+                        break;
+                    case DATA_TYPE_SERVICE_SOLICITATION_UUIDS_128_BIT:
+                        parseServiceSolicitationUuid(scanRecord, currentPos, dataLength,
+                                BluetoothUuid.UUID_BYTES_128_BIT, serviceSolicitationUuids);
                         break;
                     case DATA_TYPE_LOCAL_NAME_SHORT:
                     case DATA_TYPE_LOCAL_NAME_COMPLETE:
@@ -263,19 +292,23 @@ public final class ScanRecord {
             if (serviceUuids.isEmpty()) {
                 serviceUuids = null;
             }
-            return new ScanRecord(serviceUuids, manufacturerData, serviceData,
-                    advertiseFlag, txPowerLevel, localName, scanRecord);
+            if (serviceSolicitationUuids.isEmpty()) {
+                serviceSolicitationUuids = null;
+            }
+            return new ScanRecord(serviceUuids, serviceSolicitationUuids, manufacturerData,
+                    serviceData, advertiseFlag, txPowerLevel, localName, scanRecord);
         } catch (Exception e) {
             Log.e(TAG, "unable to parse scan record: " + Arrays.toString(scanRecord));
             // As the record is invalid, ignore all the parsed results for this packet
             // and return an empty record with raw scanRecord bytes in results
-            return new ScanRecord(null, null, null, -1, Integer.MIN_VALUE, null, scanRecord);
+            return new ScanRecord(null, null, null, null, -1, Integer.MIN_VALUE, null, scanRecord);
         }
     }
 
     @Override
     public String toString() {
         return "ScanRecord [mAdvertiseFlags=" + mAdvertiseFlags + ", mServiceUuids=" + mServiceUuids
+                + ", mServiceSolicitationUuids=" + mServiceSolicitationUuids
                 + ", mManufacturerSpecificData=" + BluetoothLeUtils.toString(
                 mManufacturerSpecificData)
                 + ", mServiceData=" + BluetoothLeUtils.toString(mServiceData)
@@ -289,6 +322,21 @@ public final class ScanRecord {
             byte[] uuidBytes = extractBytes(scanRecord, currentPos,
                     uuidLength);
             serviceUuids.add(BluetoothUuid.parseUuidFrom(uuidBytes));
+            dataLength -= uuidLength;
+            currentPos += uuidLength;
+        }
+        return currentPos;
+    }
+
+    /**
+     * Parse service Solicitation UUIDs.
+     * @hide
+     */
+    private static int parseServiceSolicitationUuid(byte[] scanRecord, int currentPos,
+            int dataLength, int uuidLength, List<ParcelUuid> serviceSolicitationUuids) {
+        while (dataLength > 0) {
+            byte[] uuidBytes = extractBytes(scanRecord, currentPos, uuidLength);
+            serviceSolicitationUuids.add(BluetoothUuid.parseUuidFrom(uuidBytes));
             dataLength -= uuidLength;
             currentPos += uuidLength;
         }
