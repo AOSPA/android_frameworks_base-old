@@ -5377,7 +5377,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (this) {
-                mWindowManager.cancelRecentsAnimation(restoreHomeStackPosition
+                // Cancel the recents animation synchronously (do not hold the WM lock)
+                mWindowManager.cancelRecentsAnimationSynchronously(restoreHomeStackPosition
                         ? REORDER_MOVE_TO_ORIGINAL_POSITION
                         : REORDER_KEEP_IN_PLACE, "cancelRecentsAnimation");
             }
@@ -8593,8 +8594,19 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (!(sender instanceof PendingIntentRecord)) {
             return;
         }
+        boolean isCancelled;
         synchronized(this) {
-            ((PendingIntentRecord)sender).registerCancelListenerLocked(receiver);
+            PendingIntentRecord pendingIntent = (PendingIntentRecord) sender;
+            isCancelled = pendingIntent.canceled;
+            if (!isCancelled) {
+                pendingIntent.registerCancelListenerLocked(receiver);
+            }
+        }
+        if (isCancelled) {
+            try {
+                receiver.send(Activity.RESULT_CANCELED, null);
+            } catch (RemoteException e) {
+            }
         }
     }
 
