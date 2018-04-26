@@ -3422,8 +3422,6 @@
          empty string is passed in -->
     <string name="config_wlan_network_service_package" translatable="false"></string>
 
-    <!-- whether to show dual bar -->
-    <bool name="config_dual_bar">false</bool>
     <!-- Wear devices: Controls the radios affected by Activity Mode. -->
     <string-array name="config_wearActivityModeRadios">
         <item>"wifi"</item>
