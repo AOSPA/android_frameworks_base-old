@@ -68,15 +68,9 @@
     <!-- home -->
     <integer name="config_longPressOnHomeKeyBehavior">3</integer>
     <integer name="config_doubleTapOnHomeKeyBehavior">0</integer>
-    <!-- menu -->
-    <integer name="config_longPressOnMenuKeyBehavior">0</integer>
-    <integer name="config_doubleTapOnMenuKeyBehavior">0</integer>
     <!-- back -->
     <integer name="config_longPressOnBackKeyBehavior">0</integer>
     <integer name="config_doubleTapOnBackKeyBehavior">0</integer>
-    <!-- assist -->
-    <integer name="config_longPressOnAssistKeyBehavior">0</integer>
-    <integer name="config_doubleTapOnAssistKeyBehavior">0</integer>
     <!-- app switch -->
     <integer name="config_longPressOnAppSwitchKeyBehavior">8</integer>
     <integer name="config_doubleTapOnAppSwitchKeyBehavior">7</integer>

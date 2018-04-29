@@ -348,8 +348,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Must match values in core/res/res/values/config.xml
     private static final int KEY_MASK_HOME = 0x01;
     private static final int KEY_MASK_BACK = 0x02;
-    private static final int KEY_MASK_MENU = 0x04;
-    private static final int KEY_MASK_ASSIST = 0x08;
     private static final int KEY_MASK_APP_SWITCH = 0x10;
     private static final int KEY_MASK_CAMERA = 0x20;
 
@@ -1063,22 +1061,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.System.KEY_HOME_DOUBLE_TAP_ACTION), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.KEY_MENU_LONG_PRESS_ACTION), false, this,
-                    UserHandle.USER_ALL);
-            resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.KEY_MENU_DOUBLE_TAP_ACTION), false, this,
-                    UserHandle.USER_ALL);
-            resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.KEY_BACK_LONG_PRESS_ACTION), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.KEY_BACK_DOUBLE_TAP_ACTION), false, this,
-                    UserHandle.USER_ALL);
-            resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.KEY_ASSIST_LONG_PRESS_ACTION), false, this,
-                    UserHandle.USER_ALL);
-            resolver.registerContentObserver(Settings.System.getUriFor(
-                    Settings.System.KEY_ASSIST_DOUBLE_TAP_ACTION), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.KEY_APP_SWITCH_LONG_PRESS_ACTION), false, this,
@@ -2440,8 +2426,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         final boolean hasHome = mNavBarEnabled || (mDeviceHardwareKeys & KEY_MASK_HOME) != 0;
         final boolean hasAppSwitch = mNavBarEnabled || (mDeviceHardwareKeys & KEY_MASK_APP_SWITCH) != 0;
         final boolean hasBack = mNavBarEnabled || (mDeviceHardwareKeys & KEY_MASK_BACK) != 0;
-        final boolean hasMenu = (mDeviceHardwareKeys & KEY_MASK_MENU) != 0;
-        final boolean hasAssist = (mDeviceHardwareKeys & KEY_MASK_ASSIST) != 0;
         final boolean hasCamera = (mDeviceHardwareKeys & KEY_MASK_CAMERA) != 0;
 
         for (int i = 0; i < SUPPORTED_KEYCODE_LIST.length; i++) {
@@ -2470,15 +2454,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     mKeyDoubleTapBehavior.get(KeyEvent.KEYCODE_HOME), UserHandle.USER_CURRENT));
         }
 
-        if (hasMenu) {
-            mKeyLongPressBehavior.put(KeyEvent.KEYCODE_MENU, Settings.System.getIntForUser(resolver,
-                    Settings.System.KEY_MENU_LONG_PRESS_ACTION,
-                    mKeyLongPressBehavior.get(KeyEvent.KEYCODE_MENU), UserHandle.USER_CURRENT));
-            mKeyDoubleTapBehavior.put(KeyEvent.KEYCODE_MENU, Settings.System.getIntForUser(resolver,
-                    Settings.System.KEY_MENU_DOUBLE_TAP_ACTION,
-                    mKeyDoubleTapBehavior.get(KeyEvent.KEYCODE_MENU), UserHandle.USER_CURRENT));
-        }
-
         if (hasBack) {
             mKeyLongPressBehavior.put(KeyEvent.KEYCODE_BACK, Settings.System.getIntForUser(resolver,
                     Settings.System.KEY_BACK_LONG_PRESS_ACTION,
@@ -2486,15 +2461,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             mKeyDoubleTapBehavior.put(KeyEvent.KEYCODE_BACK, Settings.System.getIntForUser(resolver,
                     Settings.System.KEY_BACK_DOUBLE_TAP_ACTION,
                     mKeyDoubleTapBehavior.get(KeyEvent.KEYCODE_BACK), UserHandle.USER_CURRENT));
-        }
-
-        if (hasAssist) {
-            mKeyLongPressBehavior.put(KeyEvent.KEYCODE_ASSIST, Settings.System.getIntForUser(resolver,
-                    Settings.System.KEY_ASSIST_LONG_PRESS_ACTION,
-                    mKeyLongPressBehavior.get(KeyEvent.KEYCODE_ASSIST), UserHandle.USER_CURRENT));
-            mKeyDoubleTapBehavior.put(KeyEvent.KEYCODE_ASSIST, Settings.System.getIntForUser(resolver,
-                    Settings.System.KEY_ASSIST_DOUBLE_TAP_ACTION,
-                    mKeyDoubleTapBehavior.get(KeyEvent.KEYCODE_ASSIST), UserHandle.USER_CURRENT));
         }
 
         if (hasAppSwitch) {
@@ -3669,8 +3635,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final int[] SUPPORTED_KEYCODE_LIST = {
             KeyEvent.KEYCODE_HOME,
             KeyEvent.KEYCODE_BACK,
-            KeyEvent.KEYCODE_MENU,
-            KeyEvent.KEYCODE_ASSIST,
             KeyEvent.KEYCODE_APP_SWITCH,
             KeyEvent.KEYCODE_CAMERA
         };
@@ -3811,10 +3775,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return com.android.internal.R.integer.config_doubleTapOnHomeKeyBehavior;
             case KeyEvent.KEYCODE_BACK:
                 return com.android.internal.R.integer.config_doubleTapOnBackKeyBehavior;
-            case KeyEvent.KEYCODE_MENU:
-                return com.android.internal.R.integer.config_doubleTapOnMenuKeyBehavior;
-            case KeyEvent.KEYCODE_ASSIST:
-                return com.android.internal.R.integer.config_doubleTapOnAssistKeyBehavior;
             case KeyEvent.KEYCODE_APP_SWITCH:
                 return com.android.internal.R.integer.config_doubleTapOnAppSwitchKeyBehavior;
             case KeyEvent.KEYCODE_CAMERA:
@@ -3833,10 +3793,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return com.android.internal.R.integer.config_longPressOnHomeKeyBehavior;
             case KeyEvent.KEYCODE_BACK:
                 return com.android.internal.R.integer.config_longPressOnBackKeyBehavior;
-            case KeyEvent.KEYCODE_MENU:
-                return com.android.internal.R.integer.config_longPressOnMenuKeyBehavior;
-            case KeyEvent.KEYCODE_ASSIST:
-                return com.android.internal.R.integer.config_longPressOnAssistKeyBehavior;
             case KeyEvent.KEYCODE_APP_SWITCH:
                 return com.android.internal.R.integer.config_longPressOnAppSwitchKeyBehavior;
             case KeyEvent.KEYCODE_CAMERA:
