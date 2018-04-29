@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "781d8998_57092e89",
+        "filename": "core/res/res/values/pa_config.xml",
+        "patchSetId": 2
+      },
+      "lineNbr": 82,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2018-04-29T11:40:05Z",
+      "side": 1,
+      "message": "we should change this to 7 since it\u0027s the Android default behavior.",
+      "revId": "b63a7b961c6cc02ee166a73554eef10f91c4a720",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
