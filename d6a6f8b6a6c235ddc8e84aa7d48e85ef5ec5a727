@@ -2,6 +2,23 @@
   "comments": [
     {
       "key": {
+        "uuid": "f0171cf8_b2810528",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 3998,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2018-05-04T07:01:01Z",
+      "side": 1,
+      "message": "unnecessary new line",
+      "revId": "d6a6f8b6a6c235ddc8e84aa7d48e85ef5ec5a727",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
         "uuid": "032c6446_6fc0fba6",
         "filename": "core/java/android/provider/Settings.java",
         "patchSetId": 3
@@ -19,6 +36,41 @@
         "endLine": 7301,
         "endChar": 111
       },
+      "revId": "d6a6f8b6a6c235ddc8e84aa7d48e85ef5ec5a727",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b2bbc667_3c37d8c5",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 7301,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2018-05-04T07:01:01Z",
+      "side": 1,
+      "message": "Why not? it\u0027s part of the Oreo substratum commits I rebased this commit on",
+      "parentUuid": "032c6446_6fc0fba6",
+      "revId": "d6a6f8b6a6c235ddc8e84aa7d48e85ef5ec5a727",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "1411d63a_94d46971",
+        "filename": "core/res/res/values/pa_symbols.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 45,
+      "author": {
+        "id": 1000130
+      },
+      "writtenOn": "2018-05-04T07:01:01Z",
+      "side": 1,
+      "message": "unnecessary line",
       "revId": "d6a6f8b6a6c235ddc8e84aa7d48e85ef5ec5a727",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
       "unresolved": false
