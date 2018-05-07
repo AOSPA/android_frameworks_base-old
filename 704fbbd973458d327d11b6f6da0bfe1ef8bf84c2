@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "888f8c12_06fa30b1",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 847,
+      "author": {
+        "id": 1000007
+      },
+      "writtenOn": "2018-05-07T13:28:25Z",
+      "side": 1,
+      "message": "make sure to uncomment this and add the bits in PowerManagerService.java from the original commit (https://github.com/AOSPA/android_frameworks_base/commit/f48ff220d6a4dfb7784eead64fa12119b45b30c8) when both button light and gestures are ready up",
+      "revId": "704fbbd973458d327d11b6f6da0bfe1ef8bf84c2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
