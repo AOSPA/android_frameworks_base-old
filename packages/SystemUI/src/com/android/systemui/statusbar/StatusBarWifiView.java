@@ -16,6 +16,9 @@
 
 package com.android.systemui.statusbar;
 
+import static com.android.systemui.statusbar.StatusBarIconView.STATE_DOT;
+import static com.android.systemui.statusbar.StatusBarIconView.STATE_HIDDEN;
+import static com.android.systemui.statusbar.StatusBarIconView.STATE_ICON;
 import static com.android.systemui.statusbar.policy.DarkIconDispatcher.getTint;
 import static com.android.systemui.statusbar.policy.DarkIconDispatcher.isInArea;
 
@@ -24,11 +27,17 @@ import android.content.res.ColorStateList;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.ContextThemeWrapper;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewGroup.LayoutParams;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 
+import android.widget.LinearLayout;
 import com.android.keyguard.AlphaOptimizedLinearLayout;
 import com.android.settingslib.Utils;
 import com.android.systemui.R;
@@ -38,10 +47,14 @@ import com.android.systemui.statusbar.policy.DarkIconDispatcher.DarkReceiver;
 /**
  * Start small: StatusBarWifiView will be able to layout from a WifiIconState
  */
-public class StatusBarWifiView extends AlphaOptimizedLinearLayout implements DarkReceiver,
+public class StatusBarWifiView extends FrameLayout implements DarkReceiver,
         StatusIconDisplayable {
     private static final String TAG = "StatusBarWifiView";
 
+    /// Used to show etc dots
+    private StatusBarIconView mDotView;
+    /// Contains the main icon layout
+    private LinearLayout mWifiGroup;
     private ImageView mWifiIcon;
     private ImageView mIn;
     private ImageView mOut;
@@ -51,13 +64,18 @@ public class StatusBarWifiView extends AlphaOptimizedLinearLayout implements Dar
     private WifiIconState mState;
     private String mSlot;
     private float mDarkIntensity = 0;
+    private int mVisibleState = -1;
 
     private ContextThemeWrapper mDarkContext;
     private ContextThemeWrapper mLightContext;
 
-    public static StatusBarWifiView fromContext(Context context) {
+    public static StatusBarWifiView fromContext(Context context, String slot) {
         LayoutInflater inflater = LayoutInflater.from(context);
-        return (StatusBarWifiView) inflater.inflate(R.layout.status_bar_wifi_group, null);
+        StatusBarWifiView v = (StatusBarWifiView) inflater.inflate(R.layout.status_bar_wifi_group, null);
+        v.setSlot(slot);
+        v.init();
+        v.setVisibleState(STATE_ICON);
+        return v;
     }
 
     public StatusBarWifiView(Context context) {
@@ -77,12 +95,6 @@ public class StatusBarWifiView extends AlphaOptimizedLinearLayout implements Dar
         super(context, attrs, defStyleAttr, defStyleRes);
     }
 
-    @Override
-    protected void onFinishInflate() {
-        super.onFinishInflate();
-        init();
-    }
-
     public void setSlot(String slot) {
         mSlot = slot;
     }
@@ -93,6 +105,12 @@ public class StatusBarWifiView extends AlphaOptimizedLinearLayout implements Dar
         mWifiIcon.setImageTintList(list);
         mIn.setImageTintList(list);
         mOut.setImageTintList(list);
+        mDotView.setDecorColor(color);
+    }
+
+    @Override
+    public void setDecorColor(int color) {
+        mDotView.setDecorColor(color);
     }
 
     @Override
@@ -105,18 +123,54 @@ public class StatusBarWifiView extends AlphaOptimizedLinearLayout implements Dar
         return mState != null && mState.visible;
     }
 
+    @Override
+    public void setVisibleState(int state) {
+        if (state == mVisibleState) {
+            return;
+        }
+        mVisibleState = state;
+
+        switch (state) {
+            case STATE_ICON:
+                mWifiGroup.setVisibility(View.VISIBLE);
+                mDotView.setVisibility(View.GONE);
+                break;
+            case STATE_DOT:
+                mWifiGroup.setVisibility(View.GONE);
+                mDotView.setVisibility(View.VISIBLE);
+                break;
+            case STATE_HIDDEN:
+            default:
+                setVisibility(View.GONE);
+                break;
+        }
+    }
+
     private void init() {
         int dualToneLightTheme = Utils.getThemeAttr(mContext, R.attr.lightIconTheme);
         int dualToneDarkTheme = Utils.getThemeAttr(mContext, R.attr.darkIconTheme);
         mLightContext = new ContextThemeWrapper(mContext, dualToneLightTheme);
         mDarkContext = new ContextThemeWrapper(mContext, dualToneDarkTheme);
 
+        mWifiGroup = findViewById(R.id.wifi_group);
         mWifiIcon = findViewById(R.id.wifi_signal);
         mIn = findViewById(R.id.wifi_in);
         mOut = findViewById(R.id.wifi_out);
         mSignalSpacer = findViewById(R.id.wifi_signal_spacer);
         mAirplaneSpacer = findViewById(R.id.wifi_airplane_spacer);
         mInoutContainer = findViewById(R.id.inout_container);
+
+        initDotView();
+    }
+
+    private void initDotView() {
+        mDotView = new StatusBarIconView(mContext, mSlot, null);
+        mDotView.setVisibleState(STATE_DOT);
+
+        int width = mContext.getResources().getDimensionPixelSize(R.dimen.status_bar_icon_size);
+        LayoutParams lp = new LayoutParams(width, width);
+        lp.gravity = Gravity.CENTER_VERTICAL | Gravity.START;
+        addView(mDotView, lp);
     }
 
     public void applyWifiState(WifiIconState state) {
@@ -127,12 +181,12 @@ public class StatusBarWifiView extends AlphaOptimizedLinearLayout implements Dar
         }
 
         if (mState == null) {
-            mState = state;
+            mState = state.copy();
             initViewState();
         }
 
         if (!mState.equals(state)) {
-            updateState(state);
+            updateState(state.copy());
         }
     }
 
@@ -186,6 +240,8 @@ public class StatusBarWifiView extends AlphaOptimizedLinearLayout implements Dar
         }
         mIn.setImageTintList(ColorStateList.valueOf(getTint(area, this, tint)));
         mOut.setImageTintList(ColorStateList.valueOf(getTint(area, this, tint)));
+        mDotView.setDecorColor(tint);
+        mDotView.setIconColor(tint, false);
     }
 
 

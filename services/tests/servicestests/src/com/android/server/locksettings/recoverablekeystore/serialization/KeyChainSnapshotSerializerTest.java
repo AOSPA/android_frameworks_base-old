@@ -45,7 +45,6 @@ public class KeyChainSnapshotSerializerTest {
     private static final int MAX_ATTEMPTS = 21;
     private static final byte[] SERVER_PARAMS = new byte[] { 8, 2, 4 };
     private static final byte[] KEY_BLOB = new byte[] { 124, 53, 53, 53 };
-    private static final byte[] PUBLIC_KEY_BLOB = new byte[] { 6, 6, 6, 6, 6, 6, 7 };
     private static final CertPath CERT_PATH = TestData.CERT_PATH_1;
     private static final int SECRET_TYPE = KeyChainProtectionParams.TYPE_LOCKSCREEN;
     private static final int LOCK_SCREEN_UI = KeyChainProtectionParams.UI_FORMAT_PASSWORD;
@@ -91,11 +90,6 @@ public class KeyChainSnapshotSerializerTest {
     @Test
     public void roundTrip_persistsCertPath() throws Exception {
         assertThat(roundTrip().getTrustedHardwareCertPath()).isEqualTo(CERT_PATH);
-    }
-
-    @Test
-    public void roundTrip_persistsBackendPublicKey() throws Exception {
-        assertThat(roundTrip().getTrustedHardwarePublicKey()).isEqualTo(PUBLIC_KEY_BLOB);
     }
 
     @Test
@@ -170,9 +164,9 @@ public class KeyChainSnapshotSerializerTest {
     }
 
     @Test
-    public void serialize_doesNotThrowForNullPublicKey() throws Exception {
+    public void serialize_doesNotThrowForTestSnapshot() throws Exception {
         KeyChainSnapshotSerializer.serialize(
-                createTestKeyChainSnapshotNoPublicKey(), new ByteArrayOutputStream());
+                createTestKeyChainSnapshot(), new ByteArrayOutputStream());
     }
 
     private static List<WrappedApplicationKey> roundTripKeys() throws Exception {
@@ -192,20 +186,6 @@ public class KeyChainSnapshotSerializerTest {
     }
 
     private static KeyChainSnapshot createTestKeyChainSnapshot() throws Exception {
-        return new KeyChainSnapshot.Builder()
-                .setCounterId(COUNTER_ID)
-                .setSnapshotVersion(SNAPSHOT_VERSION)
-                .setServerParams(SERVER_PARAMS)
-                .setMaxAttempts(MAX_ATTEMPTS)
-                .setEncryptedRecoveryKeyBlob(KEY_BLOB)
-                .setKeyChainProtectionParams(createKeyChainProtectionParamsList())
-                .setWrappedApplicationKeys(createKeys())
-                .setTrustedHardwareCertPath(CERT_PATH)
-                .setTrustedHardwarePublicKey(PUBLIC_KEY_BLOB)
-                .build();
-    }
-
-    private static KeyChainSnapshot createTestKeyChainSnapshotNoPublicKey() throws Exception {
         return new KeyChainSnapshot.Builder()
                 .setCounterId(COUNTER_ID)
                 .setSnapshotVersion(SNAPSHOT_VERSION)

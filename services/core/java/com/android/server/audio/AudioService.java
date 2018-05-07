@@ -3598,6 +3598,7 @@ public class AudioService extends IAudioService.Stub
         if (btDevice == null) {
             return true;
         }
+
         String address = btDevice.getAddress();
         BluetoothClass btClass = btDevice.getBluetoothClass();
         int outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO;
@@ -3619,9 +3620,40 @@ public class AudioService extends IAudioService.Stub
         }
 
         String btDeviceName =  btDevice.getName();
+
+        Slog.i(TAG, "handleBtScoActiveDeviceChange: isActive " + isActive +
+             " outDevice " + outDevice + " address " + address + " btDevicename " + btDeviceName);
+
         boolean result = handleDeviceConnection(isActive, outDevice, address, btDeviceName);
+        Slog.i(TAG, "for outDevice " + outDevice + " result is " + result);
+
+        /* When BT process is killed, getting device class may fail during cleanup.
+         * This results in outDevice assigned to DEVICE_OUT_BLUETOOTH_SCO. If
+         * outDevice was added as different device than DEVICE_OUT_BLUETOOTH_SCO
+         * during connection, removal will fail during disconnection. Attempt to
+         * remove outDevice with other possible SCO devices.
+         */
+        if (isActive == false && result == false) {
+           outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET;
+           Slog.w(TAG, "handleBtScoActiveDeviceChange: retrying with outDevice " + outDevice);
+
+           result = handleDeviceConnection(isActive, outDevice, address, btDeviceName);
+
+           Slog.w(TAG, "for outDevice "+ outDevice + " result is " + result);
+        }
+
+        if (isActive == false && result == false) {
+           outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT;
+           Slog.w(TAG, "handleBtScoActiveDeviceChange: retrying with outDevice " + outDevice);
+
+           result = handleDeviceConnection(isActive, outDevice, address, btDeviceName);
+
+           Slog.w(TAG, "for outDevice "+ outDevice + " result is " + result);
+        }
+
         // handleDeviceConnection() && result to make sure the method get executed
         result = handleDeviceConnection(isActive, inDevice, address, btDeviceName) && result;
+        Slog.i(TAG, "for inDevice" + inDevice + " result is " + result);
         return result;
     }
 
@@ -5670,8 +5702,6 @@ public class AudioService extends IAudioService.Stub
         // enable A2DP before notifying A2DP connection to avoid unnecessary processing in
         // audio policy manager
         VolumeStreamState streamState = mStreamStates[AudioSystem.STREAM_MUSIC];
-        sendMsg(mAudioHandler, MSG_SET_DEVICE_VOLUME, SENDMSG_QUEUE,
-                AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, 0, streamState, 0);
         setBluetoothA2dpOnInt(true, eventSource);
         AudioSystem.setDeviceConnectionState(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP,
                 AudioSystem.DEVICE_STATE_AVAILABLE, address, name);
@@ -5939,12 +5969,6 @@ public class AudioService extends IAudioService.Stub
         // address is not used for now, but may be used when multiple a2dp devices are supported
         synchronized (mA2dpAvrcpLock) {
             mAvrcpAbsVolSupported = support;
-            sendMsg(mAudioHandler, MSG_SET_DEVICE_VOLUME, SENDMSG_QUEUE,
-                    AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, 0,
-                    mStreamStates[AudioSystem.STREAM_MUSIC], 0);
-            sendMsg(mAudioHandler, MSG_SET_DEVICE_VOLUME, SENDMSG_QUEUE,
-                    AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, 0,
-                    mStreamStates[AudioSystem.STREAM_RING], 0);
         }
     }
 
@@ -5983,7 +6007,11 @@ public class AudioService extends IAudioService.Stub
                 mConnectedDevices.remove(deviceKey);
                 return true;
             }
+            Log.w(TAG, "handleDeviceConnection() failed, deviceKey=" + deviceKey + ", deviceSpec="
+                       + deviceSpec + ", connect=" + connect);
         }
+
+        Slog.e(TAG, "handleDeviceConnection: returning false");
         return false;
     }
 
@@ -7012,6 +7040,7 @@ public class AudioService extends IAudioService.Stub
     final int LOG_NB_EVENTS_WIRED_DEV_CONNECTION = 30;
     final int LOG_NB_EVENTS_FORCE_USE = 20;
     final int LOG_NB_EVENTS_VOLUME = 40;
+    final int LOG_NB_EVENTS_DYN_POLICY = 10;
 
     final private AudioEventLogger mModeLogger = new AudioEventLogger(LOG_NB_EVENTS_PHONE_STATE,
             "phone state (logged after successfull call to AudioSystem.setPhoneState(int))");
@@ -7027,6 +7056,9 @@ public class AudioService extends IAudioService.Stub
 
     final private AudioEventLogger mVolumeLogger = new AudioEventLogger(LOG_NB_EVENTS_VOLUME,
             "volume changes (logged when command received by AudioService)");
+
+    final private AudioEventLogger mDynPolicyLogger = new AudioEventLogger(LOG_NB_EVENTS_DYN_POLICY,
+            "dynamic policy events (logged when command received by AudioService)");
 
     private static final String[] RINGER_MODE_NAMES = new String[] {
             "SILENT",
@@ -7095,6 +7127,7 @@ public class AudioService extends IAudioService.Stub
         pw.print("  mAvrcpAbsVolSupported="); pw.println(mAvrcpAbsVolSupported);
 
         dumpAudioPolicies(pw);
+        mDynPolicyLogger.dump(pw);
 
         mPlaybackMonitor.dump(pw);
 
@@ -7419,8 +7452,6 @@ public class AudioService extends IAudioService.Stub
             boolean hasFocusListener, boolean isFocusPolicy, boolean isVolumeController) {
         AudioSystem.setDynamicPolicyCallback(mDynPolicyCallback);
 
-        if (DEBUG_AP) Log.d(TAG, "registerAudioPolicy for " + pcb.asBinder()
-                + " with config:" + policyConfig);
         String regId = null;
         // error handling
         boolean hasPermissionForPolicy =
@@ -7432,6 +7463,8 @@ public class AudioService extends IAudioService.Stub
             return null;
         }
 
+        mDynPolicyLogger.log((new AudioEventLogger.StringEvent("registerAudioPolicy for "
+                + pcb.asBinder() + " with config:" + policyConfig)).printLog(TAG));
         synchronized (mAudioPolicies) {
             try {
                 if (mAudioPolicies.containsKey(pcb.asBinder())) {
@@ -7454,7 +7487,8 @@ public class AudioService extends IAudioService.Stub
     }
 
     public void unregisterAudioPolicyAsync(IAudioPolicyCallback pcb) {
-        if (DEBUG_AP) Log.d(TAG, "unregisterAudioPolicyAsync for " + pcb.asBinder());
+        mDynPolicyLogger.log((new AudioEventLogger.StringEvent("unregisterAudioPolicyAsync for "
+                + pcb.asBinder()).printLog(TAG)));
         synchronized (mAudioPolicies) {
             AudioPolicyProxy app = mAudioPolicies.remove(pcb.asBinder());
             if (app == null) {

@@ -2594,6 +2594,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                     | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                     | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
+            lp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
             if (ActivityManager.isHighEndGfx()) {
                 lp.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
                 lp.privateFlags |=
@@ -4852,6 +4853,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // For layout, the status bar is always at the top with our fixed height.
         displayFrames.mStable.top = displayFrames.mUnrestricted.top
                 + mStatusBarHeightForRotation[displayFrames.mRotation];
+        // Make sure the status bar covers the entire cutout height
+        displayFrames.mStable.top = Math.max(displayFrames.mStable.top,
+                displayFrames.mDisplayCutoutSafe.top);
 
         // Tell the bar controller where the collapsed status bar content is
         mTmpRect.set(mStatusBar.getContentFrameLw());
@@ -6130,6 +6134,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 && (policyFlags & WindowManagerPolicy.FLAG_VIRTUAL) != 0
                 && (!isNavBarVirtKey || mNavBarVirtualKeyHapticFeedbackEnabled)
                 && event.getRepeatCount() == 0;
+
+        // Cancel any pending remote recents animations before handling the button itself. In the
+        // case where we are going home and the recents animation has already started, just cancel
+        // the recents animation, leaving the home stack in place for the pending start activity
+        if (isNavBarVirtKey && !down && !canceled) {
+            boolean isHomeKey = keyCode == KeyEvent.KEYCODE_HOME;
+            mActivityManagerInternal.cancelRecentsAnimation(!isHomeKey);
+        }
 
         // Handle special keys.
         switch (keyCode) {

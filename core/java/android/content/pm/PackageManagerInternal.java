@@ -302,6 +302,12 @@ public abstract class PackageManagerInternal {
     public abstract boolean isPackageDataProtected(int userId, String packageName);
 
     /**
+     * Returns {@code true} if a given package's state is protected, e.g. it cannot be force
+     * stopped, suspended, disabled or hidden. Otherwise, returns {@code false}.
+     */
+    public abstract boolean isPackageStateProtected(String packageName, int userId);
+
+    /**
      * Returns {@code true} if a given package is installed as ephemeral. Otherwise, returns
      * {@code false}.
      */
@@ -610,4 +616,16 @@ public abstract class PackageManagerInternal {
      */
     public abstract boolean isDataRestoreSafe(@NonNull Signature restoringFromSig,
             @NonNull String packageName);
+
+
+    /**
+     * Returns true if the the signing information for {@code clientUid} is sufficient to gain
+     * access gated by {@code capability}.  This can happen if the two UIDs have the same signing
+     * information, if the signing information {@code clientUid} indicates that it has the signing
+     * certificate for {@code serverUid} in its signing history (if it was previously signed by it),
+     * or if the signing certificate for {@code clientUid} is in ths signing history for {@code
+     * serverUid} and with the {@code capability} specified.
+     */
+    public abstract boolean hasSignatureCapability(int serverUid, int clientUid,
+            @PackageParser.SigningDetails.CertCapabilities int capability);
 }

@@ -34,7 +34,7 @@
     <string name="status_bar_no_notifications_title" msgid="4755261167193833213">"Žádná oznámení"</string>
     <string name="status_bar_ongoing_events_title" msgid="1682504513316879202">"Probíhající"</string>
     <string name="status_bar_latest_events_title" msgid="6594767438577593172">"Oznámení"</string>
-    <string name="battery_low_title" msgid="6456385927409742437">"Baterie je slabá"</string>
+    <string name="battery_low_title" msgid="9187898087363540349">"Baterie se brzy vybije"</string>
     <string name="battery_low_percent_format" msgid="2900940511201380775">"Zbývá <xliff:g id="PERCENTAGE">%s</xliff:g>"</string>
     <string name="battery_low_percent_format_hybrid" msgid="6838677459286775617">"Zbývá <xliff:g id="PERCENTAGE">%s</xliff:g>, při obvyklém využití asi <xliff:g id="TIME">%s</xliff:g>"</string>
     <string name="battery_low_percent_format_hybrid_short" msgid="9025795469949145586">"Zbývá <xliff:g id="PERCENTAGE">%s</xliff:g>, asi <xliff:g id="TIME">%s</xliff:g>"</string>
@@ -97,6 +97,7 @@
     <string name="accessibility_unlock_button" msgid="128158454631118828">"Odemknout"</string>
     <string name="accessibility_waiting_for_fingerprint" msgid="4808860050517462885">"Čeká se na použití otisku"</string>
     <string name="accessibility_unlock_without_fingerprint" msgid="7541705575183694446">"Odemknout bez otisku prstu"</string>
+    <string name="accessibility_send_smart_reply" msgid="7766727839703044493">"Odeslat"</string>
     <string name="unlock_label" msgid="8779712358041029439">"odemknout"</string>
     <string name="phone_label" msgid="2320074140205331708">"otevřít telefon"</string>
     <string name="voice_assist_label" msgid="3956854378310019854">"otevřít hlasovou asistenci"</string>
@@ -150,20 +151,21 @@
     <string name="data_connection_gprs" msgid="7652872568358508452">"GPRS"</string>
     <string name="data_connection_hspa" msgid="1499615426569473562">"HSPA"</string>
     <string name="data_connection_3g" msgid="503045449315378373">"3G"</string>
-    <string name="data_connection_3_5g" msgid="5218328297191657602">"3,5G"</string>
-    <string name="data_connection_3_5g_plus" msgid="7570783890290275297">"3,5G+"</string>
+    <string name="data_connection_3_5g" msgid="3164370985817123144">"H"</string>
+    <string name="data_connection_3_5g_plus" msgid="4464630787664529264">"H+"</string>
     <string name="data_connection_4g" msgid="9139963475267449144">"4G"</string>
     <string name="data_connection_4g_plus" msgid="1148687201877800700">"4G+"</string>
     <string name="data_connection_lte" msgid="2694876797724028614">"LTE"</string>
     <string name="data_connection_lte_plus" msgid="3423013208570937424">"LTE+"</string>
-    <string name="data_connection_cdma" msgid="4677985502159869585">"CDMA"</string>
+    <string name="data_connection_cdma" msgid="8176597308239086780">"1X"</string>
     <string name="data_connection_roaming" msgid="6037232010953697354">"Roaming"</string>
     <string name="data_connection_edge" msgid="871835227939216682">"EDGE"</string>
     <string name="accessibility_data_connection_wifi" msgid="2324496756590645221">"Wi-Fi"</string>
     <string name="accessibility_no_sim" msgid="8274017118472455155">"Žádná SIM karta."</string>
     <string name="accessibility_cell_data" msgid="5326139158682385073">"Mobilní data"</string>
     <string name="accessibility_cell_data_on" msgid="5927098403452994422">"Mobilní data jsou zapnuta"</string>
-    <string name="cell_data_off" msgid="5287705247512911922">"Mobilní data jsou vypnuta"</string>
+    <string name="cell_data_off_content_description" msgid="4356113230238585072">"Mobilní data jsou vypnuta"</string>
+    <string name="cell_data_off" msgid="1051264981229902873">"Vypnuto"</string>
     <string name="accessibility_bluetooth_tether" msgid="4102784498140271969">"Sdílené připojení přes Bluetooth."</string>
     <string name="accessibility_airplane_mode" msgid="834748999790763092">"Režim Letadlo."</string>
     <string name="accessibility_vpn_on" msgid="5993385083262856059">"VPN je zapnuto."</string>
@@ -209,11 +211,9 @@
     <string name="accessibility_quick_settings_airplane_on" msgid="6406141469157599296">"Režim Letadlo je zapnutý."</string>
     <string name="accessibility_quick_settings_airplane_changed_off" msgid="66846307818850664">"Režim Letadlo je vypnutý."</string>
     <string name="accessibility_quick_settings_airplane_changed_on" msgid="8983005603505087728">"Režim Letadlo je zapnutý."</string>
-    <string name="accessibility_quick_settings_dnd_priority_on" msgid="5836205286254617194">"Režim Nerušit je zapnutý."</string>
-    <string name="accessibility_quick_settings_dnd_none_on" msgid="6882582132662613537">"Je zapnut režim Nerušit – úplné ticho."</string>
-    <string name="accessibility_quick_settings_dnd_alarms_on" msgid="9152834845587554157">"Nerušit, pouze budíky"</string>
+    <string name="accessibility_quick_settings_dnd_none_on" msgid="2960643943620637020">"úplné ticho"</string>
+    <string name="accessibility_quick_settings_dnd_alarms_on" msgid="3357131899365865386">"pouze budíky"</string>
     <string name="accessibility_quick_settings_dnd" msgid="6607873236717185815">"Nerušit."</string>
-    <string name="accessibility_quick_settings_dnd_off" msgid="2371832603753738581">"Stav Nerušit je vypnutý."</string>
     <string name="accessibility_quick_settings_dnd_changed_off" msgid="898107593453022935">"Stav Nerušit je vypnutý"</string>
     <string name="accessibility_quick_settings_dnd_changed_on" msgid="4483780856613561039">"Stav Nerušit je zapnutý."</string>
     <string name="accessibility_quick_settings_bluetooth" msgid="6341675755803320038">"Bluetooth."</string>
@@ -271,9 +271,9 @@
     <string name="accessibility_rotation_lock_off" msgid="4062780228931590069">"Obrazovka se automaticky otočí."</string>
     <string name="accessibility_rotation_lock_on_landscape" msgid="6731197337665366273">"Obrazovka je uzamčena v orientaci na šířku."</string>
     <string name="accessibility_rotation_lock_on_portrait" msgid="5809367521644012115">"Obrazovka je uzamčena v orientaci na výšku."</string>
-    <string name="accessibility_rotation_lock_off_changed" msgid="8134601071026305153">"Obrazovka se nyní otáčí automaticky."</string>
-    <string name="accessibility_rotation_lock_on_landscape_changed" msgid="3135965553707519743">"Obrazovka je nyní uzamčena v orientaci na šířku."</string>
-    <string name="accessibility_rotation_lock_on_portrait_changed" msgid="8922481981834012126">"Obrazovka je nyní uzamčena v orientaci na výšku."</string>
+    <string name="accessibility_rotation_lock_off_changed" msgid="8134601071026305153">"Obrazovka se teď otáčí automaticky."</string>
+    <string name="accessibility_rotation_lock_on_landscape_changed" msgid="3135965553707519743">"Obrazovka je teď uzamčena v orientaci na šířku."</string>
+    <string name="accessibility_rotation_lock_on_portrait_changed" msgid="8922481981834012126">"Obrazovka je teď uzamčena v orientaci na výšku."</string>
     <string name="dessert_case" msgid="1295161776223959221">"Pult se sladkostmi"</string>
     <string name="start_dreams" msgid="5640361424498338327">"Spořič obrazovky"</string>
     <string name="ethernet_label" msgid="7967563676324087464">"Ethernet"</string>
@@ -288,7 +288,7 @@
     <string name="quick_settings_bluetooth_detail_empty_text" msgid="4910015762433302860">"Nejsou dostupná žádná spárovaná zařízení"</string>
     <string name="quick_settings_bluetooth_secondary_label_battery_level" msgid="7106697106764717416">"Baterie: <xliff:g id="BATTERY_LEVEL_AS_PERCENTAGE">%s</xliff:g>"</string>
     <string name="quick_settings_bluetooth_secondary_label_audio" msgid="5673845963301132071">"Zvuk"</string>
-    <string name="quick_settings_bluetooth_secondary_label_headset" msgid="1880572731276240588">"Náhlavní souprava"</string>
+    <string name="quick_settings_bluetooth_secondary_label_headset" msgid="1880572731276240588">"Sluchátka"</string>
     <string name="quick_settings_bluetooth_secondary_label_input" msgid="2173322305072945905">"Vstup"</string>
     <string name="quick_settings_bluetooth_secondary_label_transient" msgid="4551281899312150640">"Zapínání…"</string>
     <string name="quick_settings_brightness_label" msgid="6968372297018755815">"Jas"</string>
@@ -316,7 +316,7 @@
     <string name="quick_settings_wifi_on_label" msgid="7607810331387031235">"Wi-Fi je zapnutá"</string>
     <string name="quick_settings_wifi_detail_empty_text" msgid="269990350383909226">"Žádné sítě Wi-Fi nejsou k dispozici"</string>
     <string name="quick_settings_wifi_secondary_label_transient" msgid="7748206246119760554">"Zapínání…"</string>
-    <string name="quick_settings_cast_title" msgid="7709016546426454729">"Odeslat"</string>
+    <string name="quick_settings_cast_title" msgid="7709016546426454729">"Odesílání"</string>
     <string name="quick_settings_casting" msgid="6601710681033353316">"Odesílání"</string>
     <string name="quick_settings_cast_device_default_name" msgid="5367253104742382945">"Nepojmenované zařízení"</string>
     <string name="quick_settings_cast_device_default_description" msgid="2484573682378634413">"Připraveno k vysílání"</string>
@@ -367,6 +367,8 @@
     <string name="recents_launch_disabled_message" msgid="1624523193008871793">"Aplikace <xliff:g id="APP">%s</xliff:g> je v nouzovém režimu zakázána."</string>
     <string name="recents_stack_action_button_label" msgid="6593727103310426253">"Vymazat vše"</string>
     <string name="recents_drag_hint_message" msgid="2649739267073203985">"Rozdělenou obrazovku můžete použít přetažením zde"</string>
+    <string name="recents_swipe_up_onboarding" msgid="3824607135920170001">"Přejetím nahoru přepnete aplikace"</string>
+    <string name="recents_quick_scrub_onboarding" msgid="2778062804333285789">"Přetažením doprava rychle přepnete aplikace"</string>
     <string name="recents_multistack_add_stack_dialog_split_horizontal" msgid="8848514474543427332">"Vodorovné rozdělení"</string>
     <string name="recents_multistack_add_stack_dialog_split_vertical" msgid="9075292233696180813">"Vertikální rozdělení"</string>
     <string name="recents_multistack_add_stack_dialog_split_custom" msgid="4177837597513701943">"Vlastní rozdělení"</string>
@@ -539,18 +541,15 @@
     <string name="volume_ringer_status_normal" msgid="4273142424125855384">"Vyzvánění"</string>
     <string name="volume_ringer_status_vibrate" msgid="1825615171021346557">"Vibrace"</string>
     <string name="volume_ringer_status_silent" msgid="6896394161022916369">"Ztlumení"</string>
-    <!-- no translation found for qs_status_phone_vibrate (204362991135761679) -->
-    <skip />
-    <!-- no translation found for qs_status_phone_muted (5437668875879171548) -->
-    <skip />
+    <string name="qs_status_phone_vibrate" msgid="204362991135761679">"Telefon je nastaven na vibrace"</string>
+    <string name="qs_status_phone_muted" msgid="5437668875879171548">"Telefon je ztlumen"</string>
     <string name="volume_stream_content_description_unmute" msgid="4436631538779230857">"%1$s. Klepnutím zapnete zvuk."</string>
     <string name="volume_stream_content_description_vibrate" msgid="1187944970457807498">"%1$s. Klepnutím aktivujete režim vibrací. Služby přístupnosti mohou být ztlumeny."</string>
     <string name="volume_stream_content_description_mute" msgid="3625049841390467354">"%1$s. Klepnutím vypnete zvuk. Služby přístupnosti mohou být ztlumeny."</string>
     <string name="volume_stream_content_description_vibrate_a11y" msgid="6427727603978431301">"%1$s. Klepnutím nastavíte vibrace."</string>
     <string name="volume_stream_content_description_mute_a11y" msgid="8995013018414535494">"%1$s. Klepnutím vypnete zvuk."</string>
     <string name="volume_dialog_title" msgid="7272969888820035876">"Ovládací prvky hlasitosti %s"</string>
-    <!-- no translation found for volume_dialog_ringer_guidance_ring (3360373718388509040) -->
-    <skip />
+    <string name="volume_dialog_ringer_guidance_ring" msgid="3360373718388509040">"Volání a oznámení budou vyzvánět (<xliff:g id="VOLUME_LEVEL">%1$s</xliff:g>)"</string>
     <string name="output_title" msgid="5355078100792942802">"Výstup médií"</string>
     <string name="output_calls_title" msgid="8717692905017206161">"Výstup telefonního hovoru"</string>
     <string name="output_none_found" msgid="5544982839808921091">"Nebyla nalezena žádná zařízení"</string>
@@ -630,7 +629,7 @@
       <item quantity="one">používá položku <xliff:g id="PERFORMING_ACTIVITY_0">%1$s</xliff:g></item>
     </plurals>
     <string name="notification_appops_settings" msgid="1028328314935908050">"Nastavení"</string>
-    <string name="notification_appops_ok" msgid="602562195588819631">"OK"</string>
+    <string name="notification_appops_ok" msgid="1156966426011011434">"OK"</string>
     <string name="notification_channel_controls_opened_accessibility" msgid="6553950422055908113">"Ovládací prvky oznámení aplikace <xliff:g id="APP_NAME">%1$s</xliff:g> byly otevřeny"</string>
     <string name="notification_channel_controls_closed_accessibility" msgid="7521619812603693144">"Ovládací prvky oznámení aplikace <xliff:g id="APP_NAME">%1$s</xliff:g> byly zavřeny"</string>
     <string name="notification_channel_switch_accessibility" msgid="3420796005601900717">"Povolit oznámení z tohoto kanálu"</string>
@@ -709,8 +708,7 @@
     <string name="battery" msgid="7498329822413202973">"Baterie"</string>
     <string name="clock" msgid="7416090374234785905">"Hodiny"</string>
     <string name="headset" msgid="4534219457597457353">"Sluchátka"</string>
-    <!-- no translation found for accessibility_long_click_tile (6687350750091842525) -->
-    <skip />
+    <string name="accessibility_long_click_tile" msgid="6687350750091842525">"Otevřít nastavení"</string>
     <string name="accessibility_status_bar_headphones" msgid="9156307120060559989">"Sluchátka připojena"</string>
     <string name="accessibility_status_bar_headset" msgid="8666419213072449202">"Sluchátka připojena"</string>
     <string name="data_saver" msgid="5037565123367048522">"Spořič dat"</string>

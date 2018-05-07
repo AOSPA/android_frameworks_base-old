@@ -16,6 +16,7 @@
 
 package com.android.server.power;
 
+import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManagerInternal;
 import android.app.AppOpsManager;
@@ -97,7 +98,7 @@ final class Notifier {
     private final ActivityManagerInternal mActivityManagerInternal;
     private final InputManagerInternal mInputManagerInternal;
     private final InputMethodManagerInternal mInputMethodManagerInternal;
-    private final StatusBarManagerInternal mStatusBarManagerInternal;
+    @Nullable private final StatusBarManagerInternal mStatusBarManagerInternal;
     private final TrustManager mTrustManager;
 
     private final NotifierHandler mHandler;
@@ -718,14 +719,13 @@ final class Notifier {
      * Plays the wireless charging sound for both wireless and non-wireless charging
      */
     private void playChargingStartedSound() {
-        final boolean enabled = Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.CHARGING_SOUNDS_ENABLED, 1) != 0;
+        // TODO (b/77912907): add back charging sound enabled check & default to charging sounds ON
         final boolean dndOff = Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.ZEN_MODE, Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS)
                 == Settings.Global.ZEN_MODE_OFF;
         final String soundPath = Settings.Global.getString(mContext.getContentResolver(),
                 Settings.Global.CHARGING_STARTED_SOUND);
-        if (enabled && dndOff && soundPath != null) {
+        if (dndOff && soundPath != null) {
             final Uri soundUri = Uri.parse("file://" + soundPath);
             if (soundUri != null) {
                 final Ringtone sfx = RingtoneManager.getRingtone(mContext, soundUri);
@@ -739,7 +739,9 @@ final class Notifier {
 
     private void showWirelessChargingStarted(int batteryLevel) {
         playChargingStartedSound();
-        mStatusBarManagerInternal.showChargingAnimation(batteryLevel);
+        if (mStatusBarManagerInternal != null) {
+            mStatusBarManagerInternal.showChargingAnimation(batteryLevel);
+        }
         mSuspendBlocker.release();
     }
 

@@ -112,7 +112,7 @@ import static com.android.server.wm.IdentifierProto.HASH_CODE;
 import static com.android.server.wm.IdentifierProto.TITLE;
 import static com.android.server.wm.IdentifierProto.USER_ID;
 import static com.android.server.wm.AnimationSpecProto.MOVE;
-import static com.android.server.wm.MoveAnimationSpecProto.DURATION;
+import static com.android.server.wm.MoveAnimationSpecProto.DURATION_MS;
 import static com.android.server.wm.MoveAnimationSpecProto.FROM;
 import static com.android.server.wm.MoveAnimationSpecProto.TO;
 import static com.android.server.wm.WindowStateProto.ANIMATING_EXIT;
@@ -1088,16 +1088,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                             :  Math.max(mFrame.bottom - mStableFrame.bottom, 0));
         }
 
+        mDisplayCutout = displayCutout.calculateRelativeTo(mFrame);
+
         // Offset the actual frame by the amount layout frame is off.
         mFrame.offset(-layoutXDiff, -layoutYDiff);
         mCompatFrame.offset(-layoutXDiff, -layoutYDiff);
         mContentFrame.offset(-layoutXDiff, -layoutYDiff);
         mVisibleFrame.offset(-layoutXDiff, -layoutYDiff);
         mStableFrame.offset(-layoutXDiff, -layoutYDiff);
-
-        // TODO(roosa): Figure out what frame exactly this needs to be calculated with.
-        mDisplayCutout = displayCutout.calculateRelativeTo(mFrame);
-
 
         mCompatFrame.set(mFrame);
         if (mEnforceSizeCompat) {
@@ -1278,6 +1276,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         if (mContentInsetsChanged
                 || mVisibleInsetsChanged
+                || mStableInsetsChanged
                 || winAnimator.mSurfaceResized
                 || mOutsetsChanged
                 || mFrameSizeChanged
@@ -1701,12 +1700,17 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return changed;
         }
 
-        if (visible != isVisibleNow()) {
-            if (!runningAppAnimation) {
+        final boolean isVisibleNow = isVisibleNow();
+        if (visible != isVisibleNow) {
+            // Run exit animation if:
+            // 1. App visibility and WS visibility are different
+            // 2. App is not running an animation
+            // 3. WS is currently visible
+            if (!runningAppAnimation && isVisibleNow) {
                 final AccessibilityController accessibilityController =
                         mService.mAccessibilityController;
-                final int winTransit = visible ? TRANSIT_ENTER : TRANSIT_EXIT;
-                mWinAnimator.applyAnimationLocked(winTransit, visible);
+                final int winTransit = TRANSIT_EXIT;
+                mWinAnimator.applyAnimationLocked(winTransit, false /* isEntrance */);
                 //TODO (multidisplay): Magnification is supported only for the default
                 if (accessibilityController != null && getDisplayId() == DEFAULT_DISPLAY) {
                     accessibilityController.onWindowTransitionLocked(this, winTransit);
@@ -2401,6 +2405,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         @Override
         public void binderDied() {
             try {
+                boolean resetSplitScreenResizing = false;
                 synchronized(mService.mWindowMap) {
                     final WindowState win = mService.windowForClientLocked(mSession, mClient, false);
                     Slog.i(TAG, "WIN DEATH: " + win);
@@ -2420,11 +2425,21 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                             if (stack != null) {
                                 stack.resetDockedStackToMiddle();
                             }
-                            mService.setDockedStackResizing(false);
+                            resetSplitScreenResizing = true;
                         }
                     } else if (mHasSurface) {
                         Slog.e(TAG, "!!! LEAK !!! Window removed but surface still valid.");
                         WindowState.this.removeIfPossible();
+                    }
+                }
+                if (resetSplitScreenResizing) {
+                    try {
+                        // Note: this calls into ActivityManager, so we must *not* hold the window
+                        // manager lock while calling this.
+                        mService.mActivityManager.setSplitScreenResizing(false);
+                    } catch (RemoteException e) {
+                        // Local call, shouldn't return RemoteException.
+                        throw e.rethrowAsRuntimeException();
                     }
                 }
             } catch (IllegalArgumentException ex) {
@@ -3850,9 +3865,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         windowInfo.title = mAttrs.accessibilityTitle;
         // Panel windows have no public way to set the a11y title directly. Use the
         // regular title as a fallback.
-        if (TextUtils.isEmpty(windowInfo.title)
-                && (mAttrs.type >= WindowManager.LayoutParams.FIRST_SUB_WINDOW)
-                && (mAttrs.type <= WindowManager.LayoutParams.LAST_SUB_WINDOW)) {
+        final boolean isPanelWindow = (mAttrs.type >= WindowManager.LayoutParams.FIRST_SUB_WINDOW)
+                && (mAttrs.type <= WindowManager.LayoutParams.LAST_SUB_WINDOW);
+        // Accessibility overlays should have titles that work for accessibility, and can't set
+        // the a11y title themselves.
+        final boolean isAccessibilityOverlay =
+                windowInfo.type == WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
+        if (TextUtils.isEmpty(windowInfo.title) && (isPanelWindow || isAccessibilityOverlay)) {
             windowInfo.title = mAttrs.getTitle();
         }
         windowInfo.accessibilityIdOfAnchor = mAttrs.accessibilityIdOfAnchor;
@@ -4106,11 +4125,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mDestroying = true;
 
         final boolean hasSurface = mWinAnimator.hasSurface();
-        if (hasSurface) {
-            // Use pendingTransaction here so hide is done the same transaction as the other
-            // animations when exiting
-            mWinAnimator.hide(getPendingTransaction(), "onExitAnimationDone");
-        }
+
+        // Use pendingTransaction here so hide is done the same transaction as the other
+        // animations when exiting
+        mWinAnimator.hide(getPendingTransaction(), "onExitAnimationDone");
 
         // If we have an app token, we ask it to destroy the surface for us, so that it can take
         // care to ensure the activity has actually stopped and the surface is not still in use.
@@ -4256,6 +4274,24 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
+    private boolean skipDecorCrop() {
+        // The decor frame is used to specify the region not covered by the system
+        // decorations (nav bar, status bar). In case this is empty, for example with
+        // FLAG_TRANSLUCENT_NAVIGATION, we don't need to do any cropping.
+        if (mDecorFrame.isEmpty()) {
+            return true;
+        }
+
+        // But if we have a frame, and are an application window, then we must be cropped.
+        if (mAppToken != null) {
+            return false;
+        }
+
+        // For non application windows, we may be allowed to extend over the decor bars
+        // depending on our type and permissions assosciated with our token.
+        return mToken.canLayerAboveSystemBars();
+    }
+
     /**
      * Calculate the window crop according to system decor policy. In general this is
      * the system decor rect (see #calculateSystemDecorRect), but we also have some
@@ -4273,7 +4309,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             policyCrop.intersect(-mCompatFrame.left, -mCompatFrame.top,
                     displayInfo.logicalWidth - mCompatFrame.left,
                     displayInfo.logicalHeight - mCompatFrame.top);
-        } else if (mDecorFrame.isEmpty()) {
+        } else if (skipDecorCrop()) {
             // Windows without policy decor aren't cropped.
             policyCrop.set(0, 0, mCompatFrame.width(), mCompatFrame.height());
         } else {
@@ -4315,7 +4351,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // If a freeform window is animating from a position where it would be cutoff, it would be
         // cutoff during the animation. We don't want that, so for the duration of the animation
         // we ignore the decor cropping and depend on layering to position windows correctly.
-        final boolean cropToDecor = !(inFreeformWindowingMode() && isAnimatingLw());
+
+        // We also ignore cropping when the window is currently being drag resized in split screen
+        // to prevent issues with the crop for screenshot.
+        final boolean cropToDecor =
+                !(inFreeformWindowingMode() && isAnimatingLw()) && !isDockedResizing();
         if (cropToDecor) {
             // Intersect with the decor rect, offsetted by window position.
             systemDecorRect.intersect(decorRect.left - left, decorRect.top - top,
@@ -4699,16 +4739,38 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         outPoint.offset(-mAttrs.surfaceInsets.left, -mAttrs.surfaceInsets.top);
     }
 
+    boolean needsRelativeLayeringToIme() {
+        // We only use the relative layering mode in split screen, as part of elevating the IME
+        // and windows above it's target above the docked divider.
+        if (!inSplitScreenWindowingMode()) {
+            return false;
+        }
+
+        if (isChildWindow()) {
+            // If we are a child of the input method target we need this promotion.
+            if (getParentWindow().isInputMethodTarget()) {
+                return true;
+            }
+        } else if (mAppToken != null) {
+            // Likewise if we share a token with the Input method target and are ordered
+            // above it but not necessarily a child (e.g. a Dialog) then we also need
+            // this promotion.
+            final WindowState imeTarget = mService.mInputMethodTarget;
+            boolean inTokenWithAndAboveImeTarget = imeTarget != null && imeTarget != this
+                    && imeTarget.mToken == mToken && imeTarget.compareTo(this) <= 0;
+            return inTokenWithAndAboveImeTarget;
+        }
+        return false;
+    }
+
     @Override
     void assignLayer(Transaction t, int layer) {
         // See comment in assignRelativeLayerForImeTargetChild
-        if (!isChildWindow()
-                || (!getParentWindow().isInputMethodTarget())
-                || !inSplitScreenWindowingMode()) {
-            super.assignLayer(t, layer);
+        if (needsRelativeLayeringToIme()) {
+            getDisplayContent().assignRelativeLayerForImeTargetChild(t, this);
             return;
         }
-        getDisplayContent().assignRelativeLayerForImeTargetChild(t, this);
+        super.assignLayer(t, layer);
     }
 
     @Override
@@ -4826,7 +4888,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             final long token = proto.start(MOVE);
             mFrom.writeToProto(proto, FROM);
             mTo.writeToProto(proto, TO);
-            proto.write(DURATION, mDuration);
+            proto.write(DURATION_MS, mDuration);
             proto.end(token);
         }
     }

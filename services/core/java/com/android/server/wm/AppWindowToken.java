@@ -1662,7 +1662,9 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     }
 
     SurfaceControl getAppAnimationLayer() {
-        return getAppAnimationLayer(needsZBoost());
+        return getAppAnimationLayer(isActivityTypeHome() ? ANIMATION_LAYER_HOME
+                : needsZBoost() ? ANIMATION_LAYER_BOOSTED
+                : ANIMATION_LAYER_STANDARD);
     }
 
     @Override
@@ -1982,7 +1984,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         final Rect frame = win.mFrame;
         final int thumbnailDrawableRes = getTask().mUserId == mService.mCurrentUserId
                 ? R.drawable.ic_account_circle
-                : R.drawable.ic_corp_badge_no_background;
+                : R.drawable.ic_corp_badge;
         final GraphicBuffer thumbnail =
                 mService.mAppTransition
                         .createCrossProfileAppsThumbnail(thumbnailDrawableRes, frame);

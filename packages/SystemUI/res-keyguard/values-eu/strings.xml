@@ -140,7 +140,7 @@
       <item quantity="one">Gailua ez da desblokeatu <xliff:g id="NUMBER_0">%d</xliff:g> orduz. Berretsi pasahitza.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Ez da ezagutu"</string>
-    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="3739658416797652781">
       <item quantity="other">Idatzi SIM txartelaren PIN kodea. <xliff:g id="NUMBER_1">%d</xliff:g> saiakera geratzen zaizkizu.</item>
       <item quantity="one">Idatzi SIM txartelaren PIN kodea. <xliff:g id="NUMBER_0">%d</xliff:g> saiakera geratzen zaizu; oker idatziz gero, operadoreari eskatu beharko diozu gailua desblokeatzeko.</item>
     </plurals>

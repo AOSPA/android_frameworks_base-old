@@ -123,6 +123,7 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.GrowingArrayUtils;
 import com.android.internal.util.Preconditions;
+import com.android.internal.view.FloatingActionMode;
 import com.android.internal.widget.EditableInputConnection;
 
 import java.lang.annotation.Retention;
@@ -2215,6 +2216,15 @@ public class Editor {
         ActionMode.Callback actionModeCallback = new TextActionModeCallback(actionMode);
         mTextActionMode = mTextView.startActionMode(actionModeCallback, ActionMode.TYPE_FLOATING);
 
+        final boolean selectableText = mTextView.isTextEditable() || mTextView.isTextSelectable();
+        if (actionMode == TextActionMode.TEXT_LINK && !selectableText
+                && mTextActionMode instanceof FloatingActionMode) {
+            // Make the toolbar outside-touchable so that it can be dismissed when the user clicks
+            // outside of it.
+            ((FloatingActionMode) mTextActionMode).setOutsideTouchable(true,
+                    () -> stopTextActionMode());
+        }
+
         final boolean selectionStarted = mTextActionMode != null;
         if (selectionStarted
                 && mTextView.isTextEditable() && !mTextView.isTextSelectable()
@@ -4063,7 +4073,8 @@ public class Editor {
                 item.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
                 mAssistClickHandlers.put(item, TextClassification.createIntentOnClickListener(
                         TextClassification.createPendingIntent(mTextView.getContext(),
-                                textClassification.getIntent())));
+                                textClassification.getIntent(),
+                                createAssistMenuItemPendingIntentRequestCode())));
             }
             final int count = textClassification.getActions().size();
             for (int i = 1; i < count; i++) {
@@ -4121,7 +4132,9 @@ public class Editor {
                 final Intent intent = assistMenuItem.getIntent();
                 if (intent != null) {
                     onClickListener = TextClassification.createIntentOnClickListener(
-                            TextClassification.createPendingIntent(mTextView.getContext(), intent));
+                            TextClassification.createPendingIntent(
+                                    mTextView.getContext(), intent,
+                                    createAssistMenuItemPendingIntentRequestCode()));
                 }
             }
             if (onClickListener != null) {
@@ -4130,6 +4143,14 @@ public class Editor {
             }
             // We tried our best.
             return true;
+        }
+
+        private int createAssistMenuItemPendingIntentRequestCode() {
+            return mTextView.hasSelection()
+                    ? mTextView.getText().subSequence(
+                            mTextView.getSelectionStart(), mTextView.getSelectionEnd())
+                            .hashCode()
+                    : 0;
         }
 
         private boolean shouldEnableAssistMenuItems() {

@@ -175,6 +175,15 @@ public abstract class NotificationViewWrapper implements TransformableView {
         return mRow.isSummaryWithChildren() ? 0 : mBackgroundColor;
     }
 
+    protected int resolveBackgroundColor() {
+        int customBackgroundColor = getCustomBackgroundColor();
+        if (customBackgroundColor != 0) {
+            return customBackgroundColor;
+        }
+        return mView.getContext().getColor(
+                com.android.internal.R.color.notification_material_background_color);
+    }
+
     public void setLegacy(boolean legacy) {
     }
 
@@ -204,5 +213,13 @@ public abstract class NotificationViewWrapper implements TransformableView {
     }
 
     public void setHeaderVisibleAmount(float headerVisibleAmount) {
+    }
+
+    /**
+     * Get the extra height that needs to be added to this view, such that it can be measured
+     * normally.
+     */
+    public int getExtraMeasureHeight() {
+        return 0;
     }
 }

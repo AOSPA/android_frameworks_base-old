@@ -140,7 +140,7 @@
       <item quantity="one">Apparaat is al <xliff:g id="NUMBER_0">%d</xliff:g> uur niet ontgrendeld. Bevestig het wachtwoord.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Niet herkend"</string>
-    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="3739658416797652781">
       <item quantity="other">Geef de pincode van de simkaart op. Je hebt nog <xliff:g id="NUMBER_1">%d</xliff:g> pogingen over.</item>
       <item quantity="one">Geef de pincode van de simkaart op. Je hebt nog <xliff:g id="NUMBER_0">%d</xliff:g> poging over voordat je contact met je provider moet opnemen om het apparaat te ontgrendelen.</item>
     </plurals>

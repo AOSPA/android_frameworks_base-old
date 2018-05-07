@@ -286,23 +286,28 @@ public class VibratorService extends IVibratorService.Stub
         filter.addAction(Intent.ACTION_SCREEN_OFF);
         context.registerReceiver(mIntentReceiver, filter);
 
-        long[] clickEffectTimings = getLongIntArray(context.getResources(),
+        VibrationEffect clickEffect = createEffectFromResource(
                 com.android.internal.R.array.config_virtualKeyVibePattern);
-        VibrationEffect clickEffect = createEffect(clickEffectTimings);
         VibrationEffect doubleClickEffect = VibrationEffect.createWaveform(
                 DOUBLE_CLICK_EFFECT_FALLBACK_TIMINGS, -1 /*repeatIndex*/);
-        long[] tickEffectTimings = getLongIntArray(context.getResources(),
+        VibrationEffect heavyClickEffect = createEffectFromResource(
+                com.android.internal.R.array.config_longPressVibePattern);
+        VibrationEffect tickEffect = createEffectFromResource(
                 com.android.internal.R.array.config_clockTickVibePattern);
-        VibrationEffect tickEffect = createEffect(tickEffectTimings);
 
         mFallbackEffects = new SparseArray<VibrationEffect>();
         mFallbackEffects.put(VibrationEffect.EFFECT_CLICK, clickEffect);
         mFallbackEffects.put(VibrationEffect.EFFECT_DOUBLE_CLICK, doubleClickEffect);
         mFallbackEffects.put(VibrationEffect.EFFECT_TICK, tickEffect);
-        mFallbackEffects.put(VibrationEffect.EFFECT_HEAVY_CLICK, clickEffect);
+        mFallbackEffects.put(VibrationEffect.EFFECT_HEAVY_CLICK, heavyClickEffect);
     }
 
-    private static VibrationEffect createEffect(long[] timings) {
+    private VibrationEffect createEffectFromResource(int resId) {
+        long[] timings = getLongIntArray(mContext.getResources(), resId);
+        return createEffectFromTimings(timings);
+    }
+
+    private static VibrationEffect createEffectFromTimings(long[] timings) {
         if (timings == null || timings.length == 0) {
             return null;
         } else if (timings.length == 1) {
@@ -699,9 +704,11 @@ public class VibratorService extends IVibratorService.Stub
         VibrationEffect scaledEffect = null;
         if (vib.effect instanceof VibrationEffect.OneShot) {
             VibrationEffect.OneShot oneShot = (VibrationEffect.OneShot) vib.effect;
+            oneShot = oneShot.resolve(mDefaultVibrationAmplitude);
             scaledEffect = oneShot.scale(gamma, maxAmplitude);
         } else if (vib.effect instanceof VibrationEffect.Waveform) {
             VibrationEffect.Waveform waveform = (VibrationEffect.Waveform) vib.effect;
+            waveform = waveform.resolve(mDefaultVibrationAmplitude);
             scaledEffect = waveform.scale(gamma, maxAmplitude);
         } else {
             Slog.w(TAG, "Unable to apply intensity scaling, unknown VibrationEffect type");

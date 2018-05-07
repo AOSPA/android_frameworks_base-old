@@ -16,19 +16,19 @@
 
 package com.android.systemui.statusbar.car;
 
-import android.app.ActivityManager;
+import static android.content.DialogInterface.BUTTON_POSITIVE;
+
+import android.app.AlertDialog;
+import android.app.AlertDialog.Builder;
+import android.app.Dialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.Paint.Align;
-import android.graphics.drawable.GradientDrawable;
 import android.os.AsyncTask;
-import android.support.annotation.Nullable;
+import android.os.UserHandle;
 import android.support.v7.widget.RecyclerView;
-import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -36,9 +36,13 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.car.widget.PagedListView;
+
+import com.android.internal.util.UserIcons;
 import com.android.settingslib.users.UserManagerHelper;
 import com.android.systemui.R;
 
+import com.android.systemui.statusbar.phone.SystemUIDialog;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,7 +50,7 @@ import java.util.List;
  * Displays a GridLayout with icons for the users in the system to allow switching between users.
  * One of the uses of this is for the lock screen in auto.
  */
-public class UserGridRecyclerView extends RecyclerView implements
+public class UserGridRecyclerView extends PagedListView implements
         UserManagerHelper.OnUsersUpdateListener {
     private UserSelectionListener mUserSelectionListener;
     private UserAdapter mAdapter;
@@ -55,7 +59,6 @@ public class UserGridRecyclerView extends RecyclerView implements
 
     public UserGridRecyclerView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        super.setHasFixedSize(true);
         mContext = context;
         mUserManagerHelper = new UserManagerHelper(mContext);
     }
@@ -65,6 +68,7 @@ public class UserGridRecyclerView extends RecyclerView implements
      */
     @Override
     public void onFinishInflate() {
+        super.onFinishInflate();
         mUserManagerHelper.registerOnUsersUpdateListener(this);
     }
 
@@ -73,6 +77,7 @@ public class UserGridRecyclerView extends RecyclerView implements
      */
     @Override
     public void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
         mUserManagerHelper.unregisterOnUsersUpdateListener();
     }
 
@@ -91,8 +96,12 @@ public class UserGridRecyclerView extends RecyclerView implements
     private List<UserRecord> createUserRecords(List<UserInfo> userInfoList) {
         List<UserRecord> userRecords = new ArrayList<>();
         for (UserInfo userInfo : userInfoList) {
+            if (userInfo.isGuest()) {
+                // Don't display guests in the switcher.
+                continue;
+            }
             boolean isForeground = mUserManagerHelper.getForegroundUserId() == userInfo.id;
-            UserRecord record = new UserRecord(userInfo, false /* isGuest */,
+            UserRecord record = new UserRecord(userInfo, false /* isStartGuestSession */,
                     false /* isAddUser */, isForeground);
             userRecords.add(record);
         }
@@ -116,7 +125,7 @@ public class UserGridRecyclerView extends RecyclerView implements
     private UserRecord addGuestUserRecord() {
         UserInfo userInfo = new UserInfo();
         userInfo.name = mContext.getString(R.string.car_guest);
-        return new UserRecord(userInfo, true /* isGuest */,
+        return new UserRecord(userInfo, true /* isStartGuestSession */,
                 false /* isAddUser */, false /* isForeground */);
     }
 
@@ -126,7 +135,7 @@ public class UserGridRecyclerView extends RecyclerView implements
     private UserRecord addUserRecord() {
         UserInfo userInfo = new UserInfo();
         userInfo.name = mContext.getString(R.string.car_add_user);
-        return new UserRecord(userInfo, false /* isGuest */,
+        return new UserRecord(userInfo, false /* isStartGuestSession */,
                 true /* isAddUser */, false /* isForeground */);
     }
 
@@ -144,24 +153,22 @@ public class UserGridRecyclerView extends RecyclerView implements
     /**
      * Adapter to populate the grid layout with the available user profiles
      */
-    public final class UserAdapter extends RecyclerView.Adapter<UserAdapter.UserAdapterViewHolder> {
+    public final class UserAdapter extends RecyclerView.Adapter<UserAdapter.UserAdapterViewHolder>
+            implements Dialog.OnClickListener {
 
         private final Context mContext;
         private List<UserRecord> mUsers;
-        private final int mPodImageAvatarWidth;
-        private final int mPodImageAvatarHeight;
         private final Resources mRes;
         private final String mGuestName;
         private final String mNewUserName;
+        private AlertDialog mDialog;
+        // View that holds the add user button.  Used to enable/disable the view
+        private View mAddUserView;
 
         public UserAdapter(Context context, List<UserRecord> users) {
             mRes = context.getResources();
             mContext = context;
             updateUsers(users);
-            mPodImageAvatarWidth = mRes.getDimensionPixelSize(
-                    R.dimen.car_fullscreen_user_pod_image_avatar_width);
-            mPodImageAvatarHeight = mRes.getDimensionPixelSize(
-                    R.dimen.car_fullscreen_user_pod_image_avatar_height);
             mGuestName = mRes.getString(R.string.car_guest);
             mNewUserName = mRes.getString(R.string.car_new_user);
         }
@@ -186,7 +193,7 @@ public class UserGridRecyclerView extends RecyclerView implements
         @Override
         public void onBindViewHolder(UserAdapterViewHolder holder, int position) {
             UserRecord userRecord = mUsers.get(position);
-            holder.mUserAvatarImageView.setImageBitmap(getDefaultUserIcon(userRecord));
+            holder.mUserAvatarImageView.setImageBitmap(getUserRecordIcon(userRecord));
             holder.mUserNameTextView.setText(userRecord.mInfo.name);
             holder.mView.setOnClickListener(v -> {
                 if (userRecord == null) {
@@ -198,22 +205,62 @@ public class UserGridRecyclerView extends RecyclerView implements
                     mUserSelectionListener.onUserSelected(userRecord);
                 }
 
-                // If the user selects Guest, switch to Guest profile
-                if (userRecord.mIsGuest) {
-                    mUserManagerHelper.switchToGuest(mGuestName);
+                // If the user selects Guest, start the guest session.
+                if (userRecord.mIsStartGuestSession) {
+                    mUserManagerHelper.startNewGuestSession(mGuestName);
                     return;
                 }
 
-                // If the user wants to add a user, start task to add new user
+                // If the user wants to add a user, show dialog to confirm adding a user
                 if (userRecord.mIsAddUser) {
-                    new AddNewUserTask().execute(mNewUserName);
+                    // Disable button so it cannot be clicked multiple times
+                    mAddUserView = holder.mView;
+                    mAddUserView.setEnabled(false);
+
+                    String message = mRes.getString(R.string.user_add_user_message_setup)
+                        .concat(System.getProperty("line.separator"))
+                        .concat(System.getProperty("line.separator"))
+                        .concat(mRes.getString(R.string.user_add_user_message_update));
+
+                    mDialog = new Builder(mContext, R.style.Theme_Car_Dark_Dialog_Alert)
+                        .setTitle(R.string.user_add_user_title)
+                        .setMessage(message)
+                        .setNegativeButton(android.R.string.cancel, this)
+                        .setPositiveButton(android.R.string.ok, this)
+                        .create();
+                    // Sets window flags for the SysUI dialog
+                    SystemUIDialog.applyFlags(mDialog);
+                    mDialog.show();
                     return;
                 }
-
                 // If the user doesn't want to be a guest or add a user, switch to the user selected
                 mUserManagerHelper.switchToUser(userRecord.mInfo);
             });
 
+        }
+
+        private Bitmap getUserRecordIcon(UserRecord userRecord) {
+            if (userRecord.mIsStartGuestSession) {
+                return mUserManagerHelper.getGuestDefaultIcon();
+            }
+
+            if (userRecord.mIsAddUser) {
+                return UserIcons.convertToBitmap(mContext
+                    .getDrawable(R.drawable.car_add_circle_round));
+            }
+
+            return mUserManagerHelper.getUserIcon(userRecord.mInfo);
+        }
+
+        @Override
+        public void onClick(DialogInterface dialog, int which) {
+            // Enable the add button
+            if (mAddUserView != null) {
+                mAddUserView.setEnabled(true);
+            }
+            if (which == BUTTON_POSITIVE) {
+                new AddNewUserTask().execute(mNewUserName);
+            }
         }
 
         private class AddNewUserTask extends AsyncTask<String, Void, UserInfo> {
@@ -240,57 +287,6 @@ public class UserGridRecyclerView extends RecyclerView implements
             return mUsers.size();
         }
 
-        /**
-         * Returns the default user icon.  This icon is a circle with a letter in it.  The letter is
-         * the first character in the username.
-         *
-         * @param record the profile of the user for which the icon should be created
-         */
-        private Bitmap getDefaultUserIcon(UserRecord record) {
-            CharSequence displayText;
-            boolean isAddUserText = false;
-            if (record.mIsAddUser) {
-                displayText = "+";
-                isAddUserText = true;
-            } else {
-                displayText = record.mInfo.name.subSequence(0, 1);
-            }
-            Bitmap out = Bitmap.createBitmap(mPodImageAvatarWidth, mPodImageAvatarHeight,
-                    Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(out);
-
-            // Draw the circle background.
-            GradientDrawable shape = new GradientDrawable();
-            shape.setShape(GradientDrawable.RADIAL_GRADIENT);
-            shape.setGradientRadius(1.0f);
-            shape.setColor(mContext.getColor(R.color.car_user_switcher_no_user_image_bgcolor));
-            shape.setBounds(0, 0, mPodImageAvatarWidth, mPodImageAvatarHeight);
-            shape.draw(canvas);
-
-            // Draw the letter in the center.
-            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            paint.setColor(mContext.getColor(R.color.car_user_switcher_no_user_image_fgcolor));
-            paint.setTextAlign(Align.CENTER);
-            if (isAddUserText) {
-                paint.setTextSize(mRes.getDimensionPixelSize(
-                        R.dimen.car_touch_target_size));
-            } else {
-                paint.setTextSize(mRes.getDimensionPixelSize(
-                        R.dimen.car_fullscreen_user_pod_icon_text_size));
-            }
-
-            Paint.FontMetricsInt metrics = paint.getFontMetricsInt();
-            // The Y coordinate is measured by taking half the height of the pod, but that would
-            // draw the character putting the bottom of the font in the middle of the pod.  To
-            // correct this, half the difference between the top and bottom distance metrics of the
-            // font gives the offset of the font.  Bottom is a positive value, top is negative, so
-            // the different is actually a sum.  The "half" operation is then factored out.
-            canvas.drawText(displayText.toString(), mPodImageAvatarWidth / 2,
-                    (mPodImageAvatarHeight - (metrics.bottom + metrics.top)) / 2, paint);
-
-            return out;
-        }
-
         public class UserAdapterViewHolder extends RecyclerView.ViewHolder {
 
             public ImageView mUserAvatarImageView;
@@ -313,14 +309,14 @@ public class UserGridRecyclerView extends RecyclerView implements
     public static final class UserRecord {
 
         public final UserInfo mInfo;
-        public final boolean mIsGuest;
+        public final boolean mIsStartGuestSession;
         public final boolean mIsAddUser;
         public final boolean mIsForeground;
 
-        public UserRecord(UserInfo userInfo, boolean isGuest, boolean isAddUser,
+        public UserRecord(UserInfo userInfo, boolean isStartGuestSession, boolean isAddUser,
                 boolean isForeground) {
             mInfo = userInfo;
-            mIsGuest = isGuest;
+            mIsStartGuestSession = isStartGuestSession;
             mIsAddUser = isAddUser;
             mIsForeground = isForeground;
         }

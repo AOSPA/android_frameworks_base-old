@@ -17,13 +17,7 @@ package com.android.server.notification;
 
 import static android.app.NotificationManager.IMPORTANCE_NONE;
 
-import com.android.internal.R;
-import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.logging.MetricsLogger;
-import com.android.internal.logging.nano.MetricsProto;
-import com.android.internal.util.Preconditions;
-import com.android.internal.util.XmlUtils;
-
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -36,7 +30,6 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.Signature;
-import android.content.res.Resources;
 import android.metrics.LogMaker;
 import android.os.Build;
 import android.os.UserHandle;
@@ -52,6 +45,13 @@ import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.util.proto.ProtoOutputStream;
 
+import com.android.internal.R;
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto;
+import com.android.internal.util.Preconditions;
+import com.android.internal.util.XmlUtils;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -65,11 +65,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class RankingHelper implements RankingConfig {
     private static final String TAG = "RankingHelper";
@@ -89,11 +89,25 @@ public class RankingHelper implements RankingConfig {
     private static final String ATT_VISIBILITY = "visibility";
     private static final String ATT_IMPORTANCE = "importance";
     private static final String ATT_SHOW_BADGE = "show_badge";
+    private static final String ATT_APP_USER_LOCKED_FIELDS = "app_user_locked_fields";
 
     private static final int DEFAULT_PRIORITY = Notification.PRIORITY_DEFAULT;
     private static final int DEFAULT_VISIBILITY = NotificationManager.VISIBILITY_NO_OVERRIDE;
     private static final int DEFAULT_IMPORTANCE = NotificationManager.IMPORTANCE_UNSPECIFIED;
     private static final boolean DEFAULT_SHOW_BADGE = true;
+    /**
+     * Default value for what fields are user locked. See {@link LockableAppFields} for all lockable
+     * fields.
+     */
+    private static final int DEFAULT_LOCKED_APP_FIELDS = 0;
+
+    /**
+     * All user-lockable fields for a given application.
+     */
+    @IntDef({LockableAppFields.USER_LOCKED_IMPORTANCE})
+    public @interface LockableAppFields {
+        int USER_LOCKED_IMPORTANCE = 0x00000001;
+    }
 
     private final NotificationSignalExtractor[] mSignalExtractors;
     private final NotificationComparator mPreliminaryComparator;
@@ -113,12 +127,15 @@ public class RankingHelper implements RankingConfig {
     private String mPermissionControllerPackageName;
     private String mServicesSystemSharedLibPackageName;
     private String mSharedSystemSharedLibPackageName;
+    private boolean mAreChannelsBypassingDnd;
+    private ZenModeHelper mZenModeHelper;
 
     public RankingHelper(Context context, PackageManager pm, RankingHandler rankingHandler,
             ZenModeHelper zenHelper, NotificationUsageStats usageStats, String[] extractorNames) {
         mContext = context;
         mRankingHandler = rankingHandler;
         mPm = pm;
+        mZenModeHelper= zenHelper;
 
         mPreliminaryComparator = new NotificationComparator(mContext);
 
@@ -145,6 +162,7 @@ public class RankingHelper implements RankingConfig {
         }
 
         getSignatures();
+        updateChannelsBypassingDnd();
     }
 
     @SuppressWarnings("unchecked")
@@ -218,6 +236,8 @@ public class RankingHelper implements RankingConfig {
                                 parser, ATT_VISIBILITY, DEFAULT_VISIBILITY);
                         r.showBadge = XmlUtils.readBooleanAttribute(
                                 parser, ATT_SHOW_BADGE, DEFAULT_SHOW_BADGE);
+                        r.lockedAppFields = XmlUtils.readIntAttribute(parser,
+                                ATT_APP_USER_LOCKED_FIELDS, DEFAULT_LOCKED_APP_FIELDS);
 
                         final int innerDepth = parser.getDepth();
                         while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
@@ -388,10 +408,14 @@ public class RankingHelper implements RankingConfig {
                 if (forBackup && UserHandle.getUserId(r.uid) != UserHandle.USER_SYSTEM) {
                     continue;
                 }
-                final boolean hasNonDefaultSettings = r.importance != DEFAULT_IMPORTANCE
-                        || r.priority != DEFAULT_PRIORITY || r.visibility != DEFAULT_VISIBILITY
-                        || r.showBadge != DEFAULT_SHOW_BADGE || r.channels.size() > 0
-                        || r.groups.size() > 0;
+                final boolean hasNonDefaultSettings =
+                        r.importance != DEFAULT_IMPORTANCE
+                            || r.priority != DEFAULT_PRIORITY
+                            || r.visibility != DEFAULT_VISIBILITY
+                            || r.showBadge != DEFAULT_SHOW_BADGE
+                            || r.lockedAppFields != DEFAULT_LOCKED_APP_FIELDS
+                            || r.channels.size() > 0
+                            || r.groups.size() > 0;
                 if (hasNonDefaultSettings) {
                     out.startTag(null, TAG_PACKAGE);
                     out.attribute(null, ATT_NAME, r.pkg);
@@ -405,6 +429,8 @@ public class RankingHelper implements RankingConfig {
                         out.attribute(null, ATT_VISIBILITY, Integer.toString(r.visibility));
                     }
                     out.attribute(null, ATT_SHOW_BADGE, Boolean.toString(r.showBadge));
+                    out.attribute(null, ATT_APP_USER_LOCKED_FIELDS,
+                            Integer.toString(r.lockedAppFields));
 
                     if (!forBackup) {
                         out.attribute(null, ATT_UID, Integer.toString(r.uid));
@@ -511,6 +537,17 @@ public class RankingHelper implements RankingConfig {
         return getOrCreateRecord(packageName, uid).importance;
     }
 
+
+    /**
+     * Returns whether the importance of the corresponding notification is user-locked and shouldn't
+     * be adjusted by an assistant (via means of a blocking helper, for example). For the channel
+     * locking field, see {@link NotificationChannel#USER_LOCKED_IMPORTANCE}.
+     */
+    public boolean getIsAppImportanceLocked(String packageName, int uid) {
+        int userLockedFields = getOrCreateRecord(packageName, uid).lockedAppFields;
+        return (userLockedFields & LockableAppFields.USER_LOCKED_IMPORTANCE) != 0;
+    }
+
     @Override
     public boolean canShowBadge(String packageName, int uid) {
         return getOrCreateRecord(packageName, uid).showBadge;
@@ -615,7 +652,12 @@ public class RankingHelper implements RankingConfig {
             // system apps and dnd access apps can bypass dnd if the user hasn't changed any
             // fields on the channel yet
             if (existing.getUserLockedFields() == 0 && (isSystemApp || hasDndAccess)) {
-                existing.setBypassDnd(channel.canBypassDnd());
+                boolean bypassDnd = channel.canBypassDnd();
+                existing.setBypassDnd(bypassDnd);
+
+                if (bypassDnd != mAreChannelsBypassingDnd) {
+                    updateChannelsBypassingDnd();
+                }
             }
 
             updateConfig();
@@ -642,6 +684,9 @@ public class RankingHelper implements RankingConfig {
         }
 
         r.channels.put(channel.getId(), channel);
+        if (channel.canBypassDnd() != mAreChannelsBypassingDnd) {
+            updateChannelsBypassingDnd();
+        }
         MetricsLogger.action(getChannelLog(channel, pkg).setType(
                 MetricsProto.MetricsEvent.TYPE_OPEN));
     }
@@ -748,6 +793,10 @@ public class RankingHelper implements RankingConfig {
             // only log if there are real changes
             MetricsLogger.action(getChannelLog(updatedChannel, pkg));
         }
+
+        if (updatedChannel.canBypassDnd() != mAreChannelsBypassingDnd) {
+            updateChannelsBypassingDnd();
+        }
         updateConfig();
     }
 
@@ -781,6 +830,10 @@ public class RankingHelper implements RankingConfig {
             LogMaker lm = getChannelLog(channel, pkg);
             lm.setType(MetricsProto.MetricsEvent.TYPE_CLOSE);
             MetricsLogger.action(lm);
+
+            if (mAreChannelsBypassingDnd && channel.canBypassDnd()) {
+                updateChannelsBypassingDnd();
+            }
         }
     }
 
@@ -978,6 +1031,60 @@ public class RankingHelper implements RankingConfig {
         return blockedCount;
     }
 
+    public int getBlockedAppCount(int userId) {
+        int count = 0;
+        synchronized (mRecords) {
+            final int N = mRecords.size();
+            for (int i = 0; i < N; i++) {
+                final Record r = mRecords.valueAt(i);
+                if (userId == UserHandle.getUserId(r.uid)
+                        && r.importance == IMPORTANCE_NONE) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    public void updateChannelsBypassingDnd() {
+        synchronized (mRecords) {
+            final int numRecords = mRecords.size();
+            for (int recordIndex = 0; recordIndex < numRecords; recordIndex++) {
+                final Record r = mRecords.valueAt(recordIndex);
+                final int numChannels = r.channels.size();
+
+                for (int channelIndex = 0; channelIndex < numChannels; channelIndex++) {
+                    NotificationChannel channel = r.channels.valueAt(channelIndex);
+                    if (!channel.isDeleted() && channel.canBypassDnd()) {
+                        if (!mAreChannelsBypassingDnd) {
+                            mAreChannelsBypassingDnd = true;
+                            updateZenPolicy(true);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        if (mAreChannelsBypassingDnd) {
+            mAreChannelsBypassingDnd = false;
+            updateZenPolicy(false);
+        }
+    }
+
+    public void updateZenPolicy(boolean areChannelsBypassingDnd) {
+        NotificationManager.Policy policy = mZenModeHelper.getNotificationPolicy();
+        mZenModeHelper.setNotificationPolicy(new NotificationManager.Policy(
+                policy.priorityCategories, policy.priorityCallSenders,
+                policy.priorityMessageSenders, policy.suppressedVisualEffects,
+                (areChannelsBypassingDnd ? NotificationManager.Policy.STATE_CHANNELS_BYPASSING_DND
+                        : 0)));
+    }
+
+    public boolean areChannelsBypassingDnd() {
+        return mAreChannelsBypassingDnd;
+    }
+
     /**
      * Sets importance.
      */
@@ -994,6 +1101,21 @@ public class RankingHelper implements RankingConfig {
         }
         setImportance(packageName, uid,
                 enabled ? DEFAULT_IMPORTANCE : IMPORTANCE_NONE);
+    }
+
+    /**
+     * Sets whether any notifications from the app, represented by the given {@code pkgName} and
+     * {@code uid}, have their importance locked by the user. Locked notifications don't get
+     * considered for sentiment adjustments (and thus never show a blocking helper).
+     */
+    public void setAppImportanceLocked(String packageName, int uid) {
+        Record record = getOrCreateRecord(packageName, uid);
+        if ((record.lockedAppFields & LockableAppFields.USER_LOCKED_IMPORTANCE) != 0) {
+            return;
+        }
+
+        record.lockedAppFields = record.lockedAppFields | LockableAppFields.USER_LOCKED_IMPORTANCE;
+        updateConfig();
     }
 
     @VisibleForTesting
@@ -1162,12 +1284,16 @@ public class RankingHelper implements RankingConfig {
                         if (r.showBadge != DEFAULT_SHOW_BADGE) {
                             record.put("showBadge", Boolean.valueOf(r.showBadge));
                         }
+                        JSONArray channels = new JSONArray();
                         for (NotificationChannel channel : r.channels.values()) {
-                            record.put("channel", channel.toJson());
+                            channels.put(channel.toJson());
                         }
+                        record.put("channels", channels);
+                        JSONArray groups = new JSONArray();
                         for (NotificationChannelGroup group : r.groups.values()) {
-                            record.put("group", group.toJson());
+                            groups.put(group.toJson());
                         }
+                        record.put("groups", groups);
                     } catch (JSONException e) {
                         // pass
                     }
@@ -1413,6 +1539,7 @@ public class RankingHelper implements RankingConfig {
         int priority = DEFAULT_PRIORITY;
         int visibility = DEFAULT_VISIBILITY;
         boolean showBadge = DEFAULT_SHOW_BADGE;
+        int lockedAppFields = DEFAULT_LOCKED_APP_FIELDS;
 
         ArrayMap<String, NotificationChannel> channels = new ArrayMap<>();
         Map<String, NotificationChannelGroup> groups = new ConcurrentHashMap<>();

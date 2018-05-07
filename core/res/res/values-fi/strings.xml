@@ -303,7 +303,7 @@
     <string name="capability_desc_canRequestTouchExploration" msgid="7543249041581408313">"Kosketetut kohteet sanotaan ääneen, ja ruudulla voi liikkua eleiden avulla."</string>
     <string name="capability_title_canRequestFilterKeyEvents" msgid="2103440391902412174">"Tarkkailla kirjoittamaasi tekstiä"</string>
     <string name="capability_desc_canRequestFilterKeyEvents" msgid="7463135292204152818">"Sisältää henkilökohtaisia tietoja, kuten luottokortin numeroita ja salasanoja."</string>
-    <string name="capability_title_canControlMagnification" msgid="3593493281059424855">"Näytön suurentamisen hallinnointi"</string>
+    <string name="capability_title_canControlMagnification" msgid="3593493281059424855">"Kontrolloida näytön suurentamista"</string>
     <string name="capability_desc_canControlMagnification" msgid="4791858203568383773">"Hallinnoi näytön zoomaustasoa ja asettelua."</string>
     <string name="capability_title_canPerformGestures" msgid="7418984730362576862">"Eleiden käyttäminen"</string>
     <string name="capability_desc_canPerformGestures" msgid="8296373021636981249">"Lupa napauttaa, pyyhkäistä, nipistää ja käyttää muita eleitä."</string>
@@ -601,7 +601,7 @@
     <string name="policydesc_encryptedStorage" msgid="2637732115325316992">"Pakota tallennettujen sovellustietojen salaus."</string>
     <string name="policylab_disableCamera" msgid="6395301023152297826">"Poista kamerat käytöstä"</string>
     <string name="policydesc_disableCamera" msgid="2306349042834754597">"Estä laitteen kaikkien kameroiden käyttö."</string>
-    <string name="policylab_disableKeyguardFeatures" msgid="8552277871075367771">"Estä lukitun näytön toimintoja"</string>
+    <string name="policylab_disableKeyguardFeatures" msgid="8552277871075367771">"Estää lukitun näytön toimintoja"</string>
     <string name="policydesc_disableKeyguardFeatures" msgid="2044755691354158439">"Estä joidenkin lukitun näytön toimintojen käyttö."</string>
   <string-array name="phoneTypes">
     <item msgid="8901098336658710359">"Koti"</item>
@@ -836,7 +836,8 @@
     <string name="double_tap_toast" msgid="4595046515400268881">"Vinkki: lähennä ja loitonna kaksoisnapauttamalla."</string>
     <string name="autofill_this_form" msgid="4616758841157816676">"Aut. täyttö"</string>
     <string name="setup_autofill" msgid="7103495070180590814">"Määritä autom. täyttö"</string>
-    <string name="autofill_window_title" msgid="921006636895825007">"Automaattinen täyttö"</string>
+    <!-- no translation found for autofill_window_title (4107745526909284887) -->
+    <skip />
     <string name="autofill_address_name_separator" msgid="6350145154779706772">" "</string>
     <string name="autofill_address_summary_name_format" msgid="3268041054899214945">"$1$2$3"</string>
     <string name="autofill_address_summary_separator" msgid="7483307893170324129">", "</string>
@@ -1014,8 +1015,7 @@
     <string name="dial" msgid="1253998302767701559">"Soita"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Soita valittuun puhelinnumeroon"</string>
     <string name="map" msgid="5441053548030107189">"Kartta"</string>
-    <!-- no translation found for map_desc (1836995341943772348) -->
-    <skip />
+    <string name="map_desc" msgid="1836995341943772348">"Etsi valittu osoite kartalta"</string>
     <string name="browse" msgid="1245903488306147205">"Avaa"</string>
     <string name="browse_desc" msgid="8220976549618935044">"Avaa valittu URL-osoite"</string>
     <string name="sms" msgid="4560537514610063430">"Viesti"</string>
@@ -1267,7 +1267,7 @@
     <string name="select_keyboard_layout_notification_message" msgid="8084622969903004900">"Valitse kieli ja asettelu koskettamalla."</string>
     <string name="fast_scroll_alphabet" msgid="5433275485499039199">" ABCDEFGHIJKLMNOPQRSTUVWXYZÅÄÖ"</string>
     <string name="fast_scroll_numeric_alphabet" msgid="4030170524595123610">" 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"</string>
-    <string name="alert_windows_notification_channel_group_name" msgid="1463953341148606396">"Sovellusten päällä näkyminen"</string>
+    <string name="alert_windows_notification_channel_group_name" msgid="1463953341148606396">"Näkyminen muiden päällä"</string>
     <string name="alert_windows_notification_channel_name" msgid="3116610965549449803">"<xliff:g id="NAME">%s</xliff:g> näkyy muiden sovellusten päällä"</string>
     <string name="alert_windows_notification_title" msgid="3697657294867638947">"<xliff:g id="NAME">%s</xliff:g> näkyy sovellusten päällä"</string>
     <string name="alert_windows_notification_message" msgid="8917232109522912560">"Jos et halua, että <xliff:g id="NAME">%s</xliff:g> voi käyttää tätä ominaisuutta, avaa asetukset napauttamalla ja poista se käytöstä."</string>
@@ -1691,7 +1691,8 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Järjestelmänvalvoja asensi tämän."</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Järjestelmänvalvoja päivitti tämän."</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Järjestelmänvalvoja poisti tämän."</string>
-    <string name="battery_saver_description" msgid="4660824093877546730">"Parantaakseen akun kestoa virransäästö vähentää laitteesi suorituskykyä ja rajoittaa värinää, sijaintipalveluita ja taustadataa tai poistaa ne käytöstä. Sähköposti, viestit ja muut synkronointiin perustuvat sovellukset eivät välttämättä päivity, ellet avaa niitä.\n\nVirransäästö poistuu käytöstä automaattisesti, kun laitteesi latautuu."</string>
+    <string name="battery_saver_description_with_learn_more" msgid="6323937147992667707">"Virransäästö poistaa joitakin laitteen ominaisuuksia käytöstä ja rajoittaa sovelluksia parantaakseen akunkestoa. "<annotation id="url">"Lisätietoja"</annotation></string>
+    <string name="battery_saver_description" msgid="769989536172631582">"Virransäästö poistaa joitakin laitteen ominaisuuksia käytöstä ja rajoittaa sovelluksia parantaakseen akunkestoa."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Data Saver estää joitakin sovelluksia lähettämästä tai vastaanottamasta tietoja taustalla, jotta datan käyttöä voidaan vähentää. Käytössäsi oleva sovellus voi yhä käyttää dataa, mutta se saattaa tehdä niin tavallista harvemmin. Tämä voi tarkoittaa esimerkiksi sitä, että kuva ladataan vasta, kun kosketat sitä."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Otetaanko Data Saver käyttöön?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Ota käyttöön"</string>
@@ -1739,7 +1740,7 @@
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Viikonloppuna"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Tapahtuma"</string>
     <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"Nukkuminen"</string>
-    <string name="muted_by" msgid="6147073845094180001">"Mykistänyt <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
+    <string name="muted_by" msgid="5942954724562097128">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g> mykistää joitakin ääniä"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"Laitteellasi on sisäinen ongelma, joka aiheuttaa epävakautta. Voit korjata tilanteen palauttamalla tehdasasetukset."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"Laitteesi yhdistäminen ei onnistu sisäisen virheen takia. Saat lisätietoja valmistajalta."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5214333646366591205">"USSD-pyyntö vaihdettu tavalliseksi puheluksi"</string>
@@ -1778,6 +1779,9 @@
     <string name="language_picker_section_all" msgid="3097279199511617537">"Kaikki kielet"</string>
     <string name="region_picker_section_all" msgid="8966316787153001779">"Kaikki alueet"</string>
     <string name="locale_search_menu" msgid="2560710726687249178">"Haku"</string>
+    <string name="app_suspended_title" msgid="1919029799438164552">"Sovellusta ei voi avata"</string>
+    <string name="app_suspended_default_message" msgid="7875306315686531621">"Sovellus <xliff:g id="APP_NAME_0">%1$s</xliff:g> ei ole juuri nyt saatavilla. Tästä vastaa <xliff:g id="APP_NAME_1">%2$s</xliff:g>."</string>
+    <string name="app_suspended_more_details" msgid="1131804827776778187">"Lue lisää"</string>
     <string name="work_mode_off_title" msgid="1118691887588435530">"Otetaanko työprofiili käyttöön?"</string>
     <string name="work_mode_off_message" msgid="5130856710614337649">"Työsovellukset, ‑ilmoitukset, ‑tiedot ja muut työprofiiliominaisuudet otetaan käyttöön"</string>
     <string name="work_mode_turn_on" msgid="2062544985670564875">"Ota käyttöön"</string>
@@ -1867,10 +1871,11 @@
     <string name="volume_dialog_ringer_guidance_silent" msgid="2128975224280276122">"Puhelut ja ilmoitukset mykistetään"</string>
     <string name="notification_channel_system_changes" msgid="5072715579030948646">"Järjestelmän muutokset"</string>
     <string name="notification_channel_do_not_disturb" msgid="6766940333105743037">"Älä häiritse"</string>
-    <string name="zen_upgrade_notification_visd_title" msgid="4168873821019741166">"Älä häiritse ‑tila piilottaa ilmoitukset, jotta voit keskittyä paremmin"</string>
-    <string name="zen_upgrade_notification_visd_content" msgid="6776377368195804354">"Tämä toiminto on muuttunut. Muuta napauttamalla."</string>
+    <string name="zen_upgrade_notification_visd_title" msgid="3288313883409759733">"Uutta: Älä häiritse ‑tila piilottaa ilmoitukset"</string>
+    <string name="zen_upgrade_notification_visd_content" msgid="5533674060311631165">"Napauta, jos haluat lukea lisää ja tehdä muutoksia."</string>
     <string name="zen_upgrade_notification_title" msgid="3799603322910377294">"Älä häiritse ‑tila muuttui"</string>
     <string name="zen_upgrade_notification_content" msgid="1794994264692424562">"Napauta niin näet, mitä on estetty."</string>
     <string name="notification_app_name_system" msgid="4205032194610042794">"Järjestelmä"</string>
     <string name="notification_app_name_settings" msgid="7751445616365753381">"Asetukset"</string>
+    <string name="car_loading_profile" msgid="3545132581795684027">"Ladataan"</string>
 </resources>

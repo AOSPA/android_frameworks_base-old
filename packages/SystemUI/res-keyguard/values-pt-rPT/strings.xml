@@ -140,7 +140,7 @@
       <item quantity="one">O dispositivo não é desbloqueado há <xliff:g id="NUMBER_0">%d</xliff:g> hora. Confirme a palavra-passe.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Não reconhecido"</string>
-    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="3739658416797652781">
       <item quantity="other">Introduza o PIN do cartão SIM. Tem mais <xliff:g id="NUMBER_1">%d</xliff:g> tentativas.</item>
       <item quantity="one">Introduza o PIN do cartão SIM. Tem mais <xliff:g id="NUMBER_0">%d</xliff:g> tentativa antes de ser necessário contactar o operador para desbloquear o dispositivo.</item>
     </plurals>

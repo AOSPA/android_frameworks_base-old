@@ -45,6 +45,7 @@ interface ILockSettings {
     boolean checkVoldPassword(int userId);
     boolean havePattern(int userId);
     boolean havePassword(int userId);
+    byte[] getHashFactor(String currentCredential, int userId);
     void setSeparateProfileChallengeEnabled(int userId, boolean enabled, String managedUserPassword);
     boolean getSeparateProfileChallengeEnabled(int userId);
     void registerStrongAuthTracker(in IStrongAuthTracker tracker);
@@ -57,7 +58,6 @@ interface ILockSettings {
     // Keystore RecoveryController methods.
     // {@code ServiceSpecificException} may be thrown to signal an error, which caller can
     // convert to  {@code RecoveryManagerException}.
-    void initRecoveryService(in String rootCertificateAlias, in byte[] signedPublicKeyList);
     void initRecoveryServiceWithSigFile(in String rootCertificateAlias,
             in byte[] recoveryServiceCertFile, in byte[] recoveryServiceSigFile);
     KeyChainSnapshot getKeyChainSnapshot();
@@ -71,14 +71,9 @@ interface ILockSettings {
     Map getRecoveryStatus();
     void setRecoverySecretTypes(in int[] secretTypes);
     int[] getRecoverySecretTypes();
-    byte[] startRecoverySession(in String sessionId,
-            in byte[] verifierPublicKey, in byte[] vaultParams, in byte[] vaultChallenge,
-            in List<KeyChainProtectionParams> secrets);
     byte[] startRecoverySessionWithCertPath(in String sessionId, in String rootCertificateAlias,
             in RecoveryCertPath verifierCertPath, in byte[] vaultParams, in byte[] vaultChallenge,
             in List<KeyChainProtectionParams> secrets);
-    Map/*<String, byte[]>*/ recoverKeys(in String sessionId, in byte[] recoveryKeyBlob,
-            in List<WrappedApplicationKey> applicationKeys);
     Map/*<String, String>*/ recoverKeyChainSnapshot(
             in String sessionId,
             in byte[] recoveryKeyBlob,

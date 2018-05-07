@@ -584,8 +584,41 @@ public class LockSettingsService extends ILockSettings.Stub {
                 if (mUserManager.getUserInfo(userId).isManagedProfile()) {
                     tieManagedProfileLockIfNecessary(userId, null);
                 }
+
+                // If the user doesn't have a credential, try and derive their secret for the
+                // AuthSecret HAL. The secret will have been enrolled if the user previously set a
+                // credential and still needs to be passed to the HAL once that credential is
+                // removed.
+                if (mUserManager.getUserInfo(userId).isPrimary() && !isUserSecure(userId)) {
+                    tryDeriveAuthTokenForUnsecuredPrimaryUser(userId);
+                }
             }
         });
+    }
+
+    private void tryDeriveAuthTokenForUnsecuredPrimaryUser(@UserIdInt int userId) {
+        synchronized (mSpManager) {
+            // Make sure the user has a synthetic password to derive
+            if (!isSyntheticPasswordBasedCredentialLocked(userId)) {
+                return;
+            }
+
+            try {
+                final long handle = getSyntheticPasswordHandleLocked(userId);
+                final String noCredential = null;
+                AuthenticationResult result =
+                        mSpManager.unwrapPasswordBasedSyntheticPassword(
+                                getGateKeeperService(), handle, noCredential, userId, null);
+                if (result.authToken != null) {
+                    Slog.i(TAG, "Retrieved auth token for user " + userId);
+                    onAuthTokenKnownForUser(userId, result.authToken);
+                } else {
+                    Slog.e(TAG, "Auth token not available for user " + userId);
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failure retrieving auth token", e);
+            }
+        }
     }
 
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
@@ -1709,7 +1742,8 @@ public class LockSettingsService extends ILockSettings.Stub {
             if (storedHash.type == LockPatternUtils.CREDENTIAL_TYPE_PATTERN) {
                 hash = LockPatternUtils.patternToHash(LockPatternUtils.stringToPattern(credential));
             } else {
-                hash = mLockPatternUtils.passwordToHash(credential, userId);
+                hash = mLockPatternUtils.legacyPasswordToHash(credential, userId)
+                        .getBytes(StandardCharsets.UTF_8);
             }
             if (Arrays.equals(hash, storedHash.hash)) {
                 if (storedHash.type == LockPatternUtils.CREDENTIAL_TYPE_PATTERN) {
@@ -1980,13 +2014,6 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     @Override
-    public void initRecoveryService(@NonNull String rootCertificateAlias,
-            @NonNull byte[] signedPublicKeyList) throws RemoteException {
-        mRecoverableKeyStoreManager.initRecoveryService(rootCertificateAlias,
-                signedPublicKeyList);
-    }
-
-    @Override
     public void initRecoveryServiceWithSigFile(@NonNull String rootCertificateAlias,
             @NonNull byte[] recoveryServiceCertFile, @NonNull byte[] recoveryServiceSigFile)
             throws RemoteException {
@@ -2033,15 +2060,6 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     @Override
-    public byte[] startRecoverySession(@NonNull String sessionId,
-            @NonNull byte[] verifierPublicKey, @NonNull byte[] vaultParams,
-            @NonNull byte[] vaultChallenge, @NonNull List<KeyChainProtectionParams> secrets)
-            throws RemoteException {
-        return mRecoverableKeyStoreManager.startRecoverySession(sessionId, verifierPublicKey,
-                vaultParams, vaultChallenge, secrets);
-    }
-
-    @Override
     public @NonNull byte[] startRecoverySessionWithCertPath(@NonNull String sessionId,
             @NonNull String rootCertificateAlias, @NonNull RecoveryCertPath verifierCertPath,
             @NonNull byte[] vaultParams, @NonNull byte[] vaultChallenge,
@@ -2050,11 +2068,6 @@ public class LockSettingsService extends ILockSettings.Stub {
         return mRecoverableKeyStoreManager.startRecoverySessionWithCertPath(
                 sessionId, rootCertificateAlias, verifierCertPath, vaultParams, vaultChallenge,
                 secrets);
-    }
-
-    @Override
-    public void closeSession(@NonNull String sessionId) throws RemoteException {
-        mRecoverableKeyStoreManager.closeSession(sessionId);
     }
 
     @Override
@@ -2067,10 +2080,8 @@ public class LockSettingsService extends ILockSettings.Stub {
     }
 
     @Override
-    public @NonNull Map<String, byte[]> recoverKeys(@NonNull String sessionId,
-            @NonNull byte[] recoveryKeyBlob, @NonNull List<WrappedApplicationKey> applicationKeys)
-            throws RemoteException {
-        return mRecoverableKeyStoreManager.recoverKeys(sessionId, recoveryKeyBlob, applicationKeys);
+    public void closeSession(@NonNull String sessionId) throws RemoteException {
+        mRecoverableKeyStoreManager.closeSession(sessionId);
     }
 
     @Override
@@ -2520,6 +2531,33 @@ public class LockSettingsService extends ILockSettings.Stub {
             // synthetic password. That would invalidate existing escrow tokens though.
         }
         mRecoverableKeyStoreManager.lockScreenSecretChanged(credentialType, credential, userId);
+    }
+
+    /**
+     * Returns a fixed pseudorandom byte string derived from the user's synthetic password.
+     * This is used to salt the password history hash to protect the hash against offline
+     * bruteforcing, since rederiving this value requires a successful authentication.
+     */
+    @Override
+    public byte[] getHashFactor(String currentCredential, int userId) throws RemoteException {
+        checkPasswordReadPermission(userId);
+        if (TextUtils.isEmpty(currentCredential)) {
+            currentCredential = null;
+        }
+        synchronized (mSpManager) {
+            if (!isSyntheticPasswordBasedCredentialLocked(userId)) {
+                Slog.w(TAG, "Synthetic password not enabled");
+                return null;
+            }
+            long handle = getSyntheticPasswordHandleLocked(userId);
+            AuthenticationResult auth = mSpManager.unwrapPasswordBasedSyntheticPassword(
+                    getGateKeeperService(), handle, currentCredential, userId, null);
+            if (auth.authToken == null) {
+                Slog.w(TAG, "Current credential is incorrect");
+                return null;
+            }
+            return auth.authToken.derivePasswordHashFactor();
+        }
     }
 
     private long addEscrowToken(byte[] token, int userId) throws RemoteException {

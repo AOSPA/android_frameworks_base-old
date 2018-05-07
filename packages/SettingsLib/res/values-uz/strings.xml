@@ -21,7 +21,7 @@
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="wifi_fail_to_scan" msgid="1265540342578081461">"Tarmoqlarni tekshirib chiqishni iloji bo‘lmadi"</string>
-    <string name="wifi_security_none" msgid="7985461072596594400">"Yo‘q"</string>
+    <string name="wifi_security_none" msgid="7985461072596594400">"Hech qanday"</string>
     <string name="wifi_remembered" msgid="4955746899347821096">"Saqlandi"</string>
     <string name="wifi_disabled_generic" msgid="4259794910584943386">"O‘chiq"</string>
     <string name="wifi_disabled_network_failure" msgid="2364951338436007124">"IP manzilini sozlab bo‘lmadi"</string>
@@ -216,20 +216,15 @@
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"Bluetooth AVRCP versiyasi"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"Bluetooth AVRCP versiyasini tanlang"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"Bluetooth audio kodeki"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_type_dialog_title (8436224899475822557) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="8436224899475822557">"Bluetooth orqali uzatish uchun audiokodek\nTanlash"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"Bluetooth audio namunasi chastotasi"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_sample_rate_dialog_title (8010380028880963535) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"Bluetooth orqali uzatish uchun audiokodek\nTanlash: namuna chastotasi"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample" msgid="2099645202720164141">"Bluetooth audio namunasidagi bitlar soni"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_bits_per_sample_dialog_title (8063859754619484760) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="8063859754619484760">"Bluetooth orqali uzatish uchun audiokodek\nTanlash: namunadagi bitlar soni"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"Bluetooth audio kanali rejimi"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_channel_mode_dialog_title (7234956835280563341) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="7234956835280563341">"Bluetooth orqali uzatish uchun audiokodek\nTanlash: kanal rejimi"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"LDAC audiokodeki bilan ijro etish sifati (Bluetooth orqali)"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title (7595776220458732825) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="7595776220458732825">"Bluetooth orqali uzatish uchun LDAC audiokodeki\nTanlash: ijro etish sifati"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"Translatsiya: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"Shaxsiy DNS"</string>
     <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"Shaxsiy DNS rejimini tanlang"</string>
@@ -241,7 +236,7 @@
     <string name="wifi_display_certification_summary" msgid="1155182309166746973">"Simsiz monitorlarni sertifikatlash parametrini ko‘rsatish"</string>
     <string name="wifi_verbose_logging_summary" msgid="6615071616111731958">"Wi-Fi ulanishini tanlashda har bir SSID uchun jurnalda ko‘rsatilsin"</string>
     <string name="wifi_connected_mac_randomization_summary" msgid="1743059848752201485">"Wi-Fi tarmoqlarga ulanishda MAC manzilini tasodifiy tanlash"</string>
-    <string name="wifi_metered_label" msgid="4514924227256839725">"Trafik hisobi yuritiladigan tarmoq"</string>
+    <string name="wifi_metered_label" msgid="4514924227256839725">"Trafik hisoblanadigan tarmoq"</string>
     <string name="wifi_unmetered_label" msgid="6124098729457992931">"Trafik hisobi yuritilmaydigan tarmoq"</string>
     <string name="select_logd_size_title" msgid="7433137108348553508">"Jurnal buferi hajmi"</string>
     <string name="select_logd_size_dialog_title" msgid="1206769310236476760">"Jurnal xotirasi hajmini tanlang"</string>
@@ -274,7 +269,7 @@
     <string name="debug_app_not_set" msgid="718752499586403499">"Nosozliklarni tuzatish uchun hech qanday ilova ko‘rsatilmagan"</string>
     <string name="debug_app_set" msgid="2063077997870280017">"Nosozliklarni tuzatuvchi ilova: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="select_application" msgid="5156029161289091703">"Ilovani tanlang"</string>
-    <string name="no_application" msgid="2813387563129153880">"Yo‘q"</string>
+    <string name="no_application" msgid="2813387563129153880">"Hech narsa"</string>
     <string name="wait_for_debugger" msgid="1202370874528893091">"Tuzatuvchi dasturni kuting"</string>
     <string name="wait_for_debugger_summary" msgid="1766918303462746804">"Ilova nosozliklarni tuzatuvchi dasturga ulanishni kutmoqda"</string>
     <string name="debug_input_category" msgid="1811069939601180246">"Matn kiritish"</string>
@@ -372,11 +367,12 @@
     <string name="accessibility_display_daltonizer_preference_title" msgid="5800761362678707872">"Rangni tuzatish"</string>
     <string name="accessibility_display_daltonizer_preference_subtitle" msgid="3484969015295282911">"Bu funksiya tajribaviy bo‘lib, u qurilma unumdorligiga ta’sir qilishi mumkin."</string>
     <string name="daltonizer_type_overridden" msgid="3116947244410245916">"<xliff:g id="TITLE">%1$s</xliff:g> bilan almashtirildi"</string>
-    <string name="power_remaining_duration_only" msgid="845431008899029842">"Taxminan <xliff:g id="TIME">%1$s</xliff:g> qoldi"</string>
-    <string name="power_discharging_duration" msgid="6655472132189365839">"Taxminan <xliff:g id="TIME">%1$s</xliff:g> qoldi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_enhanced" msgid="5992456722677973678">"Joriy holatda taxminan <xliff:g id="TIME">%1$s</xliff:g> qoldi"</string>
-    <string name="power_discharging_duration_enhanced" msgid="5726302316642148671">"Joriy holatda taxminan <xliff:g id="TIME">%1$s</xliff:g> qoldi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_short" msgid="5329694252258605547">"<xliff:g id="TIME">%1$s</xliff:g> qoldi"</string>
+    <string name="power_remaining_settings_home_page" msgid="4845022416859002011">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> – <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
+    <string name="power_remaining_duration_only" msgid="6123167166221295462">"Taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi"</string>
+    <string name="power_discharging_duration" msgid="8848256785736335185">"Taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Joriy holatda taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi"</string>
+    <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Joriy holatda taxminan <xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"<xliff:g id="TIME_REMAINING">%1$s</xliff:g> qoldi"</string>
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"Joriy holatda taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha davom etadi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"Joriy holatda taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha davom etadi"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"Taxminan <xliff:g id="TIME">%1$s</xliff:g> gacha davom etadi (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
@@ -427,7 +423,7 @@
     <string name="retail_demo_reset_next" msgid="8356731459226304963">"Keyingisi"</string>
     <string name="retail_demo_reset_title" msgid="696589204029930100">"Parolni kiritish zarur"</string>
     <string name="active_input_method_subtypes" msgid="3596398805424733238">"Faol matn kiritish usullari"</string>
-    <string name="use_system_language_to_select_input_method_subtypes" msgid="5747329075020379587">"Tizimda mavjud tillar"</string>
+    <string name="use_system_language_to_select_input_method_subtypes" msgid="5747329075020379587">"Tizimdagi mavjud tillar"</string>
     <string name="failed_to_open_app_settings_toast" msgid="1251067459298072462">"<xliff:g id="SPELL_APPLICATION_NAME">%1$s</xliff:g> sozlamalarini ochmadi"</string>
     <string name="ime_security_warning" msgid="4135828934735934248">"Ushbu yozish usuli barcha yozgan matnlaringizni to‘plab olishi mumkin, jumladan kredit karta raqamlari va parollar kabi shaxsiy ma‘lumotlarni ham. Usul  <xliff:g id="IME_APPLICATION_NAME">%1$s</xliff:g> ilovasi bilan o‘rnatiladi. Ushbu usuldan foydalanilsinmi?"</string>
     <string name="direct_boot_unaware_dialog_message" msgid="7870273558547549125">"Eslatma: O‘chirib-yoqilgandan so‘ng, bu ilova to telefoningiz qulfdan chiqarilmaguncha ishga tushmaydi"</string>

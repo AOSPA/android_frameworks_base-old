@@ -91,6 +91,7 @@ import static com.android.server.am.ActivityStackProto.RESUMED_ACTIVITY;
 import static com.android.server.am.ActivityStackProto.TASKS;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_OPEN;
+import static android.view.WindowManager.TRANSIT_CRASHING_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_TASK_CLOSE;
 import static android.view.WindowManager.TRANSIT_TASK_OPEN;
@@ -519,11 +520,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     @Override
     public void setWindowingMode(int windowingMode) {
         setWindowingMode(windowingMode, false /* animate */, false /* showRecents */,
-                false /* enteringSplitScreenMode */);
+                false /* enteringSplitScreenMode */, false /* deferEnsuringVisibility */);
     }
 
     void setWindowingMode(int preferredWindowingMode, boolean animate, boolean showRecents,
-            boolean enteringSplitScreenMode) {
+            boolean enteringSplitScreenMode, boolean deferEnsuringVisibility) {
         final boolean creating = mWindowContainerController == null;
         final int currentMode = getWindowingMode();
         final ActivityDisplay display = getDisplay();
@@ -559,7 +560,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 // doesn't support split-screen mode, go ahead an dismiss split-screen and display a
                 // warning toast about it.
                 mService.mTaskChangeNotificationController.notifyActivityDismissingDockedStack();
-                display.getSplitScreenPrimaryStack().setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+                display.getSplitScreenPrimaryStack().setWindowingMode(WINDOWING_MODE_FULLSCREEN,
+                        false /* animate */, false /* showRecents */,
+                        false /* enteringSplitScreenMode */, true /* deferEnsuringVisibility */);
             }
         }
 
@@ -650,9 +653,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             wm.continueSurfaceLayout();
         }
 
-        // Don't ensure visible activities if the windowing mode change was a side effect of us
-        // entering split-screen mode.
-        if (!enteringSplitScreenMode) {
+        if (!deferEnsuringVisibility) {
             mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, PRESERVE_WINDOWS);
             mStackSupervisor.resumeFocusedStackTopActivityLocked();
         }
@@ -1498,8 +1499,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
                 mService.getLifecycleManager().scheduleTransaction(prev.app.thread, prev.appToken,
                         PauseActivityItem.obtain(prev.finishing, userLeaving,
-                                prev.configChangeFlags, pauseImmediately).setDescription(
-                                        prev.getLifecycleDescription("startPausingLocked")));
+                                prev.configChangeFlags, pauseImmediately));
             } catch (Exception e) {
                 // Ignore exception, if process died other code will cleanup.
                 Slog.w(TAG, "Exception thrown during pause", e);
@@ -1752,6 +1752,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
     boolean isTopStackOnDisplay() {
         return getDisplay().isTopStack(this);
+    }
+
+    boolean isTopActivityVisible() {
+        final ActivityRecord topActivity = getTopActivity();
+        return topActivity != null && topActivity.visible;
     }
 
     /**
@@ -2721,9 +2726,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     next.clearOptionsLocked();
                     transaction.setLifecycleStateRequest(
                             ResumeActivityItem.obtain(next.app.repProcState,
-                                    mService.isNextTransitionForward())
-                                    .setDescription(next.getLifecycleDescription(
-                                            "resumeTopActivityInnerLocked")));
+                                    mService.isNextTransitionForward()));
                     mService.getLifecycleManager().scheduleTransaction(transaction);
 
                     if (DEBUG_STATES) Slog.d(TAG_STATES, "resumeTopActivityLocked: Resumed "
@@ -3520,8 +3523,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 EventLogTags.writeAmStopActivity(
                         r.userId, System.identityHashCode(r), r.shortComponentName);
                 mService.getLifecycleManager().scheduleTransaction(r.app.thread, r.appToken,
-                        StopActivityItem.obtain(r.visible, r.configChangeFlags)
-                                .setDescription(r.getLifecycleDescription("stopActivityLocked")));
+                        StopActivityItem.obtain(r.visible, r.configChangeFlags));
                 if (shouldSleepOrShutDownActivities()) {
                     r.setSleeping(true);
                 }
@@ -3599,6 +3601,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         int taskNdx = mTaskHistory.indexOf(finishedTask);
         final TaskRecord task = finishedTask;
         int activityNdx = task.mActivities.indexOf(r);
+        mWindowManager.prepareAppTransition(TRANSIT_CRASHING_ACTIVITY_CLOSE, false /* TODO */,
+                0, true /* forceOverride */);
         finishActivityLocked(r, Activity.RESULT_CANCELED, null, reason, false);
         finishedTask = task;
         // Also terminate any activities below it that aren't yet
@@ -3838,7 +3842,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         // and the resumed activity is not yet visible, then hold off on
         // finishing until the resumed one becomes visible.
 
-        final ActivityRecord next = mStackSupervisor.topRunningActivityLocked();
+        // The activity that we are finishing may be over the lock screen. In this case, we do not
+        // want to consider activities that cannot be shown on the lock screen as running and should
+        // proceed with finishing the activity if there is no valid next top running activity.
+        final ActivityRecord next = mStackSupervisor.topRunningActivityLocked(
+                true /* considerKeyguardState */);
 
         if (mode == FINISH_AFTER_VISIBLE && (r.visible || r.nowVisible)
                 && next != null && !next.nowVisible) {
@@ -4348,9 +4356,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             try {
                 if (DEBUG_SWITCH) Slog.i(TAG_SWITCH, "Destroying: " + r);
                 mService.getLifecycleManager().scheduleTransaction(r.app.thread, r.appToken,
-                        DestroyActivityItem.obtain(r.finishing, r.configChangeFlags)
-                            .setDescription(
-                                    r.getLifecycleDescription("destroyActivityLocked:" + reason)));
+                        DestroyActivityItem.obtain(r.finishing, r.configChangeFlags));
             } catch (Exception e) {
                 // We can just ignore exceptions here...  if the process
                 // has crashed, our death notification will clean things
@@ -5029,6 +5035,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                             + r.intent.getComponent().flattenToShortString());
                     // Force the destroy to skip right to removal.
                     r.app = null;
+                    mWindowManager.prepareAppTransition(TRANSIT_CRASHING_ACTIVITY_CLOSE,
+                            false /* TODO */, 0, true /* forceOverride */);
                     finishCurrentActivityLocked(r, FINISH_IMMEDIATELY, false,
                             "handleAppCrashedLocked");
                 }

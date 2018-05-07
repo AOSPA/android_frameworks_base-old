@@ -86,6 +86,7 @@ import com.android.server.location.ActivityRecognitionProxy;
 import com.android.server.location.GeocoderProxy;
 import com.android.server.location.GeofenceManager;
 import com.android.server.location.GeofenceProxy;
+import com.android.server.location.GnssBatchingProvider;
 import com.android.server.location.GnssLocationProvider;
 import com.android.server.location.GnssMeasurementsProvider;
 import com.android.server.location.GnssNavigationMessageProvider;
@@ -247,7 +248,7 @@ public class LocationManagerService extends ILocationManager.Stub {
 
     private GnssLocationProvider.GnssMetricsProvider mGnssMetricsProvider;
 
-    private GnssLocationProvider.GnssBatchingProvider mGnssBatchingProvider;
+    private GnssBatchingProvider mGnssBatchingProvider;
     private IBatchedLocationCallback mGnssBatchingCallback;
     private LinkedCallback mGnssBatchingDeathCallback;
     private boolean mGnssBatchingInProgress = false;
@@ -427,7 +428,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                             Log.d(TAG, "request from uid " + uid + " is now "
                                     + (foreground ? "foreground" : "background)"));
                         }
-                        record.mIsForegroundUid = foreground;
+                        record.updateForeground(foreground);
 
                         if (!isThrottlingExemptLocked(record.mReceiver.mIdentity)) {
                             affectedProviders.add(provider);
@@ -970,7 +971,8 @@ public class LocationManagerService extends ILocationManager.Stub {
                         // synchronize to ensure incrementPendingBroadcastsLocked()
                         // is called before decrementPendingBroadcasts()
                         mPendingIntent.send(mContext, 0, statusChanged, this, mLocationHandler,
-                                getResolutionPermission(mAllowedResolutionLevel));
+                                getResolutionPermission(mAllowedResolutionLevel),
+                                PendingIntentUtils.createDontSendToRestrictedAppsBundle(null));
                         // call this after broadcasting so we do not increment
                         // if we throw an exeption.
                         incrementPendingBroadcastsLocked();
@@ -1005,7 +1007,8 @@ public class LocationManagerService extends ILocationManager.Stub {
                         // synchronize to ensure incrementPendingBroadcastsLocked()
                         // is called before decrementPendingBroadcasts()
                         mPendingIntent.send(mContext, 0, locationChanged, this, mLocationHandler,
-                                getResolutionPermission(mAllowedResolutionLevel));
+                                getResolutionPermission(mAllowedResolutionLevel),
+                                PendingIntentUtils.createDontSendToRestrictedAppsBundle(null));
                         // call this after broadcasting so we do not increment
                         // if we throw an exeption.
                         incrementPendingBroadcastsLocked();
@@ -1047,7 +1050,8 @@ public class LocationManagerService extends ILocationManager.Stub {
                         // synchronize to ensure incrementPendingBroadcastsLocked()
                         // is called before decrementPendingBroadcasts()
                         mPendingIntent.send(mContext, 0, providerIntent, this, mLocationHandler,
-                                getResolutionPermission(mAllowedResolutionLevel));
+                                getResolutionPermission(mAllowedResolutionLevel),
+                                PendingIntentUtils.createDontSendToRestrictedAppsBundle(null));
                         // call this after broadcasting so we do not increment
                         // if we throw an exeption.
                         incrementPendingBroadcastsLocked();
@@ -1183,7 +1187,7 @@ public class LocationManagerService extends ILocationManager.Stub {
                 "Location Hardware permission not granted to access hardware batching");
 
         if (hasGnssPermissions(packageName) && mGnssBatchingProvider != null) {
-            return mGnssBatchingProvider.getSize();
+            return mGnssBatchingProvider.getBatchSize();
         } else {
             return 0;
         }
@@ -1912,7 +1916,17 @@ public class LocationManagerService extends ILocationManager.Stub {
 
             // Update statistics for historical location requests by package/provider
             mRequestStatistics.startRequesting(
-                    mReceiver.mIdentity.mPackageName, provider, request.getInterval());
+                    mReceiver.mIdentity.mPackageName, provider, request.getInterval(),
+                    mIsForegroundUid);
+        }
+
+        /**
+         * Method to be called when record changes foreground/background
+         */
+        void updateForeground(boolean isForeground){
+            mIsForegroundUid = isForeground;
+            mRequestStatistics.updateForeground(
+                    mReceiver.mIdentity.mPackageName, mProvider, isForeground);
         }
 
         /**

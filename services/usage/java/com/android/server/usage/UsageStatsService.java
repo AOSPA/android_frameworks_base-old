@@ -62,6 +62,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 
+import com.android.internal.content.PackageMonitor;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
@@ -112,6 +113,7 @@ public class UsageStatsService extends SystemService implements
     UserManager mUserManager;
     PackageManager mPackageManager;
     PackageManagerInternal mPackageManagerInternal;
+    PackageMonitor mPackageMonitor;
     IDeviceIdleController mDeviceIdleController;
     DevicePolicyManagerInternal mDpmInternal;
 
@@ -660,7 +662,7 @@ public class UsageStatsService extends SystemService implements
             if (callingUid == Process.SYSTEM_UID) {
                 return true;
             }
-            final int mode = mAppOps.checkOp(AppOpsManager.OP_GET_USAGE_STATS,
+            final int mode = mAppOps.noteOp(AppOpsManager.OP_GET_USAGE_STATS,
                     callingUid, callingPackage);
             if (mode == AppOpsManager.MODE_DEFAULT) {
                 // The default behavior here is to check if PackageManager has given the app
@@ -843,13 +845,18 @@ public class UsageStatsService extends SystemService implements
             } catch (RemoteException re) {
                 throw re.rethrowFromSystemServer();
             }
+            final int packageUid = mPackageManagerInternal.getPackageUid(packageName,
+                    PackageManager.MATCH_ANY_USER, userId);
             // If the calling app is asking about itself, continue, else check for permission.
-            if (mPackageManagerInternal.getPackageUid(packageName, PackageManager.MATCH_ANY_USER,
-                    userId) != callingUid) {
+            if (packageUid != callingUid) {
                 if (!hasPermission(callingPackage)) {
                     throw new SecurityException(
                             "Don't have permission to query app standby bucket");
                 }
+            }
+            if (packageUid < 0) {
+                throw new IllegalArgumentException(
+                        "Cannot get standby bucket for non existent package (" + packageName + ")");
             }
             final boolean obfuscateInstantApps = shouldObfuscateInstantAppsForCaller(callingUid,
                     userId);
@@ -886,10 +893,16 @@ public class UsageStatsService extends SystemService implements
                     : UsageStatsManager.REASON_MAIN_PREDICTED;
             final long token = Binder.clearCallingIdentity();
             try {
+                final int packageUid = mPackageManagerInternal.getPackageUid(packageName,
+                        PackageManager.MATCH_ANY_USER, userId);
                 // Caller cannot set their own standby state
-                if (mPackageManagerInternal.getPackageUid(packageName,
-                        PackageManager.MATCH_ANY_USER, userId) == callingUid) {
+                if (packageUid == callingUid) {
                     throw new IllegalArgumentException("Cannot set your own standby bucket");
+                }
+                if (packageUid < 0) {
+                    throw new IllegalArgumentException(
+                            "Cannot set standby bucket for non existent package (" + packageName
+                                    + ")");
                 }
                 mAppStandby.setAppStandbyBucket(packageName, userId, bucket, reason,
                         SystemClock.elapsedRealtime());

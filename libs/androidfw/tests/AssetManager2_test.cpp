@@ -329,6 +329,17 @@ TEST_F(AssetManager2Test, MergesStylesWithParentFromSingleApkAssets) {
   EXPECT_EQ(0, bag_two->entries[5].cookie);
 }
 
+TEST_F(AssetManager2Test, MergeStylesCircularDependency) {
+  AssetManager2 assetmanager;
+  assetmanager.SetApkAssets({style_assets_.get()});
+
+  // GetBag should stop traversing the parents of styles when a circular
+  // dependency is detected
+  const ResolvedBag* bag_one = assetmanager.GetBag(app::R::style::StyleFour);
+  ASSERT_NE(nullptr, bag_one);
+  ASSERT_EQ(3u, bag_one->entry_count);
+}
+
 TEST_F(AssetManager2Test, ResolveReferenceToResource) {
   AssetManager2 assetmanager;
   assetmanager.SetApkAssets({basic_assets_.get()});
@@ -373,6 +384,38 @@ TEST_F(AssetManager2Test, ResolveReferenceToBag) {
   EXPECT_EQ(Res_value::TYPE_REFERENCE, value.dataType);
   EXPECT_EQ(basic::R::array::integerArray1, value.data);
   EXPECT_EQ(basic::R::array::integerArray1, last_ref);
+}
+
+TEST_F(AssetManager2Test, ResolveDeepIdReference) {
+  AssetManager2 assetmanager;
+  assetmanager.SetApkAssets({basic_assets_.get()});
+
+  // Set up the resource ids
+  const uint32_t high_ref = assetmanager
+      .GetResourceId("@id/high_ref", "values", "com.android.basic");
+  ASSERT_NE(high_ref, 0u);
+  const uint32_t middle_ref = assetmanager
+      .GetResourceId("@id/middle_ref", "values", "com.android.basic");
+  ASSERT_NE(middle_ref, 0u);
+  const uint32_t low_ref = assetmanager
+      .GetResourceId("@id/low_ref", "values", "com.android.basic");
+  ASSERT_NE(low_ref, 0u);
+
+  // Retrieve the most shallow resource
+  Res_value value;
+  ResTable_config config;
+  uint32_t flags;
+  ApkAssetsCookie cookie = assetmanager.GetResource(high_ref, false /*may_be_bag*/,
+                                                    0 /*density_override*/,
+                                                    &value, &config, &flags);
+  ASSERT_NE(kInvalidCookie, cookie);
+  EXPECT_EQ(Res_value::TYPE_REFERENCE, value.dataType);
+  EXPECT_EQ(middle_ref, value.data);
+
+  // Check that resolving the reference resolves to the deepest id
+  uint32_t last_ref = high_ref;
+  assetmanager.ResolveReference(cookie, &value, &config, &flags, &last_ref);
+  EXPECT_EQ(last_ref, low_ref);
 }
 
 TEST_F(AssetManager2Test, KeepLastReferenceIdUnmodifiedIfNoReferenceIsResolved) {

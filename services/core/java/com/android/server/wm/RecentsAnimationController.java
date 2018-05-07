@@ -47,7 +47,9 @@ import android.view.IRecentsAnimationRunner;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
+import android.view.inputmethod.InputMethodManagerInternal;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.LocalServices;
 import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 import com.android.server.wm.utils.InsetUtils;
 import com.google.android.collect.Sets;
@@ -81,9 +83,8 @@ public class RecentsAnimationController implements DeathRecipient {
     private final RecentsAnimationCallbacks mCallbacks;
     private final ArrayList<TaskAnimationAdapter> mPendingAnimations = new ArrayList<>();
     private final int mDisplayId;
-    private final Runnable mFailsafeRunnable = () -> {
-        cancelAnimation(REORDER_MOVE_TO_ORIGINAL_POSITION, "failSafeRunnable");
-    };
+    private final Runnable mFailsafeRunnable = () ->
+            cancelAnimation(REORDER_MOVE_TO_ORIGINAL_POSITION, "failSafeRunnable");
 
     // The recents component app token that is shown behind the visibile tasks
     private AppWindowToken mTargetAppToken;
@@ -110,7 +111,7 @@ public class RecentsAnimationController implements DeathRecipient {
     private boolean mLinkedToDeathOfRunner;
 
     public interface RecentsAnimationCallbacks {
-        void onAnimationFinished(@ReorderMode int reorderMode);
+        void onAnimationFinished(@ReorderMode int reorderMode, boolean runSychronously);
     }
 
     private final IRecentsAnimationController mController =
@@ -162,7 +163,8 @@ public class RecentsAnimationController implements DeathRecipient {
                 // prior to calling the callback
                 mCallbacks.onAnimationFinished(moveHomeToTop
                         ? REORDER_MOVE_TO_TOP
-                        : REORDER_MOVE_TO_ORIGINAL_POSITION);
+                        : REORDER_MOVE_TO_ORIGINAL_POSITION,
+                        true /* runSynchronously */);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -215,6 +217,20 @@ public class RecentsAnimationController implements DeathRecipient {
 
                     mSplitScreenMinimized = minimized;
                     mService.checkSplitScreenMinimizedChanged(true /* animate */);
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void hideCurrentInputMethod() {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                final InputMethodManagerInternal inputMethodManagerInternal =
+                        LocalServices.getService(InputMethodManagerInternal.class);
+                if (inputMethodManagerInternal != null) {
+                    inputMethodManagerInternal.hideCurrentInputMethod();
                 }
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -369,7 +385,17 @@ public class RecentsAnimationController implements DeathRecipient {
     }
 
     void cancelAnimation(@ReorderMode int reorderMode, String reason) {
-        if (DEBUG_RECENTS_ANIMATIONS) Slog.d(TAG, "cancelAnimation()");
+        cancelAnimation(reorderMode, false /* runSynchronously */, reason);
+    }
+
+    void cancelAnimationSynchronously(@ReorderMode int reorderMode, String reason) {
+        cancelAnimation(reorderMode, true /* runSynchronously */, reason);
+    }
+
+    private void cancelAnimation(@ReorderMode int reorderMode, boolean runSynchronously,
+            String reason) {
+        if (DEBUG_RECENTS_ANIMATIONS) Slog.d(TAG, "cancelAnimation(): reason=" + reason
+                + " runSynchronously=" + runSynchronously);
         synchronized (mService.getWindowManagerLock()) {
             if (mCanceled) {
                 // We've already canceled the animation
@@ -385,8 +411,7 @@ public class RecentsAnimationController implements DeathRecipient {
         }
 
         // Clean up and return to the previous app
-        // Don't hold the WM lock here as it calls back to AM/RecentsAnimation
-        mCallbacks.onAnimationFinished(reorderMode);
+        mCallbacks.onAnimationFinished(reorderMode, runSynchronously);
     }
 
     void cleanupAnimation(@ReorderMode int reorderMode) {
@@ -405,6 +430,14 @@ public class RecentsAnimationController implements DeathRecipient {
         // Clear associated input consumers
         mService.mInputMonitor.updateInputWindowsLw(true /*force*/);
         mService.destroyInputConsumer(INPUT_CONSUMER_RECENTS_ANIMATION);
+
+        // We have deferred all notifications to the target app as a part of the recents animation,
+        // so if we are actually transitioning there, notify again here
+        if (mTargetAppToken != null) {
+            if (reorderMode == REORDER_MOVE_TO_TOP || reorderMode == REORDER_KEEP_IN_PLACE) {
+                mService.mAppTransition.notifyAppTransitionFinishedLocked(mTargetAppToken.token);
+            }
+        }
     }
 
     void scheduleFailsafe() {
@@ -467,6 +500,10 @@ public class RecentsAnimationController implements DeathRecipient {
             return true;
         }
         return false;
+    }
+
+    boolean isTargetApp(AppWindowToken token) {
+        return mTargetAppToken != null && token == mTargetAppToken;
     }
 
     private boolean isTargetOverWallpaper() {
@@ -549,7 +586,12 @@ public class RecentsAnimationController implements DeathRecipient {
         @Override
         public void startAnimation(SurfaceControl animationLeash, Transaction t,
                 OnAnimationFinishedCallback finishCallback) {
+            // Restore z-layering, position and stack crop until client has a chance to modify it.
+            t.setLayer(animationLeash, mTask.getPrefixOrderIndex());
             t.setPosition(animationLeash, mPosition.x, mPosition.y);
+            mTmpRect.set(mBounds);
+            mTmpRect.offsetTo(0, 0);
+            t.setWindowCrop(animationLeash, mTmpRect);
             mCapturedLeash = animationLeash;
             mCapturedFinishCallback = finishCallback;
         }

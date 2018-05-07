@@ -224,13 +224,33 @@ public class ActivityStartController {
         }
     }
 
+    /**
+     * If {@code validateIncomingUser} is true, check {@code targetUserId} against the real calling
+     * user ID inferred from {@code realCallingUid}, then return the resolved user-id, taking into
+     * account "current user", etc.
+     *
+     * If {@code validateIncomingUser} is false, it skips the above check, but instead
+     * ensures {@code targetUserId} is a real user ID and not a special user ID such as
+     * {@link android.os.UserHandle#USER_ALL}, etc.
+     */
+    private int checkTargetUser(int targetUserId, boolean validateIncomingUser,
+            int realCallingPid, int realCallingUid, String reason) {
+        if (validateIncomingUser) {
+            return mService.mUserController.handleIncomingUser(realCallingPid, realCallingUid,
+                    targetUserId, false, ALLOW_FULL_ONLY, reason, null);
+        } else {
+            mService.mUserController.ensureNotSpecialUser(targetUserId);
+            return targetUserId;
+        }
+    }
+
     final int startActivityInPackage(int uid, int realCallingPid, int realCallingUid,
             String callingPackage, Intent intent, String resolvedType, IBinder resultTo,
             String resultWho, int requestCode, int startFlags, SafeActivityOptions options,
-            int userId, TaskRecord inTask, String reason) {
+            int userId, TaskRecord inTask, String reason, boolean validateIncomingUser) {
 
-        userId = mService.mUserController.handleIncomingUser(realCallingPid, realCallingUid, userId,
-                false, ALLOW_FULL_ONLY, "startActivityInPackage", null);
+        userId = checkTargetUser(userId, validateIncomingUser, realCallingPid, realCallingUid,
+                reason);
 
         // TODO: Switch to user app stacks here.
         return obtainStarter(intent, reason)
@@ -261,13 +281,12 @@ public class ActivityStartController {
     final int startActivitiesInPackage(int uid, String callingPackage, Intent[] intents,
             String[] resolvedTypes, IBinder resultTo, SafeActivityOptions options, int userId,
             boolean validateIncomingUser) {
+
         final String reason = "startActivityInPackage";
-        if (validateIncomingUser) {
-            userId = mService.mUserController.handleIncomingUser(Binder.getCallingPid(),
-                    Binder.getCallingUid(), userId, false, ALLOW_FULL_ONLY, reason, null);
-        } else {
-            mService.mUserController.ensureNotSpecialUser(userId);
-        }
+
+        userId = checkTargetUser(userId, validateIncomingUser, Binder.getCallingPid(),
+                Binder.getCallingUid(), reason);
+
         // TODO: Switch to user app stacks here.
         return startActivities(null, uid, callingPackage, intents, resolvedTypes, resultTo, options,
                 userId, reason);
@@ -331,7 +350,8 @@ public class ActivityStartController {
                                 "FLAG_CANT_SAVE_STATE not supported here");
                     }
 
-                    final SafeActivityOptions checkedOptions = i == intents.length - 1
+                    final boolean top = i == intents.length - 1;
+                    final SafeActivityOptions checkedOptions = top
                             ? options
                             : null;
                     final int res = obtainStarter(intent, reason)
@@ -348,6 +368,10 @@ public class ActivityStartController {
                             .setActivityOptions(checkedOptions)
                             .setComponentSpecified(componentSpecified)
                             .setOutActivity(outActivity)
+
+                            // Top activity decides on animation being run, so we allow only for the
+                            // top one as otherwise an activity below might consume it.
+                            .setAllowPendingRemoteAnimationRegistryLookup(top /* allowLookup*/)
                             .execute();
 
                     if (res < 0) {

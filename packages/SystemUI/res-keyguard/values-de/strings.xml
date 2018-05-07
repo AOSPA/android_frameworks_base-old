@@ -113,7 +113,7 @@
     <string name="kg_password_pin_failed" msgid="8769990811451236223">"Fehler beim Entsperren der SIM-Karte mit der PIN."</string>
     <string name="kg_password_puk_failed" msgid="1331621440873439974">"Fehler beim Entsperren der SIM-Karte mithilfe des PUK-Codes."</string>
     <string name="kg_pin_accepted" msgid="7637293533973802143">"Code akzeptiert."</string>
-    <string name="keyguard_carrier_default" msgid="4274828292998453695">"Kein Dienst."</string>
+    <string name="keyguard_carrier_default" msgid="4274828292998453695">"Dienst nicht verfügbar"</string>
     <string name="accessibility_ime_switch_button" msgid="2695096475319405612">"Eingabemethode wechseln"</string>
     <string name="airplane_mode" msgid="3807209033737676010">"Flugmodus"</string>
     <string name="kg_prompt_reason_restart_pattern" msgid="7246972020562621506">"Nach dem Neustart des Geräts ist die Eingabe des Musters erforderlich"</string>
@@ -140,9 +140,9 @@
       <item quantity="one">Das Gerät wurde seit <xliff:g id="NUMBER_0">%d</xliff:g> Stunde nicht mehr entsperrt. Bitte bestätige das Passwort.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Nicht erkannt"</string>
-    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="3739658416797652781">
       <item quantity="other">Gib die PIN für die SIM-Karte ein. Du hast noch <xliff:g id="NUMBER_1">%d</xliff:g> Versuche.</item>
-      <item quantity="one">Gib die PIN für die SIM-Karte ein. Du hast noch <xliff:g id="NUMBER_0">%d</xliff:g> Versuch, bevor das Gerät vom Mobilfunkanbieter entsperrt werden muss.</item>
+      <item quantity="one">Gib die PIN für die SIM-Karte ein. Du hast noch <xliff:g id="NUMBER_0">%d</xliff:g> Versuch, bevor das Gerät nur noch vom Mobilfunkanbieter entsperrt werden kann.</item>
     </plurals>
     <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
       <item quantity="other">Die SIM-Karte ist jetzt deaktiviert. Gib den PUK-Code ein, um fortzufahren. Du hast noch <xliff:g id="_NUMBER_1">%d</xliff:g> Versuche, bevor die SIM-Karte endgültig gesperrt wird. Weitere Informationen erhältst du von deinem Mobilfunkanbieter.</item>

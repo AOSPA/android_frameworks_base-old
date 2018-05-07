@@ -140,7 +140,7 @@
       <item quantity="one">Enheten har ikke blitt låst opp på <xliff:g id="NUMBER_0">%d</xliff:g> time. Bekreft passordet.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Ikke gjenkjent"</string>
-    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="3739658416797652781">
       <item quantity="other">Skriv inn PIN-koden for SIM-kortet. Du har <xliff:g id="NUMBER_1">%d</xliff:g> forsøk igjen.</item>
       <item quantity="one">Skriv inn PIN-koden for SIM-kortet. Du har <xliff:g id="NUMBER_0">%d</xliff:g> forsøk igjen før du må kontakte operatøren din for å låse opp enheten.</item>
     </plurals>

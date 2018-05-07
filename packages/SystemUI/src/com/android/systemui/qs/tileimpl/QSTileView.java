@@ -36,6 +36,7 @@ import java.util.Objects;
 
 /** View that represents a standard quick settings tile. **/
 public class QSTileView extends QSTileBaseView {
+    private static final int MAX_LABEL_LINES = 2;
     private static final boolean DUAL_TARGET_ALLOWED = false;
     private View mDivider;
     protected TextView mLabel;
@@ -98,21 +99,13 @@ public class QSTileView extends QSTileBaseView {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
-        // Remeasure view if the secondary label text will be cut off.
-        if (!TextUtils.isEmpty(mSecondLine.getText())
-                && mSecondLine.getLineHeight() > mSecondLine.getHeight()) {
+        // Remeasure view if the primary label requires more then 2 lines or the secondary label
+        // text will be cut off.
+        if (mLabel.getLineCount() > MAX_LABEL_LINES || !TextUtils.isEmpty(mSecondLine.getText())
+                        && mSecondLine.getLineHeight() > mSecondLine.getHeight()) {
             mLabel.setSingleLine();
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
-    }
-
-    @Override
-    public void setExpansion(float expansion) {
-        // Start the marquee when fully expanded and stop when fully collapsed. Leave as is for
-        // other expansion ratios since there is no way way to pause the marquee.
-        boolean selected = expansion == 1f ? true : expansion == 0f ? false : mLabel.isSelected();
-        mLabel.setSelected(selected);
-        mSecondLine.setSelected(selected);
     }
 
     @Override

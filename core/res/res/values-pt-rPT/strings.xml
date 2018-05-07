@@ -836,7 +836,8 @@
     <string name="double_tap_toast" msgid="4595046515400268881">"Sugestão: toque duas vezes para aumentar ou diminuir o zoom."</string>
     <string name="autofill_this_form" msgid="4616758841157816676">"Preenchimento Automático"</string>
     <string name="setup_autofill" msgid="7103495070180590814">"Configurar Preenchimento Automático"</string>
-    <string name="autofill_window_title" msgid="921006636895825007">"Preenchimento automático"</string>
+    <!-- no translation found for autofill_window_title (4107745526909284887) -->
+    <skip />
     <string name="autofill_address_name_separator" msgid="6350145154779706772">" "</string>
     <string name="autofill_address_summary_name_format" msgid="3268041054899214945">"$1$2$3"</string>
     <string name="autofill_address_summary_separator" msgid="7483307893170324129">", "</string>
@@ -1014,8 +1015,7 @@
     <string name="dial" msgid="1253998302767701559">"Telefonar"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Telefonar para o número de telefone selecionado"</string>
     <string name="map" msgid="5441053548030107189">"Mapa"</string>
-    <!-- no translation found for map_desc (1836995341943772348) -->
-    <skip />
+    <string name="map_desc" msgid="1836995341943772348">"Localizar o endereço selecionado"</string>
     <string name="browse" msgid="1245903488306147205">"Abrir"</string>
     <string name="browse_desc" msgid="8220976549618935044">"Abrir o URL selecionado"</string>
     <string name="sms" msgid="4560537514610063430">"Mensagem"</string>
@@ -1141,7 +1141,7 @@
     <string name="volume_icon_description_notification" msgid="7044986546477282274">"Volume de notificações"</string>
     <string name="ringtone_default" msgid="3789758980357696936">"Toque predefinido"</string>
     <string name="ringtone_default_with_actual" msgid="1767304850491060581">"Predefinição (<xliff:g id="ACTUAL_RINGTONE">%1$s</xliff:g>)"</string>
-    <string name="ringtone_silent" msgid="7937634392408977062">"Nada"</string>
+    <string name="ringtone_silent" msgid="7937634392408977062">"Nenhum"</string>
     <string name="ringtone_picker_title" msgid="3515143939175119094">"Toques"</string>
     <string name="ringtone_picker_title_alarm" msgid="6473325356070549702">"Sons de alarme"</string>
     <string name="ringtone_picker_title_notification" msgid="4837740874822788802">"Sons de notificação"</string>
@@ -1691,7 +1691,8 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Instalado pelo seu gestor"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Atualizado pelo seu gestor"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Eliminado pelo seu gestor"</string>
-    <string name="battery_saver_description" msgid="4660824093877546730">"Para prolongar a autonomia da bateria, a Poupança de bateria reduz o desempenho do dispositivo e limita ou desativa a vibração, os serviços de localização e os dados de segundo plano. O email, as mensagens e outras aplicações que dependem da sincronização podem não ser atualizados, exceto se os abrir.\n\nA Poupança de bateria desliga-se automaticamente quando o dispositivo está a carregar."</string>
+    <string name="battery_saver_description_with_learn_more" msgid="6323937147992667707">"Para prolongar a autonomia da bateria, a Poupança de bateria desativa algumas funcionalidades do dispositivo e restringe aplicações. "<annotation id="url">"Saiba mais"</annotation></string>
+    <string name="battery_saver_description" msgid="769989536172631582">"Para prolongar a autonomia da bateria, a Poupança de bateria desativa algumas funcionalidades do dispositivo e restringe aplicações."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Para ajudar a reduzir a utilização de dados, a Poupança de dados impede que algumas aplicações enviem ou recebam dados em segundo plano. Uma determinada aplicação que esteja a utilizar atualmente pode aceder aos dados, mas é possível que o faça com menos frequência. Isto pode significar, por exemplo, que as imagens não são apresentadas até que toque nas mesmas."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Ativar a Poupança de dados?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Ativar"</string>
@@ -1739,7 +1740,7 @@
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Fim de semana"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Evento"</string>
     <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"A dormir"</string>
-    <string name="muted_by" msgid="6147073845094180001">"Som desativado por <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
+    <string name="muted_by" msgid="5942954724562097128">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g> está a desativar alguns sons."</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"Existe um problema interno no seu dispositivo e pode ficar instável até efetuar uma reposição de dados de fábrica."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"Existe um problema interno no seu dispositivo. Contacte o fabricante para obter mais informações."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5214333646366591205">"O pedido USSD foi alterado para uma chamada normal."</string>
@@ -1778,6 +1779,9 @@
     <string name="language_picker_section_all" msgid="3097279199511617537">"Todos os idiomas"</string>
     <string name="region_picker_section_all" msgid="8966316787153001779">"Todas as regiões"</string>
     <string name="locale_search_menu" msgid="2560710726687249178">"Pesquisa"</string>
+    <string name="app_suspended_title" msgid="1919029799438164552">"Impossível abrir a aplicação"</string>
+    <string name="app_suspended_default_message" msgid="7875306315686531621">"A aplicação <xliff:g id="APP_NAME_0">%1$s</xliff:g> não está disponível neste momento. A aplicação <xliff:g id="APP_NAME_1">%2$s</xliff:g> gere esta definição."</string>
+    <string name="app_suspended_more_details" msgid="1131804827776778187">"Saiba mais"</string>
     <string name="work_mode_off_title" msgid="1118691887588435530">"Ativar o perfil de trabalho?"</string>
     <string name="work_mode_off_message" msgid="5130856710614337649">"As aplicações de trabalho, as notificações, os dados e outras funcionalidades do perfil de trabalho serão desativados"</string>
     <string name="work_mode_turn_on" msgid="2062544985670564875">"Ativar"</string>
@@ -1794,7 +1798,7 @@
     <string name="usb_mtp_launch_notification_description" msgid="8541876176425411358">"Tocar para ver ficheiros"</string>
     <string name="pin_target" msgid="3052256031352291362">"Fixar"</string>
     <string name="unpin_target" msgid="3556545602439143442">"Soltar"</string>
-    <string name="app_info" msgid="6856026610594615344">"Informações da aplicação"</string>
+    <string name="app_info" msgid="6856026610594615344">"Info. da aplicação"</string>
     <string name="negative_duration" msgid="5688706061127375131">"-<xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="demo_starting_message" msgid="5268556852031489931">"A iniciar a demonstração…"</string>
     <string name="demo_restarting_message" msgid="952118052531642451">"A repor o dispositivo…"</string>
@@ -1867,10 +1871,11 @@
     <string name="volume_dialog_ringer_guidance_silent" msgid="2128975224280276122">"É desativado o som das chamadas e das notificações."</string>
     <string name="notification_channel_system_changes" msgid="5072715579030948646">"Alterações ao sistema"</string>
     <string name="notification_channel_do_not_disturb" msgid="6766940333105743037">"Não incomodar"</string>
-    <string name="zen_upgrade_notification_visd_title" msgid="4168873821019741166">"Para se concentrar, o modo Não incomodar está a ocultar as notificações"</string>
-    <string name="zen_upgrade_notification_visd_content" msgid="6776377368195804354">"Este é um comportamento novo. Toque para alterar."</string>
+    <string name="zen_upgrade_notification_visd_title" msgid="3288313883409759733">"Novo: o modo Não incomodar está a ocultar as notificações"</string>
+    <string name="zen_upgrade_notification_visd_content" msgid="5533674060311631165">"Toque para saber mais e alterar."</string>
     <string name="zen_upgrade_notification_title" msgid="3799603322910377294">"O modo Não incomodar foi alterado"</string>
     <string name="zen_upgrade_notification_content" msgid="1794994264692424562">"Toque para verificar o que está bloqueado."</string>
     <string name="notification_app_name_system" msgid="4205032194610042794">"Sistema"</string>
     <string name="notification_app_name_settings" msgid="7751445616365753381">"Definições"</string>
+    <string name="car_loading_profile" msgid="3545132581795684027">"A carregar…"</string>
 </resources>

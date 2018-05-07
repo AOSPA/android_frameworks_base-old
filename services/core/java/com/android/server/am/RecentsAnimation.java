@@ -17,6 +17,8 @@
 package com.android.server.am;
 
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
+import static android.app.AppOpsManager.OP_ASSIST_STRUCTURE;
+import static android.app.AppOpsManager.OP_NONE;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
@@ -30,7 +32,10 @@ import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_O
 import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_TOP;
 
 import android.app.ActivityOptions;
+import android.app.AppOpsManager;
+import android.app.IAssistDataReceiver;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.os.RemoteException;
 import android.os.Trace;
@@ -58,6 +63,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
     private final int mCallingPid;
 
     private int mTargetActivityType;
+    private AssistDataRequester mAssistDataRequester;
 
     // The stack to restore the target stack behind when the animation is finished
     private ActivityStack mRestoreTargetBehindStack;
@@ -75,8 +81,10 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
     }
 
     void startRecentsActivity(Intent intent, IRecentsAnimationRunner recentsAnimationRunner,
-            ComponentName recentsComponent, int recentsUid) {
-        if (DEBUG) Slog.d(TAG, "startRecentsActivity(): intent=" + intent);
+            ComponentName recentsComponent, int recentsUid,
+            IAssistDataReceiver assistDataReceiver) {
+        if (DEBUG) Slog.d(TAG, "startRecentsActivity(): intent=" + intent
+                + " assistDataReceiver=" + assistDataReceiver);
         Trace.traceBegin(TRACE_TAG_ACTIVITY_MANAGER, "RecentsAnimation#startRecentsActivity");
 
         if (!mWindowManager.canStartRecentsAnimation()) {
@@ -93,9 +101,7 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
                         : ACTIVITY_TYPE_HOME;
         final ActivityStack targetStack = mDefaultDisplay.getStack(WINDOWING_MODE_UNDEFINED,
                 mTargetActivityType);
-        ActivityRecord targetActivity = targetStack != null
-                ? targetStack.getTopActivity()
-                : null;
+        ActivityRecord targetActivity = getTargetActivity(targetStack, intent.getComponent());
         final boolean hasExistingActivity = targetActivity != null;
         if (hasExistingActivity) {
             final ActivityDisplay display = targetActivity.getDisplay();
@@ -120,6 +126,20 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
 
         mWindowManager.deferSurfaceLayout();
         try {
+            // Kick off the assist data request in the background before showing the target activity
+            if (assistDataReceiver != null) {
+                final AppOpsManager appOpsManager = (AppOpsManager)
+                        mService.mContext.getSystemService(Context.APP_OPS_SERVICE);
+                final AssistDataReceiverProxy proxy = new AssistDataReceiverProxy(
+                        assistDataReceiver, recentsComponent.getPackageName());
+                mAssistDataRequester = new AssistDataRequester(mService.mContext, mService,
+                        mWindowManager, appOpsManager, proxy, this, OP_ASSIST_STRUCTURE, OP_NONE);
+                mAssistDataRequester.requestAssistData(mStackSupervisor.getTopVisibleActivities(),
+                        true /* fetchData */, false /* fetchScreenshots */,
+                        true /* allowFetchData */, false /* allowFetchScreenshots */,
+                        recentsUid, recentsComponent.getPackageName());
+            }
+
             final ActivityDisplay display;
             if (hasExistingActivity) {
                 // Move the recents activity into place for the animation if it is not top most
@@ -127,6 +147,14 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
                 display.moveStackBehindBottomMostVisibleStack(targetStack);
                 if (DEBUG) Slog.d(TAG, "Moved stack=" + targetStack + " behind stack="
                             + display.getStackAbove(targetStack));
+
+                // If there are multiple tasks in the target stack (ie. the home stack, with 3p
+                // and default launchers coexisting), then move the task to the top as a part of
+                // moving the stack to the front
+                if (targetStack.topTask() != targetActivity.getTask()) {
+                    targetStack.addTask(targetActivity.getTask(), true /* toTop */,
+                            "startRecentsActivity");
+                }
             } else {
                 // No recents activity
                 ActivityOptions options = ActivityOptions.makeBasic();
@@ -157,8 +185,9 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
             targetActivity.mLaunchTaskBehind = true;
 
             // Fetch all the surface controls and pass them to the client to get the animation
-            // started
-            mWindowManager.cancelRecentsAnimation(REORDER_MOVE_TO_ORIGINAL_POSITION,
+            // started. Cancel any existing recents animation running synchronously (do not hold the
+            // WM lock)
+            mWindowManager.cancelRecentsAnimationSynchronously(REORDER_MOVE_TO_ORIGINAL_POSITION,
                     "startRecentsActivity");
             mWindowManager.initializeRecentsAnimation(mTargetActivityType, recentsAnimationRunner,
                     this, display.mDisplayId, mStackSupervisor.mRecentTasks.getRecentTaskIds());
@@ -178,12 +207,18 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
         }
     }
 
-    @Override
-    public void onAnimationFinished(@RecentsAnimationController.ReorderMode int reorderMode) {
+    private void finishAnimation(@RecentsAnimationController.ReorderMode int reorderMode) {
         synchronized (mService) {
             if (DEBUG) Slog.d(TAG, "onAnimationFinished(): controller="
-                        + mWindowManager.getRecentsAnimationController()
-                        + " reorderMode=" + reorderMode);
+                    + mWindowManager.getRecentsAnimationController()
+                    + " reorderMode=" + reorderMode);
+
+            // Cancel the associated assistant data request
+            if (mAssistDataRequester != null) {
+                mAssistDataRequester.cancel();
+                mAssistDataRequester = null;
+            }
+
             if (mWindowManager.getRecentsAnimationController() == null) return;
 
             // Just to be sure end the launch hint in case the target activity was never launched.
@@ -269,6 +304,16 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
         }
     }
 
+    @Override
+    public void onAnimationFinished(@RecentsAnimationController.ReorderMode int reorderMode,
+            boolean runSychronously) {
+        if (runSychronously) {
+            finishAnimation(reorderMode);
+        } else {
+            mService.mHandler.post(() -> finishAnimation(reorderMode));
+        }
+    }
+
     /**
      * Called only when the animation should be canceled prior to starting.
      */
@@ -292,5 +337,23 @@ class RecentsAnimation implements RecentsAnimationCallbacks {
             return s;
         }
         return null;
+    }
+
+    /**
+     * @return the top activity in the {@param targetStack} matching the {@param component}, or just
+     * the top activity of the top task if no task matches the component.
+     */
+    private ActivityRecord getTargetActivity(ActivityStack targetStack, ComponentName component) {
+        if (targetStack == null) {
+            return null;
+        }
+
+        for (int i = targetStack.getChildCount() - 1; i >= 0; i--) {
+            final TaskRecord task = (TaskRecord) targetStack.getChildAt(i);
+            if (task.getBaseIntent().getComponent().equals(component)) {
+                return task.getTopActivity();
+            }
+        }
+        return targetStack.getTopActivity();
     }
 }

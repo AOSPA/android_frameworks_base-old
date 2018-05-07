@@ -58,7 +58,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
             = SystemProperties.getBoolean("debug.icon_scroll_animations", true);
     private static final int TAG_CONTINUOUS_CLIPPING = R.id.continuous_clipping_tag;
     private static final String TAG = "NotificationShelf";
-    private static final long SHELF_IN_TRANSLATION_DURATION = 220;
+    private static final long SHELF_IN_TRANSLATION_DURATION = 200;
 
     private ViewInvertHelper mViewInvertHelper;
     private boolean mDark;
@@ -157,12 +157,16 @@ public class NotificationShelf extends ActivatableNotificationView implements
 
     public void fadeInTranslating() {
         float translation = mShelfIcons.getTranslationY();
-        mShelfIcons.setTranslationY(translation + mShelfAppearTranslation);
+        mShelfIcons.setTranslationY(translation - mShelfAppearTranslation);
         mShelfIcons.setAlpha(0);
         mShelfIcons.animate()
-                .alpha(1)
-                .setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN)
+                .setInterpolator(Interpolators.DECELERATE_QUINT)
                 .translationY(translation)
+                .setDuration(SHELF_IN_TRANSLATION_DURATION)
+                .start();
+        mShelfIcons.animate()
+                .alpha(1)
+                .setInterpolator(Interpolators.LINEAR)
                 .setDuration(SHELF_IN_TRANSLATION_DURATION)
                 .start();
     }
@@ -403,13 +407,14 @@ public class NotificationShelf extends ActivatableNotificationView implements
         boolean needsContinuousClipping = ViewState.isAnimatingY(icon) && !mAmbientState.isDark();
         boolean isContinuousClipping = icon.getTag(TAG_CONTINUOUS_CLIPPING) != null;
         if (needsContinuousClipping && !isContinuousClipping) {
+            final ViewTreeObserver observer = icon.getViewTreeObserver();
             ViewTreeObserver.OnPreDrawListener predrawListener =
                     new ViewTreeObserver.OnPreDrawListener() {
                         @Override
                         public boolean onPreDraw() {
                             boolean animatingY = ViewState.isAnimatingY(icon);
-                            if (!animatingY || !icon.isAttachedToWindow()) {
-                                icon.getViewTreeObserver().removeOnPreDrawListener(this);
+                            if (!animatingY) {
+                                observer.removeOnPreDrawListener(this);
                                 icon.setTag(TAG_CONTINUOUS_CLIPPING, null);
                                 return true;
                             }
@@ -417,7 +422,20 @@ public class NotificationShelf extends ActivatableNotificationView implements
                             return true;
                         }
                     };
-            icon.getViewTreeObserver().addOnPreDrawListener(predrawListener);
+            observer.addOnPreDrawListener(predrawListener);
+            icon.addOnAttachStateChangeListener(new OnAttachStateChangeListener() {
+                @Override
+                public void onViewAttachedToWindow(View v) {
+                }
+
+                @Override
+                public void onViewDetachedFromWindow(View v) {
+                    if (v == icon) {
+                        observer.removeOnPreDrawListener(predrawListener);
+                        icon.setTag(TAG_CONTINUOUS_CLIPPING, null);
+                    }
+                }
+            });
             icon.setTag(TAG_CONTINUOUS_CLIPPING, predrawListener);
         }
     }

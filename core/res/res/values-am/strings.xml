@@ -334,9 +334,9 @@
     <string name="permlab_sendSms" msgid="7544599214260982981">"የኤስኤምኤስ መልዕክቶችን ይላኩና ይመልከቱ"</string>
     <string name="permdesc_sendSms" msgid="7094729298204937667">"መተግበሪያው የኤስ.ኤም.ኤስ. መልዕክቶችን እንዲልክ ይፈቅድለታል። ይህ ያልተጠበቁ ወጪዎችን ሊያስከትል ይችላል። ተንኮል አዘል መተግበሪያዎች ያላንተ ማረጋገጫ መልዕክቶችን በመላክ ገንዘብ ሊያስወጡህ ይችላሉ።"</string>
     <string name="permlab_readSms" msgid="8745086572213270480">"የጽሑፍ መልዕክቶችዎን ያንብቡ (ኤስ.ኤም.ኤስ. ወይም ኤም.ኤም.ኤስ.)"</string>
-    <string name="permdesc_readSms" product="tablet" msgid="4741697454888074891">"ይህ መተግበሪያ በእርስዎ ጡባዊ ላይ የተከማቹ ሁሉንም አጭር የስልክ መልእክት (ጽሑፍ) መልእክቶን ማንበብ ይችላል።"</string>
-    <string name="permdesc_readSms" product="tv" msgid="5796670395641116592">"ይህ መተግበሪያ በእርስዎ ቴሌቪዥን ላይ የተከማቹ ሁሉንም አጭር የስልክ መልእክት (ጽሑፍ) መልእክቶን ማንበብ ይችላል።"</string>
-    <string name="permdesc_readSms" product="default" msgid="6826832415656437652">"ይህ መተግበሪያ በእርስዎ ስልክ ላይ የተከማቹ ሁሉንም አጭር የስልክ መልእክት (ጽሑፍ) መልእክቶን ማንበብ ይችላል።"</string>
+    <string name="permdesc_readSms" product="tablet" msgid="4741697454888074891">"ይህ መተግበሪያ በእርስዎ ጡባዊ ላይ የተከማቹ ሁሉንም አጭር የስልክ መልዕክት (ጽሑፍ) መልእክቶን ማንበብ ይችላል።"</string>
+    <string name="permdesc_readSms" product="tv" msgid="5796670395641116592">"ይህ መተግበሪያ በእርስዎ ቴሌቪዥን ላይ የተከማቹ ሁሉንም አጭር የስልክ መልዕክት (ጽሑፍ) መልእክቶን ማንበብ ይችላል።"</string>
+    <string name="permdesc_readSms" product="default" msgid="6826832415656437652">"ይህ መተግበሪያ በእርስዎ ስልክ ላይ የተከማቹ ሁሉንም አጭር የስልክ መልዕክት (ጽሑፍ) መልእክቶን ማንበብ ይችላል።"</string>
     <string name="permlab_receiveWapPush" msgid="5991398711936590410">"የፅሁፍ መልዕክቶችን ተቀበል (WAP)"</string>
     <string name="permdesc_receiveWapPush" msgid="748232190220583385">"መተግበሪያው የWAP መልዕክቶችን እንዲያነብ እና እንዲያካሂድ ይፈቅዳል። ይህ ፈቃድ የተላኩልዎን መልዕክቶች ለእርስዎ ሳያሳይዎ የመቆጣጠር ወይም የመሰረዝ ብቃትን ያጠቃልላል።"</string>
     <string name="permlab_getTasks" msgid="6466095396623933906">"አሂድ መተግበሪያዎችን ሰርስረው ያውጡ"</string>
@@ -836,7 +836,8 @@
     <string name="double_tap_toast" msgid="4595046515400268881">"ጠቃሚ ምክር፦ ለማጉላት እና ለማሳነስ ሁለቴ-መታ አድርግ።"</string>
     <string name="autofill_this_form" msgid="4616758841157816676">"ራስ ሙላ"</string>
     <string name="setup_autofill" msgid="7103495070180590814">"በራስ ሰር ሙላ አዘጋጅ"</string>
-    <string name="autofill_window_title" msgid="921006636895825007">"ራስ-ሙላ"</string>
+    <!-- no translation found for autofill_window_title (4107745526909284887) -->
+    <skip />
     <string name="autofill_address_name_separator" msgid="6350145154779706772">" "</string>
     <string name="autofill_address_summary_name_format" msgid="3268041054899214945">"$1$2$3"</string>
     <string name="autofill_address_summary_separator" msgid="7483307893170324129">"፣ "</string>
@@ -1014,8 +1015,7 @@
     <string name="dial" msgid="1253998302767701559">"ጥሪ"</string>
     <string name="dial_desc" msgid="6573723404985517250">"ወደተመረጠውን ስልክ ቁጥር ደውል"</string>
     <string name="map" msgid="5441053548030107189">"ካርታ"</string>
-    <!-- no translation found for map_desc (1836995341943772348) -->
-    <skip />
+    <string name="map_desc" msgid="1836995341943772348">"የተመረጠውን አድራሻ ያለበትን አግኝ"</string>
     <string name="browse" msgid="1245903488306147205">"ክፈት"</string>
     <string name="browse_desc" msgid="8220976549618935044">"የተመረጠውን ዩአርኤል ክፈት"</string>
     <string name="sms" msgid="4560537514610063430">"መልዕክት"</string>
@@ -1489,7 +1489,7 @@
     <string name="default_audio_route_category_name" msgid="3722811174003886946">"ስርዓት"</string>
     <string name="bluetooth_a2dp_audio_route_name" msgid="8575624030406771015">"የብሉቱዝ ድምጽ"</string>
     <string name="wireless_display_route_description" msgid="9070346425023979651">"ገመድ አልባ ማሳያ"</string>
-    <string name="media_route_button_content_description" msgid="591703006349356016">"ውሰድ"</string>
+    <string name="media_route_button_content_description" msgid="591703006349356016">"Cast"</string>
     <string name="media_route_chooser_title" msgid="1751618554539087622">"ከመሳሪያ ጋር ያገናኙ"</string>
     <string name="media_route_chooser_title_for_remote_display" msgid="3395541745872017583">"ማያ ገጽን ወደ መሣሪያ ይውሰዱ"</string>
     <string name="media_route_chooser_searching" msgid="4776236202610828706">"መሳሪያዎችን በመፈለግ ላይ…"</string>
@@ -1691,7 +1691,8 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"በእርስዎ አስተዳዳሪ ተጭኗል"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"በእርስዎ አስተዳዳሪ ተዘምኗል"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"በእርስዎ አስተዳዳሪ ተሰርዟል"</string>
-    <string name="battery_saver_description" msgid="4660824093877546730">"የባትሪ ህይወትን ለማሻሻል ባትሪ ቆጣቢ የመሣሪያዎን አፈጻጸምን ይቀንስና ንዝረትን፣ የአካባቢ አገልግሎቶችን እና የጀርባ ውሂብን ይገድባል። ኢሜይል፣ መልዕክት መላላክ እና ሌሎች በስምረት ላይ የሚወሰኑ መተግበሪያዎች እስኪከፍቷቸው ድረስ ላያዘምኑ ይችላሉ።\n\nመሣሪያዎ ኃይል በሚሞላበት ማንኛውም ጊዜ ላይ ባትሪ ቆጣቢ በራስ-ሰር ይጠፋል።"</string>
+    <string name="battery_saver_description_with_learn_more" msgid="6323937147992667707">"የእርስዎን ባትሪ ዕድሜ ለማራዘም ባትሪ ቆጣቢ አንዳንድ የመሣሪያ ባሕሪያትን ያጠፋል እንዲሁም መተግበሪያዎችን ይገድባል።"<annotation id="url">"የበለጠ ለመረዳት"</annotation></string>
+    <string name="battery_saver_description" msgid="769989536172631582">"የእርስዎን ባትሪ ዕድሜ ለማራዘም ባትሪ ቆጣቢ አንዳንድ የመሣሪያ ባሕሪያትን ያጠፋል እንዲሁም መተግበሪያዎችን ይገድባል።"</string>
     <string name="data_saver_description" msgid="6015391409098303235">"የውሂብ አጠቃቀም እንዲቀንስ ለማገዝ ውሂብ ቆጣቢ አንዳንድ መተግበሪያዎች ከበስተጀርባ ሆነው ውሂብ እንዳይልኩ ወይም እንዳይቀበሉ ይከለክላቸዋል። በአሁኑ ጊዜ እየተጠቀሙበት ያለ መተግበሪያ ውሂብ ሊደርስ ይችላል፣ ነገር ግን ባነሰ ተደጋጋሚነት ሊሆን ይችላል። ይሄ ማለት ለምሳሌ ምስሎችን መታ እስኪያደርጓቸው ድረስ ላይታዩ ይችላሉ ማለት ነው።"</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"ውሂብ ቆጣቢ ይጥፋ?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"አብራ"</string>
@@ -1739,7 +1740,7 @@
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"የሳምንት እረፍት ቀናት"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"ክስተት"</string>
     <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"መተኛት"</string>
-    <string name="muted_by" msgid="6147073845094180001">"ድምጽ በ<xliff:g id="THIRD_PARTY">%1$s</xliff:g> ተዘግቷል"</string>
+    <string name="muted_by" msgid="5942954724562097128">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g> አንዳንድ ድምጾችን እየዘጋ ነው"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"መሣሪያዎ ላይ የውስጣዊ ችግር አለ፣ የፋብሪካ ውሂብ ዳግም እስኪያስጀምሩት ድረስ ላይረጋጋ ይችላል።"</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"መሣሪያዎ ላይ የውስጣዊ ችግር አለ። ዝርዝሮችን ለማግኘት አምራችዎን ያነጋግሩ።"</string>
     <string name="stk_cc_ussd_to_dial" msgid="5214333646366591205">"የUSSD ጥያቄ ወደ መደበኛ ጥሪ ተለውጧል"</string>
@@ -1778,6 +1779,9 @@
     <string name="language_picker_section_all" msgid="3097279199511617537">"ሁሉም ቋንቋዎች"</string>
     <string name="region_picker_section_all" msgid="8966316787153001779">"ሁሉም ክልሎች"</string>
     <string name="locale_search_menu" msgid="2560710726687249178">"ፈልግ"</string>
+    <string name="app_suspended_title" msgid="1919029799438164552">"መተግበሪያን መክፈት አይቻልም"</string>
+    <string name="app_suspended_default_message" msgid="7875306315686531621">"መተግበሪያ <xliff:g id="APP_NAME_0">%1$s</xliff:g> አሁን አይገኝም። ይህ በ<xliff:g id="APP_NAME_1">%2$s</xliff:g> ነው የሚቀናበረው።"</string>
+    <string name="app_suspended_more_details" msgid="1131804827776778187">"የበለጠ ለመረዳት"</string>
     <string name="work_mode_off_title" msgid="1118691887588435530">"የስራ መገለጫ ይብራ?"</string>
     <string name="work_mode_off_message" msgid="5130856710614337649">"የእርስዎ የስራ መተግበሪያዎች፣ ማሳወቂያዎች፣ ውሂብ እና ሌሎች የስራ መገለጫ ባህሪያት ይበራሉ"</string>
     <string name="work_mode_turn_on" msgid="2062544985670564875">"አብራ"</string>
@@ -1805,7 +1809,7 @@
     <string name="app_category_audio" msgid="1659853108734301647">"ሙዚቃ እና ኦዲዮ"</string>
     <string name="app_category_video" msgid="2728726078629384196">"ፊልሞች እና ቪዲዮ"</string>
     <string name="app_category_image" msgid="4867854544519846048">"ፎቶዎች እና ምስሎች"</string>
-    <string name="app_category_social" msgid="5842783057834965912">"ማኅበራዊ እና መልእክት ልውውጥ"</string>
+    <string name="app_category_social" msgid="5842783057834965912">"ማኅበራዊ እና መልዕክት ልውውጥ"</string>
     <string name="app_category_news" msgid="7496506240743986873">"ዜና እና መጽሔቶች"</string>
     <string name="app_category_maps" msgid="5878491404538024367">"ካርታዎች እና ዳሰሳ"</string>
     <string name="app_category_productivity" msgid="3742083261781538852">"ውጤታማነት"</string>
@@ -1867,10 +1871,11 @@
     <string name="volume_dialog_ringer_guidance_silent" msgid="2128975224280276122">"ጥሪዎች እና ማሳወቂያዎች ድምፀ-ከል ይሆናሉ"</string>
     <string name="notification_channel_system_changes" msgid="5072715579030948646">"የሥርዓት ለውጦች"</string>
     <string name="notification_channel_do_not_disturb" msgid="6766940333105743037">"አትረብሽ"</string>
-    <string name="zen_upgrade_notification_visd_title" msgid="4168873821019741166">"እርስዎ ትኩረት እንዲሰጡ ለማገዝ አትረብሽ ማሳወቂያዎችን እየደበቀ ነው"</string>
-    <string name="zen_upgrade_notification_visd_content" msgid="6776377368195804354">"ይህ አዲስ ባሕሪ ነው። ለመለወጥ መታ ያድርጉ።"</string>
+    <string name="zen_upgrade_notification_visd_title" msgid="3288313883409759733">"አዲስ፦ አትረብሽ ማሳወቂያዎችን እየደበቀ ነው"</string>
+    <string name="zen_upgrade_notification_visd_content" msgid="5533674060311631165">"የበለጠ ለመረዳት እና ለመለወጥ መታ ያድርጉ።"</string>
     <string name="zen_upgrade_notification_title" msgid="3799603322910377294">"አትረብሽ ተቀይሯል"</string>
     <string name="zen_upgrade_notification_content" msgid="1794994264692424562">"ምን እንደታገደ ለመፈተሽ መታ ያድርጉ።"</string>
     <string name="notification_app_name_system" msgid="4205032194610042794">"ሥርዓት"</string>
     <string name="notification_app_name_settings" msgid="7751445616365753381">"ቅንብሮች"</string>
+    <string name="car_loading_profile" msgid="3545132581795684027">"በመጫን ላይ"</string>
 </resources>

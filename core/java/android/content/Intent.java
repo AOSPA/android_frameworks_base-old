@@ -2289,9 +2289,8 @@ public class Intent implements Parcelable, Cloneable {
     /**
      * Activity Action: Started to show more details about why an application was suspended.
      *
-     * <p>Whenever the system detects an activity launch for a suspended app, it shows a dialog to
-     * the user to inform them of the state and present them an affordance to start this activity
-     * action to show more details about the reason for suspension.
+     * <p>Whenever the system detects an activity launch for a suspended app, this action can
+     * be used to show more details about the reason for suspension.
      *
      * <p>Apps holding {@link android.Manifest.permission#SUSPEND_APPS} must declare an activity
      * handling this intent and protect it with
@@ -2359,6 +2358,18 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PACKAGE_NEEDS_VERIFICATION = "android.intent.action.PACKAGE_NEEDS_VERIFICATION";
+
+    /**
+     * Broadcast Action: Sent to the optional package verifier when a package
+     * needs to be verified. The data contains the package URI.
+     * <p class="note">
+     * This is a protected intent.
+     * </p>
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PACKAGE_NEEDS_OPTIONAL_VERIFICATION = "com.qualcomm.qti.intent.action.PACKAGE_NEEDS_OPTIONAL_VERIFICATION";
 
     /**
      * Broadcast Action: Sent to the system package verifier when a package is
@@ -10167,6 +10178,7 @@ public class Intent implements Parcelable, Cloneable {
                 case ACTION_MEDIA_SCANNER_FINISHED:
                 case ACTION_MEDIA_SCANNER_SCAN_FILE:
                 case ACTION_PACKAGE_NEEDS_VERIFICATION:
+                case ACTION_PACKAGE_NEEDS_OPTIONAL_VERIFICATION:
                 case ACTION_PACKAGE_VERIFIED:
                     // Ignore legacy actions
                     break;

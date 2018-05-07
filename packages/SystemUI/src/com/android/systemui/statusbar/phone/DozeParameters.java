@@ -30,6 +30,7 @@ import com.android.internal.hardware.AmbientDisplayConfiguration;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.doze.AlwaysOnDisplayPolicy;
+import com.android.systemui.doze.DozeScreenState;
 import com.android.systemui.tuner.TunerService;
 
 import java.io.PrintWriter;
@@ -59,9 +60,9 @@ public class DozeParameters implements TunerService.Tunable {
 
     @VisibleForTesting
     protected DozeParameters(Context context) {
-        mContext = context;
+        mContext = context.getApplicationContext();
         mAmbientDisplayConfiguration = new AmbientDisplayConfiguration(mContext);
-        mAlwaysOnPolicy = new AlwaysOnDisplayPolicy(context);
+        mAlwaysOnPolicy = new AlwaysOnDisplayPolicy(mContext);
 
         mControlScreenOffAnimation = !getDisplayNeedsBlanking();
         mPowerManager = mContext.getSystemService(PowerManager.class);
@@ -153,7 +154,8 @@ public class DozeParameters implements TunerService.Tunable {
      * @return duration in millis.
      */
     public long getWallpaperAodDuration() {
-        return mAlwaysOnPolicy.wallpaperVisibilityDuration;
+        return shouldControlScreenOff() ? DozeScreenState.ENTER_DOZE_HIDE_WALLPAPER_DELAY
+                : mAlwaysOnPolicy.wallpaperVisibilityDuration;
     }
 
     /**
@@ -241,6 +243,10 @@ public class DozeParameters implements TunerService.Tunable {
     @Override
     public void onTuningChanged(String key, String newValue) {
         mDozeAlwaysOn = mAmbientDisplayConfiguration.alwaysOnEnabled(UserHandle.USER_CURRENT);
+    }
+
+    public AlwaysOnDisplayPolicy getPolicy() {
+        return mAlwaysOnPolicy;
     }
 
     /**

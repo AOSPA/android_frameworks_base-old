@@ -152,7 +152,7 @@
       <item quantity="one">Urządzenie nie zostało odblokowane od <xliff:g id="NUMBER_0">%d</xliff:g> godziny. Potwierdź hasło.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Nie rozpoznano"</string>
-    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="3739658416797652781">
       <item quantity="few">Wpisz kod PIN karty SIM. Masz jeszcze <xliff:g id="NUMBER_1">%d</xliff:g> próby.</item>
       <item quantity="many">Wpisz kod PIN karty SIM. Masz jeszcze <xliff:g id="NUMBER_1">%d</xliff:g> prób.</item>
       <item quantity="other">Wpisz kod PIN karty SIM. Masz jeszcze <xliff:g id="NUMBER_1">%d</xliff:g> próby.</item>

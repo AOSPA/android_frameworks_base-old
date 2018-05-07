@@ -71,7 +71,6 @@ public class SliceManagerServiceTest extends UiServiceTestCase {
 
     @Before
     public void setup() {
-        LocalServices.addService(PackageManagerInternal.class, mock(PackageManagerInternal.class));
         LocalServices.addService(UsageStatsManagerInternal.class,
                 mock(UsageStatsManagerInternal.class));
         mContext.addMockSystemService(AppOpsManager.class, mock(AppOpsManager.class));
@@ -85,7 +84,6 @@ public class SliceManagerServiceTest extends UiServiceTestCase {
 
     @After
     public void teardown() {
-        LocalServices.removeServiceForTest(PackageManagerInternal.class);
         LocalServices.removeServiceForTest(UsageStatsManagerInternal.class);
     }
 
@@ -95,7 +93,7 @@ public class SliceManagerServiceTest extends UiServiceTestCase {
 
         mService.pinSlice("pkg", TEST_URI, EMPTY_SPECS, mToken);
         mService.pinSlice("pkg", TEST_URI, EMPTY_SPECS, mToken);
-        verify(mService, times(1)).createPinnedSlice(eq(TEST_URI), eq("pkg"));
+        verify(mService, times(1)).createPinnedSlice(eq(TEST_URI), anyString());
     }
 
     @Test

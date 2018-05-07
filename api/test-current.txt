@@ -204,6 +204,10 @@ package android.app.backup {
 
 package android.app.usage {
 
+  public class NetworkStatsManager {
+    method public void setPollForce(boolean);
+  }
+
   public class StorageStatsManager {
     method public boolean isQuotaSupported(java.util.UUID);
     method public boolean isReservedSupported(java.util.UUID);
@@ -604,6 +608,10 @@ package android.os {
     field public static final android.os.Parcelable.Creator<android.os.IncidentReportArgs> CREATOR;
   }
 
+  public final class PowerManager {
+    method public void nap(long);
+  }
+
   public class Process {
     method public static final int getThreadScheduler(int) throws java.lang.IllegalArgumentException;
   }
@@ -909,6 +917,7 @@ package android.telephony {
 
   public class TelephonyManager {
     method public int getCarrierIdListVersion();
+    method public void refreshUiccProfile();
     method public void setCarrierTestOverride(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String);
     field public static final int UNKNOWN_CARRIER_ID_LIST_VERSION = -1; // 0xffffffff
   }

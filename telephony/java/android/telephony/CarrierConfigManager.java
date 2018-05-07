@@ -1021,11 +1021,13 @@ public class CarrierConfigManager {
     /**
      * Unconditionally override the carrier name string using #KEY_CARRIER_NAME_STRING.
      *
-     * If true, then the carrier display name will be #KEY_CARRIER_NAME_STRING, unconditionally.
+     * If true, then the carrier name string will be #KEY_CARRIER_NAME_STRING, unconditionally.
      *
      * <p>If false, then the override will be performed conditionally and the
      * #KEY_CARRIER_NAME_STRING will have the lowest-precedence; it will only be used in the event
-     * that the name string would otherwise be empty, allowing it to serve as a last-resort.
+     * that the name string would otherwise be empty, allowing it to serve as a last-resort. If
+     * used, this value functions in place of the SPN on any/all ICC records for the corresponding
+     * subscription.
      */
     public static final String KEY_CARRIER_NAME_OVERRIDE_BOOL = "carrier_name_override_bool";
 
@@ -1708,6 +1710,7 @@ public class CarrierConfigManager {
      * Controls if the device should automatically notify the user as they reach
      * their cellular data warning. When set to {@code false} the carrier is
      * expected to have implemented their own notification mechanism.
+     * @hide
      */
     public static final String KEY_DATA_WARNING_NOTIFICATION_BOOL =
             "data_warning_notification_bool";
@@ -1730,6 +1733,7 @@ public class CarrierConfigManager {
      * Controls if the device should automatically notify the user as they reach
      * their cellular data limit. When set to {@code false} the carrier is
      * expected to have implemented their own notification mechanism.
+     * @hide
      */
     public static final String KEY_DATA_LIMIT_NOTIFICATION_BOOL =
             "data_limit_notification_bool";
@@ -1738,6 +1742,7 @@ public class CarrierConfigManager {
      * Controls if the device should automatically notify the user when rapid
      * cellular data usage is observed. When set to {@code false} the carrier is
      * expected to have implemented their own notification mechanism.
+     * @hide
      */
     public static final String KEY_DATA_RAPID_NOTIFICATION_BOOL =
             "data_rapid_notification_bool";
@@ -1964,6 +1969,15 @@ public class CarrierConfigManager {
     public static final String KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING =
             "wcdma_default_signal_strength_measurement_string";
 
+    /**
+     * When a partial sms / mms message stay in raw table for too long without being completed,
+     * we expire them and delete them from the raw table. This carrier config defines the
+     * expiration time.
+     * @hide
+     */
+    public static final String KEY_UNDELIVERED_SMS_MESSAGE_EXPIRATION_TIME =
+            "undelivered_sms_message_expiration_time";
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
@@ -2085,9 +2099,14 @@ public class CarrierConfigManager {
                 new String[]{"default", "mms", "dun", "supl"});
         sDefaults.putStringArray(KEY_CARRIER_METERED_ROAMING_APN_TYPES_STRINGS,
                 new String[]{"default", "mms", "dun", "supl"});
-        // By default all APNs are unmetered if the device is on IWLAN.
+        // By default all APNs should be unmetered if the device is on IWLAN. However, we add
+        // default APN as metered here as a workaround for P because in some cases, a data
+        // connection was brought up on cellular, but later on the device camped on IWLAN. That
+        // data connection was incorrectly treated as unmetered due to the current RAT IWLAN.
+        // Marking it as metered for now can workaround the issue.
+        // Todo: This will be fixed in Q when IWLAN full refactoring is completed.
         sDefaults.putStringArray(KEY_CARRIER_METERED_IWLAN_APN_TYPES_STRINGS,
-                new String[]{});
+                new String[]{"default"});
         sDefaults.putBoolean(KEY_CDMA_CW_CF_ENABLED_BOOL, false);
 
         sDefaults.putIntArray(KEY_ONLY_SINGLE_DC_ALLOWED_INT_ARRAY,

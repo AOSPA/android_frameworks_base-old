@@ -152,7 +152,7 @@
       <item quantity="other">Naprava ni bila odklenjena <xliff:g id="NUMBER_1">%d</xliff:g> ur. Potrdite geslo.</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"Ni prepoznano"</string>
-    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="3739658416797652781">
       <item quantity="one">Vnesite kodo PIN kartice SIM. Na voljo imate še <xliff:g id="NUMBER_1">%d</xliff:g> poskus.</item>
       <item quantity="two">Vnesite kodo PIN kartice SIM. Na voljo imate še <xliff:g id="NUMBER_1">%d</xliff:g> poskusa.</item>
       <item quantity="few">Vnesite kodo PIN kartice SIM. Na voljo imate še <xliff:g id="NUMBER_1">%d</xliff:g> poskuse.</item>

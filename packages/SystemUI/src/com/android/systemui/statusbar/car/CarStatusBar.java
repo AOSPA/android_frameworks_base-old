@@ -25,9 +25,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
-import android.view.ViewStub;
 import android.view.WindowManager;
-import android.widget.LinearLayout;
 
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.BatteryMeterView;
@@ -143,6 +141,52 @@ public class CarStatusBar extends StatusBar implements
         buildNavBarContent();
     }
 
+    /**
+     * Allows for showing or hiding just the navigation bars. This is indented to be used when
+     * the full screen user selector is shown.
+     */
+     void setNavBarVisibility(@View.Visibility int visibility) {
+        if (mNavigationBarWindow != null) {
+            mNavigationBarWindow.setVisibility(visibility);
+        }
+        if (mLeftNavigationBarWindow != null) {
+            mLeftNavigationBarWindow.setVisibility(visibility);
+        }
+        if (mRightNavigationBarWindow != null) {
+            mRightNavigationBarWindow.setVisibility(visibility);
+        }
+    }
+
+
+    @Override
+    public boolean hideKeyguard() {
+        boolean result = super.hideKeyguard();
+        if (mNavigationBarView != null) {
+            mNavigationBarView.hideKeyguardButtons();
+        }
+        if (mLeftNavigationBarView != null) {
+            mLeftNavigationBarView.hideKeyguardButtons();
+        }
+        if (mRightNavigationBarView != null) {
+            mRightNavigationBarView.hideKeyguardButtons();
+        }
+        return result;
+    }
+
+
+    @Override
+    public void showKeyguard() {
+        super.showKeyguard();
+        if (mNavigationBarView != null) {
+            mNavigationBarView.showKeyguardButtons();
+        }
+        if (mLeftNavigationBarView != null) {
+            mLeftNavigationBarView.showKeyguardButtons();
+        }
+        if (mRightNavigationBarView != null) {
+            mRightNavigationBarView.showKeyguardButtons();
+        }
+    }
 
     @Override
     public void destroy() {
@@ -406,9 +450,12 @@ public class CarStatusBar extends StatusBar implements
     private class TaskStackListenerImpl extends SysUiTaskStackChangeListener {
         @Override
         public void onTaskStackChanged() {
-            ActivityManager.RunningTaskInfo runningTaskInfo =
-                    ActivityManagerWrapper.getInstance().getRunningTask();
-            mCarFacetButtonController.taskChanged(runningTaskInfo);
+            try {
+                mCarFacetButtonController.taskChanged(
+                        ActivityManager.getService().getAllStackInfos());
+            } catch (Exception e) {
+                Log.e(TAG, "Getting StackInfo from activity manager failed", e);
+            }
         }
     }
 

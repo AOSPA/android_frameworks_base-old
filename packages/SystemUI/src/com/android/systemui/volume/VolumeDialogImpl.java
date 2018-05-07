@@ -45,17 +45,14 @@ import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.ColorDrawable;
-import android.media.AudioAttributes;
 import android.media.AudioManager;
 import android.media.AudioSystem;
-import android.media.MediaPlayer;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.SystemClock;
 import android.os.VibrationEffect;
-import android.os.Vibrator;
 import android.provider.Settings;
 import android.provider.Settings.Global;
 import android.text.InputFilter;
@@ -73,10 +70,10 @@ import android.view.ViewPropertyAnimator;
 import android.view.Window;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityManager.AccessibilityStateChangeListener;
+import android.view.accessibility.AccessibilityManager.AccessibilityServicesStateChangeListener;
 import android.view.animation.DecelerateInterpolator;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
-import android.widget.ImageView;
 import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.TextView;
@@ -124,7 +121,7 @@ public class VolumeDialogImpl implements VolumeDialog {
     private ImageButton mRingerIcon;
     private View mSettingsView;
     private ImageButton mSettingsIcon;
-    private ImageView mZenIcon;
+    private FrameLayout mZenIcon;
     private final List<VolumeRow> mRows = new ArrayList<>();
     private ConfigurableTexts mConfigurableTexts;
     private final SparseBooleanArray mDynamic = new SparseBooleanArray();
@@ -132,9 +129,8 @@ public class VolumeDialogImpl implements VolumeDialog {
     private final AccessibilityManagerWrapper mAccessibilityMgr;
     private final Object mSafetyWarningLock = new Object();
     private final Accessibility mAccessibility = new Accessibility();
-    private final ColorStateList mActiveSliderTint;
-    private final ColorStateList mInactiveSliderTint;
-    private final Vibrator mVibrator;
+    private final ColorStateList mActiveTint;
+    private final ColorStateList mInactiveTint;
 
     private boolean mShowing;
     private boolean mShowA11yStream;
@@ -152,10 +148,9 @@ public class VolumeDialogImpl implements VolumeDialog {
         mController = Dependency.get(VolumeDialogController.class);
         mKeyguard = (KeyguardManager) mContext.getSystemService(Context.KEYGUARD_SERVICE);
         mAccessibilityMgr = Dependency.get(AccessibilityManagerWrapper.class);
-        mActiveSliderTint = ColorStateList.valueOf(Utils.getColorAccent(mContext));
-        mInactiveSliderTint = loadColorStateList(R.color.volume_slider_inactive);
+        mActiveTint = ColorStateList.valueOf(Utils.getColorAccent(mContext));
+        mInactiveTint = loadColorStateList(R.color.volume_slider_inactive);
         mDeviceProvisionedController = Dependency.get(DeviceProvisionedController.class);
-        mVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
     }
 
     public void init(int windowType, Callback callback) {
@@ -413,7 +408,7 @@ public class VolumeDialogImpl implements VolumeDialog {
 
     public void initSettingsH() {
         mSettingsView.setVisibility(
-                mDeviceProvisionedController.isDeviceProvisioned() ? VISIBLE : GONE);
+                mDeviceProvisionedController.isCurrentUserSetup() ? VISIBLE : GONE);
         mSettingsIcon.setOnClickListener(v -> {
             Events.writeEvent(mContext, Events.EVENT_SETTINGS_CLICK);
             Intent intent = new Intent(Settings.ACTION_SOUND_SETTINGS);
@@ -520,7 +515,6 @@ public class VolumeDialogImpl implements VolumeDialog {
         mHandler.removeMessages(H.SHOW);
         mHandler.removeMessages(H.DISMISS);
         rescheduleTimeoutH();
-        if (mShowing) return;
         mShowing = true;
 
         initSettingsH();
@@ -548,7 +542,6 @@ public class VolumeDialogImpl implements VolumeDialog {
     protected void dismissH(int reason) {
         mHandler.removeMessages(H.DISMISS);
         mHandler.removeMessages(H.SHOW);
-        if (!mShowing) return;
         mDialogView.animate().cancel();
         mShowing = false;
 
@@ -614,7 +607,7 @@ public class VolumeDialogImpl implements VolumeDialog {
             final boolean shouldBeVisible = shouldBeVisibleH(row, activeRow);
             Util.setVisOrGone(row.view, shouldBeVisible);
             if (row.view.isShown()) {
-                updateVolumeRowSliderTintH(row, isActive);
+                updateVolumeRowTintH(row, isActive);
             }
         }
     }
@@ -677,7 +670,28 @@ public class VolumeDialogImpl implements VolumeDialog {
      * @param enable whether to enable volume row views and hide dnd icon
      */
     private void enableVolumeRowViewsH(VolumeRow row, boolean enable) {
-        row.dndIcon.setVisibility(enable ? GONE : VISIBLE);
+        boolean showDndIcon = !enable;
+        row.dndIcon.setVisibility(showDndIcon ? VISIBLE : GONE);
+
+        if (showDndIcon && getNumVisibleRows() == 1) {
+            row.dndIcon.setLayoutParams(new FrameLayout.LayoutParams(
+                    mContext.getResources().getDimensionPixelSize(
+                            R.dimen.volume_dialog_panel_width),
+                    FrameLayout.LayoutParams.WRAP_CONTENT));
+        } else if (row.view.getVisibility() == VISIBLE) {
+            row.dndIcon.setLayoutParams(new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT));
+        }
+    }
+
+    private int getNumVisibleRows() {
+        int count = 0;
+        for (int i = 0; i < mRows.size(); i++) {
+            if (mRows.get(i).view.getVisibility() == VISIBLE) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**
@@ -769,6 +783,11 @@ public class VolumeDialogImpl implements VolumeDialog {
         if (max != row.slider.getMax()) {
             row.slider.setMax(max);
         }
+        // update slider min
+        final int min = ss.levelMin * 100;
+        if (min != row.slider.getMin()) {
+            row.slider.setMin(min);
+        }
 
         // update header text
         Util.setText(row.header, getStreamLabelH(ss));
@@ -848,21 +867,22 @@ public class VolumeDialogImpl implements VolumeDialog {
         updateVolumeRowSliderH(row, enableSlider, vlevel);
     }
 
-    private void updateVolumeRowSliderTintH(VolumeRow row, boolean isActive) {
+    private void updateVolumeRowTintH(VolumeRow row, boolean isActive) {
         if (isActive) {
             row.slider.requestFocus();
         }
-        final ColorStateList tint = isActive && row.slider.isEnabled() ? mActiveSliderTint
-                : mInactiveSliderTint;
-        if (tint == row.cachedSliderTint) return;
-        row.cachedSliderTint = tint;
+        final ColorStateList tint = isActive && row.slider.isEnabled() ? mActiveTint
+                : mInactiveTint;
+        if (tint == row.cachedTint) return;
         row.slider.setProgressTintList(tint);
         row.slider.setThumbTintList(tint);
+        row.icon.setImageTintList(tint);
+        row.cachedTint = tint;
     }
 
     private void updateVolumeRowSliderH(VolumeRow row, boolean enable, int vlevel) {
         row.slider.setEnabled(enable);
-        updateVolumeRowSliderTintH(row, row.stream == mActiveStream);
+        updateVolumeRowTintH(row, row.stream == mActiveStream);
         if (row.tracking) {
             return;  // don't update if user is sliding
         }
@@ -1185,12 +1205,12 @@ public class VolumeDialogImpl implements VolumeDialog {
                 }
             });
             mDialogView.setAccessibilityDelegate(this);
-            mAccessibilityMgr.addAccessibilityStateChangeListener(mListener);
+            mAccessibilityMgr.addCallback(mListener);
             updateFeedbackEnabled();
         }
 
         public void destroy() {
-            mAccessibilityMgr.removeAccessibilityStateChangeListener(mListener);
+            mAccessibilityMgr.removeCallback(mListener);
         }
 
         @Override
@@ -1216,7 +1236,7 @@ public class VolumeDialogImpl implements VolumeDialog {
             return false;
         }
 
-        private final AccessibilityStateChangeListener mListener =
+        private final AccessibilityServicesStateChangeListener mListener =
                 enabled -> updateFeedbackEnabled();
     }
 
@@ -1234,11 +1254,11 @@ public class VolumeDialogImpl implements VolumeDialog {
         private int iconMuteRes;
         private boolean important;
         private boolean defaultStream;
-        private ColorStateList cachedSliderTint;
+        private ColorStateList cachedTint;
         private int iconState;  // from Events
         private ObjectAnimator anim;  // slider progress animation for non-touch-related updates
         private int animTargetProgress;
         private int lastAudibleLevel = 1;
-        private ImageView dndIcon;
+        private FrameLayout dndIcon;
     }
 }

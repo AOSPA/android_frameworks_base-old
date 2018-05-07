@@ -95,6 +95,7 @@ import static android.os.Process.SIGNAL_USR1;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Process.THREAD_GROUP_BG_NONINTERACTIVE;
 import static android.os.Process.THREAD_GROUP_DEFAULT;
+import static android.os.Process.THREAD_GROUP_RESTRICTED;
 import static android.os.Process.THREAD_GROUP_TOP_APP;
 import static android.os.Process.THREAD_PRIORITY_BACKGROUND;
 import static android.os.Process.THREAD_PRIORITY_FOREGROUND;
@@ -437,6 +438,7 @@ import com.android.internal.util.Preconditions;
 import com.android.server.AlarmManagerInternal;
 import com.android.server.AppOpsService;
 import com.android.server.AttributeCache;
+import com.android.server.BinderCallsStatsService;
 import com.android.server.DeviceIdleController;
 import com.android.server.IntentResolver;
 import com.android.server.IoThread;
@@ -2992,7 +2994,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                             ? Collections.emptyList()
                             : Arrays.asList(exemptions.split(","));
                 }
-                zygoteProcess.setApiBlacklistExemptions(mExemptions);
+                if (!zygoteProcess.setApiBlacklistExemptions(mExemptions)) {
+                  Slog.e(TAG, "Failed to set API blacklist exemptions!");
+                  // leave mExemptionsStr as is, so we don't try to send the same list again.
+                  mExemptions = Collections.emptyList();
+                }
             }
             int logSampleRate = Settings.Global.getInt(mContext.getContentResolver(),
                     Settings.Global.HIDDEN_API_ACCESS_LOG_SAMPLING_RATE, -1);
@@ -3208,6 +3214,8 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         // bind background thread to little cores
         // this is expected to fail inside of framework tests because apps can't touch cpusets directly
+        // make sure we've already adjusted system_server's internal view of itself first
+        updateOomAdjLocked();
         try {
             Process.setThreadGroupAndCpuset(BackgroundThread.get().getThreadId(),
                     Process.THREAD_GROUP_BG_NONINTERACTIVE);
@@ -3450,6 +3458,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mOnBattery = DEBUG_POWER ? true : onBattery;
             }
         }
+    }
+
+    @Override
+    public void batteryStatsReset() {
+        BinderCallsStatsService.reset();
     }
 
     @Override
@@ -3757,12 +3770,16 @@ public class ActivityManagerService extends IActivityManager.Stub
         int lrui = mLruProcesses.lastIndexOf(app);
         if (lrui >= 0) {
             if (!app.killed) {
-                Slog.wtfStack(TAG, "Removing process that hasn't been killed: " + app);
-                if (app.pid > 0) {
-                    killProcessQuiet(app.pid);
-                    killProcessGroup(app.uid, app.pid);
+                if (app.persistent) {
+                    Slog.w(TAG, "Removing persistent process that hasn't been killed: " + app);
                 } else {
-                    app.pendingStart = false;
+                    Slog.wtfStack(TAG, "Removing process that hasn't been killed: " + app);
+                    if (app.pid > 0) {
+                        killProcessQuiet(app.pid);
+                        killProcessGroup(app.uid, app.pid);
+                    } else {
+                        app.pendingStart = false;
+                    }
                 }
             }
             if (lrui <= mLruProcessActivityStart) {
@@ -4789,7 +4806,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     private boolean hasUsageStatsPermission(String callingPackage) {
-        final int mode = mAppOpsService.checkOperation(AppOpsManager.OP_GET_USAGE_STATS,
+        final int mode = mAppOpsService.noteOperation(AppOpsManager.OP_GET_USAGE_STATS,
                 Binder.getCallingUid(), callingPackage);
         if (mode == AppOpsManager.MODE_DEFAULT) {
             return checkCallingPermission(Manifest.permission.PACKAGE_USAGE_STATS)
@@ -5347,22 +5364,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 final RecentsAnimation anim = new RecentsAnimation(this, mStackSupervisor,
                         mActivityStartController, mWindowManager, mUserController, callingPid);
                 anim.startRecentsActivity(intent, recentsAnimationRunner, recentsComponent,
-                        recentsUid);
-            }
-
-            // If provided, kick off the request for the assist data in the background. Do not hold
-            // the AM lock as this will just proxy directly to the assist data receiver provided.
-            if (assistDataReceiver != null) {
-                final AppOpsManager appOpsManager = (AppOpsManager)
-                        mContext.getSystemService(Context.APP_OPS_SERVICE);
-                final AssistDataReceiverProxy proxy = new AssistDataReceiverProxy(
-                        assistDataReceiver, recentsPackage);
-                final AssistDataRequester requester = new AssistDataRequester(mContext, this,
-                        mWindowManager, appOpsManager, proxy, this, OP_ASSIST_STRUCTURE, OP_NONE);
-                requester.requestAssistData(topVisibleActivities,
-                        true /* fetchData */, false /* fetchScreenshots */,
-                        true /* allowFetchData */, false /* allowFetchScreenshots */,
-                        recentsUid, recentsPackage);
+                        recentsUid, assistDataReceiver);
             }
         } finally {
             Binder.restoreCallingIdentity(origId);
@@ -5375,7 +5377,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         final long origId = Binder.clearCallingIdentity();
         try {
             synchronized (this) {
-                mWindowManager.cancelRecentsAnimation(restoreHomeStackPosition
+                // Cancel the recents animation synchronously (do not hold the WM lock)
+                mWindowManager.cancelRecentsAnimationSynchronously(restoreHomeStackPosition
                         ? REORDER_MOVE_TO_ORIGINAL_POSITION
                         : REORDER_KEEP_IN_PLACE, "cancelRecentsAnimation");
             }
@@ -6845,6 +6848,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                 int[] users = userId == UserHandle.USER_ALL
                         ? mUserController.getUsers() : new int[] { userId };
                 for (int user : users) {
+                    if (getPackageManagerInternalLocked().isPackageStateProtected(
+                            packageName, user)) {
+                        Slog.w(TAG, "Ignoring request to force stop protected package "
+                                + packageName + " u" + user);
+                        return;
+                    }
+
                     int pkgUid = -1;
                     try {
                         pkgUid = pm.getPackageUid(packageName, MATCH_DEBUG_TRIAGED_MISSING,
@@ -8584,8 +8594,19 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (!(sender instanceof PendingIntentRecord)) {
             return;
         }
+        boolean isCancelled;
         synchronized(this) {
-            ((PendingIntentRecord)sender).registerCancelListenerLocked(receiver);
+            PendingIntentRecord pendingIntent = (PendingIntentRecord) sender;
+            isCancelled = pendingIntent.canceled;
+            if (!isCancelled) {
+                pendingIntent.registerCancelListenerLocked(receiver);
+            }
+        }
+        if (isCancelled) {
+            try {
+                receiver.send(Activity.RESULT_CANCELED, null);
+            } catch (RemoteException e) {
+            }
         }
     }
 
@@ -8798,7 +8819,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public boolean isAppForeground(int uid) throws RemoteException {
+    public boolean isAppForeground(int uid) {
         synchronized (this) {
             UidRecord uidRec = mActiveUids.get(uid);
             if (uidRec == null || uidRec.idle) {
@@ -9088,6 +9109,12 @@ public class ActivityManagerService extends IActivityManager.Stub
         public boolean checkPermission(String permission, int pid, int uid) {
             return mActivityManagerService.checkPermission(permission, pid,
                     uid) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @Override
+        public int noteOp(String op, int uid, String packageName) {
+            return mActivityManagerService.mAppOpsService
+                    .noteOperation(AppOpsManager.strOpToOp(op), uid, packageName);
         }
 
         @Override
@@ -11355,7 +11382,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     stack.moveToFront("setTaskWindowingModeSplitScreenPrimary", task);
                 }
                 stack.setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, animate, showRecents,
-                        false /* enteringSplitScreenMode */);
+                        false /* enteringSplitScreenMode */, false /* deferEnsuringVisibility */);
                 return windowingMode != task.getWindowingMode();
             } finally {
                 Binder.restoreCallingIdentity(ident);
@@ -11546,6 +11573,19 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mStackSupervisor.resizeDockedStackLocked(dockedBounds, tempDockedTaskBounds,
                         tempDockedTaskInsetBounds, tempOtherTaskBounds, tempOtherTaskInsetBounds,
                         PRESERVE_WINDOWS);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(ident);
+        }
+    }
+
+    @Override
+    public void setSplitScreenResizing(boolean resizing) {
+        enforceCallerIsRecentsOrHasPermission(MANAGE_ACTIVITY_STACKS, "setSplitScreenResizing()");
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            synchronized (this) {
+                mStackSupervisor.setSplitScreenResizing(resizing);
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -13300,6 +13340,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 mHandler.obtainMessage(DISPATCH_SCREEN_AWAKE_MSG, isAwake ? 1 : 0, 0)
                         .sendToTarget();
             }
+            updateOomAdjLocked();
         }
     }
 
@@ -14266,12 +14307,16 @@ public class ActivityManagerService extends IActivityManager.Stub
     public boolean isUidActive(int uid, String callingPackage) {
         if (!hasUsageStatsPermission(callingPackage)) {
             enforceCallingPermission(android.Manifest.permission.PACKAGE_USAGE_STATS,
-                    "getPackageProcessState");
+                    "isUidActive");
         }
         synchronized (this) {
-            final UidRecord uidRecord = mActiveUids.get(uid);
-            return uidRecord != null && !uidRecord.setIdle;
+            return isUidActiveLocked(uid);
         }
+    }
+
+    boolean isUidActiveLocked(int uid) {
+        final UidRecord uidRecord = mActiveUids.get(uid);
+        return uidRecord != null && !uidRecord.setIdle;
     }
 
     @Override
@@ -14626,6 +14671,10 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     void setRunningRemoteAnimation(int pid, boolean runningRemoteAnimation) {
+        if (pid == Process.myPid()) {
+            Slog.wtf(TAG, "system can't run remote animation");
+            return;
+        }
         synchronized (ActivityManagerService.this) {
             final ProcessRecord pr;
             synchronized (mPidsSelfLocked) {
@@ -18294,6 +18343,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 case ProcessList.SCHED_GROUP_TOP_APP:
                     schedGroup = 'T';
                     break;
+                case ProcessList.SCHED_GROUP_RESTRICTED:
+                    schedGroup = 'R';
+                    break;
                 default:
                     schedGroup = '?';
                     break;
@@ -21266,6 +21318,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             if (brOptions.isDontSendToRestrictedApps()
+                    && !isUidActiveLocked(callingUid)
                     && isBackgroundRestrictedNoCheck(callingUid, callerPackage)) {
                 Slog.i(TAG, "Not sending broadcast " + action + " - app " + callerPackage
                         + " has background restrictions");
@@ -22050,54 +22103,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     // INSTRUMENTATION
     // =========================================================
 
-    private static String[] HIDDENAPI_EXEMPT_PACKAGES = {
-        "com.android.bluetooth.tests",
-        "com.android.managedprovisioning.tests",
-        "com.android.frameworks.coretests",
-        "com.android.frameworks.coretests.binderproxycountingtestapp",
-        "com.android.frameworks.coretests.binderproxycountingtestservice",
-        "com.android.frameworks.tests.net",
-        "com.android.frameworks.tests.uiservices",
-        "com.android.coretests.apps.bstatstestapp",
-        "com.android.servicestests.apps.conntestapp",
-        "com.android.frameworks.servicestests",
-        "com.android.frameworks.utiltests",
-        "com.android.mtp.tests",
-        "android.mtp",
-        "com.android.documentsui.tests",
-        "com.android.shell.tests",
-        "com.android.systemui.tests",
-        "com.android.testables",
-        "android.net.wifi.test",
-        "com.android.server.wifi.test",
-        "com.android.frameworks.telephonytests",
-        "com.android.providers.contacts.tests",
-        "com.android.providers.contacts.tests2",
-        "com.android.settings.tests.unit",
-        "com.android.server.telecom.tests",
-        "com.android.vcard.tests",
-        "com.android.providers.blockednumber.tests",
-        "android.settings.functional",
-        "com.android.notification.functional",
-        "com.android.frameworks.dexloggertest",
-        "com.android.server.usb",
-        "com.android.providers.downloads.tests",
-        "com.android.emergency.tests.unit",
-        "com.android.providers.calendar.tests",
-        "com.android.settingslib",
-        "com.android.rs.test",
-        "com.android.printspooler.outofprocess.tests",
-        "com.android.cellbroadcastreceiver.tests.unit",
-        "com.android.providers.telephony.tests",
-        "com.android.carrierconfig.tests",
-        "com.android.phone.tests",
-        "com.android.service.ims.presence.tests",
-        "com.android.providers.setting.test",
-        "com.android.frameworks.locationtests",
-        "com.android.frameworks.coretests.privacy",
-        "com.android.settings.ui",
-    };
-
     public boolean startInstrumentation(ComponentName className,
             String profileFile, int flags, Bundle arguments,
             IInstrumentationWatcher watcher, IUiAutomationConnection uiAutomationConnection,
@@ -22169,6 +22174,13 @@ public class ActivityManagerService extends IActivityManager.Stub
             activeInstr.mUiAutomationConnection = uiAutomationConnection;
             activeInstr.mResultClass = className;
 
+            boolean disableHiddenApiChecks =
+                    (flags & INSTRUMENTATION_FLAG_DISABLE_HIDDEN_API_CHECKS) != 0;
+            if (disableHiddenApiChecks) {
+                enforceCallingPermission(android.Manifest.permission.DISABLE_HIDDEN_API_CHECKS,
+                        "disable hidden API checks");
+            }
+
             final long origId = Binder.clearCallingIdentity();
             // Instrumentation can kill and relaunch even persistent processes
             forceStopPackageLocked(ii.targetPackage, -1, true, false, true, true, false, userId,
@@ -22177,15 +22189,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             if (mUsageStatsService != null) {
                 mUsageStatsService.reportEvent(ii.targetPackage, userId,
                         UsageEvents.Event.SYSTEM_INTERACTION);
-            }
-            boolean disableHiddenApiChecks =
-                    (flags & INSTRUMENTATION_FLAG_DISABLE_HIDDEN_API_CHECKS) != 0;
-
-            // TODO: Temporary whitelist of packages which need to be exempt from hidden API
-            //       checks. Remove this as soon as the testing infrastructure allows to set
-            //       the flag in AndroidTest.xml.
-            if (Arrays.asList(HIDDENAPI_EXEMPT_PACKAGES).contains(ai.packageName)) {
-                disableHiddenApiChecks = true;
             }
 
             ProcessRecord app = addAppLocked(ai, defProcess, false, disableHiddenApiChecks,
@@ -23046,6 +23049,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private void noteUidProcessState(final int uid, final int state) {
         mBatteryStatsService.noteUidProcessState(uid, state);
+        mAppOpsService.updateUidProcState(uid, state);
         if (mTrackingAssociations) {
             for (int i1=0, N1=mAssociations.size(); i1<N1; i1++) {
                 ArrayMap<ComponentName, SparseArray<ArrayMap<String, Association>>> targetComponents
@@ -23118,8 +23122,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 app.curSchedGroup = ProcessList.SCHED_GROUP_TOP_APP;
                 app.adjType = "pers-top-activity";
             } else if (app.hasTopUi) {
+                // sched group/proc state adjustment is below
                 app.systemNoUi = false;
-                app.curSchedGroup = ProcessList.SCHED_GROUP_TOP_APP;
                 app.adjType = "pers-top-ui";
             } else if (activitiesSize > 0) {
                 for (int j = 0; j < activitiesSize; j++) {
@@ -23130,7 +23134,15 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             if (!app.systemNoUi) {
-                app.curProcState = ActivityManager.PROCESS_STATE_PERSISTENT_UI;
+              if (mWakefulness == PowerManagerInternal.WAKEFULNESS_AWAKE) {
+                  // screen on, promote UI
+                  app.curProcState = ActivityManager.PROCESS_STATE_PERSISTENT_UI;
+                  app.curSchedGroup = ProcessList.SCHED_GROUP_TOP_APP;
+              } else {
+                  // screen off, restrict UI scheduling
+                  app.curProcState = ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
+                  app.curSchedGroup = ProcessList.SCHED_GROUP_RESTRICTED;
+              }
             }
             return (app.curAdj=app.maxAdj);
         }
@@ -23613,8 +23625,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 int newAdj;
                                 if ((cr.flags&(Context.BIND_ABOVE_CLIENT
                                         |Context.BIND_IMPORTANT)) != 0) {
-                                    newAdj = clientAdj >= ProcessList.PERSISTENT_SERVICE_ADJ
-                                            ? clientAdj : ProcessList.PERSISTENT_SERVICE_ADJ;
+                                    if (clientAdj >= ProcessList.PERSISTENT_SERVICE_ADJ) {
+                                        newAdj = clientAdj;
+                                    } else {
+                                        // make this service persistent
+                                        newAdj = ProcessList.PERSISTENT_SERVICE_ADJ;
+                                        schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
+                                        procState = ActivityManager.PROCESS_STATE_PERSISTENT;
+                                    }
                                 } else if ((cr.flags&Context.BIND_NOT_VISIBLE) != 0
                                         && clientAdj < ProcessList.PERCEPTIBLE_APP_ADJ
                                         && adj > ProcessList.PERCEPTIBLE_APP_ADJ) {
@@ -23979,6 +23997,15 @@ public class ActivityManagerService extends IActivityManager.Stub
             adj = app.maxAdj;
             if (app.maxAdj <= ProcessList.PERCEPTIBLE_APP_ADJ) {
                 schedGroup = ProcessList.SCHED_GROUP_DEFAULT;
+            }
+        }
+
+        // Put bound foreground services in a special sched group for additional
+        // restrictions on screen off
+        if (procState >= ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE &&
+            mWakefulness != PowerManagerInternal.WAKEFULNESS_AWAKE) {
+            if (schedGroup > ProcessList.SCHED_GROUP_RESTRICTED) {
+                schedGroup = ProcessList.SCHED_GROUP_RESTRICTED;
             }
         }
 
@@ -24366,6 +24393,18 @@ public class ActivityManagerService extends IActivityManager.Stub
         boolean success = true;
 
         if (app.curRawAdj != app.setRawAdj) {
+            String seempStr = "app_uid=" + app.uid
+                + ",app_pid=" + app.pid + ",oom_adj=" + app.curAdj
+                + ",setAdj=" + app.setAdj + ",hasShownUi=" + (app.hasShownUi ? 1 : 0)
+                + ",cached=" + (app.cached ? 1 : 0)
+                + ",fA=" + (app.foregroundActivities ? 1 : 0)
+                + ",fS=" + (app.foregroundServices ? 1 : 0)
+                + ",systemNoUi=" + (app.systemNoUi ? 1 : 0)
+                + ",curSchedGroup=" + app.curSchedGroup
+                + ",curProcState=" + app.curProcState + ",setProcState=" + app.setProcState
+                + ",killed=" + (app.killed ? 1 : 0) + ",killedByAm=" + (app.killedByAm ? 1 : 0)
+                + ",debugging=" + (app.debugging ? 1 : 0);
+            android.util.SeempLog.record_str(385, seempStr);
             app.setRawAdj = app.curRawAdj;
         }
 
@@ -24403,6 +24442,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                     case ProcessList.SCHED_GROUP_TOP_APP:
                     case ProcessList.SCHED_GROUP_TOP_APP_BOUND:
                         processGroup = THREAD_GROUP_TOP_APP;
+                        break;
+                    case ProcessList.SCHED_GROUP_RESTRICTED:
+                        processGroup = THREAD_GROUP_RESTRICTED;
                         break;
                     default:
                         processGroup = THREAD_GROUP_DEFAULT;
@@ -26748,10 +26790,14 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
+        public void cancelRecentsAnimation(boolean restoreHomeStackPosition) {
+            ActivityManagerService.this.cancelRecentsAnimation(restoreHomeStackPosition);
+        }
+
+        @Override
         public boolean isUidActive(int uid) {
             synchronized (ActivityManagerService.this) {
-                final UidRecord uidRec = mActiveUids.get(uid);
-                return (uidRec != null) && !uidRec.idle;
+                return isUidActiveLocked(uid);
             }
         }
 

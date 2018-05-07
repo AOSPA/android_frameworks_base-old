@@ -839,7 +839,8 @@
     <string name="double_tap_toast" msgid="4595046515400268881">"Padoms. Divreiz pieskarieties, lai tuvinātu un tālinātu."</string>
     <string name="autofill_this_form" msgid="4616758841157816676">"Automātiskā aizpilde"</string>
     <string name="setup_autofill" msgid="7103495070180590814">"Iest. aut. aizp."</string>
-    <string name="autofill_window_title" msgid="921006636895825007">"Automātiskā aizpilde"</string>
+    <!-- no translation found for autofill_window_title (4107745526909284887) -->
+    <skip />
     <string name="autofill_address_name_separator" msgid="6350145154779706772">" "</string>
     <string name="autofill_address_summary_name_format" msgid="3268041054899214945">"$1$2$3"</string>
     <string name="autofill_address_summary_separator" msgid="7483307893170324129">", "</string>
@@ -1034,8 +1035,7 @@
     <string name="dial" msgid="1253998302767701559">"Zvanīt"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Zvanīt uz atlasīto tālruņa numuru"</string>
     <string name="map" msgid="5441053548030107189">"Maps"</string>
-    <!-- no translation found for map_desc (1836995341943772348) -->
-    <skip />
+    <string name="map_desc" msgid="1836995341943772348">"Atrast atlasīto adresi"</string>
     <string name="browse" msgid="1245903488306147205">"Atvērt"</string>
     <string name="browse_desc" msgid="8220976549618935044">"Atvērt atlasīto URL"</string>
     <string name="sms" msgid="4560537514610063430">"Īsziņa"</string>
@@ -1716,7 +1716,8 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Instalēja administrators"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Atjaunināja administrators"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Dzēsa administrators"</string>
-    <string name="battery_saver_description" msgid="4660824093877546730">"Lai paildzinātu akumulatora darbību, akumulatora jaudas taupīšanas režīmā tiek samazināta ierīces veiktspēja un ierobežota vai izslēgta vibrācija, atrašanās vietu pakalpojumi un fona dati. E-pasta, ziņojumapmaiņas un citas lietotnes, kurām ir nepieciešama sinhronizācija, var netikt atjauninātas, ja tās neatverat.\n\nTiklīdz tiek sākta ierīces uzlāde, akumulatora jaudas taupīšanas režīms tiek automātiski izslēgts."</string>
+    <string name="battery_saver_description_with_learn_more" msgid="6323937147992667707">"Lai pagarinātu akumulatora darbības ilgumu, akumulatora jaudas taupīšanas režīmā tiek izslēgtas dažas ierīces funkcijas un ierobežota lietotņu darbība. "<annotation id="url">"Uzziniet vairāk"</annotation>"."</string>
+    <string name="battery_saver_description" msgid="769989536172631582">"Lai pagarinātu akumulatora darbības ilgumu, akumulatora jaudas taupīšanas režīmā tiek izslēgtas dažas ierīces funkcijas un ierobežota lietotņu darbība."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Lai samazinātu datu lietojumu, datu lietojuma samazinātājs neļauj dažām lietotnēm fonā nosūtīt vai saņemt datus. Lietotne, kuru pašlaik izmantojat, var piekļūt datiem, bet, iespējams, piekļūs tiem retāk (piemēram, attēli tiks parādīti tikai tad, kad tiem pieskarsieties)."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Vai ieslēgt datu lietojuma samazinātāju?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Ieslēgt"</string>
@@ -1772,7 +1773,7 @@
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Nedēļas nogalē"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Pasākums"</string>
     <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"Gulēšana"</string>
-    <string name="muted_by" msgid="6147073845094180001">"Skaņu izslēdza <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
+    <string name="muted_by" msgid="5942954724562097128">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g> izslēdz noteiktas skaņas"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"Jūsu ierīcē ir radusies iekšēja problēma, un ierīce var darboties nestabili. Lai to labotu, veiciet rūpnīcas datu atiestatīšanu."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"Jūsu ierīcē ir radusies iekšēja problēma. Lai iegūtu plašāku informāciju, lūdzu, sazinieties ar ražotāju."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5214333646366591205">"USSD pieprasījums mainīts uz parastu zvanu"</string>
@@ -1812,6 +1813,9 @@
     <string name="language_picker_section_all" msgid="3097279199511617537">"Visas valodas"</string>
     <string name="region_picker_section_all" msgid="8966316787153001779">"Visi reģioni"</string>
     <string name="locale_search_menu" msgid="2560710726687249178">"Meklēt"</string>
+    <string name="app_suspended_title" msgid="1919029799438164552">"Neatverama lietotne"</string>
+    <string name="app_suspended_default_message" msgid="7875306315686531621">"Lietotne <xliff:g id="APP_NAME_0">%1$s</xliff:g> pašlaik nav pieejama. Šo darbību pārvalda <xliff:g id="APP_NAME_1">%2$s</xliff:g>."</string>
+    <string name="app_suspended_more_details" msgid="1131804827776778187">"Uzzināt vairāk"</string>
     <string name="work_mode_off_title" msgid="1118691887588435530">"Vai ieslēgt darba profilu?"</string>
     <string name="work_mode_off_message" msgid="5130856710614337649">"Tiks ieslēgtas jūsu darba lietotnes, paziņojumi, dati un citas darba profila funkcijas."</string>
     <string name="work_mode_turn_on" msgid="2062544985670564875">"Ieslēgt"</string>
@@ -1902,10 +1906,11 @@
     <string name="volume_dialog_ringer_guidance_silent" msgid="2128975224280276122">"Zvanu un paziņojumu signāla skaņa būs izslēgta."</string>
     <string name="notification_channel_system_changes" msgid="5072715579030948646">"Sistēmas izmaiņas"</string>
     <string name="notification_channel_do_not_disturb" msgid="6766940333105743037">"Netraucēt"</string>
-    <string name="zen_upgrade_notification_visd_title" msgid="4168873821019741166">"Režīmā “Netraucēt” paziņojumi tiek paslēpti, lai palīdzētu jums koncentrēties"</string>
-    <string name="zen_upgrade_notification_visd_content" msgid="6776377368195804354">"Šāda darbība ir jauna. Pieskarieties, lai mainītu iestatījumus."</string>
+    <string name="zen_upgrade_notification_visd_title" msgid="3288313883409759733">"Jaunums: režīmā “Netraucēt” paziņojumi tiek paslēpti"</string>
+    <string name="zen_upgrade_notification_visd_content" msgid="5533674060311631165">"Pieskarieties, lai uzzinātu vairāk un veiktu izmaiņas."</string>
     <string name="zen_upgrade_notification_title" msgid="3799603322910377294">"Režīms “Netraucēt” ir mainīts"</string>
     <string name="zen_upgrade_notification_content" msgid="1794994264692424562">"Pieskarieties, lai uzzinātu, kas tiek bloķēts."</string>
     <string name="notification_app_name_system" msgid="4205032194610042794">"Sistēma"</string>
     <string name="notification_app_name_settings" msgid="7751445616365753381">"Iestatījumi"</string>
+    <string name="car_loading_profile" msgid="3545132581795684027">"Ielāde"</string>
 </resources>

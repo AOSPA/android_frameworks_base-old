@@ -411,7 +411,8 @@ public final class ProgramSelector implements Parcelable {
     /**
      * Checks, if a given AM/FM frequency is roughly valid and in correct unit.
      *
-     * It does not check the range precisely. In particular, it may be way off for certain regions.
+     * It does not check the range precisely: it may provide false positives, but not false
+     * negatives. In particular, it may be way off for certain regions.
      * The main purpose is to avoid passing inproper units, ie. MHz instead of kHz.
      *
      * @param isAm true, if AM, false if FM.
@@ -420,7 +421,7 @@ public final class ProgramSelector implements Parcelable {
      */
     private static boolean isValidAmFmFrequency(boolean isAm, int frequencyKhz) {
         if (isAm) {
-            return frequencyKhz > 150 && frequencyKhz < 30000;
+            return frequencyKhz > 150 && frequencyKhz <= 30000;
         } else {
             return frequencyKhz > 60000 && frequencyKhz < 110000;
         }
@@ -462,7 +463,8 @@ public final class ProgramSelector implements Parcelable {
             throw new IllegalArgumentException("Subchannels are not supported for non-HD radio");
         }
         if (!isValidAmFmFrequency(isAm, frequencyKhz)) {
-            throw new IllegalArgumentException("Provided value is not a valid AM/FM frequency");
+            throw new IllegalArgumentException("Provided value is not a valid AM/FM frequency: "
+                    + frequencyKhz);
         }
 
         // We can't use AM_HD or FM_HD, because we don't know HD station ID.
@@ -496,7 +498,7 @@ public final class ProgramSelector implements Parcelable {
     @Override
     public int hashCode() {
         // secondaryIds and vendorIds are ignored for equality/hashing
-        return Objects.hash(mProgramType, mPrimaryId);
+        return mPrimaryId.hashCode();
     }
 
     @Override
@@ -505,7 +507,8 @@ public final class ProgramSelector implements Parcelable {
         if (!(obj instanceof ProgramSelector)) return false;
         ProgramSelector other = (ProgramSelector) obj;
         // secondaryIds and vendorIds are ignored for equality/hashing
-        return other.getProgramType() == mProgramType && mPrimaryId.equals(other.getPrimaryId());
+        // programType can be inferred from primaryId, thus not checked
+        return mPrimaryId.equals(other.getPrimaryId());
     }
 
     private ProgramSelector(Parcel in) {

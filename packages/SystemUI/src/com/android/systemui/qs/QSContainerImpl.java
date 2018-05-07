@@ -38,10 +38,10 @@ public class QSContainerImpl extends FrameLayout {
     private final Point mSizePoint = new Point();
 
     private int mHeightOverride = -1;
-    protected View mQSPanel;
+    private QSPanel mQSPanel;
     private View mQSDetail;
-    protected View mHeader;
-    protected float mQsExpansion;
+    private QuickStatusBarHeader mHeader;
+    private float mQsExpansion;
     private QSCustomizer mQSCustomizer;
     private View mQSFooter;
 
@@ -100,16 +100,6 @@ public class QSContainerImpl extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        if (mQsDisabled) {
-            // Only show the status bar contents in QQS header when QS is disabled.
-            mHeader.measure(widthMeasureSpec, heightMeasureSpec);
-            LayoutParams layoutParams = (LayoutParams) mHeader.getLayoutParams();
-            int height = layoutParams.topMargin + layoutParams.bottomMargin
-                    + mHeader.getMeasuredHeight();
-            super.onMeasure(
-                    widthMeasureSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
-            return;
-        }
         // Since we control our own bottom, be whatever size we want.
         // Otherwise the QSPanel ends up with 0 height when the window is only the
         // size of the status bar.
@@ -139,8 +129,7 @@ public class QSContainerImpl extends FrameLayout {
         if (disabled == mQsDisabled) return;
         mQsDisabled = disabled;
         mBackgroundGradient.setVisibility(mQsDisabled ? View.GONE : View.VISIBLE);
-        mQSPanel.setVisibility(mQsDisabled ? View.GONE : View.VISIBLE);
-        mQSFooter.setVisibility(mQsDisabled ? View.GONE : View.VISIBLE);
+        mBackground.setVisibility(mQsDisabled ? View.GONE : View.VISIBLE);
     }
 
     private void updateResources() {
@@ -188,8 +177,8 @@ public class QSContainerImpl extends FrameLayout {
         setMargins(mQSDetail);
         setMargins(mBackground);
         setMargins(mQSFooter);
-        setMargins(mQSPanel);
-        setMargins(mHeader);
+        mQSPanel.setMargins(mSideMargins);
+        mHeader.setMargins(mSideMargins);
     }
 
     private void setMargins(View view) {

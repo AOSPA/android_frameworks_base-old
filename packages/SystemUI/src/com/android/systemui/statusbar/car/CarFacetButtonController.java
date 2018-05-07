@@ -6,7 +6,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.util.Log;
+import android.view.Display;
+import android.view.View;
 
 import java.util.HashMap;
 import java.util.List;
@@ -49,6 +50,9 @@ public class CarFacetButtonController {
         for (int i = 0; i < componentNames.length; i++) {
             mButtonsByComponentName.put(componentNames[i], facetButton);
         }
+        // Using the following as a default button for display id info it's not
+        // attached to a screen at this point so it can't be extracted here.
+        mSelectedFacetButton = facetButton;
     }
 
     public void removeAll() {
@@ -61,36 +65,62 @@ public class CarFacetButtonController {
     /**
      * This will unselect the currently selected CarFacetButton and determine which one should be
      * selected next. It does this by reading the properties on the CarFacetButton and seeing if
-     * they are a match with the supplied taskInfo.
-     * Order of selection detection ComponentName, PackageName, Category
+     * they are a match with the supplied StackInfo list.
+     * The order of selection detection is ComponentName, PackageName then Category
+     * They will then be compared with the supplied StackInfo list.
+     * The StackInfo is expected to be supplied in order of recency and StackInfo will only be used
+     * for consideration if it has the same displayId as the CarFacetButtons.
      * @param taskInfo of the currently running application
      */
-    public void taskChanged(ActivityManager.RunningTaskInfo taskInfo) {
-        if (taskInfo == null || taskInfo.baseActivity == null) {
+    public void taskChanged(List<ActivityManager.StackInfo> stackInfoList) {
+        int displayId = getDisplayId();
+        ActivityManager.StackInfo validStackInfo = null;
+        for (ActivityManager.StackInfo stackInfo :stackInfoList) {
+            // If the display id is unknown or it matches the stack, it's valid for use
+            if ((displayId == -1 || displayId == stackInfo.displayId) &&
+                    stackInfo.topActivity != null) {
+                validStackInfo = stackInfo;
+                break;
+            }
+        }
+
+        if (validStackInfo == null) {
+            // No stack was found that was on the same display as the facet buttons thus return
             return;
         }
-        String packageName = taskInfo.baseActivity.getPackageName();
 
-        // If the package name belongs to a filter, then highlight appropriate button in
-        // the navigation bar.
         if (mSelectedFacetButton != null) {
             mSelectedFacetButton.setSelected(false);
         }
-        CarFacetButton facetButton = findFacetButtongByComponentName(taskInfo.topActivity);
+
+        String packageName = validStackInfo.topActivity.getPackageName();
+        CarFacetButton facetButton = findFacetButtongByComponentName(validStackInfo.topActivity);
         if (facetButton == null) {
-            facetButton =  mButtonsByPackage.get(packageName);
+            facetButton = mButtonsByPackage.get(packageName);
         }
-        if (facetButton != null) {
-            facetButton.setSelected(true);
-            mSelectedFacetButton = facetButton;
-        } else {
+
+        if (facetButton == null) {
             String category = getPackageCategory(packageName);
             if (category != null) {
                 facetButton = mButtonsByCategory.get(category);
-                facetButton.setSelected(true);
-                mSelectedFacetButton = facetButton;
             }
         }
+
+        if (facetButton != null && facetButton.getVisibility() == View.VISIBLE) {
+            facetButton.setSelected(true);
+            mSelectedFacetButton = facetButton;
+        }
+
+    }
+
+    private int getDisplayId() {
+        if (mSelectedFacetButton != null) {
+            Display display = mSelectedFacetButton.getDisplay();
+            if (display != null) {
+                return display.getDisplayId();
+            }
+        }
+        return -1;
     }
 
     private CarFacetButton findFacetButtongByComponentName(ComponentName componentName) {

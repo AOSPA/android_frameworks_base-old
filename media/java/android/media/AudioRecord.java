@@ -988,6 +988,7 @@ public class AudioRecord implements AudioRouting
      */
     public void startRecording()
     throws IllegalStateException {
+        android.util.SeempLog.record(70);
         if (mState != STATE_INITIALIZED) {
             throw new IllegalStateException("startRecording() called on an "
                     + "uninitialized AudioRecord.");
@@ -1011,6 +1012,7 @@ public class AudioRecord implements AudioRouting
      */
     public void startRecording(MediaSyncEvent syncEvent)
     throws IllegalStateException {
+        android.util.SeempLog.record(70);
         if (mState != STATE_INITIALIZED) {
             throw new IllegalStateException("startRecording() called on an "
                     + "uninitialized AudioRecord.");
@@ -1636,7 +1638,10 @@ public class AudioRecord implements AudioRouting
         ArrayList<MicrophoneInfo> activeMicrophones = new ArrayList<>();
         int status = native_get_active_microphones(activeMicrophones);
         if (status != AudioManager.SUCCESS) {
-            Log.e(TAG, "getActiveMicrophones failed:" + status);
+            if (status != AudioManager.ERROR_INVALID_OPERATION) {
+                Log.e(TAG, "getActiveMicrophones failed:" + status);
+            }
+            Log.i(TAG, "getActiveMicrophones failed, fallback on routed device info");
         }
         AudioManager.setPortIdForMicrophones(activeMicrophones);
 

@@ -58,6 +58,8 @@ import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.PackageManagerInternal;
+import android.content.pm.PackageParser;
 import android.content.pm.RegisteredServicesCache;
 import android.content.pm.RegisteredServicesCacheListener;
 import android.content.pm.ResolveInfo;
@@ -1435,6 +1437,7 @@ public class AccountManagerService
 
     @Override
     public String getPassword(Account account) {
+        android.util.SeempLog.record(14);
         int callingUid = Binder.getCallingUid();
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "getPassword: " + account
@@ -1515,6 +1518,7 @@ public class AccountManagerService
 
     @Override
     public String getUserData(Account account, String key) {
+        android.util.SeempLog.record(15);
         final int callingUid = Binder.getCallingUid();
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             String msg = String.format("getUserData( account: %s, key: %s, callerUid: %s, pid: %s",
@@ -2088,6 +2092,7 @@ public class AccountManagerService
     @Override
     public void removeAccount(IAccountManagerResponse response, Account account,
             boolean expectActivityLaunch) {
+        android.util.SeempLog.record(17);
         removeAccountAsUser(
                 response,
                 account,
@@ -2528,6 +2533,7 @@ public class AccountManagerService
 
     @Override
     public void setPassword(Account account, String password) {
+        android.util.SeempLog.record(18);
         final int callingUid = Binder.getCallingUid();
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "setAuthToken: " + account
@@ -2594,6 +2600,7 @@ public class AccountManagerService
 
     @Override
     public void clearPassword(Account account) {
+        android.util.SeempLog.record(19);
         final int callingUid = Binder.getCallingUid();
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "clearPassword: " + account
@@ -2620,6 +2627,7 @@ public class AccountManagerService
 
     @Override
     public void setUserData(Account account, String key, String value) {
+        android.util.SeempLog.record(20);
         final int callingUid = Binder.getCallingUid();
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "setUserData: " + account
@@ -3103,6 +3111,7 @@ public class AccountManagerService
     public void addAccount(final IAccountManagerResponse response, final String accountType,
             final String authTokenType, final String[] requiredFeatures,
             final boolean expectActivityLaunch, final Bundle optionsIn) {
+        android.util.SeempLog.record(16);
         Bundle.setDefusable(optionsIn, true);
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "addAccount: accountType " + accountType
@@ -3856,6 +3865,7 @@ public class AccountManagerService
     @Override
     public void editProperties(IAccountManagerResponse response, final String accountType,
             final boolean expectActivityLaunch) {
+        android.util.SeempLog.record(21);
         final int callingUid = Binder.getCallingUid();
         if (Log.isLoggable(TAG, Log.VERBOSE)) {
             Log.v(TAG, "editProperties: accountType " + accountType
@@ -4737,9 +4747,11 @@ public class AccountManagerService
                 }
                 ActivityInfo targetActivityInfo = resolveInfo.activityInfo;
                 int targetUid = targetActivityInfo.applicationInfo.uid;
+                PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
                 if (!isExportedSystemActivity(targetActivityInfo)
-                        && (PackageManager.SIGNATURE_MATCH != pm.checkSignatures(authUid,
-                                targetUid))) {
+                        && !pmi.hasSignatureCapability(
+                                targetUid, authUid,
+                                PackageParser.SigningDetails.CertCapabilities.AUTH)) {
                     String pkgName = targetActivityInfo.packageName;
                     String activityName = targetActivityInfo.name;
                     String tmpl = "KEY_INTENT resolved to an Activity (%s) in a package (%s) that "
@@ -5476,15 +5488,17 @@ public class AccountManagerService
         } finally {
             Binder.restoreCallingIdentity(identityToken);
         }
-        // Check for signature match with Authenticator.
+        // Check for signature match with Authenticator.LocalServices.getService(PackageManagerInternal.class);
+        PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
         for (RegisteredServicesCache.ServiceInfo<AuthenticatorDescription> serviceInfo
                 : serviceInfos) {
             if (accountType.equals(serviceInfo.type.type)) {
                 if (serviceInfo.uid == callingUid) {
                     return SIGNATURE_CHECK_UID_MATCH;
                 }
-                final int sigChk = mPackageManager.checkSignatures(serviceInfo.uid, callingUid);
-                if (sigChk == PackageManager.SIGNATURE_MATCH) {
+                if (pmi.hasSignatureCapability(
+                        serviceInfo.uid, callingUid,
+                        PackageParser.SigningDetails.CertCapabilities.AUTH)) {
                     return SIGNATURE_CHECK_MATCH;
                 }
             }
@@ -5520,10 +5534,13 @@ public class AccountManagerService
         } finally {
             Binder.restoreCallingIdentity(identityToken);
         }
+
+        PackageManagerInternal pmi = LocalServices.getService(PackageManagerInternal.class);
         for (RegisteredServicesCache.ServiceInfo<AuthenticatorDescription> serviceInfo :
                 serviceInfos) {
-            if (isOtherwisePermitted || (mPackageManager.checkSignatures(serviceInfo.uid,
-                    callingUid) == PackageManager.SIGNATURE_MATCH)) {
+            if (isOtherwisePermitted || pmi.hasSignatureCapability(
+                    serviceInfo.uid, callingUid,
+                    PackageParser.SigningDetails.CertCapabilities.AUTH)) {
                 managedAccountTypes.add(serviceInfo.type.type);
             }
         }

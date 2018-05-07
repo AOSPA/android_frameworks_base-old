@@ -129,8 +129,8 @@
     <string name="process_kernel_label" msgid="3916858646836739323">"Android OS"</string>
     <string name="data_usage_uninstalled_apps" msgid="614263770923231598">"আঁতৰোৱা এপ্‌সমূহ"</string>
     <string name="data_usage_uninstalled_apps_users" msgid="7986294489899813194">"আঁতৰোৱা এপ্‌ আৰু ব্যৱহাৰকাৰীসমূহ"</string>
-    <string name="tether_settings_title_usb" msgid="6688416425801386511">"USB টেডাৰিং"</string>
-    <string name="tether_settings_title_wifi" msgid="3277144155960302049">"প\'ৰ্টেবল হটস্পট"</string>
+    <string name="tether_settings_title_usb" msgid="6688416425801386511">"ইউএছবি টেডাৰিং"</string>
+    <string name="tether_settings_title_wifi" msgid="3277144155960302049">"প\'ৰ্টেবল হ\'টস্প\'ট"</string>
     <string name="tether_settings_title_bluetooth" msgid="355855408317564420">"ব্লুটুথ টেডাৰিং"</string>
     <string name="tether_settings_title_usb_bluetooth" msgid="5355828977109785001">"টেডাৰ কৰি থকা হৈছে"</string>
     <string name="tether_settings_title_all" msgid="8356136101061143841">"টেদৰিং আৰু প\'ৰ্টেবল হ\'টস্পট"</string>
@@ -167,7 +167,7 @@
     <string name="tts_engine_preference_section_title" msgid="448294500990971413">"অগ্ৰাধিকাৰপ্ৰাপ্ত ইঞ্জিন"</string>
     <string name="tts_general_section_title" msgid="4402572014604490502">"সাধাৰণ"</string>
     <string name="tts_reset_speech_pitch_title" msgid="5789394019544785915">"কথনভংগী তীব্ৰতা ৰিছেট কৰক"</string>
-    <string name="tts_reset_speech_pitch_summary" msgid="8700539616245004418">"পাঠ উচ্চাৰণৰ স্বৰ-তীব্ৰতা ৰিছেট কৰক যিটো ডিফল্ট হিচাপে ব্যৱহাৰ কৰা হ\'ব।"</string>
+    <string name="tts_reset_speech_pitch_summary" msgid="8700539616245004418">"পাঠ উচ্চাৰণৰ স্বৰ-তীব্ৰতা ৰিছেট কৰক যিটো ডিফ\'ল্ট হিচাপে ব্যৱহাৰ কৰা হ\'ব।"</string>
   <string-array name="tts_rate_entries">
     <item msgid="6695494874362656215">"অতি লেহেম"</item>
     <item msgid="4795095314303559268">"লেহেমীয়া"</item>
@@ -190,7 +190,7 @@
     <string name="tethering_settings_not_available" msgid="6765770438438291012">"এই ব্যৱহাৰকাৰীৰ বাবে টেডাৰিং ছেটিংসমূহ উপলব্ধ নহয়"</string>
     <string name="apn_settings_not_available" msgid="7873729032165324000">"এই ব্যৱহাৰকাৰীৰ বাবে একচেছ পইণ্টৰ নাম ছেটিংসমূহ উপলব্ধ নহয়"</string>
     <string name="enable_adb" msgid="7982306934419797485">"ইউএছবি ডিবাগিং"</string>
-    <string name="enable_adb_summary" msgid="4881186971746056635">"USB সংযোগ হৈ থকাৰ অৱস্থাত ডিবাগ ম\'ড"</string>
+    <string name="enable_adb_summary" msgid="4881186971746056635">"ইউএছবি সংযোগ হৈ থকাৰ অৱস্থাত ডিবাগ ম\'ড"</string>
     <string name="clear_adb_keys" msgid="4038889221503122743">"ইউএছবি ডিবাগিং অনুমতিসমূহ প্ৰত্যাহাৰ কৰক"</string>
     <string name="bugreport_in_power" msgid="7923901846375587241">"বাগ ৰিপৰ্টৰ শ্ৱৰ্টকাট"</string>
     <string name="bugreport_in_power_summary" msgid="1778455732762984579">"পাৱাৰ মেনুত বাগ প্ৰতিবেদন গ্ৰহণ কৰিবলৈ এটা বুটাম দেখুৱাওক"</string>
@@ -216,20 +216,15 @@
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"ব্লুটুথ AVRCP সংস্কৰণ"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"ব্লুটুথ AVRCP সংস্কৰণ বাছনি কৰক"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"ব্লুটুথ অডিঅ’ ক’ডেক"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_type_dialog_title (8436224899475822557) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="8436224899475822557">"ব্লুটুথ অডিঅ\' ক\'ডেকৰ বাছনি\nআৰম্ভ কৰক"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"ব্লুটুথ অডিঅ\' ছেম্পল ৰেইট"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_sample_rate_dialog_title (8010380028880963535) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"ব্লুটুথ অডিঅ\' LDAC বাছনি\nআৰম্ভ কৰক: নমুনাৰ হাৰ"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample" msgid="2099645202720164141">"প্ৰতি ছেম্পলত ব্লুটুথ অডিঅ\' বিটসমূহ"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_bits_per_sample_dialog_title (8063859754619484760) -->
-    <skip />
-    <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"ব্লুটুথ অডিঅ\' চেনেল ম\'ড"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_channel_mode_dialog_title (7234956835280563341) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="8063859754619484760">"ব্লুটুথ অডিঅ\' ক\'ডেকৰ বাছনি\nআৰম্ভ কৰক: প্ৰতি নমুনা ইমান বিট"</string>
+    <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"ব্লুটুথ অডিঅ\' চ্চেনেল ম\'ড"</string>
+    <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="7234956835280563341">"ব্লুটুথ অডিঅ\' ক\'ডেকৰ বাছনি\nআৰম্ভ কৰক: চ্চেনেল ম\'ড"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"ব্লুটুথ অডিঅ’ LDAC ক’ডেক: পৰিৱেশনৰ মান"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title (7595776220458732825) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="7595776220458732825">"ব্লুটুথ অডিঅ\' LDAC ক\'ডেকৰ বাছনি\nআৰম্ভ কৰক: পৰিবেশনৰ গুণাগুণ"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"ষ্ট্ৰীম কৰি থকা হৈছে: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"ব্যক্তিগত DNS"</string>
     <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"ব্যক্তিগত DNS ম\'ড বাছনি কৰক"</string>
@@ -338,7 +333,7 @@
     <string name="local_backup_password_toast_confirmation_mismatch" msgid="7805892532752708288">"নতুন পাছৱৰ্ডটোৰ লগত নিশ্চিত কৰা পাছৱৰ্ডটো মিলা নাই"</string>
     <string name="local_backup_password_toast_validation_failure" msgid="5646377234895626531">"বেকআপ পাছৱৰ্ড নিৰ্ধাৰণ কৰিব পৰা নহ\'ল"</string>
   <string-array name="color_mode_names">
-    <item msgid="2425514299220523812">"জীৱন্ত (ডিফল্ট)"</item>
+    <item msgid="2425514299220523812">"জীৱন্ত (ডিফ\'ল্ট)"</item>
     <item msgid="8446070607501413455">"প্ৰাকৃতিক"</item>
     <item msgid="6553408765810699025">"মানক"</item>
   </string-array>
@@ -372,11 +367,18 @@
     <string name="accessibility_display_daltonizer_preference_title" msgid="5800761362678707872">"ৰং শুধৰণী"</string>
     <string name="accessibility_display_daltonizer_preference_subtitle" msgid="3484969015295282911">"এই সুবিধাটো পৰীক্ষামূলক, সেয়ে ই কাৰ্যক্ষমতাৰ ওপৰত প্ৰভাৱ পেলাব পাৰে।"</string>
     <string name="daltonizer_type_overridden" msgid="3116947244410245916">"<xliff:g id="TITLE">%1$s</xliff:g>ৰ দ্বাৰা অগ্ৰাহ্য কৰা হৈছে"</string>
-    <string name="power_remaining_duration_only" msgid="845431008899029842">"প্ৰায় <xliff:g id="TIME">%1$s</xliff:g> বাকী আছে"</string>
-    <string name="power_discharging_duration" msgid="6655472132189365839">"প্ৰায় <xliff:g id="TIME">%1$s</xliff:g> সময় বাকী আছে (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_enhanced" msgid="5992456722677973678">"আপোনাৰ ব্যৱহাৰৰ ওপৰত ভিত্তি কৰি প্ৰায় <xliff:g id="TIME">%1$s</xliff:g> বাকী আছে"</string>
-    <string name="power_discharging_duration_enhanced" msgid="5726302316642148671">"আপোনাৰ ব্যৱহাৰ (<xliff:g id="LEVEL">%2$s</xliff:g>)ক ভিত্তি কৰি প্ৰায় <xliff:g id="TIME">%1$s</xliff:g> সময় বাকী আছে"</string>
-    <string name="power_remaining_duration_only_short" msgid="5329694252258605547">"<xliff:g id="TIME">%1$s</xliff:g> বাকী"</string>
+    <!-- no translation found for power_remaining_settings_home_page (4845022416859002011) -->
+    <skip />
+    <!-- no translation found for power_remaining_duration_only (6123167166221295462) -->
+    <skip />
+    <!-- no translation found for power_discharging_duration (8848256785736335185) -->
+    <skip />
+    <!-- no translation found for power_remaining_duration_only_enhanced (4189311599812296592) -->
+    <skip />
+    <!-- no translation found for power_discharging_duration_enhanced (1992003260664804080) -->
+    <skip />
+    <!-- no translation found for power_remaining_duration_only_short (3463575350656389957) -->
+    <skip />
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"আপোনাৰ ব্যৱহাৰৰ ওপৰত ভিত্তি কৰি বেটাৰি আনুমানিকভাৱে <xliff:g id="TIME">%1$s</xliff:g> লৈকে চলিব (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"আপোনাৰ ব্যৱহাৰৰ ওপৰত ভিত্তি কৰি বেটাৰি আনুমানিকভাৱে <xliff:g id="TIME">%1$s</xliff:g> লৈকে চলিব"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"বেটাৰি আনুমানিকভাৱে <xliff:g id="TIME">%1$s</xliff:g> লৈকে চলিব (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
@@ -453,7 +455,7 @@
     <string name="zen_alarm_warning" msgid="6236690803924413088">"আপুনি আপোনাৰ পিছৰটো এলাৰ্ম <xliff:g id="WHEN">%1$s</xliff:g> বজাত শুনা নাপাব"</string>
     <string name="alarm_template" msgid="4996153414057676512">"<xliff:g id="WHEN">%1$s</xliff:g> বজাত"</string>
     <string name="alarm_template_far" msgid="3779172822607461675">"<xliff:g id="WHEN">%1$s</xliff:g> বজাত"</string>
-    <string name="zen_mode_duration_settings_title" msgid="229547412251222757">"সময়ৰ পৰিসৰ"</string>
+    <string name="zen_mode_duration_settings_title" msgid="229547412251222757">"সময়সীমা"</string>
     <string name="zen_mode_duration_always_prompt_title" msgid="6478923750878945501">"প্ৰতিবাৰতে সোধক"</string>
     <string name="time_unit_just_now" msgid="6363336622778342422">"এই মাত্ৰ"</string>
 </resources>

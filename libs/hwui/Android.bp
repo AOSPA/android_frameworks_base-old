@@ -69,7 +69,6 @@ cc_defaults {
         "libRScpp",
     ],
     static_libs: [
-        "libplatformprotos",
         "libEGL_blobCache",
     ],
 }
@@ -146,8 +145,6 @@ cc_defaults {
 cc_defaults {
     name: "libhwui_defaults",
     defaults: ["hwui_defaults"],
-
-    shared_libs: ["libstatslog"],
 
     whole_static_libs: ["libskia"],
 
@@ -269,6 +266,7 @@ cc_defaults {
         "TextureCache.cpp",
         "VectorDrawable.cpp",
         "VkLayer.cpp",
+        "protos/graphicsstats.proto",
         "protos/hwui.proto",
     ],
 
@@ -336,7 +334,6 @@ cc_test {
     ],
     shared_libs: [
         "libmemunreachable",
-        "libstatslog",
     ],
     cflags: [
         "-include debug/wrap_gles.h",
@@ -404,7 +401,6 @@ cc_benchmark {
     whole_static_libs: ["libhwui"],
     shared_libs: [
         "libmemunreachable",
-        "libstatslog",
     ],
 
     srcs: [
@@ -429,7 +425,6 @@ cc_benchmark {
     whole_static_libs: ["libhwui_static_debug"],
     shared_libs: [
         "libmemunreachable",
-        "libstatslog",
     ],
 
     srcs: [

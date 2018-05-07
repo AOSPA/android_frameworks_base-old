@@ -2196,8 +2196,8 @@
     <!-- Text to show in the auto complete drop down list on a text view when the WebView can auto fill the entire form but the user has not configured an AutoFill profile [CHAR-LIMIT=19] -->
     <string name="setup_autofill">Set up Autofill</string>
 
-    <!-- Title of fullscreen autofill window [CHAR-LIMIT=80] -->
-    <string name="autofill_window_title">Autofill</string>
+    <!-- Title of fullscreen autofill window, including the name of which autofill service it is using [CHAR-LIMIT=NONE] -->
+    <string name="autofill_window_title">Autofill with <xliff:g id="serviceName" example="MyPass">%1$s</xliff:g></string>
 
     <!-- String used to separate FirstName and LastName when writing out a local name
          e.g. John<separator>Smith [CHAR-LIMIT=NONE]-->
@@ -4514,7 +4514,10 @@
     <!-- Notification shown when device owner silently deletes a package [CHAR LIMIT=NONE] -->
     <string name="package_deleted_device_owner">Deleted by your admin</string>
 
-    <!-- [CHAR_LIMIT=NONE] Battery saver: Feature description -->
+    <!-- [CHAR_LIMIT=NONE] Battery saver: Feature description, with a "learn more" link. -->
+    <string name="battery_saver_description_with_learn_more">To extend your battery life, Battery Saver turns off some device features and restricts apps. <annotation id="url">Learn More</annotation></string>
+
+    <!-- [CHAR_LIMIT=NONE] Battery saver: Feature description, without a "learn more" link. -->
     <string name="battery_saver_description">To extend your battery life, Battery Saver turns off some device features and restricts apps.</string>
 
     <!-- [CHAR_LIMIT=NONE] Data saver: Feature description -->
@@ -4609,7 +4612,7 @@
     <string name="zen_mode_default_every_night_name">Sleeping</string>
 
     <!-- Indication that the current volume and other effects (vibration) are being suppressed by a third party, such as a notification listener. [CHAR LIMIT=30] -->
-    <string name="muted_by">Muted by <xliff:g id="third_party">%1$s</xliff:g></string>
+    <string name="muted_by"><xliff:g id="third_party">%1$s</xliff:g> is muting some sounds</string>
 
     <!-- Error message shown when there is a system error which can be solved by user performing factory reset. [CHAR LIMIT=NONE] -->
     <string name="system_error_wipe_data">There\'s an internal problem with your device, and it may be unstable until you factory data reset.</string>
@@ -4957,4 +4960,8 @@
     <string name="notification_app_name_system">System</string>
     <!-- Application name displayed in notifications [CHAR LIMIT=60] -->
     <string name="notification_app_name_settings">Settings</string>
+
+    <!-- Strings for car -->
+    <!-- String displayed when loading a user in the car [CHAR LIMIT=30] -->
+    <string name="car_loading_profile">Loading</string>
 </resources>

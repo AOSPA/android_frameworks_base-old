@@ -237,8 +237,8 @@
     <string name="global_actions_airplane_mode_on_status" msgid="2719557982608919750">"Mode d\'avió activat"</string>
     <string name="global_actions_airplane_mode_off_status" msgid="5075070442854490296">"Mode d\'avió desactivat"</string>
     <string name="global_action_toggle_battery_saver" msgid="708515500418994208">"Estalvi de bateria"</string>
-    <string name="global_action_battery_saver_on_status" msgid="484059130698197787">"La funció Estalvi de bateria està desactivada"</string>
-    <string name="global_action_battery_saver_off_status" msgid="75550964969478405">"La funció Estalvi de bateria està activada"</string>
+    <string name="global_action_battery_saver_on_status" msgid="484059130698197787">"El mode d\'estalvi de bateria està desactivat"</string>
+    <string name="global_action_battery_saver_off_status" msgid="75550964969478405">"El mode d\'estalvi de bateria està activat"</string>
     <string name="global_action_settings" msgid="1756531602592545966">"Configuració"</string>
     <string name="global_action_assist" msgid="3892832961594295030">"Assistència"</string>
     <string name="global_action_voice_assist" msgid="7751191495200504480">"Assist. per veu"</string>
@@ -305,9 +305,9 @@
     <string name="capability_desc_canRequestFilterKeyEvents" msgid="7463135292204152818">"Inclou dades personals com ara números de targetes de crèdit i contrasenyes."</string>
     <string name="capability_title_canControlMagnification" msgid="3593493281059424855">"Controlar l\'ampliació de la pantalla"</string>
     <string name="capability_desc_canControlMagnification" msgid="4791858203568383773">"Controla el nivell i la posició del zoom de la pantalla."</string>
-    <string name="capability_title_canPerformGestures" msgid="7418984730362576862">"Utilitza gestos"</string>
+    <string name="capability_title_canPerformGestures" msgid="7418984730362576862">"Fer gestos"</string>
     <string name="capability_desc_canPerformGestures" msgid="8296373021636981249">"Permet tocar, lliscar, pinçar i fer altres gestos."</string>
-    <string name="capability_title_canCaptureFingerprintGestures" msgid="6309568287512278670">"Gestos al sensor d\'empremtes digitals"</string>
+    <string name="capability_title_canCaptureFingerprintGestures" msgid="6309568287512278670">"Gestos d\'empremtes digitals"</string>
     <string name="capability_desc_canCaptureFingerprintGestures" msgid="4386487962402228670">"Captura gestos realitzats en el sensor d\'empremtes digitals del dispositiu."</string>
     <string name="permlab_statusBar" msgid="7417192629601890791">"desactivar o modificar la barra d\'estat"</string>
     <string name="permdesc_statusBar" msgid="8434669549504290975">"Permet que l\'aplicació desactivi la barra d\'estat o afegeixi i elimini icones del sistema."</string>
@@ -601,7 +601,7 @@
     <string name="policydesc_encryptedStorage" msgid="2637732115325316992">"Requereix que les dades de l\'aplicació emmagatzemades estiguin encriptades."</string>
     <string name="policylab_disableCamera" msgid="6395301023152297826">"Desactivar les càmeres"</string>
     <string name="policydesc_disableCamera" msgid="2306349042834754597">"Impedeix l\'ús de les càmeres del dispositiu."</string>
-    <string name="policylab_disableKeyguardFeatures" msgid="8552277871075367771">"Desactiva funcions de bloqueig"</string>
+    <string name="policylab_disableKeyguardFeatures" msgid="8552277871075367771">"Desactivar funcions de bloqueig"</string>
     <string name="policydesc_disableKeyguardFeatures" msgid="2044755691354158439">"Impedeix l\'ús d\'algunes funcions del bloqueig de pantalla."</string>
   <string-array name="phoneTypes">
     <item msgid="8901098336658710359">"Casa"</item>
@@ -836,7 +836,8 @@
     <string name="double_tap_toast" msgid="4595046515400268881">"Consell: Pica dos cops per ampliar i per reduir."</string>
     <string name="autofill_this_form" msgid="4616758841157816676">"Em. aut."</string>
     <string name="setup_autofill" msgid="7103495070180590814">"Conf. empl. aut."</string>
-    <string name="autofill_window_title" msgid="921006636895825007">"Emplena automàticament"</string>
+    <!-- no translation found for autofill_window_title (4107745526909284887) -->
+    <skip />
     <string name="autofill_address_name_separator" msgid="6350145154779706772">" "</string>
     <string name="autofill_address_summary_name_format" msgid="3268041054899214945">"$1$2$3"</string>
     <string name="autofill_address_summary_separator" msgid="7483307893170324129">", "</string>
@@ -1014,8 +1015,7 @@
     <string name="dial" msgid="1253998302767701559">"Truca"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Truca al número de telèfon seleccionat"</string>
     <string name="map" msgid="5441053548030107189">"Mapa"</string>
-    <!-- no translation found for map_desc (1836995341943772348) -->
-    <skip />
+    <string name="map_desc" msgid="1836995341943772348">"Localitza l\'adreça seleccionada"</string>
     <string name="browse" msgid="1245903488306147205">"Obre"</string>
     <string name="browse_desc" msgid="8220976549618935044">"Obre l\'URL seleccionat"</string>
     <string name="sms" msgid="4560537514610063430">"Missatge"</string>
@@ -1691,7 +1691,8 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Instal·lat per l\'administrador"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Actualitzat per l\'administrador"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Suprimit per l\'administrador"</string>
-    <string name="battery_saver_description" msgid="4660824093877546730">"Per tal d\'augmentar la durada de la bateria, la funció Estalvi de bateria redueix el rendiment del dispositiu i en limita o desactiva la vibració, els serveis d\'ubicació i les dades en segon pla. És possible que el correu electrònic, la missatgeria i la resta d\'aplicacions que se sincronitzen amb freqüència no s\'actualitzin llevat que les obris.\n\nLa funció Estalvi de bateria es desactiva automàticament mentre el dispositiu s\'està carregant."</string>
+    <string name="battery_saver_description_with_learn_more" msgid="6323937147992667707">"Per augmentar la durada de la bateria, el mode d\'estalvi de bateria desactiva algunes funcions i restringeix aplicacions. "<annotation id="url">"Més informació"</annotation></string>
+    <string name="battery_saver_description" msgid="769989536172631582">"Per augmentar la durada de la bateria, el mode d\'estalvi de bateria desactiva algunes funcions i restringeix aplicacions."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Per reduir l\'ús de dades, la funció Economitzador de dades evita que determinades aplicacions enviïn o rebin dades en segon pla. L\'aplicació que estiguis fent servir podrà accedir a dades, però potser ho farà menys sovint. Això vol dir, per exemple, que les imatges no es mostraran fins que no les toquis."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Activar Economitzador de dades?"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Activa"</string>
@@ -1729,7 +1730,7 @@
     </plurals>
     <string name="zen_mode_until" msgid="7336308492289875088">"Fins a les <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="9128205721301330797">"Fins a les <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (propera alarma)"</string>
-    <string name="zen_mode_forever" msgid="931849471004038757">"Fins que es desactivi"</string>
+    <string name="zen_mode_forever" msgid="931849471004038757">"Fins que no ho desactivi"</string>
     <string name="zen_mode_forever_dnd" msgid="3792132696572189081">"Fins que desactivis el mode No molestis"</string>
     <string name="zen_mode_rule_name_combination" msgid="191109939968076477">"<xliff:g id="FIRST">%1$s</xliff:g> / <xliff:g id="REST">%2$s</xliff:g>"</string>
     <string name="toolbar_collapse_description" msgid="2821479483960330739">"Replega"</string>
@@ -1739,7 +1740,7 @@
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Cap de setmana"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Esdeveniment"</string>
     <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"Mentre dormo"</string>
-    <string name="muted_by" msgid="6147073845094180001">"Silenciat per <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
+    <string name="muted_by" msgid="5942954724562097128">"<xliff:g id="THIRD_PARTY">%1$s</xliff:g> està silenciant alguns sons"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"S\'ha produït un error intern al dispositiu i és possible que funcioni de manera inestable fins que restableixis les dades de fàbrica."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"S\'ha produït un error intern al dispositiu. Contacta amb el fabricant del dispositiu per obtenir més informació."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5214333646366591205">"La sol·licitud USSD s\'ha canviat per una trucada estàndard"</string>
@@ -1778,6 +1779,9 @@
     <string name="language_picker_section_all" msgid="3097279199511617537">"Tots els idiomes"</string>
     <string name="region_picker_section_all" msgid="8966316787153001779">"Totes les regions"</string>
     <string name="locale_search_menu" msgid="2560710726687249178">"Cerca"</string>
+    <string name="app_suspended_title" msgid="1919029799438164552">"No es pot obrir l\'aplicació"</string>
+    <string name="app_suspended_default_message" msgid="7875306315686531621">"L\'aplicació <xliff:g id="APP_NAME_0">%1$s</xliff:g> no està disponible en aquests moments. Aquesta opció es gestiona a <xliff:g id="APP_NAME_1">%2$s</xliff:g>."</string>
+    <string name="app_suspended_more_details" msgid="1131804827776778187">"Més informació"</string>
     <string name="work_mode_off_title" msgid="1118691887588435530">"Activar el perfil professional?"</string>
     <string name="work_mode_off_message" msgid="5130856710614337649">"S\'activaran les teves aplicacions per a la feina, les notificacions, les dades i altres funcions del perfil professional"</string>
     <string name="work_mode_turn_on" msgid="2062544985670564875">"Activa"</string>
@@ -1867,10 +1871,11 @@
     <string name="volume_dialog_ringer_guidance_silent" msgid="2128975224280276122">"Les trucades i les notificacions se silenciaran"</string>
     <string name="notification_channel_system_changes" msgid="5072715579030948646">"Canvis del sistema"</string>
     <string name="notification_channel_do_not_disturb" msgid="6766940333105743037">"No molestis"</string>
-    <string name="zen_upgrade_notification_visd_title" msgid="4168873821019741166">"El mode No molestis amaga notificacions perquè no et desconcentris"</string>
-    <string name="zen_upgrade_notification_visd_content" msgid="6776377368195804354">"Aquest comportament és nou. Toca per canviar-lo."</string>
+    <string name="zen_upgrade_notification_visd_title" msgid="3288313883409759733">"Novetat: el mode No molestis està amagant notificacions"</string>
+    <string name="zen_upgrade_notification_visd_content" msgid="5533674060311631165">"Toca per obtenir més informació i canviar la configuració."</string>
     <string name="zen_upgrade_notification_title" msgid="3799603322910377294">"S\'ha canviat el mode No molestis"</string>
     <string name="zen_upgrade_notification_content" msgid="1794994264692424562">"Toca per consultar què s\'ha bloquejat."</string>
     <string name="notification_app_name_system" msgid="4205032194610042794">"Sistema"</string>
     <string name="notification_app_name_settings" msgid="7751445616365753381">"Configuració"</string>
+    <string name="car_loading_profile" msgid="3545132581795684027">"S\'està carregant"</string>
 </resources>

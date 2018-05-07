@@ -1124,6 +1124,41 @@ public class TelephonyManager {
      */
     public static final String EXTRA_SUBSCRIPTION_ID = "android.telephony.extra.SUBSCRIPTION_ID";
 
+    /**
+     * Broadcast intent action indicating that when data stall recovery is attempted by Telephony,
+     * intended for report every data stall recovery step attempted.
+     *
+     * <p>
+     * The {@link #EXTRA_RECOVERY_ACTION} extra indicates the action associated with the data
+     * stall recovery.
+     * The phone id where the data stall recovery is attempted.
+     *
+     * <p class="note">
+     * Requires the READ_PHONE_STATE permission.
+     *
+     * <p class="note">
+     * This is a protected intent that can only be sent by the system.
+     *
+     * @see #EXTRA_RECOVERY_ACTION
+     *
+     * @hide
+     */
+    // TODO(b/78370030) : Restrict this to system applications only
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
+    public static final String ACTION_DATA_STALL_DETECTED =
+            "android.intent.action.DATA_STALL_DETECTED";
+
+    /**
+     * An int extra used with {@link #ACTION_DATA_STALL_DETECTED} to indicate the
+     * action associated with the data stall recovery.
+     *
+     * @see #ACTION_DATA_STALL_DETECTED
+     *
+     * @hide
+     */
+    public static final String EXTRA_RECOVERY_ACTION = "recoveryAction";
+
     //
     //
     // Device Info
@@ -1209,6 +1244,7 @@ public class TelephonyManager {
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public String getDeviceId(int slotIndex) {
         // FIXME this assumes phoneId == slotIndex
+        android.util.SeempLog.record_str(8, ""+slotIndex);
         try {
             IPhoneSubInfo info = getSubscriberInfo();
             if (info == null)
@@ -1353,6 +1389,7 @@ public class TelephonyManager {
             android.Manifest.permission.ACCESS_FINE_LOCATION
     })
     public CellLocation getCellLocation() {
+        android.util.SeempLog.record(49);
         try {
             ITelephony telephony = getITelephony();
             if (telephony == null) {
@@ -1442,6 +1479,7 @@ public class TelephonyManager {
     @Deprecated
     @RequiresPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
     public List<NeighboringCellInfo> getNeighboringCellInfo() {
+        android.util.SeempLog.record(50);
         try {
             ITelephony telephony = getITelephony();
             if (telephony == null)
@@ -1841,24 +1879,23 @@ public class TelephonyManager {
     }
 
     /**
-     * Returns the ISO country code equivalent of the current registered
-     * operator's MCC (Mobile Country Code).
+     * Returns the ISO country code equivalent of the MCC (Mobile Country Code) of the current
+     * registered operator, or nearby cell information if not registered.
+     * .
      * <p>
-     * Availability: Only when user is registered to a network. Result may be
-     * unreliable on CDMA networks (use {@link #getPhoneType()} to determine if
-     * on a CDMA network).
+     * Note: Result may be unreliable on CDMA networks (use {@link #getPhoneType()} to determine
+     * if on a CDMA network).
      */
     public String getNetworkCountryIso() {
         return getNetworkCountryIsoForPhone(getPhoneId());
     }
 
     /**
-     * Returns the ISO country code equivalent of the current registered
-     * operator's MCC (Mobile Country Code) of a subscription.
+     * Returns the ISO country code equivalent of the MCC (Mobile Country Code) of the current
+     * registered operator, or nearby cell information if not registered.
      * <p>
-     * Availability: Only when user is registered to a network. Result may be
-     * unreliable on CDMA networks (use {@link #getPhoneType()} to determine if
-     * on a CDMA network).
+     * Note: Result may be unreliable on CDMA networks (use {@link #getPhoneType()} to determine
+     * if on a CDMA network).
      *
      * @param subId for which Network CountryIso is returned
      * @hide
@@ -2676,6 +2713,7 @@ public class TelephonyManager {
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public String getSimSerialNumber(int subId) {
+        android.util.SeempLog.record_str(388, ""+subId);
         try {
             IPhoneSubInfo info = getSubscriberInfo();
             if (info == null)
@@ -2752,14 +2790,30 @@ public class TelephonyManager {
     }
 
     /**
+     * Test method to reload the UICC profile.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public void refreshUiccProfile() {
+        try {
+            ITelephony telephony = getITelephony();
+            telephony.refreshUiccProfile(mSubId);
+        } catch (RemoteException ex) {
+            Rlog.w(TAG, "RemoteException", ex);
+        }
+    }
+
+    /**
      * Map logicalSlot to physicalSlot, and activate the physicalSlot if it is inactive. For
      * example, passing the physicalSlots array [1, 0] means mapping the first item 1, which is
      * physical slot index 1, to the logical slot 0; and mapping the second item 0, which is
      * physical slot index 0, to the logical slot 1. The index of the array means the index of the
      * logical slots.
      *
-     * @param physicalSlots Index i in the array representing physical slot for phone i. The array
-     *        size should be same as {@link #getPhoneCount()}.
+     * @param physicalSlots The content of the array represents the physical slot index. The array
+     *        size should be same as {@link #getUiccSlotsInfo()}.
      * @return boolean Return true if the switch succeeds, false if the switch fails.
      * @hide
      */
@@ -2806,6 +2860,7 @@ public class TelephonyManager {
      */
     @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
     public String getSubscriberId(int subId) {
+        android.util.SeempLog.record_str(389, ""+subId);
         try {
             IPhoneSubInfo info = getSubscriberInfo();
             if (info == null)
@@ -3035,6 +3090,7 @@ public class TelephonyManager {
             android.Manifest.permission.READ_PHONE_NUMBERS
     })
     public String getLine1Number(int subId) {
+        android.util.SeempLog.record_str(9, ""+subId);
         String number = null;
         try {
             ITelephony telephony = getITelephony();
@@ -5523,6 +5579,7 @@ public class TelephonyManager {
      * @deprecated
      * Use {@link
      * #requestNetworkScan(NetworkScanRequest, Executor, TelephonyScanManager.NetworkScanCallback)}
+     * @removed
      */
     @Deprecated
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
@@ -6442,6 +6499,29 @@ public class TelephonyManager {
         } catch (NullPointerException e) {
         }
         return retVal;
+    }
+
+    /**
+     * Returns the result and response from RIL for oem request
+     *
+     * @param oemReq the data is sent to ril.
+     * @param oemResp the respose data from RIL.
+     * @return negative value request was not handled or get error
+     *         0 request was handled succesfully, but no response data
+     *         positive value success, data length of response
+     * @hide
+     * @deprecated OEM needs a vendor-extension hal and their apps should use that instead
+     */
+    @Deprecated
+    public int invokeOemRilRequestRaw(byte[] oemReq, byte[] oemResp) {
+        try {
+            ITelephony telephony = getITelephony();
+            if (telephony != null)
+                return telephony.invokeOemRilRequestRaw(oemReq, oemResp);
+        } catch (RemoteException ex) {
+        } catch (NullPointerException ex) {
+        }
+        return -1;
     }
 
     /** @hide */

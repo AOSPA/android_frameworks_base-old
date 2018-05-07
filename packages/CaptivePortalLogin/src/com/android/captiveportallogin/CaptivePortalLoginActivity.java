@@ -26,12 +26,12 @@ import android.net.ConnectivityManager;
 import android.net.ConnectivityManager.NetworkCallback;
 import android.net.Network;
 import android.net.NetworkCapabilities;
-import android.net.NetworkInfo;
 import android.net.NetworkRequest;
 import android.net.Proxy;
 import android.net.Uri;
 import android.net.dns.ResolvUtil;
 import android.net.http.SslError;
+import android.net.wifi.WifiInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -321,6 +321,7 @@ public class CaptivePortalLoginActivity extends Activity {
         // TODO: reuse NetworkMonitor facilities for consistent captive portal detection.
         new Thread(new Runnable() {
             public void run() {
+                final Network network = ResolvUtil.makeNetworkWithPrivateDnsBypass(mNetwork);
                 // Give time for captive portal to open.
                 try {
                     Thread.sleep(1000);
@@ -329,7 +330,7 @@ public class CaptivePortalLoginActivity extends Activity {
                 HttpURLConnection urlConnection = null;
                 int httpResponseCode = 500;
                 try {
-                    urlConnection = (HttpURLConnection) mNetwork.openConnection(mUrl);
+                    urlConnection = (HttpURLConnection) network.openConnection(mUrl);
                     urlConnection.setInstanceFollowRedirects(false);
                     urlConnection.setConnectTimeout(SOCKET_TIMEOUT_MS);
                     urlConnection.setReadTimeout(SOCKET_TIMEOUT_MS);
@@ -534,15 +535,12 @@ public class CaptivePortalLoginActivity extends Activity {
     }
 
     private String getHeaderTitle() {
-        NetworkInfo info = mCm.getNetworkInfo(mNetwork);
-        if (info == null || TextUtils.isEmpty(info.getExtraInfo())) {
-            return getString(R.string.action_bar_label);
-        }
         NetworkCapabilities nc = mCm.getNetworkCapabilities(mNetwork);
-        if (!nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+        if (nc == null || TextUtils.isEmpty(nc.getSSID())
+            || !nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
             return getString(R.string.action_bar_label);
         }
-        return getString(R.string.action_bar_title, info.getExtraInfo().replaceAll("^\"|\"$", ""));
+        return getString(R.string.action_bar_title, WifiInfo.removeDoubleQuotes(nc.getSSID()));
     }
 
     private String getHeaderSubtitle(URL url) {

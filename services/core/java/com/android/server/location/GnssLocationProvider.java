@@ -16,11 +16,11 @@
 
 package com.android.server.location;
 
-import android.annotation.Nullable;
 import android.app.AlarmManager;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -251,8 +251,6 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
     private static final int TCP_MIN_PORT = 0;
     private static final int TCP_MAX_PORT = 0xffff;
 
-    // 10 seconds.
-    private static final long LOCATION_TIME_FRESHNESS_THESHOLD_MILLIS = 10 * 1000;
     // 1 second, or 1 Hz frequency.
     private static final long LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS = 1000;
     // 30 seconds.
@@ -420,6 +418,8 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
     private final LocationChangeListener mNetworkLocationListener = new NetworkLocationListener();
     private final LocationChangeListener mFusedLocationListener = new FusedLocationListener();
     private final NtpTimeHelper mNtpTimeHelper;
+    private final GnssBatchingProvider mGnssBatchingProvider;
+    private final GnssGeofenceProvider mGnssGeofenceProvider;
 
     // Handler for processing events
     private Handler mHandler;
@@ -494,7 +494,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
     }
 
     public IGpsGeofenceHardware getGpsGeofenceProxy() {
-        return mGpsGeofenceBinder;
+        return mGnssGeofenceProvider;
     }
 
     public GnssMeasurementsProvider getGnssMeasurementsProvider() {
@@ -818,37 +818,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
             }
         };
 
-        mGnssMeasurementsProvider = new GnssMeasurementsProvider(mHandler) {
-            @Override
-            public boolean isAvailableInPlatform() {
-                return native_is_measurement_supported();
-            }
-
-            @Override
-            protected int registerWithService() {
-                int devOptions = Settings.Secure.getInt(mContext.getContentResolver(),
-                        Settings.Global.DEVELOPMENT_SETTINGS_ENABLED , 0);
-                int fullTrackingToggled = Settings.Global.getInt(mContext.getContentResolver(),
-                        Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING , 0);
-                boolean result = false;
-                if (devOptions == 1 /* Developer Mode enabled */
-                        && fullTrackingToggled == 1 /* Raw Measurements Full Tracking enabled */) {
-                    result =  native_start_measurement_collection(true /* enableFullTracking */);
-                } else {
-                    result =  native_start_measurement_collection(false /* enableFullTracking */);
-                }
-                if (result) {
-                    return RemoteListenerHelper.RESULT_SUCCESS;
-                } else {
-                    return RemoteListenerHelper.RESULT_INTERNAL_ERROR;
-                }
-            }
-
-            @Override
-            protected void unregisterFromService() {
-                native_stop_measurement_collection();
-            }
-
+        mGnssMeasurementsProvider = new GnssMeasurementsProvider(mContext, mHandler) {
             @Override
             protected boolean isGpsEnabled() {
                 return isEnabled();
@@ -856,26 +826,6 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
         };
 
         mGnssNavigationMessageProvider = new GnssNavigationMessageProvider(mHandler) {
-            @Override
-            protected boolean isAvailableInPlatform() {
-                return native_is_navigation_message_supported();
-            }
-
-            @Override
-            protected int registerWithService() {
-                boolean result = native_start_navigation_message_collection();
-                if (result) {
-                    return RemoteListenerHelper.RESULT_SUCCESS;
-                } else {
-                    return RemoteListenerHelper.RESULT_INTERNAL_ERROR;
-                }
-            }
-
-            @Override
-            protected void unregisterFromService() {
-                native_stop_navigation_message_collection();
-            }
-
             @Override
             protected boolean isGpsEnabled() {
                 return isEnabled();
@@ -887,6 +837,8 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
         mGnssSatelliteBlacklistHelper = new GnssSatelliteBlacklistHelper(mContext,
                 looper, this);
         mHandler.post(mGnssSatelliteBlacklistHelper::updateSatelliteBlacklist);
+        mGnssBatchingProvider = new GnssBatchingProvider();
+        mGnssGeofenceProvider = new GnssGeofenceProvider(looper);
     }
 
     /**
@@ -1030,12 +982,21 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
                 Log.e(TAG, "Invalid status to release SUPL connection: " + agpsDataConnStatus);
         }
     }
-    
+
     private void handleRequestLocation(boolean independentFromGnss) {
         if (isRequestLocationRateLimited()) {
             if (DEBUG) {
                 Log.d(TAG, "RequestLocation is denied due to too frequent requests.");
             }
+            return;
+        }
+        ContentResolver resolver = mContext.getContentResolver();
+        long durationMillis = Settings.Global.getLong(
+                resolver,
+                Settings.Global.GNSS_HAL_LOCATION_REQUEST_DURATION_MILLIS,
+                LOCATION_UPDATE_DURATION_MILLIS);
+        if (durationMillis == 0) {
+            Log.i(TAG, "GNSS HAL location request is disabled by Settings.");
             return;
         }
 
@@ -1054,8 +1015,16 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
             locationListener = mFusedLocationListener;
         }
 
+        if (!locationManager.isProviderEnabled(provider)) {
+            Log.w(TAG, "Unable to request location since " + provider
+                    + " provider does not exist or is not enabled.");
+            return;
+        }
+
         Log.i(TAG,
-                String.format("GNSS HAL Requesting location updates from %s provider.", provider));
+                String.format(
+                        "GNSS HAL Requesting location updates from %s provider for %d millis.",
+                        provider, durationMillis));
         locationManager.requestLocationUpdates(provider,
                 LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS, /*minDistance=*/ 0,
                 locationListener, mHandler.getLooper());
@@ -1065,7 +1034,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
                 Log.i(TAG, String.format("Removing location updates from %s provider.", provider));
                 locationManager.removeUpdates(locationListener);
             }
-        }, LOCATION_UPDATE_DURATION_MILLIS);
+        }, durationMillis);
     }
 
     private void injectBestLocation(Location location) {
@@ -1092,21 +1061,6 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
                 altitudeMeters, speedMetersPerSec, bearingDegrees, horizontalAccuracyMeters,
                 verticalAccuracyMeters, speedAccuracyMetersPerSecond, bearingAccuracyDegrees,
                 timestamp);
-    }
-
-    /**
-     * Get the last fresh location.
-     *
-     * Return null if the last location is not available or not fresh.
-     */
-    private @Nullable
-    Location getLastFreshLocation(LocationManager locationManager, String provider) {
-        Location location = locationManager.getLastKnownLocation(provider);
-        if (location != null && System.currentTimeMillis() - location.getTime()
-                < LOCATION_TIME_FRESHNESS_THESHOLD_MILLIS) {
-            return location;
-        }
-        return null;
     }
 
     /** Returns true if the location request is too frequent. */
@@ -1273,7 +1227,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
 
             mGnssMeasurementsProvider.onGpsEnabledChanged();
             mGnssNavigationMessageProvider.onGpsEnabledChanged();
-            enableBatching();
+            mGnssBatchingProvider.enable();
         } else {
             synchronized (mLock) {
                 mEnabled = false;
@@ -1305,7 +1259,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
         mAlarmManager.cancel(mWakeupIntent);
         mAlarmManager.cancel(mTimeoutIntent);
 
-        disableBatching();
+        mGnssBatchingProvider.disable();
         // do this before releasing wakelock
         native_cleanup();
 
@@ -1498,31 +1452,6 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
             Binder.restoreCallingIdentity(identity);
         }
     }
-
-    private IGpsGeofenceHardware mGpsGeofenceBinder = new IGpsGeofenceHardware.Stub() {
-        public boolean isHardwareGeofenceSupported() {
-            return native_is_geofence_supported();
-        }
-
-        public boolean addCircularHardwareGeofence(int geofenceId, double latitude,
-                double longitude, double radius, int lastTransition, int monitorTransitions,
-                int notificationResponsiveness, int unknownTimer) {
-            return native_add_geofence(geofenceId, latitude, longitude, radius,
-                    lastTransition, monitorTransitions, notificationResponsiveness, unknownTimer);
-        }
-
-        public boolean removeHardwareGeofence(int geofenceId) {
-            return native_remove_geofence(geofenceId);
-        }
-
-        public boolean pauseHardwareGeofence(int geofenceId) {
-            return native_pause_geofence(geofenceId);
-        }
-
-        public boolean resumeHardwareGeofence(int geofenceId, int monitorTransition) {
-            return native_resume_geofence(geofenceId, monitorTransition);
-        }
-    };
 
     private boolean deleteAidingData(Bundle extras) {
         int flags;
@@ -2007,58 +1936,11 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
         };
     }
 
-    public interface GnssBatchingProvider {
-        /**
-         * Returns the GNSS batching size
-         */
-        int getSize();
-
-        /**
-         * Starts the hardware batching operation
-         */
-        boolean start(long periodNanos, boolean wakeOnFifoFull);
-
-        /**
-         * Forces a flush of existing locations from the hardware batching
-         */
-        void flush();
-
-        /**
-         * Stops the batching operation
-         */
-        boolean stop();
-    }
-
     /**
      * @hide
      */
     public GnssBatchingProvider getGnssBatchingProvider() {
-        return new GnssBatchingProvider() {
-            @Override
-            public int getSize() {
-                return native_get_batch_size();
-            }
-
-            @Override
-            public boolean start(long periodNanos, boolean wakeOnFifoFull) {
-                if (periodNanos <= 0) {
-                    Log.e(TAG, "Invalid periodNanos " + periodNanos +
-                            "in batching request, not started");
-                    return false;
-                }
-                return native_start_batch(periodNanos, wakeOnFifoFull);
-            }
-
-            @Override
-            public void flush() {
-                native_flush_batch();
-            }
-
-            @Override
-            public boolean stop() {
-                return native_stop_batch();
-            }
-        };
+        return mGnssBatchingProvider;
     }
 
     public interface GnssMetricsProvider {
@@ -2078,23 +1960,6 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
                 return mGnssMetrics.dumpGnssMetricsAsProtoString();
             }
         };
-    }
-
-    /**
-     * Initialize Batching if enabled
-     */
-    private void enableBatching() {
-        if (!native_init_batching()) {
-            Log.e(TAG, "Failed to initialize GNSS batching");
-        }
-    }
-
-    /**
-     * Disable batching
-     */
-    private void disableBatching() {
-        native_stop_batch();
-        native_cleanup_batching();
     }
 
     /**
@@ -2875,33 +2740,6 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
     private native void native_update_network_state(boolean connected, int type,
             boolean roaming, boolean available, String extraInfo, String defaultAPN);
 
-    // Hardware Geofence support.
-    private static native boolean native_is_geofence_supported();
-
-    private static native boolean native_add_geofence(int geofenceId, double latitude,
-            double longitude, double radius, int lastTransition, int monitorTransitions,
-            int notificationResponsivenes, int unknownTimer);
-
-    private static native boolean native_remove_geofence(int geofenceId);
-
-    private static native boolean native_resume_geofence(int geofenceId, int transitions);
-
-    private static native boolean native_pause_geofence(int geofenceId);
-
-    // Gps Hal measurements support.
-    private static native boolean native_is_measurement_supported();
-
-    private native boolean native_start_measurement_collection(boolean enableFullTracking);
-
-    private native boolean native_stop_measurement_collection();
-
-    // Gps Navigation message support.
-    private static native boolean native_is_navigation_message_supported();
-
-    private native boolean native_start_navigation_message_collection();
-
-    private native boolean native_stop_navigation_message_collection();
-
     // GNSS Configuration
     private static native boolean native_set_supl_version(int version);
 
@@ -2918,19 +2756,5 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
     private static native boolean native_set_emergency_supl_pdn(int emergencySuplPdn);
 
     private static native boolean native_set_satellite_blacklist(int[] constellations, int[] svIds);
-
-    // GNSS Batching
-    private static native int native_get_batch_size();
-
-    private static native boolean native_start_batch(long periodNanos, boolean wakeOnFifoFull);
-
-    private static native void native_flush_batch();
-
-    private static native boolean native_stop_batch();
-
-    private static native boolean native_init_batching();
-
-    private static native void native_cleanup_batching();
-
 }
 

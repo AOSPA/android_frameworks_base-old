@@ -89,7 +89,6 @@ import com.android.systemui.fragments.FragmentHostManager.FragmentListener;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.misc.SysUiTaskStackChangeListener;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
-import com.android.systemui.shared.system.WindowManagerWrapper;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
@@ -174,14 +173,10 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
         public void onConnectionChanged(boolean isConnected) {
             mNavigationBarView.updateStates();
             updateScreenPinningGestures();
-            WindowManagerWrapper.getInstance()
-                    .setNavBarVirtualKeyHapticFeedbackEnabled(!isConnected);
         }
 
         @Override
         public void onQuickStepStarted() {
-            mNavigationBarView.onQuickStepStarted();
-
             // Use navbar dragging as a signal to hide the rotate button
             setRotateSuggestionButtonState(false);
         }
@@ -286,6 +281,7 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
         filter.addAction(Intent.ACTION_SCREEN_ON);
+        filter.addAction(Intent.ACTION_USER_SWITCHED);
         getContext().registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null, null);
         notifyNavigationBarScreenOn();
         mOverviewProxyService.addCallback(mOverviewProxyListener);
@@ -526,7 +522,7 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
 
         // Clear any pending suggestion flag as it has either been nullified or is being shown
         mPendingRotationSuggestion = false;
-        getView().removeCallbacks(mCancelPendingRotationProposal);
+        if (getView() != null) getView().removeCallbacks(mCancelPendingRotationProposal);
 
         // Handle the visibility change and animation
         if (visible) { // Appear and change (cannot force)
@@ -549,7 +545,12 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
 
             // Set visibility, may fail if a11y service is active.
             // If invisible, call will stop animation.
-            mNavigationBarView.setRotateButtonVisibility(true);
+            int appliedVisibility = mNavigationBarView.setRotateButtonVisibility(true);
+            if (appliedVisibility == View.VISIBLE) {
+                // If the button will actually become visible and the navbar is about to hide,
+                // tell the statusbar to keep it around for longer
+                mStatusBar.touchAutoHide();
+            }
 
         } else { // Hide
 
@@ -1084,6 +1085,10 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
                     || Intent.ACTION_SCREEN_ON.equals(action)) {
                 notifyNavigationBarScreenOn();
             }
+            if (Intent.ACTION_USER_SWITCHED.equals(action)) {
+                // The accessibility settings may be different for the new user
+                updateAccessibilityServicesState(mAccessibilityManager);
+            };
         }
     };
 
@@ -1141,6 +1146,7 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
         private final Runnable mRipple = new Runnable() {
             @Override
             public void run() { // Cause the ripple to fire via false presses
+                if (!mRoot.isAttachedToWindow()) return;
                 mRoot.setPressed(true);
                 mRoot.setPressed(false);
             }

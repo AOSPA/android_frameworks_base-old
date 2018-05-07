@@ -46,6 +46,7 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
     private final ArrayList<TilePage> mPages = new ArrayList<>();
 
     private PageIndicator mPageIndicator;
+    private float mPageIndicatorPosition;
 
     private int mNumPages;
     private PageListener mPageListener;
@@ -55,6 +56,7 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
 
     private AnimatorSet mBounceAnimatorSet;
     private int mAnimatingToPage = -1;
+    private float mLastExpansion;
 
     public PagedTileLayout(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -145,6 +147,8 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
 
     public void setPageIndicator(PageIndicator indicator) {
         mPageIndicator = indicator;
+        mPageIndicator.setNumPages(mNumPages);
+        mPageIndicator.setLocation(mPageIndicatorPosition);
     }
 
     @Override
@@ -169,8 +173,19 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
 
     @Override
     public void setExpansion(float expansion) {
-        for (TileRecord tr : mTiles) {
-            tr.tileView.setExpansion(expansion);
+        mLastExpansion = expansion;
+        updateSelected();
+    }
+
+    private void updateSelected() {
+        // Start the marquee when fully expanded and stop when fully collapsed. Leave as is for
+        // other expansion ratios since there is no way way to pause the marquee.
+        if (mLastExpansion > 0f && mLastExpansion < 1f) {
+            return;
+        }
+        boolean selected = mLastExpansion == 1f;
+        for (int i = 0; i < mPages.size(); i++) {
+            mPages.get(i).setSelected(i == getCurrentItem() ? selected : false);
         }
     }
 
@@ -212,7 +227,6 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
             }
             if (DEBUG) Log.d(TAG, "Size: " + mNumPages);
             mPageIndicator.setNumPages(mNumPages);
-            mPageIndicator.setVisibility(mNumPages > 1 ? View.VISIBLE : View.GONE);
             setAdapter(mAdapter);
             mAdapter.notifyDataSetChanged();
             setCurrentItem(0, false);
@@ -221,6 +235,12 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
 
     @Override
     public boolean updateResources() {
+        // Update bottom padding, useful for removing extra space once the panel page indicator is
+        // hidden.
+        setPadding(0, 0, 0,
+                getContext().getResources().getDimensionPixelSize(
+                        R.dimen.qs_paged_tile_layout_padding_bottom));
+
         boolean changed = false;
         for (int i = 0; i < mPages.size(); i++) {
             changed |= mPages.get(i).updateResources();
@@ -315,6 +335,7 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
             new ViewPager.SimpleOnPageChangeListener() {
                 @Override
                 public void onPageSelected(int position) {
+                    updateSelected();
                     if (mPageIndicator == null) return;
                     if (mPageListener != null) {
                         mPageListener.onPageChanged(isLayoutRtl() ? position == mPages.size() - 1
@@ -326,7 +347,8 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
                 public void onPageScrolled(int position, float positionOffset,
                         int positionOffsetPixels) {
                     if (mPageIndicator == null) return;
-                    mPageIndicator.setLocation(position + positionOffset);
+                    mPageIndicatorPosition = position + positionOffset;
+                    mPageIndicator.setLocation(mPageIndicatorPosition);
                     if (mPageListener != null) {
                         mPageListener.onPageChanged(positionOffsetPixels == 0 &&
                                 (isLayoutRtl() ? position == mPages.size() - 1 : position == 0));
@@ -353,11 +375,7 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
         }
 
         private int getRows() {
-            final Resources res = getContext().getResources();
-            if (res.getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
-                return res.getInteger(R.integer.quick_settings_num_rows_portrait);
-            }
-            return Math.max(1, res.getInteger(R.integer.quick_settings_num_rows));
+            return Math.max(1, getResources().getInteger(R.integer.quick_settings_num_rows));
         }
 
         public void setMaxRows(int maxRows) {

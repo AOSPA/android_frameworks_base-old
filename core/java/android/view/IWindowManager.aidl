@@ -128,7 +128,10 @@ interface IWindowManager
     void overridePendingAppTransitionRemote(in RemoteAnimationAdapter remoteAnimationAdapter);
     void executeAppTransition();
 
-    /** Used by system ui to report that recents has shown itself. */
+    /**
+      * Used by system ui to report that recents has shown itself.
+      * @deprecated to be removed once prebuilts are updated
+      */
     void endProlongedAnimations();
 
     // Re-evaluate the current orientation from the caller's state.
@@ -340,12 +343,6 @@ interface IWindowManager
      *         WindowManagerGlobal.DOCKED_* values
      */
     int getDockedStackSide();
-
-    /**
-     * Sets whether we are currently in a drag resize operation where we are changing the docked
-     * stack size.
-     */
-    void setDockedStackResizing(boolean resizing);
 
     /**
      * Sets the region the user can touch the divider. This region will be excluded from the region

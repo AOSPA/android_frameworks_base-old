@@ -1344,6 +1344,10 @@ public final class ViewRootImpl implements ViewParent,
             for (int i = 0; i < mWindowStoppedCallbacks.size(); i++) {
                 mWindowStoppedCallbacks.get(i).windowStopped(stopped);
             }
+
+            if (mStopped) {
+                mSurface.release();
+            }
         }
     }
 
@@ -3280,7 +3284,8 @@ public final class ViewRootImpl implements ViewParent,
                 // eglTerminate() for instance.
                 if (mAttachInfo.mThreadedRenderer != null &&
                         !mAttachInfo.mThreadedRenderer.isEnabled() &&
-                        mAttachInfo.mThreadedRenderer.isRequested()) {
+                        mAttachInfo.mThreadedRenderer.isRequested() &&
+                        mSurface.isValid()) {
 
                     try {
                         mAttachInfo.mThreadedRenderer.initializeIfNeeded(

@@ -2758,8 +2758,7 @@ public class DevicePolicyManager {
      * Determine whether the current password the user has set is sufficient to meet the policy
      * requirements (e.g. quality, minimum length) that have been requested by the admins of this
      * user and its participating profiles. Restrictions on profiles that have a separate challenge
-     * are not taken into account. The user must be unlocked in order to perform the check. The
-     * password blacklist is not considered when checking sufficiency.
+     * are not taken into account. The user must be unlocked in order to perform the check.
      * <p>
      * The calling device admin must have requested
      * {@link DeviceAdminInfo#USES_POLICY_LIMIT_PASSWORD} to be able to call this method; if it has
@@ -4067,8 +4066,8 @@ public class DevicePolicyManager {
      * immediately, without user approval. It is a best practice not to request this unless strictly
      * necessary since it opens up additional security vulnerabilities.
      *
-     * <p>Whether this key is offered to the user for approval at all or not depends on the
-     * {@code isUserSelectable} parameter.
+     * <p>Include {@link #INSTALLKEY_SET_USER_SELECTABLE} in the {@code flags} argument to allow
+     * the user to select the key from a dialog.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *        {@code null} if calling from a delegated certificate installer.

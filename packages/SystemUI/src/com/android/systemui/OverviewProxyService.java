@@ -22,7 +22,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
-import android.content.pm.PackageManager;
 import android.graphics.Rect;
 import android.os.Binder;
 import android.os.Handler;
@@ -42,6 +41,7 @@ import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.recents.ISystemUiProxy;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.GraphicBufferCompat;
+import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.CallbackController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
@@ -78,7 +78,6 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
 
     private IOverviewProxy mOverviewProxy;
     private int mConnectionBackoffAttempts;
-    private CharSequence mOnboardingText;
     private @InteractionType int mInteractionFlags;
     private boolean mIsEnabled;
 
@@ -119,8 +118,17 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
         }
 
-        public void setRecentsOnboardingText(CharSequence text) {
-            mOnboardingText = text;
+        public void onOverviewShown(boolean fromHome) {
+            long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> {
+                    for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+                        mConnectionCallbacks.get(i).onOverviewShown(fromHome);
+                    }
+                });
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
         }
 
         public void setInteractionState(@InteractionType int flags) {
@@ -136,6 +144,19 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 }
             } finally {
                 Prefs.putInt(mContext, Prefs.Key.QUICK_STEP_INTERACTION_FLAGS, mInteractionFlags);
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        public Rect getNonMinimizedSplitScreenSecondaryBounds() {
+            long token = Binder.clearCallingIdentity();
+            try {
+                Divider divider = ((SystemUIApplication) mContext).getComponent(Divider.class);
+                if (divider != null) {
+                    return divider.getView().getNonMinimizedSplitScreenSecondaryBounds();
+                }
+                return null;
+            } finally {
                 Binder.restoreCallingIdentity(token);
             }
         }
@@ -286,10 +307,6 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         return mOverviewProxy;
     }
 
-    public CharSequence getOnboardingText() {
-        return mOnboardingText;
-    }
-
     public int getInteractionFlags() {
         return mInteractionFlags;
     }
@@ -315,6 +332,12 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
     }
 
+    public void notifyQuickScrubStarted() {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).onQuickScrubStarted();
+        }
+    }
+
     private void updateEnabledState() {
         mIsEnabled = mContext.getPackageManager().resolveServiceAsUser(mQuickStepIntent,
                 MATCH_DIRECT_BOOT_UNAWARE,
@@ -334,5 +357,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         default void onConnectionChanged(boolean isConnected) {}
         default void onQuickStepStarted() {}
         default void onInteractionFlagsChanged(@InteractionType int flags) {}
+        default void onOverviewShown(boolean fromHome) {}
+        default void onQuickScrubStarted() {}
     }
 }

@@ -20,6 +20,7 @@ import static android.view.WindowManager.LayoutParams;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_OPEN;
 import static android.view.WindowManager.TRANSIT_ACTIVITY_RELAUNCH;
+import static android.view.WindowManager.TRANSIT_CRASHING_ACTIVITY_CLOSE;
 import static android.view.WindowManager.TRANSIT_DOCK_TASK_FROM_RECENTS;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE;
@@ -81,6 +82,7 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.content.res.ResourceId;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -244,7 +246,6 @@ public class AppTransition implements Dump {
 
     private int mLastClipRevealMaxTranslation;
     private boolean mLastHadClipReveal;
-    private boolean mProlongedAnimationsEnded;
 
     private final boolean mGridLayoutRecentsEnabled;
     private final boolean mLowRamRecentsEnabled;
@@ -422,25 +423,10 @@ public class AppTransition implements Dump {
         mService.getDefaultDisplayContentLocked().getDockedDividerController()
                 .notifyAppTransitionStarting(openingApps, transit);
 
-        // Prolong the start for the transition when docking a task from recents, unless recents
-        // ended it already then we don't need to wait.
-        if (transit == TRANSIT_DOCK_TASK_FROM_RECENTS && !mProlongedAnimationsEnded) {
-            for (int i = openingApps.size() - 1; i >= 0; i--) {
-                final AppWindowToken app = openingApps.valueAt(i);
-                app.startDelayingAnimationStart();
-            }
-        }
         if (mRemoteAnimationController != null) {
             mRemoteAnimationController.goodToGo();
         }
         return redoLayout;
-    }
-
-    /**
-     * Let the transitions manager know that the somebody wanted to end the prolonged animations.
-     */
-    void notifyProlongedAnimationsEnded() {
-        mProlongedAnimationsEnded = true;
     }
 
     void clear() {
@@ -451,7 +437,6 @@ public class AppTransition implements Dump {
         mNextAppTransitionAnimationsSpecsFuture = null;
         mDefaultNextAppTransitionAnimationSpec = null;
         mAnimationFinishedCallback = null;
-        mProlongedAnimationsEnded = false;
     }
 
     void freeze() {
@@ -553,25 +538,26 @@ public class AppTransition implements Dump {
         return null;
     }
 
-    Animation loadAnimationAttr(LayoutParams lp, int animAttr) {
-        int anim = 0;
+    Animation loadAnimationAttr(LayoutParams lp, int animAttr, int transit) {
+        int resId = ResourceId.ID_NULL;
         Context context = mContext;
         if (animAttr >= 0) {
             AttributeCache.Entry ent = getCachedAnimations(lp);
             if (ent != null) {
                 context = ent.context;
-                anim = ent.array.getResourceId(animAttr, 0);
+                resId = ent.array.getResourceId(animAttr, 0);
             }
         }
-        if (anim != 0) {
-            return AnimationUtils.loadAnimation(context, anim);
+        resId = updateToTranslucentAnimIfNeeded(resId, transit);
+        if (ResourceId.isValid(resId)) {
+            return AnimationUtils.loadAnimation(context, resId);
         }
         return null;
     }
 
     Animation loadAnimationRes(LayoutParams lp, int resId) {
         Context context = mContext;
-        if (resId >= 0) {
+        if (ResourceId.isValid(resId)) {
             AttributeCache.Entry ent = getCachedAnimations(lp);
             if (ent != null) {
                 context = ent.context;
@@ -582,19 +568,23 @@ public class AppTransition implements Dump {
     }
 
     private Animation loadAnimationRes(String packageName, int resId) {
-        int anim = 0;
-        Context context = mContext;
-        if (resId >= 0) {
+        if (ResourceId.isValid(resId)) {
             AttributeCache.Entry ent = getCachedAnimations(packageName, resId);
             if (ent != null) {
-                context = ent.context;
-                anim = resId;
+                return AnimationUtils.loadAnimation(ent.context, resId);
             }
         }
-        if (anim != 0) {
-            return AnimationUtils.loadAnimation(context, anim);
-        }
         return null;
+    }
+
+    private int updateToTranslucentAnimIfNeeded(int anim, int transit) {
+        if (transit == TRANSIT_TRANSLUCENT_ACTIVITY_OPEN && anim == R.anim.activity_open_enter) {
+            return R.anim.activity_translucent_open_enter;
+        }
+        if (transit == TRANSIT_TRANSLUCENT_ACTIVITY_CLOSE && anim == R.anim.activity_close_exit) {
+            return R.anim.activity_translucent_close_exit;
+        }
+        return anim;
     }
 
     /**
@@ -994,6 +984,7 @@ public class AppTransition implements Dump {
                 (height - thumbnailSize) / 2,
                 (width + thumbnailSize) / 2,
                 (height + thumbnailSize) / 2);
+        drawable.setTint(mContext.getColor(android.R.color.white));
         drawable.draw(canvas);
         picture.endRecording();
 
@@ -1569,6 +1560,8 @@ public class AppTransition implements Dump {
             a = null;
         } else if (transit == TRANSIT_KEYGUARD_UNOCCLUDE && !enter) {
             a = loadAnimationRes(lp, com.android.internal.R.anim.wallpaper_open_exit);
+        } else if (transit == TRANSIT_CRASHING_ACTIVITY_CLOSE) {
+            a = null;
         } else if (isVoiceInteraction && (transit == TRANSIT_ACTIVITY_OPEN
                 || transit == TRANSIT_TASK_OPEN
                 || transit == TRANSIT_TASK_TO_FRONT)) {
@@ -1661,29 +1654,17 @@ public class AppTransition implements Dump {
                     "applyAnimation NEXT_TRANSIT_TYPE_OPEN_CROSS_PROFILE_APPS:"
                             + " anim=" + a + " transit=" + appTransitionToString(transit)
                             + " isEntrance=true" + " Callers=" + Debug.getCallers(3));
-        } else if (transit == TRANSIT_TRANSLUCENT_ACTIVITY_OPEN && enter) {
-            a = loadAnimationRes("android",
-                    com.android.internal.R.anim.activity_translucent_open_enter);
-            Slog.v(TAG,
-                    "applyAnimation TRANSIT_TRANSLUCENT_ACTIVITY_OPEN:"
-                            + " anim=" + a + " transit=" + appTransitionToString(transit)
-                            + " isEntrance=true" + " Callers=" + Debug.getCallers(3));
-        } else if (transit == TRANSIT_TRANSLUCENT_ACTIVITY_CLOSE && !enter) {
-            a = loadAnimationRes("android",
-                    com.android.internal.R.anim.activity_translucent_close_exit);
-            Slog.v(TAG,
-                    "applyAnimation TRANSIT_TRANSLUCENT_ACTIVITY_CLOSE:"
-                            + " anim=" + a + " transit=" + appTransitionToString(transit)
-                            + " isEntrance=false" + " Callers=" + Debug.getCallers(3));
         } else {
             int animAttr = 0;
             switch (transit) {
                 case TRANSIT_ACTIVITY_OPEN:
+                case TRANSIT_TRANSLUCENT_ACTIVITY_OPEN:
                     animAttr = enter
                             ? WindowAnimation_activityOpenEnterAnimation
                             : WindowAnimation_activityOpenExitAnimation;
                     break;
                 case TRANSIT_ACTIVITY_CLOSE:
+                case TRANSIT_TRANSLUCENT_ACTIVITY_CLOSE:
                     animAttr = enter
                             ? WindowAnimation_activityCloseEnterAnimation
                             : WindowAnimation_activityCloseExitAnimation;
@@ -1734,7 +1715,7 @@ public class AppTransition implements Dump {
                             ? WindowAnimation_launchTaskBehindSourceAnimation
                             : WindowAnimation_launchTaskBehindTargetAnimation;
             }
-            a = animAttr != 0 ? loadAnimationAttr(lp, animAttr) : null;
+            a = animAttr != 0 ? loadAnimationAttr(lp, animAttr, transit) : null;
             if (DEBUG_APP_TRANSITIONS || DEBUG_ANIM) Slog.v(TAG,
                     "applyAnimation:"
                     + " anim=" + a
@@ -2157,8 +2138,10 @@ public class AppTransition implements Dump {
             setAppTransition(transit, flags);
         }
         // We never want to change from a Keyguard transit to a non-Keyguard transit, as our logic
-        // relies on the fact that we always execute a Keyguard transition after preparing one.
-        else if (!alwaysKeepCurrent && !isKeyguardTransit(transit)) {
+        // relies on the fact that we always execute a Keyguard transition after preparing one. We
+        // also don't want to change away from a crashing transition.
+        else if (!alwaysKeepCurrent && !isKeyguardTransit(transit)
+                && transit != TRANSIT_CRASHING_ACTIVITY_CLOSE) {
             if (transit == TRANSIT_TASK_OPEN && isTransitionEqual(TRANSIT_TASK_CLOSE)) {
                 // Opening a new task always supersedes a close for the anim.
                 setAppTransition(transit, flags);

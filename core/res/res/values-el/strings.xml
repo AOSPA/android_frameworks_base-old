@@ -836,7 +836,8 @@
     <string name="double_tap_toast" msgid="4595046515400268881">"Συμβουλή: Πατήστε δύο φορές για μεγέθυνση και σμίκρυνση."</string>
     <string name="autofill_this_form" msgid="4616758841157816676">"Αυτόματη συμπλήρωση"</string>
     <string name="setup_autofill" msgid="7103495070180590814">"Ρύθμ.αυτ.συμπλ."</string>
-    <string name="autofill_window_title" msgid="921006636895825007">"Αυτόματη συμπλήρωση"</string>
+    <!-- no translation found for autofill_window_title (4107745526909284887) -->
+    <skip />
     <string name="autofill_address_name_separator" msgid="6350145154779706772">" "</string>
     <string name="autofill_address_summary_name_format" msgid="3268041054899214945">"$1$2$3"</string>
     <string name="autofill_address_summary_separator" msgid="7483307893170324129">", "</string>
@@ -1014,8 +1015,7 @@
     <string name="dial" msgid="1253998302767701559">"Κλήση"</string>
     <string name="dial_desc" msgid="6573723404985517250">"Κλήση επιλεγμένου αριθμού τηλεφώνου"</string>
     <string name="map" msgid="5441053548030107189">"Χάρτης"</string>
-    <!-- no translation found for map_desc (1836995341943772348) -->
-    <skip />
+    <string name="map_desc" msgid="1836995341943772348">"Εντοπισμός επιλεγμένης διεύθυνσης"</string>
     <string name="browse" msgid="1245903488306147205">"Άνοιγμα"</string>
     <string name="browse_desc" msgid="8220976549618935044">"Άνοιγμα επιλεγμένου URL"</string>
     <string name="sms" msgid="4560537514610063430">"Μήνυμα"</string>
@@ -1691,7 +1691,8 @@
     <string name="package_installed_device_owner" msgid="6875717669960212648">"Εγκαταστάθηκε από τον διαχειριστή σας"</string>
     <string name="package_updated_device_owner" msgid="1847154566357862089">"Ενημερώθηκε από τον διαχειριστή σας"</string>
     <string name="package_deleted_device_owner" msgid="2307122077550236438">"Διαγράφηκε από τον διαχειριστή σας"</string>
-    <string name="battery_saver_description" msgid="4660824093877546730">"Προκειμένου να επεκτείνει τη διάρκεια ζωής της μπαταρίας, η Εξοικονόμηση μπαταρίας μειώνει την απόδοση της συσκευής σας και περιορίζει ή απενεργοποιεί τη δόνηση, τις υπηρεσίες τοποθεσίας και τα δεδομένα παρασκηνίου. Οι εφαρμογές ηλεκτρονικού ταχυδρομείου, ανταλλαγής μηνυμάτων και άλλες, οι οποίες βασίζονται στον συγχρονισμό μπορεί να μην ενημερωθούν, εκτός εάν τις ανοίξετε.\n\nΗ Εξοικονόμηση μπαταρίας απενεργοποιείται αυτόματα κατά τη φόρτιση της συσκευής σας."</string>
+    <string name="battery_saver_description_with_learn_more" msgid="6323937147992667707">"Προκειμένου να επεκτείνει τη διάρκεια ζωής της μπαταρίας σας, η Εξοικονόμηση μπαταρίας απενεργοποιεί ορισμένες λειτουργίες της συσκευής και περιορίζει τις εφαρμογές. "<annotation id="url">"Μάθετε περισσότερα"</annotation></string>
+    <string name="battery_saver_description" msgid="769989536172631582">"Προκειμένου να επεκτείνει τη διάρκεια ζωής της μπαταρίας σας, η Εξοικονόμηση μπαταρίας απενεργοποιεί ορισμένες λειτουργίες της συσκευής και περιορίζει τις εφαρμογές."</string>
     <string name="data_saver_description" msgid="6015391409098303235">"Προκειμένου να μειωθεί η χρήση δεδομένων, η Εξοικονόμηση δεδομένων αποτρέπει την αποστολή ή λήψη δεδομένων από ορισμένες εφαρμογές στο παρασκήνιο. Μια εφαρμογή που χρησιμοποιείτε αυτήν τη στιγμή μπορεί να χρησιμοποιήσει δεδομένα αλλά με μικρότερη συχνότητα. Για παράδειγμα, οι εικόνες μπορεί να μην εμφανίζονται μέχρι να τις πατήσετε."</string>
     <string name="data_saver_enable_title" msgid="4674073932722787417">"Ενεργ.Εξοικονόμησης δεδομένων;"</string>
     <string name="data_saver_enable_button" msgid="7147735965247211818">"Ενεργοποίηση"</string>
@@ -1739,7 +1740,7 @@
     <string name="zen_mode_default_weekends_name" msgid="2786495801019345244">"Σαββατοκύριακο"</string>
     <string name="zen_mode_default_events_name" msgid="8158334939013085363">"Συμβάν"</string>
     <string name="zen_mode_default_every_night_name" msgid="3012363838882944175">"Ύπνος"</string>
-    <string name="muted_by" msgid="6147073845094180001">"Σίγαση από <xliff:g id="THIRD_PARTY">%1$s</xliff:g>"</string>
+    <string name="muted_by" msgid="5942954724562097128">"Το τρίτο μέρος <xliff:g id="THIRD_PARTY">%1$s</xliff:g> θέτει ορισμένους ήχους σε σίγαση"</string>
     <string name="system_error_wipe_data" msgid="6608165524785354962">"Υπάρχει ένα εσωτερικό πρόβλημα με τη συσκευή σας και ενδέχεται να είναι ασταθής μέχρι την επαναφορά των εργοστασιακών ρυθμίσεων."</string>
     <string name="system_error_manufacturer" msgid="8086872414744210668">"Υπάρχει ένα εσωτερικό πρόβλημα με τη συσκευή σας. Επικοινωνήστε με τον κατασκευαστή σας για λεπτομέρειες."</string>
     <string name="stk_cc_ussd_to_dial" msgid="5214333646366591205">"Το αίτημα USSD τροποποιήθηκε σε κανονική κλήση"</string>
@@ -1778,6 +1779,9 @@
     <string name="language_picker_section_all" msgid="3097279199511617537">"Όλες οι γλώσσες"</string>
     <string name="region_picker_section_all" msgid="8966316787153001779">"Όλες οι περιοχές"</string>
     <string name="locale_search_menu" msgid="2560710726687249178">"Αναζήτηση"</string>
+    <string name="app_suspended_title" msgid="1919029799438164552">"Το άνοιγμα εφαρμ. είναι αδύν."</string>
+    <string name="app_suspended_default_message" msgid="7875306315686531621">"Η εφαρμογή <xliff:g id="APP_NAME_0">%1$s</xliff:g> δεν είναι διαθέσιμη αυτήν τη στιγμή. Η διαχείριση πραγματοποιείται από το <xliff:g id="APP_NAME_1">%2$s</xliff:g>."</string>
+    <string name="app_suspended_more_details" msgid="1131804827776778187">"Μάθετε περισσότερα"</string>
     <string name="work_mode_off_title" msgid="1118691887588435530">"Ενεργοποίηση προφίλ εργασίας;"</string>
     <string name="work_mode_off_message" msgid="5130856710614337649">"Οι εφαρμογές, οι ειδοποιήσεις και τα δεδομένα εργασίας σας, καθώς και άλλες λειτουργίες του προφίλ εργασίας, θα ενεργοποιηθούν"</string>
     <string name="work_mode_turn_on" msgid="2062544985670564875">"Ενεργοποίηση"</string>
@@ -1867,10 +1871,11 @@
     <string name="volume_dialog_ringer_guidance_silent" msgid="2128975224280276122">"Οι κλήσεις και οι ειδοποιήσεις θα τεθούν σε παύση"</string>
     <string name="notification_channel_system_changes" msgid="5072715579030948646">"Αλλαγές στο σύστημα"</string>
     <string name="notification_channel_do_not_disturb" msgid="6766940333105743037">"Μην ενοχλείτε"</string>
-    <string name="zen_upgrade_notification_visd_title" msgid="4168873821019741166">"Η λειτουργία \"Μην ενοχλείτε\" αποκρύπτει ειδοποιήσεις, για να μπορείτε να συγκεντρώνεστε καλύτερα"</string>
-    <string name="zen_upgrade_notification_visd_content" msgid="6776377368195804354">"Αυτή η συμπεριφορά είναι νέα. Πατήστε για αλλαγή."</string>
+    <string name="zen_upgrade_notification_visd_title" msgid="3288313883409759733">"Νέο: Η λειτουργία \"Μην ενοχλείτε\" αποκρύπτει ειδοποιήσεις"</string>
+    <string name="zen_upgrade_notification_visd_content" msgid="5533674060311631165">"Πατήστε για να μάθετε περισσότερα και να κάνετε αλλαγές."</string>
     <string name="zen_upgrade_notification_title" msgid="3799603322910377294">"Η λειτουργία \"Μην ενοχλείτε\" άλλαξε"</string>
     <string name="zen_upgrade_notification_content" msgid="1794994264692424562">"Πατήστε για να ελέγξετε το περιεχόμενο που έχει αποκλειστεί."</string>
     <string name="notification_app_name_system" msgid="4205032194610042794">"Σύστημα"</string>
     <string name="notification_app_name_settings" msgid="7751445616365753381">"Ρυθμίσεις"</string>
+    <string name="car_loading_profile" msgid="3545132581795684027">"Φόρτωση"</string>
 </resources>

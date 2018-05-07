@@ -29,8 +29,6 @@ import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
 
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
@@ -45,7 +43,6 @@ import android.graphics.Color;
 import android.media.AudioAttributes;
 import android.metrics.LogMaker;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -53,7 +50,6 @@ import android.service.notification.Adjustment;
 import android.service.notification.StatusBarNotification;
 import android.support.test.runner.AndroidJUnit4;
 import android.test.suitebuilder.annotation.SmallTest;
-
 
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.server.UiServiceTestCase;
@@ -74,9 +70,9 @@ public class NotificationRecordTest extends UiServiceTestCase {
     private final Context mMockContext = Mockito.mock(Context.class);
     @Mock PackageManager mPm;
 
-    private final String pkg = "com.android.server.notification";
+    private final String pkg = PKG_N_MR1;
     private final int uid = 9583;
-    private final String pkg2 = "pkg2";
+    private final String pkg2 = PKG_O;
     private final int uid2 = 1111111;
     private final int id1 = 1;
     private final int id2 = 2;
@@ -119,13 +115,6 @@ public class NotificationRecordTest extends UiServiceTestCase {
 
         when(mMockContext.getResources()).thenReturn(getContext().getResources());
         when(mMockContext.getPackageManager()).thenReturn(mPm);
-
-        legacy.targetSdkVersion = Build.VERSION_CODES.N_MR1;
-        upgrade.targetSdkVersion = Build.VERSION_CODES.O;
-        try {
-            when(mPm.getApplicationInfoAsUser(eq(pkg), anyInt(), anyInt())).thenReturn(legacy);
-            when(mPm.getApplicationInfoAsUser(eq(pkg2), anyInt(), anyInt())).thenReturn(upgrade);
-        } catch (PackageManager.NameNotFoundException e) {}
     }
 
     private StatusBarNotification getNotification(boolean preO, boolean noisy, boolean defaultSound,
@@ -554,6 +543,34 @@ public class NotificationRecordTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testUserSentiment_appImportanceUpdatesSentiment() throws Exception {
+        StatusBarNotification sbn = getNotification(false /*preO */, true /* noisy */,
+                true /* defaultSound */, false /* buzzy */, false /* defaultBuzz */,
+                false /* lights */, false /* defaultLights */, groupId /* group */);
+        NotificationRecord record = new NotificationRecord(mMockContext, sbn, channel);
+        assertEquals(USER_SENTIMENT_NEUTRAL, record.getUserSentiment());
+
+        record.setIsAppImportanceLocked(true);
+        assertEquals(USER_SENTIMENT_POSITIVE, record.getUserSentiment());
+    }
+
+    @Test
+    public void testUserSentiment_appImportanceBlocksNegativeSentimentUpdate() throws Exception {
+        StatusBarNotification sbn = getNotification(false /*preO */, true /* noisy */,
+                true /* defaultSound */, false /* buzzy */, false /* defaultBuzz */,
+                false /* lights */, false /* defaultLights */, groupId /* group */);
+        NotificationRecord record = new NotificationRecord(mMockContext, sbn, channel);
+        record.setIsAppImportanceLocked(true);
+
+        Bundle signals = new Bundle();
+        signals.putInt(Adjustment.KEY_USER_SENTIMENT, USER_SENTIMENT_NEGATIVE);
+        record.addAdjustment(new Adjustment(pkg, record.getKey(), signals, null, sbn.getUserId()));
+        record.applyAdjustments();
+
+        assertEquals(USER_SENTIMENT_POSITIVE, record.getUserSentiment());
+    }
+
+    @Test
     public void testUserSentiment_userLocked() throws Exception {
         channel.lockFields(USER_LOCKED_IMPORTANCE);
         StatusBarNotification sbn = getNotification(false /*preO */, true /* noisy */,
@@ -570,5 +587,19 @@ public class NotificationRecordTest extends UiServiceTestCase {
         record.applyAdjustments();
 
         assertEquals(USER_SENTIMENT_POSITIVE, record.getUserSentiment());
+    }
+
+    @Test
+    public void testAppImportance_returnsCorrectly() throws Exception {
+        StatusBarNotification sbn = getNotification(false /*preO */, true /* noisy */,
+                true /* defaultSound */, false /* buzzy */, false /* defaultBuzz */,
+                false /* lights */, false /* defaultLights */, groupId /* group */);
+        NotificationRecord record = new NotificationRecord(mMockContext, sbn, channel);
+
+        record.setIsAppImportanceLocked(true);
+        assertEquals(true, record.getIsAppImportanceLocked());
+
+        record.setIsAppImportanceLocked(false);
+        assertEquals(false, record.getIsAppImportanceLocked());
     }
 }

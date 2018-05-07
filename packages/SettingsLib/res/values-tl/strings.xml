@@ -216,20 +216,15 @@
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"Bersyon ng AVRCP ng Bluetooth"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"Pumili ng Bersyon ng AVRCP ng Bluetooth"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"Bluetooth Audio Codec"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_type_dialog_title (8436224899475822557) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="8436224899475822557">"I-trigger ang Pagpili sa Audio Codec ng\nBluetooth"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"Sample na Rate ng Bluetooth Audio"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_sample_rate_dialog_title (8010380028880963535) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"I-trigger ang Pagpili sa Audio Codec ng\nBluetooth: Rate ng Sample"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample" msgid="2099645202720164141">"Bits Per Sample ng Bluetooth Audio"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_bits_per_sample_dialog_title (8063859754619484760) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="8063859754619484760">"I-trigger ang Pagpili sa Audio Codec ng\nBluetooth: Bits Per Sample"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"Channel Mode ng Bluetooth Audio"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_channel_mode_dialog_title (7234956835280563341) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="7234956835280563341">"I-trigger ang Pagpili sa Audio Codec ng\nBluetooth: Channel Mode"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"Audio LDAC Codec ng Bluetooth: Kalidad ng Pag-playback"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title (7595776220458732825) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="7595776220458732825">"I-trigger ang Pagpili sa Audio LDAC Codec ng\nBluetooth: Playback Quality"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"Streaming: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"Pribadong DNS"</string>
     <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"Pumili ng Pribadong DNS Mode"</string>
@@ -247,7 +242,7 @@
     <string name="select_logd_size_dialog_title" msgid="1206769310236476760">"Pumili ng mga laki ng Logger bawat log buffer"</string>
     <string name="dev_logpersist_clear_warning_title" msgid="684806692440237967">"I-clear ang tuluy-tuloy na storage ng logger?"</string>
     <string name="dev_logpersist_clear_warning_message" msgid="2256582531342994562">"Kapag hindi na namin sinusubaybayan ang tuluy-tuloy na logger, kailangan naming burahin ang data ng logger na nanatili sa iyong device."</string>
-    <string name="select_logpersist_title" msgid="7530031344550073166">"Tuluy-tuloy na iimbak ang data ng logger sa device"</string>
+    <string name="select_logpersist_title" msgid="7530031344550073166">"Tuloy-tuloy na i-store ang data ng logger sa device"</string>
     <string name="select_logpersist_dialog_title" msgid="4003400579973269060">"Pumili ng mga buffer ng log upang tuluy-tuloy na iimbak sa device"</string>
     <string name="select_usb_configuration_title" msgid="2649938511506971843">"Pumili ng USB Configuration"</string>
     <string name="select_usb_configuration_dialog_title" msgid="6385564442851599963">"Pumili ng USB Configuration"</string>
@@ -303,8 +298,8 @@
     <string name="usb_audio_disable_routing_summary" msgid="980282760277312264">"I-disable automatic routing sa USB audio peripheral"</string>
     <string name="debug_layout" msgid="5981361776594526155">"Ipakita ang layout bounds"</string>
     <string name="debug_layout_summary" msgid="2001775315258637682">"Ipakita ang mga hangganan ng clip, margin, atbp."</string>
-    <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Force RTL layout dir."</string>
-    <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Force screen layout dir. sa RTL sa lahat ng lokal"</string>
+    <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Ipilit ang RTL na dir. ng layout"</string>
+    <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Ipilit ang RTL na direksyon ng screen layout sa lahat ng lokal"</string>
     <string name="force_hw_ui" msgid="6426383462520888732">"Ipilit ang pag-render ng GPU"</string>
     <string name="force_hw_ui_summary" msgid="5535991166074861515">"Sapilitang paggamit sa GPU para sa 2d na pagguhit"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Puwersahin ang 4x MSAA"</string>
@@ -372,11 +367,12 @@
     <string name="accessibility_display_daltonizer_preference_title" msgid="5800761362678707872">"Pagtatama ng kulay"</string>
     <string name="accessibility_display_daltonizer_preference_subtitle" msgid="3484969015295282911">"Ang feature na ito ay pinag-eeksperimentuhan at maaaring makaapekto sa performance."</string>
     <string name="daltonizer_type_overridden" msgid="3116947244410245916">"Na-override ng <xliff:g id="TITLE">%1$s</xliff:g>"</string>
-    <string name="power_remaining_duration_only" msgid="845431008899029842">"Humigit-kumulang <xliff:g id="TIME">%1$s</xliff:g> ang natitira"</string>
-    <string name="power_discharging_duration" msgid="6655472132189365839">"May humigit-kumulang <xliff:g id="TIME">%1$s</xliff:g> pa (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_enhanced" msgid="5992456722677973678">"Humigit-kumulang <xliff:g id="TIME">%1$s</xliff:g> ang natitira batay sa iyong paggamit"</string>
-    <string name="power_discharging_duration_enhanced" msgid="5726302316642148671">"May humigit-kumulang <xliff:g id="TIME">%1$s</xliff:g> pa batay sa iyong paggamit (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_short" msgid="5329694252258605547">"<xliff:g id="TIME">%1$s</xliff:g> pa"</string>
+    <string name="power_remaining_settings_home_page" msgid="4845022416859002011">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> - <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
+    <string name="power_remaining_duration_only" msgid="6123167166221295462">"Humigit-kumulang <xliff:g id="TIME_REMAINING">%1$s</xliff:g> ang natitira"</string>
+    <string name="power_discharging_duration" msgid="8848256785736335185">"Humigit-kumulang <xliff:g id="TIME_REMAINING">%1$s</xliff:g> ang natitira (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Humigit-kumulang <xliff:g id="TIME_REMAINING">%1$s</xliff:g> ang natitira batay sa iyong paggamit"</string>
+    <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Humigit-kumulang <xliff:g id="TIME_REMAINING">%1$s</xliff:g> ang natitira batay sa iyong paggamit (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"<xliff:g id="TIME_REMAINING">%1$s</xliff:g> ang natitira"</string>
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"Tatagal dapat nang hanggang humigit-kumulang <xliff:g id="TIME">%1$s</xliff:g> batay sa iyong paggamit (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"Tatagal dapat nang hanggang humigit-kumulang <xliff:g id="TIME">%1$s</xliff:g> batay sa iyong paggamit"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"Tatagal dapat nang hanggang humigit-kumulang <xliff:g id="TIME">%1$s</xliff:g> (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>

@@ -36,17 +36,22 @@ interface ISystemUiProxy {
     void startScreenPinning(int taskId) = 1;
 
     /**
-     * Specifies the text to be shown for onboarding the new swipe-up gesture to access recents.
-     */
-    void setRecentsOnboardingText(CharSequence text) = 3;
-
-    /**
      * Enables/disables launcher/overview interaction features {@link InteractionType}.
      */
     void setInteractionState(int flags) = 4;
 
     /**
-    * Notifies SystemUI that split screen has been invoked.
-    */
+     * Notifies SystemUI that split screen has been invoked.
+     */
     void onSplitScreenInvoked() = 5;
+
+    /**
+     * Notifies SystemUI that Overview is shown.
+     */
+    void onOverviewShown(boolean fromHome) = 6;
+
+    /**
+     * Get the secondary split screen app's rectangle when not minimized.
+     */
+    Rect getNonMinimizedSplitScreenSecondaryBounds() = 7;
 }

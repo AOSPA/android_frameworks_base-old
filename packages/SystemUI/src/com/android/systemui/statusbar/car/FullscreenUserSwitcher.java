@@ -21,10 +21,10 @@ import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
 import android.view.View;
 import android.view.ViewStub;
-import android.widget.ProgressBar;
 
 import android.support.v7.widget.GridLayoutManager;
-import android.support.v7.widget.RecyclerView;
+
+import com.android.settingslib.users.UserManagerHelper;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.StatusBar;
 
@@ -35,10 +35,10 @@ public class FullscreenUserSwitcher {
     private final View mContainer;
     private final View mParent;
     private final UserGridRecyclerView mUserGridView;
-    private final ProgressBar mSwitchingUsers;
     private final int mShortAnimDuration;
     private final StatusBar mStatusBar;
-
+    private final UserManagerHelper mUserManagerHelper;
+    private int mCurrentForegroundUserId;
     private boolean mShowing;
 
     public FullscreenUserSwitcher(StatusBar statusBar, ViewStub containerStub, Context context) {
@@ -48,14 +48,15 @@ public class FullscreenUserSwitcher {
         mUserGridView = mContainer.findViewById(R.id.user_grid);
         GridLayoutManager layoutManager = new GridLayoutManager(context,
                 context.getResources().getInteger(R.integer.user_fullscreen_switcher_num_col));
-        mUserGridView.setLayoutManager(layoutManager);
+        mUserGridView.getRecyclerView().setLayoutManager(layoutManager);
         mUserGridView.buildAdapter();
         mUserGridView.setUserSelectionListener(this::onUserSelected);
 
+        mUserManagerHelper = new UserManagerHelper(context);
+        updateCurrentForegroundUser();
+
         mShortAnimDuration = mContainer.getResources()
             .getInteger(android.R.integer.config_shortAnimTime);
-
-        mSwitchingUsers = mParent.findViewById(R.id.switching_users);
     }
 
     public void show() {
@@ -68,55 +69,72 @@ public class FullscreenUserSwitcher {
 
     public void hide() {
         mShowing = false;
-        toggleSwitchInProgress(false);
         mParent.setVisibility(View.GONE);
     }
 
     public void onUserSwitched(int newUserId) {
-        mParent.post(this::showOfflineAuthUi);
+        // The logic for foreground user change is needed here to exclude the reboot case. On
+        // reboot, system fires ACTION_USER_SWITCHED change from -1 to 0 user. This is not an actual
+        // user switch. We only want to trigger keyguard dismissal when foreground user changes.
+        if (foregroundUserChanged()) {
+            toggleSwitchInProgress(false);
+            updateCurrentForegroundUser();
+            mParent.post(this::dismissKeyguard);
+        }
+    }
+
+    private boolean foregroundUserChanged() {
+        return mCurrentForegroundUserId != mUserManagerHelper.getForegroundUserId();
+    }
+
+    private void updateCurrentForegroundUser() {
+        mCurrentForegroundUserId = mUserManagerHelper.getForegroundUserId();
     }
 
     private void onUserSelected(UserGridRecyclerView.UserRecord record) {
         if (record.mIsForeground) {
-            showOfflineAuthUi();
+            dismissKeyguard();
             return;
         }
         toggleSwitchInProgress(true);
     }
 
-    private void showOfflineAuthUi() {
+    // Dismisses the keyguard and shows bouncer if authentication is necessary.
+    private void dismissKeyguard() {
         mStatusBar.executeRunnableDismissingKeyguard(null/* runnable */, null /* cancelAction */,
                 true /* dismissShade */, true /* afterKeyguardGone */, true /* deferred */);
     }
 
     private void toggleSwitchInProgress(boolean inProgress) {
         if (inProgress) {
-            crossFade(mSwitchingUsers, mContainer);
+            fadeOut(mContainer);
         } else {
-            crossFade(mContainer, mSwitchingUsers);
+            fadeIn(mContainer);
         }
     }
 
-    private void crossFade(View incoming, View outgoing) {
-        incoming.animate()
-            .alpha(1.0f)
-            .setDuration(mShortAnimDuration)
-            .setListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationStart(Animator animator) {
-                    incoming.setAlpha(0.0f);
-                    incoming.setVisibility(View.VISIBLE);
-                }
-            });
+    private void fadeOut(View view) {
+        view.animate()
+                .alpha(0.0f)
+                .setDuration(mShortAnimDuration)
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        view.setVisibility(View.GONE);
+                    }
+                });
+    }
 
-        outgoing.animate()
-            .alpha(0.0f)
-            .setDuration(mShortAnimDuration)
-            .setListener(new AnimatorListenerAdapter() {
-                @Override
-                public void onAnimationEnd(Animator animation) {
-                    outgoing.setVisibility(View.GONE);
-                }
-            });
+    private void fadeIn(View view) {
+        view.animate()
+                .alpha(1.0f)
+                .setDuration(mShortAnimDuration)
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationStart(Animator animator) {
+                        view.setAlpha(0.0f);
+                        view.setVisibility(View.VISIBLE);
+                    }
+                });
     }
 }

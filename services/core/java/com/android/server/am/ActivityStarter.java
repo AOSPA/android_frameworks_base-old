@@ -103,6 +103,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.service.voice.IVoiceInteractionSession;
 import android.text.TextUtils;
+import android.util.BoostFramework;
 import android.util.EventLog;
 import android.util.Pools.SynchronizedPool;
 import android.util.Slog;
@@ -178,6 +179,8 @@ class ActivityStarter {
 
     private IVoiceInteractionSession mVoiceSession;
     private IVoiceInteractor mVoiceInteractor;
+
+    public BoostFramework mPerf = null;
 
     // Last activity record we attempted to start
     private final ActivityRecord[] mLastStartActivityRecord = new ActivityRecord[1];
@@ -314,6 +317,12 @@ class ActivityStarter {
         WaitResult waitResult;
 
         /**
+         * If set to {@code true}, allows this activity start to look into
+         * {@link PendingRemoteAnimationRegistry}
+         */
+        boolean allowPendingRemoteAnimationRegistryLookup;
+
+        /**
          * Indicates that we should wait for the result of the start request. This flag is set when
          * {@link ActivityStarter#setMayWait(int)} is called.
          * {@see ActivityStarter#startActivityMayWait}.
@@ -360,6 +369,7 @@ class ActivityStarter {
             waitResult = null;
             mayWait = false;
             avoidMoveToFront = false;
+            allowPendingRemoteAnimationRegistryLookup = true;
         }
 
         /**
@@ -395,6 +405,8 @@ class ActivityStarter {
             waitResult = request.waitResult;
             mayWait = request.mayWait;
             avoidMoveToFront = request.avoidMoveToFront;
+            allowPendingRemoteAnimationRegistryLookup
+                    = request.allowPendingRemoteAnimationRegistryLookup;
         }
     }
 
@@ -405,6 +417,7 @@ class ActivityStarter {
         mSupervisor = supervisor;
         mInterceptor = interceptor;
         reset(true);
+        mPerf = new BoostFramework();
     }
 
     /**
@@ -477,7 +490,8 @@ class ActivityStarter {
                         mRequest.resultWho, mRequest.requestCode, mRequest.startFlags,
                         mRequest.profilerInfo, mRequest.waitResult, mRequest.globalConfig,
                         mRequest.activityOptions, mRequest.ignoreTargetSecurity, mRequest.userId,
-                        mRequest.inTask, mRequest.reason);
+                        mRequest.inTask, mRequest.reason,
+                        mRequest.allowPendingRemoteAnimationRegistryLookup);
             } else {
                 return startActivity(mRequest.caller, mRequest.intent, mRequest.ephemeralIntent,
                         mRequest.resolvedType, mRequest.activityInfo, mRequest.resolveInfo,
@@ -486,7 +500,8 @@ class ActivityStarter {
                         mRequest.callingUid, mRequest.callingPackage, mRequest.realCallingPid,
                         mRequest.realCallingUid, mRequest.startFlags, mRequest.activityOptions,
                         mRequest.ignoreTargetSecurity, mRequest.componentSpecified,
-                        mRequest.outActivity, mRequest.inTask, mRequest.reason);
+                        mRequest.outActivity, mRequest.inTask, mRequest.reason,
+                        mRequest.allowPendingRemoteAnimationRegistryLookup);
             }
         } finally {
             onExecutionComplete();
@@ -517,7 +532,8 @@ class ActivityStarter {
             IBinder resultTo, String resultWho, int requestCode, int callingPid, int callingUid,
             String callingPackage, int realCallingPid, int realCallingUid, int startFlags,
             SafeActivityOptions options, boolean ignoreTargetSecurity, boolean componentSpecified,
-            ActivityRecord[] outActivity, TaskRecord inTask, String reason) {
+            ActivityRecord[] outActivity, TaskRecord inTask, String reason,
+            boolean allowPendingRemoteAnimationRegistryLookup) {
 
         if (TextUtils.isEmpty(reason)) {
             throw new IllegalArgumentException("Need to specify a reason.");
@@ -530,7 +546,7 @@ class ActivityStarter {
                 aInfo, rInfo, voiceSession, voiceInteractor, resultTo, resultWho, requestCode,
                 callingPid, callingUid, callingPackage, realCallingPid, realCallingUid, startFlags,
                 options, ignoreTargetSecurity, componentSpecified, mLastStartActivityRecord,
-                inTask);
+                inTask, allowPendingRemoteAnimationRegistryLookup);
 
         if (outActivity != null) {
             // mLastStartActivityRecord[0] is set in the call to startActivity above.
@@ -560,7 +576,7 @@ class ActivityStarter {
             String callingPackage, int realCallingPid, int realCallingUid, int startFlags,
             SafeActivityOptions options,
             boolean ignoreTargetSecurity, boolean componentSpecified, ActivityRecord[] outActivity,
-            TaskRecord inTask) {
+            TaskRecord inTask, boolean allowPendingRemoteAnimationRegistryLookup) {
         int err = ActivityManager.START_SUCCESS;
         // Pull the optional Ephemeral Installer-only bundle out of the options early.
         final Bundle verificationBundle
@@ -709,8 +725,11 @@ class ActivityStarter {
         ActivityOptions checkedOptions = options != null
                 ? options.getOptions(intent, aInfo, callerApp, mSupervisor)
                 : null;
-        checkedOptions = mService.getActivityStartController().getPendingRemoteAnimationRegistry()
-                .overrideOptionsIfNeeded(callingPackage, checkedOptions);
+        if (allowPendingRemoteAnimationRegistryLookup) {
+            checkedOptions = mService.getActivityStartController()
+                    .getPendingRemoteAnimationRegistry()
+                    .overrideOptionsIfNeeded(callingPackage, checkedOptions);
+        }
         if (mService.mController != null) {
             try {
                 // The Intent we give to the watcher has the extra data
@@ -928,7 +947,8 @@ class ActivityStarter {
             IBinder resultTo, String resultWho, int requestCode, int startFlags,
             ProfilerInfo profilerInfo, WaitResult outResult,
             Configuration globalConfig, SafeActivityOptions options, boolean ignoreTargetSecurity,
-            int userId, TaskRecord inTask, String reason) {
+            int userId, TaskRecord inTask, String reason,
+            boolean allowPendingRemoteAnimationRegistryLookup) {
         // Refuse possible leaked file descriptors
         if (intent != null && intent.hasFileDescriptors()) {
             throw new IllegalArgumentException("File descriptors passed in Intent");
@@ -1070,7 +1090,8 @@ class ActivityStarter {
             int res = startActivity(caller, intent, ephemeralIntent, resolvedType, aInfo, rInfo,
                     voiceSession, voiceInteractor, resultTo, resultWho, requestCode, callingPid,
                     callingUid, callingPackage, realCallingPid, realCallingUid, startFlags, options,
-                    ignoreTargetSecurity, componentSpecified, outRecord, inTask, reason);
+                    ignoreTargetSecurity, componentSpecified, outRecord, inTask, reason,
+                    allowPendingRemoteAnimationRegistryLookup);
 
             Binder.restoreCallingIdentity(origId);
 
@@ -1361,6 +1382,12 @@ class ActivityStarter {
         if (mStartActivity.resultTo == null && mInTask == null && !mAddingToTask
                 && (mLaunchFlags & FLAG_ACTIVITY_NEW_TASK) != 0) {
             newTask = true;
+            String packageName= mService.mContext.getPackageName();
+            if (mPerf != null) {
+                mStartActivity.perfActivityBoostHandler =
+                    mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                                        packageName, -1, BoostFramework.Launch.BOOST_V1);
+            }
             result = setTaskFromReuseOrCreateNewTask(taskToAffiliate, topStack);
         } else if (mSourceRecord != null) {
             result = setTaskFromSourceRecord();
@@ -2048,7 +2075,12 @@ class ActivityStarter {
             Slog.e(TAG, "Attempted Lock Task Mode violation mStartActivity=" + mStartActivity);
             return START_RETURN_LOCK_TASK_MODE_VIOLATION;
         }
-
+        String packageName= mService.mContext.getPackageName();
+        if (mPerf != null) {
+            mStartActivity.perfActivityBoostHandler =
+                mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                                    packageName, -1, BoostFramework.Launch.BOOST_V1);
+        }
         final TaskRecord sourceTask = mSourceRecord.getTask();
         final ActivityStack sourceStack = mSourceRecord.getStack();
         // We only want to allow changing stack in two cases:
@@ -2564,6 +2596,11 @@ class ActivityStarter {
         mRequest.mayWait = true;
         mRequest.userId = userId;
 
+        return this;
+    }
+
+    ActivityStarter setAllowPendingRemoteAnimationRegistryLookup(boolean allowLookup) {
+        mRequest.allowPendingRemoteAnimationRegistryLookup = allowLookup;
         return this;
     }
 

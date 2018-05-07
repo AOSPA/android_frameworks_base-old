@@ -172,8 +172,12 @@ public class RankingHelperTest extends UiServiceTestCase {
         when(mTestIContentProvider.uncanonicalize(any(), eq(CANONICAL_SOUND_URI)))
                 .thenReturn(SOUND_URI);
 
-        mHelper = new RankingHelper(getContext(), mPm, mHandler, mock(ZenModeHelper.class),
+        ZenModeHelper mockZenModeHelper = mock(ZenModeHelper.class);
+        mHelper = new RankingHelper(getContext(), mPm, mHandler, mockZenModeHelper,
                 mUsageStats, new String[] {ImportanceExtractor.class.getName()});
+
+        when(mockZenModeHelper.getNotificationPolicy()).thenReturn(new NotificationManager.Policy(
+                0, 0, 0));
 
         mNotiGroupGSortA = new Notification.Builder(mContext, TEST_CHANNEL_ID)
                 .setContentTitle("A")
@@ -371,6 +375,7 @@ public class RankingHelperTest extends UiServiceTestCase {
         mHelper.createNotificationChannel(PKG, UID, channel2, false, false);
 
         mHelper.setShowBadge(PKG, UID, true);
+        mHelper.setAppImportanceLocked(PKG, UID);
 
         ByteArrayOutputStream baos = writeXmlAndPurge(PKG, UID, false, channel1.getId(),
                 channel2.getId(), NotificationChannel.DEFAULT_CHANNEL_ID);
@@ -379,6 +384,7 @@ public class RankingHelperTest extends UiServiceTestCase {
         loadStreamXml(baos, false);
 
         assertTrue(mHelper.canShowBadge(PKG, UID));
+        assertTrue(mHelper.getIsAppImportanceLocked(PKG, UID));
         assertEquals(channel1, mHelper.getNotificationChannel(PKG, UID, channel1.getId(), false));
         compareChannels(channel2,
                 mHelper.getNotificationChannel(PKG, UID, channel2.getId(), false));
@@ -805,6 +811,7 @@ public class RankingHelperTest extends UiServiceTestCase {
         assertEquals(Notification.PRIORITY_DEFAULT, mHelper.getPackagePriority(PKG, UID));
         assertEquals(NotificationManager.VISIBILITY_NO_OVERRIDE,
                 mHelper.getPackageVisibility(PKG, UID));
+        assertFalse(mHelper.getIsAppImportanceLocked(PKG, UID));
 
         NotificationChannel defaultChannel = mHelper.getNotificationChannel(
                 PKG, UID, NotificationChannel.DEFAULT_CHANNEL_ID, false);
@@ -814,6 +821,7 @@ public class RankingHelperTest extends UiServiceTestCase {
         defaultChannel.setBypassDnd(true);
         defaultChannel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
 
+        mHelper.setAppImportanceLocked(PKG, UID);
         mHelper.updateNotificationChannel(PKG, UID, defaultChannel, true);
 
         // ensure app level fields are changed
@@ -821,6 +829,7 @@ public class RankingHelperTest extends UiServiceTestCase {
         assertEquals(Notification.PRIORITY_MAX, mHelper.getPackagePriority(PKG, UID));
         assertEquals(Notification.VISIBILITY_SECRET, mHelper.getPackageVisibility(PKG, UID));
         assertEquals(IMPORTANCE_NONE, mHelper.getImportance(PKG, UID));
+        assertTrue(mHelper.getIsAppImportanceLocked(PKG, UID));
     }
 
     @Test
@@ -1121,6 +1130,50 @@ public class RankingHelperTest extends UiServiceTestCase {
 
         assertEquals(1, mHelper.getBlockedChannelCount(PKG, UID));
         assertEquals(0, mHelper.getBlockedChannelCount("pkg2", UID2));
+    }
+
+    @Test
+    public void testCreateAndDeleteCanChannelsBypassDnd() throws Exception {
+        // create notification channel that can't bypass dnd
+        // expected result: areChannelsBypassingDnd = false
+        NotificationChannel channel = new NotificationChannel("id1", "name1", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG, UID, channel, true, false);
+        assertFalse(mHelper.areChannelsBypassingDnd());
+
+        //  create notification channel that can bypass dnd
+        // expected result: areChannelsBypassingDnd = true
+        NotificationChannel channel2 = new NotificationChannel("id2", "name2", IMPORTANCE_LOW);
+        channel2.setBypassDnd(true);
+        mHelper.createNotificationChannel(PKG, UID, channel2, true, true);
+        assertTrue(mHelper.areChannelsBypassingDnd());
+
+        // delete channels
+        mHelper.deleteNotificationChannel(PKG, UID, channel.getId());
+        assertTrue(mHelper.areChannelsBypassingDnd()); // channel2 can still bypass DND
+        mHelper.deleteNotificationChannel(PKG, UID, channel2.getId());
+        assertFalse(mHelper.areChannelsBypassingDnd());
+
+    }
+
+    @Test
+    public void testUpdateCanChannelsBypassDnd() throws Exception {
+        // create notification channel that can't bypass dnd
+        // expected result: areChannelsBypassingDnd = false
+        NotificationChannel channel = new NotificationChannel("id1", "name1", IMPORTANCE_LOW);
+        mHelper.createNotificationChannel(PKG, UID, channel, true, false);
+        assertFalse(mHelper.areChannelsBypassingDnd());
+
+        // update channel so it CAN bypass dnd:
+        // expected result: areChannelsBypassingDnd = true
+        channel.setBypassDnd(true);
+        mHelper.updateNotificationChannel(PKG, UID, channel, true);
+        assertTrue(mHelper.areChannelsBypassingDnd());
+
+        // update channel so it can't bypass dnd:
+        // expected result: areChannelsBypassingDnd = false
+        channel.setBypassDnd(false);
+        mHelper.updateNotificationChannel(PKG, UID, channel, true);
+        assertFalse(mHelper.areChannelsBypassingDnd());
     }
 
     @Test
@@ -1727,5 +1780,25 @@ public class RankingHelperTest extends UiServiceTestCase {
         update.setBypassDnd(true);
         mHelper.createNotificationChannel(PKG, 1000, update, true, false);
         assertFalse(mHelper.getNotificationChannel(PKG, 1000, "A", false).canBypassDnd());
+    }
+
+    @Test
+    public void testGetBlockedAppCount_noApps() {
+        assertEquals(0, mHelper.getBlockedAppCount(0));
+    }
+
+    @Test
+    public void testGetBlockedAppCount_noAppsForUserId() {
+        mHelper.setEnabled(PKG, 100, false);
+        assertEquals(0, mHelper.getBlockedAppCount(9));
+    }
+
+    @Test
+    public void testGetBlockedAppCount_appsForUserId() {
+        mHelper.setEnabled(PKG, 1020, false);
+        mHelper.setEnabled(PKG, 1030, false);
+        mHelper.setEnabled(PKG, 1060, false);
+        mHelper.setEnabled(PKG, 1000, true);
+        assertEquals(3, mHelper.getBlockedAppCount(0));
     }
 }

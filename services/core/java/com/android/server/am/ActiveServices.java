@@ -24,15 +24,19 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.app.NotificationManager;
 import android.app.ServiceStartArgs;
+import android.content.ComponentName.WithComponentName;
 import android.content.IIntentSender;
 import android.content.IntentSender;
 import android.content.pm.ParceledListSlice;
@@ -55,6 +59,8 @@ import com.android.internal.messages.nano.SystemMessageProto;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.TransferPipe;
+import com.android.internal.util.CollectionUtils;
+import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.server.AppStateTracker;
 import com.android.server.LocalServices;
@@ -419,12 +425,19 @@ public final class ActiveServices {
             return null;
         }
 
-        // If the app has strict background restrictions, we treat any service
-        // start analogously to the legacy-app forced-restrictions case.
+        // If we're starting indirectly (e.g. from PendingIntent), figure out whether
+        // we're launching into an app in a background state.  This keys off of the same
+        // idleness state tracking as e.g. O+ background service start policy.
+        final boolean bgLaunch = !mAm.isUidActiveLocked(r.appInfo.uid);
+
+        // If the app has strict background restrictions, we treat any bg service
+        // start analogously to the legacy-app forced-restrictions case, regardless
+        // of its target SDK version.
         boolean forcedStandby = false;
-        if (appRestrictedAnyInBackground(r.appInfo.uid, r.packageName)) {
+        if (bgLaunch && appRestrictedAnyInBackground(r.appInfo.uid, r.packageName)) {
             if (DEBUG_FOREGROUND_SERVICE) {
-                Slog.d(TAG, "Forcing bg-only service start only for " + r.shortName);
+                Slog.d(TAG, "Forcing bg-only service start only for " + r.shortName
+                        + " : bgLaunch=" + bgLaunch + " callerFg=" + callerFg);
             }
             forcedStandby = true;
         }
@@ -786,7 +799,7 @@ public final class ActiveServices {
                 // Asked to only stop if done with all work.  Note that
                 // to avoid leaks, we will take this as dropping all
                 // start items up to and including this one.
-                ServiceRecord.StartItem si = r.findDeliveredStart(startId, false);
+                ServiceRecord.StartItem si = r.findDeliveredStart(startId, false, false);
                 if (si != null) {
                     while (r.deliveredStarts.size() > 0) {
                         ServiceRecord.StartItem cur = r.deliveredStarts.remove(0);
@@ -1184,10 +1197,13 @@ public final class ActiveServices {
 
                 if (!ignoreForeground &&
                         appRestrictedAnyInBackground(r.appInfo.uid, r.packageName)) {
-                    ignoreForeground = true;
                     Slog.w(TAG,
                             "Service.startForeground() not allowed due to bg restriction: service "
                             + r.shortName);
+                    // Back off of any foreground expectations around this service, since we've
+                    // just turned down its fg request.
+                    updateServiceForegroundLocked(r.app, false);
+                    ignoreForeground = true;
                 }
 
                 // Apps under strict background restrictions simply don't get to have foreground
@@ -2927,14 +2943,14 @@ public final class ActiveServices {
                     case Service.START_STICKY_COMPATIBILITY:
                     case Service.START_STICKY: {
                         // We are done with the associated start arguments.
-                        r.findDeliveredStart(startId, true);
+                        r.findDeliveredStart(startId, false, true);
                         // Don't stop if killed.
                         r.stopIfKilled = false;
                         break;
                     }
                     case Service.START_NOT_STICKY: {
                         // We are done with the associated start arguments.
-                        r.findDeliveredStart(startId, true);
+                        r.findDeliveredStart(startId, false, true);
                         if (r.getLastStartId() == startId) {
                             // There is no more work, and this service
                             // doesn't want to hang around if killed.
@@ -2946,7 +2962,7 @@ public final class ActiveServices {
                         // We'll keep this item until they explicitly
                         // call stop for it, but keep track of the fact
                         // that it was delivered.
-                        ServiceRecord.StartItem si = r.findDeliveredStart(startId, false);
+                        ServiceRecord.StartItem si = r.findDeliveredStart(startId, false, false);
                         if (si != null) {
                             si.deliveryCount = 0;
                             si.doneExecutingCount++;
@@ -2958,7 +2974,7 @@ public final class ActiveServices {
                     case Service.START_TASK_REMOVED_COMPLETE: {
                         // Special processing for onTaskRemoved().  Don't
                         // impact normal onStartCommand() processing.
-                        r.findDeliveredStart(startId, true);
+                        r.findDeliveredStart(startId, true, true);
                         break;
                     }
                     default:
@@ -3245,7 +3261,7 @@ public final class ActiveServices {
                     stopServiceLocked(sr);
                 } else {
                     sr.pendingStarts.add(new ServiceRecord.StartItem(sr, true,
-                            sr.makeNextStartId(), baseIntent, null, 0));
+                            sr.getLastStartId(), baseIntent, null, 0));
                     if (sr.app != null && sr.app.thread != null) {
                         // We always run in the foreground, since this is called as
                         // part of the "remove task" UI operation.
@@ -4121,57 +4137,26 @@ public final class ActiveServices {
      *  - the first arg isn't the flattened component name of an existing service:
      *    dump all services whose component contains the first arg as a substring
      */
-    protected boolean dumpService(FileDescriptor fd, PrintWriter pw, String name, String[] args,
-            int opti, boolean dumpAll) {
-        ArrayList<ServiceRecord> services = new ArrayList<ServiceRecord>();
+    protected boolean dumpService(FileDescriptor fd, PrintWriter pw, final String name,
+            String[] args, int opti, boolean dumpAll) {
+        final ArrayList<ServiceRecord> services = new ArrayList<>();
+
+        final Predicate<ServiceRecord> filter = DumpUtils.filterRecord(name);
 
         synchronized (mAm) {
             int[] users = mAm.mUserController.getUsers();
-            if ("all".equals(name)) {
-                for (int user : users) {
-                    ServiceMap smap = mServiceMap.get(user);
-                    if (smap == null) {
-                        continue;
-                    }
-                    ArrayMap<ComponentName, ServiceRecord> alls = smap.mServicesByName;
-                    for (int i=0; i<alls.size(); i++) {
-                        ServiceRecord r1 = alls.valueAt(i);
-                        services.add(r1);
-                    }
-                }
-            } else {
-                ComponentName componentName = name != null
-                        ? ComponentName.unflattenFromString(name) : null;
-                int objectId = 0;
-                if (componentName == null) {
-                    // Not a '/' separated full component name; maybe an object ID?
-                    try {
-                        objectId = Integer.parseInt(name, 16);
-                        name = null;
-                        componentName = null;
-                    } catch (RuntimeException e) {
-                    }
-                }
 
-                for (int user : users) {
-                    ServiceMap smap = mServiceMap.get(user);
-                    if (smap == null) {
-                        continue;
-                    }
-                    ArrayMap<ComponentName, ServiceRecord> alls = smap.mServicesByName;
-                    for (int i=0; i<alls.size(); i++) {
-                        ServiceRecord r1 = alls.valueAt(i);
-                        if (componentName != null) {
-                            if (r1.name.equals(componentName)) {
-                                services.add(r1);
-                            }
-                        } else if (name != null) {
-                            if (r1.name.flattenToString().contains(name)) {
-                                services.add(r1);
-                            }
-                        } else if (System.identityHashCode(r1) == objectId) {
-                            services.add(r1);
-                        }
+            for (int user : users) {
+                ServiceMap smap = mServiceMap.get(user);
+                if (smap == null) {
+                    continue;
+                }
+                ArrayMap<ComponentName, ServiceRecord> alls = smap.mServicesByName;
+                for (int i=0; i<alls.size(); i++) {
+                    ServiceRecord r1 = alls.valueAt(i);
+
+                    if (filter.test(r1)) {
+                        services.add(r1);
                     }
                 }
             }
@@ -4180,6 +4165,9 @@ public final class ActiveServices {
         if (services.size() <= 0) {
             return false;
         }
+
+        // Sort by component name.
+        services.sort(Comparator.comparing(WithComponentName::getComponentName));
 
         boolean needSep = false;
         for (int i=0; i<services.size(); i++) {

@@ -97,7 +97,7 @@
     <color name="material_deep_teal_100">#ffb2dfdb</color>
     <color name="material_deep_teal_200">#ff80cbc4</color>
     <color name="material_deep_teal_300">#ff4db6ac</color>
-    <color name="material_deep_teal_500">#ff009688</color>
+    <color name="material_deep_teal_500">#ff008577</color>
 
     <color name="material_blue_grey_200">#ffb0bec5</color>
     <color name="material_blue_grey_700">#ff455a64</color>
@@ -144,5 +144,9 @@
 
     <color name="datepicker_default_view_animator_color_material_light">#fff2f2f2</color>
     <color name="datepicker_default_view_animator_color_material_dark">#ff303030</color>
+
+    <!-- Autofill colors -->
+    <color name="autofill_background_material_dark">@color/material_blue_grey_900</color>
+    <color name="autofill_background_material_light">@color/material_grey_50</color>
 
 </resources>

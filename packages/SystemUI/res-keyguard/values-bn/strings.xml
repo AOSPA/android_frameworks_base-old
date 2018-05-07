@@ -140,7 +140,7 @@
       <item quantity="other">ডিভাইসটি <xliff:g id="NUMBER_1">%d</xliff:g> ঘন্টা ধরে আনলক করা হয় নি। পাসওয়ার্ড নিশ্চিত করুন।</item>
     </plurals>
     <string name="fingerprint_not_recognized" msgid="348813995267914625">"স্বীকৃত নয়"</string>
-    <plurals name="kg_password_default_pin_message" formatted="false" msgid="6203676909479972943">
+    <plurals name="kg_password_default_pin_message" formatted="false" msgid="3739658416797652781">
       <item quantity="one">সিমের পিন লিখুন। আপনি আর <xliff:g id="NUMBER_1">%d</xliff:g> বার চেষ্টা করতে পারবেন।</item>
       <item quantity="other">সিমের পিন লিখুন। আপনি আর <xliff:g id="NUMBER_1">%d</xliff:g> বার চেষ্টা করতে পারবেন।</item>
     </plurals>

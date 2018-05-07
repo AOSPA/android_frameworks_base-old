@@ -141,7 +141,7 @@
     <string name="launch_defaults_some" msgid="313159469856372621">"Bazı varsayılan tercihler ayarlandı"</string>
     <string name="launch_defaults_none" msgid="4241129108140034876">"Hiçbir varsayılan tercih ayarlanmadı"</string>
     <string name="tts_settings" msgid="8186971894801348327">"Metin-konuşma ayarları"</string>
-    <string name="tts_settings_title" msgid="1237820681016639683">"Metin-konuşma çıktısı"</string>
+    <string name="tts_settings_title" msgid="1237820681016639683">"Metin okuma çıkışı"</string>
     <string name="tts_default_rate_title" msgid="6030550998379310088">"Konuşma hızı"</string>
     <string name="tts_default_rate_summary" msgid="4061815292287182801">"Metnin konuşulduğu hız"</string>
     <string name="tts_default_pitch_title" msgid="6135942113172488671">"Perde"</string>
@@ -155,7 +155,7 @@
     <string name="tts_install_data_title" msgid="4264378440508149986">"Ses verilerini yükle"</string>
     <string name="tts_install_data_summary" msgid="5742135732511822589">"Konuşma sentezi için gereken ses verilerini yükle"</string>
     <string name="tts_engine_security_warning" msgid="8786238102020223650">"Bu konuşma sentezi motoru, şifreler ve kredi kartı numaraları gibi kişisel veriler de dahil konuşulan tüm metni toplayabilir. <xliff:g id="TTS_PLUGIN_ENGINE_NAME">%s</xliff:g> motorundan gelmektedir. Bu konuşma sentezi motorunun kullanımı etkinleştirilsin mi?"</string>
-    <string name="tts_engine_network_required" msgid="1190837151485314743">"Bu dil, metin-konuşma çıktısı için bir ağ bağlantısı gerektirir."</string>
+    <string name="tts_engine_network_required" msgid="1190837151485314743">"Bu dil, metin okuma çıkışı için bir ağ bağlantısı gerektirir."</string>
     <string name="tts_default_sample_string" msgid="4040835213373086322">"Bu bir konuşma sentezi örneğidir"</string>
     <string name="tts_status_title" msgid="7268566550242584413">"Varsayılan dil durumu"</string>
     <string name="tts_status_ok" msgid="1309762510278029765">"<xliff:g id="LOCALE">%1$s</xliff:g> tamamen destekleniyor"</string>
@@ -216,20 +216,15 @@
     <string name="bluetooth_select_avrcp_version_string" msgid="3750059931120293633">"Bluetooth AVRCP Sürümü"</string>
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"Bluetooth AVRCP Sürümünü seçin"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"Bluetooth Ses Codec\'i"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_type_dialog_title (8436224899475822557) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="8436224899475822557">"Bluetooth Ses Codec\'i Tetikleme\nSeçimi"</string>
     <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"Bluetooth Ses Örnek Hızı"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_sample_rate_dialog_title (8010380028880963535) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"Bluetooth Ses Codec\'i Tetikleme\nSeçimi: Örnek Hızı"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample" msgid="2099645202720164141">"Bluetooth Ses Örnek Başına Bit Sayısı"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_bits_per_sample_dialog_title (8063859754619484760) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="8063859754619484760">"Bluetooth Ses Codec\'i Tetikleme\nSeçimi: Örnek Başına Bit Sayısı"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"Bluetooth Ses Kanalı Modu"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_channel_mode_dialog_title (7234956835280563341) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="7234956835280563341">"Bluetooth Ses Codec\'i Tetikleme\nSeçimi: Kanal Modu"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"Bluetooth Ses LDAC Codec\'i: Oynatma Kalitesi"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title (7595776220458732825) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="7595776220458732825">"Bluetooth Ses LDAC Codec\'i Tetikleme\nSeçimi: Oynatma Kalitesi"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"Akış: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"Gizli DNS"</string>
     <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"Gizli DNS Modunu Seçin"</string>
@@ -289,7 +284,7 @@
     <string name="show_touches" msgid="2642976305235070316">"Dokunmayı göster"</string>
     <string name="show_touches_summary" msgid="6101183132903926324">"Dokunmalarda görsel geri bildirim göster"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Yüzey güncellemelerini göster"</string>
-    <string name="show_screen_updates_summary" msgid="2569622766672785529">"Güncelleme sırasında tüm pencere yüzeylerini çiz"</string>
+    <string name="show_screen_updates_summary" msgid="2569622766672785529">"Güncellenirken tüm pencere yüzeylerini yakıp söndür"</string>
     <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU görünüm güncellemelerini göster"</string>
     <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU ile çizim yapılırken pencerelerdeki görünümleri çiz"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Donanım katmanı güncellemelerini göster"</string>
@@ -372,11 +367,12 @@
     <string name="accessibility_display_daltonizer_preference_title" msgid="5800761362678707872">"Renk düzeltme"</string>
     <string name="accessibility_display_daltonizer_preference_subtitle" msgid="3484969015295282911">"Bu özellik deneyseldir ve performansı etkileyebilir."</string>
     <string name="daltonizer_type_overridden" msgid="3116947244410245916">"<xliff:g id="TITLE">%1$s</xliff:g> tarafından geçersiz kılındı"</string>
-    <string name="power_remaining_duration_only" msgid="845431008899029842">"Yaklaşık <xliff:g id="TIME">%1$s</xliff:g> kaldı"</string>
-    <string name="power_discharging_duration" msgid="6655472132189365839">"Yaklaşık <xliff:g id="TIME">%1$s</xliff:g> kaldı (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_enhanced" msgid="5992456722677973678">"Kullanımınıza dayalı olarak yaklaşık <xliff:g id="TIME">%1$s</xliff:g> kaldı"</string>
-    <string name="power_discharging_duration_enhanced" msgid="5726302316642148671">"Kullanımınıza dayalı olarak yaklaşık <xliff:g id="TIME">%1$s</xliff:g> kaldı (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
-    <string name="power_remaining_duration_only_short" msgid="5329694252258605547">"<xliff:g id="TIME">%1$s</xliff:g> kaldı"</string>
+    <string name="power_remaining_settings_home_page" msgid="4845022416859002011">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> - <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
+    <string name="power_remaining_duration_only" msgid="6123167166221295462">"Yaklaşık <xliff:g id="TIME_REMAINING">%1$s</xliff:g> kaldı"</string>
+    <string name="power_discharging_duration" msgid="8848256785736335185">"Yaklaşık <xliff:g id="TIME_REMAINING">%1$s</xliff:g> kaldı (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_duration_only_enhanced" msgid="4189311599812296592">"Kullanımınıza dayalı olarak yaklaşık <xliff:g id="TIME_REMAINING">%1$s</xliff:g> kaldı"</string>
+    <string name="power_discharging_duration_enhanced" msgid="1992003260664804080">"Kullanımınıza dayalı olarak yaklaşık <xliff:g id="TIME_REMAINING">%1$s</xliff:g> kaldı (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
+    <string name="power_remaining_duration_only_short" msgid="3463575350656389957">"<xliff:g id="TIME_REMAINING">%1$s</xliff:g> kaldı"</string>
     <string name="power_discharge_by_enhanced" msgid="2095821536747992464">"Kullanımınıza göre saat yaklaşık <xliff:g id="TIME">%1$s</xliff:g> olana kadar kullanılabilmelidir (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>
     <string name="power_discharge_by_only_enhanced" msgid="2175151772952365149">"Kullanımınıza göre saat yaklaşık <xliff:g id="TIME">%1$s</xliff:g> olana kadar kullanılabilmelidir"</string>
     <string name="power_discharge_by" msgid="6453537733650125582">"Saat yaklaşık <xliff:g id="TIME">%1$s</xliff:g> olana kadar kullanılabilmelidir (<xliff:g id="LEVEL">%2$s</xliff:g>)"</string>

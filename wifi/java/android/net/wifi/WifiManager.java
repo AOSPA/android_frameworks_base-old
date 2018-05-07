@@ -1654,8 +1654,7 @@ public class WifiManager {
     public boolean startScan(WorkSource workSource) {
         try {
             String packageName = mContext.getOpPackageName();
-            mService.startScan(packageName);
-            return true;
+            return mService.startScan(packageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1700,6 +1699,7 @@ public class WifiManager {
      * returned.
      */
     public List<ScanResult> getScanResults() {
+        android.util.SeempLog.record(55);
         try {
             return mService.getScanResults(mContext.getOpPackageName());
         } catch (RemoteException e) {

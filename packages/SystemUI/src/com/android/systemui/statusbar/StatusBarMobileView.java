@@ -100,13 +100,13 @@ public class StatusBarMobileView extends AlphaOptimizedLinearLayout implements D
         }
 
         if (mState == null) {
-            mState = state;
+            mState = state.copy();
             initViewState();
             return;
         }
 
         if (!mState.equals(state)) {
-            updateState(state);
+            updateState(state.copy());
         }
     }
 
@@ -197,8 +197,18 @@ public class StatusBarMobileView extends AlphaOptimizedLinearLayout implements D
     }
 
     @Override
+    public void setDecorColor(int color) {
+        //TODO: May also not be needed
+    }
+
+    @Override
     public boolean isIconVisible() {
         return mState.visible;
+    }
+
+    @Override
+    public void setVisibleState(int state) {
+        //TODO: May not be needed. Mobile is always expected to be visible (not a dot)
     }
 
     @VisibleForTesting

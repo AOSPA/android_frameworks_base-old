@@ -225,16 +225,17 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
                 if (!(mCurrentClient instanceof AuthenticationClient)) {
                     return;
                 }
-                if (isKeyguard(mCurrentClient.getOwnerString())) {
+                final String currentClient = mCurrentClient.getOwnerString();
+                if (isKeyguard(currentClient)) {
                     return; // Keyguard is always allowed
                 }
                 List<ActivityManager.RunningTaskInfo> runningTasks = mActivityManager.getTasks(1);
                 if (!runningTasks.isEmpty()) {
                     final String topPackage = runningTasks.get(0).topActivity.getPackageName();
-                    if (!topPackage.contentEquals(mCurrentClient.getOwnerString())) {
-                        mCurrentClient.stop(false /* initiatedByClient */);
+                    if (!topPackage.contentEquals(currentClient)) {
                         Slog.e(TAG, "Stopping background authentication, top: " + topPackage
-                                + " currentClient: " + mCurrentClient.getOwnerString());
+                                + " currentClient: " + currentClient);
+                        mCurrentClient.stop(false /* initiatedByClient */);
                     }
                 }
             } catch (RemoteException e) {
@@ -618,6 +619,15 @@ public class FingerprintService extends SystemService implements IHwBinder.Death
 
     void startRemove(IBinder token, int fingerId, int groupId, int userId,
             IFingerprintServiceReceiver receiver, boolean restricted, boolean internal) {
+        if (token == null) {
+            Slog.w(TAG, "startRemove: token is null");
+            return;
+        }
+        if (receiver == null) {
+            Slog.w(TAG, "startRemove: receiver is null");
+            return;
+        }
+
         IBiometricsFingerprint daemon = getFingerprintDaemon();
         if (daemon == null) {
             Slog.w(TAG, "startRemove: no fingerprint HAL!");

@@ -46,6 +46,7 @@ import android.view.ViewGroup;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.statusbar.IStatusBarService;
+import com.android.internal.statusbar.NotificationVisibility;
 import com.android.internal.util.NotificationMessagingUtil;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.Dependency;
@@ -300,12 +301,12 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
         updateNotifications();
     }
 
-    private boolean shouldSuppressFullScreenIntent(StatusBarNotification sbn) {
+    private boolean shouldSuppressFullScreenIntent(NotificationData.Entry entry) {
         if (mPresenter.isDeviceInVrMode()) {
             return true;
         }
 
-        return mNotificationData.shouldSuppressFullScreenIntent(sbn);
+        return mNotificationData.shouldSuppressFullScreenIntent(entry);
     }
 
     private void inflateViews(NotificationData.Entry entry, ViewGroup parent) {
@@ -367,6 +368,10 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
     }
 
     public void performRemoveNotification(StatusBarNotification n) {
+        final int rank = mNotificationData.getRank(n.getKey());
+        final int count = mNotificationData.getActiveNotifications().size();
+        final NotificationVisibility nv = NotificationVisibility.obtain(n.getKey(), rank, count,
+                true);
         NotificationData.Entry entry = mNotificationData.get(n.getKey());
         mRemoteInputManager.onPerformRemoveNotification(n, entry);
         final String pkg = n.getPackageName();
@@ -380,7 +385,7 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
             } else if (mListContainer.hasPulsingNotifications()) {
                 dismissalSurface = NotificationStats.DISMISSAL_AOD;
             }
-            mBarService.onNotificationClear(pkg, tag, id, userId, n.getKey(), dismissalSurface);
+            mBarService.onNotificationClear(pkg, tag, id, userId, n.getKey(), dismissalSurface, nv);
             removeNotification(n.getKey(), null);
 
         } catch (RemoteException ex) {
@@ -469,37 +474,12 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
         if (FORCE_REMOTE_INPUT_HISTORY
                 && shouldKeepForRemoteInput(entry)
                 && entry.row != null && !entry.row.isDismissed()) {
-            StatusBarNotification sbn = entry.notification;
-
-            Notification.Builder b = Notification.Builder
-                    .recoverBuilder(mContext, sbn.getNotification().clone());
-            CharSequence[] oldHistory = sbn.getNotification().extras
-                    .getCharSequenceArray(Notification.EXTRA_REMOTE_INPUT_HISTORY);
-            CharSequence[] newHistory;
-            if (oldHistory == null) {
-                newHistory = new CharSequence[1];
-            } else {
-                newHistory = new CharSequence[oldHistory.length + 1];
-                System.arraycopy(oldHistory, 0, newHistory, 1, oldHistory.length);
-            }
             CharSequence remoteInputText = entry.remoteInputText;
             if (TextUtils.isEmpty(remoteInputText)) {
                 remoteInputText = entry.remoteInputTextWhenReset;
             }
-            newHistory[0] = String.valueOf(remoteInputText);
-            b.setRemoteInputHistory(newHistory);
-
-            Notification newNotification = b.build();
-
-            // Undo any compatibility view inflation
-            newNotification.contentView = sbn.getNotification().contentView;
-            newNotification.bigContentView = sbn.getNotification().bigContentView;
-            newNotification.headsUpContentView = sbn.getNotification().headsUpContentView;
-
-            StatusBarNotification newSbn = new StatusBarNotification(sbn.getPackageName(),
-                    sbn.getOpPkg(),
-                    sbn.getId(), sbn.getTag(), sbn.getUid(), sbn.getInitialPid(),
-                    newNotification, sbn.getUser(), sbn.getOverrideGroupKey(), sbn.getPostTime());
+            StatusBarNotification newSbn = rebuildNotificationWithRemoteInput(entry,
+                    remoteInputText, false /* showSpinner */);
             boolean updated = false;
             entry.onRemoteInputInserted();
             try {
@@ -547,6 +527,39 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
         StatusBarNotification old = removeNotificationViews(key, ranking);
 
         mCallback.onNotificationRemoved(key, old);
+    }
+
+    public StatusBarNotification rebuildNotificationWithRemoteInput(NotificationData.Entry entry,
+            CharSequence remoteInputText, boolean showSpinner) {
+        StatusBarNotification sbn = entry.notification;
+
+        Notification.Builder b = Notification.Builder
+                .recoverBuilder(mContext, sbn.getNotification().clone());
+        CharSequence[] oldHistory = sbn.getNotification().extras
+                .getCharSequenceArray(Notification.EXTRA_REMOTE_INPUT_HISTORY);
+        CharSequence[] newHistory;
+        if (oldHistory == null) {
+            newHistory = new CharSequence[1];
+        } else {
+            newHistory = new CharSequence[oldHistory.length + 1];
+            System.arraycopy(oldHistory, 0, newHistory, 1, oldHistory.length);
+        }
+        newHistory[0] = String.valueOf(remoteInputText);
+        b.setRemoteInputHistory(newHistory);
+        b.setShowRemoteInputSpinner(showSpinner);
+
+        Notification newNotification = b.build();
+
+        // Undo any compatibility view inflation
+        newNotification.contentView = sbn.getNotification().contentView;
+        newNotification.bigContentView = sbn.getNotification().bigContentView;
+        newNotification.headsUpContentView = sbn.getNotification().headsUpContentView;
+
+        StatusBarNotification newSbn = new StatusBarNotification(sbn.getPackageName(),
+                sbn.getOpPkg(),
+                sbn.getId(), sbn.getTag(), sbn.getUid(), sbn.getInitialPid(),
+                newNotification, sbn.getUser(), sbn.getOverrideGroupKey(), sbn.getPostTime());
+        return newSbn;
     }
 
     private boolean shouldKeepForRemoteInput(NotificationData.Entry entry) {
@@ -692,7 +705,7 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
         NotificationData.Entry shadeEntry = createNotificationViews(notification);
         boolean isHeadsUped = shouldPeek(shadeEntry);
         if (!isHeadsUped && notification.getNotification().fullScreenIntent != null) {
-            if (shouldSuppressFullScreenIntent(notification)) {
+            if (shouldSuppressFullScreenIntent(shadeEntry)) {
                 if (DEBUG) {
                     Log.d(TAG, "No Fullscreen intent: suppressed by DND: " + key);
                 }
@@ -848,7 +861,7 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
             return false;
         }
 
-        if (mNotificationData.shouldFilterOut(sbn)) {
+        if (mNotificationData.shouldFilterOut(entry)) {
             if (DEBUG) Log.d(TAG, "No peeking: filtered notification: " + sbn.getKey());
             return false;
         }
@@ -862,13 +875,13 @@ public class NotificationEntryManager implements Dumpable, NotificationInflater.
             return false;
         }
 
-        if (!mPresenter.isDozing() && mNotificationData.shouldSuppressPeek(sbn)) {
+        if (!mPresenter.isDozing() && mNotificationData.shouldSuppressPeek(entry)) {
             if (DEBUG) Log.d(TAG, "No peeking: suppressed by DND: " + sbn.getKey());
             return false;
         }
 
         // Peeking triggers an ambient display pulse, so disable peek is ambient is active
-        if (mPresenter.isDozing() && mNotificationData.shouldSuppressAmbient(sbn)) {
+        if (mPresenter.isDozing() && mNotificationData.shouldSuppressAmbient(entry)) {
             if (DEBUG) Log.d(TAG, "No peeking: suppressed by DND: " + sbn.getKey());
             return false;
         }

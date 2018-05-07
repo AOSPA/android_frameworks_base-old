@@ -138,7 +138,10 @@
 
     <!-- Vertical translation of the shelf during animation that happens after the
     notification panel collapses -->
-    <dimen name="shelf_appear_translation">9dp</dimen>
+    <dimen name="shelf_appear_translation">42dp</dimen>
+
+    <!-- Vertical translation of pulsing notification animations -->
+    <dimen name="pulsing_notification_appear_translation">10dp</dimen>
 
     <!-- The amount the content shifts upwards when transforming into the icon -->
     <dimen name="notification_icon_transform_content_shift">32dp</dimen>
@@ -184,6 +187,9 @@
 
     <!-- the padding on the start of the statusbar -->
     <dimen name="status_bar_padding_start">6dp</dimen>
+
+    <!-- the padding on the end of the statusbar -->
+    <dimen name="status_bar_padding_end">8dp</dimen>
 
     <!-- the radius of the overflow dot in the status bar -->
     <dimen name="overflow_dot_radius">1dp</dimen>
@@ -274,7 +280,9 @@
     <!-- The width of the panel that holds the quick settings. -->
     <dimen name="qs_panel_width">@dimen/notification_panel_width</dimen>
 
-    <dimen name="volume_dialog_panel_transparent_padding">8dp</dimen>
+    <dimen name="volume_dialog_panel_transparent_padding_right">8dp</dimen>
+
+    <dimen name="volume_dialog_panel_transparent_padding">20dp</dimen>
 
     <!-- the amount the volume panel should be offset at the end from the view next to it (or
     the screen edge, in portrait-->
@@ -321,7 +329,7 @@
     <dimen name="pull_span_min">25dp</dimen>
 
     <dimen name="qs_tile_height">106dp</dimen>
-    <dimen name="qs_tile_layout_margin_side">9dp</dimen>
+    <dimen name="qs_tile_layout_margin_side">6dp</dimen>
     <dimen name="qs_tile_margin_horizontal">18dp</dimen>
     <dimen name="qs_tile_margin_vertical">24dp</dimen>
     <dimen name="qs_tile_margin_top_bottom">12dp</dimen>
@@ -377,6 +385,7 @@
     <dimen name="qs_footer_padding_start">16dp</dimen>
     <dimen name="qs_footer_padding_end">16dp</dimen>
     <dimen name="qs_footer_icon_size">16dp</dimen>
+    <dimen name="qs_paged_tile_layout_padding_bottom">24dp</dimen>
 
     <dimen name="qs_notif_collapsed_space">64dp</dimen>
 
@@ -490,9 +499,6 @@
     <!-- Distance the user needs to drag vertically such that a swipe is accepted to unlock the
          device. -->
     <dimen name="unlock_move_distance">75dp</dimen>
-
-    <!-- Distance after which the scrim starts fading in when dragging down the quick settings -->
-    <dimen name="notification_scrim_wait_distance">100dp</dimen>
 
     <!-- Move distance for the unlock hint animation on the lockscreen -->
     <dimen name="hint_move_distance">75dp</dimen>
@@ -896,8 +902,6 @@
     <dimen name="default_gear_space">18dp</dimen>
     <dimen name="cell_overlay_padding">18dp</dimen>
 
-    <dimen name="hwui_edge_margin">16dp</dimen>
-
     <dimen name="global_actions_panel_width">120dp</dimen>
 
     <dimen name="global_actions_top_padding">120dp</dimen>
@@ -913,9 +917,11 @@
     <dimen name="corner_size">8dp</dimen>
     <dimen name="top_padding">0dp</dimen>
     <dimen name="bottom_padding">48dp</dimen>
-    <dimen name="edge_margin">16dp</dimen>
+    <dimen name="edge_margin">8dp</dimen>
 
     <dimen name="rounded_corner_radius">0dp</dimen>
+    <dimen name="rounded_corner_radius_top">0dp</dimen>
+    <dimen name="rounded_corner_radius_bottom">0dp</dimen>
     <dimen name="rounded_corner_content_padding">0dp</dimen>
     <dimen name="nav_content_padding">0dp</dimen>
     <dimen name="nav_quick_scrub_track_edge_padding">42dp</dimen>
@@ -927,16 +933,21 @@
     <!-- Smart reply button -->
     <dimen name="smart_reply_button_spacing">8dp</dimen>
     <dimen name="smart_reply_button_padding_vertical">10dp</dimen>
-    <dimen name="smart_reply_button_padding_horizontal_single_line">12dp</dimen>
+    <dimen name="smart_reply_button_padding_horizontal_single_line">16dp</dimen>
     <dimen name="smart_reply_button_padding_horizontal_double_line">16dp</dimen>
-    <dimen name="smart_reply_button_min_height">40dp</dimen>
+    <dimen name="smart_reply_button_min_height">32dp</dimen>
     <dimen name="smart_reply_button_font_size">14sp</dimen>
     <dimen name="smart_reply_button_line_spacing_extra">6sp</dimen> <!-- Total line height 20sp. -->
+
+    <!-- A reasonable upper bound for the height of the smart reply button. The measuring code
+            needs to start with a guess for the maximum size. Currently two-line smart reply buttons
+            add about 88dp of height to the notifications. -->
+    <dimen name="smart_reply_button_max_height">100dp</dimen>
 
     <!-- Fingerprint Dialog values -->
     <dimen name="fingerprint_dialog_fp_icon_size">64dp</dimen>
     <dimen name="fingerprint_dialog_animation_translation_offset">350dp</dimen>
-    <dimen name="fingerprint_dialog_corner_size">2dp</dimen>
+    <dimen name="fingerprint_dialog_corner_size">4dp</dimen>
 
     <!-- Wireless Charging Animation values -->
     <dimen name="wireless_charging_dots_radius_start">0dp</dimen>

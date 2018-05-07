@@ -26,6 +26,7 @@ import android.content.res.Configuration;
 import android.graphics.PorterDuff.Mode;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.RippleDrawable;
+import android.os.Bundle;
 import android.os.UserManager;
 import android.support.annotation.Nullable;
 import android.support.annotation.VisibleForTesting;
@@ -33,8 +34,10 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import com.android.internal.logging.MetricsLogger;
@@ -66,6 +69,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     private UserInfoController mUserInfoController;
     private SettingsButton mSettingsButton;
     protected View mSettingsContainer;
+    private PageIndicator mPageIndicator;
     private CarrierText mCarrierText;
 
     private boolean mQsDisabled;
@@ -93,6 +97,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     private ImageView mMobileRoaming;
     private final int mColorForeground;
     private final CellSignalState mInfo = new CellSignalState();
+    private OnClickListener mExpandClickListener;
 
     public QSFooterImpl(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -107,6 +112,8 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         mEdit.setOnClickListener(view ->
                 Dependency.get(ActivityStarter.class).postQSRunnableDismissingKeyguard(() ->
                         mQsPanel.showEdit(view)));
+
+        mPageIndicator = findViewById(R.id.footer_page_indicator);
 
         mSettingsButton = findViewById(R.id.settings_button);
         mSettingsContainer = findViewById(R.id.settings_button_container);
@@ -135,6 +142,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         mActivityStarter = Dependency.get(ActivityStarter.class);
         addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight,
                 oldBottom) -> updateAnimator(right - left));
+        setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
     }
 
     private void updateAnimator(int width) {
@@ -167,6 +175,14 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
 
     private void updateResources() {
         updateFooterAnimator();
+
+        // Update the width and weight of the actions container as the page indicator can sometimes
+        // show and the layout needs to center it between the carrier text and actions container.
+        LinearLayout.LayoutParams params =
+                (LinearLayout.LayoutParams) mActionsContainer.getLayoutParams();
+        params.width = mContext.getResources().getInteger(R.integer.qs_footer_actions_width);
+        params.weight = mContext.getResources().getInteger(R.integer.qs_footer_actions_weight);
+        mActionsContainer.setLayoutParams(params);
     }
 
     private void updateFooterAnimator() {
@@ -181,6 +197,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
                 .addFloat(mMobileGroup, "alpha", 0, 1)
                 .addFloat(mActionsContainer, "alpha", 0, 1)
                 .addFloat(mDragHandle, "alpha", 1, 0, 0)
+                .addFloat(mPageIndicator, "alpha", 0, 1)
                 .setStartDelay(0.15f)
                 .build();
     }
@@ -188,6 +205,11 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     @Override
     public void setKeyguardShowing(boolean keyguardShowing) {
         setExpansion(mExpansionAmount);
+    }
+
+    @Override
+    public void setExpandClickListener(OnClickListener onClickListener) {
+        mExpandClickListener = onClickListener;
     }
 
     @Override
@@ -224,8 +246,20 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
     }
 
     @Override
-    public View getExpandView() {
-        return findViewById(R.id.expand_indicator);
+    public boolean performAccessibilityAction(int action, Bundle arguments) {
+        if (action == AccessibilityNodeInfo.ACTION_EXPAND) {
+            if (mExpandClickListener != null) {
+                mExpandClickListener.onClick(null);
+                return true;
+            }
+        }
+        return super.performAccessibilityAction(action, arguments);
+    }
+
+    @Override
+    public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
+        super.onInitializeAccessibilityNodeInfo(info);
+        info.addAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_EXPAND);
     }
 
     @Override
@@ -250,6 +284,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         final boolean isDemo = UserManager.isDeviceInDemoMode(mContext);
         mMultiUserSwitch.setVisibility(showUserSwitcher(isDemo) ? View.VISIBLE : View.INVISIBLE);
         mEdit.setVisibility(isDemo || !mExpanded ? View.INVISIBLE : View.VISIBLE);
+        mSettingsButton.setVisibility(isDemo || !mExpanded ? View.INVISIBLE : View.VISIBLE);
     }
 
     private boolean showUserSwitcher(boolean isDemo) {
@@ -291,6 +326,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
         mQsPanel = qsPanel;
         if (mQsPanel != null) {
             mMultiUserSwitch.setQsPanel(qsPanel);
+            mQsPanel.setFooterPageIndicator(mPageIndicator);
         }
     }
 
