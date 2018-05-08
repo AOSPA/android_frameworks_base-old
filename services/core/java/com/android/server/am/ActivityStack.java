@@ -383,6 +383,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
     static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
 
+    private static final ActivityPluginDelegate mActivityPluginDelegate =
+        new ActivityPluginDelegate();
+
     private class ActivityStackHandler extends Handler {
         ActivityStackHandler(Looper looper) {
             super(looper);
@@ -1449,6 +1452,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             mActivityTrigger.activityPauseTrigger(prev.intent, prev.info, prev.appInfo);
         }
 
+        if (mActivityPluginDelegate != null) {
+            mActivityPluginDelegate.activitySuspendNotification
+                (prev.appInfo.packageName, prev.fullscreen, true);
+        }
+
         mResumedActivity = null;
         mPausingActivity = prev;
         mLastPausedActivity = prev;
@@ -2399,6 +2407,10 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     next.fullscreen);
         }
 
+        if (mActivityPluginDelegate != null) {
+            mActivityPluginDelegate.activityInvokeNotification
+                (next.appInfo.packageName, next.fullscreen);
+        }
         // If we are currently pausing an activity, then don't do anything
         // until that is done.
         if (!mStackSupervisor.allPausedActivitiesComplete()) {
@@ -2931,6 +2943,10 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
         if (mActivityTrigger != null) {
             mActivityTrigger.activityStartTrigger(r.intent, r.info, r.appInfo, r.fullscreen);
+        }
+        if (mActivityPluginDelegate != null) {
+            mActivityPluginDelegate.activityInvokeNotification
+                (r.appInfo.packageName, r.fullscreen);
         }
         if (!isActivityTypeHome() || numActivities() > 0) {
             // We want to show the starting preview window if we are
@@ -3495,6 +3511,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
                 if (mActivityTrigger != null) {
                     mActivityTrigger.activityStopTrigger(r.intent, r.info, r.appInfo);
+                }
+
+                if (mActivityPluginDelegate != null) {
+                    mActivityPluginDelegate.activitySuspendNotification
+                        (r.appInfo.packageName, r.fullscreen, false);
                 }
 
                 if (!r.visible) {
