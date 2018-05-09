@@ -59,7 +59,7 @@
     <string name="status_bar_latest_events_title">Notifications</string>
 
     <!-- When the battery is low, this is displayed to the user in a dialog.  The title of the low battery alert.  [CHAR LIMIT=NONE]-->
-    <string name="battery_low_title">Battery is low</string>
+    <string name="battery_low_title">Battery may run out soon</string>
 
     <!-- A message that appears when the battery level is getting low in a dialog.  This is
         appended to the subtitle of the low battery alert.  "percentage" is the percentage of battery
@@ -2230,4 +2230,6 @@
     <!-- An action on the dialog that tells that scheduled (i.e. automatic) battery saver: user acknowledges and closes the dialog.  [CHAR LIMIT=NONE]-->
     <string name="auto_saver_okay_action">Got it</string>
 
+    <!-- URl of the webpage that explains battery saver. -->
+    <string name="help_uri_battery_saver_learn_more_link_target" translatable="false"></string>
 </resources>

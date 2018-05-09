@@ -20,15 +20,12 @@
     android:id="@+id/quick_status_bar_system_icons"
     android:layout_width="match_parent"
     android:layout_height="@*android:dimen/quick_qs_offset_height"
-    android:layout_marginRight="@dimen/notification_side_paddings"
-    android:layout_marginLeft="@dimen/notification_side_paddings"
-    android:layout_alignParentEnd="true"
     android:clipChildren="false"
     android:clipToPadding="false"
     android:gravity="center"
+    android:orientation="horizontal"
     android:paddingStart="@dimen/status_bar_padding_start"
-    android:paddingEnd="@dimen/status_bar_padding_end"
-    android:orientation="horizontal">
+    android:paddingEnd="@dimen/status_bar_padding_end" >
 
     <com.android.systemui.statusbar.policy.Clock
         android:id="@+id/clock"
@@ -40,16 +37,6 @@
         android:singleLine="true"
         android:textAppearance="@style/TextAppearance.StatusBar.Clock"
         systemui:showDark="false" />
-
-    <com.android.systemui.statusbar.policy.DateView
-        android:id="@+id/date"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:singleLine="true"
-        android:textAppearance="@style/TextAppearance.StatusBar.Expanded.Date"
-        android:textSize="@dimen/qs_time_collapsed_size"
-        systemui:datePattern="@string/abbrev_wday_month_day_no_year_alarm" />
 
     <android.widget.Space
         android:id="@+id/space"

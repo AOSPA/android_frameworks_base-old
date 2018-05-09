@@ -520,11 +520,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     @Override
     public void setWindowingMode(int windowingMode) {
         setWindowingMode(windowingMode, false /* animate */, false /* showRecents */,
-                false /* enteringSplitScreenMode */);
+                false /* enteringSplitScreenMode */, false /* deferEnsuringVisibility */);
     }
 
     void setWindowingMode(int preferredWindowingMode, boolean animate, boolean showRecents,
-            boolean enteringSplitScreenMode) {
+            boolean enteringSplitScreenMode, boolean deferEnsuringVisibility) {
         final boolean creating = mWindowContainerController == null;
         final int currentMode = getWindowingMode();
         final ActivityDisplay display = getDisplay();
@@ -560,7 +560,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 // doesn't support split-screen mode, go ahead an dismiss split-screen and display a
                 // warning toast about it.
                 mService.mTaskChangeNotificationController.notifyActivityDismissingDockedStack();
-                display.getSplitScreenPrimaryStack().setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+                display.getSplitScreenPrimaryStack().setWindowingMode(WINDOWING_MODE_FULLSCREEN,
+                        false /* animate */, false /* showRecents */,
+                        false /* enteringSplitScreenMode */, true /* deferEnsuringVisibility */);
             }
         }
 
@@ -651,9 +653,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             wm.continueSurfaceLayout();
         }
 
-        // Don't ensure visible activities if the windowing mode change was a side effect of us
-        // entering split-screen mode.
-        if (!enteringSplitScreenMode) {
+        if (!deferEnsuringVisibility) {
             mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, PRESERVE_WINDOWS);
             mStackSupervisor.resumeFocusedStackTopActivityLocked();
         }
@@ -3842,7 +3842,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         // and the resumed activity is not yet visible, then hold off on
         // finishing until the resumed one becomes visible.
 
-        final ActivityRecord next = mStackSupervisor.topRunningActivityLocked();
+        // The activity that we are finishing may be over the lock screen. In this case, we do not
+        // want to consider activities that cannot be shown on the lock screen as running and should
+        // proceed with finishing the activity if there is no valid next top running activity.
+        final ActivityRecord next = mStackSupervisor.topRunningActivityLocked(
+                true /* considerKeyguardState */);
 
         if (mode == FINISH_AFTER_VISIBLE && (r.visible || r.nowVisible)
                 && next != null && !next.nowVisible) {

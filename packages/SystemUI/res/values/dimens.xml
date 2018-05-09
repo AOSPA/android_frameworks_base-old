@@ -140,6 +140,9 @@
     notification panel collapses -->
     <dimen name="shelf_appear_translation">42dp</dimen>
 
+    <!-- Vertical translation of pulsing notification animations -->
+    <dimen name="pulsing_notification_appear_translation">10dp</dimen>
+
     <!-- The amount the content shifts upwards when transforming into the icon -->
     <dimen name="notification_icon_transform_content_shift">32dp</dimen>
 
@@ -326,7 +329,7 @@
     <dimen name="pull_span_min">25dp</dimen>
 
     <dimen name="qs_tile_height">106dp</dimen>
-    <dimen name="qs_tile_layout_margin_side">9dp</dimen>
+    <dimen name="qs_tile_layout_margin_side">6dp</dimen>
     <dimen name="qs_tile_margin_horizontal">18dp</dimen>
     <dimen name="qs_tile_margin_vertical">24dp</dimen>
     <dimen name="qs_tile_margin_top_bottom">12dp</dimen>
@@ -899,8 +902,6 @@
     <dimen name="default_gear_space">18dp</dimen>
     <dimen name="cell_overlay_padding">18dp</dimen>
 
-    <dimen name="hwui_edge_margin">16dp</dimen>
-
     <dimen name="global_actions_panel_width">120dp</dimen>
 
     <dimen name="global_actions_top_padding">120dp</dimen>
@@ -916,9 +917,11 @@
     <dimen name="corner_size">8dp</dimen>
     <dimen name="top_padding">0dp</dimen>
     <dimen name="bottom_padding">48dp</dimen>
-    <dimen name="edge_margin">16dp</dimen>
+    <dimen name="edge_margin">8dp</dimen>
 
     <dimen name="rounded_corner_radius">0dp</dimen>
+    <dimen name="rounded_corner_radius_top">0dp</dimen>
+    <dimen name="rounded_corner_radius_bottom">0dp</dimen>
     <dimen name="rounded_corner_content_padding">0dp</dimen>
     <dimen name="nav_content_padding">0dp</dimen>
     <dimen name="nav_quick_scrub_track_edge_padding">42dp</dimen>

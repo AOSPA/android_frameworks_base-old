@@ -82,6 +82,7 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
         mSlotWifi     = mContext.getString(com.android.internal.R.string.status_bar_wifi);
         mSlotEthernet = mContext.getString(com.android.internal.R.string.status_bar_ethernet);
         mSlotVpn      = mContext.getString(com.android.internal.R.string.status_bar_vpn);
+        mActivityEnabled = mContext.getResources().getBoolean(R.bool.config_showActivity);
 
         mIconController = iconController;
         mNetworkController = Dependency.get(NetworkController.class);
@@ -106,10 +107,6 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
 
     private int currentVpnIconId(boolean isBranded) {
         return isBranded ? R.drawable.stat_sys_branded_vpn : R.drawable.stat_sys_vpn_ic;
-    }
-
-    private void updateActivityEnabled() {
-        mActivityEnabled = mContext.getResources().getBoolean(R.bool.config_showActivity);
     }
 
     /**
@@ -390,6 +387,12 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
             return Objects
                     .hash(super.hashCode(), subId, strengthId, typeId, roaming, needsLeadingPadding,
                             typeContentDescription);
+        }
+
+        public MobileIconState copy() {
+            MobileIconState copy = new MobileIconState(this.subId);
+            copyTo(copy);
+            return copy;
         }
 
         public void copyTo(MobileIconState other) {

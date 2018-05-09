@@ -21,6 +21,7 @@ import android.util.Log;
 import android.view.Display;
 
 import com.android.systemui.statusbar.phone.DozeParameters;
+import com.android.systemui.util.wakelock.SettableWakeLock;
 import com.android.systemui.util.wakelock.WakeLock;
 
 /**
@@ -35,7 +36,13 @@ public class DozeScreenState implements DozeMachine.Part {
      * Delay entering low power mode when animating to make sure that we'll have
      * time to move all elements into their final positions while still at 60 fps.
      */
-    private static final int ENTER_DOZE_DELAY = 3000;
+    private static final int ENTER_DOZE_DELAY = 6000;
+    /**
+     * Hide wallpaper earlier when entering low power mode. The gap between
+     * hiding the wallpaper and changing the display mode is necessary to hide
+     * the black frame that's inherent to hardware specs.
+     */
+    public static final int ENTER_DOZE_HIDE_WALLPAPER_DELAY = 2000;
 
     private final DozeMachine.Service mDozeService;
     private final Handler mHandler;
@@ -43,15 +50,14 @@ public class DozeScreenState implements DozeMachine.Part {
     private final DozeParameters mParameters;
 
     private int mPendingScreenState = Display.STATE_UNKNOWN;
-    private boolean mWakeLockHeld;
-    private WakeLock mWakeLock;
+    private SettableWakeLock mWakeLock;
 
     public DozeScreenState(DozeMachine.Service service, Handler handler,
             DozeParameters parameters, WakeLock wakeLock) {
         mDozeService = service;
         mHandler = handler;
         mParameters = parameters;
-        mWakeLock = wakeLock;
+        mWakeLock = new SettableWakeLock(wakeLock);
     }
 
     @Override
@@ -64,6 +70,7 @@ public class DozeScreenState implements DozeMachine.Part {
             mHandler.removeCallbacks(mApplyPendingScreenState);
 
             applyScreenState(screenState);
+            mWakeLock.setAcquired(false);
             return;
         }
 
@@ -73,7 +80,9 @@ public class DozeScreenState implements DozeMachine.Part {
         }
 
         boolean messagePending = mHandler.hasCallbacks(mApplyPendingScreenState);
-        if (messagePending || oldState == DozeMachine.State.INITIALIZED) {
+        boolean pulseEnding = oldState  == DozeMachine.State.DOZE_PULSE_DONE
+                && newState == DozeMachine.State.DOZE_AOD;
+        if (messagePending || oldState == DozeMachine.State.INITIALIZED || pulseEnding) {
             // During initialization, we hide the navigation bar. That is however only applied after
             // a traversal; setting the screen state here is immediate however, so it can happen
             // that the screen turns on again before the navigation bar is hidden. To work around
@@ -84,9 +93,8 @@ public class DozeScreenState implements DozeMachine.Part {
             boolean shouldDelayTransition = newState == DozeMachine.State.DOZE_AOD
                     && mParameters.shouldControlScreenOff();
 
-            if (!mWakeLockHeld && shouldDelayTransition) {
-                mWakeLockHeld = true;
-                mWakeLock.acquire();
+            if (shouldDelayTransition) {
+                mWakeLock.setAcquired(true);
             }
 
             if (!messagePending) {
@@ -118,10 +126,7 @@ public class DozeScreenState implements DozeMachine.Part {
             if (DEBUG) Log.d(TAG, "setDozeScreenState(" + screenState + ")");
             mDozeService.setDozeScreenState(screenState);
             mPendingScreenState = Display.STATE_UNKNOWN;
-            if (mWakeLockHeld) {
-                mWakeLockHeld = false;
-                mWakeLock.release();
-            }
+            mWakeLock.setAcquired(false);
         }
     }
 }

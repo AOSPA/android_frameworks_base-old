@@ -751,8 +751,9 @@ public class TaskStack extends WindowContainer<Task> implements
      * Used to make room for shadows in the pinned windowing mode.
      */
     int getStackOutset() {
-        if (inPinnedWindowingMode()) {
-            final DisplayMetrics displayMetrics = getDisplayContent().getDisplayMetrics();
+        DisplayContent displayContent = getDisplayContent();
+        if (inPinnedWindowingMode() && displayContent != null) {
+            final DisplayMetrics displayMetrics = displayContent.getDisplayMetrics();
 
             // We multiply by two to match the client logic for converting view elevation
             // to insets, as in {@link WindowManager.LayoutParams#setSurfaceInsets}
@@ -1721,6 +1722,9 @@ public class TaskStack extends WindowContainer<Task> implements
             return true;
         }
         final Task homeTask = homeStack.getTopChild();
+        if (homeTask == null) {
+            return true;
+        }
         final AppWindowToken homeApp = homeTask.getTopVisibleAppToken();
         if (!homeTask.isVisible() || homeApp == null) {
             return true;

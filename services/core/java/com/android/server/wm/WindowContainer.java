@@ -183,6 +183,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             // build a surface.
             mSurfaceControl = makeSurface().build();
             getPendingTransaction().show(mSurfaceControl);
+            updateSurfacePosition();
         } else {
             // If we have a surface but a new parent, we just need to perform a reparent. Go through
             // surface animator such that hierarchy is preserved when animating, i.e.
@@ -921,6 +922,10 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * @return Whether this WindowContainer should be magnified by the accessibility magnifier.
      */
     boolean shouldMagnify() {
+        if (mSurfaceControl == null) {
+            return false;
+        }
+
         for (int i = 0; i < mChildren.size(); i++) {
             if (!mChildren.get(i).shouldMagnify()) {
                 return false;

@@ -327,13 +327,16 @@ public class DeviceIdleController extends SystemService
 
     private final int[] mEventCmds = new int[EVENT_BUFFER_SIZE];
     private final long[] mEventTimes = new long[EVENT_BUFFER_SIZE];
+    private final String[] mEventReasons = new String[EVENT_BUFFER_SIZE];
 
-    private void addEvent(int cmd) {
+    private void addEvent(int cmd, String reason) {
         if (mEventCmds[0] != cmd) {
             System.arraycopy(mEventCmds, 0, mEventCmds, 1, EVENT_BUFFER_SIZE - 1);
             System.arraycopy(mEventTimes, 0, mEventTimes, 1, EVENT_BUFFER_SIZE - 1);
+            System.arraycopy(mEventReasons, 0, mEventReasons, 1, EVENT_BUFFER_SIZE - 1);
             mEventCmds[0] = cmd;
             mEventTimes[0] = SystemClock.elapsedRealtime();
+            mEventReasons[0] = reason;
         }
     }
 
@@ -2061,7 +2064,7 @@ public class DeviceIdleController extends SystemService
             mMaintenanceStartTime = 0;
             resetIdleManagementLocked();
             resetLightIdleManagementLocked();
-            addEvent(EVENT_NORMAL);
+            addEvent(EVENT_NORMAL, activeReason);
         }
     }
 
@@ -2158,7 +2161,7 @@ public class DeviceIdleController extends SystemService
                 if (DEBUG) Slog.d(TAG, "Moved to LIGHT_STATE_IDLE.");
                 mLightState = LIGHT_STATE_IDLE;
                 EventLogTags.writeDeviceIdleLight(mLightState, reason);
-                addEvent(EVENT_LIGHT_IDLE);
+                addEvent(EVENT_LIGHT_IDLE, null);
                 mGoingIdleWakeLock.acquire();
                 mHandler.sendEmptyMessage(MSG_REPORT_IDLE_ON_LIGHT);
                 break;
@@ -2179,7 +2182,7 @@ public class DeviceIdleController extends SystemService
                             "Moved from LIGHT_STATE_IDLE to LIGHT_STATE_IDLE_MAINTENANCE.");
                     mLightState = LIGHT_STATE_IDLE_MAINTENANCE;
                     EventLogTags.writeDeviceIdleLight(mLightState, reason);
-                    addEvent(EVENT_LIGHT_MAINTENANCE);
+                    addEvent(EVENT_LIGHT_MAINTENANCE, null);
                     mHandler.sendEmptyMessage(MSG_REPORT_IDLE_OFF);
                 } else {
                     // We'd like to do maintenance, but currently don't have network
@@ -2284,7 +2287,7 @@ public class DeviceIdleController extends SystemService
                     cancelLightAlarmLocked();
                 }
                 EventLogTags.writeDeviceIdle(mState, reason);
-                addEvent(EVENT_DEEP_IDLE);
+                addEvent(EVENT_DEEP_IDLE, null);
                 mGoingIdleWakeLock.acquire();
                 mHandler.sendEmptyMessage(MSG_REPORT_IDLE_ON);
                 break;
@@ -2303,7 +2306,7 @@ public class DeviceIdleController extends SystemService
                 }
                 mState = STATE_IDLE_MAINTENANCE;
                 EventLogTags.writeDeviceIdle(mState, reason);
-                addEvent(EVENT_DEEP_MAINTENANCE);
+                addEvent(EVENT_DEEP_MAINTENANCE, null);
                 mHandler.sendEmptyMessage(MSG_REPORT_IDLE_OFF);
                 break;
         }
@@ -2408,19 +2411,26 @@ public class DeviceIdleController extends SystemService
         // after moving out of the inactive state, so no need to worry about that.
         boolean becomeInactive = false;
         if (mState != STATE_ACTIVE) {
-            scheduleReportActiveLocked(type, Process.myUid());
+            // Motion shouldn't affect light state, if it's already in doze-light or maintenance
+            boolean lightIdle = mLightState == LIGHT_STATE_IDLE
+                    || mLightState == LIGHT_STATE_WAITING_FOR_NETWORK
+                    || mLightState == LIGHT_STATE_IDLE_MAINTENANCE;
+            if (!lightIdle) {
+                // Only switch to active state if we're not in either idle state
+                scheduleReportActiveLocked(type, Process.myUid());
+                addEvent(EVENT_NORMAL, type);
+            }
             mState = STATE_ACTIVE;
             mInactiveTimeout = timeout;
             mCurIdleBudget = 0;
             mMaintenanceStartTime = 0;
             EventLogTags.writeDeviceIdle(mState, type);
-            addEvent(EVENT_NORMAL);
             becomeInactive = true;
         }
         if (mLightState == LIGHT_STATE_OVERRIDE) {
             // We went out of light idle mode because we had started deep idle mode...  let's
             // now go back and reset things so we resume light idling if appropriate.
-            mLightState = STATE_ACTIVE;
+            mLightState = LIGHT_STATE_ACTIVE;
             EventLogTags.writeDeviceIdleLight(mLightState, type);
             becomeInactive = true;
         }
@@ -2808,6 +2818,8 @@ public class DeviceIdleController extends SystemService
         pw.println("    If no DURATION is specified, 10 seconds is used");
         pw.println("    If [-r] option is used, then the package is removed from temp whitelist "
                 + "and any [-d] is ignored");
+        pw.println("  motion");
+        pw.println("    Simulate a motion event to bring the device out of deep doze");
     }
 
     class Shell extends ShellCommand {
@@ -3204,11 +3216,26 @@ public class DeviceIdleController extends SystemService
                 }
             } else {
                 synchronized (this) {
-                    for (int j=0; j<mPowerSaveWhitelistApps.size(); j++) {
+                    for (int j = 0; j < mPowerSaveWhitelistApps.size(); j++) {
                         pw.print(mPowerSaveWhitelistApps.keyAt(j));
                         pw.print(",");
                         pw.println(mPowerSaveWhitelistApps.valueAt(j));
                     }
+                }
+            }
+        } else if ("motion".equals(cmd)) {
+            getContext().enforceCallingOrSelfPermission(android.Manifest.permission.DEVICE_POWER,
+                    null);
+            synchronized (this) {
+                long token = Binder.clearCallingIdentity();
+                try {
+                    motionLocked();
+                    pw.print("Light state: ");
+                    pw.print(lightStateToString(mLightState));
+                    pw.print(", deep state: ");
+                    pw.println(stateToString(mState));
+                } finally {
+                    Binder.restoreCallingIdentity(token);
                 }
             }
         } else {
@@ -3273,8 +3300,14 @@ public class DeviceIdleController extends SystemService
                     pw.print("    ");
                     pw.print(label);
                     pw.print(": ");
-                    TimeUtils.formatDuration(mEventTimes[i], now, pw);;
+                    TimeUtils.formatDuration(mEventTimes[i], now, pw);
+                    if (mEventReasons[i] != null) {
+                        pw.print(" (");
+                        pw.print(mEventReasons[i]);
+                        pw.print(")");
+                    }
                     pw.println();
+
                 }
             }
 

@@ -21,6 +21,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
+import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Color;
@@ -259,6 +260,22 @@ public final class FloatingToolbar {
         return mPopup.isHidden();
     }
 
+    /**
+     * If this is set to true, the action mode view will dismiss itself on touch events outside of
+     * its window. If the toolbar is already showing, it will be re-shown so that this setting takes
+     * effect immediately.
+     *
+     * @param outsideTouchable whether or not this action mode is "outside touchable"
+     * @param onDismiss optional. Sets a callback for when this action mode popup dismisses itself
+     */
+    public void setOutsideTouchable(
+            boolean outsideTouchable, @Nullable PopupWindow.OnDismissListener onDismiss) {
+        if (mPopup.setOutsideTouchable(outsideTouchable, onDismiss) && isShowing()) {
+            dismiss();
+            doShow();
+        }
+    }
+
     private void doShow() {
         List<MenuItem> menuItems = getVisibleAndEnabledMenuItems(mMenu);
         menuItems.sort(mMenuItemComparator);
@@ -452,7 +469,7 @@ public final class FloatingToolbar {
             mLineHeight = context.getResources()
                     .getDimensionPixelSize(R.dimen.floating_toolbar_height);
             mIconTextSpacing = context.getResources()
-                    .getDimensionPixelSize(R.dimen.floating_toolbar_menu_button_side_padding);
+                    .getDimensionPixelSize(R.dimen.floating_toolbar_icon_text_spacing);
 
             // Interpolators
             mLogAccelerateInterpolator = new LogAccelerateInterpolator();
@@ -481,7 +498,7 @@ public final class FloatingToolbar {
             mOverflowButton = createOverflowButton();
             mOverflowButtonSize = measure(mOverflowButton);
             mMainPanel = createMainPanel();
-            mOverflowPanelViewHelper = new OverflowPanelViewHelper(mContext);
+            mOverflowPanelViewHelper = new OverflowPanelViewHelper(mContext, mIconTextSpacing);
             mOverflowPanel = createOverflowPanel();
 
             // Animation. Need views.
@@ -510,6 +527,32 @@ public final class FloatingToolbar {
                             mPopupWindow.dismiss();
                         }
                     });
+        }
+
+        /**
+         * Makes this toolbar "outside touchable" and sets the onDismissListener.
+         * This will take effect the next time the toolbar is re-shown.
+         *
+         * @param outsideTouchable if true, the popup will be made "outside touchable" and
+         *      "non focusable". The reverse will happen if false.
+         * @param onDismiss
+         *
+         * @return true if the "outsideTouchable" setting was modified. Otherwise returns false
+         *
+         * @see PopupWindow#setOutsideTouchable(boolean)
+         * @see PopupWindow#setFocusable(boolean)
+         * @see PopupWindow.OnDismissListener
+         */
+        public boolean setOutsideTouchable(
+                boolean outsideTouchable, @Nullable PopupWindow.OnDismissListener onDismiss) {
+            boolean ret = false;
+            if (mPopupWindow.isOutsideTouchable() ^ outsideTouchable) {
+                mPopupWindow.setOutsideTouchable(outsideTouchable);
+                mPopupWindow.setFocusable(!outsideTouchable);
+                ret = true;
+            }
+            mPopupWindow.setOnDismissListener(onDismiss);
+            return ret;
         }
 
         /**
@@ -1573,10 +1616,9 @@ public final class FloatingToolbar {
 
             private final Context mContext;
 
-            public OverflowPanelViewHelper(Context context) {
+            public OverflowPanelViewHelper(Context context, int iconTextSpacing) {
                 mContext = Preconditions.checkNotNull(context);
-                mIconTextSpacing = context.getResources()
-                        .getDimensionPixelSize(R.dimen.floating_toolbar_menu_button_side_padding);
+                mIconTextSpacing = iconTextSpacing;
                 mSidePadding = context.getResources()
                         .getDimensionPixelSize(R.dimen.floating_toolbar_overflow_side_padding);
                 mCalculator = createMenuButton(null);
