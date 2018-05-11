@@ -484,10 +484,24 @@ public class MobileSignalController extends SignalController<
             } else {
                 mCurrentState.level = mSignalStrength.getLevel();
                 if (mConfig.showRsrpSignalLevelforLTE) {
+                    if (DEBUG) {
+                        Log.d(mTag, "updateTelephony CS:" + mServiceState.getVoiceNetworkType()
+                                + "/" + TelephonyManager.getNetworkTypeName(
+                                mServiceState.getVoiceNetworkType())
+                                + ", PS:" + mServiceState.getDataNetworkType()
+                                + "/"+ TelephonyManager.getNetworkTypeName(
+                                mServiceState.getDataNetworkType()));
+                    }
                     int dataType = mServiceState.getDataNetworkType();
                     if (dataType == TelephonyManager.NETWORK_TYPE_LTE ||
                             dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
                         mCurrentState.level = getAlternateLteLevel(mSignalStrength);
+                    }else if ( dataType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+                        int voiceType = mServiceState.getVoiceNetworkType();
+                        if (voiceType == TelephonyManager.NETWORK_TYPE_LTE ||
+                                voiceType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+                            mCurrentState.level = getAlternateLteLevel(mSignalStrength);
+                        }
                     }
                 }
             }
@@ -578,6 +592,15 @@ public class MobileSignalController extends SignalController<
 
     private int getAlternateLteLevel(SignalStrength signalStrength) {
         int lteRsrp = signalStrength.getLteDbm();
+        if ( lteRsrp == SignalStrength.INVALID ) {
+            int signalStrengthLevel = signalStrength.getLevel();
+            if (DEBUG) {
+                Log.d(mTag, "getAlternateLteLevel lteRsrp:INVALID "
+                        + " signalStrengthLevel = " + signalStrengthLevel);
+            }
+            return signalStrengthLevel;
+        }
+
         int rsrpLevel = SignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
         if (lteRsrp > -44) rsrpLevel = SignalStrength.SIGNAL_STRENGTH_NONE_OR_UNKNOWN;
         else if (lteRsrp >= -97) rsrpLevel = SignalStrength.SIGNAL_STRENGTH_GREAT;
