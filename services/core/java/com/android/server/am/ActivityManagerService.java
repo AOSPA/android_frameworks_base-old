@@ -3529,10 +3529,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         return mAppBindArgs;
     }
 
-<<<<<<< HEAD
     public final void networkOptsCheck(int flag, String packageName) {
         mHandler.sendMessage(mHandler.obtainMessage(NETWORK_OPTS_CHECK_MSG, flag, 0, packageName));
-=======
+    }
+
     private static void addServiceToMap(ArrayMap<String, IBinder> map, String name) {
         final IBinder service = ServiceManager.getService(name);
         if (service != null) {
@@ -3541,7 +3541,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 Log.i(TAG, "Adding " + name + " to the pre-loaded service cache.");
             }
         }
->>>>>>> p-fs-release
     }
 
     /**
@@ -25129,11 +25128,9 @@ public class ActivityManagerService extends IActivityManager.Stub
         int nextCachedAdj = curCachedAdj+1;
         int curEmptyAdj = ProcessList.CACHED_APP_MIN_ADJ;
         int nextEmptyAdj = curEmptyAdj+2;
-<<<<<<< HEAD
         ProcessRecord selectedAppRecord = null;
         long serviceLastActivity = 0;
         int numBServices = 0;
-=======
 
         boolean retryCycles = false;
 
@@ -25142,7 +25139,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             ProcessRecord app = mLruProcesses.get(i);
             app.containsCycle = false;
         }
->>>>>>> p-fs-release
         for (int i=N-1; i>=0; i--) {
             ProcessRecord app = mLruProcesses.get(i);
             if (mEnableBServicePropagation && app.serviceb
