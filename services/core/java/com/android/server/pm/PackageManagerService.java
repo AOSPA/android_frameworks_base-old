@@ -8490,7 +8490,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
                 // Delete invalid userdata apps
                 if ((scanFlags & SCAN_AS_SYSTEM) == 0 &&
-                        errorCode == PackageManager.INSTALL_FAILED_INVALID_APK) {
+                        errorCode != PackageManager.INSTALL_SUCCEEDED) {
                     logCriticalInfo(Log.WARN,
                             "Deleting invalid package at " + parseResult.scanFile);
                     removeCodePathLI(parseResult.scanFile);
@@ -22552,9 +22552,13 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
         }
         final String volumeUuid = pkg.volumeUuid;
         final String packageName = pkg.packageName;
-        final ApplicationInfo app = (ps == null)
+
+        ApplicationInfo app = (ps == null)
                 ? pkg.applicationInfo
                 : PackageParser.generateApplicationInfo(pkg, 0, ps.readUserState(userId), userId);
+        if (app == null) {
+            app = pkg.applicationInfo;
+        }
 
         final int appId = UserHandle.getAppId(app.uid);
 
