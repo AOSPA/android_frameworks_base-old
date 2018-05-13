@@ -1732,6 +1732,7 @@
   <java-symbol type="integer" name="config_lidNavigationAccessibility" />
   <java-symbol type="integer" name="config_lidOpenRotation" />
   <java-symbol type="integer" name="config_longPressOnHomeBehavior" />
+  <java-symbol type="layout" name="global_actions" />
   <java-symbol type="layout" name="global_actions_item" />
   <java-symbol type="layout" name="global_actions_silent_mode" />
   <java-symbol type="layout" name="recent_apps_dialog" />
@@ -3301,6 +3302,8 @@
   <java-symbol type="string" name="shortcut_restore_not_supported" />
   <java-symbol type="string" name="shortcut_restore_signature_mismatch" />
   <java-symbol type="string" name="shortcut_restore_unknown_issue" />
+
+  <java-symbol type="bool" name="config_swipe_up_gesture_default" />
 
   <!-- From media projection -->
   <java-symbol type="string" name="config_mediaProjectionPermissionDialogComponent" />
