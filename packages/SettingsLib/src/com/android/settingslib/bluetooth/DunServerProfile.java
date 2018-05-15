@@ -76,6 +76,11 @@ final class DunServerProfile implements LocalBluetoothProfile {
         return mIsProfileReady;
     }
 
+    @Override
+    public int getProfileId() {
+        return BluetoothProfile.DUN;
+    }
+
     DunServerProfile(Context context) {
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
         adapter.getProfileProxy(context, new DunServiceListener(),
