@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Copyright 2014-2019 Paranoid Android
+    Copyright 2019 Paranoid Android
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -14,17 +14,10 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 -->
-<resources>
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
 
-    <!-- The list of components which should be automatically disabled. -->
-    <string-array name="config_disabledComponents" translatable="false">
-    </string-array>
-
-    <!-- The list of components which should be forced to be enabled. -->
-    <string-array name="config_forceEnabledComponents" translatable="false">
-    </string-array>
-
-    <!-- Whether device has physical tri state switch -->
-    <bool name="config_hasAlertSlider">false</bool>
+    <!-- Alert slider proc nodes paths. -->
+    <string name="alert_slider_state_path"></string>
+    <string name="alert_slider_uevent_match_path"></string>
 
 </resources>
