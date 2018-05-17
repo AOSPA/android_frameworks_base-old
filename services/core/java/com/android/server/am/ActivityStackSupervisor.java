@@ -1321,10 +1321,6 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         return aInfo;
     }
 
-    ResolveInfo resolveIntent(Intent intent, String resolvedType, int userId) {
-        return resolveIntent(intent, resolvedType, userId, 0, Binder.getCallingUid());
-    }
-
     ResolveInfo resolveIntent(Intent intent, String resolvedType, int userId, int flags,
             int filterCallingUid) {
         synchronized (mService) {
@@ -1336,9 +1332,19 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                             || (intent.getFlags() & Intent.FLAG_ACTIVITY_MATCH_EXTERNAL) != 0) {
                     modifiedFlags |= PackageManager.MATCH_INSTANT;
                 }
-                return mService.getPackageManagerInternalLocked().resolveIntent(
-                        intent, resolvedType, modifiedFlags, userId, true, filterCallingUid);
 
+                // In order to allow cross-profile lookup, we clear the calling identity here.
+                // Note the binder identity won't affect the result, but filterCallingUid will.
+
+                // Cross-user/profile call check are done at the entry points
+                // (e.g. AMS.startActivityAsUser).
+                final long token = Binder.clearCallingIdentity();
+                try {
+                    return mService.getPackageManagerInternalLocked().resolveIntent(
+                            intent, resolvedType, modifiedFlags, userId, true, filterCallingUid);
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
             } finally {
                 Trace.traceEnd(TRACE_TAG_ACTIVITY_MANAGER);
             }
@@ -2425,6 +2431,16 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                 if (stack.isCompatible(windowingMode, activityType)) {
                     return stack;
                 }
+                if (windowingMode == WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY
+                        && display.getSplitScreenPrimaryStack() == stack
+                        && candidateTask == stack.topTask()) {
+                    // This is a special case when we try to launch an activity that is currently on
+                    // top of split-screen primary stack, but is targeting split-screen secondary.
+                    // In this case we don't want to move it to another stack.
+                    // TODO(b/78788972): Remove after differentiating between preferred and required
+                    // launch options.
+                    return stack;
+                }
             }
         }
 
@@ -2906,10 +2922,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         try {
             ActivityRecord r = stack.topRunningActivityLocked();
             Rect insetBounds = null;
-            if (tempPinnedTaskBounds != null) {
-                // We always use 0,0 as the position for the inset rect because
-                // if we are getting insets at all in the pinned stack it must mean
-                // we are headed for fullscreen.
+            if (tempPinnedTaskBounds != null && stack.isAnimatingBoundsToFullscreen()) {
+                // Use 0,0 as the position for the inset rect because we are headed for fullscreen.
                 insetBounds = tempRect;
                 insetBounds.top = 0;
                 insetBounds.left = 0;

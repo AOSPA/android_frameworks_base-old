@@ -1636,6 +1636,10 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         if (parent != null) {
             parent.onActivityStateChanged(this, state, reason);
         }
+
+        if (state == STOPPING) {
+            mWindowContainerController.notifyAppStopping();
+        }
     }
 
     ActivityState getState() {

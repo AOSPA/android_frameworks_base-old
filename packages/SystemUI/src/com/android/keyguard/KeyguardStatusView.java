@@ -82,14 +82,14 @@ public class KeyguardStatusView extends GridLayout implements
 
         @Override
         public void onTimeChanged() {
-            refresh();
+            refreshTime();
         }
 
         @Override
         public void onKeyguardVisibilityChanged(boolean showing) {
             if (showing) {
                 if (DEBUG) Slog.v(TAG, "refresh statusview showing:" + showing);
-                refresh();
+                refreshTime();
                 updateOwnerInfo();
                 updateLogoutView();
             }
@@ -107,7 +107,7 @@ public class KeyguardStatusView extends GridLayout implements
 
         @Override
         public void onUserSwitchComplete(int userId) {
-            refresh();
+            refreshFormat();
             updateOwnerInfo();
             updateLogoutView();
         }
@@ -164,7 +164,9 @@ public class KeyguardStatusView extends GridLayout implements
     protected void onFinishInflate() {
         super.onFinishInflate();
         mLogoutView = findViewById(R.id.logout);
-        mLogoutView.setOnClickListener(this::onLogoutClicked);
+        if (mLogoutView != null) {
+            mLogoutView.setOnClickListener(this::onLogoutClicked);
+        }
 
         mClockView = findViewById(R.id.clock_view);
         mClockView.setShowCurrentUserTime(true);
@@ -184,7 +186,7 @@ public class KeyguardStatusView extends GridLayout implements
 
         boolean shouldMarquee = KeyguardUpdateMonitor.getInstance(mContext).isDeviceInteractive();
         setEnableMarquee(shouldMarquee);
-        refresh();
+        refreshFormat();
         updateOwnerInfo();
         updateLogoutView();
         updateDark();
@@ -289,12 +291,16 @@ public class KeyguardStatusView extends GridLayout implements
         mClockView.refresh();
     }
 
-    private void refresh() {
+    private void refreshFormat() {
         Patterns.update(mContext);
-        refreshTime();
+        mClockView.setFormat12Hour(Patterns.clockView12);
+        mClockView.setFormat24Hour(Patterns.clockView24);
     }
 
     public int getLogoutButtonHeight() {
+        if (mLogoutView == null) {
+            return 0;
+        }
         return mLogoutView.getVisibility() == VISIBLE ? mLogoutView.getHeight() : 0;
     }
 
@@ -303,6 +309,9 @@ public class KeyguardStatusView extends GridLayout implements
     }
 
     private void updateLogoutView() {
+        if (mLogoutView == null) {
+            return;
+        }
         mLogoutView.setVisibility(shouldShowLogout() ? VISIBLE : GONE);
         // Logout button will stay in language of user 0 if we don't set that manually.
         mLogoutView.setText(mContext.getResources().getString(
@@ -335,6 +344,11 @@ public class KeyguardStatusView extends GridLayout implements
         super.onDetachedFromWindow();
         KeyguardUpdateMonitor.getInstance(mContext).removeCallback(mInfoCallback);
         Dependency.get(ConfigurationController.class).removeCallback(this);
+    }
+
+    @Override
+    public void onLocaleListChanged() {
+        refreshFormat();
     }
 
     @Override
@@ -384,7 +398,9 @@ public class KeyguardStatusView extends GridLayout implements
 
     private void updateDark() {
         boolean dark = mDarkAmount == 1;
-        mLogoutView.setAlpha(dark ? 0 : 1);
+        if (mLogoutView != null) {
+            mLogoutView.setAlpha(dark ? 0 : 1);
+        }
         if (mOwnerInfo != null) {
             boolean hasText = !TextUtils.isEmpty(mOwnerInfo.getText());
             mOwnerInfo.setVisibility(hasText && mDarkAmount != 1 ? VISIBLE : GONE);
