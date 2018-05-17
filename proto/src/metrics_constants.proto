@@ -4607,6 +4607,6 @@ message MetricsEvent {
 
     // BEGIN PA CONSTANTS
     // Settings -> Backup & Reset -> Feature Preferences
-    FEATURE_PREFERENCES = 1144;
+    FEATURE_PREFERENCES = 1238;
   }
 }
