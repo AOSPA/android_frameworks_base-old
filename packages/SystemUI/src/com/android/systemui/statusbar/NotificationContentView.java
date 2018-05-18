@@ -178,7 +178,7 @@ public class NotificationContentView extends FrameLayout {
         int heightMode = MeasureSpec.getMode(heightMeasureSpec);
         boolean hasFixedHeight = heightMode == MeasureSpec.EXACTLY;
         boolean isHeightLimited = heightMode == MeasureSpec.AT_MOST;
-        int maxSize = Integer.MAX_VALUE;
+        int maxSize = Integer.MAX_VALUE / 2;
         int width = MeasureSpec.getSize(widthMeasureSpec);
         if (hasFixedHeight || isHeightLimited) {
             maxSize = MeasureSpec.getSize(heightMeasureSpec);
@@ -189,17 +189,15 @@ public class NotificationContentView extends FrameLayout {
             if (mExpandedSmartReplyView != null) {
                 notificationMaxHeight += mExpandedSmartReplyView.getHeightUpperLimit();
             }
-            int size = Math.min(maxSize, notificationMaxHeight);
+            int size = notificationMaxHeight;
             ViewGroup.LayoutParams layoutParams = mExpandedChild.getLayoutParams();
             boolean useExactly = false;
             if (layoutParams.height >= 0) {
                 // An actual height is set
-                size = Math.min(maxSize, layoutParams.height);
+                size = Math.min(size, layoutParams.height);
                 useExactly = true;
             }
-            int spec = size == Integer.MAX_VALUE
-                    ? MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
-                    : MeasureSpec.makeMeasureSpec(size, useExactly
+            int spec = MeasureSpec.makeMeasureSpec(size, useExactly
                             ? MeasureSpec.EXACTLY
                             : MeasureSpec.AT_MOST);
             measureChildWithMargins(mExpandedChild, widthMeasureSpec, 0, spec, 0);
@@ -207,7 +205,7 @@ public class NotificationContentView extends FrameLayout {
         }
         if (mContractedChild != null) {
             int heightSpec;
-            int size = Math.min(maxSize, mSmallHeight);
+            int size = mSmallHeight;
             ViewGroup.LayoutParams layoutParams = mContractedChild.getLayoutParams();
             boolean useExactly = false;
             if (layoutParams.height >= 0) {
@@ -241,7 +239,7 @@ public class NotificationContentView extends FrameLayout {
         if (mHeadsUpChild != null) {
             int maxHeight = mHeadsUpHeight;
             maxHeight += mHeadsUpWrapper.getExtraMeasureHeight();
-            int size = Math.min(maxSize, maxHeight);
+            int size = maxHeight;
             ViewGroup.LayoutParams layoutParams = mHeadsUpChild.getLayoutParams();
             boolean useExactly = false;
             if (layoutParams.height >= 0) {
@@ -263,11 +261,11 @@ public class NotificationContentView extends FrameLayout {
                         MeasureSpec.EXACTLY);
             }
             mSingleLineView.measure(singleLineWidthSpec,
-                    MeasureSpec.makeMeasureSpec(maxSize, MeasureSpec.AT_MOST));
+                    MeasureSpec.makeMeasureSpec(mNotificationMaxHeight, MeasureSpec.AT_MOST));
             maxChildHeight = Math.max(maxChildHeight, mSingleLineView.getMeasuredHeight());
         }
         if (mAmbientChild != null) {
-            int size = Math.min(maxSize, mNotificationAmbientHeight);
+            int size = mNotificationAmbientHeight;
             ViewGroup.LayoutParams layoutParams = mAmbientChild.getLayoutParams();
             boolean useExactly = false;
             if (layoutParams.height >= 0) {
@@ -281,7 +279,7 @@ public class NotificationContentView extends FrameLayout {
             maxChildHeight = Math.max(maxChildHeight, mAmbientChild.getMeasuredHeight());
         }
         if (mAmbientSingleLineChild != null) {
-            int size = Math.min(maxSize, mNotificationAmbientHeight);
+            int size = mNotificationAmbientHeight;
             ViewGroup.LayoutParams layoutParams = mAmbientSingleLineChild.getLayoutParams();
             boolean useExactly = false;
             if (layoutParams.height >= 0) {
@@ -424,7 +422,6 @@ public class NotificationContentView extends FrameLayout {
         mContractedChild = child;
         mContractedWrapper = NotificationViewWrapper.wrap(getContext(), child,
                 mContainingNotification);
-        mContractedWrapper.setDark(mDark, false /* animate */, 0 /* delay */);
     }
 
     private NotificationViewWrapper getWrapperForView(View child) {
@@ -1108,18 +1105,6 @@ public class NotificationContentView extends FrameLayout {
             return;
         }
         mDark = dark;
-        if (mVisibleType == VISIBLE_TYPE_CONTRACTED || !dark) {
-            mContractedWrapper.setDark(dark, fade, delay);
-        }
-        if (mVisibleType == VISIBLE_TYPE_EXPANDED || (mExpandedChild != null && !dark)) {
-            mExpandedWrapper.setDark(dark, fade, delay);
-        }
-        if (mVisibleType == VISIBLE_TYPE_HEADSUP || (mHeadsUpChild != null && !dark)) {
-            mHeadsUpWrapper.setDark(dark, fade, delay);
-        }
-        if (mSingleLineView != null && (mVisibleType == VISIBLE_TYPE_SINGLELINE || !dark)) {
-            mSingleLineView.setDark(dark, fade, delay);
-        }
         selectLayout(!dark && fade /* animate */, false /* force */);
     }
 
@@ -1201,8 +1186,13 @@ public class NotificationContentView extends FrameLayout {
     }
     private void updateSingleLineView() {
         if (mIsChildInGroup) {
+            boolean isNewView = mSingleLineView == null;
             mSingleLineView = mHybridGroupManager.bindFromNotification(
                     mSingleLineView, mStatusBarNotification.getNotification());
+            if (isNewView) {
+                updateViewVisibility(mVisibleType, VISIBLE_TYPE_SINGLELINE,
+                        mSingleLineView, mSingleLineView);
+            }
         } else if (mSingleLineView != null) {
             removeView(mSingleLineView);
             mSingleLineView = null;
@@ -1211,8 +1201,13 @@ public class NotificationContentView extends FrameLayout {
 
     private void updateAmbientSingleLineView() {
         if (mIsChildInGroup) {
+            boolean isNewView = mAmbientSingleLineChild == null;
             mAmbientSingleLineChild = mHybridGroupManager.bindAmbientFromNotification(
                     mAmbientSingleLineChild, mStatusBarNotification.getNotification());
+            if (isNewView) {
+                updateViewVisibility(mVisibleType, VISIBLE_TYPE_AMBIENT_SINGLELINE,
+                        mAmbientSingleLineChild, mAmbientSingleLineChild);
+            }
         } else if (mAmbientSingleLineChild != null) {
             removeView(mAmbientSingleLineChild);
             mAmbientSingleLineChild = null;

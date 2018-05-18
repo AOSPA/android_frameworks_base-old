@@ -268,6 +268,7 @@ import com.android.internal.accessibility.AccessibilityShortcutController;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
 import com.android.internal.policy.KeyguardDismissCallback;
@@ -640,6 +641,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     boolean mUseTvRouting;
     int mVeryLongPressTimeout;
     boolean mAllowStartActivityForLongPressOnPowerDuringSetup;
+    MetricsLogger mLogger;
 
     private boolean mHandleVolumeKeysInWM;
 
@@ -1157,6 +1159,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         getAudioManagerInternal();
         mAudioManagerInternal.silenceRingerModeInternal("volume_hush");
+        mLogger.action(MetricsProto.MetricsEvent.ACTION_HUSH_GESTURE, mRingerToggleChord);
     }
 
     IStatusBarService getStatusBarService() {
@@ -2024,6 +2027,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mHasFeatureLeanback = mContext.getPackageManager().hasSystemFeature(FEATURE_LEANBACK);
         mAccessibilityShortcutController =
                 new AccessibilityShortcutController(mContext, new Handler(), mCurrentUserId);
+        mLogger = new MetricsLogger();
         // Init display burn-in protection
         boolean burnInProtectionEnabled = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_enableBurnInProtection);
