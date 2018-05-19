@@ -31,6 +31,7 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiActivityEnergyInfo;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiDppConfig;
 
 import android.os.Messenger;
 import android.os.ResultReceiver;
@@ -176,5 +177,27 @@ interface IWifiManager
     void registerSoftApCallback(in IBinder binder, in ISoftApCallback callback, int callbackIdentifier);
 
     void unregisterSoftApCallback(int callbackIdentifier);
+
+    String getCapabilities(String capaType);
+
+    int dppAddBootstrapQrCode(String uri);
+
+    int dppBootstrapGenerate(in WifiDppConfig config);
+
+    String dppGetUri(int bootstrap_id);
+
+    int dppBootstrapRemove(int bootstrap_id);
+
+    int dppListen(String frequency, int dpp_role, boolean qr_mutual, boolean netrole_ap);
+
+    void dppStopListen();
+
+    int dppConfiguratorAdd(String curve, String key, int expiry);
+
+    int dppConfiguratorRemove(int config_id);
+
+    int  dppStartAuth(in WifiDppConfig config);
+
+    String dppConfiguratorGetKey(int id);
 }
 
