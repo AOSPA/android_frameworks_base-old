@@ -24,6 +24,7 @@ import android.net.NetworkInfo;
 import android.net.RouteInfo;
 import android.os.INetworkManagementService;
 import android.os.RemoteException;
+import android.os.SystemProperties;
 import android.util.Slog;
 
 import com.android.internal.util.ArrayUtils;
@@ -88,12 +89,21 @@ public class Nat464Xlat extends BaseNetworkObserver {
      */
     public static boolean requiresClat(NetworkAgentInfo nai) {
         // TODO: migrate to NetworkCapabilities.TRANSPORT_*.
+        final int netType = nai.networkInfo.getType();
         final boolean supported = ArrayUtils.contains(NETWORK_TYPES, nai.networkInfo.getType());
         final boolean connected = ArrayUtils.contains(NETWORK_STATES, nai.networkInfo.getState());
         // We only run clat on networks that don't have a native IPv4 address.
         final boolean hasIPv4Address =
                 (nai.linkProperties != null) && nai.linkProperties.hasIPv4Address();
-        return supported && connected && !hasIPv4Address;
+        // Only support clat on mobile and wifi for now, because these are the only IPv6-only
+        // networks we can connect to.
+        boolean doXlat = SystemProperties.getBoolean("persist.vendor.net.doxlat", true);
+        if(!doXlat) {
+            Slog.i(TAG, "Android Xlat is disabled");
+        }
+        return supported && connected && !hasIPv4Address
+               && ArrayUtils.contains(NETWORK_TYPES, netType)
+               && ((netType == ConnectivityManager.TYPE_MOBILE) ? doXlat : true);
     }
 
     /**

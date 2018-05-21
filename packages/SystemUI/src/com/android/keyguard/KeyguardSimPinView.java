@@ -61,6 +61,7 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
     private AlertDialog mRemainingAttemptsDialog;
     private int mSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
     private ImageView mSimImageView;
+    private int mSlotId;
 
     KeyguardUpdateMonitorCallback mUpdateMonitorCallback = new KeyguardUpdateMonitorCallback() {
         @Override
@@ -118,6 +119,7 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
             return;
         }
 
+        mSlotId = SubscriptionManager.getSlotIndex(mSubId) + 1;
         boolean isEsimLocked = KeyguardEsimArea.isEsimLocked(mContext, mSubId);
         int count = TelephonyManager.getDefault().getSimCount();
         Resources rez = getResources();
@@ -184,10 +186,18 @@ public class KeyguardSimPinView extends KeyguardPinBasedInputView {
         if (attemptsRemaining == 0) {
             displayMessage = getContext().getString(R.string.kg_password_wrong_pin_code_pukked);
         } else if (attemptsRemaining > 0) {
-            msgId = isDefault ? R.plurals.kg_password_default_pin_message :
-                     R.plurals.kg_password_wrong_pin_code;
-            displayMessage = getContext().getResources()
-                    .getQuantityString(msgId, attemptsRemaining, attemptsRemaining);
+            int count = TelephonyManager.getDefault().getSimCount();
+            if ( count > 1 ) {
+                msgId = isDefault ? R.plurals.kg_password_default_pin_message_multi_sim :
+                        R.plurals.kg_password_wrong_pin_code_multi_sim;
+                displayMessage = getContext().getResources()
+                        .getQuantityString(msgId, attemptsRemaining, mSlotId, attemptsRemaining);
+            }else {
+                msgId = isDefault ? R.plurals.kg_password_default_pin_message :
+                        R.plurals.kg_password_wrong_pin_code;
+                displayMessage = getContext().getResources()
+                        .getQuantityString(msgId, attemptsRemaining, attemptsRemaining);
+            }
         } else {
             msgId = isDefault ? R.string.kg_sim_pin_instructions : R.string.kg_password_pin_failed;
             displayMessage = getContext().getString(msgId);

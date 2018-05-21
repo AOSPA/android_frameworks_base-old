@@ -158,11 +158,14 @@ StatsService::StatsService(const sp<Looper>& handlerLooper)
         auto receiver = mConfigManager->GetConfigReceiver(key);
         if (sc == nullptr) {
             VLOG("Could not find StatsCompanionService");
+            return false;
         } else if (receiver == nullptr) {
             VLOG("Statscompanion could not find a broadcast receiver for %s",
                  key.ToString().c_str());
+            return false;
         } else {
             sc->sendDataBroadcast(receiver, mProcessor->getLastReportTimeNs(key));
+            return true;
         }
     }
     );
@@ -334,6 +337,10 @@ status_t StatsService::command(FILE* in, FILE* out, FILE* err, Vector<String8>& 
         if (!args[0].compare(String8("clear-puller-cache"))) {
             return cmd_clear_puller_cache(out);
         }
+
+        if (!args[0].compare(String8("print-logs"))) {
+            return cmd_print_logs(out, args);
+        }
     }
 
     print_cmd_help(out);
@@ -419,6 +426,9 @@ void StatsService::print_cmd_help(FILE* out) {
     fprintf(out, "\n");
     fprintf(out, "usage: adb shell cmd stats clear-puller-cache\n");
     fprintf(out, "  Clear cached puller data.\n");
+    fprintf(out, "\n");
+    fprintf(out, "usage: adb shell cmd stats print-logs\n");
+    fprintf(out, "      Only works on eng build\n");
 }
 
 status_t StatsService::cmd_trigger_broadcast(FILE* out, Vector<String8>& args) {
@@ -659,7 +669,7 @@ status_t StatsService::cmd_print_uid_map(FILE* out, const Vector<String8>& args)
 
 status_t StatsService::cmd_write_data_to_disk(FILE* out) {
     fprintf(out, "Writing data to disk\n");
-    mProcessor->WriteDataToDisk(false);
+    mProcessor->WriteDataToDisk(ADB_DUMP);
     return NO_ERROR;
 }
 
@@ -732,6 +742,22 @@ status_t StatsService::cmd_clear_puller_cache(FILE* out) {
     if (checkCallingPermission(String16(kPermissionDump))) {
         int cleared = mStatsPullerManager.ForceClearPullerCache();
         fprintf(out, "Puller removed %d cached data!\n", cleared);
+        return NO_ERROR;
+    } else {
+        return PERMISSION_DENIED;
+    }
+}
+
+status_t StatsService::cmd_print_logs(FILE* out, const Vector<String8>& args) {
+    IPCThreadState* ipc = IPCThreadState::self();
+    VLOG("StatsService::cmd_print_logs with Pid %i, Uid %i", ipc->getCallingPid(),
+         ipc->getCallingUid());
+    if (checkCallingPermission(String16(kPermissionDump))) {
+        bool enabled = true;
+        if (args.size() >= 2) {
+            enabled = atoi(args[1].c_str()) != 0;
+        }
+        mProcessor->setPrintLogs(enabled);
         return NO_ERROR;
     } else {
         return PERMISSION_DENIED;
@@ -816,10 +842,10 @@ Status StatsService::systemRunning() {
     return Status::ok();
 }
 
-Status StatsService::informDeviceShutdown(bool isShutdown) {
+Status StatsService::informDeviceShutdown() {
     ENFORCE_UID(AID_SYSTEM);
     VLOG("StatsService::informDeviceShutdown");
-    mProcessor->WriteDataToDisk(isShutdown);
+    mProcessor->WriteDataToDisk(DEVICE_SHUTDOWN);
     return Status::ok();
 }
 
@@ -925,6 +951,11 @@ Status StatsService::setDataFetchOperation(int64_t key,
     IPCThreadState* ipc = IPCThreadState::self();
     ConfigKey configKey(ipc->getCallingUid(), key);
     mConfigManager->SetConfigReceiver(configKey, intentSender);
+    if (StorageManager::hasConfigMetricsReport(configKey)) {
+        VLOG("StatsService::setDataFetchOperation marking configKey %s to dump reports on disk",
+             configKey.ToString().c_str());
+        mProcessor->noteOnDiskData(configKey);
+    }
     return Status::ok();
 }
 
@@ -965,9 +996,23 @@ Status StatsService::unsetBroadcastSubscriber(int64_t configId,
     return Status::ok();
 }
 
+Status StatsService::sendAppBreadcrumbAtom(int32_t label, int32_t state) {
+    // Permission check not necessary as it's meant for applications to write to
+    // statsd.
+    android::util::stats_write(util::APP_BREADCRUMB_REPORTED,
+                               IPCThreadState::self()->getCallingUid(), label,
+                               state);
+    return Status::ok();
+}
+
 void StatsService::binderDied(const wp <IBinder>& who) {
     ALOGW("statscompanion service died");
-    mProcessor->WriteDataToDisk(STATSCOMPANION_DIED);
+    StatsdStats::getInstance().noteSystemServerRestart(getWallClockSec());
+    if (mProcessor != nullptr) {
+        ALOGW("Reset statsd upon system server restars.");
+        mProcessor->WriteDataToDisk(STATSCOMPANION_DIED);
+        mProcessor->resetConfigs();
+    }
     mAnomalyAlarmMonitor->setStatsCompanionService(nullptr);
     mPeriodicAlarmMonitor->setStatsCompanionService(nullptr);
     SubscriberReporter::getInstance().setStatsCompanionService(nullptr);

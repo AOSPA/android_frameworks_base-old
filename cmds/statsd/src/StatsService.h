@@ -66,7 +66,7 @@ public:
                                     const vector<String16>& app);
     virtual Status informOnePackage(const String16& app, int32_t uid, int64_t version);
     virtual Status informOnePackageRemoved(const String16& app, int32_t uid);
-    virtual Status informDeviceShutdown(bool isShutdown);
+    virtual Status informDeviceShutdown();
 
     /**
      * Called right before we start processing events.
@@ -138,6 +138,11 @@ public:
 
     /** Inform statsCompanion that statsd is ready. */
     virtual void sayHiToStatsCompanion();
+
+    /**
+     * Binder call to get AppBreadcrumbReported atom.
+     */
+    virtual Status sendAppBreadcrumbAtom(int32_t label, int32_t state) override;
 
     /** IBinder::DeathRecipient */
     virtual void binderDied(const wp<IBinder>& who) override;
@@ -219,6 +224,11 @@ private:
      * Clear all puller cached data
      */
     status_t cmd_clear_puller_cache(FILE* out);
+
+    /**
+     * Print all stats logs received to logcat.
+     */
+    status_t cmd_print_logs(FILE* out, const Vector<String8>& args);
 
     /**
      * Adds a configuration after checking permissions and obtaining UID from binder call.

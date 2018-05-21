@@ -64,6 +64,7 @@ import java.lang.ref.WeakReference;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URL;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -90,6 +91,7 @@ final class ServiceConnectionLeaked extends AndroidRuntimeException {
 public final class LoadedApk {
     static final String TAG = "LoadedApk";
     static final boolean DEBUG = false;
+    private static final String PROPERTY_NAME_APPEND_NATIVE = "pi.append_native_lib_paths";
 
     private final ActivityThread mActivityThread;
     final String mPackageName;
@@ -667,7 +669,17 @@ public final class LoadedApk {
         makePaths(mActivityThread, isBundledApp, mApplicationInfo, zipPaths, libPaths);
 
         String libraryPermittedPath = mDataDir;
+
         if (isBundledApp) {
+            // For bundled apps, add the base directory of the app (e.g.,
+            // /system/app/Foo/) to the permitted paths so that it can load libraries
+            // embedded in module apks under the directory. For now, GmsCore is relying
+            // on this, but this isn't specific to the app. Also note that, we don't
+            // need to do this for unbundled apps as entire /data is already set to
+            // the permitted paths for them.
+            libraryPermittedPath += File.pathSeparator
+                    + Paths.get(getAppDir()).getParent().toString();
+
             // This is necessary to grant bundled apps access to
             // libraries located in subdirectories of /system/lib
             libraryPermittedPath += File.pathSeparator + defaultSearchPaths;
@@ -721,6 +733,16 @@ public final class LoadedApk {
             StrictMode.setThreadPolicy(oldPolicy);
             // Setup the class loader paths for profiling.
             needToSetupJitProfiles = true;
+        }
+
+        if (!libPaths.isEmpty() && SystemProperties.getBoolean(PROPERTY_NAME_APPEND_NATIVE, true)) {
+            // Temporarily disable logging of disk reads on the Looper thread as this is necessary
+            StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+            try {
+                ApplicationLoaders.getDefault().addNative(mClassLoader, libPaths);
+            } finally {
+                StrictMode.setThreadPolicy(oldPolicy);
+            }
         }
 
         if (addedPaths != null && addedPaths.size() > 0) {

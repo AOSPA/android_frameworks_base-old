@@ -24,6 +24,8 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "tests/statsd_test_util.h"
+
 #include <stdio.h>
 
 using namespace android;
@@ -62,7 +64,7 @@ TEST(StatsLogProcessorTest, TestRateLimitByteSize) {
     sp<AlarmMonitor> periodicAlarmMonitor;
     // Construct the processor with a dummy sendBroadcast function that does nothing.
     StatsLogProcessor p(m, anomalyAlarmMonitor, periodicAlarmMonitor, 0,
-        [](const ConfigKey& key) {});
+        [](const ConfigKey& key) {return true;});
 
     MockMetricsManager mockMetricsManager;
 
@@ -81,7 +83,7 @@ TEST(StatsLogProcessorTest, TestRateLimitBroadcast) {
     sp<AlarmMonitor> subscriberAlarmMonitor;
     int broadcastCount = 0;
     StatsLogProcessor p(m, anomalyAlarmMonitor, subscriberAlarmMonitor, 0,
-                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; });
+                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; return true;});
 
     MockMetricsManager mockMetricsManager;
 
@@ -107,7 +109,7 @@ TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge) {
     sp<AlarmMonitor> subscriberAlarmMonitor;
     int broadcastCount = 0;
     StatsLogProcessor p(m, anomalyAlarmMonitor, subscriberAlarmMonitor, 0,
-                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; });
+                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; return true;});
 
     MockMetricsManager mockMetricsManager;
 
@@ -123,6 +125,21 @@ TEST(StatsLogProcessorTest, TestDropWhenByteSizeTooLarge) {
     EXPECT_EQ(0, broadcastCount);
 }
 
+StatsdConfig MakeConfig(bool includeMetric) {
+    StatsdConfig config;
+    config.add_allowed_log_source("AID_ROOT");  // LogEvent defaults to UID of root.
+
+    if (includeMetric) {
+        auto appCrashMatcher = CreateProcessCrashAtomMatcher();
+        *config.add_atom_matcher() = appCrashMatcher;
+        auto countMetric = config.add_count_metric();
+        countMetric->set_id(StringToId("AppCrashes"));
+        countMetric->set_what(appCrashMatcher.id());
+        countMetric->set_bucket(FIVE_MINUTES);
+    }
+    return config;
+}
+
 TEST(StatsLogProcessorTest, TestUidMapHasSnapshot) {
     // Setup simple config key corresponding to empty config.
     sp<UidMap> m = new UidMap();
@@ -131,10 +148,9 @@ TEST(StatsLogProcessorTest, TestUidMapHasSnapshot) {
     sp<AlarmMonitor> subscriberAlarmMonitor;
     int broadcastCount = 0;
     StatsLogProcessor p(m, anomalyAlarmMonitor, subscriberAlarmMonitor, 0,
-                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; });
+                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; return true;});
     ConfigKey key(3, 4);
-    StatsdConfig config;
-    config.add_allowed_log_source("AID_ROOT");
+    StatsdConfig config = MakeConfig(true);
     p.OnConfigUpdated(0, key, config);
 
     // Expect to get no metrics, but snapshot specified above in uidmap.
@@ -149,6 +165,29 @@ TEST(StatsLogProcessorTest, TestUidMapHasSnapshot) {
     EXPECT_EQ(2, uidmap.snapshots(0).package_info_size());
 }
 
+TEST(StatsLogProcessorTest, TestEmptyConfigHasNoUidMap) {
+    // Setup simple config key corresponding to empty config.
+    sp<UidMap> m = new UidMap();
+    m->updateMap(1, {1, 2}, {1, 2}, {String16("p1"), String16("p2")});
+    sp<AlarmMonitor> anomalyAlarmMonitor;
+    sp<AlarmMonitor> subscriberAlarmMonitor;
+    int broadcastCount = 0;
+    StatsLogProcessor p(m, anomalyAlarmMonitor, subscriberAlarmMonitor, 0,
+                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; return true;});
+    ConfigKey key(3, 4);
+    StatsdConfig config = MakeConfig(false);
+    p.OnConfigUpdated(0, key, config);
+
+    // Expect to get no metrics, but snapshot specified above in uidmap.
+    vector<uint8_t> bytes;
+    p.onDumpReport(key, 1, false, true, ADB_DUMP, &bytes);
+
+    ConfigMetricsReportList output;
+    output.ParseFromArray(bytes.data(), bytes.size());
+    EXPECT_TRUE(output.reports_size() > 0);
+    EXPECT_FALSE(output.reports(0).has_uid_map());
+}
+
 TEST(StatsLogProcessorTest, TestReportIncludesSubConfig) {
     // Setup simple config key corresponding to empty config.
     sp<UidMap> m = new UidMap();
@@ -156,7 +195,7 @@ TEST(StatsLogProcessorTest, TestReportIncludesSubConfig) {
     sp<AlarmMonitor> subscriberAlarmMonitor;
     int broadcastCount = 0;
     StatsLogProcessor p(m, anomalyAlarmMonitor, subscriberAlarmMonitor, 0,
-                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; });
+                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; return true;});
     ConfigKey key(3, 4);
     StatsdConfig config;
     auto annotation = config.add_annotation();
@@ -185,7 +224,7 @@ TEST(StatsLogProcessorTest, TestOutOfOrderLogs) {
     sp<AlarmMonitor> subscriberAlarmMonitor;
     int broadcastCount = 0;
     StatsLogProcessor p(m, anomalyAlarmMonitor, subscriberAlarmMonitor, 0,
-                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; });
+                        [&broadcastCount](const ConfigKey& key) { broadcastCount++; return true;});
 
     LogEvent event1(0, 1 /*logd timestamp*/, 1001 /*elapsedRealtime*/);
     event1.init();

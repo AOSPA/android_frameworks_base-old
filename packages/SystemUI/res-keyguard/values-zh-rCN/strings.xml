@@ -51,6 +51,8 @@
     <string name="keyguard_sim_puk_locked_message" msgid="1772789643694942073">"SIM 卡已用 PUK 码锁定。"</string>
     <string name="keyguard_sim_unlock_progress_dialog_message" msgid="3586601150825821675">"正在解锁 SIM 卡…"</string>
     <string name="keyguard_accessibility_pin_area" msgid="703175752097279029">"PIN 码区域"</string>
+    <!-- no translation found for keyguard_accessibility_password (7695303207740941101) -->
+    <skip />
     <string name="keyguard_accessibility_sim_pin_area" msgid="912702510825058921">"SIM 卡 PIN 码区域"</string>
     <string name="keyguard_accessibility_sim_puk_area" msgid="136979425761438705">"SIM 卡 PUK 码区域"</string>
     <string name="keyguard_accessibility_next_alarm" msgid="5835196989158584991">"下一个闹钟时间已设置为<xliff:g id="ALARM">%1$s</xliff:g>"</string>
@@ -105,6 +107,10 @@
       <item quantity="other">SIM 卡 PIN 码不正确，您还有 <xliff:g id="NUMBER_1">%d</xliff:g> 次尝试机会。</item>
       <item quantity="one">SIM 卡 PIN 码不正确，您还有 <xliff:g id="NUMBER_0">%d</xliff:g> 次尝试机会。如果仍不正确，则需要联系运营商帮您解锁设备。</item>
     </plurals>
+    <plurals name="kg_password_wrong_pin_code_multi_sim" formatted="false">
+        <item quantity="other">SIM 卡<xliff:g id="slotid">%d</xliff:g> PIN 码不正确，您还有 <xliff:g id="NUMBER_1">%d</xliff:g> 次尝试机会。</item>
+        <item quantity="one">SIM 卡<xliff:g id="slotid">%d</xliff:g> PIN 码不正确，您还有 <xliff:g id="NUMBER_0">%d</xliff:g> 次尝试机会。如果仍不正确，则需要联系运营商帮您解锁设备。</item>
+    </plurals>
     <string name="kg_password_wrong_puk_code_dead" msgid="3329017604125179374">"SIM 卡无法使用，请与您的运营商联系。"</string>
     <plurals name="kg_password_wrong_puk_code" formatted="false" msgid="2287504898931957513">
       <item quantity="other">SIM 卡 PUK 码不正确，您还有 <xliff:g id="NUMBER_1">%d</xliff:g> 次尝试机会。如果仍不正确，SIM 卡将永远无法使用。</item>
@@ -143,6 +149,10 @@
     <plurals name="kg_password_default_pin_message" formatted="false" msgid="3739658416797652781">
       <item quantity="other">请输入 SIM 卡 PIN 码，您还可以尝试 <xliff:g id="NUMBER_1">%d</xliff:g> 次。</item>
       <item quantity="one">请输入 SIM 卡 PIN 码，您还可以尝试 <xliff:g id="NUMBER_0">%d</xliff:g> 次。如果仍不正确，则需要联系运营商帮您解锁设备。</item>
+    </plurals>
+    <plurals name="kg_password_default_pin_message_multi_sim" formatted="false">
+        <item quantity="other">请输入 SIM 卡<xliff:g id="slotid">%d</xliff:g> PIN 码，您还可以尝试 <xliff:g id="NUMBER_1">%d</xliff:g> 次。</item>
+        <item quantity="one">请输入 SIM 卡<xliff:g id="slotid">%d</xliff:g> PIN 码，您还可以尝试 <xliff:g id="NUMBER_0">%d</xliff:g> 次。如果仍不正确，则需要联系运营商帮您解锁设备。</item>
     </plurals>
     <plurals name="kg_password_default_puk_message" formatted="false" msgid="8744416410184198352">
       <item quantity="other">SIM 卡现已停用，请输入 PUK 码继续使用。您还可以尝试 <xliff:g id="_NUMBER_1">%d</xliff:g> 次。如果仍不正确，该 SIM 卡将永远无法使用。有关详情，请联系您的运营商。</item>
