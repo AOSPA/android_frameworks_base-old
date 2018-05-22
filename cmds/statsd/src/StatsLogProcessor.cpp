@@ -83,6 +83,7 @@ StatsLogProcessor::StatsLogProcessor(const sp<UidMap>& uidMap,
       mTimeBaseNs(timeBaseNs),
       mLargestTimestampSeen(0),
       mLastTimestampSeen(0) {
+    mStatsPullerManager.ForceClearPullerCache();
 }
 
 StatsLogProcessor::~StatsLogProcessor() {
@@ -384,7 +385,11 @@ void StatsLogProcessor::onConfigMetricsReportLocked(const ConfigKey& key,
     // This skips the uid map if it's an empty config.
     if (it->second->getNumMetrics() > 0) {
         uint64_t uidMapToken = proto->start(FIELD_TYPE_MESSAGE | FIELD_ID_UID_MAP);
-        mUidMap->appendUidMap(dumpTimeStampNs, key, &str_set, proto);
+        if (it->second->hashStringInReport()) {
+            mUidMap->appendUidMap(dumpTimeStampNs, key, &str_set, proto);
+        } else {
+            mUidMap->appendUidMap(dumpTimeStampNs, key, nullptr, proto);
+        }
         proto->end(uidMapToken);
     }
 
