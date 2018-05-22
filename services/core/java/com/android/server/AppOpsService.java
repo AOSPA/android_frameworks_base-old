@@ -21,6 +21,7 @@ import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
+import android.app.AppOpsManagerInternal;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -94,11 +95,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import static android.app.AppOpsManager._NUM_UID_STATE;
 import static android.app.AppOpsManager.UID_STATE_BACKGROUND;
 import static android.app.AppOpsManager.UID_STATE_CACHED;
 import static android.app.AppOpsManager.UID_STATE_FOREGROUND;
 import static android.app.AppOpsManager.UID_STATE_FOREGROUND_SERVICE;
-import static android.app.AppOpsManager._NUM_UID_STATE;
+import static android.app.AppOpsManager.UID_STATE_LAST_NON_RESTRICTED;
 import static android.app.AppOpsManager.UID_STATE_PERSISTENT;
 import static android.app.AppOpsManager.UID_STATE_TOP;
 
@@ -172,6 +174,9 @@ public class AppOpsService extends IAppOpsService.Stub {
     final AtomicFile mFile;
     final Handler mHandler;
 
+    private final AppOpsManagerInternalImpl mAppOpsManagerInternal
+            = new AppOpsManagerInternalImpl();
+
     boolean mWriteScheduled;
     boolean mFastWriteScheduled;
     final Runnable mWriteRunner = new Runnable() {
@@ -200,6 +205,8 @@ public class AppOpsService extends IAppOpsService.Stub {
      */
     private final ArrayMap<IBinder, ClientRestrictionState> mOpUserRestrictions = new ArrayMap<>();
 
+    SparseIntArray mProfileOwners;
+
     /**
      * All times are in milliseconds. These constants are kept synchronized with the system
      * global Settings. Any access to this class or its fields should be done while
@@ -207,15 +214,31 @@ public class AppOpsService extends IAppOpsService.Stub {
      */
     private final class Constants extends ContentObserver {
         // Key names stored in the settings value.
-        private static final String KEY_STATE_SETTLE_TIME = "state_settle_time";
+        private static final String KEY_TOP_STATE_SETTLE_TIME = "top_state_settle_time";
+        private static final String KEY_FG_SERVICE_STATE_SETTLE_TIME
+                = "fg_service_state_settle_time";
+        private static final String KEY_BG_STATE_SETTLE_TIME = "bg_state_settle_time";
 
         /**
-         * How long we want for a drop in uid state to settle before applying it.
+         * How long we want for a drop in uid state from top to settle before applying it.
          * @see Settings.Global#APP_OPS_CONSTANTS
-         * @see #KEY_STATE_SETTLE_TIME
+         * @see #KEY_TOP_STATE_SETTLE_TIME
          */
-        public long STATE_SETTLE_TIME;
+        public long TOP_STATE_SETTLE_TIME;
 
+        /**
+         * How long we want for a drop in uid state from foreground to settle before applying it.
+         * @see Settings.Global#APP_OPS_CONSTANTS
+         * @see #KEY_FG_SERVICE_STATE_SETTLE_TIME
+         */
+        public long FG_SERVICE_STATE_SETTLE_TIME;
+
+        /**
+         * How long we want for a drop in uid state from background to settle before applying it.
+         * @see Settings.Global#APP_OPS_CONSTANTS
+         * @see #KEY_BG_STATE_SETTLE_TIME
+         */
+        public long BG_STATE_SETTLE_TIME;
 
         private final KeyValueListParser mParser = new KeyValueListParser(',');
         private ContentResolver mResolver;
@@ -250,16 +273,24 @@ public class AppOpsService extends IAppOpsService.Stub {
                     // with defaults.
                     Slog.e(TAG, "Bad app ops settings", e);
                 }
-                STATE_SETTLE_TIME = mParser.getDurationMillis(
-                        KEY_STATE_SETTLE_TIME, 10 * 1000L);
+                TOP_STATE_SETTLE_TIME = mParser.getDurationMillis(
+                        KEY_TOP_STATE_SETTLE_TIME, 30 * 1000L);
+                FG_SERVICE_STATE_SETTLE_TIME = mParser.getDurationMillis(
+                        KEY_FG_SERVICE_STATE_SETTLE_TIME, 10 * 1000L);
+                BG_STATE_SETTLE_TIME = mParser.getDurationMillis(
+                        KEY_BG_STATE_SETTLE_TIME, 1 * 1000L);
             }
         }
 
         void dump(PrintWriter pw) {
             pw.println("  Settings:");
 
-            pw.print("    "); pw.print(KEY_STATE_SETTLE_TIME); pw.print("=");
-            TimeUtils.formatDuration(STATE_SETTLE_TIME, pw);
+            pw.print("    "); pw.print(KEY_TOP_STATE_SETTLE_TIME); pw.print("=");
+            TimeUtils.formatDuration(TOP_STATE_SETTLE_TIME, pw);
+            pw.print("    "); pw.print(KEY_FG_SERVICE_STATE_SETTLE_TIME); pw.print("=");
+            TimeUtils.formatDuration(FG_SERVICE_STATE_SETTLE_TIME, pw);
+            pw.print("    "); pw.print(KEY_BG_STATE_SETTLE_TIME); pw.print("=");
+            TimeUtils.formatDuration(BG_STATE_SETTLE_TIME, pw);
             pw.println();
         }
     }
@@ -298,7 +329,7 @@ public class AppOpsService extends IAppOpsService.Stub {
 
         int evalMode(int mode) {
             if (mode == AppOpsManager.MODE_FOREGROUND) {
-                return state <= UID_STATE_FOREGROUND_SERVICE
+                return state <= UID_STATE_LAST_NON_RESTRICTED
                         ? AppOpsManager.MODE_ALLOWED : AppOpsManager.MODE_IGNORED;
             }
             return mode;
@@ -551,6 +582,7 @@ public class AppOpsService extends IAppOpsService.Stub {
     public void publish(Context context) {
         mContext = context;
         ServiceManager.addService(Context.APP_OPS_SERVICE, asBinder());
+        LocalServices.addService(AppOpsManagerInternal.class, mAppOpsManagerInternal);
     }
 
     public void systemReady() {
@@ -721,14 +753,22 @@ public class AppOpsService extends IAppOpsService.Stub {
             if (uidState != null && uidState.pendingState != newState) {
                 final int oldPendingState = uidState.pendingState;
                 uidState.pendingState = newState;
-                if (newState < uidState.state) {
-                    // We are moving to a more important state, always do it immediately.
+                if (newState < uidState.state || newState <= UID_STATE_LAST_NON_RESTRICTED) {
+                    // We are moving to a more important state, or the new state is in the
+                    // foreground, then always do it immediately.
                     commitUidPendingStateLocked(uidState);
                 } else if (uidState.pendingStateCommitTime == 0) {
                     // We are moving to a less important state for the first time,
                     // delay the application for a bit.
-                    uidState.pendingStateCommitTime = SystemClock.uptimeMillis() +
-                            mConstants.STATE_SETTLE_TIME;
+                    final long settleTime;
+                    if (uidState.state <= UID_STATE_TOP) {
+                        settleTime = mConstants.TOP_STATE_SETTLE_TIME;
+                    } else if (uidState.state <= UID_STATE_FOREGROUND_SERVICE) {
+                        settleTime = mConstants.FG_SERVICE_STATE_SETTLE_TIME;
+                    } else {
+                        settleTime = mConstants.BG_STATE_SETTLE_TIME;
+                    }
+                    uidState.pendingStateCommitTime = SystemClock.uptimeMillis() + settleTime;
                 }
                 if (uidState.startNesting != 0) {
                     // There is some actively running operation...  need to find it
@@ -921,12 +961,27 @@ public class AppOpsService extends IAppOpsService.Stub {
         }
     }
 
+    void enforceManageAppOpsModes(int callingPid, int callingUid, int targetUid) {
+        if (callingPid == Process.myPid()) {
+            return;
+        }
+        final int callingUser = UserHandle.getUserId(callingUid);
+        synchronized (this) {
+            if (mProfileOwners != null && mProfileOwners.get(callingUser, -1) == callingUid) {
+                if (targetUid >= 0 && callingUser == UserHandle.getUserId(targetUid)) {
+                    // Profile owners are allowed to change modes but only for apps
+                    // within their user.
+                    return;
+                }
+            }
+        }
+        mContext.enforcePermission(android.Manifest.permission.MANAGE_APP_OPS_MODES,
+                Binder.getCallingPid(), Binder.getCallingUid(), null);
+    }
+
     @Override
     public void setUidMode(int code, int uid, int mode) {
-        if (Binder.getCallingPid() != Process.myPid()) {
-            mContext.enforcePermission(android.Manifest.permission.MANAGE_APP_OPS_MODES,
-                    Binder.getCallingPid(), Binder.getCallingUid(), null);
-        }
+        enforceManageAppOpsModes(Binder.getCallingPid(), Binder.getCallingUid(), uid);
         verifyIncomingOp(code);
         code = AppOpsManager.opToSwitch(code);
 
@@ -1029,10 +1084,7 @@ public class AppOpsService extends IAppOpsService.Stub {
 
     @Override
     public void setMode(int code, int uid, String packageName, int mode) {
-        if (Binder.getCallingPid() != Process.myPid()) {
-            mContext.enforcePermission(android.Manifest.permission.MANAGE_APP_OPS_MODES,
-                    Binder.getCallingPid(), Binder.getCallingUid(), null);
-        }
+        enforceManageAppOpsModes(Binder.getCallingPid(), Binder.getCallingUid(), uid);
         verifyIncomingOp(code);
         ArraySet<ModeCallback> repCbs = null;
         code = AppOpsManager.opToSwitch(code);
@@ -1151,8 +1203,6 @@ public class AppOpsService extends IAppOpsService.Stub {
     public void resetAllModes(int reqUserId, String reqPackageName) {
         final int callingPid = Binder.getCallingPid();
         final int callingUid = Binder.getCallingUid();
-        mContext.enforcePermission(android.Manifest.permission.MANAGE_APP_OPS_MODES,
-                callingPid, callingUid, null);
         reqUserId = ActivityManager.handleIncomingUser(callingPid, callingUid, reqUserId,
                 true, true, "resetAllModes", null);
 
@@ -1165,6 +1215,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                 /* ignore - local call */
             }
         }
+
+        enforceManageAppOpsModes(callingPid, callingUid, reqUid);
 
         HashMap<ModeCallback, ArrayList<ChangeRec>> callbacks = null;
         synchronized (this) {
@@ -1428,10 +1480,9 @@ public class AppOpsService extends IAppOpsService.Stub {
     @Override
     public void setAudioRestriction(int code, int usage, int uid, int mode,
             String[] exceptionPackages) {
+        enforceManageAppOpsModes(Binder.getCallingPid(), Binder.getCallingUid(), uid);
         verifyIncomingUid(uid);
         verifyIncomingOp(code);
-        mContext.enforcePermission(android.Manifest.permission.MANAGE_APP_OPS_MODES,
-                Binder.getCallingPid(), Binder.getCallingUid(), null);
         synchronized (this) {
             SparseArray<Restriction> usageRestrictions = mAudioRestrictions.get(code);
             if (usageRestrictions == null) {
@@ -1840,9 +1891,11 @@ public class AppOpsService extends IAppOpsService.Stub {
     }
 
     private void commitUidPendingStateLocked(UidState uidState) {
+        final boolean lastForeground = uidState.state <= UID_STATE_LAST_NON_RESTRICTED;
+        final boolean nowForeground = uidState.pendingState <= UID_STATE_LAST_NON_RESTRICTED;
         uidState.state = uidState.pendingState;
         uidState.pendingStateCommitTime = 0;
-        if (uidState.hasForegroundWatchers) {
+        if (uidState.hasForegroundWatchers && lastForeground != nowForeground) {
             for (int fgi = uidState.foregroundOps.size() - 1; fgi >= 0; fgi--) {
                 if (!uidState.foregroundOps.valueAt(fgi)) {
                     continue;
@@ -2809,9 +2862,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                     return 0;
                 }
                 case "write-settings": {
-                    shell.mInternal.mContext.enforcePermission(
-                            android.Manifest.permission.MANAGE_APP_OPS_MODES,
-                            Binder.getCallingPid(), Binder.getCallingUid(), null);
+                    shell.mInternal.enforceManageAppOpsModes(Binder.getCallingPid(),
+                            Binder.getCallingUid(), -1);
                     long token = Binder.clearCallingIdentity();
                     try {
                         synchronized (shell.mInternal) {
@@ -2825,9 +2877,8 @@ public class AppOpsService extends IAppOpsService.Stub {
                     return 0;
                 }
                 case "read-settings": {
-                    shell.mInternal.mContext.enforcePermission(
-                            android.Manifest.permission.MANAGE_APP_OPS_MODES,
-                            Binder.getCallingPid(), Binder.getCallingUid(), null);
+                    shell.mInternal.enforceManageAppOpsModes(Binder.getCallingPid(),
+                            Binder.getCallingUid(), -1);
                     long token = Binder.clearCallingIdentity();
                     try {
                         shell.mInternal.readState();
@@ -2989,6 +3040,17 @@ public class AppOpsService extends IAppOpsService.Stub {
             final SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
             final Date date = new Date();
             boolean needSep = false;
+            if (dumpOp < 0 && dumpMode < 0 && dumpPackage == null && mProfileOwners != null) {
+                pw.println("  Profile owners:");
+                for (int poi = 0; poi < mProfileOwners.size(); poi++) {
+                    pw.print("    User #");
+                    pw.print(mProfileOwners.keyAt(poi));
+                    pw.print(": ");
+                    UserHandle.formatUid(pw, mProfileOwners.valueAt(poi));
+                    pw.println();
+                }
+                pw.println();
+            }
             if (mOpModeWatchers.size() > 0) {
                 boolean printedHeader = false;
                 for (int i=0; i<mOpModeWatchers.size(); i++) {
@@ -3700,6 +3762,14 @@ public class AppOpsService extends IAppOpsService.Stub {
                 }
             }
             return true;
+        }
+    }
+
+    private final class AppOpsManagerInternalImpl extends AppOpsManagerInternal {
+        @Override public void setDeviceAndProfileOwners(SparseIntArray owners) {
+            synchronized (AppOpsService.this) {
+                mProfileOwners = owners;
+            }
         }
     }
 }

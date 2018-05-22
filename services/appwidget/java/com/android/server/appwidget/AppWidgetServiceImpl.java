@@ -20,6 +20,8 @@ import static android.content.Context.KEYGUARD_SERVICE;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 
+import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
+
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.AlarmManager;
@@ -50,6 +52,7 @@ import android.content.pm.LauncherApps;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
@@ -96,13 +99,13 @@ import android.view.WindowManager;
 import android.widget.RemoteViews;
 
 import com.android.internal.R;
+import com.android.internal.app.SuspendedAppActivity;
 import com.android.internal.app.UnlaunchableAppActivity;
 import com.android.internal.appwidget.IAppWidgetHost;
 import com.android.internal.appwidget.IAppWidgetService;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.widget.IRemoteViewsFactory;
@@ -110,7 +113,6 @@ import com.android.server.LocalServices;
 import com.android.server.WidgetBackupProvider;
 import com.android.server.policy.IconUtilities;
 
-import libcore.util.EmptyArray;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
@@ -228,6 +230,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
     private AppOpsManager mAppOpsManager;
     private KeyguardManager mKeyguardManager;
     private DevicePolicyManagerInternal mDevicePolicyManagerInternal;
+    private PackageManagerInternal mPackageManagerInternal;
 
     private SecurityPolicy mSecurityPolicy;
 
@@ -254,6 +257,7 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         mAppOpsManager = (AppOpsManager) mContext.getSystemService(Context.APP_OPS_SERVICE);
         mKeyguardManager = (KeyguardManager) mContext.getSystemService(KEYGUARD_SERVICE);
         mDevicePolicyManagerInternal = LocalServices.getService(DevicePolicyManagerInternal.class);
+        mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
         mSaveStateHandler = BackgroundThread.getHandler();
         mCallbackHandler = new CallbackHandler(mContext.getMainLooper());
         mBackupRestoreController = new BackupRestoreController();
@@ -620,8 +624,17 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             if (provider.maskedBySuspendedPackage) {
                 UserInfo userInfo = mUserManager.getUserInfo(providerUserId);
                 showBadge = userInfo.isManagedProfile();
-                onClickIntent = mDevicePolicyManagerInternal.createShowAdminSupportIntent(
-                        providerUserId, true);
+                final String suspendingPackage = mPackageManagerInternal.getSuspendingPackage(
+                        providerPackage, providerUserId);
+                if (PLATFORM_PACKAGE_NAME.equals(suspendingPackage)) {
+                    onClickIntent = mDevicePolicyManagerInternal.createShowAdminSupportIntent(
+                            providerUserId, true);
+                } else {
+                    final String dialogMessage = mPackageManagerInternal.getSuspendedDialogMessage(
+                            providerPackage, providerUserId);
+                    onClickIntent = SuspendedAppActivity.createSuspendedAppInterceptIntent(
+                            providerPackage, suspendingPackage, dialogMessage, providerUserId);
+                }
             } else if (provider.maskedByQuietProfile) {
                 showBadge = true;
                 onClickIntent = UnlaunchableAppActivity.createInQuietModeDialogIntent(
@@ -824,6 +837,12 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         mSecurityPolicy.enforceCallFromPackage(callingPackage);
 
         synchronized (mLock) {
+            // Instant apps cannot host app widgets.
+            if (mSecurityPolicy.isInstantAppLocked(callingPackage, userId)) {
+                Slog.w(TAG, "Instant package " + callingPackage + " cannot host app widgets");
+                return ParceledListSlice.emptyList();
+            }
+
             ensureGroupStateLoadedLocked(userId);
 
             // NOTE: The lookup is enforcing security across users by making
@@ -890,6 +909,12 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         mSecurityPolicy.enforceCallFromPackage(callingPackage);
 
         synchronized (mLock) {
+            // Instant apps cannot host app widgets.
+            if (mSecurityPolicy.isInstantAppLocked(callingPackage, userId)) {
+                Slog.w(TAG, "Instant package " + callingPackage + " cannot host app widgets");
+                return AppWidgetManager.INVALID_APPWIDGET_ID;
+            }
+
             ensureGroupStateLoadedLocked(userId);
 
             if (mNextAppWidgetIds.indexOfKey(userId) < 0) {
@@ -1621,6 +1646,13 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
 
     @Override
     public boolean isRequestPinAppWidgetSupported() {
+        synchronized (mLock) {
+            if (mSecurityPolicy.isCallerInstantAppLocked()) {
+                Slog.w(TAG, "Instant uid " + Binder.getCallingUid()
+                        + " query information about app widgets");
+                return false;
+            }
+        }
         return LocalServices.getService(ShortcutServiceInternal.class)
                 .isRequestPinItemSupported(UserHandle.getCallingUserId(),
                         LauncherApps.PinItemRequest.REQUEST_TYPE_APPWIDGET);
@@ -1671,6 +1703,12 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
         }
 
         synchronized (mLock) {
+            if (mSecurityPolicy.isCallerInstantAppLocked()) {
+                Slog.w(TAG, "Instant uid " + Binder.getCallingUid()
+                        + " cannot access widget providers");
+                return ParceledListSlice.emptyList();
+            }
+
             ensureGroupStateLoadedLocked(userId);
 
             ArrayList<AppWidgetProviderInfo> result = new ArrayList<AppWidgetProviderInfo>();
@@ -3650,6 +3688,35 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             mContext.enforceCallingPermission(
                     android.Manifest.permission.MODIFY_APPWIDGET_BIND_PERMISSIONS,
                     "hasBindAppWidgetPermission packageName=" + packageName);
+        }
+
+        public boolean isCallerInstantAppLocked() {
+            final int callingUid =  Binder.getCallingUid();
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                final String[] uidPackages = mPackageManager.getPackagesForUid(callingUid);
+                if (!ArrayUtils.isEmpty(uidPackages)) {
+                    return mPackageManager.isInstantApp(uidPackages[0],
+                            UserHandle.getCallingUserId());
+                }
+            } catch (RemoteException e) {
+                /* ignore - same process */
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+            return false;
+        }
+
+        public boolean isInstantAppLocked(String packageName, int userId) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                return mPackageManager.isInstantApp(packageName, userId);
+            } catch (RemoteException e) {
+                /* ignore - same process */
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+            return false;
         }
 
         public void enforceCallFromPackage(String packageName) {
