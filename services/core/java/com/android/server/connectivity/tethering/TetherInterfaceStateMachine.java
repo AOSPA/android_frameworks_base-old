@@ -134,7 +134,6 @@ public class TetherInterfaceStateMachine extends StateMachine {
     private LinkProperties mLastIPv6LinkProperties;
     private RouterAdvertisementDaemon mRaDaemon;
     private RaParams mLastRaParams;
-    private boolean mV6OnlyTetherEnabled;
 
     public TetherInterfaceStateMachine(
             String ifaceName, Looper looper, int interfaceType, SharedLog log,
@@ -153,7 +152,6 @@ public class TetherInterfaceStateMachine extends StateMachine {
         mLinkProperties = new LinkProperties();
         mDeps = deps;
         resetLinkProperties();
-        mV6OnlyTetherEnabled = false;
         mLastError = ConnectivityManager.TETHER_ERROR_NO_ERROR;
 
         mInitialState = new InitialState();
@@ -168,38 +166,6 @@ public class TetherInterfaceStateMachine extends StateMachine {
         setInitialState(mInitialState);
     }
 
-
-    public TetherInterfaceStateMachine(
-            String ifaceName, Looper looper, int interfaceType, SharedLog log,
-            INetworkManagementService nMService, INetworkStatsService statsService,
-            IControlsTethering tetherController,
-            TetheringDependencies deps, boolean v6OnlyTetherEnabled) {
-        super(ifaceName, looper);
-        mLog = log.forSubComponent(ifaceName);
-        mNMService = nMService;
-        mNetd = deps.getNetdService();
-        mStatsService = statsService;
-        mTetherController = tetherController;
-        mInterfaceCtrl = new InterfaceController(ifaceName, nMService, mNetd, mLog);
-        mIfaceName = ifaceName;
-        mInterfaceType = interfaceType;
-        mLinkProperties = new LinkProperties();
-        mDeps = deps;
-        resetLinkProperties();
-        mV6OnlyTetherEnabled = v6OnlyTetherEnabled;
-        mLastError = ConnectivityManager.TETHER_ERROR_NO_ERROR;
-
-        mInitialState = new InitialState();
-        mLocalHotspotState = new LocalHotspotState();
-        mTetheredState = new TetheredState();
-        mUnavailableState = new UnavailableState();
-        addState(mInitialState);
-        addState(mLocalHotspotState);
-        addState(mTetheredState);
-        addState(mUnavailableState);
-
-        setInitialState(mInitialState);
-    }
 
     public String interfaceName() { return mIfaceName; }
 
@@ -680,14 +646,6 @@ public class TetherInterfaceStateMachine extends StateMachine {
             }
             try {
                 mNMService.stopInterfaceForwarding(mIfaceName, upstreamIface);
-                if (mV6OnlyTetherEnabled) {
-                    // As per external/android-clat/clatd.c
-                    final String ClatPrefix = "v4-";
-                    if(upstreamIface.startsWith(ClatPrefix, 0)) {
-                        mNMService.stopInterfaceForwarding(mIfaceName,
-                                upstreamIface.substring(ClatPrefix.length()));
-                    }
-                }
             } catch (Exception e) {
                 if (VDBG) Log.e(TAG, "Exception in removeInterfaceForward: " + e.toString());
             }
@@ -732,16 +690,6 @@ public class TetherInterfaceStateMachine extends StateMachine {
                         try {
                             mNMService.enableNat(mIfaceName, ifname);
                             mNMService.startInterfaceForwarding(mIfaceName, ifname);
-                            if (mV6OnlyTetherEnabled) {
-                                for (String newUpstreamIfaceName : mUpstreamIfaceSet.ifnames) {
-                                    // As per external/android-clat/clatd.c
-                                    final String ClatPrefix = "v4-";
-                                    if(newUpstreamIfaceName.startsWith(ClatPrefix, 0)) {
-                                        mNMService.startInterfaceForwarding(mIfaceName,
-                                                newUpstreamIfaceName.substring(ClatPrefix.length()));
-                                    }
-                                }
-                            }
                         } catch (Exception e) {
                             mLog.e("Exception enabling NAT: " + e);
                             cleanupUpstream();

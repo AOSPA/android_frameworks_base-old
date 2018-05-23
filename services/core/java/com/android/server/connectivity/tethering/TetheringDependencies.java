@@ -45,8 +45,8 @@ public class TetheringDependencies {
     }
 
     public IPv6TetheringCoordinator getIPv6TetheringCoordinator(
-            ArrayList<TetherInterfaceStateMachine> notifyList, SharedLog log, boolean v6OnlyTetherEnable) {
-        return new IPv6TetheringCoordinator(notifyList, log, v6OnlyTetherEnable);
+            ArrayList<TetherInterfaceStateMachine> notifyList, SharedLog log) {
+        return new IPv6TetheringCoordinator(notifyList, log);
     }
 
     public RouterAdvertisementDaemon getRouterAdvertisementDaemon(InterfaceParams ifParams) {
