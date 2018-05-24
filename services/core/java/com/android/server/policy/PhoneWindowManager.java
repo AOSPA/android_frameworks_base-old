@@ -957,7 +957,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     accessibilityShortcutActivated();
                     break;
                 case MSG_BUGREPORT_TV:
-                    takeBugreport();
+                    requestFullBugreport();
                     break;
                 case MSG_ACCESSIBILITY_TV:
                     if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable(false)) {
@@ -1164,6 +1164,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         getAudioManagerInternal();
         mAudioManagerInternal.silenceRingerModeInternal("volume_hush");
+        Settings.Secure.putInt(mContext.getContentResolver(), Settings.Secure.HUSH_GESTURE_USED, 1);
         mLogger.action(MetricsProto.MetricsEvent.ACTION_HUSH_GESTURE, mRingerToggleChord);
     }
 
@@ -4188,13 +4189,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         return mAccessibilityTvScheduled;
     }
 
-    private void takeBugreport() {
+    private void requestFullBugreport() {
         if ("1".equals(SystemProperties.get("ro.debuggable"))
                 || Settings.Global.getInt(mContext.getContentResolver(),
                         Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) == 1) {
             try {
                 ActivityManager.getService()
-                        .requestBugReport(ActivityManager.BUGREPORT_OPTION_INTERACTIVE);
+                        .requestBugReport(ActivityManager.BUGREPORT_OPTION_FULL);
             } catch (RemoteException e) {
                 Slog.e(TAG, "Error taking bugreport", e);
             }
@@ -5162,7 +5163,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         final int fl = PolicyControl.getWindowFlags(win, attrs);
         final int pfl = attrs.privateFlags;
         final int sim = attrs.softInputMode;
-        final int requestedSysUiFl = PolicyControl.getSystemUiVisibility(win, null);
+        final int requestedSysUiFl = PolicyControl.getSystemUiVisibility(null, attrs);
         final int sysUiFl = requestedSysUiFl | getImpliedSysUiFlagsForLayout(attrs);
 
         final Rect pf = mTmpParentFrame;

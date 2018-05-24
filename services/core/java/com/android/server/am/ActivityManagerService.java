@@ -1867,6 +1867,11 @@ public class ActivityManagerService extends IActivityManager.Stub
      */
     boolean mBooted = false;
 
+    /**
+     * Current boot phase.
+     */
+    int mBootPhase;
+
     WindowManagerService mWindowManager;
     final ActivityThread mSystemThread;
 
@@ -2935,6 +2940,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void onBootPhase(int phase) {
+            mService.mBootPhase = phase;
             if (phase == PHASE_SYSTEM_SERVICES_READY) {
                 mService.mBatteryStatsService.systemServicesReady();
                 mService.mServices.systemServicesReady();

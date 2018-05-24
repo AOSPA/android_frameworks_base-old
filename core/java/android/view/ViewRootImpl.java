@@ -81,6 +81,7 @@ import android.util.TimeUtils;
 import android.util.TypedValue;
 import android.util.BoostFramework;
 import android.view.Surface.OutOfResourcesException;
+import android.view.ThreadedRenderer.FrameDrawingCallback;
 import android.view.View.AttachInfo;
 import android.view.View.FocusDirection;
 import android.view.View.MeasureSpec;
@@ -178,6 +179,8 @@ public final class ViewRootImpl implements ViewParent,
 
     static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList();
     static boolean sFirstDrawComplete = false;
+
+    private FrameDrawingCallback mNextRtFrameCallback;
 
     /**
      * Callback for notifying about global configuration changes.
@@ -973,6 +976,17 @@ public final class ViewRootImpl implements ViewParent,
         if (mAttachInfo.mThreadedRenderer != null) {
             mAttachInfo.mThreadedRenderer.registerVectorDrawableAnimator(animator);
         }
+    }
+
+    /**
+     * Registers a callback to be executed when the next frame is being drawn on RenderThread. This
+     * callback will be executed on a RenderThread worker thread, and only used for the next frame
+     * and thus it will only fire once.
+     *
+     * @param callback The callback to register.
+     */
+    public void registerRtFrameCallback(FrameDrawingCallback callback) {
+        mNextRtFrameCallback = callback;
     }
 
     private void enableHardwareAcceleration(WindowManager.LayoutParams attrs) {
@@ -3275,7 +3289,8 @@ public final class ViewRootImpl implements ViewParent,
                     requestDrawWindow();
                 }
 
-                mAttachInfo.mThreadedRenderer.draw(mView, mAttachInfo, this);
+                mAttachInfo.mThreadedRenderer.draw(mView, mAttachInfo, this, mNextRtFrameCallback);
+                mNextRtFrameCallback = null;
             } else {
                 // If we get here with a disabled & requested hardware renderer, something went
                 // wrong (an invalidate posted right before we destroyed the hardware surface
