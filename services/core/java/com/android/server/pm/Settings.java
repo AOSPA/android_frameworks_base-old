@@ -734,10 +734,10 @@ public final class Settings {
                                 true /*notLaunched*/,
                                 false /*hidden*/,
                                 false /*suspended*/,
-                                null, /*suspendingPackage*/
-                                null, /*dialogMessage*/
-                                null, /*suspendedAppExtras*/
-                                null, /*suspendedLauncherExtras*/
+                                null /*suspendingPackage*/,
+                                null /*dialogMessage*/,
+                                null /*suspendedAppExtras*/,
+                                null /*suspendedLauncherExtras*/,
                                 instantApp,
                                 virtualPreload,
                                 null /*lastDisableAppCaller*/,
@@ -844,7 +844,12 @@ public final class Settings {
         }
         // If what we are scanning is a system (and possibly privileged) package,
         // then make it so, regardless of whether it was previously installed only
-        // in the data partition.
+        // in the data partition. Reset first.
+        pkgSetting.pkgFlags &= ~ApplicationInfo.FLAG_SYSTEM;
+        pkgSetting.pkgPrivateFlags &= ~(ApplicationInfo.PRIVATE_FLAG_PRIVILEGED
+                | ApplicationInfo.PRIVATE_FLAG_OEM
+                | ApplicationInfo.PRIVATE_FLAG_VENDOR
+                | ApplicationInfo.PRIVATE_FLAG_PRODUCT);
         pkgSetting.pkgFlags |= pkgFlags & ApplicationInfo.FLAG_SYSTEM;
         pkgSetting.pkgPrivateFlags |=
                 pkgPrivateFlags & ApplicationInfo.PRIVATE_FLAG_PRIVILEGED;
@@ -1629,10 +1634,10 @@ public final class Settings {
                                 false /*notLaunched*/,
                                 false /*hidden*/,
                                 false /*suspended*/,
-                                null, /*suspendingPackage*/
-                                null, /*dialogMessage*/
-                                null, /*suspendedAppExtras*/
-                                null, /*suspendedLauncherExtras*/
+                                null /*suspendingPackage*/,
+                                null /*dialogMessage*/,
+                                null /*suspendedAppExtras*/,
+                                null /*suspendedLauncherExtras*/,
                                 false /*instantApp*/,
                                 false /*virtualPreload*/,
                                 null /*lastDisableAppCaller*/,
@@ -4701,7 +4706,7 @@ public final class Settings {
         pw.print(prefix); pw.print("  pkgFlags="); printFlags(pw, ps.pkgFlags, FLAG_DUMP_SPEC);
                 pw.println();
 
-        if (ps.pkg.mOverlayTarget != null) {
+        if (ps.pkg != null && ps.pkg.mOverlayTarget != null) {
             pw.print(prefix); pw.print("  overlayTarget="); pw.println(ps.pkg.mOverlayTarget);
             pw.print(prefix); pw.print("  overlayCategory="); pw.println(ps.pkg.mOverlayCategory);
         }

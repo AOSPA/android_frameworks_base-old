@@ -113,6 +113,7 @@ import android.security.NetworkSecurityPolicy;
 import android.security.net.config.NetworkSecurityConfigProvider;
 import android.util.AndroidRuntimeException;
 import android.util.ArrayMap;
+import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Log;
@@ -354,6 +355,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     static volatile Handler sMainThreadHandler;  // set once in main()
 
     Bundle mCoreSettings = null;
+    private final int mEnableUxe = SystemProperties.getInt("vendor.iop.enable_uxe", 0);
 
     /** Activity client record, used for bookkeeping for the real {@link Activity} instance. */
     public static final class ActivityClientRecord {
@@ -857,6 +859,27 @@ public final class ActivityThread extends ClientTransactionHandler {
                 String buildSerial, boolean autofillCompatibilityEnabled) {
 
             if (services != null) {
+                if (false) {
+                    // Test code to make sure the app could see the passed-in services.
+                    for (Object oname : services.keySet()) {
+                        if (services.get(oname) == null) {
+                            continue; // AM just passed in a null service.
+                        }
+                        String name = (String) oname;
+
+                        // See b/79378449 about the following exemption.
+                        switch (name) {
+                            case "package":
+                            case Context.WINDOW_SERVICE:
+                                continue;
+                        }
+
+                        if (ServiceManager.getService(name) == null) {
+                            Log.wtf(TAG, "Service " + name + " should be accessible by this app");
+                        }
+                    }
+                }
+
                 // Setup the service cache in the ServiceManager
                 ServiceManager.initServiceCache(services);
             }
@@ -1555,6 +1578,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         public static final int APPLICATION_INFO_CHANGED = 156;
         public static final int RUN_ISOLATED_ENTRY_POINT = 158;
         public static final int EXECUTE_TRANSACTION = 159;
+        public static final int RELAUNCH_ACTIVITY = 160;
 
         String codeToString(int code) {
             if (DEBUG_MESSAGES) {
@@ -1598,6 +1622,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case APPLICATION_INFO_CHANGED: return "APPLICATION_INFO_CHANGED";
                     case RUN_ISOLATED_ENTRY_POINT: return "RUN_ISOLATED_ENTRY_POINT";
                     case EXECUTE_TRANSACTION: return "EXECUTE_TRANSACTION";
+                    case RELAUNCH_ACTIVITY: return "RELAUNCH_ACTIVITY";
                 }
             }
             return Integer.toString(code);
@@ -1779,6 +1804,9 @@ public final class ActivityThread extends ClientTransactionHandler {
                         transaction.recycle();
                     }
                     // TODO(lifecycler): Recycle locally scheduled transactions.
+                    break;
+                case RELAUNCH_ACTIVITY:
+                    handleRelaunchActivityLocally((IBinder) msg.obj);
                     break;
             }
             Object obj = msg.obj;
@@ -2683,7 +2711,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         // TODO(lifecycler): Can't switch to use #handleLaunchActivity() because it will try to
         // call #reportSizeConfigurations(), but the server might not know anything about the
         // activity if it was launched from LocalAcvitivyManager.
-        return performLaunchActivity(r);
+        return performLaunchActivity(r, null /* customIntent */);
     }
 
     public final Activity getActivity(IBinder token) {
@@ -2768,7 +2796,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     /**  Core implementation of activity launch. */
-    private Activity performLaunchActivity(ActivityClientRecord r) {
+    private Activity performLaunchActivity(ActivityClientRecord r, Intent customIntent) {
         ActivityInfo aInfo = r.activityInfo;
         if (r.packageInfo == null) {
             r.packageInfo = getPackageInfo(aInfo.applicationInfo, r.compatInfo,
@@ -2838,6 +2866,9 @@ public final class ActivityThread extends ClientTransactionHandler {
                         r.embeddedID, r.lastNonConfigurationInstances, config,
                         r.referrer, r.voiceInteractor, window, r.configCallback);
 
+                if (customIntent != null) {
+                    activity.mIntent = customIntent;
+                }
                 r.lastNonConfigurationInstances = null;
                 checkAndBlockForNetworkAccess();
                 activity.mStartedActivity = false;
@@ -2982,7 +3013,7 @@ public final class ActivityThread extends ClientTransactionHandler {
      */
     @Override
     public Activity handleLaunchActivity(ActivityClientRecord r,
-            PendingTransactionActions pendingActions) {
+            PendingTransactionActions pendingActions, Intent customIntent) {
         // If we are getting ready to gc after going to the background, well
         // we are back active so skip it.
         unscheduleGcIdler();
@@ -3005,7 +3036,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
         WindowManagerGlobal.initialize();
 
-        final Activity a = performLaunchActivity(r);
+        final Activity a = performLaunchActivity(r, customIntent);
 
         if (a != null) {
             r.createdConfig = new Configuration(mConfiguration);
@@ -4281,7 +4312,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         for (Map.Entry<IBinder, ActivityClientRecord> entry : mActivities.entrySet()) {
             final Activity activity = entry.getValue().activity;
             if (!activity.mFinished) {
-                handleRelaunchActivityLocally(entry.getKey());
+                scheduleRelaunchActivity(entry.getKey());
             }
         }
     }
@@ -4659,21 +4690,29 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
-    /** Performs the activity relaunch locally vs. requesting from system-server. */
-    void handleRelaunchActivityLocally(IBinder token) {
-        if (Looper.myLooper() != getLooper()) {
-            throw new IllegalStateException("Must be called from main thread");
-        }
+    /**
+     * Post a message to relaunch the activity. We do this instead of launching it immediately,
+     * because this will destroy the activity from which it was called and interfere with the
+     * lifecycle changes it was going through before. We need to make sure that we have finished
+     * handling current transaction item before relaunching the activity.
+     */
+    void scheduleRelaunchActivity(IBinder token) {
+        sendMessage(H.RELAUNCH_ACTIVITY, token);
+    }
 
+    /** Performs the activity relaunch locally vs. requesting from system-server. */
+    private void handleRelaunchActivityLocally(IBinder token) {
         final ActivityClientRecord r = mActivities.get(token);
         if (r == null) {
+            Log.w(TAG, "Activity to relaunch no longer exists");
             return;
         }
 
         final int prevState = r.getLifecycleState();
 
-        if (prevState < ON_RESUME) {
-            Log.w(TAG, "Activity needs to be already resumed in other to be relaunched.");
+        if (prevState < ON_RESUME || prevState > ON_STOP) {
+            Log.w(TAG, "Activity state must be in [ON_RESUME..ON_STOP] in order to be relaunched,"
+                    + "current state is " + prevState);
             return;
         }
 
@@ -4699,6 +4738,8 @@ public final class ActivityThread extends ClientTransactionHandler {
             List<ResultInfo> pendingResults, List<ReferrerIntent> pendingIntents,
             PendingTransactionActions pendingActions, boolean startsNotResumed,
             Configuration overrideConfig, String reason) {
+        // Preserve last used intent, it may be set from Activity#setIntent().
+        final Intent customIntent = r.activity.mIntent;
         // Need to ensure state is saved.
         if (!r.paused) {
             performPauseActivity(r, false, reason, null /* pendingActions */);
@@ -4731,7 +4772,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         r.startsNotResumed = startsNotResumed;
         r.overrideConfig = overrideConfig;
 
-        handleLaunchActivity(r, pendingActions);
+        handleLaunchActivity(r, pendingActions, customIntent);
     }
 
     @Override
@@ -5333,8 +5374,8 @@ public final class ActivityThread extends ClientTransactionHandler {
                                         }
                                     }
                                 }
-                                final List<String> oldPaths =
-                                        sPackageManager.getPreviousCodePaths(packageName);
+                                final ArrayList<String> oldPaths = new ArrayList<>();
+                                LoadedApk.makePaths(this, pkgInfo.getApplicationInfo(), oldPaths);
                                 pkgInfo.updateApplicationInfo(aInfo, oldPaths);
                             } catch (RemoteException e) {
                             }
@@ -5482,6 +5523,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     private void handleBindApplication(AppBindData data) {
+        long st_bindApp = SystemClock.uptimeMillis();
+        BoostFramework ux_perf = null;
         // Register the UI Thread as a sensitive thread to the runtime.
         VMRuntime.registerSensitiveThread();
         if (data.trackAllocation) {
@@ -5512,6 +5555,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         Process.setArgV0(data.processName);
         android.ddm.DdmHandleAppName.setAppName(data.processName,
                                                 UserHandle.myUserId());
+        VMRuntime.setProcessPackageName(data.appInfo.packageName);
 
         if (mProfiler.profileFd != null) {
             mProfiler.startProfiling();
@@ -5704,6 +5748,10 @@ public final class ActivityThread extends ClientTransactionHandler {
         updateLocaleListFromAppContext(appContext,
                 mResourcesManager.getConfiguration().getLocales());
 
+        if (mEnableUxe != 0 && !Process.isIsolated()) {
+            ux_perf = new BoostFramework(appContext);
+        }
+
         if (!Process.isIsolated()) {
             final int oldMask = StrictMode.allowThreadDiskWritesMask();
             try {
@@ -5858,6 +5906,15 @@ public final class ActivityThread extends ClientTransactionHandler {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
+        }
+        long end_bindApp = SystemClock.uptimeMillis();
+        int bindApp_dur = (int) (end_bindApp - st_bindApp);
+        String pkg_name = null;
+        if (appContext != null) {
+            pkg_name = appContext.getPackageName();
+        }
+        if (ux_perf != null && !Process.isIsolated() && pkg_name != null) {
+            ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_BINDAPP, 0, pkg_name, bindApp_dur);
         }
     }
 

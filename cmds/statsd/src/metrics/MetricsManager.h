@@ -67,6 +67,10 @@ public:
         return !mAllowedPkg.empty();
     }
 
+    bool shouldWriteToDisk() const {
+        return mNoReportMetricIds.size() != mAllMetricProducers.size();
+    }
+
     void dumpStates(FILE* out, bool verbose);
 
     inline bool isInTtl(const int64_t timestampNs) const {
@@ -79,7 +83,8 @@ public:
         }
     };
 
-    // Returns the elapsed realtime when this metric manager last reported metrics.
+    // Returns the elapsed realtime when this metric manager last reported metrics. If this config
+    // has not yet dumped any reports, this is the time the metricsmanager was initialized.
     inline int64_t getLastReportTimeNs() const {
         return mLastReportTimeNs;
     };
@@ -87,6 +92,10 @@ public:
     inline int64_t getLastReportWallClockNs() const {
         return mLastReportWallClockNs;
     };
+
+    inline size_t getNumMetrics() const {
+        return mAllMetricProducers.size();
+    }
 
     virtual void dropData(const int64_t dropTimeNs);
 

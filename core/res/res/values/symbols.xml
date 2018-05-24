@@ -1732,6 +1732,7 @@
   <java-symbol type="integer" name="config_lidNavigationAccessibility" />
   <java-symbol type="integer" name="config_lidOpenRotation" />
   <java-symbol type="integer" name="config_longPressOnHomeBehavior" />
+  <java-symbol type="layout" name="global_actions" />
   <java-symbol type="layout" name="global_actions_item" />
   <java-symbol type="layout" name="global_actions_silent_mode" />
   <java-symbol type="layout" name="recent_apps_dialog" />
@@ -3302,6 +3303,8 @@
   <java-symbol type="string" name="shortcut_restore_signature_mismatch" />
   <java-symbol type="string" name="shortcut_restore_unknown_issue" />
 
+  <java-symbol type="bool" name="config_swipe_up_gesture_default" />
+
   <!-- From media projection -->
   <java-symbol type="string" name="config_mediaProjectionPermissionDialogComponent" />
   <java-symbol type="string" name="config_batterySaverDeviceSpecificConfig" />
@@ -3347,8 +3350,6 @@
 
   <java-symbol type="bool" name="config_keepRestrictedProfilesInBackground" />
 
-  <!-- whether to show dual bar -->
-  <java-symbol type="bool" name="config_dual_bar" />
   <java-symbol type="array" name="config_ringtoneEffectUris" />
 
   <!-- For Wear devices -->
@@ -3380,9 +3381,10 @@
   <java-symbol type="layout" name="car_user_switching_dialog" />
   <java-symbol type="id" name="user_loading_avatar" />
   <java-symbol type="id" name="user_loading" />
-  
+
   <java-symbol type="integer" name="config_sms_authorization_timeout_ms" />
   <java-symbol type="bool" name="config_sms_authorization_enabled" />
 
   <java-symbol type="string" name="battery_saver_description_with_learn_more" />
+  <java-symbol type="bool" name="config_primarycard" />
 </resources>

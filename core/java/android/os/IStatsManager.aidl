@@ -56,7 +56,7 @@ interface IStatsManager {
     /**
      * Tells statsd that the device is about to shutdown.
      */
-    void informDeviceShutdown(boolean isShutdown);
+    void informDeviceShutdown();
 
     /**
      * Inform statsd what the version and package are for each uid. Note that each array should
@@ -152,4 +152,10 @@ interface IStatsManager {
      * Requires Manifest.permission.DUMP.
      */
     void unsetBroadcastSubscriber(long configKey, long subscriberId, in String packageName);
+
+    /**
+     * Apps can send an atom via this application breadcrumb with the specified label and state for
+     * this label. This allows building custom metrics and predicates.
+     */
+    void sendAppBreadcrumbAtom(int label, int state);
 }

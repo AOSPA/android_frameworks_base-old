@@ -18,6 +18,7 @@ package com.android.systemui.keyguard;
 
 import android.app.ActivityManager;
 import android.app.AlarmManager;
+import android.app.NotificationManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -28,13 +29,16 @@ import android.icu.text.DateFormat;
 import android.icu.text.DisplayContext;
 import android.net.Uri;
 import android.os.Handler;
-import android.os.SystemClock;
+import android.provider.Settings;
+import android.service.notification.ZenModeConfig;
 import android.text.TextUtils;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.policy.NextAlarmController;
 import com.android.systemui.statusbar.policy.NextAlarmControllerImpl;
+import com.android.systemui.statusbar.policy.ZenModeController;
+import com.android.systemui.statusbar.policy.ZenModeControllerImpl;
 
 import java.util.Date;
 import java.util.Locale;
@@ -49,12 +53,13 @@ import androidx.slice.builders.ListBuilder.RowBuilder;
  * Simple Slice provider that shows the current date.
  */
 public class KeyguardSliceProvider extends SliceProvider implements
-        NextAlarmController.NextAlarmChangeCallback {
+        NextAlarmController.NextAlarmChangeCallback, ZenModeController.Callback {
 
     public static final String KEYGUARD_SLICE_URI = "content://com.android.systemui.keyguard/main";
     public static final String KEYGUARD_DATE_URI = "content://com.android.systemui.keyguard/date";
     public static final String KEYGUARD_NEXT_ALARM_URI =
             "content://com.android.systemui.keyguard/alarm";
+    public static final String KEYGUARD_DND_URI = "content://com.android.systemui.keyguard/dnd";
 
     /**
      * Only show alarms that will ring within N hours.
@@ -62,22 +67,23 @@ public class KeyguardSliceProvider extends SliceProvider implements
     @VisibleForTesting
     static final int ALARM_VISIBILITY_HOURS = 12;
 
-    private final Date mCurrentTime = new Date();
     protected final Uri mSliceUri;
     protected final Uri mDateUri;
     protected final Uri mAlarmUri;
+    protected final Uri mDndUri;
+    private final Date mCurrentTime = new Date();
     private final Handler mHandler;
+    private final AlarmManager.OnAlarmListener mUpdateNextAlarm = this::updateNextAlarm;
+    private ZenModeController mZenModeController;
     private String mDatePattern;
     private DateFormat mDateFormat;
     private String mLastText;
     private boolean mRegistered;
-    private boolean mRegisteredEveryMinute;
     private String mNextAlarm;
     private NextAlarmController mNextAlarmController;
     protected AlarmManager mAlarmManager;
     protected ContentResolver mContentResolver;
     private AlarmManager.AlarmClockInfo mNextAlarmInfo;
-    private final AlarmManager.OnAlarmListener mUpdateNextAlarm = this::updateNextAlarm;
 
     /**
      * Receiver responsible for time ticking and updating the date format.
@@ -112,6 +118,7 @@ public class KeyguardSliceProvider extends SliceProvider implements
         mSliceUri = Uri.parse(KEYGUARD_SLICE_URI);
         mDateUri = Uri.parse(KEYGUARD_DATE_URI);
         mAlarmUri = Uri.parse(KEYGUARD_NEXT_ALARM_URI);
+        mDndUri = Uri.parse(KEYGUARD_DND_URI);
     }
 
     @Override
@@ -119,6 +126,7 @@ public class KeyguardSliceProvider extends SliceProvider implements
         ListBuilder builder = new ListBuilder(getContext(), mSliceUri);
         builder.addRow(new RowBuilder(builder, mDateUri).setTitle(mLastText));
         addNextAlarm(builder);
+        addZenMode(builder);
         return builder.build();
     }
 
@@ -134,16 +142,51 @@ public class KeyguardSliceProvider extends SliceProvider implements
         builder.addRow(alarmRowBuilder);
     }
 
+    /**
+     * Add zen mode (DND) icon to slice if it's enabled.
+     * @param builder The slice builder.
+     */
+    protected void addZenMode(ListBuilder builder) {
+        if (!isDndSuppressingNotifications()) {
+            return;
+        }
+        RowBuilder dndBuilder = new RowBuilder(builder, mDndUri)
+                .addEndItem(Icon.createWithResource(getContext(), R.drawable.stat_sys_dnd));
+        builder.addRow(dndBuilder);
+    }
+
+    /**
+     * Return true if DND is enabled suppressing notifications.
+     */
+    protected boolean isDndSuppressingNotifications() {
+        boolean suppressingNotifications = (mZenModeController.getConfig().suppressedVisualEffects
+                & NotificationManager.Policy.SUPPRESSED_EFFECT_NOTIFICATION_LIST) != 0;
+        return mZenModeController.getZen() != Settings.Global.ZEN_MODE_OFF
+                && suppressingNotifications;
+    }
+
     @Override
     public boolean onCreateSliceProvider() {
         mAlarmManager = getContext().getSystemService(AlarmManager.class);
         mContentResolver = getContext().getContentResolver();
         mNextAlarmController = new NextAlarmControllerImpl(getContext());
         mNextAlarmController.addCallback(this);
+        mZenModeController = new ZenModeControllerImpl(getContext(), mHandler);
+        mZenModeController.addCallback(this);
         mDatePattern = getContext().getString(R.string.system_ui_aod_date_pattern);
-        registerClockUpdate(false /* everyMinute */);
+        registerClockUpdate();
         updateClock();
         return true;
+    }
+
+    @Override
+    public void onZenChanged(int zen) {
+        mContentResolver.notifyChange(mSliceUri, null /* observer */);
+    }
+
+    @Override
+    public void onConfigChanged(ZenModeConfig config) {
+        mContentResolver.notifyChange(mSliceUri, null /* observer */);
     }
 
     private void updateNextAlarm() {
@@ -170,22 +213,13 @@ public class KeyguardSliceProvider extends SliceProvider implements
     /**
      * Registers a broadcast receiver for clock updates, include date, time zone and manually
      * changing the date/time via the settings app.
-     *
-     * @param everyMinute {@code true} if you also want updates every minute.
      */
-    protected void registerClockUpdate(boolean everyMinute) {
+    private void registerClockUpdate() {
         if (mRegistered) {
-            if (mRegisteredEveryMinute == everyMinute) {
-                return;
-            } else {
-                unregisterClockUpdate();
-            }
+            return;
         }
 
         IntentFilter filter = new IntentFilter();
-        if (everyMinute) {
-            filter.addAction(Intent.ACTION_TIME_TICK);
-        }
         filter.addAction(Intent.ACTION_DATE_CHANGED);
         filter.addAction(Intent.ACTION_TIME_CHANGED);
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
@@ -193,15 +227,6 @@ public class KeyguardSliceProvider extends SliceProvider implements
         getContext().registerReceiver(mIntentReceiver, filter, null /* permission*/,
                 null /* scheduler */);
         mRegistered = true;
-        mRegisteredEveryMinute = everyMinute;
-    }
-
-    protected void unregisterClockUpdate() {
-        if (!mRegistered) {
-            return;
-        }
-        getContext().unregisterReceiver(mIntentReceiver);
-        mRegistered = false;
     }
 
     @VisibleForTesting

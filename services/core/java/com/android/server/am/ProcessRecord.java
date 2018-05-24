@@ -45,6 +45,7 @@ import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
+import android.util.BoostFramework;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -149,6 +150,8 @@ final class ProcessRecord {
     String waitingToKill;       // Process is waiting to be killed when in the bg, and reason
     Object forcingToImportant;  // Token that is forcing this process to be important
     int adjSeq;                 // Sequence id for identifying oom_adj assignment cycles
+    int completedAdjSeq;        // Sequence id for identifying oom_adj assignment cycles
+    boolean containsCycle;      // Whether this app has encountered a cycle in the most recent update
     int lruSeq;                 // Sequence id for identifying LRU update cycles
     CompatibilityInfo compat;   // last used compatibility mode
     IBinder.DeathRecipient deathRecipient; // Who is watching for the death.
@@ -686,6 +689,7 @@ final class ProcessRecord {
     void kill(String reason, boolean noisy) {
         if (!killedByAm) {
             Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "kill");
+            BoostFramework ux_perf = new BoostFramework();
             if (mService != null && (noisy || info.uid == mService.mCurOomAdjUid)) {
                 mService.reportUidInfoMessageLocked(TAG,
                         "Killing " + toShortString() + " (adj " + setAdj + "): " + reason,
@@ -701,6 +705,9 @@ final class ProcessRecord {
             if (!persistent) {
                 killed = true;
                 killedByAm = true;
+            }
+            if (ux_perf != null) {
+                ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
             }
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }

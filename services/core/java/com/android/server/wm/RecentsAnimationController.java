@@ -79,7 +79,7 @@ public class RecentsAnimationController implements DeathRecipient {
     public @interface ReorderMode {}
 
     private final WindowManagerService mService;
-    private final IRecentsAnimationRunner mRunner;
+    private IRecentsAnimationRunner mRunner;
     private final RecentsAnimationCallbacks mCallbacks;
     private final ArrayList<TaskAnimationAdapter> mPendingAnimations = new ArrayList<>();
     private final int mDisplayId;
@@ -426,7 +426,14 @@ public class RecentsAnimationController implements DeathRecipient {
             removeAnimation(taskAdapter);
         }
 
+        // Clear any pending failsafe runnables
+        mService.mH.removeCallbacks(mFailsafeRunnable);
+
+        // Clear references to the runner
         unlinkToDeathOfRunner();
+        mRunner = null;
+        mCanceled = true;
+
         // Clear associated input consumers
         mService.mInputMonitor.updateInputWindowsLw(true /*force*/);
         mService.destroyInputConsumer(INPUT_CONSUMER_RECENTS_ANIMATION);

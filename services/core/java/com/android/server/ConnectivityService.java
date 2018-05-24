@@ -134,6 +134,7 @@ import com.android.internal.net.NetworkStatsFactory;
 import com.android.internal.net.VpnConfig;
 import com.android.internal.net.VpnInfo;
 import com.android.internal.net.VpnProfile;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.AsyncChannel;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
@@ -501,24 +502,24 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private static final int MAX_VALIDATION_LOGS = 10;
     private static class ValidationLog {
         final Network mNetwork;
-        final String mNetworkExtraInfo;
+        final String mName;
         final ReadOnlyLocalLog mLog;
 
-        ValidationLog(Network network, String networkExtraInfo, ReadOnlyLocalLog log) {
+        ValidationLog(Network network, String name, ReadOnlyLocalLog log) {
             mNetwork = network;
-            mNetworkExtraInfo = networkExtraInfo;
+            mName = name;
             mLog = log;
         }
     }
     private final ArrayDeque<ValidationLog> mValidationLogs =
             new ArrayDeque<ValidationLog>(MAX_VALIDATION_LOGS);
 
-    private void addValidationLogs(ReadOnlyLocalLog log, Network network, String networkExtraInfo) {
+    private void addValidationLogs(ReadOnlyLocalLog log, Network network, String name) {
         synchronized (mValidationLogs) {
             while (mValidationLogs.size() >= MAX_VALIDATION_LOGS) {
                 mValidationLogs.removeLast();
             }
-            mValidationLogs.addFirst(new ValidationLog(network, networkExtraInfo, log));
+            mValidationLogs.addFirst(new ValidationLog(network, name, log));
         }
     }
 
@@ -1994,13 +1995,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return ret;
     }
 
-    private boolean argsContain(String[] args, String target) {
-        for (String arg : args) {
-            if (target.equals(arg)) return true;
-        }
-        return false;
-    }
-
     private void dumpNetworkDiagnostics(IndentingPrintWriter pw) {
         final List<NetworkDiagnostics> netDiags = new ArrayList<NetworkDiagnostics>();
         final long DIAG_TIME_MS = 5000;
@@ -2029,10 +2023,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
         if (asProto) return;
 
-        if (argsContain(args, DIAG_ARG)) {
+        if (ArrayUtils.contains(args, DIAG_ARG)) {
             dumpNetworkDiagnostics(pw);
             return;
-        } else if (argsContain(args, TETHERING_ARG)) {
+        } else if (ArrayUtils.contains(args, TETHERING_ARG)) {
             mTethering.dump(fd, pw, args);
             return;
         }
@@ -2100,12 +2094,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
         pw.println();
         mMultipathPolicyTracker.dump(pw);
 
-        if (argsContain(args, SHORT_ARG) == false) {
+        if (ArrayUtils.contains(args, SHORT_ARG) == false) {
             pw.println();
             synchronized (mValidationLogs) {
                 pw.println("mValidationLogs (most recent first):");
                 for (ValidationLog p : mValidationLogs) {
-                    pw.println(p.mNetwork + " - " + p.mNetworkExtraInfo);
+                    pw.println(p.mNetwork + " - " + p.mName);
                     pw.increaseIndent();
                     p.mLog.dump(fd, pw, args);
                     pw.decreaseIndent();
@@ -4646,8 +4640,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         synchronized (this) {
             nai.networkMonitor.systemReady = mSystemReady;
         }
-        addValidationLogs(nai.networkMonitor.getValidationLogs(), nai.network,
-                networkInfo.getExtraInfo());
+        final String extraInfo = networkInfo.getExtraInfo();
+        final String name = TextUtils.isEmpty(extraInfo)
+                ? nai.networkCapabilities.getSSID() : extraInfo;
+        addValidationLogs(nai.networkMonitor.getValidationLogs(), nai.network, name);
         if (DBG) log("registerNetworkAgent " + nai);
         mHandler.sendMessage(mHandler.obtainMessage(EVENT_REGISTER_NETWORK_AGENT, nai));
         return nai.network.netId;

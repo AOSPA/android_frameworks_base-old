@@ -8904,6 +8904,14 @@ public final class Settings {
         public static final String PRIV_APP_OOB_ENABLED = "priv_app_oob_enabled";
 
         /**
+         * Comma separated list of privileged package names, which will be running out-of-box APK.
+         * Default: "ALL"
+         *
+         * @hide
+         */
+        public static final String PRIV_APP_OOB_LIST = "priv_app_oob_list";
+
+        /**
          * The interval in milliseconds at which location requests will be throttled when they are
          * coming from the background.
          *
@@ -9544,6 +9552,15 @@ public final class Settings {
         */
        public static final String WIFI_SCAN_ALWAYS_AVAILABLE =
                 "wifi_scan_always_enabled";
+
+        /**
+         * The interval in milliseconds at which wifi rtt ranging requests will be throttled when
+         * they are coming from the background.
+         *
+         * @hide
+         */
+        public static final String WIFI_RTT_BACKGROUND_EXEC_GAP_MS =
+                "wifi_rtt_background_exec_gap_ms";
 
         /**
          * Whether soft AP will shut down after a timeout period when no devices are connected.
@@ -10408,6 +10425,25 @@ public final class Settings {
          * @see com.android.server.am.ActivityManagerConstants
          */
         public static final String ACTIVITY_MANAGER_CONSTANTS = "activity_manager_constants";
+
+        /**
+         * App ops specific settings.
+         * This is encoded as a key=value list, separated by commas. Ex:
+         *
+         * "state_settle_time=10000"
+         *
+         * The following keys are supported:
+         *
+         * <pre>
+         * state_settle_time                (long)
+         * </pre>
+         *
+         * <p>
+         * Type: string
+         * @hide
+         * @see com.android.server.AppOpsService.Constants
+         */
+        public static final String APP_OPS_CONSTANTS = "app_ops_constants";
 
         /**
          * Device Idle (Doze) specific settings.
@@ -12422,7 +12458,7 @@ public final class Settings {
           */
         public static final String MULTI_SIM_SMS_SUBSCRIPTION = "multi_sim_sms";
 
-       /**
+        /**
           * Used to provide option to user to select subscription during send SMS.
           * The value 1 - enable, 0 - disable
           * @hide
@@ -12562,6 +12598,28 @@ public final class Settings {
          */
         public static final String NOTIFICATION_SNOOZE_OPTIONS =
                 "notification_snooze_options";
+
+        /**
+         * Settings key for the ratio of notification dismissals to notification views - one of the
+         * criteria for showing the notification blocking helper.
+         *
+         * <p>The value is a float ranging from 0.0 to 1.0 (the closer to 0.0, the more intrusive
+         * the blocking helper will be).
+         *
+         * @hide
+         */
+        public static final String BLOCKING_HELPER_DISMISS_TO_VIEW_RATIO_LIMIT =
+                "blocking_helper_dismiss_to_view_ratio";
+
+        /**
+         * Settings key for the longest streak of dismissals  - one of the criteria for showing the
+         * notification blocking helper.
+         *
+         * <p>The value is an integer greater than 0.
+         *
+         * @hide
+         */
+        public static final String BLOCKING_HELPER_STREAK_LIMIT = "blocking_helper_streak_limit";
 
         /**
          * Configuration flags for SQLite Compatibility WAL. Encoded as a key-value list, separated

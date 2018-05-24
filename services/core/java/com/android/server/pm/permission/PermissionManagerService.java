@@ -620,9 +620,8 @@ public class PermissionManagerService {
                 enforcePermissionCapLocked(info, tree);
                 bp = new BasePermission(info.name, tree.getSourcePackageName(),
                         BasePermission.TYPE_DYNAMIC);
-            } else if (bp.isDynamic()) {
-                // TODO: switch this back to SecurityException
-                Slog.wtf(TAG, "Not allowed to modify non-dynamic permission "
+            } else if (!bp.isDynamic()) {
+                throw new SecurityException("Not allowed to modify non-dynamic permission "
                         + info.name);
             }
             changed = bp.addToTree(fixedLevel, info, tree);
@@ -1953,7 +1952,7 @@ public class PermissionManagerService {
                     UserManager.DISALLOW_DEBUGGING_FEATURES, callingUid, userId);
         }
         if (userId == UserHandle.getUserId(callingUid)) return;
-        if (callingUid != Process.SYSTEM_UID && callingUid != 0) {
+        if (callingUid != Process.SYSTEM_UID && callingUid != Process.ROOT_UID) {
             if (requireFullPermission) {
                 mContext.enforceCallingOrSelfPermission(
                         android.Manifest.permission.INTERACT_ACROSS_USERS_FULL, message);
