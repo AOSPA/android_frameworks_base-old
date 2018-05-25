@@ -37,9 +37,7 @@ import static android.app.ActivityManagerInternal.ASSIST_KEY_DATA;
 import static android.app.ActivityManagerInternal.ASSIST_KEY_RECEIVER_EXTRAS;
 import static android.app.ActivityManagerInternal.ASSIST_KEY_STRUCTURE;
 import static android.app.ActivityThread.PROC_START_SEQ_IDENT;
-import static android.app.AppOpsManager.OP_ASSIST_STRUCTURE;
 import static android.app.AppOpsManager.OP_NONE;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
@@ -5241,6 +5239,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final ActivityRecord sourceRecord;
         final int targetUid;
         final String targetPackage;
+        final boolean isResolver;
         synchronized (this) {
             if (resultTo == null) {
                 throw new SecurityException("Must be called from an activity");
@@ -5278,6 +5277,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
             targetUid = sourceRecord.launchedFromUid;
             targetPackage = sourceRecord.launchedFromPackage;
+            isResolver = sourceRecord.isResolverOrChildActivity();
         }
 
         if (userId == UserHandle.USER_NULL) {
@@ -5297,6 +5297,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                     .setActivityOptions(bOptions)
                     .setMayWait(userId)
                     .setIgnoreTargetSecurity(ignoreTargetSecurity)
+                    .setFilterCallingUid(isResolver ? 0 /* system */ : targetUid)
                     .execute();
         } catch (SecurityException e) {
             // XXX need to figure out how to propagate to original app.
@@ -16110,7 +16111,10 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @Override
-    public void getMyMemoryState(ActivityManager.RunningAppProcessInfo outInfo) {
+    public void getMyMemoryState(ActivityManager.RunningAppProcessInfo outState) {
+        if (outState == null) {
+            throw new IllegalArgumentException("outState is null");
+        }
         enforceNotIsolatedCaller("getMyMemoryState");
 
         final int callingUid = Binder.getCallingUid();
@@ -16121,7 +16125,9 @@ public class ActivityManagerService extends IActivityManager.Stub
             synchronized (mPidsSelfLocked) {
                 proc = mPidsSelfLocked.get(Binder.getCallingPid());
             }
-            fillInProcMemInfo(proc, outInfo, clientTargetSdk);
+            if (proc != null) {
+                fillInProcMemInfo(proc, outState, clientTargetSdk);
+            }
         }
     }
 
@@ -20709,7 +20715,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         IPackageManager pm = AppGlobals.getPackageManager();
         ApplicationInfo app = null;
         try {
-            app = pm.getApplicationInfo(packageName, 0, userId);
+            app = pm.getApplicationInfo(packageName, STOCK_PM_FLAGS, userId);
         } catch (RemoteException e) {
             // can't happen; package manager is process-local
         }
