@@ -44,7 +44,7 @@ import com.android.settingslib.R;
 /**
  * DunServerProfile handles Bluetooth DUN server profile.
  */
-final class DunServerProfile implements LocalBluetoothProfile {
+public final class DunServerProfile implements LocalBluetoothProfile {
     private static final String TAG = "DunServerProfile";
     private static boolean V = true;
 
@@ -74,6 +74,11 @@ final class DunServerProfile implements LocalBluetoothProfile {
 
     public boolean isProfileReady() {
         return mIsProfileReady;
+    }
+
+    @Override
+    public int getProfileId() {
+        return BluetoothProfile.DUN;
     }
 
     DunServerProfile(Context context) {

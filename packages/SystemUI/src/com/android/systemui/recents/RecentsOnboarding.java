@@ -24,11 +24,19 @@ import static com.android.systemui.Prefs.Key.HAS_SEEN_RECENTS_QUICK_SCRUB_ONBOAR
 import static com.android.systemui.Prefs.Key.HAS_SEEN_RECENTS_SWIPE_UP_ONBOARDING;
 import static com.android.systemui.Prefs.Key.OVERVIEW_OPENED_COUNT;
 import static com.android.systemui.Prefs.Key.OVERVIEW_OPENED_FROM_HOME_COUNT;
+import static com.android.systemui.shared.system.LauncherEventUtil.VISIBLE;
+import static com.android.systemui.shared.system.LauncherEventUtil.DISMISS;
+import static com.android.systemui.shared.system.LauncherEventUtil.RECENTS_QUICK_SCRUB_ONBOARDING_TIP;
+import static com.android.systemui.shared.system.LauncherEventUtil.RECENTS_SWIPE_UP_ONBOARDING_TIP;
 
 import android.annotation.StringRes;
 import android.annotation.TargetApi;
 import android.app.ActivityManager;
+import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.CornerPathEffect;
@@ -38,6 +46,7 @@ import android.graphics.drawable.ShapeDrawable;
 import android.os.Build;
 import android.os.SystemProperties;
 import android.os.UserManager;
+import android.os.RemoteException;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -53,6 +62,7 @@ import com.android.systemui.OverviewProxyService;
 import com.android.systemui.Prefs;
 import com.android.systemui.R;
 import com.android.systemui.recents.misc.SysUiTaskStackChangeListener;
+import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 
 import java.util.Collections;
@@ -100,8 +110,19 @@ public class RecentsOnboarding {
     private int mOverviewOpenedCountSinceQuickScrubTipDismiss;
 
     private final SysUiTaskStackChangeListener mTaskListener = new SysUiTaskStackChangeListener() {
+        private String mLastPackageName;
+
         @Override
-        public void onTaskStackChanged() {
+        public void onTaskCreated(int taskId, ComponentName componentName) {
+            onAppLaunch();
+        }
+
+        @Override
+        public void onTaskMovedToFront(int taskId) {
+            onAppLaunch();
+        }
+
+        private void onAppLaunch() {
             ActivityManager.RunningTaskInfo info = ActivityManagerWrapper.getInstance()
                     .getRunningTask(ACTIVITY_TYPE_UNDEFINED /* ignoreActivityType */);
             if (info == null) {
@@ -111,6 +132,10 @@ public class RecentsOnboarding {
                 hide(true);
                 return;
             }
+            if (info.baseActivity.getPackageName().equals(mLastPackageName)) {
+                return;
+            }
+            mLastPackageName = info.baseActivity.getPackageName();
             int activityType = info.configuration.windowConfiguration.getActivityType();
             if (activityType == ACTIVITY_TYPE_STANDARD) {
                 boolean alreadySeenSwipeUpOnboarding = hasSeenSwipeUpOnboarding();
@@ -120,6 +145,7 @@ public class RecentsOnboarding {
                     return;
                 }
 
+                boolean shouldLog = false;
                 if (!alreadySeenSwipeUpOnboarding) {
                     if (getOpenedOverviewFromHomeCount()
                             >= SWIPE_UP_SHOW_ON_OVERVIEW_OPENED_FROM_HOME_COUNT) {
@@ -128,10 +154,13 @@ public class RecentsOnboarding {
                             if (mNumAppsLaunchedSinceSwipeUpTipDismiss
                                     == SWIPE_UP_SHOW_ON_APP_LAUNCH_AFTER_DISMISS) {
                                 mNumAppsLaunchedSinceSwipeUpTipDismiss = 0;
-                                show(R.string.recents_swipe_up_onboarding);
+                                shouldLog = show(R.string.recents_swipe_up_onboarding);
                             }
                         } else {
-                            show(R.string.recents_swipe_up_onboarding);
+                            shouldLog = show(R.string.recents_swipe_up_onboarding);
+                        }
+                        if (shouldLog) {
+                            notifyOnTip(VISIBLE, RECENTS_SWIPE_UP_ONBOARDING_TIP);
                         }
                     }
                 } else {
@@ -140,12 +169,16 @@ public class RecentsOnboarding {
                             if (mOverviewOpenedCountSinceQuickScrubTipDismiss
                                     == QUICK_SCRUB_SHOW_ON_OVERVIEW_OPENED_COUNT) {
                                 mOverviewOpenedCountSinceQuickScrubTipDismiss = 0;
-                                show(R.string.recents_quick_scrub_onboarding);
+                                shouldLog = show(R.string.recents_quick_scrub_onboarding);
                             }
                         } else {
-                            show(R.string.recents_quick_scrub_onboarding);
+                            shouldLog = show(R.string.recents_quick_scrub_onboarding);
+                        }
+                        if (shouldLog) {
+                            notifyOnTip(VISIBLE, RECENTS_QUICK_SCRUB_ONBOARDING_TIP);
                         }
                     }
+
                 }
             } else {
                 hide(false);
@@ -191,6 +224,7 @@ public class RecentsOnboarding {
         @Override
         public void onViewAttachedToWindow(View view) {
             if (view == mLayout) {
+                mContext.registerReceiver(mReceiver, new IntentFilter(Intent.ACTION_SCREEN_OFF));
                 mLayoutAttachedToWindow = true;
                 if (view.getTag().equals(R.string.recents_swipe_up_onboarding)) {
                     mHasDismissedSwipeUpTip = false;
@@ -215,6 +249,7 @@ public class RecentsOnboarding {
                     }
                     mOverviewOpenedCountSinceQuickScrubTipDismiss = 0;
                 }
+                mContext.unregisterReceiver(mReceiver);
             }
         }
     };
@@ -244,6 +279,9 @@ public class RecentsOnboarding {
             if (v.getTag().equals(R.string.recents_swipe_up_onboarding)) {
                 mHasDismissedSwipeUpTip = true;
                 mNumAppsLaunchedSinceSwipeUpTipDismiss = 0;
+                notifyOnTip(DISMISS, RECENTS_SWIPE_UP_ONBOARDING_TIP);
+            } else {
+                notifyOnTip(DISMISS, RECENTS_QUICK_SCRUB_ONBOARDING_TIP);
             }
         });
 
@@ -263,6 +301,15 @@ public class RecentsOnboarding {
             setOpenedOverviewCount(0);
             setOpenedOverviewFromHomeCount(0);
         }
+    }
+
+    private void notifyOnTip(int action, int target) {
+        try {
+            IOverviewProxy overviewProxy = mOverviewProxyService.getProxy();
+            if(overviewProxy != null) {
+                overviewProxy.onTip(action, target);
+            }
+        } catch (RemoteException e) {}
     }
 
     public void onConnectedToLauncher() {
@@ -307,9 +354,9 @@ public class RecentsOnboarding {
         }
     }
 
-    public void show(@StringRes int stringRes) {
+    public boolean show(@StringRes int stringRes) {
         if (!shouldShow()) {
-            return;
+            return false;
         }
         mDismissView.setTag(stringRes);
         mLayout.setTag(stringRes);
@@ -328,7 +375,9 @@ public class RecentsOnboarding {
                     .setDuration(SHOW_DURATION_MS)
                     .setInterpolator(new DecelerateInterpolator())
                     .start();
+            return true;
         }
+        return false;
     }
 
     /**
@@ -370,7 +419,7 @@ public class RecentsOnboarding {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 0, -mNavBarHeight / 2,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL,
                 flags,
                 PixelFormat.TRANSLUCENT);
         lp.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
@@ -427,4 +476,13 @@ public class RecentsOnboarding {
     private void setOpenedOverviewCount(int openedOverviewCount) {
         Prefs.putInt(mContext, OVERVIEW_OPENED_COUNT, openedOverviewCount);
     }
+
+    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.getAction().equals(Intent.ACTION_SCREEN_OFF)) {
+                hide(false);
+            }
+        }
+    };
 }

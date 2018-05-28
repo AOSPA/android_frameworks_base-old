@@ -130,6 +130,10 @@ public abstract class SliceProvider extends ContentProvider {
     /**
      * @hide
      */
+    public static final String METHOD_GET_PERMISSIONS = "get_permissions";
+    /**
+     * @hide
+     */
     public static final String EXTRA_INTENT = "slice_intent";
     /**
      * @hide
@@ -147,6 +151,10 @@ public abstract class SliceProvider extends ContentProvider {
      * @hide
      */
     public static final String EXTRA_PROVIDER_PKG = "provider_pkg";
+    /**
+     * @hide
+     */
+    public static final String EXTRA_RESULT = "result";
 
     private static final boolean DEBUG = false;
 
@@ -392,18 +400,20 @@ public abstract class SliceProvider extends ContentProvider {
             b.putParcelableArrayList(EXTRA_SLICE_DESCENDANTS,
                     new ArrayList<>(handleGetDescendants(uri)));
             return b;
+        } else if (method.equals(METHOD_GET_PERMISSIONS)) {
+            if (Binder.getCallingUid() != Process.SYSTEM_UID) {
+                throw new SecurityException("Only the system can get permissions");
+            }
+            Bundle b = new Bundle();
+            b.putStringArray(EXTRA_RESULT, mAutoGrantPermissions);
+            return b;
         }
         return super.call(method, arg, extras);
     }
 
     private Collection<Uri> handleGetDescendants(Uri uri) {
         mCallback = "onGetSliceDescendants";
-        Handler.getMain().postDelayed(mAnr, SLICE_BIND_ANR);
-        try {
-            return onGetSliceDescendants(uri);
-        } finally {
-            Handler.getMain().removeCallbacks(mAnr);
-        }
+        return onGetSliceDescendants(uri);
     }
 
     private void handlePinSlice(Uri sliceUri) {

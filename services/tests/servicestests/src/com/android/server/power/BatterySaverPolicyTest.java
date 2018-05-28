@@ -15,9 +15,15 @@
  */
 package com.android.server.power;
 
+import static com.google.common.truth.Truth.assertThat;
+
+import static org.mockito.Mockito.mock;
+
+import android.content.Context;
+import android.os.Handler;
+import android.os.PowerManager;
 import android.os.PowerManager.ServiceType;
 import android.os.PowerSaveState;
-import android.os.Handler;
 import android.provider.Settings.Global;
 import android.test.AndroidTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
@@ -25,11 +31,11 @@ import android.util.ArrayMap;
 
 import com.android.frameworks.servicestests.R;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.logging.MetricsLogger;
+import com.android.server.power.batterysaver.BatterySavingStats;
 
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-
-import static com.google.common.truth.Truth.assertThat;
 
 /**
  * Tests for {@link com.android.server.power.BatterySaverPolicy}
@@ -41,7 +47,8 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
     private static final float DEFAULT_BRIGHTNESS_FACTOR = 0.5f;
     private static final float PRECISION = 0.001f;
     private static final int GPS_MODE = 0;
-    private static final int DEFAULT_GPS_MODE = 0;
+    private static final int DEFAULT_GPS_MODE =
+            PowerManager.LOCATION_MODE_ALL_DISABLED_WHEN_SCREEN_OFF;
     private static final String BATTERY_SAVER_CONSTANTS = "vibration_disabled=true,"
             + "animation_disabled=false,"
             + "soundtrigger_disabled=true,"
@@ -55,8 +62,9 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
     private static final String BATTERY_SAVER_INCORRECT_CONSTANTS = "vi*,!=,,true";
 
     private class BatterySaverPolicyForTest extends BatterySaverPolicy {
-        public BatterySaverPolicyForTest(Handler handler) {
-            super(handler);
+        public BatterySaverPolicyForTest(Object lock, Context context,
+                BatterySavingStats batterySavingStats) {
+            super(lock, context, batterySavingStats);
         }
 
         @Override
@@ -69,7 +77,6 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
             return mDeviceSpecificConfigResId;
         }
 
-
         @VisibleForTesting
         void onChange() {
             onChange(true, null);
@@ -78,6 +85,10 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
 
     @Mock
     Handler mHandler;
+
+    @Mock
+    MetricsLogger mMetricsLogger = mock(MetricsLogger.class);
+
     private BatterySaverPolicyForTest mBatterySaverPolicy;
 
     private final ArrayMap<String, String> mMockGlobalSettings = new ArrayMap<>();
@@ -86,8 +97,10 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
     public void setUp() throws Exception {
         super.setUp();
         MockitoAnnotations.initMocks(this);
-        mBatterySaverPolicy = new BatterySaverPolicyForTest(mHandler);
-        mBatterySaverPolicy.systemReady(getContext());
+        final Object lock = new Object();
+        mBatterySaverPolicy = new BatterySaverPolicyForTest(lock, getContext(),
+                new BatterySavingStats(lock, mMetricsLogger));
+        mBatterySaverPolicy.systemReady();
     }
 
     @SmallTest
@@ -98,6 +111,12 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
     @SmallTest
     public void testGetBatterySaverPolicy_PolicyVibration_DefaultValueCorrect() {
         testServiceDefaultValue(ServiceType.VIBRATION);
+    }
+
+    @SmallTest
+    public void testGetBatterySaverPolicy_PolicyVibration_WithAccessibilityEnabled() {
+        mBatterySaverPolicy.setAccessibilityEnabledForTest(true);
+        testServiceDefaultValue_unchanged(ServiceType.VIBRATION);
     }
 
     @SmallTest
@@ -117,7 +136,7 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
 
     @SmallTest
     public void testGetBatterySaverPolicy_PolicyAnimation_DefaultValueCorrect() {
-        testServiceDefaultValue(ServiceType.ANIMATION);
+        testServiceDefaultValue_unchanged(ServiceType.ANIMATION);
     }
 
     @SmallTest
@@ -144,11 +163,7 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
 
     @SmallTest
     public void testGetBatterySaverPolicy_PolicyScreenBrightness_DefaultValueCorrect() {
-        testServiceDefaultValue(ServiceType.SCREEN_BRIGHTNESS);
-
-        PowerSaveState stateOn =
-                mBatterySaverPolicy.getBatterySaverPolicy(ServiceType.SCREEN_BRIGHTNESS, true);
-        assertThat(stateOn.brightnessFactor).isWithin(PRECISION).of(DEFAULT_BRIGHTNESS_FACTOR);
+        testServiceDefaultValue_unchanged(ServiceType.SCREEN_BRIGHTNESS);
     }
 
     @SmallTest
@@ -216,6 +231,17 @@ public class BatterySaverPolicyTest extends AndroidTestCase {
         final PowerSaveState batterySaverStateOn =
                 mBatterySaverPolicy.getBatterySaverPolicy(type, BATTERY_SAVER_ON);
         assertThat(batterySaverStateOn.batterySaverEnabled).isTrue();
+
+        final PowerSaveState batterySaverStateOff =
+                mBatterySaverPolicy.getBatterySaverPolicy(type, BATTERY_SAVER_OFF);
+        assertThat(batterySaverStateOff.batterySaverEnabled).isFalse();
+    }
+
+    private void testServiceDefaultValue_unchanged(@ServiceType int type) {
+        mBatterySaverPolicy.updateConstantsLocked("", "");
+        final PowerSaveState batterySaverStateOn =
+                mBatterySaverPolicy.getBatterySaverPolicy(type, BATTERY_SAVER_ON);
+        assertThat(batterySaverStateOn.batterySaverEnabled).isFalse();
 
         final PowerSaveState batterySaverStateOff =
                 mBatterySaverPolicy.getBatterySaverPolicy(type, BATTERY_SAVER_OFF);

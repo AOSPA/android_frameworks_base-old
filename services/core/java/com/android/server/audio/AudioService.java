@@ -254,6 +254,7 @@ public class AudioService extends IAudioService.Stub
     private static final int MSG_ACCESSORY_PLUG_MEDIA_UNMUTE = 27;
     private static final int MSG_NOTIFY_VOL_EVENT = 28;
     private static final int MSG_DISPATCH_AUDIO_SERVER_STATE = 29;
+    private static final int MSG_ENABLE_SURROUND_FORMATS = 30;
     // start of messages handled under wakelock
     //   these messages can only be queued, i.e. sent with queueMsgUnderWakeLock(),
     //   and not with sendMsg(..., ..., SENDMSG_QUEUE, ...)
@@ -632,6 +633,10 @@ public class AudioService extends IAudioService.Stub
     // Array of Uids of valid accessibility services to check if caller is one of them
     private int[] mAccessibilityServiceUids;
     private final Object mAccessibilityServiceUidsLock = new Object();
+
+    private int mEncodedSurroundMode;
+    private String mEnabledSurroundFormats;
+    private boolean mSurroundModeChanged;
 
     // Intent "extra" data keys.
     public static final String CONNECT_INTENT_KEY_PORT_NAME = "portName";
@@ -1035,6 +1040,7 @@ public class AudioService extends IAudioService.Stub
                     "onAudioServerDied"));
             AudioSystem.setForceUse(AudioSystem.FOR_DOCK, forDock);
             sendEncodedSurroundMode(mContentResolver, "onAudioServerDied");
+            sendEnabledSurroundFormats(mContentResolver, true);
         }
         if (mHdmiManager != null) {
             synchronized (mHdmiManager) {
@@ -1288,6 +1294,9 @@ public class AudioService extends IAudioService.Stub
             case Settings.Global.ENCODED_SURROUND_OUTPUT_ALWAYS:
                 forceSetting = AudioSystem.FORCE_ENCODED_SURROUND_ALWAYS;
                 break;
+            case Settings.Global.ENCODED_SURROUND_OUTPUT_MANUAL:
+                forceSetting = AudioSystem.FORCE_ENCODED_SURROUND_MANUAL;
+                break;
             default:
                 Log.e(TAG, "updateSurroundSoundSettings: illegal value "
                         + encodedSurroundMode);
@@ -1301,6 +1310,56 @@ public class AudioService extends IAudioService.Stub
                     forceSetting,
                     eventSource,
                     0);
+        }
+    }
+
+    private void sendEnabledSurroundFormats(ContentResolver cr, boolean forceUpdate) {
+        if (mEncodedSurroundMode != Settings.Global.ENCODED_SURROUND_OUTPUT_MANUAL) {
+            // Manually enable surround formats only when the setting is in manual mode.
+            return;
+        }
+        String enabledSurroundFormats = Settings.Global.getString(
+                cr, Settings.Global.ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS);
+        if (!forceUpdate && TextUtils.equals(enabledSurroundFormats, mEnabledSurroundFormats)) {
+            // Update enabled surround formats to AudioPolicyManager only when forceUpdate
+            // is true or enabled surround formats changed.
+            return;
+        }
+
+        mEnabledSurroundFormats = enabledSurroundFormats;
+        String[] surroundFormats = TextUtils.split(enabledSurroundFormats, ",");
+        ArrayList<Integer> formats = new ArrayList<>();
+        for (String format : surroundFormats) {
+            try {
+                int audioFormat = Integer.valueOf(format);
+                boolean isSurroundFormat = false;
+                for (int sf : AudioFormat.SURROUND_SOUND_ENCODING) {
+                    if (sf == audioFormat) {
+                        isSurroundFormat = true;
+                        break;
+                    }
+                }
+                if (isSurroundFormat && !formats.contains(audioFormat)) {
+                    formats.add(audioFormat);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Invalid enabled surround format:" + format);
+            }
+        }
+        // Set filtered surround formats to settings DB in case
+        // there are invalid surround formats in original settings.
+        Settings.Global.putString(mContext.getContentResolver(),
+                Settings.Global.ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS,
+                TextUtils.join(",", formats));
+        sendMsg(mAudioHandler, MSG_ENABLE_SURROUND_FORMATS, SENDMSG_QUEUE, 0, 0, formats, 0);
+    }
+
+    private void onEnableSurroundFormats(ArrayList<Integer> enabledSurroundFormats) {
+        // Set surround format enabled accordingly.
+        for (int surroundFormat : AudioFormat.SURROUND_SOUND_ENCODING) {
+            boolean enabled = enabledSurroundFormats.contains(surroundFormat);
+            int ret = AudioSystem.setSurroundFormatEnabled(surroundFormat, enabled);
+            Log.i(TAG, "enable surround format:" + surroundFormat + " " + enabled + " " + ret);
         }
     }
 
@@ -1346,6 +1405,7 @@ public class AudioService extends IAudioService.Stub
             updateRingerAndZenModeAffectedStreams();
             readDockAudioSettings(cr);
             sendEncodedSurroundMode(cr, "readPersistedSettings");
+            sendEnabledSurroundFormats(cr, true);
         }
 
         mMuteAffectedStreams = System.getIntForUser(cr,
@@ -3657,54 +3717,34 @@ public class AudioService extends IAudioService.Stub
 
         String address = btDevice.getAddress();
         BluetoothClass btClass = btDevice.getBluetoothClass();
-        int outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO;
         int inDevice = AudioSystem.DEVICE_IN_BLUETOOTH_SCO_HEADSET;
+        int[] outDeviceTypes = {
+            AudioSystem.DEVICE_OUT_BLUETOOTH_SCO,
+            AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET,
+            AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT
+        };
         if (btClass != null) {
             switch (btClass.getDeviceClass()) {
                 case BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET:
                 case BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE:
-                    outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET;
+                    outDeviceTypes = new int[] { AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET };
                     break;
                 case BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO:
-                    outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT;
+                    outDeviceTypes = new int[] { AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT };
                     break;
             }
         }
-
         if (!BluetoothAdapter.checkBluetoothAddress(address)) {
             address = "";
         }
-
         String btDeviceName =  btDevice.getName();
-
-        Slog.i(TAG, "handleBtScoActiveDeviceChange: isActive " + isActive +
-             " outDevice " + outDevice + " address " + address + " btDevicename " + btDeviceName);
-
-        boolean result = handleDeviceConnection(isActive, outDevice, address, btDeviceName);
-        Slog.i(TAG, "for outDevice " + outDevice + " result is " + result);
-
-        /* When BT process is killed, getting device class may fail during cleanup.
-         * This results in outDevice assigned to DEVICE_OUT_BLUETOOTH_SCO. If
-         * outDevice was added as different device than DEVICE_OUT_BLUETOOTH_SCO
-         * during connection, removal will fail during disconnection. Attempt to
-         * remove outDevice with other possible SCO devices.
-         */
-        if (isActive == false && result == false) {
-           outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_HEADSET;
-           Slog.w(TAG, "handleBtScoActiveDeviceChange: retrying with outDevice " + outDevice);
-
-           result = handleDeviceConnection(isActive, outDevice, address, btDeviceName);
-
-           Slog.w(TAG, "for outDevice "+ outDevice + " result is " + result);
-        }
-
-        if (isActive == false && result == false) {
-           outDevice = AudioSystem.DEVICE_OUT_BLUETOOTH_SCO_CARKIT;
-           Slog.w(TAG, "handleBtScoActiveDeviceChange: retrying with outDevice " + outDevice);
-
-           result = handleDeviceConnection(isActive, outDevice, address, btDeviceName);
-
-           Slog.w(TAG, "for outDevice "+ outDevice + " result is " + result);
+        boolean result = false;
+        if (isActive) {
+            result |= handleDeviceConnection(isActive, outDeviceTypes[0], address, btDeviceName);
+        } else {
+            for (int outDeviceType : outDeviceTypes) {
+                result |= handleDeviceConnection(isActive, outDeviceType, address, btDeviceName);
+            }
         }
 
         // handleDeviceConnection() && result to make sure the method get executed
@@ -5667,13 +5707,15 @@ public class AudioService extends IAudioService.Stub
                 case MSG_NOTIFY_VOL_EVENT:
                     onNotifyVolumeEvent((IAudioPolicyCallback) msg.obj, msg.arg1);
                     break;
+
+                case MSG_ENABLE_SURROUND_FORMATS:
+                    onEnableSurroundFormats((ArrayList<Integer>) msg.obj);
+                    break;
             }
         }
     }
 
     private class SettingsObserver extends ContentObserver {
-
-        private int mEncodedSurroundMode;
 
         SettingsObserver() {
             super(new Handler());
@@ -5693,6 +5735,11 @@ public class AudioService extends IAudioService.Stub
                     Settings.Global.ENCODED_SURROUND_OUTPUT_AUTO);
             mContentResolver.registerContentObserver(Settings.Global.getUriFor(
                     Settings.Global.ENCODED_SURROUND_OUTPUT), false, this);
+
+            mEnabledSurroundFormats = Settings.Global.getString(
+                    mContentResolver, Settings.Global.ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS);
+            mContentResolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.ENCODED_SURROUND_OUTPUT_ENABLED_FORMATS), false, this);
         }
 
         @Override
@@ -5713,6 +5760,7 @@ public class AudioService extends IAudioService.Stub
                 readDockAudioSettings(mContentResolver);
                 updateMasterMono(mContentResolver);
                 updateEncodedSurroundOutput();
+                sendEnabledSurroundFormats(mContentResolver, mSurroundModeChanged);
             }
         }
 
@@ -5739,6 +5787,9 @@ public class AudioService extends IAudioService.Stub
                     }
                 }
                 mEncodedSurroundMode = newSurroundMode;
+                mSurroundModeChanged = true;
+            } else {
+                mSurroundModeChanged = false;
             }
         }
     }
@@ -6276,6 +6327,9 @@ public class AudioService extends IAudioService.Stub
                             }
                         }
                     }
+                }
+                if ((device & AudioSystem.DEVICE_OUT_HDMI) != 0) {
+                    sendEnabledSurroundFormats(mContentResolver, true);
                 }
             } else {
                 if (isPlatformTelevision() && ((device & AudioSystem.DEVICE_OUT_HDMI) != 0)) {
