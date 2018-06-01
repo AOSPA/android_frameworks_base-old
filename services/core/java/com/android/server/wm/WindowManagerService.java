@@ -1809,6 +1809,12 @@ public class WindowManagerService extends IWindowManager.Stub
                     }
                     w.setDisplayLayoutNeeded();
                     mWindowPlacerLocked.performSurfacePlacement();
+
+                    // We need to report touchable region changes to accessibility.
+                    if (mAccessibilityController != null
+                            && w.getDisplayContent().getDisplayId() == DEFAULT_DISPLAY) {
+                        mAccessibilityController.onSomeWindowResizedOrMovedLocked();
+                    }
                 }
             }
         } finally {
@@ -2703,12 +2709,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     + " Callers=" + Debug.getCallers(5));
             if (mAppTransition.isTransitionSet()) {
                 mAppTransition.setReady();
-                final long origId = Binder.clearCallingIdentity();
-                try {
-                    mWindowPlacerLocked.performSurfacePlacement();
-                } finally {
-                    Binder.restoreCallingIdentity(origId);
-                }
+                mWindowPlacerLocked.requestTraversal();
             }
         }
     }

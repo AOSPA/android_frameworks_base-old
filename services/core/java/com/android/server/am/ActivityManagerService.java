@@ -20889,7 +20889,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     // BROADCASTS
     // =========================================================
 
-    private boolean isInstantApp(ProcessRecord record, String callerPackage, int uid) {
+    private boolean isInstantApp(ProcessRecord record, @Nullable String callerPackage, int uid) {
         if (UserHandle.getAppId(uid) < FIRST_APPLICATION_UID) {
             return false;
         }
@@ -20898,13 +20898,17 @@ public class ActivityManagerService extends IActivityManager.Stub
             return record.info.isInstantApp();
         }
         // Otherwise check with PackageManager.
-        if (callerPackage == null) {
-            Slog.e(TAG, "isInstantApp with an application's uid, no record, and no package name");
-            throw new IllegalArgumentException("Calling application did not provide package name");
-        }
-        mAppOpsService.checkPackage(uid, callerPackage);
+        IPackageManager pm = AppGlobals.getPackageManager();
         try {
-            IPackageManager pm = AppGlobals.getPackageManager();
+            if (callerPackage == null) {
+                final String[] packageNames = pm.getPackagesForUid(uid);
+                if (packageNames == null || packageNames.length == 0) {
+                    throw new IllegalArgumentException("Unable to determine caller package name");
+                }
+                // Instant Apps can't use shared uids, so its safe to only check the first package.
+                callerPackage = packageNames[0];
+            }
+            mAppOpsService.checkPackage(uid, callerPackage);
             return pm.isInstantApp(callerPackage, UserHandle.getUserId(uid));
         } catch (RemoteException e) {
             Slog.e(TAG, "Error looking up if " + callerPackage + " is an instant app.", e);
@@ -21618,6 +21622,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                             return ActivityManager.BROADCAST_SUCCESS;
                         }
                         mStackSupervisor.updateActivityApplicationInfoLocked(aInfo);
+                        mServices.updateServiceApplicationInfoLocked(aInfo);
                         sendPackageBroadcastLocked(ApplicationThreadConstants.PACKAGE_REPLACED,
                                 new String[] {ssp}, userId);
                     }
@@ -22174,12 +22179,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                     doNext = r.queue.finishReceiverLocked(r, resultCode,
                         resultData, resultExtras, resultAbort, true);
                 }
+                if (doNext) {
+                    r.queue.processNextBroadcastLocked(/*fromMsg=*/ false, /*skipOomAdj=*/ true);
+                }
+                // updateOomAdjLocked() will be done here
+                trimApplicationsLocked();
             }
 
-            if (doNext) {
-                r.queue.processNextBroadcast(false);
-            }
-            trimApplications();
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
@@ -25965,40 +25971,43 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     final void trimApplications() {
         synchronized (this) {
-            int i;
+            trimApplicationsLocked();
+        }
+    }
 
-            // First remove any unused application processes whose package
-            // has been removed.
-            for (i=mRemovedProcesses.size()-1; i>=0; i--) {
-                final ProcessRecord app = mRemovedProcesses.get(i);
-                if (app.activities.size() == 0 && app.recentTasks.size() == 0
-                        && app.curReceivers.isEmpty() && app.services.size() == 0) {
-                    Slog.i(
-                        TAG, "Exiting empty application process "
-                        + app.toShortString() + " ("
-                        + (app.thread != null ? app.thread.asBinder() : null)
-                        + ")\n");
-                    if (app.pid > 0 && app.pid != MY_PID) {
-                        app.kill("empty", false);
-                    } else if (app.thread != null) {
-                        try {
-                            app.thread.scheduleExit();
-                        } catch (Exception e) {
-                            // Ignore exceptions.
-                        }
-                    }
-                    cleanUpApplicationRecordLocked(app, false, true, -1, false /*replacingPid*/);
-                    mRemovedProcesses.remove(i);
-
-                    if (app.persistent) {
-                        addAppLocked(app.info, null, false, null /* ABI override */);
+    final void trimApplicationsLocked() {
+        // First remove any unused application processes whose package
+        // has been removed.
+        for (int i=mRemovedProcesses.size()-1; i>=0; i--) {
+            final ProcessRecord app = mRemovedProcesses.get(i);
+            if (app.activities.size() == 0 && app.recentTasks.size() == 0
+                    && app.curReceivers.isEmpty() && app.services.size() == 0) {
+                Slog.i(
+                    TAG, "Exiting empty application process "
+                    + app.toShortString() + " ("
+                    + (app.thread != null ? app.thread.asBinder() : null)
+                    + ")\n");
+                if (app.pid > 0 && app.pid != MY_PID) {
+                    app.kill("empty", false);
+                } else if (app.thread != null) {
+                    try {
+                        app.thread.scheduleExit();
+                    } catch (Exception e) {
+                        // Ignore exceptions.
                     }
                 }
-            }
+                cleanUpApplicationRecordLocked(app, false, true, -1, false /*replacingPid*/);
+                mRemovedProcesses.remove(i);
 
-            // Now update the oom adj for all processes.
-            updateOomAdjLocked();
+                if (app.persistent) {
+                    addAppLocked(app.info, null, false, null /* ABI override */);
+                }
+            }
         }
+
+        // Now update the oom adj for all processes. Don't skip this, since other callers
+        // might be depending on it.
+        updateOomAdjLocked();
     }
 
     /** This method sends the specified signal to each of the persistent apps */

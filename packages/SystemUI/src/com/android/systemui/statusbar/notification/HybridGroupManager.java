@@ -151,11 +151,22 @@ public class HybridGroupManager {
         return reusableView;
     }
 
+    public TextView bindOverflowNumberAmbient(TextView titleView, Notification notification,
+            int number) {
+        String text = mContext.getResources().getString(
+                R.string.notification_group_overflow_indicator_ambient,
+                resolveTitle(notification), number);
+        if (!text.equals(titleView.getText())) {
+            titleView.setText(text);
+        }
+        return titleView;
+    }
+
     public void setOverflowNumberDark(TextView view, boolean dark, boolean fade, long delay) {
         mDozer.setIntensityDark((f)->{
             mDarkAmount = f;
             updateOverFlowNumberColor(view);
-        }, dark, fade, delay);
+        }, dark, fade, delay, view);
         view.setTextSize(TypedValue.COMPLEX_UNIT_PX,
                 dark ? mOverflowNumberSizeDark : mOverflowNumberSize);
         int paddingEnd = dark ? mOverflowNumberPaddingDark : mOverflowNumberPadding;

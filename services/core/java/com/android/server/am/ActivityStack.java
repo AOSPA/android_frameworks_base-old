@@ -343,9 +343,6 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     private final Rect mDeferredTaskBounds = new Rect();
     private final Rect mDeferredTaskInsetBounds = new Rect();
 
-    long mLaunchStartTime = 0;
-    long mFullyDrawnStartTime = 0;
-
     int mCurrentUser;
 
     final int mStackId;
@@ -644,6 +641,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 // so that the divider matches and remove this logic.
                 // TODO: This is currently only called when entering split-screen while in another
                 // task, and from the tests
+                // TODO (b/78247419): Check if launcher and overview are same then move home stack
+                // instead of recents stack. Then fix the rotation animation from fullscreen to
+                // minimized mode
                 final ActivityStack recentStack = display.getOrCreateStack(
                         WINDOWING_MODE_SPLIT_SCREEN_SECONDARY, ACTIVITY_TYPE_RECENTS,
                         true /* onTop */);
@@ -1259,37 +1259,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 + " callers=" + Debug.getCallers(5));
         r.setState(RESUMED, "minimalResumeActivityLocked");
         r.completeResumeLocked();
-        setLaunchTime(r);
+        mStackSupervisor.getLaunchTimeTracker().setLaunchTime(r);
         if (DEBUG_SAVED_STATE) Slog.i(TAG_SAVED_STATE,
                 "Launch completed; removing icicle of " + r.icicle);
-    }
-
-    private void startLaunchTraces(String packageName) {
-        if (mFullyDrawnStartTime != 0)  {
-            Trace.asyncTraceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER, "drawing", 0);
-        }
-        Trace.asyncTraceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "launching: " + packageName, 0);
-        Trace.asyncTraceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "drawing", 0);
-    }
-
-    private void stopFullyDrawnTraceIfNeeded() {
-        if (mFullyDrawnStartTime != 0 && mLaunchStartTime == 0) {
-            Trace.asyncTraceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER, "drawing", 0);
-            mFullyDrawnStartTime = 0;
-        }
-    }
-
-    void setLaunchTime(ActivityRecord r) {
-        if (r.displayStartTime == 0) {
-            r.fullyDrawnStartTime = r.displayStartTime = SystemClock.uptimeMillis();
-            if (mLaunchStartTime == 0) {
-                startLaunchTraces(r.packageName);
-                mLaunchStartTime = mFullyDrawnStartTime = r.displayStartTime;
-            }
-        } else if (mLaunchStartTime == 0) {
-            startLaunchTraces(r.packageName);
-            mLaunchStartTime = mFullyDrawnStartTime = SystemClock.uptimeMillis();
-        }
     }
 
     private void clearLaunchTime(ActivityRecord r) {
@@ -1485,9 +1457,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         prev.setState(PAUSING, "startPausingLocked");
         prev.getTask().touchActiveTime();
         clearLaunchTime(prev);
-        final ActivityRecord next = mStackSupervisor.topRunningActivityLocked();
 
-        stopFullyDrawnTraceIfNeeded();
+        mStackSupervisor.getLaunchTimeTracker().stopFullyDrawnTraceIfNeeded(getWindowingMode());
 
         mService.updateCpuStats();
 
@@ -4632,46 +4603,58 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             }
         }
 
-        // Shift all activities with this task up to the top
-        // of the stack, keeping them in the same internal order.
-        insertTaskAtTop(tr, null);
+        try {
+            // Defer updating the IME target since the new IME target will try to get computed
+            // before updating all closing and opening apps, which can cause the ime target to
+            // get calculated incorrectly.
+            getDisplay().deferUpdateImeTarget();
 
-        // Don't refocus if invisible to current user
-        final ActivityRecord top = tr.getTopActivity();
-        if (top == null || !top.okToShowLocked()) {
-            if (top != null) {
-                mStackSupervisor.mRecentTasks.add(top.getTask());
+            // Shift all activities with this task up to the top
+            // of the stack, keeping them in the same internal order.
+            insertTaskAtTop(tr, null);
+
+            // Don't refocus if invisible to current user
+            final ActivityRecord top = tr.getTopActivity();
+            if (top == null || !top.okToShowLocked()) {
+                if (top != null) {
+                    mStackSupervisor.mRecentTasks.add(top.getTask());
+                }
+                ActivityOptions.abort(options);
+                return;
             }
-            ActivityOptions.abort(options);
-            return;
-        }
 
-        // Set focus to the top running activity of this stack.
-        final ActivityRecord r = topRunningActivityLocked();
-        mStackSupervisor.moveFocusableActivityStackToFrontLocked(r, reason);
+            // Set focus to the top running activity of this stack.
+            final ActivityRecord r = topRunningActivityLocked();
+            mStackSupervisor.moveFocusableActivityStackToFrontLocked(r, reason);
 
-        if (DEBUG_TRANSITION) Slog.v(TAG_TRANSITION, "Prepare to front transition: task=" + tr);
-        if (noAnimation) {
-            mWindowManager.prepareAppTransition(TRANSIT_NONE, false);
-            if (r != null) {
-                mStackSupervisor.mNoAnimActivities.add(r);
+            if (DEBUG_TRANSITION) Slog.v(TAG_TRANSITION, "Prepare to front transition: task=" + tr);
+            if (noAnimation) {
+                mWindowManager.prepareAppTransition(TRANSIT_NONE, false);
+                if (r != null) {
+                    mStackSupervisor.mNoAnimActivities.add(r);
+                }
+                ActivityOptions.abort(options);
+            } else {
+                updateTransitLocked(TRANSIT_TASK_TO_FRONT, options);
             }
-            ActivityOptions.abort(options);
-        } else {
-            updateTransitLocked(TRANSIT_TASK_TO_FRONT, options);
-        }
-        // If a new task is moved to the front, then mark the existing top activity as supporting
-        // picture-in-picture while paused only if the task would not be considered an oerlay on top
-        // of the current activity (eg. not fullscreen, or the assistant)
-        if (canEnterPipOnTaskSwitch(topActivity, tr, null /* toFrontActivity */,
-                options)) {
-            topActivity.supportsEnterPipOnTaskSwitch = true;
-        }
+            // If a new task is moved to the front, then mark the existing top activity as
+            // supporting
 
-        mStackSupervisor.resumeFocusedStackTopActivityLocked();
-        EventLog.writeEvent(EventLogTags.AM_TASK_TO_FRONT, tr.userId, tr.taskId);
+            // picture-in-picture while paused only if the task would not be considered an oerlay
+            // on top
+            // of the current activity (eg. not fullscreen, or the assistant)
+            if (canEnterPipOnTaskSwitch(topActivity, tr, null /* toFrontActivity */,
+                    options)) {
+                topActivity.supportsEnterPipOnTaskSwitch = true;
+            }
 
-        mService.mTaskChangeNotificationController.notifyTaskMovedToFront(tr.taskId);
+            mStackSupervisor.resumeFocusedStackTopActivityLocked();
+            EventLog.writeEvent(EventLogTags.AM_TASK_TO_FRONT, tr.userId, tr.taskId);
+
+            mService.mTaskChangeNotificationController.notifyTaskMovedToFront(tr.taskId);
+        } finally {
+            getDisplay().continueUpdateImeTarget();
+        }
     }
 
     /**

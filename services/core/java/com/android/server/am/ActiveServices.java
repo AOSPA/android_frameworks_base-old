@@ -480,11 +480,22 @@ public final class ActiveServices {
                 Slog.w(TAG, "Background start not allowed: service "
                         + service + " to " + r.name.flattenToShortString()
                         + " from pid=" + callingPid + " uid=" + callingUid
-                        + " pkg=" + callingPackage);
+                        + " pkg=" + callingPackage + " startFg?=" + fgRequired);
                 if (allowed == ActivityManager.APP_START_MODE_DELAYED || forceSilentAbort) {
                     // In this case we are silently disabling the app, to disrupt as
                     // little as possible existing apps.
                     return null;
+                }
+                if (forcedStandby) {
+                    // This is an O+ app, but we might be here because the user has placed
+                    // it under strict background restrictions.  Don't punish the app if it's
+                    // trying to do the right thing but we're denying it for that reason.
+                    if (fgRequired) {
+                        if (DEBUG_BACKGROUND_CHECK) {
+                            Slog.v(TAG, "Silently dropping foreground service launch due to FAS");
+                        }
+                        return null;
+                    }
                 }
                 // This app knows it is in the new model where this operation is not
                 // allowed, so tell it what has happened.
@@ -3658,6 +3669,21 @@ public final class ActiveServices {
             mAm.mAppErrors.appNotResponding(app, null, null, false,
                     "Context.startForegroundService() did not then call Service.startForeground(): "
                         + r);
+        }
+    }
+
+    public void updateServiceApplicationInfoLocked(ApplicationInfo applicationInfo) {
+        final int userId = UserHandle.getUserId(applicationInfo.uid);
+        ServiceMap serviceMap = mServiceMap.get(userId);
+        if (serviceMap != null) {
+            ArrayMap<ComponentName, ServiceRecord> servicesByName = serviceMap.mServicesByName;
+            for (int j = servicesByName.size() - 1; j >= 0; j--) {
+                ServiceRecord serviceRecord = servicesByName.valueAt(j);
+                if (applicationInfo.packageName.equals(serviceRecord.appInfo.packageName)) {
+                    serviceRecord.appInfo = applicationInfo;
+                    serviceRecord.serviceInfo.applicationInfo = applicationInfo;
+                }
+            }
         }
     }
 

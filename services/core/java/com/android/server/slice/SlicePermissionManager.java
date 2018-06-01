@@ -133,6 +133,16 @@ public class SlicePermissionManager implements DirtyTracker {
         mHandler.obtainMessage(H.MSG_REMOVE, pkgUser);
     }
 
+    public String[] getAllPackagesGranted(String pkg) {
+        ArraySet<String> ret = new ArraySet<>();
+        for (SliceAuthority authority : getProvider(new PkgUser(pkg, 0)).getAuthorities()) {
+            for (PkgUser pkgUser : authority.getPkgs()) {
+                ret.add(pkgUser.mPkg);
+            }
+        }
+        return ret.toArray(new String[ret.size()]);
+    }
+
     public boolean hasFullAccess(String pkg, int userId) {
         PkgUser pkgUser = new PkgUser(pkg, userId);
         return getClient(pkgUser).hasFullAccess();
@@ -251,6 +261,9 @@ public class SlicePermissionManager implements DirtyTracker {
             }
             // Can't read or no permissions exist, create a clean object.
             client = new SliceClientPermissions(pkgUser, this);
+            synchronized (mCachedClients) {
+                mCachedClients.put(pkgUser, client);
+            }
         }
         return client;
     }
@@ -278,6 +291,9 @@ public class SlicePermissionManager implements DirtyTracker {
             }
             // Can't read or no permissions exist, create a clean object.
             provider = new SliceProviderPermissions(pkgUser, this);
+            synchronized (mCachedProviders) {
+                mCachedProviders.put(pkgUser, provider);
+            }
         }
         return provider;
     }
