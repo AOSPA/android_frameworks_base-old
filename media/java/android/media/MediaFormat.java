@@ -935,6 +935,18 @@ public final class MediaFormat {
      */
     public static final String KEY_CA_SESSION_ID = "ca-session-id";
 
+     /**
+     * A key to enable the nal length bitstream format in encode session
+     * @hide
+     */
+    public static final String NAL_LENGTH_BITSTREAM = "nal-length-bitstream";
+
+    /**
+     * A key to set the value of nal length in bytes in encode session
+     * @hide
+     */
+    public static final String KEY_NAL_LENGTH_IN_BYTES = "nal-length-in-bytes";
+
     /* package private */ MediaFormat(Map<String, Object> map) {
         mMap = map;
     }
