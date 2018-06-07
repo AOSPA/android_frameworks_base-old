@@ -4547,7 +4547,10 @@ public class WindowManagerService extends IWindowManager.Stub
         if (mSafeMode) {
             Log.i(TAG_WM, "SAFE MODE ENABLED (menu=" + menuState + " s=" + sState
                     + " dpad=" + dpadState + " trackball=" + trackballState + ")");
-            SystemProperties.set(ShutdownThread.RO_SAFEMODE_PROPERTY, "1");
+            // May already be set if (for instance) this process has crashed
+            if (SystemProperties.getInt(ShutdownThread.RO_SAFEMODE_PROPERTY, 0) == 0) {
+                SystemProperties.set(ShutdownThread.RO_SAFEMODE_PROPERTY, "1");
+            }
         } else {
             Log.i(TAG_WM, "SAFE MODE not enabled");
         }
@@ -7630,6 +7633,19 @@ public class WindowManagerService extends IWindowManager.Stub
     public void onLockTaskStateChanged(int lockTaskState) {
         synchronized (mWindowMap) {
             mPolicy.onLockTaskStateChangedLw(lockTaskState);
+        }
+    }
+
+    /**
+     * Updates {@link WindowManagerPolicy} with new value about whether AOD  is showing. If AOD
+     * has changed, this will trigger a {@link WindowSurfacePlacer#performSurfacePlacement} to
+     * ensure the new value takes effect.
+     */
+    public void setAodShowing(boolean aodShowing) {
+        synchronized (mWindowMap) {
+            if (mPolicy.setAodShowing(aodShowing)) {
+                mWindowPlacerLocked.performSurfacePlacement();
+            }
         }
     }
 }

@@ -257,6 +257,15 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS += \
 		-federate AndroidX https://developer.android.com \
 		-federationapi AndroidX prebuilts/sdk/current/androidx-api.txt
 
+framework_metalava_docs_LOCAL_DROIDDOC_OPTIONS := \
+    --manifest ./frameworks/base/core/res/AndroidManifest.xml \
+    --hide-package com.android.okhttp \
+    --hide-package com.android.org.conscrypt --hide-package com.android.server \
+    --hide RequiresPermission \
+    --hide MissingPermission --hide BroadcastBehavior \
+    --hide HiddenSuperclass --hide DeprecationMismatch --hide UnavailableSymbol \
+    --hide SdkConstant --hide HiddenTypeParameter --hide Todo --hide Typo
+
 # ====  Public API diff ===========================
 include $(CLEAR_VARS)
 
@@ -351,6 +360,40 @@ $(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_API_FILE) \
                                           $(INTERNAL_PLATFORM_REMOVED_API_FILE)
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_API_FILE))
 
+# ====  the metalava api stubs and current.xml ===========================
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
+LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
+LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
+LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
+LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
+LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
+LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
+LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
+
+LOCAL_MODULE := metalava-api-stubs
+LOCAL_DROIDDOC_USE_METALAVA := true
+
+LOCAL_DROIDDOC_STUB_OUT_DIR := $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/metalava_android_stubs_current_intermediates/src
+
+INTERNAL_PLATFORM_METALAVA_PUBLIC_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava_public_api.txt
+INTERNAL_PLATFORM_METALAVA_PUBLIC_REMOVED_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava_removed.txt
+
+LOCAL_DROIDDOC_OPTIONS:=\
+		$(framework_metalava_docs_LOCAL_DROIDDOC_OPTIONS) \
+		--api $(INTERNAL_PLATFORM_METALAVA_PUBLIC_API_FILE) \
+		--removed-api $(INTERNAL_PLATFORM_METALAVA_PUBLIC_REMOVED_API_FILE) \
+		-nodocs
+
+LOCAL_UNINSTALLABLE_MODULE := true
+
+include $(BUILD_DROIDDOC)
+
+$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_METALAVA_PUBLIC_API_FILE) \
+                                          $(INTERNAL_PLATFORM_METALAVA_PUBLIC_REMOVED_API_FILE)
+$(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_METALAVA_PUBLIC_API_FILE))
+
 # ====  the system api stubs ===================================
 include $(CLEAR_VARS)
 
@@ -387,6 +430,41 @@ $(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_SYSTEM_API_FILE) \
                                           $(INTERNAL_PLATFORM_SYSTEM_REMOVED_API_FILE) \
                                           $(INTERNAL_PLATFORM_SYSTEM_EXACT_API_FILE)
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_SYSTEM_API_FILE))
+
+# ====  the metalava system api stubs ===================================
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
+LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
+LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
+LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
+LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
+LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
+LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
+LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
+
+LOCAL_MODULE := metalava-system-api-stubs
+LOCAL_DROIDDOC_USE_METALAVA := true
+
+LOCAL_DROIDDOC_STUB_OUT_DIR := $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/metalava_android_system_stubs_current_intermediates/src
+
+INTERNAL_PLATFORM_METALAVA_SYSTEM_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava-system-api.txt
+INTERNAL_PLATFORM_METALAVA_SYSTEM_REMOVED_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava-system-removed.txt
+
+LOCAL_DROIDDOC_OPTIONS:=\
+		$(framework_metalava_docs_LOCAL_DROIDDOC_OPTIONS) \
+		--show-annotation android.annotation.SystemApi \
+		--api $(INTERNAL_PLATFORM_METALAVA_SYSTEM_API_FILE) \
+		--removed-api $(INTERNAL_PLATFORM_METALAVA_SYSTEM_REMOVED_API_FILE) \
+		-nodocs
+
+LOCAL_UNINSTALLABLE_MODULE := true
+
+include $(BUILD_DROIDDOC)
+
+$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_METALAVA_SYSTEM_API_FILE) \
+                                          $(INTERNAL_PLATFORM_METALAVA_SYSTEM_REMOVED_API_FILE) \
+$(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_METALAVA_SYSTEM_API_FILE))
 
 # ====  the test api stubs ===================================
 include $(CLEAR_VARS)
@@ -426,6 +504,41 @@ $(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_TEST_API_FILE) \
                                           $(INTERNAL_PLATFORM_TEST_EXACT_API_FILE)
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_TEST_API_FILE))
 
+# ====  the metalava test api stubs ===================================
+include $(CLEAR_VARS)
+
+LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
+LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
+LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
+LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
+LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
+LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
+LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
+LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
+
+LOCAL_MODULE := metalava-test-api-stubs
+LOCAL_DROIDDOC_USE_METALAVA := true
+
+LOCAL_DROIDDOC_STUB_OUT_DIR := $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/metalava_android_test_stubs_current_intermediates/src
+
+INTERNAL_PLATFORM_METALAVA_TEST_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava-test-api.txt
+INTERNAL_PLATFORM_METALAVA_TEST_REMOVED_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava-test-removed.txt
+
+LOCAL_DROIDDOC_OPTIONS:=\
+               $(framework_metalava_docs_LOCAL_DROIDDOC_OPTIONS) \
+               --show-annotation android.annotation.TestApi \
+               --api $(INTERNAL_PLATFORM_METALAVA_TEST_API_FILE) \
+               --removed-api $(INTERNAL_PLATFORM_METALAVA_TEST_REMOVED_API_FILE) \
+               -nodocs
+
+LOCAL_UNINSTALLABLE_MODULE := true
+
+include $(BUILD_DROIDDOC)
+
+$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_METALAVA_TEST_API_FILE) \
+                                          $(INTERNAL_PLATFORM_METALAVA_TEST_REMOVED_API_FILE) \
+$(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_METALAVA_TEST_API_FILE))
+
 # ====  the complete hidden api list ===================================
 include $(CLEAR_VARS)
 
@@ -447,6 +560,7 @@ LOCAL_DROIDDOC_OPTIONS:=\
 		-showUnannotated \
 		-showAnnotation android.annotation.SystemApi \
 		-showAnnotation android.annotation.TestApi \
+		-dexApi $(INTERNAL_PLATFORM_DEX_API_FILE) \
 		-privateDexApi $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE) \
 		-removedDexApi $(INTERNAL_PLATFORM_REMOVED_DEX_API_FILE) \
 		-nodocs
@@ -457,7 +571,8 @@ LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_DROIDDOC)
 
-$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE) \
+$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_DEX_API_FILE) \
+                                          $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE) \
                                           $(INTERNAL_PLATFORM_REMOVED_DEX_API_FILE)
 
 # ====  check javadoc comments but don't generate docs ========
@@ -878,6 +993,7 @@ LOCAL_BLACKLIST := $(INTERNAL_PLATFORM_HIDDENAPI_BLACKLIST)
 LOCAL_SRC_GREYLIST := frameworks/base/config/hiddenapi-light-greylist.txt
 LOCAL_SRC_VENDOR_LIST := frameworks/base/config/hiddenapi-vendor-list.txt
 LOCAL_SRC_FORCE_BLACKLIST := frameworks/base/config/hiddenapi-force-blacklist.txt
+LOCAL_SRC_PUBLIC_API := $(INTERNAL_PLATFORM_DEX_API_FILE)
 LOCAL_SRC_PRIVATE_API := $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE)
 LOCAL_SRC_REMOVED_API := $(INTERNAL_PLATFORM_REMOVED_DEX_API_FILE)
 
@@ -885,6 +1001,7 @@ LOCAL_SRC_ALL := \
 	$(LOCAL_SRC_GREYLIST) \
 	$(LOCAL_SRC_VENDOR_LIST) \
 	$(LOCAL_SRC_FORCE_BLACKLIST) \
+	$(LOCAL_SRC_PUBLIC_API) \
 	$(LOCAL_SRC_PRIVATE_API) \
 	$(LOCAL_SRC_REMOVED_API)
 
@@ -957,7 +1074,8 @@ $(LOCAL_LIGHT_GREYLIST): $(LOCAL_SRC_ALL)
 #   (4) subtract entries shared with LOCAL_LIGHT_GREYLIST
 $(LOCAL_DARK_GREYLIST): $(LOCAL_SRC_ALL) $(LOCAL_LIGHT_GREYLIST)
 	comm -13 <(sort $(LOCAL_LIGHT_GREYLIST) $(LOCAL_SRC_FORCE_BLACKLIST)) \
-	         <(sed 's/\->.*//' $(LOCAL_LIGHT_GREYLIST) | sed 's/\(.*\/\).*/\1/' | sort | uniq | \
+	         <(cat $(LOCAL_SRC_PUBLIC_API) $(LOCAL_LIGHT_GREYLIST) | \
+	               sed 's/\->.*//' | sed 's/\(.*\/\).*/\1/' | sort | uniq | \
 	               while read PKG_NAME; do \
 	                   grep -E "^$${PKG_NAME}[^/;]*;" $(LOCAL_SRC_PRIVATE_API); \
 	               done | sort | uniq) \

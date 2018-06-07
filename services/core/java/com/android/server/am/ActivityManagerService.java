@@ -1393,9 +1393,14 @@ public class ActivityManagerService extends IActivityManager.Stub
     DeviceIdleController.LocalService mLocalDeviceIdleController;
 
     /**
-     * Set of app ids that are whitelisted for device idle and thus background check.
+     * Power-save whitelisted app-ids (not including except-idle-whitelisted ones).
      */
     int[] mDeviceIdleWhitelist = new int[0];
+
+    /**
+     * Power-save whitelisted app-ids (including except-idle-whitelisted ones).
+     */
+    int[] mDeviceIdleExceptIdleWhitelist = new int[0];
 
     /**
      * Set of app ids that are temporarily allowed to escape bg check due to high-pri message
@@ -9474,7 +9479,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // If force-background-check is enabled, restrict all apps that aren't whitelisted.
                 if (mForceBackgroundCheck &&
                         !UserHandle.isCore(uid) &&
-                        !isOnDeviceIdleWhitelistLocked(uid)) {
+                        !isOnDeviceIdleWhitelistLocked(uid, /*allowExceptIdleToo=*/ true)) {
                     if (DEBUG_BACKGROUND_CHECK) {
                         Slog.i(TAG, "Force background check: " +
                                 uid + "/" + packageName + " restricted");
@@ -9512,7 +9517,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         // Is this app on the battery whitelist?
-        if (isOnDeviceIdleWhitelistLocked(uid)) {
+        if (isOnDeviceIdleWhitelistLocked(uid, /*allowExceptIdleToo=*/ false)) {
             if (DEBUG_BACKGROUND_CHECK) {
                 Slog.i(TAG, "App " + uid + "/" + packageName
                         + " on idle whitelist; not restricted in background");
@@ -9554,9 +9559,12 @@ public class ActivityManagerService extends IActivityManager.Stub
                         ? appRestrictedInBackgroundLocked(uid, packageName, packageTargetSdk)
                         : appServicesRestrictedInBackgroundLocked(uid, packageName,
                                 packageTargetSdk);
-                if (DEBUG_BACKGROUND_CHECK) Slog.d(TAG, "checkAllowBackground: uid=" + uid
-                        + " pkg=" + packageName + " startMode=" + startMode
-                        + " onwhitelist=" + isOnDeviceIdleWhitelistLocked(uid));
+                if (DEBUG_BACKGROUND_CHECK) {
+                    Slog.d(TAG, "checkAllowBackground: uid=" + uid
+                            + " pkg=" + packageName + " startMode=" + startMode
+                            + " onwhitelist=" + isOnDeviceIdleWhitelistLocked(uid, false)
+                            + " onwhitelist(ei)=" + isOnDeviceIdleWhitelistLocked(uid, true));
+                }
                 if (startMode == ActivityManager.APP_START_MODE_DELAYED) {
                     // This is an old app that has been forced into a "compatible as possible"
                     // mode of background check.  To increase compatibility, we will allow other
@@ -9583,9 +9591,14 @@ public class ActivityManagerService extends IActivityManager.Stub
     /**
      * @return whether a UID is in the system, user or temp doze whitelist.
      */
-    boolean isOnDeviceIdleWhitelistLocked(int uid) {
+    boolean isOnDeviceIdleWhitelistLocked(int uid, boolean allowExceptIdleToo) {
         final int appId = UserHandle.getAppId(uid);
-        return Arrays.binarySearch(mDeviceIdleWhitelist, appId) >= 0
+
+        final int[] whitelist = allowExceptIdleToo
+                ? mDeviceIdleExceptIdleWhitelist
+                : mDeviceIdleWhitelist;
+
+        return Arrays.binarySearch(whitelist, appId) >= 0
                 || Arrays.binarySearch(mDeviceIdleTempWhitelist, appId) >= 0
                 || mPendingTempWhitelist.indexOfKey(uid) >= 0;
     }
@@ -15463,7 +15476,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                         public void onLimitReached(int uid) {
                             Slog.wtf(TAG, "Uid " + uid + " sent too many Binders to uid "
                                     + Process.myUid());
-                            Binder.dumpProxyDebugInfo();
                             if (uid == Process.SYSTEM_UID) {
                                 Slog.i(TAG, "Skipping kill (uid is SYSTEM)");
                             } else {
@@ -17136,6 +17148,8 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             pw.println("  mDeviceIdleWhitelist=" + Arrays.toString(mDeviceIdleWhitelist));
+            pw.println("  mDeviceIdleExceptIdleWhitelist="
+                    + Arrays.toString(mDeviceIdleExceptIdleWhitelist));
             pw.println("  mDeviceIdleTempWhitelist=" + Arrays.toString(mDeviceIdleTempWhitelist));
             if (mPendingTempWhitelist.size() > 0) {
                 pw.println("  mPendingTempWhitelist:");
@@ -21188,9 +21202,15 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     private List<ResolveInfo> collectReceiverComponents(Intent intent, String resolvedType,
-            int callingUid, int[] users) {
+            int callingUid, boolean callerInstantApp, int[] users) {
         // TODO: come back and remove this assumption to triage all broadcasts
         int pmFlags = STOCK_PM_FLAGS | MATCH_DEBUG_TRIAGED_MISSING;
+        // Instant apps should be able to send broadcasts to themselves, so we would
+        // match instant receivers and later the broadcast queue would enforce that
+        // the broadcast cannot be sent to a receiver outside the instant UID.
+        if (callerInstantApp) {
+            pmFlags |= PackageManager.MATCH_INSTANT;
+        }
 
         List<ResolveInfo> receivers = null;
         try {
@@ -21819,7 +21839,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         // Need to resolve the intent to interested receivers...
         if ((intent.getFlags()&Intent.FLAG_RECEIVER_REGISTERED_ONLY)
                  == 0) {
-            receivers = collectReceiverComponents(intent, resolvedType, callingUid, users);
+            receivers = collectReceiverComponents(intent, resolvedType, callingUid,
+                    callerInstantApp, users);
         }
         if (intent.getComponent() == null) {
             if (userId == UserHandle.USER_ALL && callingUid == SHELL_UID) {
@@ -26643,9 +26664,10 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         @Override
-        public void setDeviceIdleWhitelist(int[] appids) {
+        public void setDeviceIdleWhitelist(int[] allAppids, int[] exceptIdleAppids) {
             synchronized (ActivityManagerService.this) {
-                mDeviceIdleWhitelist = appids;
+                mDeviceIdleWhitelist = allAppids;
+                mDeviceIdleExceptIdleWhitelist = exceptIdleAppids;
             }
         }
 

@@ -4841,8 +4841,11 @@ public class PackageManagerService extends IPackageManager.Stub
             triaged = false;
         }
         if ((flags & PackageManager.MATCH_ANY_USER) != 0) {
+            // require the permission to be held; the calling uid and given user id referring
+            // to the same user is not sufficient
             mPermissionManager.enforceCrossUserPermission(
                     Binder.getCallingUid(), userId, false, false,
+                    !isRecentsAccessingChildProfiles(Binder.getCallingUid(), userId),
                     "MATCH_ANY_USER flag requires INTERACT_ACROSS_USERS permission at "
                     + Debug.getCallers(5));
         } else if ((flags & PackageManager.MATCH_UNINSTALLED_PACKAGES) != 0 && isCallerSystemUser
@@ -6681,7 +6684,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
             return applyPostResolutionFilter(
-                    list, instantAppPkgName, allowDynamicSplits, filterCallingUid, userId, intent);
+                    list, instantAppPkgName, allowDynamicSplits, filterCallingUid, resolveForStart,
+                    userId, intent);
         }
 
         // reader
@@ -6700,7 +6704,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     xpResult.add(xpResolveInfo);
                     return applyPostResolutionFilter(
                             filterIfNotSystemUser(xpResult, userId), instantAppPkgName,
-                            allowDynamicSplits, filterCallingUid, userId, intent);
+                            allowDynamicSplits, filterCallingUid, resolveForStart, userId, intent);
                 }
 
                 // Check for results in the current profile.
@@ -6740,14 +6744,16 @@ public class PackageManagerService extends IPackageManager.Stub
                             // result straight away.
                             result.add(xpDomainInfo.resolveInfo);
                             return applyPostResolutionFilter(result, instantAppPkgName,
-                                    allowDynamicSplits, filterCallingUid, userId, intent);
+                                    allowDynamicSplits, filterCallingUid, resolveForStart, userId,
+                                    intent);
                         }
                     } else if (result.size() <= 1 && !addInstant) {
                         // No result in parent user and <= 1 result in current profile, and we
                         // are not going to add emphemeral app, so we can return the result without
                         // further processing.
                         return applyPostResolutionFilter(result, instantAppPkgName,
-                                allowDynamicSplits, filterCallingUid, userId, intent);
+                                allowDynamicSplits, filterCallingUid, resolveForStart, userId,
+                                intent);
                     }
                     // We have more than one candidate (combining results from current and parent
                     // profile), so we need filtering and sorting.
@@ -6783,7 +6789,8 @@ public class PackageManagerService extends IPackageManager.Stub
             Collections.sort(result, mResolvePrioritySorter);
         }
         return applyPostResolutionFilter(
-                result, instantAppPkgName, allowDynamicSplits, filterCallingUid, userId, intent);
+                result, instantAppPkgName, allowDynamicSplits, filterCallingUid, resolveForStart,
+                userId, intent);
     }
 
     private List<ResolveInfo> maybeAddInstantAppInstaller(List<ResolveInfo> result, Intent intent,
@@ -6993,8 +7000,8 @@ public class PackageManagerService extends IPackageManager.Stub
      * @return A filtered list of resolved activities.
      */
     private List<ResolveInfo> applyPostResolutionFilter(List<ResolveInfo> resolveInfos,
-            String ephemeralPkgName, boolean allowDynamicSplits, int filterCallingUid, int userId,
-            Intent intent) {
+            String ephemeralPkgName, boolean allowDynamicSplits, int filterCallingUid,
+            boolean resolveForStart, int userId, Intent intent) {
         final boolean blockInstant = intent.isWebIntent() && areWebInstantAppsDisabled();
         for (int i = resolveInfos.size() - 1; i >= 0; i--) {
             final ResolveInfo info = resolveInfos.get(i);
@@ -7052,6 +7059,13 @@ public class PackageManagerService extends IPackageManager.Stub
                 continue;
             } else if (ephemeralPkgName.equals(info.activityInfo.packageName)) {
                 // caller is same app; don't need to apply any other filtering
+                continue;
+            } else if (resolveForStart
+                    && (intent.isWebIntent()
+                            || (intent.getFlags() & Intent.FLAG_ACTIVITY_MATCH_EXTERNAL) != 0)
+                    && intent.getPackage() == null
+                    && intent.getComponent() == null) {
+                // ephemeral apps can launch other ephemeral apps indirectly
                 continue;
             }
             // allow activities that have been explicitly exposed to ephemeral apps
@@ -7631,7 +7645,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
             return applyPostResolutionFilter(
-                    list, instantAppPkgName, allowDynamicSplits, callingUid, userId, intent);
+                    list, instantAppPkgName, allowDynamicSplits, callingUid, false, userId,
+                    intent);
         }
 
         // reader
@@ -7641,14 +7656,16 @@ public class PackageManagerService extends IPackageManager.Stub
                 final List<ResolveInfo> result =
                         mReceivers.queryIntent(intent, resolvedType, flags, userId);
                 return applyPostResolutionFilter(
-                        result, instantAppPkgName, allowDynamicSplits, callingUid, userId, intent);
+                        result, instantAppPkgName, allowDynamicSplits, callingUid, false, userId,
+                        intent);
             }
             final PackageParser.Package pkg = mPackages.get(pkgName);
             if (pkg != null) {
                 final List<ResolveInfo> result = mReceivers.queryIntentForPackage(
                         intent, resolvedType, flags, pkg.receivers, userId);
                 return applyPostResolutionFilter(
-                        result, instantAppPkgName, allowDynamicSplits, callingUid, userId, intent);
+                        result, instantAppPkgName, allowDynamicSplits, callingUid, false, userId,
+                        intent);
             }
             return Collections.emptyList();
         }
@@ -7926,7 +7943,7 @@ public class PackageManagerService extends IPackageManager.Stub
         flags = updateFlagsForPackage(flags, userId, null);
         final boolean listUninstalled = (flags & MATCH_KNOWN_PACKAGES) != 0;
         mPermissionManager.enforceCrossUserPermission(callingUid, userId,
-                true /* requireFullPermission */, false /* checkShell */,
+                false /* requireFullPermission */, false /* checkShell */,
                 "get installed packages");
 
         // writer
@@ -8049,6 +8066,13 @@ public class PackageManagerService extends IPackageManager.Stub
         if (!sUserManager.exists(userId)) return ParceledListSlice.emptyList();
         flags = updateFlagsForApplication(flags, userId, null);
         final boolean listUninstalled = (flags & MATCH_KNOWN_PACKAGES) != 0;
+
+        mPermissionManager.enforceCrossUserPermission(
+            callingUid,
+            userId,
+            false /* requireFullPermission */,
+            false /* checkShell */,
+            "get installed application info");
 
         // writer
         synchronized (mPackages) {
