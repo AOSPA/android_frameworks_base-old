@@ -1,0 +1,8 @@
+Presubmit-Ready+1: Alex Naidis <alex.naidis@linux.com>
+Verified+1: Friendly BuildBot
+Code-Review+2: Chris Lahaye <dev@chrislahaye.com>
+Submitted-by: Jake Weinstein <xboxlover360@gmail.com>
+Submitted-at: Sun, 10 Jun 2018 20:06:32 +0000
+Reviewed-on: https://gerrit.aospa.co/4769
+Project: AOSPA/android_frameworks_base
+Branch: refs/heads/oreo-mr1
