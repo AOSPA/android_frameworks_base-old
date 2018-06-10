@@ -519,10 +519,24 @@ public class MobileSignalController extends SignalController<
             } else {
                 mCurrentState.level = mSignalStrength.getLevel();
                 if (mConfig.showRsrpSignalLevelforLTE) {
+                    if (DEBUG) {
+                        Log.d(mTag, "updateTelephony: CS:" + mServiceState.getVoiceNetworkType()
+                                + "/" + TelephonyManager.getNetworkTypeName(
+                                        mServiceState.getVoiceNetworkType())
+                                + ", PS:" + mServiceState.getDataNetworkType()
+                                + "/"+ TelephonyManager.getNetworkTypeName(
+                                        mServiceState.getDataNetworkType()));
+                    }
                     int dataType = mServiceState.getDataNetworkType();
                     if (dataType == TelephonyManager.NETWORK_TYPE_LTE ||
                             dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
                         mCurrentState.level = getAlternateLteLevel(mSignalStrength);
+                    }else if ( dataType == TelephonyManager.NETWORK_TYPE_UNKNOWN) {
+                        int voiceType = mServiceState.getVoiceNetworkType();
+                        if (voiceType == TelephonyManager.NETWORK_TYPE_LTE ||
+                                voiceType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+                            mCurrentState.level = getAlternateLteLevel(mSignalStrength);
+                        }
                     }
                 }
             }
