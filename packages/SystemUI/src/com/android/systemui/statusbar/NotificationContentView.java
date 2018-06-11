@@ -189,6 +189,7 @@ public class NotificationContentView extends FrameLayout {
             if (mExpandedSmartReplyView != null) {
                 notificationMaxHeight += mExpandedSmartReplyView.getHeightUpperLimit();
             }
+            notificationMaxHeight += mExpandedWrapper.getExtraMeasureHeight();
             int size = notificationMaxHeight;
             ViewGroup.LayoutParams layoutParams = mExpandedChild.getLayoutParams();
             boolean useExactly = false;
@@ -1381,6 +1382,13 @@ public class NotificationContentView extends FrameLayout {
         boolean showingSpinner = entry.notification.getNotification()
                 .extras.getBoolean(Notification.EXTRA_SHOW_REMOTE_INPUT_SPINNER, false);
         if (showingSpinner) {
+            smartReplyContainer.setVisibility(View.GONE);
+            return null;
+        }
+        // If we are keeping the notification around while sending we don't want to add the buttons.
+        boolean hideSmartReplies = entry.notification.getNotification()
+                .extras.getBoolean(Notification.EXTRA_HIDE_SMART_REPLIES, false);
+        if (hideSmartReplies) {
             smartReplyContainer.setVisibility(View.GONE);
             return null;
         }

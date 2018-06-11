@@ -54,7 +54,7 @@ public class WindowManagerDebugConfig {
     static final boolean DEBUG_STARTING_WINDOW_VERBOSE = false;
     static final boolean DEBUG_STARTING_WINDOW = DEBUG_STARTING_WINDOW_VERBOSE || false;
     static final boolean DEBUG_WALLPAPER = false;
-    static final boolean DEBUG_WALLPAPER_LIGHT = false || DEBUG_WALLPAPER;
+    static final boolean DEBUG_WALLPAPER_LIGHT = true || DEBUG_WALLPAPER;
     static final boolean DEBUG_DRAG = false;
     static final boolean DEBUG_SCREEN_ON = false;
     static final boolean DEBUG_SCREENSHOT = false;
@@ -74,9 +74,8 @@ public class WindowManagerDebugConfig {
     static final boolean SHOW_STACK_CRAWLS = false;
     static final boolean DEBUG_WINDOW_CROP = false;
     static final boolean DEBUG_UNKNOWN_APP_VISIBILITY = false;
-    // TODO (b/73188263): Reset debugging flags
-    static final boolean DEBUG_RECENTS_ANIMATIONS = true;
-    static final boolean DEBUG_REMOTE_ANIMATIONS = DEBUG_APP_TRANSITIONS || true;
+    static final boolean DEBUG_RECENTS_ANIMATIONS = false;
+    static final boolean DEBUG_REMOTE_ANIMATIONS = DEBUG_APP_TRANSITIONS || false;
 
     static final String TAG_KEEP_SCREEN_ON = "DebugKeepScreenOn";
     static final boolean DEBUG_KEEP_SCREEN_ON = false;

@@ -19,8 +19,10 @@ package com.android.systemui.statusbar;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.util.AttributeSet;
+import android.view.DisplayCutout;
 import android.view.View;
 import android.widget.TextView;
 
@@ -44,8 +46,10 @@ public class HeadsUpStatusBarView extends AlphaOptimizedLinearLayout {
     private boolean mPublicMode;
     private int mMaxWidth;
     private View mRootView;
-    private int mLeftInset;
+    private int mSysWinInset;
+    private int mCutOutInset;
     private Rect mIconDrawingRect = new Rect();
+    private Point mPoint;
     private Runnable mOnDrawingRectChangedListener;
 
     public HeadsUpStatusBarView(Context context) {
@@ -136,9 +140,20 @@ public class HeadsUpStatusBarView extends AlphaOptimizedLinearLayout {
         int bottom = top + mIconPlaceholder.getHeight();
         mLayoutedIconRect.set(left, top, right, bottom);
         updateDrawingRect();
-        int targetPadding = mAbsoluteStartPadding + mLeftInset;
+        int targetPadding = mAbsoluteStartPadding + mSysWinInset + mCutOutInset;
         if (left != targetPadding) {
-            int newPadding = targetPadding - left + getPaddingStart();
+            int start;
+            if (isLayoutRtl()) {
+                if (mPoint == null) {
+                    mPoint = new Point();
+                }
+                getDisplay().getRealSize(mPoint);
+                start = (mPoint.x - right);
+            } else {
+                start = left;
+            }
+
+            int newPadding = targetPadding - start + getPaddingStart();
             setPaddingRelative(newPadding, 0, mEndMargin, 0);
         }
         if (mFirstLayout) {
@@ -150,9 +165,12 @@ public class HeadsUpStatusBarView extends AlphaOptimizedLinearLayout {
         }
     }
 
-    @Override
-    public void setTranslationX(float translationX) {
-        super.setTranslationX(translationX);
+    public void setPanelTranslation(float translationX) {
+        if (isLayoutRtl()) {
+            setTranslationX(translationX + mCutOutInset);
+        } else {
+            setTranslationX(translationX - mCutOutInset);
+        }
         updateDrawingRect();
     }
 
@@ -167,7 +185,21 @@ public class HeadsUpStatusBarView extends AlphaOptimizedLinearLayout {
 
     @Override
     protected boolean fitSystemWindows(Rect insets) {
-        mLeftInset = insets.left;
+        boolean isRtl = isLayoutRtl();
+        mSysWinInset = isRtl ? insets.right : insets.left;
+        DisplayCutout displayCutout = getRootWindowInsets().getDisplayCutout();
+        mCutOutInset = (displayCutout != null)
+                ? (isRtl ? displayCutout.getSafeInsetRight() : displayCutout.getSafeInsetLeft())
+                : 0;
+        // For Double Cut Out mode, the System window navigation bar is at the right
+        // side of the left cut out. In this condition, mSysWinInset include the left cut
+        // out width so we set mCutOutInset to be 0. For RTL, the condition is the same.
+        // The navigation bar is at the left side of the right cut out and include the
+        // right cut out width.
+        if (mSysWinInset != 0) {
+            mCutOutInset = 0;
+        }
+
         return super.fitSystemWindows(insets);
     }
 

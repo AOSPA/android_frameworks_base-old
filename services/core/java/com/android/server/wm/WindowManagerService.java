@@ -379,7 +379,10 @@ public class WindowManagerService extends IWindowManager.Stub
     private BoostFramework mPerf = null;
 
     final private KeyguardDisableHandler mKeyguardDisableHandler;
+    // TODO: eventually unify all keyguard state in a common place instead of having it spread over
+    // AM's KeyguardController and the policy's KeyguardServiceDelegate.
     boolean mKeyguardGoingAway;
+    boolean mKeyguardOrAodShowingOnDefaultDisplay;
     // VR Vr2d Display Id.
     int mVr2dDisplayId = INVALID_DISPLAY;
 
@@ -2381,6 +2384,12 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public Configuration updateOrientationFromAppTokens(Configuration currentConfig,
             IBinder freezeThisOneIfNeeded, int displayId) {
+        return updateOrientationFromAppTokens(currentConfig, freezeThisOneIfNeeded, displayId,
+                false /* forceUpdate */);
+    }
+
+    public Configuration updateOrientationFromAppTokens(Configuration currentConfig,
+            IBinder freezeThisOneIfNeeded, int displayId, boolean forceUpdate) {
         if (!checkCallingPermission(MANAGE_APP_TOKENS, "updateOrientationFromAppTokens()")) {
             throw new SecurityException("Requires MANAGE_APP_TOKENS permission");
         }
@@ -2390,7 +2399,7 @@ public class WindowManagerService extends IWindowManager.Stub
         try {
             synchronized(mWindowMap) {
                 config = updateOrientationFromAppTokensLocked(currentConfig, freezeThisOneIfNeeded,
-                        displayId);
+                        displayId, forceUpdate);
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -2400,13 +2409,13 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private Configuration updateOrientationFromAppTokensLocked(Configuration currentConfig,
-            IBinder freezeThisOneIfNeeded, int displayId) {
+            IBinder freezeThisOneIfNeeded, int displayId, boolean forceUpdate) {
         if (!mDisplayReady) {
             return null;
         }
         Configuration config = null;
 
-        if (updateOrientationFromAppTokensLocked(displayId)) {
+        if (updateOrientationFromAppTokensLocked(displayId, forceUpdate)) {
             // If we changed the orientation but mOrientationChangeComplete is already true,
             // we used seamless rotation, and we don't need to freeze the screen.
             if (freezeThisOneIfNeeded != null && !mRoot.mOrientationChangeComplete) {
@@ -2454,11 +2463,15 @@ public class WindowManagerService extends IWindowManager.Stub
      * @see android.view.IWindowManager#updateOrientationFromAppTokens(Configuration, IBinder, int)
      */
     boolean updateOrientationFromAppTokensLocked(int displayId) {
+        return updateOrientationFromAppTokensLocked(displayId, false /* forceUpdate */);
+    }
+
+    boolean updateOrientationFromAppTokensLocked(int displayId, boolean forceUpdate) {
         long ident = Binder.clearCallingIdentity();
         try {
             final DisplayContent dc = mRoot.getDisplayContent(displayId);
             final int req = dc.getOrientation();
-            if (req != dc.getLastOrientation()) {
+            if (req != dc.getLastOrientation() || forceUpdate) {
                 dc.setLastOrientation(req);
                 //send a message to Policy indicating orientation change to take
                 //action like disabling/enabling sensors etc.,
@@ -2466,12 +2479,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 if (dc.isDefaultDisplay) {
                     mPolicy.setCurrentOrientationLw(req);
                 }
-                if (dc.updateRotationUnchecked()) {
-                    // changed
-                    return true;
-                }
+                return dc.updateRotationUnchecked(forceUpdate);
             }
-
             return false;
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -2855,6 +2864,11 @@ public class WindowManagerService extends IWindowManager.Stub
         mH.sendEmptyMessage(H.ANIMATION_FAILSAFE);
     }
 
+    @Override
+    public void onKeyguardShowingAndNotOccludedChanged() {
+        mH.sendEmptyMessage(H.RECOMPUTE_FOCUS);
+    }
+
     /**
      * Starts deferring layout passes. Useful when doing multiple changes but to optimize
      * performance, only one layout pass should be done. This can be called multiple times, and
@@ -2918,6 +2932,12 @@ public class WindowManagerService extends IWindowManager.Stub
     public void setKeyguardGoingAway(boolean keyguardGoingAway) {
         synchronized (mWindowMap) {
             mKeyguardGoingAway = keyguardGoingAway;
+        }
+    }
+
+    public void setKeyguardOrAodShowingOnDefaultDisplay(boolean showing) {
+        synchronized (mWindowMap) {
+            mKeyguardOrAodShowingOnDefaultDisplay = showing;
         }
     }
 
@@ -4655,6 +4675,7 @@ public class WindowManagerService extends IWindowManager.Stub
         public static final int SET_HAS_OVERLAY_UI = 58;
         public static final int SET_RUNNING_REMOTE_ANIMATION = 59;
         public static final int ANIMATION_FAILSAFE = 60;
+        public static final int RECOMPUTE_FOCUS = 61;
 
         /**
          * Used to denote that an integer field in a message will not be used.
@@ -5078,6 +5099,13 @@ public class WindowManagerService extends IWindowManager.Stub
                         if (mRecentsAnimationController != null) {
                             mRecentsAnimationController.scheduleFailsafe();
                         }
+                    }
+                }
+                break;
+                case RECOMPUTE_FOCUS: {
+                    synchronized (mWindowMap) {
+                        updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL,
+                                true /* updateInputWindows */);
                     }
                 }
                 break;

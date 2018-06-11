@@ -409,7 +409,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     final Rect mContainingFrame = new Rect();
 
-    private final Rect mParentFrame = new Rect();
+    final Rect mParentFrame = new Rect();
 
     /** Whether the parent frame would have been different if there was no display cutout. */
     private boolean mParentFrameWasClippedByDisplayCutout;
@@ -931,6 +931,17 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     mContainingFrame.set(contentFrame);
                 }
             }
+
+            final TaskStack stack = getStack();
+            if (inPinnedWindowingMode() && stack != null
+                    && stack.lastAnimatingBoundsWasToFullscreen()) {
+                // PIP edge case: When going from pinned to fullscreen, we apply a
+                // tempInsetFrame for the full task - but we're still at the start of the animation.
+                // To prevent a jump if there's a letterbox, restrict to the parent frame.
+                mInsetFrame.intersectUnchecked(parentFrame);
+                mContainingFrame.intersectUnchecked(parentFrame);
+            }
+
             mDisplayFrame.set(mContainingFrame);
             layoutXDiff = !mInsetFrame.isEmpty() ? mInsetFrame.left - mContainingFrame.left : 0;
             layoutYDiff = !mInsetFrame.isEmpty() ? mInsetFrame.top - mContainingFrame.top : 0;
@@ -1752,7 +1763,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     @Override
     void onResize() {
         final ArrayList<WindowState> resizingWindows = mService.mResizingWindows;
-        if (mHasSurface && !resizingWindows.contains(this)) {
+        if (mHasSurface && !isGoneForLayoutLw() && !resizingWindows.contains(this)) {
             if (DEBUG_RESIZE) Slog.d(TAG, "onResize: Resizing " + this);
             resizingWindows.add(this);
         }
@@ -2287,8 +2298,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     if (DEBUG_FOCUS_LIGHT) Slog.i(TAG,
                             "setAnimationLocked: setting mFocusMayChange true");
                     mService.mFocusMayChange = true;
-                    setDisplayLayoutNeeded();
                 }
+                setDisplayLayoutNeeded();
                 // Window is no longer visible -- make sure if we were waiting
                 // for it to be displayed before enabling the display, that
                 // we allow the display to be enabled now.
@@ -4403,14 +4414,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final boolean wasVisible = isVisibleLw();
 
         result |= (!wasVisible || !isDrawnLw()) ? RELAYOUT_RES_FIRST_TIME : 0;
-
-        if (mWinAnimator.mChildrenDetached) {
-            // If there are detached children hanging around we need to force
-            // the client receiving a new Surface.
-            mWinAnimator.preserveSurfaceLocked();
-            result |= RELAYOUT_RES_SURFACE_CHANGED
-                    | RELAYOUT_RES_FIRST_TIME;
-        }
 
         if (mAnimatingExit) {
             Slog.d(TAG, "relayoutVisibleWindow: " + this + " mAnimatingExit=true, mRemoveOnExit="

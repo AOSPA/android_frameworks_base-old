@@ -82,7 +82,7 @@ public class MessagingLayout extends FrameLayout {
     private Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private Paint mTextPaint = new Paint();
     private CharSequence mConversationTitle;
-    private Icon mLargeIcon;
+    private Icon mAvatarReplacement;
     private boolean mIsOneToOne;
     private ArrayList<MessagingGroup> mAddedGroups = new ArrayList<>();
     private Person mUser;
@@ -125,8 +125,8 @@ public class MessagingLayout extends FrameLayout {
     }
 
     @RemotableViewMethod
-    public void setLargeIcon(Icon icon) {
-        mLargeIcon = icon;
+    public void setAvatarReplacement(Icon icon) {
+        mAvatarReplacement = icon;
     }
 
     @RemotableViewMethod
@@ -180,7 +180,12 @@ public class MessagingLayout extends FrameLayout {
         List<MessagingMessage> historicMessages = createMessages(newHistoricMessages,
                 true /* isHistoric */);
         List<MessagingMessage> messages = createMessages(newMessages, false /* isHistoric */);
+
+        ArrayList<MessagingGroup> oldGroups = new ArrayList<>(mGroups);
         addMessagesToGroups(historicMessages, messages, showSpinner);
+
+        // Let's first check which groups were removed altogether and remove them in one animation
+        removeGroups(oldGroups);
 
         // Let's remove the remaining messages
         mMessages.forEach(REMOVE_MESSAGE);
@@ -191,6 +196,31 @@ public class MessagingLayout extends FrameLayout {
 
         updateHistoricMessageVisibility();
         updateTitleAndNamesDisplay();
+    }
+
+    private void removeGroups(ArrayList<MessagingGroup> oldGroups) {
+        int size = oldGroups.size();
+        for (int i = 0; i < size; i++) {
+            MessagingGroup group = oldGroups.get(i);
+            if (!mGroups.contains(group)) {
+                List<MessagingMessage> messages = group.getMessages();
+                Runnable endRunnable = () -> {
+                    mMessagingLinearLayout.removeTransientView(group);
+                    group.recycle();
+                };
+
+                boolean wasShown = group.isShown();
+                mMessagingLinearLayout.removeView(group);
+                if (wasShown && !MessagingLinearLayout.isGone(group)) {
+                    mMessagingLinearLayout.addTransientView(group, 0);
+                    group.removeGroupAnimated(endRunnable);
+                } else {
+                    endRunnable.run();
+                }
+                mMessages.removeAll(messages);
+                mHistoricMessages.removeAll(messages);
+            }
+        }
     }
 
     private void updateTitleAndNamesDisplay() {
@@ -228,7 +258,7 @@ public class MessagingLayout extends FrameLayout {
             boolean isOwnMessage = group.getSender() == mUser;
             CharSequence senderName = group.getSenderName();
             if (!group.needsGeneratedAvatar() || TextUtils.isEmpty(senderName)
-                    || (mIsOneToOne && mLargeIcon != null && !isOwnMessage)) {
+                    || (mIsOneToOne && mAvatarReplacement != null && !isOwnMessage)) {
                 continue;
             }
             String symbol = uniqueNames.get(senderName);
@@ -246,8 +276,8 @@ public class MessagingLayout extends FrameLayout {
             if (!group.needsGeneratedAvatar() || TextUtils.isEmpty(senderName)) {
                 continue;
             }
-            if (mIsOneToOne && mLargeIcon != null && group.getSender() != mUser) {
-                group.setAvatar(mLargeIcon);
+            if (mIsOneToOne && mAvatarReplacement != null && group.getSender() != mUser) {
+                group.setAvatar(mAvatarReplacement);
             } else {
                 Icon cachedIcon = cachedAvatars.get(senderName);
                 if (cachedIcon == null) {

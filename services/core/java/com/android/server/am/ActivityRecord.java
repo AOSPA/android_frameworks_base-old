@@ -115,6 +115,7 @@ import static com.android.server.am.ActivityRecordProto.FRONT_OF_TASK;
 import static com.android.server.am.ActivityRecordProto.IDENTIFIER;
 import static com.android.server.am.ActivityRecordProto.PROC_ID;
 import static com.android.server.am.ActivityRecordProto.STATE;
+import static com.android.server.am.ActivityRecordProto.TRANSLUCENT;
 import static com.android.server.am.ActivityRecordProto.VISIBLE;
 import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_LEFT;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
@@ -862,6 +863,18 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         return ResolverActivity.class.getName().equals(realActivity.getClassName());
     }
 
+    boolean isResolverOrChildActivity() {
+        if (!"android".equals(packageName)) {
+            return false;
+        }
+        try {
+            return ResolverActivity.class.isAssignableFrom(
+                    Object.class.getClassLoader().loadClass(realActivity.getClassName()));
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
+    }
+
     ActivityRecord(ActivityManagerService _service, ProcessRecord _caller, int _launchedFromPid,
             int _launchedFromUid, String _launchedFromPackage, Intent _intent, String _resolvedType,
             ActivityInfo aInfo, Configuration _configuration,
@@ -1114,6 +1127,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     private boolean canLaunchHomeActivity(int uid, ActivityRecord sourceRecord) {
         if (uid == Process.myUid() || uid == 0) {
             // System process can launch home activity.
+            return true;
+        }
+        // Allow the recents component to launch the home activity.
+        final RecentTasks recentTasks = mStackSupervisor.mService.getRecentTasks();
+        if (recentTasks != null && recentTasks.isCallerRecents(uid)) {
             return true;
         }
         // Resolver activity can launch home activity.
@@ -2466,11 +2484,16 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         }
 
         // Compute configuration based on max supported width and height.
-        outBounds.set(0, 0, maxActivityWidth, maxActivityHeight);
-        // Position the activity frame on the opposite side of the nav bar.
-        final int navBarPosition = service.mWindowManager.getNavBarPosition();
-        final int left = navBarPosition == NAV_BAR_LEFT ? appBounds.right - outBounds.width() : 0;
-        outBounds.offsetTo(left, 0 /* top */);
+        // Also account for the left / top insets (e.g. from display cutouts), which will be clipped
+        // away later in StackWindowController.adjustConfigurationForBounds(). Otherwise, the app
+        // bounds would end up too small.
+        outBounds.set(0, 0, maxActivityWidth + appBounds.left, maxActivityHeight + appBounds.top);
+
+        if (service.mWindowManager.getNavBarPosition() == NAV_BAR_LEFT) {
+            // Position the activity frame on the opposite side of the nav bar.
+            outBounds.left = appBounds.right - maxActivityWidth;
+            outBounds.right = appBounds.right;
+        }
     }
 
     boolean ensureActivityConfiguration(int globalChanges, boolean preserveWindow) {
@@ -3034,6 +3057,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         if (app != null) {
             proto.write(PROC_ID, app.pid);
         }
+        proto.write(TRANSLUCENT, !fullscreen);
         proto.end(token);
     }
 }

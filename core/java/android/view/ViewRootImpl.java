@@ -76,11 +76,11 @@ import android.util.LongArray;
 import android.util.MergedConfiguration;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.SparseBooleanArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
 import android.util.BoostFramework;
 import android.view.Surface.OutOfResourcesException;
+import android.view.ThreadedRenderer.FrameDrawingCallback;
 import android.view.View.AttachInfo;
 import android.view.View.FocusDirection;
 import android.view.View.MeasureSpec;
@@ -178,6 +178,8 @@ public final class ViewRootImpl implements ViewParent,
 
     static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList();
     static boolean sFirstDrawComplete = false;
+
+    private FrameDrawingCallback mNextRtFrameCallback;
 
     /**
      * Callback for notifying about global configuration changes.
@@ -975,6 +977,17 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    /**
+     * Registers a callback to be executed when the next frame is being drawn on RenderThread. This
+     * callback will be executed on a RenderThread worker thread, and only used for the next frame
+     * and thus it will only fire once.
+     *
+     * @param callback The callback to register.
+     */
+    public void registerRtFrameCallback(FrameDrawingCallback callback) {
+        mNextRtFrameCallback = callback;
+    }
+
     private void enableHardwareAcceleration(WindowManager.LayoutParams attrs) {
         mAttachInfo.mHardwareAccelerated = false;
         mAttachInfo.mHardwareAccelerationRequested = false;
@@ -1624,12 +1637,25 @@ public final class ViewRootImpl implements ViewParent,
                         contentInsets.top + outsets.top, contentInsets.right + outsets.right,
                         contentInsets.bottom + outsets.bottom);
             }
+            contentInsets = ensureInsetsNonNegative(contentInsets, "content");
+            stableInsets = ensureInsetsNonNegative(stableInsets, "stable");
             mLastWindowInsets = new WindowInsets(contentInsets,
                     null /* windowDecorInsets */, stableInsets,
                     mContext.getResources().getConfiguration().isScreenRound(),
                     mAttachInfo.mAlwaysConsumeNavBar, displayCutout);
         }
         return mLastWindowInsets;
+    }
+
+    private Rect ensureInsetsNonNegative(Rect insets, String kind) {
+        if (insets.left < 0  || insets.top < 0  || insets.right < 0  || insets.bottom < 0) {
+            Log.wtf(mTag, "Negative " + kind + "Insets: " + insets + ", mFirst=" + mFirst);
+            return new Rect(Math.max(0, insets.left),
+                    Math.max(0, insets.top),
+                    Math.max(0, insets.right),
+                    Math.max(0, insets.bottom));
+        }
+        return insets;
     }
 
     void dispatchApplyInsets(View host) {
@@ -3275,7 +3301,8 @@ public final class ViewRootImpl implements ViewParent,
                     requestDrawWindow();
                 }
 
-                mAttachInfo.mThreadedRenderer.draw(mView, mAttachInfo, this);
+                mAttachInfo.mThreadedRenderer.draw(mView, mAttachInfo, this, mNextRtFrameCallback);
+                mNextRtFrameCallback = null;
             } else {
                 // If we get here with a disabled & requested hardware renderer, something went
                 // wrong (an invalidate posted right before we destroyed the hardware surface
@@ -4995,10 +5022,7 @@ public final class ViewRootImpl implements ViewParent,
         private int processKeyEvent(QueuedInputEvent q) {
             final KeyEvent event = (KeyEvent)q.mEvent;
 
-            mUnhandledKeyManager.mDispatched = false;
-
-            if (mUnhandledKeyManager.hasFocus()
-                    && mUnhandledKeyManager.dispatchUnique(mView, event)) {
+            if (mUnhandledKeyManager.preViewDispatch(event)) {
                 return FINISH_HANDLED;
             }
 
@@ -5011,7 +5035,10 @@ public final class ViewRootImpl implements ViewParent,
                 return FINISH_NOT_HANDLED;
             }
 
-            if (mUnhandledKeyManager.dispatchUnique(mView, event)) {
+            // This dispatch is for windows that don't have a Window.Callback. Otherwise,
+            // the Window.Callback usually will have already called this (see
+            // DecorView.superDispatchKeyEvent) leaving this call a no-op.
+            if (mUnhandledKeyManager.dispatch(mView, event)) {
                 return FINISH_HANDLED;
             }
 
@@ -7058,6 +7085,10 @@ public final class ViewRootImpl implements ViewParent,
             stage = q.shouldSkipIme() ? mFirstPostImeInputStage : mFirstInputStage;
         }
 
+        if (q.mEvent instanceof KeyEvent) {
+            mUnhandledKeyManager.preDispatch((KeyEvent) q.mEvent);
+        }
+
         if (stage != null) {
             handleWindowFocusChanged();
             stage.deliver(q);
@@ -7826,7 +7857,7 @@ public final class ViewRootImpl implements ViewParent,
      * @param event
      * @return {@code true} if the event was handled, {@code false} otherwise.
      */
-    public boolean dispatchKeyFallbackEvent(KeyEvent event) {
+    public boolean dispatchUnhandledKeyEvent(KeyEvent event) {
         return mUnhandledKeyManager.dispatch(mView, event);
     }
 
@@ -8418,35 +8449,74 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private static class UnhandledKeyManager {
-
         // This is used to ensure that unhandled events are only dispatched once. We attempt
         // to dispatch more than once in order to achieve a certain order. Specifically, if we
         // are in an Activity or Dialog (and have a Window.Callback), the unhandled events should
-        // be dispatched after the view hierarchy, but before the Activity. However, if we aren't
+        // be dispatched after the view hierarchy, but before the Callback. However, if we aren't
         // in an activity, we still want unhandled keys to be dispatched.
-        boolean mDispatched = false;
+        private boolean mDispatched = true;
 
-        SparseBooleanArray mCapturedKeys = new SparseBooleanArray();
-        WeakReference<View> mCurrentReceiver = null;
+        // Keeps track of which Views have unhandled key focus for which keys. This doesn't
+        // include modifiers.
+        private final SparseArray<WeakReference<View>> mCapturedKeys = new SparseArray<>();
 
-        private void updateCaptureState(KeyEvent event) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                mCapturedKeys.append(event.getKeyCode(), true);
+        // The current receiver. This value is transient and used between the pre-dispatch and
+        // pre-view phase to ensure that other input-stages don't interfere with tracking.
+        private WeakReference<View> mCurrentReceiver = null;
+
+        boolean dispatch(View root, KeyEvent event) {
+            if (mDispatched) {
+                return false;
             }
+            View consumer;
+            try {
+                Trace.traceBegin(Trace.TRACE_TAG_VIEW, "UnhandledKeyEvent dispatch");
+                mDispatched = true;
+
+                consumer = root.dispatchUnhandledKeyEvent(event);
+
+                // If an unhandled listener handles one, then keep track of it so that the
+                // consuming view is first to receive its repeats and release as well.
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    int keycode = event.getKeyCode();
+                    if (consumer != null && !KeyEvent.isModifierKey(keycode)) {
+                        mCapturedKeys.put(keycode, new WeakReference<>(consumer));
+                    }
+                }
+            } finally {
+                Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+            }
+            return consumer != null;
+        }
+
+        /**
+         * Called before the event gets dispatched to anything
+         */
+        void preDispatch(KeyEvent event) {
+            // Always clean-up 'up' events since it's possible for earlier dispatch stages to
+            // consume them without consuming the corresponding 'down' event.
+            mCurrentReceiver = null;
             if (event.getAction() == KeyEvent.ACTION_UP) {
-                mCapturedKeys.delete(event.getKeyCode());
+                int idx = mCapturedKeys.indexOfKey(event.getKeyCode());
+                if (idx >= 0) {
+                    mCurrentReceiver = mCapturedKeys.valueAt(idx);
+                    mCapturedKeys.removeAt(idx);
+                }
             }
         }
 
-        boolean dispatch(View root, KeyEvent event) {
-            Trace.traceBegin(Trace.TRACE_TAG_VIEW, "KeyFallback dispatch");
-            mDispatched = true;
-
-            updateCaptureState(event);
-
+        /**
+         * Called before the event gets dispatched to the view hierarchy
+         * @return {@code true} if an unhandled handler has focus and consumed the event
+         */
+        boolean preViewDispatch(KeyEvent event) {
+            mDispatched = false;
+            if (mCurrentReceiver == null) {
+                mCurrentReceiver = mCapturedKeys.get(event.getKeyCode());
+            }
             if (mCurrentReceiver != null) {
                 View target = mCurrentReceiver.get();
-                if (mCapturedKeys.size() == 0) {
+                if (event.getAction() == KeyEvent.ACTION_UP) {
                     mCurrentReceiver = null;
                 }
                 if (target != null && target.isAttachedToWindow()) {
@@ -8455,24 +8525,7 @@ public final class ViewRootImpl implements ViewParent,
                 // consume anyways so that we don't feed uncaptured key events to other views
                 return true;
             }
-
-            View consumer = root.dispatchUnhandledKeyEvent(event);
-            if (consumer != null) {
-                mCurrentReceiver = new WeakReference<>(consumer);
-            }
-            Trace.traceEnd(Trace.TRACE_TAG_VIEW);
-            return consumer != null;
-        }
-
-        boolean hasFocus() {
-            return mCurrentReceiver != null;
-        }
-
-        boolean dispatchUnique(View root, KeyEvent event) {
-            if (mDispatched) {
-                return false;
-            }
-            return dispatch(root, event);
+            return false;
         }
     }
 }

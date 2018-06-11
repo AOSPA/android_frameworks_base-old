@@ -388,6 +388,7 @@ public class NotificationStackScrollLayout extends ViewGroup
                     return object.getDarkAmount();
                 }
             };
+    private ObjectAnimator mDarkAmountAnimator;
     private boolean mUsingLightTheme;
     private boolean mQsExpanded;
     private boolean mForwardScrollable;
@@ -760,7 +761,9 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     private void updateClippingToTopRoundedCorner() {
-        Float clipStart = (float) mTopPadding + mAmbientState.getExpandAnimationTopChange();
+        Float clipStart = (float) mTopPadding
+                                 + mStackTranslation
+                                 + mAmbientState.getExpandAnimationTopChange();
         Float clipEnd = clipStart + mCornerRadius;
         boolean first = true;
         for (int i = 0; i < getChildCount(); i++) {
@@ -769,12 +772,12 @@ public class NotificationStackScrollLayout extends ViewGroup
                 continue;
             }
             float start = child.getTranslationY();
-            float end = start + Math.max(child.getActualHeight() - child.getClipBottomAmount(),
-                    0);
+            float end = start + child.getActualHeight();
             boolean clip = clipStart > start && clipStart < end
                     || clipEnd >= start && clipEnd <= end;
             clip &= !(first && mOwnScrollY == 0);
-            child.setDistanceToTopRoundness(clip ? Math.max(start - clipStart, 0) : -1);
+            child.setDistanceToTopRoundness(clip ? Math.max(start - clipStart, 0)
+                    : ExpandableView.NO_ROUNDNESS);
             first = false;
         }
     }
@@ -885,7 +888,9 @@ public class NotificationStackScrollLayout extends ViewGroup
         float appearEndPosition = getAppearEndPosition();
         float appearStartPosition = getAppearStartPosition();
         float appearFraction = 1.0f;
-        if (height >= appearEndPosition) {
+        boolean appearing = height < appearEndPosition;
+        mAmbientState.setAppearing(appearing);
+        if (!appearing) {
             translationY = 0;
             if (mShouldShowShelfOnly) {
                 stackHeight = mTopPadding + mShelf.getIntrinsicHeight();
@@ -3290,6 +3295,16 @@ public class NotificationStackScrollLayout extends ViewGroup
             if (!childWasSwipedOut) {
                 Rect clipBounds = child.getClipBounds();
                 childWasSwipedOut = clipBounds != null && clipBounds.height() == 0;
+
+                if (childWasSwipedOut && child instanceof ExpandableView) {
+                    // Clean up any potential transient views if the child has already been swiped
+                    // out, as we won't be animating it further (due to its height already being
+                    // clipped to 0.
+                    ViewGroup transientContainer = ((ExpandableView) child).getTransientContainer();
+                    if (transientContainer != null) {
+                        transientContainer.removeTransientView(child);
+                    }
+                }
             }
             int animationType = childWasSwipedOut
                     ? AnimationEvent.ANIMATION_TYPE_REMOVE_SWIPED_OUT
@@ -3388,7 +3403,7 @@ public class NotificationStackScrollLayout extends ViewGroup
                             .animateY(mShelf));
             ev.darkAnimationOriginIndex = mDarkAnimationOriginIndex;
             mAnimationEvents.add(ev);
-            startBackgroundFade();
+            startDarkAmountAnimation();
         }
         mDarkNeedsAnimation = false;
     }
@@ -3966,6 +3981,9 @@ public class NotificationStackScrollLayout extends ViewGroup
             mDarkAnimationOriginIndex = findDarkAnimationOriginIndex(touchWakeUpScreenLocation);
             mNeedsAnimation =  true;
         } else {
+            if (mDarkAmountAnimator != null) {
+                mDarkAmountAnimator.cancel();
+            }
             setDarkAmount(dark ? 1f : 0f);
             updateBackground();
         }
@@ -4010,12 +4028,22 @@ public class NotificationStackScrollLayout extends ViewGroup
         return mDarkAmount;
     }
 
-    private void startBackgroundFade() {
-        ObjectAnimator fadeAnimator = ObjectAnimator.ofFloat(this, DARK_AMOUNT, mDarkAmount,
+    private void startDarkAmountAnimation() {
+        ObjectAnimator darkAnimator = ObjectAnimator.ofFloat(this, DARK_AMOUNT, mDarkAmount,
                 mAmbientState.isDark() ? 1f : 0);
-        fadeAnimator.setDuration(StackStateAnimator.ANIMATION_DURATION_WAKEUP);
-        fadeAnimator.setInterpolator(Interpolators.ALPHA_IN);
-        fadeAnimator.start();
+        darkAnimator.setDuration(StackStateAnimator.ANIMATION_DURATION_WAKEUP);
+        darkAnimator.setInterpolator(Interpolators.ALPHA_IN);
+        darkAnimator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                mDarkAmountAnimator = null;
+            }
+        });
+        if (mDarkAmountAnimator != null) {
+            mDarkAmountAnimator.cancel();
+        }
+        mDarkAmountAnimator = darkAnimator;
+        mDarkAmountAnimator.start();
     }
 
     private int findDarkAnimationOriginIndex(@Nullable PointF screenLocation) {
@@ -4117,8 +4145,8 @@ public class NotificationStackScrollLayout extends ViewGroup
                 && !mFooterView.willBeGone();
     }
 
-    public boolean isFooterViewVisible() {
-        return mFooterView != null && mFooterView.isVisible();
+    public boolean isFooterViewContentVisible() {
+        return mFooterView != null && mFooterView.isContentVisible();
     }
 
     public int getFooterViewHeight() {

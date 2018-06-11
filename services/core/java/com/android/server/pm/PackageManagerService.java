@@ -369,6 +369,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 /**
  * Keep track of all those APKs everywhere.
@@ -2075,6 +2076,16 @@ public class PackageManagerService extends IPackageManager.Stub
                             installerPackageName, null /*finishedReceiver*/,
                             updateUserIds, instantUserIds);
                 }
+                // if the required verifier is defined, but, is not the installer of record
+                // for the package, it gets notified
+                final boolean notifyVerifier = mRequiredVerifierPackage != null
+                        && !mRequiredVerifierPackage.equals(installerPackageName);
+                if (notifyVerifier) {
+                    sendPackageBroadcast(Intent.ACTION_PACKAGE_ADDED, packageName,
+                            extras, 0 /*flags*/,
+                            mRequiredVerifierPackage, null /*finishedReceiver*/,
+                            updateUserIds, instantUserIds);
+                }
 
                 // Send replaced for users that don't see the package for the first time
                 if (update) {
@@ -2086,6 +2097,12 @@ public class PackageManagerService extends IPackageManager.Stub
                         sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED, packageName,
                                 extras, 0 /*flags*/,
                                 installerPackageName, null /*finishedReceiver*/,
+                                updateUserIds, instantUserIds);
+                    }
+                    if (notifyVerifier) {
+                        sendPackageBroadcast(Intent.ACTION_PACKAGE_REPLACED, packageName,
+                                extras, 0 /*flags*/,
+                                mRequiredVerifierPackage, null /*finishedReceiver*/,
                                 updateUserIds, instantUserIds);
                     }
                     sendPackageBroadcast(Intent.ACTION_MY_PACKAGE_REPLACED,
@@ -8827,8 +8844,16 @@ public class PackageManagerService extends IPackageManager.Stub
 
         if (scanSystemPartition && isSystemPkgUpdated && !isSystemPkgBetter) {
             // The version of the application on the /system partition is less than or
-            // equal to the version on the /data partition. Throw an exception and use
-            // the application already installed on the /data partition.
+            // equal to the version on the /data partition. Even though the disabled system package
+            // is likely to be replaced by a version on the /data partition, we make assumptions
+            // that it's part of the mPackages collection during package manager initialization. So,
+            // add it to mPackages if there isn't already a package in the collection and then throw
+            // an exception to use the application already installed on the /data partition.
+            synchronized (mPackages) {
+                if (!mPackages.containsKey(pkg.packageName)) {
+                    mPackages.put(pkg.packageName, pkg);
+                }
+            }
             throw new PackageManagerException(Log.WARN, "Package " + pkg.packageName + " at "
                     + pkg.codePath + " ignored: updated version " + pkgSetting.versionCode
                     + " better than this " + pkg.getLongVersionCode());
@@ -13980,6 +14005,43 @@ public class PackageManagerService extends IPackageManager.Stub
         return false;
     }
 
+    @Override
+    public boolean setSystemAppInstallState(String packageName, boolean installed, int userId) {
+        enforceSystemOrPhoneCaller("setSystemAppInstallState");
+        PackageSetting pkgSetting = mSettings.mPackages.get(packageName);
+        // The target app should always be in system
+        if (pkgSetting == null || !pkgSetting.isSystem()) {
+            return false;
+        }
+        // Check if the install state is the same
+        if (pkgSetting.getInstalled(userId) == installed) {
+            return false;
+        }
+
+        long callingId = Binder.clearCallingIdentity();
+        try {
+            if (installed) {
+                // install the app from uninstalled state
+                installExistingPackageAsUser(
+                        packageName,
+                        userId,
+                        0 /*installFlags*/,
+                        PackageManager.INSTALL_REASON_DEVICE_SETUP);
+                return true;
+            }
+
+            // uninstall the app from installed state
+            deletePackageVersioned(
+                    new VersionedPackage(packageName, PackageManager.VERSION_CODE_HIGHEST),
+                    new LegacyPackageDeleteObserver(null).getBinder(),
+                    userId,
+                    PackageManager.DELETE_SYSTEM_APP);
+            return true;
+        } finally {
+            Binder.restoreCallingIdentity(callingId);
+        }
+    }
+
     private void sendApplicationHiddenForUser(String packageName, PackageSetting pkgSetting,
             int userId) {
         final PackageRemovedInfo info = new PackageRemovedInfo(this);
@@ -14044,10 +14106,16 @@ public class PackageManagerService extends IPackageManager.Stub
     @Override
     public int installExistingPackageAsUser(String packageName, int userId, int installFlags,
             int installReason) {
-        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.INSTALL_PACKAGES,
-                null);
-        PackageSetting pkgSetting;
         final int callingUid = Binder.getCallingUid();
+        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.INSTALL_PACKAGES)
+                != PackageManager.PERMISSION_GRANTED
+                && mContext.checkCallingOrSelfPermission(
+                        android.Manifest.permission.INSTALL_EXISTING_PACKAGES)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Neither user " + callingUid + " nor current process has "
+                    + android.Manifest.permission.INSTALL_PACKAGES + ".");
+        }
+        PackageSetting pkgSetting;
         mPermissionManager.enforceCrossUserPermission(callingUid, userId,
                 true /* requireFullPermission */, true /* checkShell */,
                 "installExistingPackage for user " + userId);
@@ -14152,13 +14220,9 @@ public class PackageManagerService extends IPackageManager.Stub
     public String[] setPackagesSuspendedAsUser(String[] packageNames, boolean suspended,
             PersistableBundle appExtras, PersistableBundle launcherExtras, String dialogMessage,
             String callingPackage, int userId) {
-        try {
-            mContext.enforceCallingOrSelfPermission(android.Manifest.permission.SUSPEND_APPS, null);
-        } catch (SecurityException e) {
-            mContext.enforceCallingOrSelfPermission(Manifest.permission.MANAGE_USERS,
-                    "Callers need to have either " + Manifest.permission.SUSPEND_APPS + " or "
-                            + Manifest.permission.MANAGE_USERS);
-        }
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.SUSPEND_APPS,
+                "setPackagesSuspendedAsUser");
+
         final int callingUid = Binder.getCallingUid();
         if (callingUid != Process.ROOT_UID && callingUid != Process.SYSTEM_UID
                 && getPackageUid(callingPackage, 0, userId) != callingUid) {
@@ -14300,28 +14364,50 @@ public class PackageManagerService extends IPackageManager.Stub
      * @param packageName The package holding {@link Manifest.permission#SUSPEND_APPS} permission
      * @param affectedUser The user for which the changes are taking place.
      */
-    void unsuspendForSuspendingPackage(String packageName, int affectedUser) {
+    void unsuspendForSuspendingPackage(final String packageName, int affectedUser) {
         final int[] userIds = (affectedUser == UserHandle.USER_ALL) ? sUserManager.getUserIds()
                 : new int[] {affectedUser};
         for (int userId : userIds) {
-            List<String> affectedPackages = new ArrayList<>();
-            synchronized (mPackages) {
-                for (PackageSetting ps : mSettings.mPackages.values()) {
-                    final PackageUserState pus = ps.readUserState(userId);
-                    if (pus.suspended && packageName.equals(pus.suspendingPackage)) {
-                        ps.setSuspended(false, null, null, null, null, userId);
-                        affectedPackages.add(ps.name);
-                    }
+            unsuspendForSuspendingPackages(packageName::equals, userId);
+        }
+    }
+
+    /**
+     * Immediately unsuspends any packages in the given users not suspended by the platform or root.
+     * To be called when a profile owner or a device owner is added.
+     *
+     * <p><b>Should not be used on a frequent code path</b> as it flushes state to disk
+     * synchronously
+     *
+     * @param userIds The users for which to unsuspend packages
+     */
+    void unsuspendForNonSystemSuspendingPackages(ArraySet<Integer> userIds) {
+        final int sz = userIds.size();
+        for (int i = 0; i < sz; i++) {
+            unsuspendForSuspendingPackages(
+                    (suspendingPackage) -> !PLATFORM_PACKAGE_NAME.equals(suspendingPackage),
+                    userIds.valueAt(i));
+        }
+    }
+
+    private void unsuspendForSuspendingPackages(Predicate<String> packagePredicate, int userId) {
+        final List<String> affectedPackages = new ArrayList<>();
+        synchronized (mPackages) {
+            for (PackageSetting ps : mSettings.mPackages.values()) {
+                final PackageUserState pus = ps.readUserState(userId);
+                if (pus.suspended && packagePredicate.test(pus.suspendingPackage)) {
+                    ps.setSuspended(false, null, null, null, null, userId);
+                    affectedPackages.add(ps.name);
                 }
             }
-            if (!affectedPackages.isEmpty()) {
-                final String[] packageArray = affectedPackages.toArray(
-                        new String[affectedPackages.size()]);
-                sendMyPackageSuspendedOrUnsuspended(packageArray, false, null, userId);
-                sendPackagesSuspendedForUser(packageArray, userId, false, null);
-                // Write package restrictions immediately to avoid an inconsistent state.
-                mSettings.writePackageRestrictionsLPr(userId);
-            }
+        }
+        if (!affectedPackages.isEmpty()) {
+            final String[] packageArray = affectedPackages.toArray(
+                    new String[affectedPackages.size()]);
+            sendMyPackageSuspendedOrUnsuspended(packageArray, false, null, userId);
+            sendPackagesSuspendedForUser(packageArray, userId, false, null);
+            // Write package restrictions immediately to avoid an inconsistent state.
+            mSettings.writePackageRestrictionsLPr(userId);
         }
     }
 
@@ -17268,17 +17354,6 @@ public class PackageManagerService extends IPackageManager.Stub
                                         + "Persistent apps are not updateable.");
                         return;
                     }
-                    // Prevent apps from downgrading their targetSandbox.
-                    final int oldTargetSandbox = oldPackage.applicationInfo.targetSandboxVersion;
-                    final int newTargetSandbox = pkg.applicationInfo.targetSandboxVersion;
-                    if (oldTargetSandbox == 2 && newTargetSandbox != 2) {
-                        res.setError(PackageManager.INSTALL_FAILED_SANDBOX_VERSION_DOWNGRADE,
-                                "Package " + pkg.packageName + " new target sandbox "
-                                + newTargetSandbox + " is incompatible with the previous value of"
-                                + oldTargetSandbox + ".");
-                        return;
-                    }
-
                     // Prevent installing of child packages
                     if (oldPackage.parentPackage != null) {
                         res.setError(PackageManager.INSTALL_PARSE_FAILED_BAD_PACKAGE_NAME,
@@ -24061,6 +24136,18 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
                 SparseArray<String> profileOwnerPackages) {
             mProtectedPackages.setDeviceAndProfileOwnerPackages(
                     deviceOwnerUserId, deviceOwnerPackage, profileOwnerPackages);
+
+            final ArraySet<Integer> usersWithPoOrDo = new ArraySet<>();
+            if (deviceOwnerPackage != null) {
+                usersWithPoOrDo.add(deviceOwnerUserId);
+            }
+            final int sz = profileOwnerPackages.size();
+            for (int i = 0; i < sz; i++) {
+                if (profileOwnerPackages.valueAt(i) != null) {
+                    usersWithPoOrDo.add(profileOwnerPackages.keyAt(i));
+                }
+            }
+            unsuspendForNonSystemSuspendingPackages(usersWithPoOrDo);
         }
 
         @Override
@@ -24490,6 +24577,9 @@ Slog.v(TAG, ":: stepped forward, applying functor at tag " + parser.getName());
             return false;
         }
         if (info.targetSdkVersion < Build.VERSION_CODES.O) {
+            return false;
+        }
+        if (isInstantApp(packageName, userId)) {
             return false;
         }
         String appOpPermission = Manifest.permission.REQUEST_INSTALL_PACKAGES;

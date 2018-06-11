@@ -207,17 +207,18 @@ public class SmartReplyView extends ViewGroup {
         b.setText(choice);
 
         OnDismissAction action = () -> {
+            smartReplyController.smartReplySent(entry, replyIndex, b.getText());
             Bundle results = new Bundle();
             results.putString(remoteInput.getResultKey(), choice.toString());
             Intent intent = new Intent().addFlags(Intent.FLAG_RECEIVER_FOREGROUND);
             RemoteInput.addResultsToIntent(new RemoteInput[]{remoteInput}, intent, results);
             RemoteInput.setResultsSource(intent, RemoteInput.SOURCE_CHOICE);
+            entry.setHasSentReply();
             try {
                 pendingIntent.send(context, 0, intent);
             } catch (PendingIntent.CanceledException e) {
                 Log.w(TAG, "Unable to send smart reply", e);
             }
-            smartReplyController.smartReplySent(entry, replyIndex, b.getText());
             mSmartReplyContainer.setVisibility(View.GONE);
             return false; // do not defer
         };

@@ -147,6 +147,7 @@ public abstract class PackageManager {
             GET_DISABLED_COMPONENTS,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
+            MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PackageInfoFlags {}
@@ -164,6 +165,7 @@ public abstract class PackageManager {
             MATCH_STATIC_SHARED_LIBRARIES,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
+            MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ApplicationInfoFlags {}
@@ -519,6 +521,12 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int MATCH_DEBUG_TRIAGED_MISSING = 0x10000000;
+
+    /**
+     * Internal flag used to indicate that a package is a hidden system app.
+     * @hide
+     */
+    public static final int MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS =  0x20000000;
 
     /**
      * Flag for {@link #addCrossProfileIntentFilter}: if this flag is set: when
@@ -1656,7 +1664,8 @@ public abstract class PackageManager {
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device includes at least one form of audio
-     * output, such as speakers, audio jack or streaming over bluetooth
+     * output, as defined in the Android Compatibility Definition Document (CDD)
+     * <a href="https://source.android.com/compatibility/android-cdd#7_8_audio">section 7.8 Audio</a>.
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_AUDIO_OUTPUT = "android.hardware.audio.output";
@@ -4839,7 +4848,8 @@ public abstract class PackageManager {
      * on the system for other users, also install it for the specified user.
      * @hide
      */
-     @RequiresPermission(anyOf = {
+    @RequiresPermission(anyOf = {
+            Manifest.permission.INSTALL_EXISTING_PACKAGES,
             Manifest.permission.INSTALL_PACKAGES,
             Manifest.permission.INTERACT_ACROSS_USERS_FULL})
     public abstract int installExistingPackageAsUser(String packageName, @UserIdInt int userId)
@@ -5574,8 +5584,7 @@ public abstract class PackageManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(anyOf = {Manifest.permission.SUSPEND_APPS,
-            Manifest.permission.MANAGE_USERS})
+    @RequiresPermission(Manifest.permission.SUSPEND_APPS)
     public String[] setPackagesSuspended(String[] packageNames, boolean suspended,
             @Nullable PersistableBundle appExtras, @Nullable PersistableBundle launcherExtras,
             String dialogMessage) {

@@ -389,6 +389,7 @@
     <protected-broadcast android:name="android.net.wifi.p2p.PERSISTENT_GROUPS_CHANGED" />
     <protected-broadcast android:name="android.net.wifi.DPP_EVENT" />
     <protected-broadcast android:name="android.net.wifi.COUNTRY_CODE_CHANGED" />
+    <protected-broadcast android:name="android.net.wifi.WIFI_DISCONNECT_IN_PROGRESS" />
     <protected-broadcast android:name="android.net.conn.TETHER_STATE_CHANGED" />
     <protected-broadcast android:name="android.net.conn.INET_CONDITION_ACTION" />
     <protected-broadcast android:name="android.net.conn.NETWORK_CONDITIONS_MEASURED" />
@@ -878,7 +879,7 @@
 
     <!-- Used for permissions that are associated telephony features. -->
     <permission-group android:name="android.permission-group.CALL_LOG"
-        android:icon="@drawable/perm_group_phone_calls"
+        android:icon="@drawable/perm_group_call_log"
         android:label="@string/permgrouplab_calllog"
         android:description="@string/permgroupdesc_calllog"
         android:request="@string/permgrouprequest_calllog"
@@ -3055,6 +3056,15 @@
         @hide
     -->
     <permission android:name="android.permission.INSTALL_PACKAGE_UPDATES"
+        android:protectionLevel="signature|privileged" />
+
+    <!-- Allows an application to install existing system packages. This is a limited
+         version of {@link android.Manifest.permission#INSTALL_PACKAGES}.
+         <p>Not for use by third-party applications.
+         TODO(b/80204953): remove this permission once we have a long-term solution.
+         @hide
+    -->
+    <permission android:name="com.android.permission.INSTALL_EXISTING_PACKAGES"
         android:protectionLevel="signature|privileged" />
 
     <!-- @SystemApi Allows an application to clear user data.

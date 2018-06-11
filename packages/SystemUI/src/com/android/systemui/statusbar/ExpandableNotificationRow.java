@@ -710,6 +710,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         updateClickAndFocus();
         if (mNotificationParent != null) {
             setOverrideTintColor(NO_COLOR, 0.0f);
+            // Let's reset the distance to top roundness, as this isn't applied to group children
+            setDistanceToTopRoundness(NO_ROUNDNESS);
             mNotificationParent.updateBackgroundForGroupState();
         }
         updateIconVisibilities();
@@ -2286,6 +2288,11 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     @Override
     public void setHideSensitive(boolean hideSensitive, boolean animated, long delay,
             long duration) {
+        if (getVisibility() == GONE) {
+            // If we are GONE, the hideSensitive parameter will not be calculated and always be
+            // false, which is incorrect, let's wait until a real call comes in later.
+            return;
+        }
         boolean oldShowingPublic = mShowingPublic;
         mShowingPublic = mSensitive && hideSensitive;
         if (mShowingPublicInitialized && mShowingPublic == oldShowingPublic) {
@@ -2787,6 +2794,24 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             }
             notifyHeightChanged(false /* needsAnimation */);
         }
+    }
+
+    @Override
+    public boolean topAmountNeedsClipping() {
+        if (isGroupExpanded()) {
+            return true;
+        }
+        if (isGroupExpansionChanging()) {
+            return true;
+        }
+        if (getShowingLayout().shouldClipToRounding(true /* topRounded */,
+                false /* bottomRounded */)) {
+            return true;
+        }
+        if (mGuts != null && mGuts.getAlpha() != 0.0f) {
+            return true;
+        }
+        return false;
     }
 
     @Override
