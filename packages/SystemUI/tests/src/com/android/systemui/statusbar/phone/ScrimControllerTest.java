@@ -351,6 +351,23 @@ public class ScrimControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void scrimBlanksWhenUnlockingFromPulse() {
+        boolean[] blanked = {false};
+        // Simulate unlock with fingerprint
+        mScrimController.transitionTo(ScrimState.PULSING);
+        mScrimController.finishAnimationsImmediately();
+        mScrimController.transitionTo(ScrimState.UNLOCKED,
+                new ScrimController.Callback() {
+                    @Override
+                    public void onDisplayBlanked() {
+                        blanked[0] = true;
+                    }
+                });
+        mScrimController.finishAnimationsImmediately();
+        Assert.assertTrue("Scrim should blank when unlocking from pulse.", blanked[0]);
+    }
+
+    @Test
     public void testScrimCallback() {
         int[] callOrder = {0, 0, 0};
         int[] currentCall = {0};
@@ -520,6 +537,18 @@ public class ScrimControllerTest extends SysuiTestCase {
         assertScrimVisibility(VISIBILITY_FULLY_TRANSPARENT, VISIBILITY_FULLY_OPAQUE);
 
         mScrimController.transitionTo(ScrimState.PULSING);
+        mScrimController.finishAnimationsImmediately();
+        assertScrimVisibility(VISIBILITY_FULLY_TRANSPARENT, VISIBILITY_FULLY_OPAQUE);
+    }
+
+    @Test
+    public void testHidesShowWhenLockedActivity_whenAlreadyInAod() {
+        mScrimController.setWallpaperSupportsAmbientMode(true);
+        mScrimController.transitionTo(ScrimState.AOD);
+        mScrimController.finishAnimationsImmediately();
+        assertScrimVisibility(VISIBILITY_FULLY_TRANSPARENT, VISIBILITY_FULLY_TRANSPARENT);
+
+        mScrimController.setKeyguardOccluded(true);
         mScrimController.finishAnimationsImmediately();
         assertScrimVisibility(VISIBILITY_FULLY_TRANSPARENT, VISIBILITY_FULLY_OPAQUE);
     }

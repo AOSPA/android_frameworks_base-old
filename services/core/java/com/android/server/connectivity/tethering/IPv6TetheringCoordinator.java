@@ -73,24 +73,12 @@ public class IPv6TetheringCoordinator {
     private final byte[] mUniqueLocalPrefix;
     private short mNextSubnetId;
     private NetworkState mUpstreamNetworkState;
-    private static boolean mV6OnlyTetherEnabled;
 
     public IPv6TetheringCoordinator(ArrayList<TetherInterfaceStateMachine> notifyList,
                                     SharedLog log) {
         mNotifyList = notifyList;
         mLog = log.forSubComponent(TAG);
         mActiveDownstreams = new LinkedList<>();
-        mV6OnlyTetherEnabled = false;
-        mUniqueLocalPrefix = generateUniqueLocalPrefix();
-        mNextSubnetId = 0;
-    }
-
-    public IPv6TetheringCoordinator(ArrayList<TetherInterfaceStateMachine> notifyList,
-                                    SharedLog log, boolean v6OnlyTetherEnable) {
-        mNotifyList = notifyList;
-        mLog = log.forSubComponent(TAG);
-        mActiveDownstreams = new LinkedList<>();
-        mV6OnlyTetherEnabled = v6OnlyTetherEnable;
         mUniqueLocalPrefix = generateUniqueLocalPrefix();
         mNextSubnetId = 0;
     }

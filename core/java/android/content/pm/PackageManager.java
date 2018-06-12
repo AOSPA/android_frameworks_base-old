@@ -147,7 +147,6 @@ public abstract class PackageManager {
             GET_DISABLED_COMPONENTS,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
-            MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PackageInfoFlags {}
@@ -165,7 +164,6 @@ public abstract class PackageManager {
             MATCH_STATIC_SHARED_LIBRARIES,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
-            MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ApplicationInfoFlags {}
@@ -461,6 +459,7 @@ public abstract class PackageManager {
      * package.
      * @hide
      */
+    @TestApi
     public static final int MATCH_KNOWN_PACKAGES = MATCH_UNINSTALLED_PACKAGES | MATCH_ANY_USER;
 
     /**
@@ -521,12 +520,6 @@ public abstract class PackageManager {
      * @hide
      */
     public static final int MATCH_DEBUG_TRIAGED_MISSING = 0x10000000;
-
-    /**
-     * Internal flag used to indicate that a package is a hidden system app.
-     * @hide
-     */
-    public static final int MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS =  0x20000000;
 
     /**
      * Flag for {@link #addCrossProfileIntentFilter}: if this flag is set: when
@@ -1964,8 +1957,6 @@ public abstract class PackageManager {
      * </ul>
      * A version of 1.1.0 or higher also indicates:
      * <ul>
-     * <li>The {@code VK_ANDROID_external_memory_android_hardware_buffer} extension is
-     *     supported.</li>
      * <li>{@code SYNC_FD} external semaphore and fence handles are supported.</li>
      * <li>{@code VkPhysicalDeviceSamplerYcbcrConversionFeatures::samplerYcbcrConversion} is
      *     supported.</li>
@@ -3420,6 +3411,7 @@ public abstract class PackageManager {
      *         deleted with {@code DONT_DELETE_DATA} flag set).
      * @hide
      */
+    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
     public abstract List<PackageInfo> getInstalledPackagesAsUser(@PackageInfoFlags int flags,
@@ -3796,6 +3788,7 @@ public abstract class PackageManager {
      *         deleted with {@code DONT_DELETE_DATA} flag set).
      * @hide
      */
+    @TestApi
     public abstract List<ApplicationInfo> getInstalledApplicationsAsUser(
             @ApplicationInfoFlags int flags, @UserIdInt int userId);
 
@@ -4848,8 +4841,7 @@ public abstract class PackageManager {
      * on the system for other users, also install it for the specified user.
      * @hide
      */
-    @RequiresPermission(anyOf = {
-            Manifest.permission.INSTALL_EXISTING_PACKAGES,
+     @RequiresPermission(anyOf = {
             Manifest.permission.INSTALL_PACKAGES,
             Manifest.permission.INTERACT_ACROSS_USERS_FULL})
     public abstract int installExistingPackageAsUser(String packageName, @UserIdInt int userId)

@@ -321,6 +321,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     boolean sleeping;       // have we told the activity to sleep?
     boolean launching;      // is activity launch in progress?
     boolean nowVisible;     // is this activity's window visible?
+    boolean mClientVisibilityDeferred;// was the visibility change message to client deferred?
     boolean idle;           // has the activity gone idle?
     boolean hasBeenLaunched;// has this activity ever been launched?
     boolean frozenBeforeDestroy;// has been frozen but not yet destroyed.
@@ -811,6 +812,13 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             }
             return null;
         }
+    }
+
+    /**
+     * See {@link AppWindowContainerController#setWillCloseOrEnterPip(boolean)}
+     */
+    void setWillCloseOrEnterPip(boolean willCloseOrEnterPip) {
+        getWindowContainerController().setWillCloseOrEnterPip(willCloseOrEnterPip);
     }
 
     static class Token extends IApplicationToken.Stub {
@@ -1444,6 +1452,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         newIntents.add(intent);
     }
 
+    final boolean isSleeping() {
+        final ActivityStack stack = getStack();
+        return stack != null ? stack.shouldSleepActivities() : service.isSleepingLocked();
+    }
+
     /**
      * Deliver a new Intent to an existing activity, so that its onNewIntent()
      * method will be called at the proper time.
@@ -1454,9 +1467,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 intent, getUriPermissionsLocked(), userId);
         final ReferrerIntent rintent = new ReferrerIntent(intent, referrer);
         boolean unsent = true;
-        final ActivityStack stack = getStack();
-        final boolean isTopActivityWhileSleeping = isTopRunningActivity()
-                && (stack != null ? stack.shouldSleepActivities() : service.isSleepingLocked());
+        final boolean isTopActivityWhileSleeping = isTopRunningActivity() && isSleeping();
 
         // We want to immediately deliver the intent to the activity if:
         // - It is currently resumed or paused. i.e. it is currently visible to the user and we want
@@ -1684,7 +1695,10 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             parent.onActivityStateChanged(this, state, reason);
         }
 
-        if (state == STOPPING) {
+        // The WindowManager interprets the app stopping signal as
+        // an indication that the Surface will eventually be destroyed.
+        // This however isn't necessarily true if we are going to sleep.
+        if (state == STOPPING && !isSleeping()) {
             mWindowContainerController.notifyAppStopping();
         }
     }
@@ -1749,7 +1763,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         return !behindFullscreenActivity || mLaunchTaskBehind;
     }
 
-    void makeVisibleIfNeeded(ActivityRecord starting) {
+    void makeVisibleIfNeeded(ActivityRecord starting, boolean reportToClient) {
         // This activity is not currently visible, but is running. Tell it to become visible.
         if (mState == RESUMED || this == starting) {
             if (DEBUG_VISIBILITY) Slog.d(TAG_VISIBILITY,
@@ -1769,23 +1783,28 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             setVisible(true);
             sleeping = false;
             app.pendingUiClean = true;
-            service.getLifecycleManager().scheduleTransaction(app.thread, appToken,
-                    WindowVisibilityItem.obtain(true /* showWindow */));
+            if (reportToClient) {
+                makeClientVisible();
+            } else {
+                mClientVisibilityDeferred = true;
+            }
             // The activity may be waiting for stop, but that is no longer appropriate for it.
             mStackSupervisor.mStoppingActivities.remove(this);
             mStackSupervisor.mGoingToSleepActivities.remove(this);
+        } catch (Exception e) {
+            // Just skip on any failure; we'll make it visible when it next restarts.
+            Slog.w(TAG, "Exception thrown making visible: " + intent.getComponent(), e);
+        }
+        handleAlreadyVisible();
+    }
 
-            // If the activity is stopped or stopping, cycle to the paused state. We avoid doing
-            // this when there is an activity waiting to become translucent as the extra binder
-            // calls will lead to noticeable jank. A later call to
-            // ActivityStack#ensureActivitiesVisibleLocked will bring the activity to the proper
-            // paused state. We also avoid doing this for the activity the stack supervisor
-            // considers the resumed activity, as normal means will bring the activity from STOPPED
-            // to RESUMED. Adding PAUSING in this scenario will lead to double lifecycles.
-            if (isState(STOPPED, STOPPING) && stack.mTranslucentActivityWaiting == null
-                    && mStackSupervisor.getResumedActivityLocked() != this) {
-                // Capture reason before state change
-
+    /** Send visibility change message to the client and pause if needed. */
+    void makeClientVisible() {
+        mClientVisibilityDeferred = false;
+        try {
+            service.getLifecycleManager().scheduleTransaction(app.thread, appToken,
+                    WindowVisibilityItem.obtain(true /* showWindow */));
+            if (shouldPauseWhenBecomingVisible()) {
                 // An activity must be in the {@link PAUSING} state for the system to validate
                 // the move to {@link PAUSED}.
                 setState(PAUSING, "makeVisibleIfNeeded");
@@ -1794,10 +1813,41 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                                 configChangeFlags, false /* dontReport */));
             }
         } catch (Exception e) {
-            // Just skip on any failure; we'll make it visible when it next restarts.
-            Slog.w(TAG, "Exception thrown making visible: " + intent.getComponent(), e);
+            Slog.w(TAG, "Exception thrown sending visibility update: " + intent.getComponent(), e);
         }
-        handleAlreadyVisible();
+    }
+
+    /** Check if activity should be moved to PAUSED state when it becomes visible. */
+    private boolean shouldPauseWhenBecomingVisible() {
+        // If the activity is stopped or stopping, cycle to the paused state. We avoid doing
+        // this when there is an activity waiting to become translucent as the extra binder
+        // calls will lead to noticeable jank. A later call to
+        // ActivityStack#ensureActivitiesVisibleLocked will bring the activity to the proper
+        // paused state. We also avoid doing this for the activity the stack supervisor
+        // considers the resumed activity, as normal means will bring the activity from STOPPED
+        // to RESUMED. Adding PAUSING in this scenario will lead to double lifecycles.
+        if (!isState(STOPPED, STOPPING) || getStack().mTranslucentActivityWaiting != null
+                || mStackSupervisor.getResumedActivityLocked() == this) {
+            return false;
+        }
+
+        // Check if position in task allows to become paused
+        final int positionInTask = task.mActivities.indexOf(this);
+        if (positionInTask == -1) {
+            throw new IllegalStateException("Activity not found in its task");
+        }
+        if (positionInTask == task.mActivities.size() - 1) {
+            // It's the topmost activity in the task - should become paused now
+            return true;
+        }
+        // Check if activity above is finishing now and this one becomes the topmost in task.
+        final ActivityRecord activityAbove = task.mActivities.get(positionInTask + 1);
+        if (activityAbove.finishing && results == null) {
+            // We will only allow pausing if activity above wasn't launched for result. Otherwise it
+            // will cause this activity to resume before getting result.
+            return true;
+        }
+        return false;
     }
 
     boolean handleAlreadyVisible() {

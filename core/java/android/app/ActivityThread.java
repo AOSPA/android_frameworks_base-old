@@ -348,6 +348,13 @@ public final class ActivityThread extends ClientTransactionHandler {
     final ArrayMap<ComponentName, ProviderClientRecord> mLocalProvidersByName
             = new ArrayMap<ComponentName, ProviderClientRecord>();
 
+    // Mitigation for b/74523247: Used to serialize calls to AM.getContentProvider().
+    // Note we never removes items from this map but that's okay because there are only so many
+    // users and so many authorities.
+    // TODO Remove it once we move CPR.wait() from AMS to the client side.
+    @GuardedBy("mGetProviderLocks")
+    final ArrayMap<ProviderKey, Object> mGetProviderLocks = new ArrayMap<>();
+
     final ArrayMap<Activity, ArrayList<OnActivityPausedListener>> mOnPauseListeners
         = new ArrayMap<Activity, ArrayList<OnActivityPausedListener>>();
 
@@ -357,7 +364,6 @@ public final class ActivityThread extends ClientTransactionHandler {
     static volatile Handler sMainThreadHandler;  // set once in main()
 
     Bundle mCoreSettings = null;
-    private final int mEnableUxe = SystemProperties.getInt("vendor.iop.enable_uxe", 0);
 
     /** Activity client record, used for bookkeeping for the real {@link Activity} instance. */
     public static final class ActivityClientRecord {
@@ -5754,7 +5760,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         updateLocaleListFromAppContext(appContext,
                 mResourcesManager.getConfiguration().getLocales());
 
-        if (mEnableUxe != 0 && !Process.isIsolated()) {
+        if (!Process.isIsolated()) {
             ux_perf = new BoostFramework(appContext);
         }
 
@@ -5983,8 +5989,10 @@ public final class ActivityThread extends ClientTransactionHandler {
         // be re-entrant in the case where the provider is in the same process.
         ContentProviderHolder holder = null;
         try {
-            holder = ActivityManager.getService().getContentProvider(
-                    getApplicationThread(), auth, userId, stable);
+            synchronized (getGetProviderLock(auth, userId)) {
+                holder = ActivityManager.getService().getContentProvider(
+                        getApplicationThread(), auth, userId, stable);
+            }
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }
@@ -5998,6 +6006,18 @@ public final class ActivityThread extends ClientTransactionHandler {
         holder = installProvider(c, holder, holder.info,
                 true /*noisy*/, holder.noReleaseNeeded, stable);
         return holder.provider;
+    }
+
+    private Object getGetProviderLock(String auth, int userId) {
+        final ProviderKey key = new ProviderKey(auth, userId);
+        synchronized (mGetProviderLocks) {
+            Object lock = mGetProviderLocks.get(key);
+            if (lock == null) {
+                lock = key;
+                mGetProviderLocks.put(key, lock);
+            }
+            return lock;
+        }
     }
 
     private final void incProviderRefLocked(ProviderRefCount prc, boolean stable) {
