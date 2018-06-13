@@ -423,8 +423,10 @@ class TvInputHardwareManager implements TvInputHal.Callback {
     private int findDeviceIdForInputIdLocked(String inputId) {
         for (int i = 0; i < mConnections.size(); ++i) {
             Connection connection = mConnections.get(i);
-            if (connection.getInfoLocked().getId().equals(inputId)) {
-                return i;
+            if (connection.getInfoLocked() != null) {
+                if (connection.getInfoLocked().getId().equals(inputId)) {
+                    return i;
+                }
             }
         }
         return -1;
@@ -444,7 +446,8 @@ class TvInputHardwareManager implements TvInputHal.Callback {
             }
             Connection connection = mConnections.get(deviceId);
             for (TvStreamConfig config : connection.getConfigsLocked()) {
-                if (config.getType() == TvStreamConfig.STREAM_TYPE_BUFFER_PRODUCER) {
+            if ((config.getType() == TvStreamConfig.STREAM_TYPE_BUFFER_PRODUCER) ||
+                (config.getType() == TvStreamConfig.STREAM_TYPE_INDEPENDENT_VIDEO_SOURCE)) {
                     configsList.add(config);
                 }
             }

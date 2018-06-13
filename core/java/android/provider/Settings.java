@@ -5432,6 +5432,12 @@ public final class Settings {
          **/
         public static final String WIFI_DISCONNECT_DELAY_DURATION =
                 "wifi_disconnect_delay_duration";
+        /**
+         * Setting to configure softap acs.
+         * @hide
+         **/
+        public static final String WIFI_SOFTAP_ACS_ENABLED =
+                "wifi_softap_acs_enabled";
 
         /**
          * A flag containing settings used for biometric weak
@@ -7267,7 +7273,8 @@ public final class Settings {
             SCREENSAVER_COMPONENTS,
             SCREENSAVER_ACTIVATE_ON_DOCK,
             SCREENSAVER_ACTIVATE_ON_SLEEP,
-            WIFI_DISCONNECT_DELAY_DURATION
+            WIFI_DISCONNECT_DELAY_DURATION,
+            WIFI_SOFTAP_ACS_ENABLED
         };
 
         /** @hide */
