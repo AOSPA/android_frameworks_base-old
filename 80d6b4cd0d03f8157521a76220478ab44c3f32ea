@@ -1,0 +1,72 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "10fcc928_59db1124",
+        "filename": "core/res/res/values/pa_strings.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 27,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:03:08Z",
+      "side": 1,
+      "message": "spaces",
+      "revId": "80d6b4cd0d03f8157521a76220478ab44c3f32ea",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "294c5e0f_b51abba2",
+        "filename": "services/core/java/com/android/server/policy/AlertSliderObserver.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 87,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:03:08Z",
+      "side": 1,
+      "message": "I know this was just a port, but please simplify this codepath. There\u0027s really no need for the overhead of a filereader and buffered reader to read a single number from the stream. FileInputStream is probably a better choice here.",
+      "revId": "80d6b4cd0d03f8157521a76220478ab44c3f32ea",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "df40656d_a297977d",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 1049,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:03:08Z",
+      "side": 1,
+      "message": "Don\u0027t do this.",
+      "revId": "80d6b4cd0d03f8157521a76220478ab44c3f32ea",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "7136cb86_728de634",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 1139,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:03:08Z",
+      "side": 1,
+      "message": "This is nasty. Move config update to updateSettings() and use the Settings.System.getInt function to get the setting value and update appropriately.",
+      "revId": "80d6b4cd0d03f8157521a76220478ab44c3f32ea",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
