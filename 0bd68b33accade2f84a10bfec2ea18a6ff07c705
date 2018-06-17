@@ -1,0 +1,106 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "ccde6db6_99182716",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarFragment.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 103,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:28:08Z",
+      "side": 1,
+      "message": "Make private and add setter/getter",
+      "revId": "0bd68b33accade2f84a10bfec2ea18a6ff07c705",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b7bf1fff_2f2cefa7",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarInflaterView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 203,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:28:08Z",
+      "side": 1,
+      "message": "just call onTuningChanged since updateSwappedOrder doesn\u0027t do anything else.",
+      "revId": "0bd68b33accade2f84a10bfec2ea18a6ff07c705",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "c13f692b_287abcd4",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/NavigationBarView.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 258,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:28:08Z",
+      "side": 1,
+      "message": "No need to conditionally assign since this method doesn\u0027t call any other methods.",
+      "revId": "0bd68b33accade2f84a10bfec2ea18a6ff07c705",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "01988fe4_e84ace0b",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 7684,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:28:08Z",
+      "side": 1,
+      "message": "Swap this to be private final.",
+      "revId": "0bd68b33accade2f84a10bfec2ea18a6ff07c705",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b368aa60_335fdbf0",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 7687,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:28:08Z",
+      "side": 1,
+      "message": "Direct variable access is bad and you should feel bad. Implement a setter/getter in the NavigationBarFragment class.",
+      "revId": "0bd68b33accade2f84a10bfec2ea18a6ff07c705",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "8359409d_b704a403",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 7691,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-17T21:28:08Z",
+      "side": 1,
+      "message": "Only log when DEBUG flag is set.",
+      "revId": "0bd68b33accade2f84a10bfec2ea18a6ff07c705",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
