@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "8ea0ff74_a55c61a4",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 3985,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-18T03:55:34Z",
+      "side": 1,
+      "message": "remove tab",
+      "revId": "55653a755e4ddc00d7a432860fa657a0c73686b3",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
