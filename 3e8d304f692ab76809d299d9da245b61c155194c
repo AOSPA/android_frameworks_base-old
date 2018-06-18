@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "e86e3879_0a33d0ae",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tiles/AlertSliderTile.java",
+        "patchSetId": 7
+      },
+      "lineNbr": 184,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-18T03:50:59Z",
+      "side": 1,
+      "message": "We should actually do something here, or delete the method override if we don\u0027t care",
+      "revId": "3e8d304f692ab76809d299d9da245b61c155194c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
