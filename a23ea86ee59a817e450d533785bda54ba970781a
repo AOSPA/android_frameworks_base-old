@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "696d856b_eee2b4f0",
+        "filename": "core/java/android/provider/Settings.java",
+        "patchSetId": 9
+      },
+      "lineNbr": 3956,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-18T03:57:56Z",
+      "side": 1,
+      "message": "remove tab",
+      "revId": "a23ea86ee59a817e450d533785bda54ba970781a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "cb47d543_be7e9440",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 9
+      },
+      "lineNbr": 843,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-18T03:57:56Z",
+      "side": 1,
+      "message": "remove tabs",
+      "revId": "a23ea86ee59a817e450d533785bda54ba970781a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "c2b8687f_378ee5a8",
+        "filename": "services/core/java/com/android/server/power/PowerManagerService.java",
+        "patchSetId": 9
+      },
+      "lineNbr": 3177,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-18T03:57:56Z",
+      "side": 1,
+      "message": "remove tabs",
+      "revId": "a23ea86ee59a817e450d533785bda54ba970781a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
