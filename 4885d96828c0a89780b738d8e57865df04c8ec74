@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "1be441f0_c5b277a2",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java",
+        "patchSetId": 7
+      },
+      "lineNbr": 7668,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-18T04:00:03Z",
+      "side": 1,
+      "message": "tabs make me sad",
+      "revId": "4885d96828c0a89780b738d8e57865df04c8ec74",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    },
+    {
+      "key": {
+        "uuid": "4ac73d82_3693e4df",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 7
+      },
+      "lineNbr": 2425,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-06-18T04:00:03Z",
+      "side": 1,
+      "message": "Since we don\u0027t do anything except set a variable here, there\u0027s no need for the temporary boolean value that is just assigned to mNavBarEnabled anyway.",
+      "revId": "4885d96828c0a89780b738d8e57865df04c8ec74",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": true
+    }
+  ]
+}
