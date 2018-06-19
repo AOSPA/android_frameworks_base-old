@@ -134,7 +134,6 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.Trace;
 import android.os.UserHandle;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.ArraySet;
@@ -1366,8 +1365,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
 
     void goToSleep() {
         // Ensure visibility without updating configuration, as activities are about to sleep.
-        ensureActivitiesVisibleLocked(null /* starting */, 0 /* configChanges */, !PRESERVE_WINDOWS,
-                false /* updateConfiguration */);
+        ensureActivitiesVisibleLocked(null /* starting */, 0 /* configChanges */,
+                !PRESERVE_WINDOWS);
 
         // Make sure any paused or stopped but visible activities are now sleeping.
         // This ensures that the activity's onStop() is called.
@@ -1568,6 +1567,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         if (DEBUG_PAUSE) Slog.v(TAG_PAUSE, "Complete pause: " + prev);
 
         if (prev != null) {
+            prev.setWillCloseOrEnterPip(false);
             final boolean wasStopping = prev.isState(STOPPING);
             prev.setState(PAUSED, "completePausedLocked");
             if (prev.finishing) {
@@ -1665,6 +1665,13 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     void addToStopping(ActivityRecord r, boolean scheduleIdle, boolean idleDelayed) {
         if (!mStackSupervisor.mStoppingActivities.contains(r)) {
             mStackSupervisor.mStoppingActivities.add(r);
+
+            // Some activity is waiting for another activity to become visible before it's being
+            // stopped, which means that we also want to wait with stopping this one to avoid
+            // flickers.
+            if (!mStackSupervisor.mActivitiesWaitingForVisibleActivity.isEmpty()) {
+                mStackSupervisor.mActivitiesWaitingForVisibleActivity.add(r);
+            }
         }
 
         // If we already have a few activities waiting to stop, then give up
@@ -1848,7 +1855,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
     final void ensureActivitiesVisibleLocked(ActivityRecord starting, int configChanges,
             boolean preserveWindows) {
         ensureActivitiesVisibleLocked(starting, configChanges, preserveWindows,
-                true /* updateConfiguration */);
+                true /* notifyClients */);
     }
 
     /**
@@ -1858,7 +1865,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
      */
     // TODO: Should be re-worked based on the fact that each task as a stack in most cases.
     final void ensureActivitiesVisibleLocked(ActivityRecord starting, int configChanges,
-            boolean preserveWindows, boolean updateConfiguration) {
+            boolean preserveWindows, boolean notifyClients) {
         mTopActivityOccludesKeyguard = false;
         mTopDismissingKeyguardActivity = null;
         mStackSupervisor.getKeyguardController().beginActivityVisibilityUpdate();
@@ -1910,7 +1917,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                                 + " finishing=" + r.finishing + " state=" + r.getState());
                         // First: if this is not the current activity being started, make
                         // sure it matches the current configuration.
-                        if (r != starting && updateConfiguration) {
+                        if (r != starting && notifyClients) {
                             r.ensureActivityConfiguration(0 /* globalChanges */, preserveWindows,
                                     true /* ignoreStopState */);
                         }
@@ -1930,11 +1937,15 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                             if (DEBUG_VISIBILITY) Slog.v(TAG_VISIBILITY,
                                     "Skipping: already visible at " + r);
 
+                            if (r.mClientVisibilityDeferred && notifyClients) {
+                                r.makeClientVisible();
+                            }
+
                             if (r.handleAlreadyVisible()) {
                                 resumeNextActivity = false;
                             }
                         } else {
-                            r.makeVisibleIfNeeded(starting);
+                            r.makeVisibleIfNeeded(starting, notifyClients);
                         }
                         // Aggregate current change flags.
                         configChanges |= r.configChangeFlags;
@@ -2429,11 +2440,12 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         mStackSupervisor.setLaunchSource(next.info.applicationInfo.uid);
 
         boolean lastResumedCanPip = false;
+        ActivityRecord lastResumed = null;
         final ActivityStack lastFocusedStack = mStackSupervisor.getLastStack();
         if (lastFocusedStack != null && lastFocusedStack != this) {
             // So, why aren't we using prev here??? See the param comment on the method. prev doesn't
             // represent the last resumed activity. However, the last focus stack does if it isn't null.
-            final ActivityRecord lastResumed = lastFocusedStack.mResumedActivity;
+            lastResumed = lastFocusedStack.mResumedActivity;
             if (userLeaving && inMultiWindowMode() && lastFocusedStack.shouldBeVisible(next)) {
                 // The user isn't leaving if this stack is the multi-window mode and the last
                 // focused stack should still be visible.
@@ -2468,6 +2480,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                 mService.updateLruProcessLocked(next.app, true, null);
             }
             if (DEBUG_STACK) mStackSupervisor.validateTopActivitiesLocked();
+            if (lastResumed != null) {
+                lastResumed.setWillCloseOrEnterPip(true);
+            }
             return true;
         } else if (mResumedActivity == next && next.isState(RESUMED)
                 && mStackSupervisor.allResumedActivitiesComplete()) {
@@ -3590,8 +3605,8 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         int taskNdx = mTaskHistory.indexOf(finishedTask);
         final TaskRecord task = finishedTask;
         int activityNdx = task.mActivities.indexOf(r);
-        mWindowManager.prepareAppTransition(TRANSIT_CRASHING_ACTIVITY_CLOSE, false /* TODO */,
-                0, true /* forceOverride */);
+        mWindowManager.prepareAppTransition(TRANSIT_CRASHING_ACTIVITY_CLOSE,
+                false /* alwaysKeepCurrent */);
         finishActivityLocked(r, Activity.RESULT_CANCELED, null, reason, false);
         finishedTask = task;
         // Also terminate any activities below it that aren't yet
@@ -3876,7 +3891,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             if (finishingActivityInNonFocusedStack) {
                 // Finishing activity that was in paused state and it was in not currently focused
                 // stack, need to make something visible in its place.
-                mStackSupervisor.ensureVisibilityAndConfig(null, mDisplayId,
+                mStackSupervisor.ensureVisibilityAndConfig(next, mDisplayId,
                         false /* markFrozenIfConfigChanged */, true /* deferResume */);
             }
             if (activityRemoved) {
@@ -4829,6 +4844,10 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         }
     }
 
+    void onPipAnimationEndResize() {
+        mWindowContainerController.onPipAnimationEndResize();
+    }
+
 
     /**
      * Adjust bounds to stay within stack bounds.
@@ -5038,7 +5057,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     // Force the destroy to skip right to removal.
                     r.app = null;
                     mWindowManager.prepareAppTransition(TRANSIT_CRASHING_ACTIVITY_CLOSE,
-                            false /* TODO */, 0, true /* forceOverride */);
+                            false /* alwaysKeepCurrent */);
                     finishCurrentActivityLocked(r, FINISH_IMMEDIATELY, false,
                             "handleAppCrashedLocked");
                 }

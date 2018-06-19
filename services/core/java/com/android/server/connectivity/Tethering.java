@@ -215,7 +215,6 @@ public class Tethering extends BaseNetworkObserver {
     private boolean mRndisEnabled;       // track the RNDIS function enabled state
     // True iff. WiFi tethering should be started when soft AP is ready.
     private boolean mWifiTetherRequested;
-    private boolean mV6OnlyTetherEnabled;
 
     public Tethering(Context context, INetworkManagementService nmService,
             INetworkStatsService statsService, INetworkPolicyManager policyManager,
@@ -233,9 +232,6 @@ public class Tethering extends BaseNetworkObserver {
         mPublicSync = new Object();
 
         mTetherStates = new ArrayMap<>();
-
-        mV6OnlyTetherEnabled = (Settings.Global.getInt(mContext.
-                getContentResolver(), "enable_v6_only_tethering", 0) == 1);
 
         mTetherMasterSM = new TetherMasterSM("TetherMaster", mLooper, deps);
         mTetherMasterSM.start();
@@ -1277,7 +1273,7 @@ public class Tethering extends BaseNetworkObserver {
 
             mNotifyList = new ArrayList<>();
             mIPv6TetheringCoordinator = deps.getIPv6TetheringCoordinator(
-                    mNotifyList, mLog, mV6OnlyTetherEnabled);
+                    mNotifyList, mLog);
             mOffload = new OffloadWrapper();
 
             setInitialState(mInitialState);
@@ -2004,7 +2000,7 @@ public class Tethering extends BaseNetworkObserver {
         final TetherState tetherState = new TetherState(
                 new TetherInterfaceStateMachine(
                     iface, mLooper, interfaceType, mLog, mNMService, mStatsService,
-                    makeControlCallback(iface), mDeps, mV6OnlyTetherEnabled));
+                    makeControlCallback(iface), mDeps));
         mTetherStates.put(iface, tetherState);
         tetherState.stateMachine.start();
     }

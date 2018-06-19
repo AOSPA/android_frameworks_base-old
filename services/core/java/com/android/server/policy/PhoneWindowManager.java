@@ -573,7 +573,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     volatile boolean mGoingToSleep;
     volatile boolean mRequestedOrGoingToSleep;
     volatile boolean mRecentsVisible;
-    volatile boolean mNavBarVirtualKeyHapticFeedbackEnabled;
+    volatile boolean mNavBarVirtualKeyHapticFeedbackEnabled = true;
     volatile boolean mPictureInPictureVisible;
     // Written by vr manager thread, only read in this class.
     volatile private boolean mPersistentVrModeEnabled;
@@ -839,6 +839,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             = new LogDecelerateInterpolator(100, 0);
 
     private final MutableBoolean mTmpBoolean = new MutableBoolean(false);
+
+    private boolean mAodShowing;
 
     private static final int MSG_ENABLE_POINTER_LOCATION = 1;
     private static final int MSG_DISABLE_POINTER_LOCATION = 2;
@@ -3138,8 +3140,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         boolean keyguardLocked = isKeyguardLocked();
         boolean hideDockDivider = attrs.type == TYPE_DOCK_DIVIDER
                 && !mWindowManagerInternal.isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
+        // If AOD is showing, the IME should be hidden. However, sometimes the AOD is considered
+        // hidden because it's in the process of hiding, but it's still being shown on screen.
+        // In that case, we want to continue hiding the IME until the windows have completed
+        // drawing. This way, we know that the IME can be safely shown since the other windows are
+        // now shown.
+        final boolean hideIme =
+                win.isInputMethodWindow() && (mAodShowing || !mWindowManagerDrawComplete);
         return (keyguardLocked && !allowWhenLocked && win.getDisplayId() == DEFAULT_DISPLAY)
-                || hideDockDivider;
+                || hideDockDivider || hideIme;
     }
 
     /** {@inheritDoc} */
@@ -5840,11 +5849,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         && mStatusBarController.isTransientShowing()) {
                     mStatusBarController.updateVisibilityLw(false /*transientAllowed*/,
                             mLastSystemUiFlags, mLastSystemUiFlags);
-                }
-                if (statusBarExpanded && mNavigationBar != null) {
-                    if (mNavigationBarController.setBarShowingLw(true)) {
-                        changes |= FINISH_LAYOUT_REDO_LAYOUT;
-                    }
                 }
             } else if (mTopFullscreenOpaqueWindowState != null) {
                 topIsFullscreen = topAppHidesStatusBar;
@@ -9085,5 +9089,14 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     @Override
     public void onLockTaskStateChangedLw(int lockTaskState) {
         mImmersiveModeConfirmation.onLockTaskModeChangedLw(lockTaskState);
+    }
+
+    @Override
+    public boolean setAodShowing(boolean aodShowing) {
+        if (mAodShowing != aodShowing) {
+            mAodShowing = aodShowing;
+            return true;
+        }
+        return false;
     }
 }
