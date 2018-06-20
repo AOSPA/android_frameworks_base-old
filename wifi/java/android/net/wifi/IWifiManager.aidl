@@ -201,5 +201,11 @@ interface IWifiManager
     int  dppStartAuth(in WifiDppConfig config);
 
     String dppConfiguratorGetKey(int id);
+
+    boolean isExtendingWifi();
+
+    boolean isWifiCoverageExtendFeatureEnabled();
+
+    void enableWifiCoverageExtendFeature(boolean enable);
 }
 
