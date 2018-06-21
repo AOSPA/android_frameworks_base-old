@@ -506,13 +506,15 @@ public class BatteryMeterDrawableBase extends Drawable {
         if (level == -1) return;
 
         final int circleSize = Math.min(width, height);
+        final int circleRadius = circleSize / 2;
         float strokeWidth = circleSize / 6.5f;
+        float drawFrac = (float) level / 100f;
 
-        mFramePaint.setStrokeWidth(strokeWidth);
-        mFramePaint.setStyle(Paint.Style.STROKE);
+        mFramePaint.setStrokeWidth(0);
+        mFramePaint.setStyle(Paint.Style.FILL_AND_STROKE);
 
-        mBatteryPaint.setStrokeWidth(strokeWidth);
-        mBatteryPaint.setStyle(Paint.Style.STROKE);
+        mBatteryPaint.setStrokeWidth(0);
+        mBatteryPaint.setStyle(Paint.Style.FILL_AND_STROKE);
 
         mFrame.set(
                 strokeWidth / 2.0f + mPadding.left,
@@ -522,6 +524,19 @@ public class BatteryMeterDrawableBase extends Drawable {
 
         // set the battery charging color
         mBatteryPaint.setColor(batteryColorForLevel(level));
+
+        if (level >= FULL) {
+            drawFrac = 1f;
+        } else if (level <= mCriticalLevel) {
+            drawFrac = 0f;
+        }
+
+        final float levelTop;
+        if (drawFrac == 1f) {
+            levelTop = mBoltFrame.top;
+        } else {
+            levelTop = (mFrame.top + (mFrame.height() * (1f - drawFrac)));
+        }
 
         if (mCharging) {
             // define the bolt shape
@@ -546,7 +561,15 @@ public class BatteryMeterDrawableBase extends Drawable {
                         mBoltFrame.left + mBoltPoints[0] * mBoltFrame.width(),
                         mBoltFrame.top + mBoltPoints[1] * mBoltFrame.height());
             }
-
+            float boltPct = (mBoltFrame.bottom - levelTop) / (mBoltFrame.bottom - mBoltFrame.top);
+            boltPct = Math.min(Math.max(boltPct, 0), 1);
+            if (boltPct <= BOLT_LEVEL_THRESHOLD) {
+                // draw the bolt if opaque
+                c.drawPath(mBoltPath, mBoltPaint);
+            } else {
+                // otherwise cut the bolt out of the overall shape
+                c.clipOutPath(mBoltPath);
+            }
         } else if (mPowerSaveEnabled) {
             // define the plus shape
             final float pw = mFrame.width() * 2 / 3;
@@ -570,14 +593,24 @@ public class BatteryMeterDrawableBase extends Drawable {
                         mPlusFrame.left + mPlusPoints[0] * mPlusFrame.width(),
                         mPlusFrame.top + mPlusPoints[1] * mPlusFrame.height());
             }
+            float boltPct = (mPlusFrame.bottom - levelTop) / (mPlusFrame.bottom - mPlusFrame.top);
+            boltPct = Math.min(Math.max(boltPct, 0), 1);
+            if (boltPct <= BOLT_LEVEL_THRESHOLD) {
+                // draw the bolt if opaque
+                c.drawPath(mPlusPath, mPlusPaint);
+            } else {
+                // otherwise cut the bolt out of the overall shape
+                c.clipOutPath(mPlusPath);
+            }
         }
 
         // draw thin gray ring first
-        c.drawArc(mFrame, 270, 360, false, mFramePaint);
+        c.drawCircle(mFrame.centerX(), mFrame.centerY(), circleRadius, mFramePaint);
 
         // draw colored arc representing charge level
         if (level > 0) {
-            c.drawArc(mFrame, 270, 3.6f * level, false, mBatteryPaint);
+            c.drawCircle(mFrame.centerX(), mFrame.centerY(),
+                    circleRadius * (level / 100f), mBatteryPaint);
         }
 
         // calculate Y position for text
@@ -591,22 +624,15 @@ public class BatteryMeterDrawableBase extends Drawable {
                 - strokeWidth / 2.0f + mContext.getResources().getDisplayMetrics().density;
         String pctText = null;
 
-        if (mCharging) {
-            c.drawPath(mBoltPath, mBoltPaint);
-        } else if (mPowerSaveEnabled) {
-            c.drawPath(mPlusPath, mPlusPaint);
-        } else {
-            // draw the percentage text
-            if (!mCharging && !mPowerSaveEnabled && level > mCriticalLevel
-                    && (mShowPercent && !(mLevel == 100 && !SHOW_100_PERCENT))) {
+        if (!mCharging && !mPowerSaveEnabled) {
+            if (level <= mCriticalLevel) {
+                // draw the warning text
+                c.drawText(mWarningString, x, y, mWarningTextPaint);
+            } else if (level > mCriticalLevel && (mShowPercent &&
+                    !(mLevel == 100 && !SHOW_100_PERCENT))) {
                 mTextPaint.setColor(mBatteryPaint.getColor());
                 pctText = String.valueOf(SINGLE_DIGIT_PERCENT ? (level/10) : level);
                 c.drawText(pctText, x, y, mTextPaint);
-            } else if (!mCharging && !mPowerSaveEnabled) {
-                if (level <= mCriticalLevel) {
-                    // draw the warning text
-                    c.drawText(mWarningString, x, y, mWarningTextPaint);
-                }
             }
         }
     }
