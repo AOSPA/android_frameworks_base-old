@@ -156,6 +156,9 @@
     <!-- Whether or not we show G for CDMA/1xRTT -->
     <bool name="config_showIconGforCDMA_1X">false</bool>
 
+    <!-- When true, hide no internet statue on signal strength icon -->
+    <bool name="config_hideNoInternetState">false</bool>
+
     <!-- Control whether status bar should fetch mobile signal icons from xml file dynamically -->
     <bool name="config_read_icons_from_xml">false</bool>
 
