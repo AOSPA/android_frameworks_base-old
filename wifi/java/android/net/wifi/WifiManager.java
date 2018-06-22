@@ -884,6 +884,15 @@ public class WifiManager {
     public static final String EXTRA_COUNTRY_CODE = "country_code";
 
     /**
+     * Broadcast intent action indicating that the user initiated Wifi OFF
+     * or APM ON and Wifi disconnection is in progress
+     * Actual Wifi disconnection happens after mDisconnectDelayDuration seconds.
+     * @hide
+     */
+    public static final String  ACTION_WIFI_DISCONNECT_IN_PROGRESS =
+            "android.net.wifi.WIFI_DISCONNECT_IN_PROGRESS";
+
+    /**
      * Internally used Wi-Fi lock mode representing the case were no locks are held.
      * @hide
      */
@@ -1797,6 +1806,19 @@ public class WifiManager {
     public boolean isDualBandSupported() {
         try {
             return mService.isDualBandSupported();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Check if the chipset requires conversion of 5GHz Only apBand to ANY.
+     * @return {@code true} if required, {@code false} otherwise.
+     * @hide
+     */
+    public boolean isDualModeSupported() {
+        try {
+            return mService.needs5GHzToAnyApBandConversion();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

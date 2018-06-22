@@ -186,6 +186,13 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
             mNavigationBarView.updateStates();
             updateScreenPinningGestures();
         }
+
+        @Override
+        public void onBackButtonAlphaChanged(float alpha, boolean animate) {
+            final ButtonDispatcher backButton = mNavigationBarView.getBackButton();
+            backButton.setVisibility(alpha > 0 ? View.VISIBLE : View.INVISIBLE);
+            backButton.setAlpha(alpha, animate);
+        }
     };
 
     // ----- Fragment Lifecycle Callbacks -----
@@ -601,7 +608,7 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
     private int computeRotationProposalTimeout() {
         if (mAccessibilityFeedbackEnabled) return 20000;
         if (mHoveringRotationSuggestion) return 16000;
-        return 6000;
+        return 10000;
     }
 
     private boolean isRotateSuggestionIntroduced() {
@@ -1137,6 +1144,8 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
             mRoot.postOnAnimationDelayed(mRipple, RIPPLE_OFFSET_MS);
             mRoot.postOnAnimationDelayed(mRipple, RIPPLE_INTERVAL_MS);
             mRoot.postOnAnimationDelayed(mRipple, 2*RIPPLE_INTERVAL_MS);
+            mRoot.postOnAnimationDelayed(mRipple, 3*RIPPLE_INTERVAL_MS);
+            mRoot.postOnAnimationDelayed(mRipple, 4*RIPPLE_INTERVAL_MS);
         }
 
         public void stop() {

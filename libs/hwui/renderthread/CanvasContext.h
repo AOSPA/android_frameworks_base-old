@@ -190,6 +190,10 @@ public:
 
     IRenderPipeline* getRenderPipeline() { return mRenderPipeline.get(); }
 
+    void addFrameCompleteListener(std::function<void(int64_t)>&& func) {
+        mFrameCompleteCallbacks.push_back(std::move(func));
+    }
+
 private:
     CanvasContext(RenderThread& thread, bool translucent, RenderNode* rootRenderNode,
                   IContextFactory* contextFactory, std::unique_ptr<IRenderPipeline> renderPipeline);
@@ -213,6 +217,9 @@ private:
     // stopped indicates the CanvasContext will reject actual redraw operations,
     // and defer repaint until it is un-stopped
     bool mStopped = false;
+    // Incremented each time the CanvasContext is stopped. Used to ignore
+    // delayed messages that are triggered after stopping.
+    int mGenerationID;
     // CanvasContext is dirty if it has received an update that it has not
     // painted onto its surface.
     bool mIsDirty = false;
@@ -264,6 +271,8 @@ private:
     std::vector<sp<FuncTask>> mFrameFences;
     sp<TaskProcessor<bool>> mFrameWorkProcessor;
     std::unique_ptr<IRenderPipeline> mRenderPipeline;
+
+    std::vector<std::function<void(int64_t)>> mFrameCompleteCallbacks;
 };
 
 } /* namespace renderthread */

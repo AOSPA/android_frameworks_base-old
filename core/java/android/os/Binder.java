@@ -1027,6 +1027,24 @@ final class BinderProxy implements IBinder {
     private static ProxyMap sProxyMap = new ProxyMap();
 
     /**
+      * Dump proxy debug information.
+      *
+      * Note: this method is not thread-safe; callers must serialize with other
+      * accesses to sProxyMap, in particular {@link #getInstance(long, long)}.
+      *
+      * @hide
+      */
+    private static void dumpProxyDebugInfo() {
+        if (Build.IS_DEBUGGABLE) {
+            sProxyMap.dumpProxyInterfaceCounts();
+            // Note that we don't call dumpPerUidProxyCounts(); this is because this
+            // method may be called as part of the uid limit being hit, and calling
+            // back into the UID tracking code would cause us to try to acquire a mutex
+            // that is held during that callback.
+        }
+    }
+
+    /**
      * Return a BinderProxy for IBinder.
      * This method is thread-hostile!  The (native) caller serializes getInstance() calls using
      * gProxyLock.

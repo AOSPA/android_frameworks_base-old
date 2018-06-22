@@ -2443,91 +2443,104 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
+    // This is a no-op if it's called with a message designating a network that has
+    // already been destroyed, because its reference will not be found in the relevant
+    // maps.
     private void handleAsyncChannelDisconnected(Message msg) {
         NetworkAgentInfo nai = mNetworkAgentInfos.get(msg.replyTo);
         if (nai != null) {
-            if (DBG) {
-                log(nai.name() + " got DISCONNECTED, was satisfying " + nai.numNetworkRequests());
-            }
-            // A network agent has disconnected.
-            // TODO - if we move the logic to the network agent (have them disconnect
-            // because they lost all their requests or because their score isn't good)
-            // then they would disconnect organically, report their new state and then
-            // disconnect the channel.
-            if (nai.networkInfo.isConnected()) {
-                nai.networkInfo.setDetailedState(NetworkInfo.DetailedState.DISCONNECTED,
-                        null, null);
-            }
-            final boolean wasDefault = isDefaultNetwork(nai);
-            if (wasDefault) {
-                mDefaultInetConditionPublished = 0;
-                // Log default network disconnection before required book-keeping.
-                // Let rematchAllNetworksAndRequests() below record a new default network event
-                // if there is a fallback. Taken together, the two form a X -> 0, 0 -> Y sequence
-                // whose timestamps tell how long it takes to recover a default network.
-                long now = SystemClock.elapsedRealtime();
-                metricsLogger().defaultNetworkMetrics().logDefaultNetworkEvent(now, null, nai);
-            }
-            notifyIfacesChangedForNetworkStats();
-            // TODO - we shouldn't send CALLBACK_LOST to requests that can be satisfied
-            // by other networks that are already connected. Perhaps that can be done by
-            // sending all CALLBACK_LOST messages (for requests, not listens) at the end
-            // of rematchAllNetworksAndRequests
-            notifyNetworkCallbacks(nai, ConnectivityManager.CALLBACK_LOST);
-            mKeepaliveTracker.handleStopAllKeepalives(nai,
-                    ConnectivityManager.PacketKeepalive.ERROR_INVALID_NETWORK);
-            for (String iface : nai.linkProperties.getAllInterfaceNames()) {
-                // Disable wakeup packet monitoring for each interface.
-                wakeupModifyInterface(iface, nai.networkCapabilities, false);
-            }
-            nai.networkMonitor.sendMessage(NetworkMonitor.CMD_NETWORK_DISCONNECTED);
-            mNetworkAgentInfos.remove(msg.replyTo);
-            nai.maybeStopClat();
-            synchronized (mNetworkForNetId) {
-                // Remove the NetworkAgent, but don't mark the netId as
-                // available until we've told netd to delete it below.
-                mNetworkForNetId.remove(nai.network.netId);
-            }
-            // Remove all previously satisfied requests.
-            for (int i = 0; i < nai.numNetworkRequests(); i++) {
-                NetworkRequest request = nai.requestAt(i);
-                NetworkAgentInfo currentNetwork = getNetworkForRequest(request.requestId);
-                if (currentNetwork != null && currentNetwork.network.netId == nai.network.netId) {
-                    clearNetworkForRequest(request.requestId);
-                    sendUpdatedScoreToFactories(request, 0);
-                }
-            }
-            nai.clearLingerState();
-            if (nai.isSatisfyingRequest(mDefaultRequest.requestId)) {
-                removeDataActivityTracking(nai);
-                notifyLockdownVpn(nai);
-                ensureNetworkTransitionWakelock(nai.name());
-            }
-            mLegacyTypeTracker.remove(nai, wasDefault);
-            rematchAllNetworksAndRequests(null, 0);
-            mLingerMonitor.noteDisconnect(nai);
-            if (nai.created) {
-                // Tell netd to clean up the configuration for this network
-                // (routing rules, DNS, etc).
-                // This may be slow as it requires a lot of netd shelling out to ip and
-                // ip[6]tables to flush routes and remove the incoming packet mark rule, so do it
-                // after we've rematched networks with requests which should make a potential
-                // fallback network the default or requested a new network from the
-                // NetworkFactories, so network traffic isn't interrupted for an unnecessarily
-                // long time.
-                try {
-                    mNetd.removeNetwork(nai.network.netId);
-                } catch (Exception e) {
-                    loge("Exception removing network: " + e);
-                }
-                mDnsManager.removeNetwork(nai.network);
-            }
-            synchronized (mNetworkForNetId) {
-                mNetIdInUse.delete(nai.network.netId);
-            }
+            disconnectAndDestroyNetwork(nai);
         } else {
             NetworkFactoryInfo nfi = mNetworkFactoryInfos.remove(msg.replyTo);
             if (DBG && nfi != null) log("unregisterNetworkFactory for " + nfi.name);
+        }
+    }
+
+    // Destroys a network, remove references to it from the internal state managed by
+    // ConnectivityService, free its interfaces and clean up.
+    // Must be called on the Handler thread.
+    private void disconnectAndDestroyNetwork(NetworkAgentInfo nai) {
+        if (DBG) {
+            log(nai.name() + " got DISCONNECTED, was satisfying " + nai.numNetworkRequests());
+        }
+        // A network agent has disconnected.
+        // TODO - if we move the logic to the network agent (have them disconnect
+        // because they lost all their requests or because their score isn't good)
+        // then they would disconnect organically, report their new state and then
+        // disconnect the channel.
+        if (nai.networkInfo.isConnected()) {
+            nai.networkInfo.setDetailedState(NetworkInfo.DetailedState.DISCONNECTED,
+                    null, null);
+        }
+        final boolean wasDefault = isDefaultNetwork(nai);
+        if (wasDefault) {
+            mDefaultInetConditionPublished = 0;
+            // Log default network disconnection before required book-keeping.
+            // Let rematchAllNetworksAndRequests() below record a new default network event
+            // if there is a fallback. Taken together, the two form a X -> 0, 0 -> Y sequence
+            // whose timestamps tell how long it takes to recover a default network.
+            long now = SystemClock.elapsedRealtime();
+            metricsLogger().defaultNetworkMetrics().logDefaultNetworkEvent(now, null, nai);
+        }
+        notifyIfacesChangedForNetworkStats();
+        // TODO - we shouldn't send CALLBACK_LOST to requests that can be satisfied
+        // by other networks that are already connected. Perhaps that can be done by
+        // sending all CALLBACK_LOST messages (for requests, not listens) at the end
+        // of rematchAllNetworksAndRequests
+        notifyNetworkCallbacks(nai, ConnectivityManager.CALLBACK_LOST);
+        mKeepaliveTracker.handleStopAllKeepalives(nai,
+                ConnectivityManager.PacketKeepalive.ERROR_INVALID_NETWORK);
+        for (String iface : nai.linkProperties.getAllInterfaceNames()) {
+            // Disable wakeup packet monitoring for each interface.
+            wakeupModifyInterface(iface, nai.networkCapabilities, false);
+        }
+        nai.networkMonitor.sendMessage(NetworkMonitor.CMD_NETWORK_DISCONNECTED);
+        mNetworkAgentInfos.remove(nai.messenger);
+        nai.maybeStopClat();
+        synchronized (mNetworkForNetId) {
+            // Remove the NetworkAgent, but don't mark the netId as
+            // available until we've told netd to delete it below.
+            mNetworkForNetId.remove(nai.network.netId);
+        }
+        // Remove all previously satisfied requests.
+        for (int i = 0; i < nai.numNetworkRequests(); i++) {
+            NetworkRequest request = nai.requestAt(i);
+            NetworkAgentInfo currentNetwork = getNetworkForRequest(request.requestId);
+            if (currentNetwork != null && currentNetwork.network.netId == nai.network.netId) {
+                clearNetworkForRequest(request.requestId);
+                sendUpdatedScoreToFactories(request, 0);
+            }
+        }
+        nai.clearLingerState();
+        if (nai.isSatisfyingRequest(mDefaultRequest.requestId)) {
+            removeDataActivityTracking(nai);
+            notifyLockdownVpn(nai);
+            ensureNetworkTransitionWakelock(nai.name());
+        }
+        mLegacyTypeTracker.remove(nai, wasDefault);
+        if (!nai.networkCapabilities.hasTransport(TRANSPORT_VPN)) {
+            updateAllVpnsCapabilities();
+        }
+        rematchAllNetworksAndRequests(null, 0);
+        mLingerMonitor.noteDisconnect(nai);
+        if (nai.created) {
+            // Tell netd to clean up the configuration for this network
+            // (routing rules, DNS, etc).
+            // This may be slow as it requires a lot of netd shelling out to ip and
+            // ip[6]tables to flush routes and remove the incoming packet mark rule, so do it
+            // after we've rematched networks with requests which should make a potential
+            // fallback network the default or requested a new network from the
+            // NetworkFactories, so network traffic isn't interrupted for an unnecessarily
+            // long time.
+            try {
+                mNetd.removeNetwork(nai.network.netId);
+            } catch (Exception e) {
+                loge("Exception removing network: " + e);
+            }
+            mDnsManager.removeNetwork(nai.network);
+        }
+        synchronized (mNetworkForNetId) {
+            mNetIdInUse.delete(nai.network.netId);
         }
     }
 
@@ -3790,6 +3803,26 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
+    /**
+     * Ask all VPN objects to recompute and update their capabilities.
+     *
+     * When underlying networks change, VPNs may have to update capabilities to reflect things
+     * like the metered bit, their transports, and so on. This asks the VPN objects to update
+     * their capabilities, and as this will cause them to send messages to the ConnectivityService
+     * handler thread through their agent, this is asynchronous. When the capabilities objects
+     * are computed they will be up-to-date as they are computed synchronously from here and
+     * this is running on the ConnectivityService thread.
+     * TODO : Fix this and call updateCapabilities inline to remove out-of-order events.
+     */
+    private void updateAllVpnsCapabilities() {
+        synchronized (mVpns) {
+            for (int i = 0; i < mVpns.size(); i++) {
+                final Vpn vpn = mVpns.valueAt(i);
+                vpn.updateCapabilities();
+            }
+        }
+    }
+
     @Override
     public boolean updateLockdownVpn() {
         if (Binder.getCallingUid() != Process.SYSTEM_UID) {
@@ -4587,7 +4620,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     // Note: if mDefaultRequest is changed, NetworkMonitor needs to be updated.
     private final NetworkRequest mDefaultRequest;
- 
+
     // Request used to optionally keep mobile data active even when higher
     // priority networks like Wi-Fi are active.
     private final NetworkRequest mDefaultMobileDataRequest;
@@ -4663,13 +4696,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     private void updateLinkProperties(NetworkAgentInfo networkAgent, LinkProperties oldLp) {
-        LinkProperties newLp = networkAgent.linkProperties;
+        LinkProperties newLp = new LinkProperties(networkAgent.linkProperties);
         int netId = networkAgent.network.netId;
 
         // The NetworkAgentInfo does not know whether clatd is running on its network or not. Before
         // we do anything else, make sure its LinkProperties are accurate.
         if (networkAgent.clatd != null) {
-            networkAgent.clatd.fixupLinkProperties(oldLp);
+            networkAgent.clatd.fixupLinkProperties(oldLp, newLp);
         }
 
         updateInterfaces(newLp, oldLp, netId, networkAgent.networkCapabilities);
@@ -4697,6 +4730,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
         // TODO - move this check to cover the whole function
         if (!Objects.equals(newLp, oldLp)) {
+            synchronized (networkAgent) {
+                networkAgent.linkProperties = newLp;
+            }
             notifyIfacesChangedForNetworkStats();
             notifyNetworkCallbacks(networkAgent, ConnectivityManager.CALLBACK_IP_CHANGED);
         }
@@ -4844,7 +4880,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
      */
     private NetworkCapabilities mixInCapabilities(NetworkAgentInfo nai, NetworkCapabilities nc) {
         // Once a NetworkAgent is connected, complain if some immutable capabilities are removed.
+         // Don't complain for VPNs since they're not driven by requests and there is no risk of
+         // causing a connect/teardown loop.
+         // TODO: remove this altogether and make it the responsibility of the NetworkFactories to
+         // avoid connect/teardown loops.
         if (nai.everConnected &&
+                !nai.isVPN() &&
                 !nai.networkCapabilities.satisfiedByImmutableNetworkCapabilities(nc)) {
             // TODO: consider not complaining when a network agent degrades its capabilities if this
             // does not cause any request (that is not a listen) currently matching that agent to
@@ -4947,12 +4988,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (!newNc.hasTransport(TRANSPORT_VPN)) {
             // Tell VPNs about updated capabilities, since they may need to
             // bubble those changes through.
-            synchronized (mVpns) {
-                for (int i = 0; i < mVpns.size(); i++) {
-                    final Vpn vpn = mVpns.valueAt(i);
-                    vpn.updateCapabilities();
-                }
-            }
+            updateAllVpnsCapabilities();
         }
     }
 
@@ -5623,6 +5659,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 }
                 updateUids(networkAgent, networkAgent.networkCapabilities, null);
             }
+            disconnectAndDestroyNetwork(networkAgent);
         } else if ((oldInfo != null && oldInfo.getState() == NetworkInfo.State.SUSPENDED) ||
                 state == NetworkInfo.State.SUSPENDED) {
             // going into or coming out of SUSPEND: rescore and notify

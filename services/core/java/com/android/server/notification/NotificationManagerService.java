@@ -821,6 +821,7 @@ public class NotificationManagerService extends SystemService {
                         }
                     }
                     r.setVisibility(true, nv.rank, nv.count);
+                    maybeRecordInterruptionLocked(r);
                     nv.recycle();
                 }
                 // Note that we might receive this event after notifications
@@ -1928,11 +1929,12 @@ public class NotificationManagerService extends SystemService {
 
     @GuardedBy("mNotificationLock")
     protected void maybeRecordInterruptionLocked(NotificationRecord r) {
-        if (r.isInterruptive()) {
+        if (r.isInterruptive() && !r.hasRecordedInterruption()) {
             mAppUsageStats.reportInterruptiveNotification(r.sbn.getPackageName(),
                     r.getChannel().getId(),
                     getRealUserId(r.sbn.getUserId()));
             logRecentLocked(r);
+            r.setRecordedInterruption(true);
         }
     }
 
@@ -2669,6 +2671,7 @@ public class NotificationManagerService extends SystemService {
                                 if (DBG) Slog.d(TAG, "Marking notification as seen " + keys[i]);
                                 reportSeen(r);
                                 r.setSeen();
+                                maybeRecordInterruptionLocked(r);
                             }
                         }
                     }
@@ -4449,7 +4452,7 @@ public class NotificationManagerService extends SystemService {
                         notification.flags |=
                                 old.getNotification().flags & FLAG_FOREGROUND_SERVICE;
                         r.isUpdate = true;
-                        r.setInterruptive(isVisuallyInterruptive(old, r));
+                        r.setTextChanged(isVisuallyInterruptive(old, r));
                     }
 
                     mNotificationsByKey.put(n.getKey(), r);
@@ -4527,6 +4530,14 @@ public class NotificationManagerService extends SystemService {
             return true;
         }
 
+        if (r == null) {
+            if (DEBUG_INTERRUPTIVENESS) {
+                Log.v(TAG, "INTERRUPTIVENESS: "
+                        +  r.getKey() + " is not interruptive: null");
+            }
+            return false;
+        }
+
         Notification oldN = old.sbn.getNotification();
         Notification newN = r.sbn.getNotification();
 
@@ -4540,10 +4551,19 @@ public class NotificationManagerService extends SystemService {
 
         // Ignore visual interruptions from foreground services because users
         // consider them one 'session'. Count them for everything else.
-        if (r != null && (r.sbn.getNotification().flags & FLAG_FOREGROUND_SERVICE) != 0) {
+        if ((r.sbn.getNotification().flags & FLAG_FOREGROUND_SERVICE) != 0) {
             if (DEBUG_INTERRUPTIVENESS) {
                 Log.v(TAG, "INTERRUPTIVENESS: "
                         +  r.getKey() + " is not interruptive: foreground service");
+            }
+            return false;
+        }
+
+        // Ignore summary updates because we don't display most of the information.
+        if (r.sbn.isGroup() && r.sbn.getNotification().isGroupSummary()) {
+            if (DEBUG_INTERRUPTIVENESS) {
+                Log.v(TAG, "INTERRUPTIVENESS: "
+                        +  r.getKey() + " is not interruptive: summary");
             }
             return false;
         }

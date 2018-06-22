@@ -25,11 +25,14 @@
 #include <gui/Surface.h>
 #include <android_runtime/AndroidRuntime.h>
 #include <android_runtime/android_view_Surface.h>
+#include <android_runtime/android_hardware_HardwareBuffer.h>
+#include <private/android/AHardwareBufferHelpers.h>
 #include <jni.h>
 #include <nativehelper/JNIHelp.h>
 
 #include <stdint.h>
 #include <inttypes.h>
+#include <android/hardware_buffer_jni.h>
 
 #define IMAGE_BUFFER_JNI_ID           "mNativeBuffer"
 #define IMAGE_FORMAT_UNKNOWN          0 // This is the same value as ImageFormat#UNKNOWN.
@@ -249,7 +252,14 @@ static jlong ImageWriter_init(JNIEnv* env, jobject thiz, jobject weakThiz, jobje
      * after disconnect. MEDIA or CAMERA are treated the same internally. The producer listener
      * will be cleared after disconnect call.
      */
-    producer->connect(/*api*/NATIVE_WINDOW_API_CAMERA, /*listener*/ctx);
+    res = producer->connect(/*api*/NATIVE_WINDOW_API_CAMERA, /*listener*/ctx);
+    if (res != OK) {
+        ALOGE("%s: Connecting to surface producer interface failed: %s (%d)",
+                __FUNCTION__, strerror(-res), res);
+        jniThrowRuntimeException(env, "Failed to connect to native window");
+        return 0;
+    }
+
     jlong nativeCtx = reinterpret_cast<jlong>(ctx.get());
 
     // Get the dimension and format of the producer.
@@ -701,6 +711,20 @@ static jint Image_getFormat(JNIEnv* env, jobject thiz) {
     return static_cast<jint>(publicFmt);
 }
 
+static jobject Image_getHardwareBuffer(JNIEnv* env, jobject thiz) {
+    GraphicBuffer* buffer;
+    Image_getNativeContext(env, thiz, &buffer, NULL);
+    if (buffer == NULL) {
+        jniThrowException(env, "java/lang/IllegalStateException",
+                "Image is not initialized");
+        return NULL;
+    }
+    AHardwareBuffer* b = AHardwareBuffer_from_GraphicBuffer(buffer);
+    // don't user the public AHardwareBuffer_toHardwareBuffer() because this would force us
+    // to link against libandroid.so
+    return android_hardware_HardwareBuffer_createFromAHardwareBuffer(env, b);
+}
+
 static void Image_setFenceFd(JNIEnv* env, jobject thiz, int fenceFd) {
     ALOGV("%s:", __FUNCTION__);
     env->SetIntField(thiz, gSurfaceImageClassInfo.mNativeFenceFd, reinterpret_cast<jint>(fenceFd));
@@ -818,10 +842,12 @@ static JNINativeMethod gImageWriterMethods[] = {
 
 static JNINativeMethod gImageMethods[] = {
     {"nativeCreatePlanes",      "(II)[Landroid/media/ImageWriter$WriterSurfaceImage$SurfacePlane;",
-                                                              (void*)Image_createSurfacePlanes },
-    {"nativeGetWidth",         "()I",                         (void*)Image_getWidth },
-    {"nativeGetHeight",        "()I",                         (void*)Image_getHeight },
-    {"nativeGetFormat",        "()I",                         (void*)Image_getFormat },
+                                                               (void*)Image_createSurfacePlanes },
+    {"nativeGetWidth",          "()I",                         (void*)Image_getWidth },
+    {"nativeGetHeight",         "()I",                         (void*)Image_getHeight },
+    {"nativeGetFormat",         "()I",                         (void*)Image_getFormat },
+    {"nativeGetHardwareBuffer", "()Landroid/hardware/HardwareBuffer;",
+                                                               (void*)Image_getHardwareBuffer },
 };
 
 int register_android_media_ImageWriter(JNIEnv *env) {

@@ -287,8 +287,10 @@ public class AppOpsService extends IAppOpsService.Stub {
 
             pw.print("    "); pw.print(KEY_TOP_STATE_SETTLE_TIME); pw.print("=");
             TimeUtils.formatDuration(TOP_STATE_SETTLE_TIME, pw);
+            pw.println();
             pw.print("    "); pw.print(KEY_FG_SERVICE_STATE_SETTLE_TIME); pw.print("=");
             TimeUtils.formatDuration(FG_SERVICE_STATE_SETTLE_TIME, pw);
+            pw.println();
             pw.print("    "); pw.print(KEY_BG_STATE_SETTLE_TIME); pw.print("=");
             TimeUtils.formatDuration(BG_STATE_SETTLE_TIME, pw);
             pw.println();
@@ -810,11 +812,12 @@ public class AppOpsService extends IAppOpsService.Stub {
             resOps = new ArrayList<>();
             for (int j=0; j<pkgOps.size(); j++) {
                 Op curOp = pkgOps.valueAt(j);
-                long duration = curOp.duration == -1
+                final boolean running = curOp.duration == -1;
+                long duration = running
                         ? (elapsedNow - curOp.startRealtime)
                         : curOp.duration;
                 resOps.add(new AppOpsManager.OpEntry(curOp.op, curOp.mode, curOp.time,
-                        curOp.rejectTime, (int) duration, curOp.proxyUid,
+                        curOp.rejectTime, (int) duration, running, curOp.proxyUid,
                         curOp.proxyPackageName));
             }
         } else {
@@ -824,11 +827,12 @@ public class AppOpsService extends IAppOpsService.Stub {
                     if (resOps == null) {
                         resOps = new ArrayList<>();
                     }
-                    long duration = curOp.duration == -1
+                    final boolean running = curOp.duration == -1;
+                    final long duration = running
                             ? (elapsedNow - curOp.startRealtime)
                             : curOp.duration;
                     resOps.add(new AppOpsManager.OpEntry(curOp.op, curOp.mode, curOp.time,
-                            curOp.rejectTime, (int) duration, curOp.proxyUid,
+                            curOp.rejectTime, (int) duration, running, curOp.proxyUid,
                             curOp.proxyPackageName));
                 }
             }
@@ -1331,10 +1335,10 @@ public class AppOpsService extends IAppOpsService.Stub {
         int watchedUid = -1;
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
-        if (mContext.checkCallingOrSelfPermission(Manifest.permission.WATCH_APPOPS)
-                != PackageManager.PERMISSION_GRANTED) {
-            watchedUid = callingUid;
-        }
+        // TODO: should have a privileged permission to protect this.
+        // Also, if the caller has requested WATCH_FOREGROUND_CHANGES, should we require
+        // the USAGE_STATS permission since this can provide information about when an
+        // app is in the foreground?
         Preconditions.checkArgumentInRange(op, AppOpsManager.OP_NONE,
                 AppOpsManager._NUM_OP - 1, "Invalid op code: " + op);
         if (callback == null) {

@@ -184,6 +184,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
 
     private final PowerManager.WakeLock mWakeLock;
 
+    private final boolean mUseBpfTrafficStats;
+
     private IConnectivityManager mConnManager;
 
     @VisibleForTesting
@@ -347,6 +349,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         mStatsObservers = checkNotNull(statsObservers, "missing NetworkStatsObservers");
         mSystemDir = checkNotNull(systemDir, "missing systemDir");
         mBaseDir = checkNotNull(baseDir, "missing baseDir");
+        mUseBpfTrafficStats = new File("/sys/fs/bpf/traffic_uid_stats_map").exists();
 
         LocalServices.addService(NetworkStatsManagerInternal.class,
                 new NetworkStatsManagerInternalImpl());
@@ -947,7 +950,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     }
 
     private boolean checkBpfStatsEnable() {
-        return new File("/sys/fs/bpf/traffic_uid_stats_map").exists();
+        return mUseBpfTrafficStats;
     }
 
     /**
@@ -1713,7 +1716,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         @Override
         public void foundNonMonotonic(NetworkStats left, int leftIndex, NetworkStats right,
                 int rightIndex, String cookie) {
-            Log.w(TAG, "found non-monotonic values; saving to dropbox");
+            Log.w(TAG, "Found non-monotonic values; saving to dropbox");
 
             // record error for debugging
             final StringBuilder builder = new StringBuilder();
@@ -1722,9 +1725,21 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             builder.append("left=").append(left).append('\n');
             builder.append("right=").append(right).append('\n');
 
-            final DropBoxManager dropBox = (DropBoxManager) mContext.getSystemService(
-                    Context.DROPBOX_SERVICE);
-            dropBox.addText(TAG_NETSTATS_ERROR, builder.toString());
+            mContext.getSystemService(DropBoxManager.class).addText(TAG_NETSTATS_ERROR,
+                    builder.toString());
+        }
+
+        @Override
+        public void foundNonMonotonic(
+                NetworkStats stats, int statsIndex, String cookie) {
+            Log.w(TAG, "Found non-monotonic values; saving to dropbox");
+
+            final StringBuilder builder = new StringBuilder();
+            builder.append("Found non-monotonic " + cookie + " values at [" + statsIndex + "]\n");
+            builder.append("stats=").append(stats).append('\n');
+
+            mContext.getSystemService(DropBoxManager.class).addText(TAG_NETSTATS_ERROR,
+                    builder.toString());
         }
     }
 

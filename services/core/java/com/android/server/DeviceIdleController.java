@@ -1535,12 +1535,13 @@ public class DeviceIdleController extends SystemService
                 filter.addAction(Intent.ACTION_SCREEN_ON);
                 getContext().registerReceiver(mInteractivityReceiver, filter);
 
-                mLocalActivityManager.setDeviceIdleWhitelist(mPowerSaveWhitelistAllAppIdArray);
+                mLocalActivityManager.setDeviceIdleWhitelist(
+                        mPowerSaveWhitelistAllAppIdArray, mPowerSaveWhitelistExceptIdleAppIdArray);
                 mLocalPowerManager.setDeviceIdleWhitelist(mPowerSaveWhitelistAllAppIdArray);
 
                 mLocalActivityManager.registerScreenObserver(mScreenObserver);
 
-                passWhiteListToForceAppStandbyTrackerLocked();
+                passWhiteListsToForceAppStandbyTrackerLocked();
                 updateInteractivityLocked();
             }
             updateConnectivityState(null);
@@ -1631,7 +1632,7 @@ public class DeviceIdleController extends SystemService
                             mPowerSaveWhitelistAppsExceptIdle, mPowerSaveWhitelistUserApps,
                             mPowerSaveWhitelistExceptIdleAppIds);
 
-                    passWhiteListToForceAppStandbyTrackerLocked();
+                    passWhiteListsToForceAppStandbyTrackerLocked();
                 }
                 return true;
             } catch (PackageManager.NameNotFoundException e) {
@@ -1650,7 +1651,7 @@ public class DeviceIdleController extends SystemService
                         mPowerSaveWhitelistExceptIdleAppIds);
                 mPowerSaveWhitelistUserAppsExceptIdle.clear();
 
-                passWhiteListToForceAppStandbyTrackerLocked();
+                passWhiteListsToForceAppStandbyTrackerLocked();
             }
         }
     }
@@ -2576,11 +2577,8 @@ public class DeviceIdleController extends SystemService
         mPowerSaveWhitelistUserAppIdArray = buildAppIdArray(null,
                 mPowerSaveWhitelistUserApps, mPowerSaveWhitelistUserAppIds);
         if (mLocalActivityManager != null) {
-            if (DEBUG) {
-                Slog.d(TAG, "Setting activity manager whitelist to "
-                        + Arrays.toString(mPowerSaveWhitelistAllAppIdArray));
-            }
-            mLocalActivityManager.setDeviceIdleWhitelist(mPowerSaveWhitelistAllAppIdArray);
+            mLocalActivityManager.setDeviceIdleWhitelist(
+                    mPowerSaveWhitelistAllAppIdArray, mPowerSaveWhitelistExceptIdleAppIdArray);
         }
         if (mLocalPowerManager != null) {
             if (DEBUG) {
@@ -2589,7 +2587,7 @@ public class DeviceIdleController extends SystemService
             }
             mLocalPowerManager.setDeviceIdleWhitelist(mPowerSaveWhitelistAllAppIdArray);
         }
-        passWhiteListToForceAppStandbyTrackerLocked();
+        passWhiteListsToForceAppStandbyTrackerLocked();
     }
 
     private void updateTempWhitelistAppIdsLocked(int appId, boolean adding) {
@@ -2615,7 +2613,7 @@ public class DeviceIdleController extends SystemService
             }
             mLocalPowerManager.setDeviceIdleTempWhitelist(mTempWhitelistAppIdArray);
         }
-        passWhiteListToForceAppStandbyTrackerLocked();
+        passWhiteListsToForceAppStandbyTrackerLocked();
     }
 
     private void reportPowerSaveWhitelistChangedLocked() {
@@ -2630,9 +2628,10 @@ public class DeviceIdleController extends SystemService
         getContext().sendBroadcastAsUser(intent, UserHandle.SYSTEM);
     }
 
-    private void passWhiteListToForceAppStandbyTrackerLocked() {
+    private void passWhiteListsToForceAppStandbyTrackerLocked() {
         mAppStateTracker.setPowerSaveWhitelistAppIds(
                 mPowerSaveWhitelistExceptIdleAppIdArray,
+                mPowerSaveWhitelistUserAppIdArray,
                 mTempWhitelistAppIdArray);
     }
 

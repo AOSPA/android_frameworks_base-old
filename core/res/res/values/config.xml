@@ -377,12 +377,14 @@
                [Network Capabilities] Optional. A comma seprated list of network capabilities.
                    Values must be from NetworkCapabilities#NET_CAPABILITIES_* constants.
                [IP config] Optional. If empty or not specified - DHCP will be used, otherwise
-                    static IP address with the mask.
+                   use the following format to specify static IP configuration:
+		       ip=<ip-address/mask> gateway=<ip-address> dns=<comma-sep-ip-addresses>
+                       domains=<comma-sep-domains> 
          -->
     <string-array translatable="false" name="config_ethernet_interfaces">
         <!--
-        <item>eth1;12,13,14,15;192.168.0.10/24</item>
-        <item>eth2;;192.168.0.11/24</item>
+        <item>eth1;12,13,14,15;ip=192.168.0.10/24 gateway=192.168.0.1 dns=4.4.4.4,8.8.8.8</item>
+        <item>eth2;;ip=192.168.0.11/24</item>
         -->
     </string-array>
 
@@ -516,6 +518,10 @@
 
     <!-- Boolean indicating whether the wifi chipset has dual frequency band support -->
     <bool translatable="false" name="config_wifi_dual_band_support">false</bool>
+
+    <!-- Boolean indicating whether the wifi chipset requires the softap band be -->
+    <!-- converted from 5GHz to ANY due to hardware restrictions -->
+    <bool translatable="false" name="config_wifi_convert_apband_5ghz_to_any">false</bool>
 
     <!-- Boolean indicating whether 802.11r Fast BSS Transition is enabled on this platform -->
     <bool translatable="false" name="config_wifi_fast_bss_transition_enabled">false</bool>
@@ -1107,6 +1113,15 @@
          RINGTONE_3 will be the returned effect -->
     <string-array translatable="false" name="config_ringtoneEffectUris">
     </string-array>
+
+    <!-- The default intensity level for haptic feedback. See
+         Settings.System.HAPTIC_FEEDBACK_INTENSITY more details on the constant values and
+         meanings. -->
+    <integer name="config_defaultHapticFeedbackIntensity">2</integer>
+    <!-- The default intensity level for notification vibrations. See
+         Settings.System.NOTIFICATION_VIBRATION_INTENSITY more details on the constant values and
+         meanings. -->
+    <integer name="config_defaultNotificationVibrationIntensity">2</integer>
 
     <bool name="config_use_strict_phone_number_comparation">false</bool>
 
@@ -2510,9 +2525,11 @@
          property. If this is false, then the following recents config flags are ignored. -->
     <bool name="config_hasRecents">true</bool>
 
-    <!-- Component name for the activity that will be presenting the Recents UI, which will receive
-         special permissions for API related to fetching and presenting recent tasks. -->
-    <string name="config_recentsComponentName" translatable="false">com.android.systemui/.recents.RecentsActivity</string>
+    <!-- Component name for the activity that will be presenting the Recents UI, which will receive special permissions for API related
+          to fetching and presenting recent tasks. The default configuration uses Launcehr3QuickStep as default launcher and points to
+          the corresponding recents component. When using a different default launcher, change this appropriately or use the default
+          systemui implementation: com.android.systemui/.recents.RecentsActivity -->
+    <string name="config_recentsComponentName" translatable="false">com.android.launcher3/com.android.quickstep.RecentsActivity</string>
 
     <!-- The minimum number of visible recent tasks to be presented to the user through the
          SystemUI. Can be -1 if there is no minimum limit. -->
@@ -3445,4 +3462,7 @@
     <!-- Whether or not swipe up gesture's opt-in setting is available on this device -->
     <bool name="config_swipe_up_gesture_setting_available">false</bool>
 
+    <!-- List of names that represent dual SoftAp interfaces. -->
+    <string-array translatable="false" name="config_wifi_dual_sap_interfaces">
+    </string-array>
 </resources>

@@ -161,6 +161,17 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 Binder.restoreCallingIdentity(token);
             }
         }
+
+        public void setBackButtonAlpha(float alpha, boolean animate) {
+            long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> {
+                    notifyBackButtonAlphaChanged(alpha, animate);
+                });
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
     };
 
     private final Runnable mDeferredConnectionCallback = () -> {
@@ -342,7 +353,14 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             mOverviewProxy.asBinder().unlinkToDeath(mOverviewServiceDeathRcpt, 0);
             mContext.unbindService(mOverviewServiceConnection);
             mOverviewProxy = null;
+            notifyBackButtonAlphaChanged(1f, false /* animate */);
             notifyConnectionChanged();
+        }
+    }
+
+    private void notifyBackButtonAlphaChanged(float alpha, boolean animate) {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).onBackButtonAlphaChanged(alpha, animate);
         }
     }
 
@@ -389,5 +407,6 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         default void onInteractionFlagsChanged(@InteractionType int flags) {}
         default void onOverviewShown(boolean fromHome) {}
         default void onQuickScrubStarted() {}
+        default void onBackButtonAlphaChanged(float alpha, boolean animate) {}
     }
 }

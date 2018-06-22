@@ -507,5 +507,6 @@ public class BluetoothEventManager {
                 callback.onProfileConnectionStateChanged(device, state, bluetoothProfile);
             }
         }
+        mDeviceManager.onProfileConnectionStateChanged(device, state, bluetoothProfile);
     }
 }

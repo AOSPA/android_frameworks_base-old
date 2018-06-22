@@ -129,9 +129,12 @@ class KeyguardController {
         mKeyguardShowing = keyguardShowing;
         mAodShowing = aodShowing;
         mSecondaryDisplayShowing = secondaryDisplayShowing;
+        mWindowManager.setAodShowing(aodShowing);
         if (showingChanged) {
             dismissDockedStackIfNeeded();
             setKeyguardGoingAway(false);
+            mWindowManager.setKeyguardOrAodShowingOnDefaultDisplay(
+                    isKeyguardOrAodShowing(DEFAULT_DISPLAY));
             if (keyguardShowing) {
                 mDismissalRequested = false;
             }

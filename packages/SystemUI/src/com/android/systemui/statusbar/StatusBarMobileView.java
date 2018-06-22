@@ -88,6 +88,17 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
         super(context, attrs, defStyleAttr, defStyleRes);
     }
 
+    @Override
+    public void getDrawingRect(Rect outRect) {
+        super.getDrawingRect(outRect);
+        float translationX = getTranslationX();
+        float translationY = getTranslationY();
+        outRect.left += translationX;
+        outRect.right += translationX;
+        outRect.top += translationY;
+        outRect.bottom += translationY;
+    }
+
     private void init() {
         mMobileGroup = findViewById(R.id.mobile_group);
         mMobile = findViewById(R.id.mobile_signal);
@@ -249,7 +260,8 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
                 break;
             case STATE_HIDDEN:
             default:
-                setVisibility(View.INVISIBLE);
+                mMobileGroup.setVisibility(View.INVISIBLE);
+                mDotView.setVisibility(View.INVISIBLE);
                 break;
         }
     }

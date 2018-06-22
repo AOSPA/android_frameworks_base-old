@@ -67,6 +67,12 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
      * everything above 30% to 50%, making it appear on 1bit color depths.
      */
     private static final float DARK_ALPHA_BOOST = 0.67f;
+    /**
+     * Status icons are currently drawn with the intention of being 17dp tall, but we
+     * want to scale them (in a way that doesn't require an asset dump) down 2dp. So
+     * 17dp * (15 / 17) = 15dp, the new height.
+     */
+    private static final float SYSTEM_ICON_SCALE = 15.f / 17.f;
     private final int ANIMATION_DURATION_FAST = 100;
 
     public static final int STATE_ICON = 0;
@@ -116,7 +122,7 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
     private final boolean mBlocked;
     private int mDensity;
     private float mIconScale = 1.0f;
-    private final Paint mDotPaint = new Paint();
+    private final Paint mDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private float mDotRadius;
     private int mStaticDotRadius;
     private int mVisibleState = STATE_ICON;
@@ -178,17 +184,24 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
         // We do not resize and scale system icons (on the right), only notification icons (on the
         // left).
         if (mNotification != null || mAlwaysScaleIcon) {
-            updateIconScale();
+            updateIconScaleForNotifications();
+        } else {
+            updateIconScaleForSystemIcons();
         }
     }
 
-    private void updateIconScale() {
+    private void updateIconScaleForNotifications() {
         final float imageBounds = NotificationUtils.interpolate(
                 mStatusBarIconDrawingSize,
                 mStatusBarIconDrawingSizeDark,
                 mDarkAmount);
         final int outerBounds = mStatusBarIconSize;
         mIconScale = (float)imageBounds / (float)outerBounds;
+        updatePivot();
+    }
+
+    private void updateIconScaleForSystemIcons() {
+        mIconScale = SYSTEM_ICON_SCALE;
     }
 
     public float getIconScaleFullyDark() {
@@ -238,7 +251,7 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
         mBlocked = false;
         mAlwaysScaleIcon = true;
         reloadDimens();
-        updateIconScale();
+        updateIconScaleForNotifications();
         mDensity = context.getResources().getDisplayMetrics().densityDpi;
     }
 
@@ -413,13 +426,12 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
         }
         if (mDotAppearAmount != 0.0f) {
             float radius;
-            float alpha;
+            float alpha = Color.alpha(mDecorColor) / 255.f;
             if (mDotAppearAmount <= 1.0f) {
                 radius = mDotRadius * mDotAppearAmount;
-                alpha = 1.0f;
             } else {
                 float fadeOutAmount = mDotAppearAmount - 1.0f;
-                alpha = 1.0f - fadeOutAmount;
+                alpha = alpha * (1.0f - fadeOutAmount);
                 radius = NotificationUtils.interpolate(mDotRadius, getWidth() / 4, fadeOutAmount);
             }
             mDotPaint.setAlpha((int) (alpha * 255));
@@ -802,7 +814,7 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
     public void setDark(boolean dark, boolean fade, long delay) {
         mDozer.setIntensityDark(f -> {
             mDarkAmount = f;
-            updateIconScale();
+            updateIconScaleForNotifications();
             updateDecorColor();
             updateIconColor();
             updateAllowAnimation();
@@ -848,6 +860,12 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
             mLayoutRunnable.run();
             mLayoutRunnable = null;
         }
+        updatePivot();
+    }
+
+    private void updatePivot() {
+        setPivotX((1 - mIconScale) / 2.0f * getWidth());
+        setPivotY((getHeight() - mIconScale * getWidth()) / 2.0f);
     }
 
     public void executeOnLayout(Runnable runnable) {

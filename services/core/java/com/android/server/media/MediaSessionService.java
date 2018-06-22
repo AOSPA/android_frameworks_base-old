@@ -781,6 +781,9 @@ public class MediaSessionService extends SystemService implements Monitor {
     }
 
     private void dispatchVolumeKeyLongPressLocked(KeyEvent keyEvent) {
+        if (mCurrentFullUserRecord.mOnVolumeKeyLongPressListener == null) {
+            return;
+        }
         try {
             mCurrentFullUserRecord.mOnVolumeKeyLongPressListener.onVolumeKeyLongPress(keyEvent);
         } catch (RemoteException e) {
@@ -1851,7 +1854,7 @@ public class MediaSessionService extends SystemService implements Monitor {
                     }
                 });
             } else {
-                session.adjustVolume(packageName, pid, uid, asSystemService,
+                session.adjustVolume(packageName, pid, uid, null, asSystemService,
                         direction, flags, true);
             }
         }

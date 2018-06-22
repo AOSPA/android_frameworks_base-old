@@ -85,14 +85,14 @@
     <string name="bluetooth_a2dp_profile_summary_connected" msgid="963376081347721598">"मीडिया ऑडियो से कनेक्‍ट किया गया"</string>
     <string name="bluetooth_headset_profile_summary_connected" msgid="7661070206715520671">"फ़ोन ऑडियो से कनेक्‍ट किया गया"</string>
     <string name="bluetooth_opp_profile_summary_connected" msgid="2611913495968309066">"फ़ाइल स्‍थानांतरण सर्वर से कनेक्‍ट किया गया"</string>
-    <string name="bluetooth_map_profile_summary_connected" msgid="8191407438851351713">"मानचित्र से कनेक्ट किया गया"</string>
+    <string name="bluetooth_map_profile_summary_connected" msgid="8191407438851351713">"मैप से कनेक्ट किया गया"</string>
     <string name="bluetooth_sap_profile_summary_connected" msgid="8561765057453083838">"SAP से कनेक्ट किया गया"</string>
     <string name="bluetooth_opp_profile_summary_not_connected" msgid="1267091356089086285">"फ़ाइल स्‍थानांतरण सर्वर से कनेक्‍ट नहीं किया गया"</string>
     <string name="bluetooth_hid_profile_summary_connected" msgid="3381760054215168689">"इनपुट डिवाइस से कनेक्‍ट किया गया"</string>
     <string name="bluetooth_pan_user_profile_summary_connected" msgid="6436258151814414028">"इंटरनेट के लिए डिवाइस से कनेक्ट है"</string>
     <string name="bluetooth_pan_nap_profile_summary_connected" msgid="1322694224800769308">"डिवाइस से इंटरनेट शेयर हो रहा है"</string>
     <string name="bluetooth_pan_profile_summary_use_for" msgid="5736111170225304239">"इंटरनेट से जुड़ने के लिए इस्तेमाल करें"</string>
-    <string name="bluetooth_map_profile_summary_use_for" msgid="5154200119919927434">"मानचित्र के लिए उपयोग करें"</string>
+    <string name="bluetooth_map_profile_summary_use_for" msgid="5154200119919927434">"मैप के लिए उपयोग करें"</string>
     <string name="bluetooth_sap_profile_summary_use_for" msgid="7085362712786907993">"सिम ऐक्सेस के लिए उपयोग करें"</string>
     <string name="bluetooth_a2dp_profile_summary_use_for" msgid="4630849022250168427">"मीडिया ऑडियो के लिए उपयोग करें"</string>
     <string name="bluetooth_headset_profile_summary_use_for" msgid="8705753622443862627">"फ़ोन ऑडियो के लिए उपयोग करें"</string>
@@ -224,8 +224,7 @@
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"ब्लूटूथ ऑडियो चैनल मोड"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="7234956835280563341">"ब्लूटूथ ऑडियो कोडेक का\nयह विकल्प चालू करें: चैनल मोड"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"ब्लूटूथ ऑडियो LDAC कोडेक: प्लेबैक क्वालिटी"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title (6893955536658137179) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="6893955536658137179">"ब्लूटूथ से चलने वाले ऑडियो के लिए LDAC कोडेक का\nविकल्प चुनें: ऑडियो की क्वालिटी"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"चलाया जा रहा है: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"निजी डीएनएस"</string>
     <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"निजी डीएनएस मोड चुनें"</string>

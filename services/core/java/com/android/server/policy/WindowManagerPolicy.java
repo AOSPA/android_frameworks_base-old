@@ -660,6 +660,11 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
          * abort animations that have no timeout, in case they got stuck.
          */
         void triggerAnimationFailsafe();
+
+        /**
+         * The keyguard showing state has changed
+         */
+        void onKeyguardShowingAndNotOccludedChanged();
     }
 
     /** Window has been added to the screen. */
@@ -1769,4 +1774,11 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      *                      {@link ActivityManager#LOCK_TASK_MODE_PINNED}.
      */
     void onLockTaskStateChangedLw(int lockTaskState);
+
+    /**
+     * Updates the flag about whether AOD is showing.
+     *
+     * @return whether the value was changed.
+     */
+    boolean setAodShowing(boolean aodShowing);
 }

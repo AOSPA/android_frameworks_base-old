@@ -300,9 +300,11 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
 
     private void saveImportance() {
         if (!mIsNonblockable) {
-            // Only go through the lock screen/bouncer if the user didn't hit 'Keep showing'.
+            // Only go through the lock screen/bouncer if the user hit 'Stop notifications'.
+            // Otherwise, update the importance immediately.
             if (mCheckSaveListener != null
-                    && !NotificationCounters.BLOCKING_HELPER_KEEP_SHOWING.equals(mExitReason)) {
+                    && NotificationCounters.BLOCKING_HELPER_STOP_NOTIFICATIONS.equals(
+                            mExitReason)) {
                 mCheckSaveListener.checkSave(this::updateImportance, mSbn);
             } else {
                 updateImportance();
@@ -482,6 +484,11 @@ public class NotificationInfo extends LinearLayout implements NotificationGuts.G
 
     @Override
     public boolean willBeRemoved() {
+        return hasImportanceChanged();
+    }
+
+    @Override
+    public boolean shouldBeSaved() {
         return hasImportanceChanged();
     }
 

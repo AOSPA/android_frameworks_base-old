@@ -125,6 +125,7 @@ import android.util.Slog;
 import android.util.SparseIntArray;
 import android.util.SuperNotCalledException;
 import android.util.proto.ProtoOutputStream;
+import android.view.Choreographer;
 import android.view.ContextThemeWrapper;
 import android.view.Display;
 import android.view.ThreadedRenderer;
@@ -146,6 +147,7 @@ import com.android.internal.os.RuntimeInit;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
+import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.org.conscrypt.OpenSSLSocketImpl;
 import com.android.org.conscrypt.TrustedCertificateStore;
 import com.android.server.am.MemInfoDumpProto;
@@ -346,6 +348,13 @@ public final class ActivityThread extends ClientTransactionHandler {
     final ArrayMap<ComponentName, ProviderClientRecord> mLocalProvidersByName
             = new ArrayMap<ComponentName, ProviderClientRecord>();
 
+    // Mitigation for b/74523247: Used to serialize calls to AM.getContentProvider().
+    // Note we never removes items from this map but that's okay because there are only so many
+    // users and so many authorities.
+    // TODO Remove it once we move CPR.wait() from AMS to the client side.
+    @GuardedBy("mGetProviderLocks")
+    final ArrayMap<ProviderKey, Object> mGetProviderLocks = new ArrayMap<>();
+
     final ArrayMap<Activity, ArrayList<OnActivityPausedListener>> mOnPauseListeners
         = new ArrayMap<Activity, ArrayList<OnActivityPausedListener>>();
 
@@ -355,7 +364,6 @@ public final class ActivityThread extends ClientTransactionHandler {
     static volatile Handler sMainThreadHandler;  // set once in main()
 
     Bundle mCoreSettings = null;
-    private final int mEnableUxe = SystemProperties.getInt("vendor.iop.enable_uxe", 0);
 
     /** Activity client record, used for bookkeeping for the real {@link Activity} instance. */
     public static final class ActivityClientRecord {
@@ -939,7 +947,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         public void setHttpProxy(String host, String port, String exclList, Uri pacFileUrl) {
-            final ConnectivityManager cm = ConnectivityManager.from(getSystemContext());
+            final ConnectivityManager cm = ConnectivityManager.from(
+                    getApplication() != null ? getApplication() : getSystemContext());
             final Network network = cm.getBoundNetworkForProcess();
             if (network != null) {
                 Proxy.setHttpProxySystemProperty(cm.getDefaultProxy());
@@ -1408,7 +1417,15 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         public void scheduleTrimMemory(int level) {
-            sendMessage(H.TRIM_MEMORY, null, level);
+            final Runnable r = PooledLambda.obtainRunnable(ActivityThread::handleTrimMemory,
+                    ActivityThread.this, level);
+            // Schedule trimming memory after drawing the frame to minimize jank-risk.
+            Choreographer choreographer = Choreographer.getMainThreadInstance();
+            if (choreographer != null) {
+                choreographer.postCallback(Choreographer.CALLBACK_COMMIT, r, null);
+            } else {
+                mH.post(r);
+            }
         }
 
         public void scheduleTranslucentConversionComplete(IBinder token, boolean drawComplete) {
@@ -1563,7 +1580,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         public static final int SLEEPING                = 137;
         public static final int SET_CORE_SETTINGS       = 138;
         public static final int UPDATE_PACKAGE_COMPATIBILITY_INFO = 139;
-        public static final int TRIM_MEMORY             = 140;
         public static final int DUMP_PROVIDER           = 141;
         public static final int UNSTABLE_PROVIDER_DIED  = 142;
         public static final int REQUEST_ASSIST_CONTEXT_EXTRAS = 143;
@@ -1609,7 +1625,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case SLEEPING: return "SLEEPING";
                     case SET_CORE_SETTINGS: return "SET_CORE_SETTINGS";
                     case UPDATE_PACKAGE_COMPATIBILITY_INFO: return "UPDATE_PACKAGE_COMPATIBILITY_INFO";
-                    case TRIM_MEMORY: return "TRIM_MEMORY";
                     case DUMP_PROVIDER: return "DUMP_PROVIDER";
                     case UNSTABLE_PROVIDER_DIED: return "UNSTABLE_PROVIDER_DIED";
                     case REQUEST_ASSIST_CONTEXT_EXTRAS: return "REQUEST_ASSIST_CONTEXT_EXTRAS";
@@ -1742,11 +1757,6 @@ public final class ActivityThread extends ClientTransactionHandler {
                     break;
                 case UPDATE_PACKAGE_COMPATIBILITY_INFO:
                     handleUpdatePackageCompatibilityInfo((UpdateCompatibilityData)msg.obj);
-                    break;
-                case TRIM_MEMORY:
-                    Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "trimMemory");
-                    handleTrimMemory(msg.arg1);
-                    Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case UNSTABLE_PROVIDER_DIED:
                     handleUnstableProviderDied((IBinder)msg.obj, false);
@@ -5411,7 +5421,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         BinderInternal.forceGc("mem");
     }
 
-    final void handleTrimMemory(int level) {
+    private void handleTrimMemory(int level) {
+        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "trimMemory");
         if (DEBUG_MEMORY_TRIM) Slog.v(TAG, "Trimming memory to level: " + level);
 
         ArrayList<ComponentCallbacks2> callbacks = collectComponentCallbacks(true, null);
@@ -5422,6 +5433,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         WindowManagerGlobal.getInstance().trimMemory(level);
+        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
 
     private void setupGraphicsSupport(Context context) {
@@ -5748,7 +5760,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         updateLocaleListFromAppContext(appContext,
                 mResourcesManager.getConfiguration().getLocales());
 
-        if (mEnableUxe != 0 && !Process.isIsolated()) {
+        if (!Process.isIsolated()) {
             ux_perf = new BoostFramework(appContext);
         }
 
@@ -5977,8 +5989,10 @@ public final class ActivityThread extends ClientTransactionHandler {
         // be re-entrant in the case where the provider is in the same process.
         ContentProviderHolder holder = null;
         try {
-            holder = ActivityManager.getService().getContentProvider(
-                    getApplicationThread(), auth, userId, stable);
+            synchronized (getGetProviderLock(auth, userId)) {
+                holder = ActivityManager.getService().getContentProvider(
+                        getApplicationThread(), auth, userId, stable);
+            }
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
         }
@@ -5992,6 +6006,18 @@ public final class ActivityThread extends ClientTransactionHandler {
         holder = installProvider(c, holder, holder.info,
                 true /*noisy*/, holder.noReleaseNeeded, stable);
         return holder.provider;
+    }
+
+    private Object getGetProviderLock(String auth, int userId) {
+        final ProviderKey key = new ProviderKey(auth, userId);
+        synchronized (mGetProviderLocks) {
+            Object lock = mGetProviderLocks.get(key);
+            if (lock == null) {
+                lock = key;
+                mGetProviderLocks.put(key, lock);
+            }
+            return lock;
+        }
     }
 
     private final void incProviderRefLocked(ProviderRefCount prc, boolean stable) {

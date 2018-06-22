@@ -108,6 +108,8 @@ interface IWifiManager
 
     boolean isDualBandSupported();
 
+    boolean needs5GHzToAnyApBandConversion();
+
     DhcpInfo getDhcpInfo();
 
     boolean isScanAlwaysAvailable();

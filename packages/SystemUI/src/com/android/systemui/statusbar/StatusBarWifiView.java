@@ -141,7 +141,8 @@ public class StatusBarWifiView extends FrameLayout implements DarkReceiver,
                 break;
             case STATE_HIDDEN:
             default:
-                setVisibility(View.GONE);
+                mWifiGroup.setVisibility(View.GONE);
+                mDotView.setVisibility(View.GONE);
                 break;
         }
     }
@@ -149,6 +150,17 @@ public class StatusBarWifiView extends FrameLayout implements DarkReceiver,
     @Override
     public int getVisibleState() {
         return mVisibleState;
+    }
+
+    @Override
+    public void getDrawingRect(Rect outRect) {
+        super.getDrawingRect(outRect);
+        float translationX = getTranslationX();
+        float translationY = getTranslationY();
+        outRect.left += translationX;
+        outRect.right += translationX;
+        outRect.top += translationY;
+        outRect.bottom += translationY;
     }
 
     private void init() {

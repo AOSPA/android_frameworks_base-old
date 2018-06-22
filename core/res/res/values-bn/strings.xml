@@ -120,7 +120,7 @@
     <string name="roamingText10" msgid="3992906999815316417">"রোমিং - আংশিক পরিষেবা কার্যকারিতা"</string>
     <string name="roamingText11" msgid="4154476854426920970">"রোমিং ব্যানার চালু আছে"</string>
     <string name="roamingText12" msgid="1189071119992726320">"রোমিং ব্যানার বন্ধ আছে"</string>
-    <string name="roamingTextSearching" msgid="8360141885972279963">"পরিষেবা অনুসন্ধান করা হচ্ছে"</string>
+    <string name="roamingTextSearching" msgid="8360141885972279963">"পরিষেবা সার্চ করা হচ্ছে"</string>
     <string name="wfcRegErrorTitle" msgid="3855061241207182194">"ওয়াই-ফাই কলিং সেট-আপ করা যায়নি"</string>
   <string-array name="wfcOperatorErrorAlertMessages">
     <item msgid="3910386316304772394">"ওয়াই-ফাই এর মাধ্যমে কল করতে ও মেসেজ পাঠাতে, প্রথমে আপনার পরিষেবা প্রদানকারীকে এই পরিষেবার সেট-আপ করতে বলুন। তারপর আবার সেটিংস থেকে ওয়াই-ফাই কলিং চালু করুন। (ত্রুটি কোড: <xliff:g id="CODE">%1$s</xliff:g>)"</item>
@@ -291,12 +291,9 @@
     <string name="permgrouplab_camera" msgid="4820372495894586615">"ক্যামেরা"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"ছবি তোলা এবং ভিডিও রেকর্ড"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;-কে ফটো তুলতে এবং ভিডিও রেকর্ড করতে দেবেন?"</string>
-    <!-- no translation found for permgrouplab_calllog (8798646184930388160) -->
-    <skip />
-    <!-- no translation found for permgroupdesc_calllog (3006237336748283775) -->
-    <skip />
-    <!-- no translation found for permgrouprequest_calllog (8487355309583773267) -->
-    <skip />
+    <string name="permgrouplab_calllog" msgid="8798646184930388160">"কল লগগুলি"</string>
+    <string name="permgroupdesc_calllog" msgid="3006237336748283775">"ফোন কল লগ পড়ে এবং দেখে"</string>
+    <string name="permgrouprequest_calllog" msgid="8487355309583773267">"আপনার ফোন কল লগ অ্যাক্সেস করার অনুমতি &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; কে দেবেন?"</string>
     <string name="permgrouplab_phone" msgid="5229115638567440675">"ফোন"</string>
     <string name="permgroupdesc_phone" msgid="6234224354060641055">"ফোন কলগুলি এবং পরিচালনা"</string>
     <string name="permgrouprequest_phone" msgid="9166979577750581037">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;-কে কল করতে এবং কল পরিচালনা করতে দেবেন?"</string>
@@ -889,12 +886,12 @@
     <string name="menu_enter_shortcut_label" msgid="2743362785111309668">"enter"</string>
     <string name="menu_delete_shortcut_label" msgid="3658178007202748164">"মুছুন"</string>
     <string name="search_go" msgid="8298016669822141719">"খুঁজুন"</string>
-    <string name="search_hint" msgid="1733947260773056054">"অনুসন্ধান..."</string>
+    <string name="search_hint" msgid="1733947260773056054">"সার্চ..."</string>
     <string name="searchview_description_search" msgid="6749826639098512120">"খুঁজুন"</string>
-    <string name="searchview_description_query" msgid="5911778593125355124">"অনুসন্ধান ক্যোয়ারী"</string>
+    <string name="searchview_description_query" msgid="5911778593125355124">"সার্চ ক্যোয়ারী"</string>
     <string name="searchview_description_clear" msgid="1330281990951833033">"ক্যোয়ারী সাফ করুন"</string>
     <string name="searchview_description_submit" msgid="2688450133297983542">"ক্যোয়ারী জমা দিন"</string>
-    <string name="searchview_description_voice" msgid="2453203695674994440">"ভয়েস অনুসন্ধান"</string>
+    <string name="searchview_description_voice" msgid="2453203695674994440">"ভয়েস সার্চ"</string>
     <string name="enable_explore_by_touch_warning_title" msgid="7460694070309730149">"\'স্পর্শের মাধ্যমে অন্বেষণ করুন\' সক্ষম করতে চান?"</string>
     <string name="enable_explore_by_touch_warning_message" product="tablet" msgid="8655887539089910577">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> \'স্পর্শের মাধ্যমে অন্বেষণ করুন\' সক্ষম করতে চাইছে৷ যখন \'স্পর্শের মাধ্যমে অন্বেষণ করুন\' চালু করা হবে তখন আপনার আঙ্গুলের নিয়ন্ত্রণে থাকা জিনিসের বর্ণনাগুলি শুনতে অথবা দেখতে পাবেন অথবা ট্যাবলেটের সাথে ইন্টারঅ্যাক্ট করার জন্য অঙ্গভঙ্গির সাহায্য নিতে পারবেন৷"</string>
     <string name="enable_explore_by_touch_warning_message" product="default" msgid="2708199672852373195">"<xliff:g id="ACCESSIBILITY_SERVICE_NAME">%1$s</xliff:g> \'স্পর্শের মাধ্যমে অন্বেষণ করুন\' সক্ষম করতে চাইছে৷ যখন \'স্পর্শের মাধ্যমে অন্বেষণ করুন\' চালু করা হবে তখন আপনার আঙ্গুলের নিয়ন্ত্রণে থাকা জিনিসের বর্ণনাগুলি শুনতে অথবা দেখতে পাবেন অথবা ফোনের সাথে ইন্টারঅ্যাক্ট করার জন্য অঙ্গভঙ্গির সাহায্য নিতে পারবেন৷"</string>
@@ -1078,7 +1075,7 @@
     <string name="aerr_application_repeated" msgid="3146328699537439573">"<xliff:g id="APPLICATION">%1$s</xliff:g> বারবার বন্ধ হচ্ছে"</string>
     <string name="aerr_process_repeated" msgid="6235302956890402259">"<xliff:g id="PROCESS">%1$s</xliff:g> বারবার বন্ধ হচ্ছে"</string>
     <string name="aerr_restart" msgid="7581308074153624475">"অ্যাপ্লিকেশানটিকে আবার খুলুন"</string>
-    <string name="aerr_report" msgid="5371800241488400617">"প্রতিক্রিয়া পাঠান"</string>
+    <string name="aerr_report" msgid="5371800241488400617">"মতামত জানান"</string>
     <string name="aerr_close" msgid="2991640326563991340">"বন্ধ করুন"</string>
     <string name="aerr_mute" msgid="1974781923723235953">"ডিভাইসটি পুনরায় আরম্ভ না হওয়া পর্যন্ত নিঃশব্দ করুন"</string>
     <string name="aerr_wait" msgid="3199956902437040261">"অপেক্ষা করুন"</string>
@@ -1390,7 +1387,7 @@
     <string name="progress_erasing" product="default" msgid="6596988875507043042">"SD কার্ড মোছা হচ্ছে…"</string>
     <string name="share" msgid="1778686618230011964">"শেয়ার করুন"</string>
     <string name="find" msgid="4808270900322985960">"খুঁজুন"</string>
-    <string name="websearch" msgid="4337157977400211589">"ওয়েব অনুসন্ধান"</string>
+    <string name="websearch" msgid="4337157977400211589">"ওয়েব সার্চ"</string>
     <string name="find_next" msgid="5742124618942193978">"পরবর্তীটি খুঁজুন"</string>
     <string name="find_previous" msgid="2196723669388360506">"পূর্ববর্তীটি খুঁজুন"</string>
     <string name="gpsNotifTicker" msgid="5622683912616496172">"<xliff:g id="NAME">%s</xliff:g> এর থেকে অবস্থানের অনুরোধ"</string>
@@ -1498,7 +1495,7 @@
     <string name="media_route_button_content_description" msgid="591703006349356016">"কাস্ট করুন"</string>
     <string name="media_route_chooser_title" msgid="1751618554539087622">"ডিভাইসে সংযোগ করুন"</string>
     <string name="media_route_chooser_title_for_remote_display" msgid="3395541745872017583">"ডিভাইসে স্ক্রীণ কাস্ট করুন"</string>
-    <string name="media_route_chooser_searching" msgid="4776236202610828706">"ডিভাইসগুলি অনুসন্ধান করা হচ্ছে…"</string>
+    <string name="media_route_chooser_searching" msgid="4776236202610828706">"ডিভাইসগুলি সার্চ করা হচ্ছে…"</string>
     <string name="media_route_chooser_extended_settings" msgid="87015534236701604">"সেটিংস"</string>
     <string name="media_route_controller_disconnect" msgid="8966120286374158649">"সংযোগ বিচ্ছিন্ন করুন"</string>
     <string name="media_route_status_scanning" msgid="7279908761758293783">"স্ক্যান করা হচ্ছে…"</string>
@@ -1785,8 +1782,8 @@
     <string name="language_picker_section_all" msgid="3097279199511617537">"সকল ভাষা"</string>
     <string name="region_picker_section_all" msgid="8966316787153001779">"সমস্ত অঞ্চল"</string>
     <string name="locale_search_menu" msgid="2560710726687249178">"খুঁজুন"</string>
-    <string name="app_suspended_title" msgid="1919029799438164552">"অ্যাপটি চালু করা যাচ্ছে না"</string>
-    <string name="app_suspended_default_message" msgid="7875306315686531621">"<xliff:g id="APP_NAME_0">%1$s</xliff:g> অ্যাপটি এই মুহূর্তে উপলভ্য নয়। <xliff:g id="APP_NAME_1">%2$s</xliff:g> থেকে এই অ্যাপটিকে পরিচালনা করা হয়।"</string>
+    <string name="app_suspended_title" msgid="2075071241147969611">"অ্যাপটি উপলভ্য নয়"</string>
+    <string name="app_suspended_default_message" msgid="123166680425711887">"<xliff:g id="APP_NAME_0">%1$s</xliff:g> এখন উপলভ্য নয়। এই অ্যাপটিকে <xliff:g id="APP_NAME_1">%2$s</xliff:g> অ্যাপ ম্যানেজ করে।"</string>
     <string name="app_suspended_more_details" msgid="1131804827776778187">"আরও জানুন"</string>
     <string name="work_mode_off_title" msgid="1118691887588435530">"কাজের প্রোফাইল চালু করবেন?"</string>
     <string name="work_mode_off_message" msgid="5130856710614337649">"আপনার কাজের অ্যাপ, বিজ্ঞপ্তি, ডেটা এবং কাজের প্রোফাইলের অন্যান্য বৈশিষ্ট্য চালু করা হবে"</string>
@@ -1821,7 +1818,7 @@
     <string name="app_category_productivity" msgid="3742083261781538852">"উৎপাদনশীলতা"</string>
     <string name="device_storage_monitor_notification_channel" msgid="3295871267414816228">"ডিভাইসের স্টোরেজ"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="5537766997350092316">"USB ডিবাগিং"</string>
-    <string name="time_picker_hour_label" msgid="2979075098868106450">"ঘন্টা"</string>
+    <string name="time_picker_hour_label" msgid="2979075098868106450">"ঘণ্টা"</string>
     <string name="time_picker_minute_label" msgid="5168864173796598399">"মিনিট"</string>
     <string name="time_picker_header_text" msgid="143536825321922567">"সময় সেট করুন"</string>
     <string name="time_picker_input_error" msgid="7574999942502513765">"সঠিক সময় দিন"</string>
@@ -1883,5 +1880,8 @@
     <string name="zen_upgrade_notification_content" msgid="1794994264692424562">"কী কী ব্লক করা আছে তা দেখতে ট্যাপ করুন।"</string>
     <string name="notification_app_name_system" msgid="4205032194610042794">"সিস্টেম"</string>
     <string name="notification_app_name_settings" msgid="7751445616365753381">"সেটিংস"</string>
+    <string name="notification_appops_camera_active" msgid="5050283058419699771">"ক্যামেরা"</string>
+    <string name="notification_appops_microphone_active" msgid="4335305527588191730">"মাইক্রোফোন"</string>
+    <string name="notification_appops_overlay_active" msgid="633813008357934729">"স্ক্রিনে অন্যান্য অ্যাপের উপরে দেখানো হচ্ছে"</string>
     <string name="car_loading_profile" msgid="3545132581795684027">"লোড হচ্ছে"</string>
 </resources>

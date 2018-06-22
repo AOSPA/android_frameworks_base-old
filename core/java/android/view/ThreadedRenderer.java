@@ -329,6 +329,7 @@ public final class ThreadedRenderer {
     // in response, so it really just exists to differentiate from LOST_SURFACE
     // but possibly both can just be deleted.
     private static final int SYNC_CONTEXT_IS_STOPPED = 1 << 2;
+    private static final int SYNC_FRAME_DROPPED = 1 << 3;
 
     private static final String[] VISUALIZERS = {
         PROFILE_PROPERTY_VISUALIZE_BARS,
@@ -790,7 +791,8 @@ public final class ThreadedRenderer {
      * @param attachInfo AttachInfo tied to the specified view.
      * @param callbacks Callbacks invoked when drawing happens.
      */
-    void draw(View view, AttachInfo attachInfo, DrawCallbacks callbacks) {
+    void draw(View view, AttachInfo attachInfo, DrawCallbacks callbacks,
+            FrameDrawingCallback frameDrawingCallback) {
         attachInfo.mIgnoreDirtyState = true;
 
         final Choreographer choreographer = attachInfo.mViewRootImpl.mChoreographer;
@@ -815,6 +817,9 @@ public final class ThreadedRenderer {
         }
 
         final long[] frameInfo = choreographer.mFrameInfo.mFrameInfo;
+        if (frameDrawingCallback != null) {
+            nSetFrameCallback(mNativeProxy, frameDrawingCallback);
+        }
         int syncResult = nSyncAndDrawFrame(mNativeProxy, frameInfo, frameInfo.length);
         if ((syncResult & SYNC_LOST_SURFACE_REWARD_IF_FOUND) != 0) {
             setEnabled(false);
@@ -826,6 +831,10 @@ public final class ThreadedRenderer {
         if ((syncResult & SYNC_INVALIDATE_REQUIRED) != 0) {
             attachInfo.mViewRootImpl.invalidate();
         }
+    }
+
+    void setFrameCompleteCallback(FrameCompleteCallback callback) {
+        nSetFrameCompleteCallback(mNativeProxy, callback);
     }
 
     static void invokeFunctor(long functor, boolean waitForCompletion) {
@@ -1063,6 +1072,18 @@ public final class ThreadedRenderer {
         void onFrameDraw(long frame);
     }
 
+    /**
+     * Interface used to be notified when a frame has finished rendering
+     */
+    public interface FrameCompleteCallback {
+        /**
+         * Invoked after a frame draw
+         *
+         * @param frameNr The id of the frame that was drawn.
+         */
+        void onFrameComplete(long frameNr);
+    }
+
     private static class ProcessInitializer {
         static ProcessInitializer sInstance = new ProcessInitializer();
 
@@ -1214,6 +1235,8 @@ public final class ThreadedRenderer {
     private static native void nSetContentDrawBounds(long nativeProxy, int left,
              int top, int right, int bottom);
     private static native void nSetFrameCallback(long nativeProxy, FrameDrawingCallback callback);
+    private static native void nSetFrameCompleteCallback(long nativeProxy,
+            FrameCompleteCallback callback);
 
     private static native long nAddFrameMetricsObserver(long nativeProxy, FrameMetricsObserver observer);
     private static native void nRemoveFrameMetricsObserver(long nativeProxy, long nativeObserver);

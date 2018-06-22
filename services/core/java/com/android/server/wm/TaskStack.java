@@ -1667,16 +1667,6 @@ public class TaskStack extends WindowContainer<Task> implements
     @Override  // AnimatesBounds
     public void onAnimationEnd(boolean schedulePipModeChangedCallback, Rect finalStackSize,
             boolean moveToFullscreen) {
-        // Hold the lock since this is called from the BoundsAnimator running on the UiThread
-        synchronized (mService.mWindowMap) {
-            mBoundsAnimating = false;
-            for (int i = 0; i < mChildren.size(); i++) {
-                final Task t = mChildren.get(i);
-                t.clearPreserveNonFloatingState();
-            }
-            mService.requestTraversal();
-        }
-
         if (inPinnedWindowingMode()) {
             // Update to the final bounds if requested. This is done here instead of in the bounds
             // animator to allow us to coordinate this after we notify the PiP mode changed
@@ -1692,6 +1682,10 @@ public class TaskStack extends WindowContainer<Task> implements
 
             if (finalStackSize != null) {
                 setPinnedStackSize(finalStackSize, null);
+            } else {
+                // We have been canceled, so the final stack size is null, still run the
+                // animation-end logic
+                onPipAnimationEndResize();
             }
 
             try {
@@ -1703,7 +1697,22 @@ public class TaskStack extends WindowContainer<Task> implements
             } catch (RemoteException e) {
                 // I don't believe you...
             }
+        } else {
+            // No PiP animation, just run the normal animation-end logic
+            onPipAnimationEndResize();
         }
+    }
+
+    /**
+     * Called immediately prior to resizing the tasks at the end of the pinned stack animation.
+     */
+    public void onPipAnimationEndResize() {
+        mBoundsAnimating = false;
+        for (int i = 0; i < mChildren.size(); i++) {
+            final Task t = mChildren.get(i);
+            t.clearPreserveNonFloatingState();
+        }
+        mService.requestTraversal();
     }
 
     @Override
