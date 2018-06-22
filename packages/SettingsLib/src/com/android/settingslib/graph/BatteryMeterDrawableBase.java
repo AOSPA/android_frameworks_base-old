@@ -91,6 +91,8 @@ public class BatteryMeterDrawableBase extends Drawable {
     private final Path mBoltPath = new Path();
     private final float[] mPlusPoints;
     private final Path mPlusPath = new Path();
+    private final float[] mChargingBoltPoints;
+    private final Path mChargingBoltPath = new Path();
 
     private final Rect mPadding = new Rect();
     private final RectF mFrame = new RectF();
@@ -159,6 +161,8 @@ public class BatteryMeterDrawableBase extends Drawable {
 
         mPlusPaint = new Paint(mBoltPaint);
         mPlusPoints = loadPoints(res, R.array.batterymeter_plus_points);
+
+        mChargingBoltPoints = loadPoints(res, R.array.batterymeter_charging_bolt_points);
 
         mIntrinsicWidth = context.getResources().getDimensionPixelSize(R.dimen.battery_width);
         mIntrinsicHeight = context.getResources().getDimensionPixelSize(R.dimen.battery_height);
@@ -314,16 +318,20 @@ public class BatteryMeterDrawableBase extends Drawable {
 
     @Override
     public void draw(Canvas c) {
-        switch (mMeterStyle) {
-            case BATTERY_STYLE_PORTRAIT:
-                drawRectangle(c);
-                break;
-            case BATTERY_STYLE_CIRCLE:
-                drawCircle(c);
-                break;
-            default:
-                drawRectangle(c);
-                break;
+        if (mCharging) {
+            drawBolt(c);
+        } else {
+            switch (mMeterStyle) {
+                case BATTERY_STYLE_PORTRAIT:
+                    drawRectangle(c);
+                    break;
+                case BATTERY_STYLE_CIRCLE:
+                    drawCircle(c);
+                    break;
+                default:
+                    drawRectangle(c);
+                    break;
+            }
         }
     }
 
@@ -635,6 +643,52 @@ public class BatteryMeterDrawableBase extends Drawable {
                 c.drawText(pctText, x, y, mTextPaint);
             }
         }
+    }
+
+    private void drawBolt(Canvas c) {
+        final int level = mLevel;
+
+        if (level == -1) return;
+
+        float drawFrac = (float) level / 100f;
+
+        mFramePaint.setStrokeWidth(0);
+        mFramePaint.setStyle(Paint.Style.FILL_AND_STROKE);
+
+        mBatteryPaint.setStrokeWidth(0);
+        mBatteryPaint.setStyle(Paint.Style.FILL_AND_STROKE);
+
+        mFrame.set(mWidth * 0.18f, 0, mWidth - mWidth * 0.18f, mHeight);
+
+        final float levelTop;
+        levelTop = (mFrame.top + (mFrame.height() * (1f - drawFrac)));
+
+        // set the battery charging color
+        mBatteryPaint.setColor(batteryColorForLevel(level));
+
+        // define the bolt shape
+        mChargingBoltPath.reset();
+        mChargingBoltPath.moveTo(
+                mFrame.left + mChargingBoltPoints[0] * mFrame.width(),
+                mFrame.top + mChargingBoltPoints[1] * mFrame.height());
+        for (int i = 2; i < mChargingBoltPoints.length; i += 2) {
+            mChargingBoltPath.lineTo(
+                    mFrame.left + mChargingBoltPoints[i] * mFrame.width(),
+                    mFrame.top + mChargingBoltPoints[i + 1] * mFrame.height());
+        }
+        mChargingBoltPath.lineTo(
+                mFrame.left + mChargingBoltPoints[0] * mFrame.width(),
+                mFrame.top + mChargingBoltPoints[1] * mFrame.height());
+
+        // Draw the bolt shape background
+        c.drawPath(mChargingBoltPath, mFramePaint);
+
+        // Draw the bolt shape, clipped to the charging level
+        mFrame.top = levelTop;
+        mClipPath.reset();
+        mClipPath.addRect(mFrame, Direction.CCW);
+        mChargingBoltPath.op(mClipPath, Path.Op.INTERSECT);
+        c.drawPath(mChargingBoltPath, mBatteryPaint);
     }
 
     // Some stuff required by Drawable.
