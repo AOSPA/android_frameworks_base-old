@@ -533,7 +533,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     };
 
     protected H mHandler = createHandler();
-    final private ContentObserver mHeadsUpObserver = new ContentObserver(mHandler) {
+    private final ContentObserver mHeadsUpObserver = new ContentObserver(mHandler) {
         @Override
         public void onChange(boolean selfChange) {
             boolean wasUsing = mUseHeadsUp;
@@ -992,6 +992,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         mScreenPinningRequest = new ScreenPinningRequest(mContext);
         mFalsingManager = FalsingManager.getInstance(mContext);
+        mSwapNavKeyObserver.onChange(true); // set up navigation key swap observer
 
         Dependency.get(ActivityStarterDelegate.class).setActivityStarterImpl(this);
 
@@ -1266,6 +1267,9 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         // listen for NAVIGATION_BAR_ENABLED setting (per-user)
         resetNavBarObserver();
+
+        // listen for SWAP_NAVIGATION_KEYS setting (per-user)
+        resetSwapNavKeyObserver();
     }
 
     protected void createNavigationBar() {
@@ -3922,6 +3926,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         // End old BaseStatusBar.userSwitched
         if (MULTIUSER_DEBUG) mNotificationPanelDebugText.setText("USER " + newUserId);
         resetNavBarObserver();
+        resetSwapNavKeyObserver();
         animateCollapsePanels();
         updatePublicMode();
         mNotificationData.filterAndSort();
@@ -7627,7 +7632,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     public static final boolean RESET_SYSTEMUI_VISIBILITY_FOR_NAVBAR = true;
     protected boolean mUseNavBar = false;
 
-    final private ContentObserver mNavBarObserver = new ContentObserver(mHandler) {
+    private final ContentObserver mNavBarObserver = new ContentObserver(mHandler) {
         @Override
         public void onChange(boolean selfChange) {
             boolean wasUsing = mUseNavBar;
@@ -7674,5 +7679,29 @@ public class StatusBar extends SystemUI implements DemoMode,
     private void resetSystemUIVisibility() {
         checkBarModes();
         notifyUiVisibilityChanged(mSystemUiVisibility);
+    }
+
+    private final ContentObserver mSwapNavKeyObserver = new ContentObserver(mHandler) {
+        @Override
+        public void onChange(boolean selfChange) {
+            boolean wasUsing = NavigationBarFragment.getUseSwapKey();
+            NavigationBarFragment.setUseSwapKey(Settings.System.getIntForUser(
+                    mContext.getContentResolver(), Settings.System.SWAP_NAVIGATION_KEYS, 0,
+                    UserHandle.USER_CURRENT) != 0);
+            if (DEBUG) Log.d(TAG, "navbar is " + (NavigationBarFragment.getUseSwapKey() ? "swapped" : "regular"));
+            if (wasUsing != NavigationBarFragment.getUseSwapKey()) {
+                if (mNavigationBar != null) {
+                    mNavigationBar.onConfigurationChanged(mContext.getResources().getConfiguration());
+                }
+            }
+        }
+    };
+
+    private void resetSwapNavKeyObserver() {
+        mContext.getContentResolver().unregisterContentObserver(mSwapNavKeyObserver);
+        mSwapNavKeyObserver.onChange(false);
+        mContext.getContentResolver().registerContentObserver(
+                Settings.System.getUriFor(Settings.System.SWAP_NAVIGATION_KEYS), true,
+                mSwapNavKeyObserver, mCurrentUserId);
     }
 }
