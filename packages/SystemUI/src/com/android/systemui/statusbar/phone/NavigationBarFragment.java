@@ -124,6 +124,8 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
     /** Allow some time inbetween the long press for back and recents. */
     private static final int LOCK_TO_APP_GESTURE_TOLERENCE = 200;
 
+    private static boolean mUseSwapKey = false;
+
     protected NavigationBarView mNavigationBarView = null;
     protected AssistManager mAssistManager;
 
@@ -167,6 +169,14 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
             () -> mPendingRotationSuggestion = false;
     private Animator mRotateHideAnimator;
     private ViewRippler mViewRippler = new ViewRippler();
+
+    public static boolean getUseSwapKey() {
+        return mUseSwapKey;
+    }
+
+    public static void setUseSwapKey(boolean useSwapKey) {
+        mUseSwapKey = useSwapKey;
+    }
 
     private final OverviewProxyListener mOverviewProxyListener = new OverviewProxyListener() {
         @Override
@@ -746,6 +756,7 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
     }
 
     private void prepareNavigationBarView() {
+        mNavigationBarView.setSwapKeys(mUseSwapKey);
         mNavigationBarView.reorient();
 
         ButtonDispatcher recentsButton = mNavigationBarView.getRecentsButton();
