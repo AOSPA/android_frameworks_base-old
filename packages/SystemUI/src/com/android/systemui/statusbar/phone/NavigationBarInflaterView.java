@@ -100,6 +100,7 @@ public class NavigationBarInflaterView extends FrameLayout
 
     private boolean mAlternativeOrder;
     private boolean mUsingCustomLayout;
+    private boolean mSwappedOrder;
 
     private OverviewProxyService mOverviewProxyService;
 
@@ -143,8 +144,12 @@ public class NavigationBarInflaterView extends FrameLayout
 
     protected String getDefaultLayout() {
         final int defaultResource = mOverviewProxyService.shouldShowSwipeUpUI()
-                ? R.string.config_navBarLayoutQuickstep
-                : R.string.config_navBarLayout;
+                ? ((mSwappedOrder)
+                ? R.string.config_navBarLayoutSwappedQuickstep
+                : R.string.config_navBarLayoutQuickstep)
+                : ((mSwappedOrder)
+                ? R.string.config_navBarLayoutSwapped
+                : R.string.config_navBarLayout);
         return mContext.getString(defaultResource);
     }
 
@@ -227,6 +232,13 @@ public class NavigationBarInflaterView extends FrameLayout
     private void updateAlternativeOrder(View v) {
         if (v instanceof ReverseLinearLayout) {
             ((ReverseLinearLayout) v).setAlternativeOrder(mAlternativeOrder);
+        }
+    }
+
+    public void setSwappedOrder(boolean swappedOrder) {
+        if (swappedOrder != mSwappedOrder) {
+            mSwappedOrder = swappedOrder;
+            onTuningChanged(NAV_BAR_VIEWS, getDefaultLayout());
         }
     }
 
