@@ -3922,13 +3922,15 @@ public final class Settings {
         /**
          * Setting to determine whether or not to show the battery percentage in the status bar.
          *    0 - Don't show percentage
-         *    1 - Show percentage
+         *    1 - Show percentage outside
+         *    2 - Show percentage inside
          * @hide
          */
         public static final String SHOW_BATTERY_PERCENT = "status_bar_show_battery_percent";
 
         /** @hide */
-        private static final Validator SHOW_BATTERY_PERCENT_VALIDATOR = sBooleanValidator;
+        public static final Validator SHOW_BATTERY_PERCENT_VALIDATOR =
+                new InclusiveIntegerRangeValidator(0, 2);
 
         /**
          * IMPORTANT: If you add a new public settings you also have to add it to
@@ -7172,6 +7174,17 @@ public final class Settings {
         public static final String SRGB_ENABLED = "srgb_enabled";
 
         /**
+         * Display style of the status bar battery information
+         * 0: Display the battery an icon in portrait mode
+         * 1: Display the battery as a circle
+         * 2: Display the battery as text
+         * 3: Do not display the battery
+         * default: 0
+         * @hide
+         */
+        public static final String STATUS_BAR_BATTERY_STYLE = "status_bar_battery_style";
+
+        /**
          * This are the settings to be backed up.
          *
          * NOTE: Settings are backed up and restored in the order they appear
@@ -7274,7 +7287,8 @@ public final class Settings {
             SCREENSAVER_ACTIVATE_ON_DOCK,
             SCREENSAVER_ACTIVATE_ON_SLEEP,
             WIFI_DISCONNECT_DELAY_DURATION,
-            WIFI_SOFTAP_ACS_ENABLED
+            WIFI_SOFTAP_ACS_ENABLED,
+            STATUS_BAR_BATTERY_STYLE
         };
 
         /** @hide */
