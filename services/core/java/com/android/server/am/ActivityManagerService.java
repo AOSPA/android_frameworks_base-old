@@ -12487,16 +12487,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
 
                 ComponentName comp = new ComponentName(cpi.packageName, cpi.name);
-                boolean inLaunching = false;
-                for (int i = 0; i < mLaunchingProviders.size(); i++) {
-                    if (mLaunchingProviders.get(i).name.equals(comp)
-                            && mLaunchingProviders.get(i).uid == cpi.applicationInfo.uid) {
-                        inLaunching = true;
-                        cpr = mLaunchingProviders.get(i);
-                        break;
-                    }
-                }
-                if (!inLaunching) {
+                checkTime(startTime, "getContentProviderImpl: before getProviderByClass");
+                cpr = mProviderMap.getProviderByClass(comp, userId);
+                checkTime(startTime, "getContentProviderImpl: after getProviderByClass");
+                final boolean firstClass = cpr == null;
+                if (firstClass) {
                     final long ident = Binder.clearCallingIdentity();
 
                     // If permissions need a review before any of the app components can run,
@@ -12614,7 +12609,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
                 // Make sure the provider is published (the same provider class
                 // may be published under multiple names).
-                if (!inLaunching) {
+                if (firstClass) {
                     mProviderMap.putProviderByClass(comp, cpr);
                 }
 
