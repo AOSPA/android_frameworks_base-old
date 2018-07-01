@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "d8c05181_a19f049b",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 7
+      },
+      "lineNbr": 4125,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-07-01T01:24:32Z",
+      "side": 1,
+      "message": "tab",
+      "revId": "ae9e4e064365e183d8d4f5f2fb19428bb94fd305",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "a51d2ed8_95f16ebf",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 7
+      },
+      "lineNbr": 4825,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-07-01T01:24:32Z",
+      "side": 1,
+      "message": "remove or implement toast",
+      "revId": "ae9e4e064365e183d8d4f5f2fb19428bb94fd305",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "fc725022_55cb7ba7",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 7
+      },
+      "lineNbr": 6755,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-07-01T01:24:32Z",
+      "side": 1,
+      "message": "remove the todo here. I don\u0027t think we need to worry about this",
+      "revId": "ae9e4e064365e183d8d4f5f2fb19428bb94fd305",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
