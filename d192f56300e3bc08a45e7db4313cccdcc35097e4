@@ -1,0 +1,55 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "1e3531fd_1dcd6eb2",
+        "filename": "packages/SettingsLib/src/com/android/settingslib/graph/BatteryMeterDrawableBase.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 255,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-07-01T01:51:46Z",
+      "side": 1,
+      "message": "What\u0027s the point of this switch statement? it always hits the default case and the cases are identical.",
+      "revId": "d192f56300e3bc08a45e7db4313cccdcc35097e4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "edaf2c95_9ed19d37",
+        "filename": "packages/SystemUI/src/com/android/systemui/BatteryMeterView.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 222,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-07-01T01:51:46Z",
+      "side": 1,
+      "message": "Probably with it to define this as a resource.",
+      "revId": "d192f56300e3bc08a45e7db4313cccdcc35097e4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "acda2e3a_02e63aeb",
+        "filename": "packages/SystemUI/src/com/android/systemui/BatteryMeterView.java",
+        "patchSetId": 4
+      },
+      "lineNbr": 314,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-07-01T01:51:46Z",
+      "side": 1,
+      "message": "I think this should be left as-is.",
+      "revId": "d192f56300e3bc08a45e7db4313cccdcc35097e4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
