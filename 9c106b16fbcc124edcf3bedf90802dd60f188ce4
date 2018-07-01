@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "5c9bb2bc_33a0ad63",
+        "filename": "services/core/java/com/android/server/policy/PhoneWindowManager.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 1136,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-07-01T01:16:42Z",
+      "side": 1,
+      "message": "Don\u0027t need Uri here anymore",
+      "revId": "9c106b16fbcc124edcf3bedf90802dd60f188ce4",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
