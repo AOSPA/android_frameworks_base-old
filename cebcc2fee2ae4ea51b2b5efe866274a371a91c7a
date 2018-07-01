@@ -1,0 +1,38 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "79b5ea08_6e0ff272",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 7684,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-07-01T01:21:07Z",
+      "side": 1,
+      "message": "swap private and final",
+      "revId": "cebcc2fee2ae4ea51b2b5efe866274a371a91c7a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "c04fc827_4f23ced4",
+        "filename": "packages/SystemUI/src/com/android/systemui/statusbar/phone/StatusBar.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 7688,
+      "author": {
+        "id": 1000002
+      },
+      "writtenOn": "2018-07-01T01:21:07Z",
+      "side": 1,
+      "message": "Instead of using the static variables in NavBar fragment, just have a boolean in this class that tracks the state. From what I can tell, this is the only place where getUseSwapKey and setUseSwapKey are called",
+      "revId": "cebcc2fee2ae4ea51b2b5efe866274a371a91c7a",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
