@@ -3424,7 +3424,12 @@ public class AudioService extends IAudioService.Stub
         public void incCount(int scoAudioMode) {
             synchronized(mScoClients) {
                 Log.i(TAG, "In incCount(), mStartcount = " + mStartcount);
-                requestScoState(BluetoothHeadset.STATE_AUDIO_CONNECTED, scoAudioMode);
+                boolean ScoState = requestScoState(BluetoothHeadset.STATE_AUDIO_CONNECTED,
+                                                    scoAudioMode);
+                if (!ScoState) {
+                    Log.e(TAG, "In incCount(), requestScoState failed returning");
+                    return;
+                }
                 if (mStartcount == 0) {
                     try {
                         mCb.linkToDeath(this, 0);
@@ -3463,7 +3468,8 @@ public class AudioService extends IAudioService.Stub
                             Log.w(TAG, "decCount() going to 0 but not registered to binder");
                         }
                     }
-                    requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED, 0);
+                    boolean ScoState = requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
+                                                        0);
                 }
             }
         }
@@ -3481,7 +3487,8 @@ public class AudioService extends IAudioService.Stub
                 }
                 mStartcount = 0;
                 if (stopSco) {
-                    requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED, 0);
+                    boolean ScoState = requestScoState(BluetoothHeadset.STATE_AUDIO_DISCONNECTED,
+                                                        0);
                 }
             }
         }
@@ -3509,15 +3516,15 @@ public class AudioService extends IAudioService.Stub
             }
         }
 
-        private void requestScoState(int state, int scoAudioMode) {
+        private boolean requestScoState(int state, int scoAudioMode) {
             Log.i(TAG, "In requestScoState(), state: " + state + ", scoAudioMode: "
                          + scoAudioMode);
             checkScoAudioState();
             int clientCount = totalCount();
             if (clientCount != 0) {
-                Log.i(TAG, "requestScoState: state=" + state + ", scoAudioMode=" + scoAudioMode
-                        + ", clientCount=" + clientCount);
-                return;
+                Log.w(TAG, "requestScoState: returning with state=" + state + ", scoAudioMode=" +
+                             scoAudioMode + ", clientCount=" + clientCount);
+                return false;
             }
             if (state == BluetoothHeadset.STATE_AUDIO_CONNECTED) {
                 // Make sure that the state transitions to CONNECTING even if we cannot initiate
@@ -3532,7 +3539,7 @@ public class AudioService extends IAudioService.Stub
                         Log.w(TAG, "requestScoState: audio mode is not NORMAL and modeOwnerPid "
                                 + modeOwnerPid + " != creatorPid " + mCreatorPid);
                         broadcastScoConnectionState(AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
-                        return;
+                        return false;
                     }
                     switch (mScoAudioState) {
                         case SCO_STATE_INACTIVE:
@@ -3557,6 +3564,7 @@ public class AudioService extends IAudioService.Stub
                                             + " connection, mScoAudioMode=" + mScoAudioMode);
                                     broadcastScoConnectionState(
                                             AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
+                                    return false;
                                 }
                                 break;
                             }
@@ -3565,7 +3573,7 @@ public class AudioService extends IAudioService.Stub
                                         + " mScoAudioMode=" + mScoAudioMode);
                                 broadcastScoConnectionState(
                                         AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
-                                break;
+                                return false;
                             }
                             if (connectBluetoothScoAudioHelper(mBluetoothHeadset,
                                     mBluetoothHeadsetDevice, mScoAudioMode)) {
@@ -3575,6 +3583,7 @@ public class AudioService extends IAudioService.Stub
                                         + " failed, mScoAudioMode=" + mScoAudioMode);
                                 broadcastScoConnectionState(
                                         AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
+                                return false;
                             }
                             break;
                         case SCO_STATE_DEACTIVATING:
@@ -3588,7 +3597,7 @@ public class AudioService extends IAudioService.Stub
                             Log.w(TAG, "requestScoState: failed to connect in state "
                                     + mScoAudioState + ", scoAudioMode=" + scoAudioMode);
                             broadcastScoConnectionState(AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
-                            break;
+                            return false;
 
                     }
                 }
@@ -3604,6 +3613,7 @@ public class AudioService extends IAudioService.Stub
                                 mScoAudioState = SCO_STATE_INACTIVE;
                                 broadcastScoConnectionState(
                                         AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
+                                return false;
                             }
                             break;
                         }
@@ -3630,9 +3640,10 @@ public class AudioService extends IAudioService.Stub
                         Log.w(TAG, "requestScoState: failed to disconnect in state "
                                 + mScoAudioState + ", scoAudioMode=" + scoAudioMode);
                         broadcastScoConnectionState(AudioManager.SCO_AUDIO_STATE_DISCONNECTED);
-                        break;
+                        return false;
                 }
             }
+            return true;
         }
     }
 
