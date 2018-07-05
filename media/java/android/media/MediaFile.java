@@ -56,8 +56,9 @@ public class MediaFile {
     public static final int FILE_TYPE_AIFF  = 216;
     public static final int FILE_TYPE_APE   = 217;
     public static final int FILE_TYPE_DSD   = 218;
+    public static final int FILE_TYPE_MHAS  = 219;
     private static final int FIRST_AUDIO_FILE_TYPE_EXT = FILE_TYPE_DTS;
-    private static final int LAST_AUDIO_FILE_TYPE_EXT = FILE_TYPE_DSD;
+    private static final int LAST_AUDIO_FILE_TYPE_EXT = FILE_TYPE_MHAS;
 
     // MIDI file types
     public static final int FILE_TYPE_MID     = 11;
@@ -233,6 +234,7 @@ public class MediaFile {
         addFileType("MP4", FILE_TYPE_MP4, "video/mp4", MtpConstants.FORMAT_MPEG, false);
         addFileType("M4V", FILE_TYPE_M4V, "video/mp4", MtpConstants.FORMAT_MPEG, false);
         addFileType("MOV", FILE_TYPE_QT, "video/quicktime", MtpConstants.FORMAT_MPEG, false);
+        addFileType("MP4", FILE_TYPE_MP4, "audio/mhas", MtpConstants.FORMAT_MPEG, false);
 
         addFileType("3GP", FILE_TYPE_3GPP, "video/3gpp",  MtpConstants.FORMAT_3GP_CONTAINER, true);
         addFileType("3GPP", FILE_TYPE_3GPP, "video/3gpp", MtpConstants.FORMAT_3GP_CONTAINER, false);
@@ -301,6 +303,7 @@ public class MediaFile {
         addFileType("DSF", FILE_TYPE_DSD, "audio/x-dsf");
         addFileType("DFF", FILE_TYPE_DSD, "audio/x-dff");
         addFileType("DSD", FILE_TYPE_DSD, "audio/dsd");
+        addFileType("MHAS", FILE_TYPE_MHAS, "audio/mhas");
     }
 
     public static boolean isAudioFileType(int fileType) {
