@@ -75,6 +75,7 @@ public class MobileSignalController extends SignalController<
 
     private boolean mAlwasyShowTypeIcon = false;
     private boolean mShowIconGForCDMA_1x = false;
+    private boolean mHideNoInternetState = false;
     private int mCallState = TelephonyManager.CALL_STATE_IDLE;
 
     // TODO: Reduce number of vars passed in, if we have the NetworkController, probably don't
@@ -99,7 +100,7 @@ public class MobileSignalController extends SignalController<
 
         mAlwasyShowTypeIcon = context.getResources().getBoolean(R.bool.config_alwaysShowTypeIcon);
         mShowIconGForCDMA_1x = context.getResources().getBoolean(R.bool.config_showIconGforCDMA_1X);
-
+        mHideNoInternetState = context.getResources().getBoolean(R.bool.config_hideNoInternetState);
         mapIconSets();
 
         String networkName = info.getCarrierName() != null ? info.getCarrierName().toString()
@@ -271,6 +272,9 @@ public class MobileSignalController extends SignalController<
                     && mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED;
             boolean noInternet = mCurrentState.inetCondition == 0;
             boolean cutOut = dataDisabled || noInternet;
+            if (mHideNoInternetState) {
+                cutOut = false;
+            }
             return SignalDrawable.getState(level, getNumLevels(), cutOut);
         } else if (mCurrentState.enabled) {
             return SignalDrawable.getEmptyState(getNumLevels());
@@ -533,7 +537,7 @@ public class MobileSignalController extends SignalController<
         mCurrentState.roaming = isRoaming();
         if (isCarrierNetworkChangeActive()) {
             mCurrentState.iconGroup = TelephonyIcons.CARRIER_NETWORK_CHANGE;
-        } else if (isDataDisabled() && !mConfig.alwaysShowDataRatIcon) {
+        } else if (isDataDisabled() && (!mConfig.alwaysShowDataRatIcon && !mAlwasyShowTypeIcon)) {
             mCurrentState.iconGroup = TelephonyIcons.DATA_DISABLED;
         }
         if (isEmergencyOnly() != mCurrentState.isEmergency) {
