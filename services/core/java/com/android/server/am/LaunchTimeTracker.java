@@ -19,6 +19,7 @@ package com.android.server.am;
 import android.app.WaitResult;
 import android.os.SystemClock;
 import android.os.Trace;
+import android.util.BoostFramework;
 import android.util.SparseArray;
 
 /**
@@ -54,15 +55,24 @@ class LaunchTimeTracker {
 
         long mLaunchStartTime;
         long mFullyDrawnStartTime;
+        BoostFramework mPerf = new BoostFramework();
 
         void setLaunchTime(ActivityRecord r) {
             if (r.displayStartTime == 0) {
                 r.fullyDrawnStartTime = r.displayStartTime = SystemClock.uptimeMillis();
                 if (mLaunchStartTime == 0) {
+                    if (mPerf != null)
+                        r.perfActivityBoostHandler =
+                            mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                                r.packageName, -1, BoostFramework.Launch.BOOST_V1);
                     startLaunchTraces(r.packageName);
                     mLaunchStartTime = mFullyDrawnStartTime = r.displayStartTime;
                 }
             } else if (mLaunchStartTime == 0) {
+                if (mPerf != null)
+                    r.perfActivityBoostHandler =
+                        mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            r.packageName, -1, BoostFramework.Launch.BOOST_V1);
                 startLaunchTraces(r.packageName);
                 mLaunchStartTime = mFullyDrawnStartTime = SystemClock.uptimeMillis();
             }
