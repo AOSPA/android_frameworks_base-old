@@ -1797,6 +1797,9 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                         Slog.e(TAG, " Trying to Bind again");
                         mTryBindOnBindTimeout = true;
                         handleEnable(mQuietEnable);
+                    } else {
+                        Slog.e(TAG, "Bind trails excedded");
+                        mTryBindOnBindTimeout = false;
                     }
                     break;
                 }
@@ -1935,7 +1938,6 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     mHandler.removeMessages(MESSAGE_TIMEOUT_BIND);
                 } else {
                     mBinding = true;
-                    mTryBindOnBindTimeout = false;
                 }
             } else if (mBluetooth != null) {
                 //Enable bluetooth
