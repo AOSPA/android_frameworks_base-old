@@ -66,7 +66,7 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
     private boolean mBlockEthernet;
     private boolean mActivityEnabled;
     private boolean mForceBlockWifi;
-
+    private boolean m4GStateEnabledOn5G;
     // Track as little state as possible, and only for padding purposes
     private boolean mIsAirplaneMode = false;
     private boolean mWifiVisible = false;
@@ -83,6 +83,7 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
         mSlotEthernet = mContext.getString(com.android.internal.R.string.status_bar_ethernet);
         mSlotVpn      = mContext.getString(com.android.internal.R.string.status_bar_vpn);
         mActivityEnabled = mContext.getResources().getBoolean(R.bool.config_showActivity);
+        m4GStateEnabledOn5G = mContext.getResources().getBoolean(R.bool.config_display_4GStateOn5G);
 
         mIconController = iconController;
         mNetworkController = Dependency.get(NetworkController.class);
@@ -183,7 +184,8 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
     public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
             int qsType, boolean activityIn, boolean activityOut, int dataActivityId,
             int stackedDataId, int stackedVoiceId, String typeContentDescription,
-            String description, boolean isWide, int subId, boolean roaming) {
+            String description, boolean isWide, int subId, boolean roaming,
+            boolean fiveGAvailable, int fiveGStrengthId, boolean dataOnFiveG) {
         MobileIconState state = getState(subId);
         if (state == null) {
             return;
@@ -200,6 +202,11 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
         state.roaming = roaming;
         state.activityIn = activityIn && mActivityEnabled;
         state.activityOut = activityOut && mActivityEnabled;
+
+        state.fiveGIconVisible = fiveGAvailable &&(dataOnFiveG || m4GStateEnabledOn5G);
+        state.fiveGStrengthId = fiveGStrengthId;
+        state.dataOnFiveG = dataOnFiveG;
+        state.is4GStateVisible = m4GStateEnabledOn5G || !(fiveGAvailable&&dataOnFiveG);
 
         // Always send a copy to maintain value type semantics
         mIconController.setMobileIcons(mSlotMobile, MobileIconState.copyStates(mMobileStates));
@@ -393,7 +400,10 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
         public boolean roaming;
         public boolean needsLeadingPadding;
         public String typeContentDescription;
-
+        public boolean fiveGIconVisible;
+        public int fiveGStrengthId;
+        public boolean dataOnFiveG;
+        public boolean is4GStateVisible;
         private MobileIconState(int subId) {
             super();
             this.subId = subId;
@@ -413,7 +423,11 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
                     typeId == that.typeId &&
                     roaming == that.roaming &&
                     needsLeadingPadding == that.needsLeadingPadding &&
-                    Objects.equals(typeContentDescription, that.typeContentDescription);
+                    Objects.equals(typeContentDescription, that.typeContentDescription) &&
+                    fiveGIconVisible == that.fiveGIconVisible &&
+                    fiveGStrengthId == that.fiveGStrengthId &&
+                    dataOnFiveG == that.dataOnFiveG &&
+                    is4GStateVisible == that.is4GStateVisible;
         }
 
         @Override
@@ -438,6 +452,10 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
             other.roaming = roaming;
             other.needsLeadingPadding = needsLeadingPadding;
             other.typeContentDescription = typeContentDescription;
+            other.fiveGIconVisible = fiveGIconVisible;
+            other.fiveGStrengthId = fiveGStrengthId;
+            other.dataOnFiveG = dataOnFiveG;
+            other.is4GStateVisible = is4GStateVisible;
         }
 
         private static List<MobileIconState> copyStates(List<MobileIconState> inStates) {
@@ -453,7 +471,10 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
 
         @Override public String toString() {
             return "MobileIconState(subId=" + subId + ", strengthId=" + strengthId + ", roaming="
-                    + roaming + ", typeId=" + typeId + ", visible=" + visible + ")";
+                    + roaming + ", typeId=" + typeId + ", visible=" + visible + "), "
+                    + "5GState(fiveGIconVisible=" + fiveGIconVisible + ", fiveGStrengthId="
+                    + fiveGStrengthId + ", dataOnFiveG=" + dataOnFiveG
+                    + ", is4GStateVisible=" + is4GStateVisible + ")";
         }
     }
 }
