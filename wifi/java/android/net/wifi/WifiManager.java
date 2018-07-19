@@ -153,6 +153,19 @@ public class WifiManager {
     public static final String EXTRA_SCAN_AVAILABLE = "scan_enabled";
 
     /**
+    *
+    *
+    * @hide
+    **/
+    public static final String  WIFI_DATA_STALL = "android.net.wifi.WIFI_DATA_STALL";
+
+    /**
+    *
+    * see data stall reason code
+    * @hide
+    **/
+    public static final String  EXTRA_WIFI_DATA_STALL_REASON = "data_stall_reasoncode";
+    /**
      * Broadcast intent action indicating that the credential of a Wi-Fi network
      * has been changed. One extra provides the ssid of the network. Another
      * extra provides the event type, whether the credential is saved or forgot.
@@ -1191,6 +1204,52 @@ public class WifiManager {
         }
         return addOrUpdateNetwork(config);
     }
+
+
+     /**
+      * Check the WifiSharing mode.
+      *
+      * @return true if Current Sta network connected with extending coverage
+      * option. false if it is not.
+      *
+      * @hide no intent to publish
+      */
+      public boolean isExtendingWifi() {
+          try {
+              return mService.isExtendingWifi();
+          } catch (RemoteException e) {
+              throw e.rethrowFromSystemServer();
+          }
+      }
+
+     /**
+      * Check Wifi coverage extend feature enabled or not.
+      *
+      * @return true if Wifi extend feature is enabled.
+      *
+      * @hide no intent to publish
+      */
+      public boolean isWifiCoverageExtendFeatureEnabled() {
+          try {
+              return mService.isWifiCoverageExtendFeatureEnabled();
+          } catch (RemoteException e) {
+              throw e.rethrowFromSystemServer();
+          }
+      }
+
+     /**
+      * Enable/disable Wifi coverage extend feature.
+      *
+      * @hide no intent to publish
+      */
+      public void enableWifiCoverageExtendFeature(boolean enable) {
+          try {
+              mService.enableWifiCoverageExtendFeature(enable);
+          } catch (RemoteException e) {
+              throw e.rethrowFromSystemServer();
+          }
+      }
+
 
     /**
      * Internal method for doing the RPC that creates a new network description
