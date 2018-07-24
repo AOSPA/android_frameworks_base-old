@@ -426,6 +426,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
     // Handle private DNS validation status updates.
     private static final int EVENT_PRIVATE_DNS_VALIDATION_UPDATE = 38;
 
+    private static final int EVENT_UPDATE_TCP_BUFFER_FOR_5G = 160;
+
     private static String eventName(int what) {
         return sMagicDecoderRing.get(what, Integer.toString(what));
     }
@@ -1808,7 +1810,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
     void systemReady() {
         loadGlobalProxy();
         registerNetdEventCallback();
-
         synchronized (this) {
             mSystemReady = true;
             if (mInitialBroadcast != null) {
@@ -1825,7 +1826,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         // Configure whether mobile data is always on.
         mHandler.sendMessage(mHandler.obtainMessage(EVENT_CONFIGURE_MOBILE_DATA_ALWAYS_ON));
-
         mHandler.sendMessage(mHandler.obtainMessage(EVENT_SYSTEM_READY));
 
         mPermissionMonitor.startMonitoring();
@@ -1937,6 +1937,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         String tcpBufferSizes = nai.linkProperties.getTcpBufferSizes();
+        if(nai.networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)){
+            tcpBufferSizes = NetPluginDelegate.get5GTcpBuffers(tcpBufferSizes,
+                nai.networkCapabilities.getNetworkSpecifier());
+        }
         String[] values = null;
         if (tcpBufferSizes != null) {
             values = tcpBufferSizes.split(",");
@@ -3091,6 +3095,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                         nai.networkMonitor.systemReady = true;
                     }
                     mMultipathPolicyTracker.start();
+                    NetPluginDelegate.registerHandler(mHandler);
                     break;
                 }
                 case EVENT_REVALIDATE_NETWORK: {
@@ -3103,6 +3108,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 case EVENT_PRIVATE_DNS_VALIDATION_UPDATE:
                     handlePrivateDnsValidationUpdate(
                             (PrivateDnsValidationUpdate) msg.obj);
+                    break;
+                case EVENT_UPDATE_TCP_BUFFER_FOR_5G:
+                    handleUpdateTCPBuffersfor5G();
                     break;
             }
         }
@@ -6087,5 +6095,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return true;
         }
         return false;
+    }
+
+    private void handleUpdateTCPBuffersfor5G() {
+        Network network = getActiveNetwork();
+        NetworkAgentInfo ntwAgent = getNetworkAgentInfoForNetwork(network);
+        if (DBG)
+            log("handleUpdateTCPBuffersfor5G nai " + ntwAgent);
+        if (ntwAgent != null)
+            updateTcpBufferSizes(ntwAgent);
     }
 }

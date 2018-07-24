@@ -157,7 +157,7 @@ public class WifiManager {
     *
     * @hide
     **/
-    public static final String  WIFI_DATA_STALL = "android.net.wifi.WIFI_DATA_STALL";
+    public static final String  WIFI_DATA_STALL = "com.qualcomm.qti.net.wifi.WIFI_DATA_STALL";
 
     /**
     *
@@ -817,7 +817,7 @@ public class WifiManager {
      * @see #EXTRA_DPP_DATA.
      * @hide
      */
-    public static final String DPP_EVENT_ACTION = "android.net.wifi.DPP_EVENT";
+    public static final String DPP_EVENT_ACTION = "com.qualcomm.qti.net.wifi.DPP_EVENT";
 
     /**
      * This shall point to DppResult Type.
@@ -903,7 +903,7 @@ public class WifiManager {
      * @hide
      */
     public static final String  ACTION_WIFI_DISCONNECT_IN_PROGRESS =
-            "android.net.wifi.WIFI_DISCONNECT_IN_PROGRESS";
+            "com.qualcomm.qti.net.wifi.WIFI_DISCONNECT_IN_PROGRESS";
 
     /**
      * Internally used Wi-Fi lock mode representing the case were no locks are held.
@@ -2537,6 +2537,22 @@ public class WifiManager {
          * @param numClients number of connected clients
          */
         public abstract void onNumClientsChanged(int numClients);
+
+        /**
+         * Called when Stations connected to soft AP.
+         *
+         * @param Macaddr Mac Address of connected Stations to soft AP
+         * @param numClients number of connected clients
+         */
+        public abstract void onStaConnected(String Macaddr, int numClients);
+
+        /**
+         * Called when Stations disconnected to soft AP.
+         *
+         * @param Macaddr Mac Address of Disconnected Stations to soft AP
+         * @param numClients number of connected clients
+         */
+        public abstract void onStaDisconnected(String Macaddr, int numClients);
     }
 
     /**
@@ -2567,6 +2583,22 @@ public class WifiManager {
             Log.v(TAG, "SoftApCallbackProxy: onNumClientsChanged: numClients=" + numClients);
             mHandler.post(() -> {
                 mCallback.onNumClientsChanged(numClients);
+            });
+        }
+
+        @Override
+        public void onStaConnected(String Macaddr, int numClients) throws RemoteException {
+            Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaConnected Macaddr =" + Macaddr);
+            mHandler.post(() -> {
+                mCallback.onStaConnected(Macaddr, numClients);
+            });
+        }
+
+        @Override
+        public void onStaDisconnected(String Macaddr, int numClients) throws RemoteException {
+            Log.v(TAG, "SoftApCallbackProxy: [" + numClients + "]onStaDisconnected Macaddr =" + Macaddr);
+            mHandler.post(() -> {
+                mCallback.onStaDisconnected(Macaddr, numClients);
             });
         }
     }
