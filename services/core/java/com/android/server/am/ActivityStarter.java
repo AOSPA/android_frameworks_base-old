@@ -1414,7 +1414,6 @@ class ActivityStarter {
             newTask = true;
             String packageName= mService.mContext.getPackageName();
             if (mPerf != null) {
-                mStartActivity.perfActivityBoostHandler =
                     mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
                                         packageName, -1, BoostFramework.Launch.BOOST_V1);
             }
@@ -2107,11 +2106,7 @@ class ActivityStarter {
             return START_RETURN_LOCK_TASK_MODE_VIOLATION;
         }
         String packageName= mService.mContext.getPackageName();
-        if (mPerf != null) {
-            mStartActivity.perfActivityBoostHandler =
-                mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
-                                    packageName, -1, BoostFramework.Launch.BOOST_V1);
-        }
+
         final TaskRecord sourceTask = mSourceRecord.getTask();
         final ActivityStack sourceStack = mSourceRecord.getStack();
         // We only want to allow changing stack in two cases:

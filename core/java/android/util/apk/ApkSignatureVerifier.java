@@ -186,7 +186,7 @@ public class ApkSignatureVerifier {
             if (sPerfBoost == null) {
                 sPerfBoost = new BoostFramework();
             }
-            if (sPerfBoost != null && !sIsPerfLockAcquired) {
+            if (sPerfBoost != null && !sIsPerfLockAcquired && verifyFull) {
                 //Use big enough number here to hold the perflock for entire PackageInstall session
                 sPerfBoost.perfHint(BoostFramework.VENDOR_HINT_PACKAGE_INSTALL_BOOST,
                         null, Integer.MAX_VALUE, -1);
@@ -238,6 +238,7 @@ public class ApkSignatureVerifier {
                     public boolean wait;
                     public int index;
                     public Object objWaitAll;
+                    public boolean shutDown;
                 }
                 VerificationData vData = new VerificationData();
                 vData.objWaitAll = new Object();
@@ -251,11 +252,18 @@ public class ApkSignatureVerifier {
                     Runnable verifyTask = new Runnable(){
                         public void run() {
                             try {
+                                if (vData.exceptionFlag != 0 ) {
+                                    Slog.w(TAG, "VerifyV1 exit with exception " + vData.exceptionFlag);
+                                    return;
+                                }
                                 String tid = Long.toString(Thread.currentThread().getId());
                                 StrictJarFile tempJarFile;
                                 synchronized (strictJarFiles) {
                                     tempJarFile = strictJarFiles.get(tid);
                                     if (tempJarFile == null) {
+                                        if (vData.index >= NUMBER_OF_CORES) {
+                                            vData.index = 0;
+                                        }
                                         tempJarFile = jarFile[vData.index++];
                                         strictJarFiles.put(tid, tempJarFile);
                                     }
@@ -279,13 +287,11 @@ public class ApkSignatureVerifier {
                                 synchronized (vData.objWaitAll) {
                                     vData.exceptionFlag = INSTALL_PARSE_FAILED_CERTIFICATE_ENCODING;
                                     vData.exception = e;
-                                    //Slog.w(TAG, "verifyV1 GeneralSecurityException " + vData.exceptionFlag);
                                 }
                             } catch (PackageParserException e) {
                                 synchronized (vData.objWaitAll) {
                                     vData.exceptionFlag = INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION;
                                     vData.exception = e;
-                                    //Slog.w(TAG, "verifyV1 PackageParserException " + vData.exceptionFlag);
                                 }
                             }
                         }};
@@ -297,17 +303,18 @@ public class ApkSignatureVerifier {
                 }
                 vData.wait = true;
                 verificationExecutor.shutdown();
-                while (vData.wait && vData.exceptionFlag == 0){
+                while (vData.wait) {
                     try {
+                        if (vData.exceptionFlag != 0 && !vData.shutDown) {
+                            Slog.w(TAG, "verifyV1 Exception " + vData.exceptionFlag);
+                            verificationExecutor.shutdownNow();
+                            vData.shutDown = true;
+                        }
                         vData.wait = !verificationExecutor.awaitTermination(50,
                                 TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
                         Slog.w(TAG,"VerifyV1 interrupted while awaiting all threads done...");
                     }
-                }
-                if (vData.wait) {
-                    Slog.w(TAG, "verifyV1 Exception " + vData.exceptionFlag);
-                    verificationExecutor.shutdownNow();
                 }
                 if (vData.exceptionFlag != 0)
                     throw new PackageParserException(vData.exceptionFlag,
