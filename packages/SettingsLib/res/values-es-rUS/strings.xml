@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Mostrar información visual para presiones"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Ver actualiz. de superficie"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Destello en superficie por actualización"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Ver actualizaciones de GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Mostrar vistas de ventanas procesadas con GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Mostrar actualizaciones"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Mostrar vistas de ventanas procesadas"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Ver actualiz. de capas de hardware"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Luz verde en capas de hardware al actualizarse"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Depurar superpos. de GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Mostrar límites de recortes, márgenes, etc."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Forzar diseño der. a izq."</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Forzar diseño de pantalla de derecha a izquierda para todos los idiomas"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Forzar representación GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Forzar uso de GPU para dibujar en 2d"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Forzar MSAA 4x"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Activar MSAA 4x en aplicaciones OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Depurar operaciones de recorte no rectangulares"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Represent. GPU del perfil"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Perfil procesamiento HWUI"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Habilitar depuración GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Permitir capas de GPU para apps de depuración"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Escala de animación de ventana"</string>

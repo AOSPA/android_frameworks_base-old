@@ -80,6 +80,8 @@ import android.view.autofill.AutofillManager.AutofillClient;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 
+import dalvik.system.BlockGuard;
+
 import libcore.io.Memory;
 
 import java.io.File;
@@ -923,7 +925,7 @@ class ContextImpl extends Context {
     @Override
     public void startActivityAsUser(Intent intent, Bundle options, UserHandle user) {
         try {
-            ActivityManager.getService().startActivityAsUser(
+            ActivityTaskManager.getService().startActivityAsUser(
                 mMainThread.getApplicationThread(), getBasePackageName(), intent,
                 intent.resolveTypeIfNeeded(getContentResolver()),
                 null, null, 0, Intent.FLAG_ACTIVITY_NEW_TASK, null, options,
@@ -985,7 +987,7 @@ class ContextImpl extends Context {
                 fillInIntent.prepareToLeaveProcess(this);
                 resolvedType = fillInIntent.resolveTypeIfNeeded(getContentResolver());
             }
-            int result = ActivityManager.getService()
+            int result = ActivityTaskManager.getService()
                 .startActivityIntentSender(mMainThread.getApplicationThread(),
                         intent != null ? intent.getTarget() : null,
                         intent != null ? intent.getWhitelistToken() : null,
@@ -2521,7 +2523,11 @@ class ContextImpl extends Context {
 
     private File makeFilename(File base, String name) {
         if (name.indexOf(File.separatorChar) < 0) {
-            return new File(base, name);
+            final File res = new File(base, name);
+            // We report as filesystem access here to give us the best shot at
+            // detecting apps that will pass the path down to native code.
+            BlockGuard.getVmPolicy().onPathAccess(res.getPath());
+            return res;
         }
         throw new IllegalArgumentException(
                 "File " + name + " contains a path separator");

@@ -38,6 +38,7 @@ import android.app.AppGlobals;
 import android.app.IActivityManager;
 import android.app.IBackupAgent;
 import android.app.PendingIntent;
+import android.app.backup.BackupAgent;
 import android.app.backup.BackupManager;
 import android.app.backup.BackupManagerMonitor;
 import android.app.backup.FullBackup;
@@ -351,6 +352,11 @@ public class BackupManagerService implements BackupManagerServiceInterface {
 
     public void setAlarmManager(AlarmManager alarmManager) {
         mAlarmManager = alarmManager;
+    }
+
+    @VisibleForTesting
+    void setPowerManager(PowerManager powerManager) {
+        mPowerManager = powerManager;
     }
 
     public void setBackupManagerBinder(IBackupManager backupManagerBinder) {
@@ -699,7 +705,7 @@ public class BackupManagerService implements BackupManagerServiceInterface {
      * process-local non-lifecycle agent instance, so we manually set up the context
      * topology for it.
      */
-    public PackageManagerBackupAgent makeMetadataAgent() {
+    public BackupAgent makeMetadataAgent() {
         PackageManagerBackupAgent pmAgent = new PackageManagerBackupAgent(mPackageManager);
         pmAgent.attach(mContext);
         pmAgent.onCreate();
@@ -779,7 +785,7 @@ public class BackupManagerService implements BackupManagerServiceInterface {
     }
 
     @VisibleForTesting
-    BackupManagerService(
+    public BackupManagerService(
             Context context,
             Trampoline parent,
             HandlerThread backupThread,
@@ -1744,6 +1750,16 @@ public class BackupManagerService implements BackupManagerServiceInterface {
         }
     }
 
+    public void putOperation(int token, Operation operation) {
+        if (MORE_DEBUG) {
+            Slog.d(TAG, "Adding operation token=" + Integer.toHexString(token) + ", operation type="
+                    + operation.type);
+        }
+        synchronized (mCurrentOpLock) {
+            mCurrentOperations.put(token, operation);
+        }
+    }
+
     public void removeOperation(int token) {
         if (MORE_DEBUG) {
             Slog.d(TAG, "Removing operation token=" + Integer.toHexString(token));
@@ -2410,25 +2426,30 @@ public class BackupManagerService implements BackupManagerServiceInterface {
     public void backupNow() {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BACKUP, "backupNow");
 
-        final PowerSaveState result =
-                mPowerManager.getPowerSaveState(ServiceType.KEYVALUE_BACKUP);
-        if (result.batterySaverEnabled) {
-            if (DEBUG) Slog.v(TAG, "Not running backup while in battery save mode");
-            KeyValueBackupJob.schedule(mContext, mConstants);   // try again in several hours
-        } else {
-            if (DEBUG) Slog.v(TAG, "Scheduling immediate backup pass");
-            synchronized (mQueueLock) {
-                // Fire the intent that kicks off the whole shebang...
-                try {
-                    mRunBackupIntent.send();
-                } catch (PendingIntent.CanceledException e) {
-                    // should never happen
-                    Slog.e(TAG, "run-backup intent cancelled!");
-                }
+        long oldId = Binder.clearCallingIdentity();
+        try {
+            final PowerSaveState result =
+                    mPowerManager.getPowerSaveState(ServiceType.KEYVALUE_BACKUP);
+            if (result.batterySaverEnabled) {
+                if (DEBUG) Slog.v(TAG, "Not running backup while in battery save mode");
+                KeyValueBackupJob.schedule(mContext, mConstants);   // try again in several hours
+            } else {
+                if (DEBUG) Slog.v(TAG, "Scheduling immediate backup pass");
+                synchronized (mQueueLock) {
+                    // Fire the intent that kicks off the whole shebang...
+                    try {
+                        mRunBackupIntent.send();
+                    } catch (PendingIntent.CanceledException e) {
+                        // should never happen
+                        Slog.e(TAG, "run-backup intent cancelled!");
+                    }
 
-                // ...and cancel any pending scheduled job, because we've just superseded it
-                KeyValueBackupJob.cancel(mContext);
+                    // ...and cancel any pending scheduled job, because we've just superseded it
+                    KeyValueBackupJob.cancel(mContext);
+                }
             }
+        } finally {
+            Binder.restoreCallingIdentity(oldId);
         }
     }
 
@@ -2899,6 +2920,25 @@ public class BackupManagerService implements BackupManagerServiceInterface {
         String currentTransport = mTransportManager.getCurrentTransportName();
         if (MORE_DEBUG) Slog.v(TAG, "... getCurrentTransport() returning " + currentTransport);
         return currentTransport;
+    }
+
+    /**
+     * Returns the {@link ComponentName} of the host service of the selected transport or {@code
+     * null} if no transport selected or if the transport selected is not registered.
+     */
+    @Override
+    @Nullable
+    public ComponentName getCurrentTransportComponent() {
+        mContext.enforceCallingOrSelfPermission(
+                android.Manifest.permission.BACKUP, "getCurrentTransportComponent");
+        long oldId = Binder.clearCallingIdentity();
+        try {
+            return mTransportManager.getCurrentTransportComponent();
+        } catch (TransportNotRegisteredException e) {
+            return null;
+        } finally {
+            Binder.restoreCallingIdentity(oldId);
+        }
     }
 
     // Report all known, available backup transports

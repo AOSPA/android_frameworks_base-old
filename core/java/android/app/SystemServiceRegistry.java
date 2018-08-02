@@ -24,7 +24,9 @@ import android.app.admin.IDevicePolicyManager;
 import android.app.job.IJobScheduler;
 import android.app.job.JobScheduler;
 import android.app.slice.SliceManager;
+import android.app.timedetector.TimeDetector;
 import android.app.timezone.RulesManager;
+import android.app.timezonedetector.TimeZoneDetector;
 import android.app.trust.TrustManager;
 import android.app.usage.IStorageStatsManager;
 import android.app.usage.IUsageStatsManager;
@@ -53,6 +55,8 @@ import android.hardware.SerialManager;
 import android.hardware.SystemSensorManager;
 import android.hardware.camera2.CameraManager;
 import android.hardware.display.DisplayManager;
+import android.hardware.face.FaceManager;
+import android.hardware.face.IFaceService;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.IFingerprintService;
 import android.hardware.hdmi.HdmiControlManager;
@@ -141,6 +145,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.euicc.EuiccCardManager;
 import android.telephony.euicc.EuiccManager;
+import android.util.ArrayMap;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -162,7 +167,7 @@ import com.android.internal.net.INetworkWatchlistManager;
 import com.android.internal.os.IDropBoxManagerService;
 import com.android.internal.policy.PhoneLayoutInflater;
 
-import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Manages all of the system services that can be returned by {@link Context#getSystemService}.
@@ -173,10 +178,10 @@ final class SystemServiceRegistry {
 
     // Service registry information.
     // This information is never changed once static initialization has completed.
-    private static final HashMap<Class<?>, String> SYSTEM_SERVICE_NAMES =
-            new HashMap<Class<?>, String>();
-    private static final HashMap<String, ServiceFetcher<?>> SYSTEM_SERVICE_FETCHERS =
-            new HashMap<String, ServiceFetcher<?>>();
+    private static final Map<Class<?>, String> SYSTEM_SERVICE_NAMES =
+            new ArrayMap<Class<?>, String>();
+    private static final Map<String, ServiceFetcher<?>> SYSTEM_SERVICE_FETCHERS =
+            new ArrayMap<String, ServiceFetcher<?>>();
     private static int sServiceCacheSize;
 
     // Not instantiable.
@@ -211,6 +216,14 @@ final class SystemServiceRegistry {
             @Override
             public ActivityManager createService(ContextImpl ctx) {
                 return new ActivityManager(ctx.getOuterContext(), ctx.mMainThread.getHandler());
+            }});
+
+        registerService(Context.ACTIVITY_TASK_SERVICE, ActivityTaskManager.class,
+                new CachedServiceFetcher<ActivityTaskManager>() {
+            @Override
+            public ActivityTaskManager createService(ContextImpl ctx) {
+                return new ActivityTaskManager(
+                        ctx.getOuterContext(), ctx.mMainThread.getHandler());
             }});
 
         registerService(Context.ALARM_SERVICE, AlarmManager.class,
@@ -516,7 +529,7 @@ final class SystemServiceRegistry {
                 new CachedServiceFetcher<CarrierConfigManager>() {
             @Override
             public CarrierConfigManager createService(ContextImpl ctx) {
-                return new CarrierConfigManager();
+                return new CarrierConfigManager(ctx.getOuterContext());
             }});
 
         registerService(Context.TELECOM_SERVICE, TelecomManager.class,
@@ -781,6 +794,22 @@ final class SystemServiceRegistry {
                 return new FingerprintManager(ctx.getOuterContext(), service);
             }});
 
+        registerService(Context.FACE_SERVICE, FaceManager.class,
+                new CachedServiceFetcher<FaceManager>() {
+                    @Override
+                    public FaceManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        final IBinder binder;
+                        if (ctx.getApplicationInfo().targetSdkVersion >= Build.VERSION_CODES.O) {
+                            binder = ServiceManager.getServiceOrThrow(Context.FACE_SERVICE);
+                        } else {
+                            binder = ServiceManager.getService(Context.FACE_SERVICE);
+                        }
+                        IFaceService service = IFaceService.Stub.asInterface(binder);
+                        return new FaceManager(ctx.getOuterContext(), service);
+                    }
+                });
+
         registerService(Context.TV_INPUT_SERVICE, TvInputManager.class,
                 new CachedServiceFetcher<TvInputManager>() {
             @Override
@@ -996,6 +1025,21 @@ final class SystemServiceRegistry {
                                 ServiceManager.getServiceOrThrow(
                                         Context.DEVICE_IDLE_CONTROLLER));
                         return new DeviceIdleManager(ctx.getOuterContext(), service);
+                    }});
+
+        registerService(Context.TIME_DETECTOR_SERVICE, TimeDetector.class,
+                new CachedServiceFetcher<TimeDetector>() {
+                    @Override
+                    public TimeDetector createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new TimeDetector();
+                    }});
+        registerService(Context.TIME_ZONE_DETECTOR_SERVICE, TimeZoneDetector.class,
+                new CachedServiceFetcher<TimeZoneDetector>() {
+                    @Override
+                    public TimeZoneDetector createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        return new TimeZoneDetector();
                     }});
     }
 

@@ -217,8 +217,8 @@
     <string name="bluetooth_select_avrcp_version_dialog_title" msgid="7277329668298705702">"Selecciona la versión AVRCP del Bluetooth"</string>
     <string name="bluetooth_select_a2dp_codec_type" msgid="90597356942154882">"Códec de audio de Bluetooth"</string>
     <string name="bluetooth_select_a2dp_codec_type_dialog_title" msgid="8436224899475822557">"Activar el códec de audio por Bluetooth\nSelección"</string>
-    <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"Porcentaje de muestreo de audio por Bluetooth"</string>
-    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"Activar el códec de audio por Bluetooth\nSelección: porcentaje de muestreo"</string>
+    <string name="bluetooth_select_a2dp_codec_sample_rate" msgid="4788245703824623062">"Frecuencia de muestreo de audio por Bluetooth"</string>
+    <string name="bluetooth_select_a2dp_codec_sample_rate_dialog_title" msgid="8010380028880963535">"Activar el códec de audio por Bluetooth\nSelección: frecuencia de muestreo"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample" msgid="2099645202720164141">"Bits por muestra del audio Bluetooth"</string>
     <string name="bluetooth_select_a2dp_codec_bits_per_sample_dialog_title" msgid="8063859754619484760">"Activar el códec de audio por Bluetooth\nSelección: bits por muestra"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"Modo de canal de audio por Bluetooth"</string>
@@ -238,7 +238,7 @@
     <string name="wifi_connected_mac_randomization_summary" msgid="1743059848752201485">"Ordenar las direcciones MAC de forma aleatoria al conectarse a redes Wi‑Fi"</string>
     <string name="wifi_metered_label" msgid="4514924227256839725">"Medida"</string>
     <string name="wifi_unmetered_label" msgid="6124098729457992931">"No medida"</string>
-    <string name="select_logd_size_title" msgid="7433137108348553508">"Tamaños de búfer de registrador"</string>
+    <string name="select_logd_size_title" msgid="7433137108348553508">"Tamaños del búfer para registrar"</string>
     <string name="select_logd_size_dialog_title" msgid="1206769310236476760">"Elige el tamaño del Logger por búfer"</string>
     <string name="dev_logpersist_clear_warning_title" msgid="684806692440237967">"¿Borrar almacenamiento continuo del registrador?"</string>
     <string name="dev_logpersist_clear_warning_message" msgid="2256582531342994562">"Cuando ya no supervisamos la actividad con el registrador de forma continua, estamos obligados a borrar los datos del registrador almacenados en el dispositivo."</string>
@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Mostrar la ubicación de los toques en la pantalla"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Cambios de superficie"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Actualizar superficies de ventana al actualizarse"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Ver actualizaciones de GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Actualizar vistas de las ventanas creadas con GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Ver cambios de vista"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Actualizar vistas de las ventanas creadas"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Ver actualizaciones de capas de hardware"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Iluminar capas de hardware en verde al actualizarse"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Depurar sobredibujos de GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Mostrar límites de vídeo, márgenes, etc."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Forzar dirección de diseño RTL"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Forzar dirección RTL para todos los idiomas"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Forzar renderización por GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Forzar uso de la GPU para dibujar en 2D"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Forzar MSAA 4x"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Habilitar MSAA 4x en aplicaciones de OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Depurar operaciones de recorte no rectangulares"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Trazar la renderización de la GPU"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Trazar la renderización de HWUI"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Activar capas depuración GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Permitir cargar capas de depuración de GPU en apps"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Escala de animación de ventana"</string>

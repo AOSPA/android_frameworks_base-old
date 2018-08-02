@@ -16,7 +16,6 @@
 
 #define LOG_TAG "StaticLayout"
 
-#include "ScopedIcuLocale.h"
 #include "unicode/locid.h"
 #include "unicode/brkiter.h"
 #include "utils/misc.h"
@@ -69,15 +68,12 @@ static inline minikin::android::StaticLayoutNative* toNative(jlong ptr) {
 // set text and set a number of parameters for creating a layout (width, tabstops, strategy,
 // hyphenFrequency)
 static jlong nInit(JNIEnv* env, jclass /* unused */,
-        jint breakStrategy, jint hyphenationFrequency, jboolean isJustified,
-        jintArray indents, jintArray leftPaddings, jintArray rightPaddings) {
+        jint breakStrategy, jint hyphenationFrequency, jboolean isJustified, jintArray indents) {
     return reinterpret_cast<jlong>(new minikin::android::StaticLayoutNative(
             static_cast<minikin::BreakStrategy>(breakStrategy),
             static_cast<minikin::HyphenationFrequency>(hyphenationFrequency),
             isJustified,
-            jintArrayToFloatVector(env, indents),
-            jintArrayToFloatVector(env, leftPaddings),
-            jintArrayToFloatVector(env, rightPaddings)));
+            jintArrayToFloatVector(env, indents)));
 }
 
 // CriticalNative
@@ -161,8 +157,6 @@ static const JNINativeMethod gMethods[] = {
         "I"  // hyphenationFrequency
         "Z"  // isJustified
         "[I"  // indents
-        "[I"  // left paddings
-        "[I"  // right paddings
         ")J", (void*) nInit},
 
     // Critical Natives

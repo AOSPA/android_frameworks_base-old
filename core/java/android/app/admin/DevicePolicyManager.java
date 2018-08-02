@@ -72,6 +72,7 @@ import android.security.keystore.AttestationUtils;
 import android.security.keystore.KeyAttestationException;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.ParcelableKeyGenParameterSpec;
+import android.security.keystore.StrongBoxUnavailableException;
 import android.service.restrictions.RestrictionsReceiver;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
@@ -1774,6 +1775,13 @@ public class DevicePolicyManager {
     public static final int ID_TYPE_MEID = 8;
 
     /**
+     * Service-specific error code for {@link #generateKeyPair}:
+     * Indicates the call has failed due to StrongBox unavailability.
+     * @hide
+     */
+    public static final int KEY_GEN_STRONGBOX_UNAVAILABLE = 1;
+
+    /**
      * Specifies that the calling app should be granted access to the installed credentials
      * immediately. Otherwise, access to the credentials will be gated by user approval.
      * For use with {@link #installKeyPair(ComponentName, PrivateKey, Certificate[], String, int)}
@@ -3237,8 +3245,8 @@ public class DevicePolicyManager {
 
     /**
      * Called by a device/profile owner to set the timeout after which unlocking with secondary, non
-     * strong auth (e.g. fingerprint, trust agents) times out, i.e. the user has to use a strong
-     * authentication method like password, pin or pattern.
+     * strong auth (e.g. fingerprint, face, trust agents) times out, i.e. the user has to use a
+     * strong authentication method like password, pin or pattern.
      *
      * <p>This timeout is used internally to reset the timer to require strong auth again after
      * specified timeout each time it has been successfully used.
@@ -3710,7 +3718,6 @@ public class DevicePolicyManager {
             | DevicePolicyManager.KEYGUARD_DISABLE_IRIS
             | DevicePolicyManager.KEYGUARD_DISABLE_FINGERPRINT;
 
-
     /**
      * Disable all current and future keyguard customizations.
      */
@@ -4154,8 +4161,11 @@ public class DevicePolicyManager {
      * Called by a device or profile owner, or delegated certificate installer, to generate a
      * new private/public key pair. If the device supports key generation via secure hardware,
      * this method is useful for creating a key in KeyChain that never left the secure hardware.
-     *
      * Access to the key is controlled the same way as in {@link #installKeyPair}.
+     *
+     * <p>Because this method might take several seconds to complete, it should only be called from
+     * a worker thread. This method returns {@code null} when called from the main thread.
+     *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with, or
      *            {@code null} if calling from a delegated certificate installer.
      * @param algorithm The key generation algorithm, see {@link java.security.KeyPairGenerator}.
@@ -4188,6 +4198,8 @@ public class DevicePolicyManager {
      *         {@code keySpec} does not contain an attestation challenge.
      * @throws UnsupportedOperationException if Device ID attestation was requested but the
      *         underlying hardware does not support it.
+     * @throws StrongBoxUnavailableException if the use of StrongBox for key generation was
+     *         specified in {@code keySpec} but the device does not have one.
      * @see KeyGenParameterSpec.Builder#setAttestationChallenge(byte[])
      */
     public AttestedKeyPair generateKeyPair(@Nullable ComponentName admin,
@@ -4228,6 +4240,15 @@ public class DevicePolicyManager {
         } catch (InterruptedException e) {
             Log.w(TAG, "Interrupted while generating key", e);
             Thread.currentThread().interrupt();
+        } catch (ServiceSpecificException e) {
+            Log.w(TAG, String.format("Key Generation failure: %d", e.errorCode));
+            switch (e.errorCode) {
+                case KEY_GEN_STRONGBOX_UNAVAILABLE:
+                    throw new StrongBoxUnavailableException("No StrongBox for key generation.");
+                default:
+                    throw new RuntimeException(
+                            String.format("Unknown error while generating key: %d", e.errorCode));
+            }
         }
         return null;
     }
@@ -4898,10 +4919,10 @@ public class DevicePolicyManager {
     /**
      * @hide
      */
-    public void reportFailedFingerprintAttempt(int userHandle) {
+    public void reportFailedBiometricAttempt(int userHandle) {
         if (mService != null) {
             try {
-                mService.reportFailedFingerprintAttempt(userHandle);
+                mService.reportFailedBiometricAttempt(userHandle);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -4911,10 +4932,10 @@ public class DevicePolicyManager {
     /**
      * @hide
      */
-    public void reportSuccessfulFingerprintAttempt(int userHandle) {
+    public void reportSuccessfulBiometricAttempt(int userHandle) {
         if (mService != null) {
             try {
-                mService.reportSuccessfulFingerprintAttempt(userHandle);
+                mService.reportSuccessfulBiometricAttempt(userHandle);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -8300,6 +8321,22 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Makes all accumulated network logs available to DPC in a new batch.
+     * Only callable by ADB. If throttled, returns time to wait in milliseconds, otherwise 0.
+     * @hide
+     */
+    public long forceNetworkLogs() {
+        if (mService == null) {
+            return -1;
+        }
+        try {
+            return mService.forceNetworkLogs();
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Forces a batch of security logs to be fetched from logd and makes it available for DPC.
      * Only callable by ADB. If throttled, returns time to wait in milliseconds, otherwise 0.
      * @hide
@@ -9398,9 +9435,9 @@ public class DevicePolicyManager {
      * <ul>
      *   <li>{@link ApnSetting#getOperatorNumeric()}</li>
      *   <li>{@link ApnSetting#getApnName()}</li>
-     *   <li>{@link ApnSetting#getProxyAddress()}</li>
+     *   <li>{@link ApnSetting#getProxyAddressAsString()}</li>
      *   <li>{@link ApnSetting#getProxyPort()}</li>
-     *   <li>{@link ApnSetting#getMmsProxyAddress()}</li>
+     *   <li>{@link ApnSetting#getMmsProxyAddressAsString()}</li>
      *   <li>{@link ApnSetting#getMmsProxyPort()}</li>
      *   <li>{@link ApnSetting#getMmsc()}</li>
      *   <li>{@link ApnSetting#isEnabled()}</li>

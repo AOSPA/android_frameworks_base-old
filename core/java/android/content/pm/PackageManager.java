@@ -147,6 +147,7 @@ public abstract class PackageManager {
             GET_DISABLED_COMPONENTS,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
+            MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PackageInfoFlags {}
@@ -164,6 +165,7 @@ public abstract class PackageManager {
             MATCH_STATIC_SHARED_LIBRARIES,
             GET_DISABLED_UNTIL_USED_COMPONENTS,
             GET_UNINSTALLED_PACKAGES,
+            MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ApplicationInfoFlags {}
@@ -177,6 +179,7 @@ public abstract class PackageManager {
             MATCH_DEFAULT_ONLY,
             MATCH_DISABLED_COMPONENTS,
             MATCH_DISABLED_UNTIL_USED_COMPONENTS,
+            MATCH_DIRECT_BOOT_AUTO,
             MATCH_DIRECT_BOOT_AWARE,
             MATCH_DIRECT_BOOT_UNAWARE,
             MATCH_SYSTEM_ONLY,
@@ -200,6 +203,7 @@ public abstract class PackageManager {
             MATCH_DISABLED_COMPONENTS,
             MATCH_DISABLED_UNTIL_USED_COMPONENTS,
             MATCH_DEFAULT_ONLY,
+            MATCH_DIRECT_BOOT_AUTO,
             MATCH_DIRECT_BOOT_AWARE,
             MATCH_DIRECT_BOOT_UNAWARE,
             MATCH_SYSTEM_ONLY,
@@ -504,22 +508,35 @@ public abstract class PackageManager {
     public static final int GET_SIGNING_CERTIFICATES = 0x08000000;
 
     /**
-     * Internal flag used to indicate that a system component has done their
-     * homework and verified that they correctly handle packages and components
-     * that come and go over time. In particular:
+     * Querying flag: automatically match components based on their Direct Boot
+     * awareness and the current user state.
+     * <p>
+     * Since the default behavior is to automatically apply the current user
+     * state, this is effectively a sentinel value that doesn't change the
+     * output of any queries based on its presence or absence.
+     * <p>
+     * Instead, this value can be useful in conjunction with
+     * {@link android.os.StrictMode.VmPolicy.Builder#detectImplicitDirectBoot()}
+     * to detect when a caller is relying on implicit automatic matching,
+     * instead of confirming the explicit behavior they want, using a
+     * combination of these flags:
      * <ul>
-     * <li>Apps installed on external storage, which will appear to be
-     * uninstalled while the the device is ejected.
-     * <li>Apps with encryption unaware components, which will appear to not
-     * exist while the device is locked.
+     * <li>{@link #MATCH_DIRECT_BOOT_AWARE}
+     * <li>{@link #MATCH_DIRECT_BOOT_UNAWARE}
+     * <li>{@link #MATCH_DIRECT_BOOT_AUTO}
      * </ul>
-     *
-     * @see #MATCH_UNINSTALLED_PACKAGES
-     * @see #MATCH_DIRECT_BOOT_AWARE
-     * @see #MATCH_DIRECT_BOOT_UNAWARE
+     */
+    public static final int MATCH_DIRECT_BOOT_AUTO = 0x10000000;
+
+    /** @hide */
+    @Deprecated
+    public static final int MATCH_DEBUG_TRIAGED_MISSING = MATCH_DIRECT_BOOT_AUTO;
+
+    /**
+     * Internal flag used to indicate that a package is a hidden system app.
      * @hide
      */
-    public static final int MATCH_DEBUG_TRIAGED_MISSING = 0x10000000;
+    public static final int MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS =  0x20000000;
 
     /**
      * Flag for {@link #addCrossProfileIntentFilter}: if this flag is set: when
@@ -2245,9 +2262,17 @@ public abstract class PackageManager {
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device has biometric hardware to detect a fingerprint.
-      */
+     */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_FINGERPRINT = "android.hardware.fingerprint";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device has biometric hardware to perform face authentication.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_FACE = "android.hardware.face";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
@@ -2912,6 +2937,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @TestApi
     public static final String SYSTEM_SHARED_LIBRARY_SERVICES = "android.ext.services";
 
     /**
@@ -2923,6 +2949,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @TestApi
     public static final String SYSTEM_SHARED_LIBRARY_SHARED = "android.ext.shared";
 
     /**
@@ -3555,6 +3582,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS)
     public abstract void grantRuntimePermission(@NonNull String packageName,
@@ -3581,6 +3609,7 @@ public abstract class PackageManager {
      *
      * @hide
      */
+    @TestApi
     @SystemApi
     @RequiresPermission(android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS)
     public abstract void revokeRuntimePermission(@NonNull String packageName,
@@ -3983,7 +4012,7 @@ public abstract class PackageManager {
      * <p>The sequence number starts at <code>0</code> and is
      * reset every boot.
      * @param sequenceNumber The first sequence number for which to retrieve package changes.
-     * @see Settings.Global#BOOT_COUNT
+     * @see android.provider.Settings.Global#BOOT_COUNT
      */
     public abstract @Nullable ChangedPackages getChangedPackages(
             @IntRange(from=0) int sequenceNumber);
@@ -4272,14 +4301,20 @@ public abstract class PackageManager {
             @ResolveInfoFlags int flags);
 
     /**
-     * Find a single content provider by its base path name.
+     * Find a single content provider by its authority.
+     * <p>
+     * Example:<p>
+     * <pre>
+     * Uri uri = Uri.parse("content://com.example.app.provider/table1");
+     * ProviderInfo info = packageManager.resolveContentProvider(uri.getAuthority(), flags);
+     * </pre>
      *
-     * @param name The name of the provider to find.
+     * @param authority The authority of the provider to find.
      * @param flags Additional option flags to modify the data returned.
      * @return A {@link ProviderInfo} object containing information about the
      *         provider. If a provider was not found, returns null.
      */
-    public abstract ProviderInfo resolveContentProvider(String name,
+    public abstract ProviderInfo resolveContentProvider(String authority,
             @ComponentInfoFlags int flags);
 
     /**
@@ -4841,7 +4876,8 @@ public abstract class PackageManager {
      * on the system for other users, also install it for the specified user.
      * @hide
      */
-     @RequiresPermission(anyOf = {
+    @RequiresPermission(anyOf = {
+            Manifest.permission.INSTALL_EXISTING_PACKAGES,
             Manifest.permission.INSTALL_PACKAGES,
             Manifest.permission.INTERACT_ACROSS_USERS_FULL})
     public abstract int installExistingPackageAsUser(String packageName, @UserIdInt int userId)
@@ -5402,6 +5438,8 @@ public abstract class PackageManager {
      * @param newState The new enabled state for the component.
      * @param flags Optional behavior flags.
      */
+    @RequiresPermission(value = android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE,
+            conditional = true)
     public abstract void setComponentEnabledSetting(ComponentName componentName,
             @EnabledState int newState, @EnabledFlags int flags);
 
@@ -5429,6 +5467,8 @@ public abstract class PackageManager {
      * @param newState The new enabled state for the application.
      * @param flags Optional behavior flags.
      */
+    @RequiresPermission(value = android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE,
+            conditional = true)
     public abstract void setApplicationEnabledSetting(String packageName,
             @EnabledState int newState, @EnabledFlags int flags);
 

@@ -20,7 +20,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
-import android.support.annotation.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
 import android.util.Log;
 
 import com.android.internal.logging.MetricsLogger;
@@ -144,8 +144,15 @@ public class NotificationBlockingHelperManager {
     /**
      * Returns whether the given package name is in the list of non-blockable packages.
      */
-    public boolean isNonblockablePackage(String packageName) {
-        return mNonBlockablePkgs.contains(packageName);
+    public boolean isNonblockable(String packageName, String channelName) {
+        return mNonBlockablePkgs.contains(packageName)
+                || mNonBlockablePkgs.contains(makeChannelKey(packageName, channelName));
+    }
+
+    // Format must stay in sync with frameworks/base/core/res/res/values/config.xml
+    // config_nonBlockableNotificationPackages
+    private String makeChannelKey(String pkg, String channel) {
+        return pkg + ":" + channel;
     }
 
     @VisibleForTesting
@@ -156,5 +163,11 @@ public class NotificationBlockingHelperManager {
     @VisibleForTesting
     void setBlockingHelperRowForTest(ExpandableNotificationRow blockingHelperRowForTest) {
         mBlockingHelperRow = blockingHelperRowForTest;
+    }
+
+    @VisibleForTesting
+    void setNonBlockablePkgs(String[] pkgsAndChannels) {
+        mNonBlockablePkgs = new HashSet<>();
+        Collections.addAll(mNonBlockablePkgs, pkgsAndChannels);
     }
 }

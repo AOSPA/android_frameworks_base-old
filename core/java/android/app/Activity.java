@@ -1086,7 +1086,7 @@ public class Activity extends ContextThemeWrapper
      *
      * @param savedInstanceState contains the saved state
      */
-    final void performRestoreInstanceState(Bundle savedInstanceState) {
+    final void performRestoreInstanceState(@NonNull Bundle savedInstanceState) {
         onRestoreInstanceState(savedInstanceState);
         restoreManagedDialogs(savedInstanceState);
     }
@@ -1100,8 +1100,8 @@ public class Activity extends ContextThemeWrapper
      * @param savedInstanceState contains the saved state
      * @param persistentState contains the persistable saved state
      */
-    final void performRestoreInstanceState(Bundle savedInstanceState,
-            PersistableBundle persistentState) {
+    final void performRestoreInstanceState(@Nullable Bundle savedInstanceState,
+            @Nullable PersistableBundle persistentState) {
         onRestoreInstanceState(savedInstanceState, persistentState);
         if (savedInstanceState != null) {
             restoreManagedDialogs(savedInstanceState);
@@ -1128,7 +1128,7 @@ public class Activity extends ContextThemeWrapper
      * @see #onResume
      * @see #onSaveInstanceState
      */
-    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+    protected void onRestoreInstanceState(@NonNull Bundle savedInstanceState) {
         if (mWindow != null) {
             Bundle windowState = savedInstanceState.getBundle(WINDOW_HIERARCHY_TAG);
             if (windowState != null) {
@@ -1149,8 +1149,12 @@ public class Activity extends ContextThemeWrapper
      *
      * <p>If this method is called {@link #onRestoreInstanceState(Bundle)} will not be called.
      *
-     * @param savedInstanceState the data most recently supplied in {@link #onSaveInstanceState}.
-     * @param persistentState the data most recently supplied in {@link #onSaveInstanceState}.
+     * <p>At least one of {@code savedInstanceState} or {@code persistentState} will not be null.
+     *
+     * @param savedInstanceState the data most recently supplied in {@link #onSaveInstanceState}
+     *     or null.
+     * @param persistentState the data most recently supplied in {@link #onSaveInstanceState}
+     *     or null.
      *
      * @see #onRestoreInstanceState(Bundle)
      * @see #onCreate
@@ -1158,8 +1162,8 @@ public class Activity extends ContextThemeWrapper
      * @see #onResume
      * @see #onSaveInstanceState
      */
-    public void onRestoreInstanceState(Bundle savedInstanceState,
-            PersistableBundle persistentState) {
+    public void onRestoreInstanceState(@Nullable Bundle savedInstanceState,
+            @Nullable PersistableBundle persistentState) {
         if (savedInstanceState != null) {
             onRestoreInstanceState(savedInstanceState);
         }
@@ -1442,7 +1446,7 @@ public class Activity extends ContextThemeWrapper
     public boolean isVoiceInteractionRoot() {
         try {
             return mVoiceInteractor != null
-                    && ActivityManager.getService().isRootVoiceInteraction(mToken);
+                    && ActivityTaskManager.getService().isRootVoiceInteraction(mToken);
         } catch (RemoteException e) {
         }
         return false;
@@ -1465,7 +1469,7 @@ public class Activity extends ContextThemeWrapper
      */
     public boolean isLocalVoiceInteractionSupported() {
         try {
-            return ActivityManager.getService().supportsLocalVoiceInteraction();
+            return ActivityTaskManager.getService().supportsLocalVoiceInteraction();
         } catch (RemoteException re) {
         }
         return false;
@@ -1479,7 +1483,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void startLocalVoiceInteraction(Bundle privateOptions) {
         try {
-            ActivityManager.getService().startLocalVoiceInteraction(mToken, privateOptions);
+            ActivityTaskManager.getService().startLocalVoiceInteraction(mToken, privateOptions);
         } catch (RemoteException re) {
         }
     }
@@ -1508,7 +1512,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void stopLocalVoiceInteraction() {
         try {
-            ActivityManager.getService().stopLocalVoiceInteraction(mToken);
+            ActivityTaskManager.getService().stopLocalVoiceInteraction(mToken);
         } catch (RemoteException re) {
         }
     }
@@ -1545,7 +1549,7 @@ public class Activity extends ContextThemeWrapper
      *
      * @param outState The bundle to save the state to.
      */
-    final void performSaveInstanceState(Bundle outState) {
+    final void performSaveInstanceState(@NonNull Bundle outState) {
         onSaveInstanceState(outState);
         saveManagedDialogs(outState);
         mActivityTransitionState.saveState(outState);
@@ -1562,7 +1566,8 @@ public class Activity extends ContextThemeWrapper
      * @param outState The bundle to save the state to.
      * @param outPersistentState The bundle to save persistent state to.
      */
-    final void performSaveInstanceState(Bundle outState, PersistableBundle outPersistentState) {
+    final void performSaveInstanceState(@NonNull Bundle outState,
+            @NonNull PersistableBundle outPersistentState) {
         onSaveInstanceState(outState, outPersistentState);
         saveManagedDialogs(outState);
         storeHasCurrentPermissionRequest(outState);
@@ -1618,7 +1623,7 @@ public class Activity extends ContextThemeWrapper
      * @see #onRestoreInstanceState
      * @see #onPause
      */
-    protected void onSaveInstanceState(Bundle outState) {
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
         outState.putBundle(WINDOW_HIERARCHY_TAG, mWindow.saveHierarchyState());
 
         outState.putInt(LAST_AUTOFILL_ID, mLastAutofillId);
@@ -1648,7 +1653,8 @@ public class Activity extends ContextThemeWrapper
      * @see #onRestoreInstanceState(Bundle, PersistableBundle)
      * @see #onPause
      */
-    public void onSaveInstanceState(Bundle outState, PersistableBundle outPersistentState) {
+    public void onSaveInstanceState(@NonNull Bundle outState,
+            @NonNull PersistableBundle outPersistentState) {
         onSaveInstanceState(outState);
     }
 
@@ -1886,7 +1892,7 @@ public class Activity extends ContextThemeWrapper
      */
     public boolean showAssist(Bundle args) {
         try {
-            return ActivityManager.getService().showAssistFromActivity(mToken, args);
+            return ActivityTaskManager.getService().showAssistFromActivity(mToken, args);
         } catch (RemoteException e) {
         }
         return false;
@@ -2019,7 +2025,8 @@ public class Activity extends ContextThemeWrapper
         if (mDoReportFullyDrawn) {
             mDoReportFullyDrawn = false;
             try {
-                ActivityManager.getService().reportActivityFullyDrawn(mToken, mRestoredFromBundle);
+                ActivityTaskManager.getService().reportActivityFullyDrawn(
+                        mToken, mRestoredFromBundle);
             } catch (RemoteException e) {
             }
         }
@@ -2066,7 +2073,7 @@ public class Activity extends ContextThemeWrapper
      */
     public boolean isInMultiWindowMode() {
         try {
-            return ActivityManager.getService().isInMultiWindowMode(mToken);
+            return ActivityTaskManager.getService().isInMultiWindowMode(mToken);
         } catch (RemoteException e) {
         }
         return false;
@@ -2113,7 +2120,7 @@ public class Activity extends ContextThemeWrapper
      */
     public boolean isInPictureInPictureMode() {
         try {
-            return ActivityManager.getService().isInPictureInPictureMode(mToken);
+            return ActivityTaskManager.getService().isInPictureInPictureMode(mToken);
         } catch (RemoteException e) {
         }
         return false;
@@ -2168,7 +2175,7 @@ public class Activity extends ContextThemeWrapper
                 throw new IllegalStateException("Activity must be resumed to enter"
                         + " picture-in-picture");
             }
-            return ActivityManagerNative.getDefault().enterPictureInPictureMode(mToken, params);
+            return ActivityTaskManager.getService().enterPictureInPictureMode(mToken, params);
         } catch (RemoteException e) {
             return false;
         }
@@ -2194,7 +2201,7 @@ public class Activity extends ContextThemeWrapper
             if (params == null) {
                 throw new IllegalArgumentException("Expected non-null picture-in-picture params");
             }
-            ActivityManagerNative.getDefault().setPictureInPictureParams(mToken, params);
+            ActivityTaskManager.getService().setPictureInPictureParams(mToken, params);
         } catch (RemoteException e) {
         }
     }
@@ -2207,7 +2214,7 @@ public class Activity extends ContextThemeWrapper
      */
     public int getMaxNumPictureInPictureActions() {
         try {
-            return ActivityManagerNative.getDefault().getMaxNumPictureInPictureActions(mToken);
+            return ActivityTaskManager.getService().getMaxNumPictureInPictureActions(mToken);
         } catch (RemoteException e) {
             return 0;
         }
@@ -3321,7 +3328,7 @@ public class Activity extends ContextThemeWrapper
      */
     @Override
     public void exitFreeformMode() throws RemoteException {
-        ActivityManager.getService().exitFreeformMode(mToken);
+        ActivityTaskManager.getService().exitFreeformMode(mToken);
     }
 
     /**
@@ -4405,9 +4412,9 @@ public class Activity extends ContextThemeWrapper
     /**
      * Requests permissions to be granted to this application. These permissions
      * must be requested in your manifest, they should not be granted to your app,
-     * and they should have protection level {@link android.content.pm.PermissionInfo
-     * #PROTECTION_DANGEROUS dangerous}, regardless whether they are declared by
-     * the platform or a third-party app.
+     * and they should have protection level {@link
+     * android.content.pm.PermissionInfo#PROTECTION_DANGEROUS dangerous}, regardless
+     * whether they are declared by the platform or a third-party app.
      * <p>
      * Normal permissions {@link android.content.pm.PermissionInfo#PROTECTION_NORMAL}
      * are granted at install time if requested in the manifest. Signature permissions
@@ -4451,7 +4458,7 @@ public class Activity extends ContextThemeWrapper
      * result callbacks including {@link #onRequestPermissionsResult(int, String[], int[])}.
      * </p>
      * <p>
-     * The <a href="http://developer.android.com/samples/RuntimePermissions/index.html">
+     * The <a href="https://github.com/googlesamples/android-RuntimePermissions">
      * RuntimePermissions</a> sample app demonstrates how to use this method to
      * request permissions at run time.
      * </p>
@@ -4833,7 +4840,7 @@ public class Activity extends ContextThemeWrapper
                 fillInIntent.prepareToLeaveProcess(this);
                 resolvedType = fillInIntent.resolveTypeIfNeeded(getContentResolver());
             }
-            int result = ActivityManager.getService()
+            int result = ActivityTaskManager.getService()
                 .startActivityIntentSender(mMainThread.getApplicationThread(),
                         intent != null ? intent.getTarget() : null,
                         intent != null ? intent.getWhitelistToken() : null,
@@ -5065,7 +5072,7 @@ public class Activity extends ContextThemeWrapper
                 }
                 intent.migrateExtraStreamToClipData();
                 intent.prepareToLeaveProcess(this);
-                result = ActivityManager.getService()
+                result = ActivityTaskManager.getService()
                     .startActivity(mMainThread.getApplicationThread(), getBasePackageName(),
                             intent, intent.resolveTypeIfNeeded(getContentResolver()), mToken,
                             mEmbeddedID, requestCode, ActivityManager.START_FLAG_ONLY_IF_NEEDED,
@@ -5136,7 +5143,7 @@ public class Activity extends ContextThemeWrapper
             try {
                 intent.migrateExtraStreamToClipData();
                 intent.prepareToLeaveProcess(this);
-                return ActivityManager.getService()
+                return ActivityTaskManager.getService()
                     .startNextMatchingActivity(mToken, intent, options);
             } catch (RemoteException e) {
                 // Empty
@@ -5351,7 +5358,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void overridePendingTransition(int enterAnim, int exitAnim) {
         try {
-            ActivityManager.getService().overridePendingTransition(
+            ActivityTaskManager.getService().overridePendingTransition(
                     mToken, getPackageName(), enterAnim, exitAnim);
         } catch (RemoteException e) {
         }
@@ -5476,7 +5483,7 @@ public class Activity extends ContextThemeWrapper
     @Nullable
     public String getCallingPackage() {
         try {
-            return ActivityManager.getService().getCallingPackage(mToken);
+            return ActivityTaskManager.getService().getCallingPackage(mToken);
         } catch (RemoteException e) {
             return null;
         }
@@ -5499,7 +5506,7 @@ public class Activity extends ContextThemeWrapper
     @Nullable
     public ComponentName getCallingActivity() {
         try {
-            return ActivityManager.getService().getCallingActivity(mToken);
+            return ActivityTaskManager.getService().getCallingActivity(mToken);
         } catch (RemoteException e) {
             return null;
         }
@@ -5603,7 +5610,7 @@ public class Activity extends ContextThemeWrapper
                 if (resultData != null) {
                     resultData.prepareToLeaveProcess(this);
                 }
-                if (ActivityManager.getService()
+                if (ActivityTaskManager.getService()
                         .finishActivity(mToken, resultCode, resultData, finishTask)) {
                     mFinished = true;
                 }
@@ -5653,7 +5660,7 @@ public class Activity extends ContextThemeWrapper
             throw new IllegalStateException("Can not be called to deliver a result");
         }
         try {
-            if (ActivityManager.getService().finishActivityAffinity(mToken)) {
+            if (ActivityTaskManager.getService().finishActivityAffinity(mToken)) {
                 mFinished = true;
             }
         } catch (RemoteException e) {
@@ -5699,7 +5706,7 @@ public class Activity extends ContextThemeWrapper
     public void finishActivity(int requestCode) {
         if (mParent == null) {
             try {
-                ActivityManager.getService()
+                ActivityTaskManager.getService()
                     .finishSubActivity(mToken, mEmbeddedID, requestCode);
             } catch (RemoteException e) {
                 // Empty
@@ -5719,7 +5726,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void finishActivityFromChild(@NonNull Activity child, int requestCode) {
         try {
-            ActivityManager.getService()
+            ActivityTaskManager.getService()
                 .finishSubActivity(mToken, child.mEmbeddedID, requestCode);
         } catch (RemoteException e) {
             // Empty
@@ -5747,7 +5754,7 @@ public class Activity extends ContextThemeWrapper
      */
     public boolean releaseInstance() {
         try {
-            return ActivityManager.getService().releaseActivityInstance(mToken);
+            return ActivityTaskManager.getService().releaseActivityInstance(mToken);
         } catch (RemoteException e) {
             // Empty
         }
@@ -5862,7 +5869,7 @@ public class Activity extends ContextThemeWrapper
     public void setRequestedOrientation(@ActivityInfo.ScreenOrientation int requestedOrientation) {
         if (mParent == null) {
             try {
-                ActivityManager.getService().setRequestedOrientation(
+                ActivityTaskManager.getService().setRequestedOrientation(
                         mToken, requestedOrientation);
             } catch (RemoteException e) {
                 // Empty
@@ -5885,7 +5892,7 @@ public class Activity extends ContextThemeWrapper
     public int getRequestedOrientation() {
         if (mParent == null) {
             try {
-                return ActivityManager.getService()
+                return ActivityTaskManager.getService()
                         .getRequestedOrientation(mToken);
             } catch (RemoteException e) {
                 // Empty
@@ -5904,8 +5911,7 @@ public class Activity extends ContextThemeWrapper
      */
     public int getTaskId() {
         try {
-            return ActivityManager.getService()
-                .getTaskForActivity(mToken, false);
+            return ActivityTaskManager.getService().getTaskForActivity(mToken, false);
         } catch (RemoteException e) {
             return -1;
         }
@@ -5920,7 +5926,7 @@ public class Activity extends ContextThemeWrapper
     @Override
     public boolean isTaskRoot() {
         try {
-            return ActivityManager.getService().getTaskForActivity(mToken, true) >= 0;
+            return ActivityTaskManager.getService().getTaskForActivity(mToken, true) >= 0;
         } catch (RemoteException e) {
             return false;
         }
@@ -5939,8 +5945,7 @@ public class Activity extends ContextThemeWrapper
      */
     public boolean moveTaskToBack(boolean nonRoot) {
         try {
-            return ActivityManager.getService().moveActivityTaskToBack(
-                    mToken, nonRoot);
+            return ActivityTaskManager.getService().moveActivityTaskToBack(mToken, nonRoot);
         } catch (RemoteException e) {
             // Empty
         }
@@ -6115,7 +6120,7 @@ public class Activity extends ContextThemeWrapper
             }
         }
         try {
-            ActivityManager.getService().setTaskDescription(mToken, mTaskDescription);
+            ActivityTaskManager.getService().setTaskDescription(mToken, mTaskDescription);
         } catch (RemoteException e) {
         }
     }
@@ -6390,7 +6395,7 @@ public class Activity extends ContextThemeWrapper
      */
     public boolean isImmersive() {
         try {
-            return ActivityManager.getService().isImmersive(mToken);
+            return ActivityTaskManager.getService().isImmersive(mToken);
         } catch (RemoteException e) {
             return false;
         }
@@ -6408,7 +6413,7 @@ public class Activity extends ContextThemeWrapper
             return false;
         }
         try {
-            return ActivityManager.getService().isTopOfTask(getActivityToken());
+            return ActivityTaskManager.getService().isTopOfTask(getActivityToken());
         } catch (RemoteException e) {
             return false;
         }
@@ -6434,7 +6439,7 @@ public class Activity extends ContextThemeWrapper
     public void convertFromTranslucent() {
         try {
             mTranslucentCallback = null;
-            if (ActivityManager.getService().convertFromTranslucent(mToken)) {
+            if (ActivityTaskManager.getService().convertFromTranslucent(mToken)) {
                 WindowManagerGlobal.getInstance().changeCanvasOpacity(mToken, true);
             }
         } catch (RemoteException e) {
@@ -6473,7 +6478,7 @@ public class Activity extends ContextThemeWrapper
         boolean drawComplete;
         try {
             mTranslucentCallback = callback;
-            mChangeCanvasToTranslucent = ActivityManager.getService().convertToTranslucent(
+            mChangeCanvasToTranslucent = ActivityTaskManager.getService().convertToTranslucent(
                     mToken, options == null ? null : options.toBundle());
             WindowManagerGlobal.getInstance().changeCanvasOpacity(mToken, false);
             drawComplete = true;
@@ -6519,7 +6524,7 @@ public class Activity extends ContextThemeWrapper
     ActivityOptions getActivityOptions() {
         try {
             return ActivityOptions.fromBundle(
-                    ActivityManager.getService().getActivityOptions(mToken));
+                    ActivityTaskManager.getService().getActivityOptions(mToken));
         } catch (RemoteException e) {
         }
         return null;
@@ -6664,7 +6669,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void setImmersive(boolean i) {
         try {
-            ActivityManager.getService().setImmersive(mToken, i);
+            ActivityTaskManager.getService().setImmersive(mToken, i);
         } catch (RemoteException e) {
             // pass
         }
@@ -6727,7 +6732,7 @@ public class Activity extends ContextThemeWrapper
     public void setVrModeEnabled(boolean enabled, @NonNull ComponentName requestedComponent)
           throws PackageManager.NameNotFoundException {
         try {
-            if (ActivityManager.getService().setVrMode(mToken, enabled, requestedComponent)
+            if (ActivityTaskManager.getService().setVrMode(mToken, enabled, requestedComponent)
                     != 0) {
                 throw new PackageManager.NameNotFoundException(
                         requestedComponent.flattenToString());
@@ -6848,8 +6853,7 @@ public class Activity extends ContextThemeWrapper
             if (info.taskAffinity == null) {
                 return false;
             }
-            return ActivityManager.getService()
-                    .shouldUpRecreateTask(mToken, info.taskAffinity);
+            return ActivityTaskManager.getService().shouldUpRecreateTask(mToken, info.taskAffinity);
         } catch (RemoteException e) {
             return false;
         } catch (NameNotFoundException e) {
@@ -6901,7 +6905,7 @@ public class Activity extends ContextThemeWrapper
             }
             try {
                 upIntent.prepareToLeaveProcess(this);
-                return ActivityManager.getService().navigateUpTo(mToken, upIntent,
+                return ActivityTaskManager.getService().navigateUpTo(mToken, upIntent,
                         resultCode, resultData);
             } catch (RemoteException e) {
                 return false;
@@ -7508,7 +7512,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void startLockTask() {
         try {
-            ActivityManager.getService().startLockTaskModeByToken(mToken);
+            ActivityTaskManager.getService().startLockTaskModeByToken(mToken);
         } catch (RemoteException e) {
         }
     }
@@ -7531,7 +7535,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void stopLockTask() {
         try {
-            ActivityManager.getService().stopLockTaskModeByToken(mToken);
+            ActivityTaskManager.getService().stopLockTaskModeByToken(mToken);
         } catch (RemoteException e) {
         }
     }
@@ -7543,7 +7547,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void showLockTaskEscapeMessage() {
         try {
-            ActivityManager.getService().showLockTaskEscapeMessage(mToken);
+            ActivityTaskManager.getService().showLockTaskEscapeMessage(mToken);
         } catch (RemoteException e) {
         }
     }
@@ -7813,7 +7817,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void setDisablePreviewScreenshots(boolean disable) {
         try {
-            ActivityManager.getService().setDisablePreviewScreenshots(mToken, disable);
+            ActivityTaskManager.getService().setDisablePreviewScreenshots(mToken, disable);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to call setDisablePreviewScreenshots", e);
         }
@@ -7834,7 +7838,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void setShowWhenLocked(boolean showWhenLocked) {
         try {
-            ActivityManager.getService().setShowWhenLocked(mToken, showWhenLocked);
+            ActivityTaskManager.getService().setShowWhenLocked(mToken, showWhenLocked);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to call setShowWhenLocked", e);
         }
@@ -7860,7 +7864,7 @@ public class Activity extends ContextThemeWrapper
      */
     public void setTurnScreenOn(boolean turnScreenOn) {
         try {
-            ActivityManager.getService().setTurnScreenOn(mToken, turnScreenOn);
+            ActivityTaskManager.getService().setTurnScreenOn(mToken, turnScreenOn);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to call setTurnScreenOn", e);
         }
@@ -7876,7 +7880,7 @@ public class Activity extends ContextThemeWrapper
     @RequiresPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS)
     public void registerRemoteAnimations(RemoteAnimationDefinition definition) {
         try {
-            ActivityManager.getService().registerRemoteAnimations(mToken, definition);
+            ActivityTaskManager.getService().registerRemoteAnimations(mToken, definition);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to call registerRemoteAnimations", e);
         }

@@ -103,7 +103,6 @@ bool handleMetricWithConditions(
         }
         allConditionTrackers[condition_it->second]->setSliced(true);
         allConditionTrackers[it->second]->setSliced(true);
-        // TODO: We need to verify the link is valid.
     }
     conditionIndex = condition_it->second;
 
@@ -169,7 +168,6 @@ bool initLogTrackers(const StatsdConfig& config, const UidMap& uidMap,
 bool isStateTracker(const SimplePredicate& simplePredicate, vector<Matcher>* primaryKeys) {
     // 1. must not have "stop". must have "dimension"
     if (!simplePredicate.has_stop() && simplePredicate.has_dimensions()) {
-        // TODO: need to check the start atom matcher too.
         auto it = android::util::AtomsInfo::kStateAtomsFieldOptions.find(
                 simplePredicate.dimensions().field());
         // 2. must be based on a state atom.
@@ -262,9 +260,10 @@ bool initConditions(const ConfigKey& key, const StatsdConfig& config,
     return true;
 }
 
-bool initMetrics(const ConfigKey& key, const StatsdConfig& config,
-                 const int64_t timeBaseTimeNs, const int64_t currentTimeNs,
-                 UidMap& uidMap, const unordered_map<int64_t, int>& logTrackerMap,
+bool initMetrics(const ConfigKey& key, const StatsdConfig& config, const int64_t timeBaseTimeNs,
+                 const int64_t currentTimeNs, UidMap& uidMap,
+                 const sp<StatsPullerManager>& pullerManager,
+                 const unordered_map<int64_t, int>& logTrackerMap,
                  const unordered_map<int64_t, int>& conditionTrackerMap,
                  const vector<sp<LogMatchingTracker>>& allAtomMatchers,
                  vector<sp<ConditionTracker>>& allConditionTrackers,
@@ -465,9 +464,9 @@ bool initMetrics(const ConfigKey& key, const StatsdConfig& config,
             }
         }
 
-        sp<MetricProducer> valueProducer = new ValueMetricProducer(key, metric, conditionIndex,
-                                                                   wizard, pullTagId,
-                                                                   timeBaseTimeNs, currentTimeNs);
+        sp<MetricProducer> valueProducer =
+                new ValueMetricProducer(key, metric, conditionIndex, wizard, pullTagId,
+                                        timeBaseTimeNs, currentTimeNs, pullerManager);
         allMetricProducers.push_back(valueProducer);
     }
 
@@ -525,8 +524,9 @@ bool initMetrics(const ConfigKey& key, const StatsdConfig& config,
             }
         }
 
-        sp<MetricProducer> gaugeProducer = new GaugeMetricProducer(
-                key, metric, conditionIndex, wizard, pullTagId, timeBaseTimeNs, currentTimeNs);
+        sp<MetricProducer> gaugeProducer =
+                new GaugeMetricProducer(key, metric, conditionIndex, wizard, pullTagId,
+                                        timeBaseTimeNs, currentTimeNs, pullerManager);
         allMetricProducers.push_back(gaugeProducer);
     }
     for (int i = 0; i < config.no_report_metric_size(); ++i) {
@@ -645,10 +645,10 @@ bool initAlarms(const StatsdConfig& config, const ConfigKey& key,
 }
 
 bool initStatsdConfig(const ConfigKey& key, const StatsdConfig& config, UidMap& uidMap,
+                      const sp<StatsPullerManager>& pullerManager,
                       const sp<AlarmMonitor>& anomalyAlarmMonitor,
-                      const sp<AlarmMonitor>& periodicAlarmMonitor,
-                      const int64_t timeBaseNs, const int64_t currentTimeNs,
-                      set<int>& allTagIds,
+                      const sp<AlarmMonitor>& periodicAlarmMonitor, const int64_t timeBaseNs,
+                      const int64_t currentTimeNs, set<int>& allTagIds,
                       vector<sp<LogMatchingTracker>>& allAtomMatchers,
                       vector<sp<ConditionTracker>>& allConditionTrackers,
                       vector<sp<MetricProducer>>& allMetricProducers,
@@ -674,9 +674,8 @@ bool initStatsdConfig(const ConfigKey& key, const StatsdConfig& config, UidMap& 
         return false;
     }
 
-    if (!initMetrics(key, config, timeBaseNs, currentTimeNs, uidMap,
-                     logTrackerMap, conditionTrackerMap,
-                     allAtomMatchers, allConditionTrackers, allMetricProducers,
+    if (!initMetrics(key, config, timeBaseNs, currentTimeNs, uidMap, pullerManager, logTrackerMap,
+                     conditionTrackerMap, allAtomMatchers, allConditionTrackers, allMetricProducers,
                      conditionToMetricMap, trackerToMetricMap, metricProducerMap,
                      noReportMetricIds)) {
         ALOGE("initMetricProducers failed");

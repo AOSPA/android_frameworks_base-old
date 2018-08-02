@@ -227,9 +227,6 @@ public class NetworkStatsServiceTest {
 
     @After
     public void tearDown() throws Exception {
-        // Registered by NetworkStatsService's constructor.
-        LocalServices.removeServiceForTest(NetworkStatsManagerInternal.class);
-
         IoUtils.deleteContents(mStatsDir);
 
         mServiceContext = null;
@@ -937,7 +934,6 @@ public class NetworkStatsServiceTest {
 
         // verify service has empty history for wifi
         assertNetworkTotal(sTemplateWifi, 0L, 0L, 0L, 0L, 0);
-        String callingPackage = "the.calling.package";
         long thresholdInBytes = 1L;  // very small; should be overriden by framework
         DataUsageRequest inputRequest = new DataUsageRequest(
                 DataUsageRequest.REQUEST_ID_UNSET, sTemplateWifi, thresholdInBytes);
@@ -956,7 +952,7 @@ public class NetworkStatsServiceTest {
 
         // Register and verify request and that binder was called
         DataUsageRequest request =
-                mService.registerUsageCallback(callingPackage, inputRequest,
+                mService.registerUsageCallback(mServiceContext.getOpPackageName(), inputRequest,
                         messenger, mBinder);
         assertTrue(request.requestId > 0);
         assertTrue(Objects.equals(sTemplateWifi, request.template));

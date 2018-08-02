@@ -16,7 +16,7 @@
 
 package com.android.server.am;
 
-import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
+import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
@@ -40,11 +40,9 @@ import static org.mockito.Mockito.spy;
 
 import static java.lang.Integer.MAX_VALUE;
 
-import android.annotation.TestApi;
-import android.app.ActivityManager;
 import android.app.ActivityManager.RecentTaskInfo;
 import android.app.ActivityManager.RunningTaskInfo;
-import android.app.WindowConfiguration;
+import android.app.ActivityTaskManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -96,7 +94,7 @@ public class RecentTasksTest extends ActivityTestsBase {
     private static int INVALID_STACK_ID = 999;
 
     private Context mContext = InstrumentationRegistry.getContext();
-    private ActivityManagerService mService;
+    private TestActivityTaskManagerService mService;
     private ActivityDisplay mDisplay;
     private ActivityDisplay mOtherDisplay;
     private ActivityStack mStack;
@@ -110,44 +108,15 @@ public class RecentTasksTest extends ActivityTestsBase {
 
     private CallbacksRecorder mCallbacksRecorder;
 
-    class TestUserController extends UserController {
-        TestUserController(ActivityManagerService service) {
-            super(service);
-        }
-
-        @Override
-        int[] getCurrentProfileIds() {
-            return new int[] { TEST_USER_0_ID, TEST_QUIET_USER_ID };
-        }
-
-        @Override
-        Set<Integer> getProfileIds(int userId) {
-            Set<Integer> profileIds = new HashSet<>();
-            profileIds.add(TEST_USER_0_ID);
-            profileIds.add(TEST_QUIET_USER_ID);
-            return profileIds;
-        }
-
-        @Override
-        UserInfo getUserInfo(int userId) {
-            switch (userId) {
-                case TEST_USER_0_ID:
-                case TEST_USER_1_ID:
-                    return DEFAULT_USER_INFO;
-                case TEST_QUIET_USER_ID:
-                    return QUIET_USER_INFO;
-            }
-            return null;
-        }
-    }
-
     @Before
     @Override
     public void setUp() throws Exception {
         super.setUp();
 
         mTaskPersister = new TestTaskPersister(mContext.getFilesDir());
-        mService = setupActivityManagerService(new MyTestActivityManagerService(mContext));
+        mService = spy(new MyTestActivityTaskManagerService(mContext));
+        final ActivityManagerService am = spy(new MyTestActivityManagerService(mContext, mService));
+        setupActivityManagerService(am, mService);
         mRecentTasks = (TestRecentTasks) mService.getRecentTasks();
         mRecentTasks.loadParametersFromResources(mContext.getResources());
         mHomeStack = mService.mStackSupervisor.getDefaultDisplay().createStack(
@@ -675,9 +644,8 @@ public class RecentTasksTest extends ActivityTestsBase {
 
     @Test
     public void testNotRecentsComponent_denyApiAccess() throws Exception {
-        doReturn(PackageManager.PERMISSION_DENIED).when(mService).checkPermission(anyString(),
-                anyInt(), anyInt());
-
+        doReturn(PackageManager.PERMISSION_DENIED).when(mService)
+                .checkGetTasksPermission(anyString(), anyInt(), anyInt());
         // Expect the following methods to fail due to recents component not being set
         mRecentTasks.setIsCallerRecentsOverride(TestRecentTasks.DENY_THROW_SECURITY_EXCEPTION);
         testRecentTasksApis(false /* expectNoSecurityException */);
@@ -688,8 +656,8 @@ public class RecentTasksTest extends ActivityTestsBase {
 
     @Test
     public void testRecentsComponent_allowApiAccessWithoutPermissions() throws Exception {
-        doReturn(PackageManager.PERMISSION_DENIED).when(mService).checkPermission(anyString(),
-                anyInt(), anyInt());
+        doReturn(PackageManager.PERMISSION_DENIED).when(mService)
+                .checkGetTasksPermission(anyString(), anyInt(), anyInt());
 
         // Set the recents component and ensure that the following calls do not fail
         mRecentTasks.setIsCallerRecentsOverride(TestRecentTasks.GRANT);
@@ -736,22 +704,9 @@ public class RecentTasksTest extends ActivityTestsBase {
                 () -> mService.moveTasksToFullscreenStack(INVALID_STACK_ID, true));
         assertSecurityException(expectCallable,
                 () -> mService.startActivityFromRecents(0, new Bundle()));
-        assertSecurityException(expectCallable,
-                () -> mService.getTaskSnapshot(0, true));
-        assertSecurityException(expectCallable, () -> {
-            try {
-                mService.registerTaskStackListener(null);
-            } catch (RemoteException e) {
-                // Ignore
-            }
-        });
-        assertSecurityException(expectCallable, () -> {
-            try {
-                mService.unregisterTaskStackListener(null);
-            } catch (RemoteException e) {
-                // Ignore
-            }
-        });
+        assertSecurityException(expectCallable,() -> mService.getTaskSnapshot(0, true));
+        assertSecurityException(expectCallable,() -> mService.registerTaskStackListener(null));
+        assertSecurityException(expectCallable,() -> mService.unregisterTaskStackListener(null));
         assertSecurityException(expectCallable, () -> mService.getTaskDescription(0));
         assertSecurityException(expectCallable, () -> mService.cancelTaskWindowTransition(0));
         assertSecurityException(expectCallable, () -> mService.startRecentsActivity(null, null,
@@ -794,7 +749,7 @@ public class RecentTasksTest extends ActivityTestsBase {
                 .setFlags(FLAG_ACTIVITY_NEW_DOCUMENT | flags)
                 .build();
         task.affinity = null;
-        task.maxRecents = ActivityManager.getMaxAppRecentsLimitStatic();
+        task.maxRecents = ActivityTaskManager.getMaxAppRecentsLimitStatic();
         return task;
     }
 
@@ -836,19 +791,26 @@ public class RecentTasksTest extends ActivityTestsBase {
         }
     }
 
-    private class MyTestActivityManagerService extends TestActivityManagerService {
-        MyTestActivityManagerService(Context context) {
+    private class MyTestActivityTaskManagerService extends TestActivityTaskManagerService {
+        MyTestActivityTaskManagerService(Context context) {
             super(context);
         }
 
         @Override
-        protected ActivityStackSupervisor createTestSupervisor() {
-            return new MyTestActivityStackSupervisor(this, mHandlerThread.getLooper());
+        protected RecentTasks createRecentTasks() {
+            return new TestRecentTasks(this, mTaskPersister);
         }
 
         @Override
-        protected RecentTasks createRecentTasks() {
-            return new TestRecentTasks(this, mTaskPersister, new TestUserController(this));
+        protected ActivityStackSupervisor createTestSupervisor() {
+            return new MyTestActivityStackSupervisor(this, mH.getLooper());
+        }
+
+    }
+
+    private class MyTestActivityManagerService extends TestActivityManagerService {
+        MyTestActivityManagerService(Context context, TestActivityTaskManagerService atm) {
+            super(context, atm);
         }
 
         @Override
@@ -858,7 +820,7 @@ public class RecentTasksTest extends ActivityTestsBase {
     }
 
     private class MyTestActivityStackSupervisor extends TestActivityStackSupervisor {
-        public MyTestActivityStackSupervisor(ActivityManagerService service, Looper looper) {
+        public MyTestActivityStackSupervisor(ActivityTaskManagerService service, Looper looper) {
             super(service, looper);
         }
 
@@ -961,9 +923,33 @@ public class RecentTasksTest extends ActivityTestsBase {
 
         boolean lastAllowed;
 
-        TestRecentTasks(ActivityManagerService service, TaskPersister taskPersister,
-                UserController userController) {
-            super(service, taskPersister, userController);
+        TestRecentTasks(ActivityTaskManagerService service, TaskPersister taskPersister) {
+            super(service, taskPersister);
+        }
+
+        @Override
+        Set<Integer> getProfileIds(int userId) {
+            Set<Integer> profileIds = new HashSet<>();
+            profileIds.add(TEST_USER_0_ID);
+            profileIds.add(TEST_QUIET_USER_ID);
+            return profileIds;
+        }
+
+        @Override
+        UserInfo getUserInfo(int userId) {
+            switch (userId) {
+                case TEST_USER_0_ID:
+                case TEST_USER_1_ID:
+                    return DEFAULT_USER_INFO;
+                case TEST_QUIET_USER_ID:
+                    return QUIET_USER_INFO;
+            }
+            return null;
+        }
+
+        @Override
+        int[] getCurrentProfileIds() {
+            return new int[] { TEST_USER_0_ID, TEST_QUIET_USER_ID };
         }
 
         @Override

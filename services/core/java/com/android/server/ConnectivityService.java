@@ -130,7 +130,6 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.net.LegacyVpnInfo;
-import com.android.internal.net.NetworkStatsFactory;
 import com.android.internal.net.VpnConfig;
 import com.android.internal.net.VpnInfo;
 import com.android.internal.net.VpnProfile;
@@ -158,6 +157,7 @@ import com.android.server.connectivity.NetworkNotificationManager;
 import com.android.server.connectivity.NetworkNotificationManager.NotificationType;
 import com.android.server.connectivity.PacManager;
 import com.android.server.connectivity.PermissionMonitor;
+import com.android.server.connectivity.ProxyTracker;
 import com.android.server.connectivity.Tethering;
 import com.android.server.connectivity.Vpn;
 import com.android.server.connectivity.tethering.TetheringDependencies;
@@ -201,14 +201,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
         implements PendingIntent.OnFinished {
     private static final String TAG = ConnectivityService.class.getSimpleName();
 
-    public static final String DIAG_ARG = "--diag";
+    private static final String DIAG_ARG = "--diag";
     public static final String SHORT_ARG = "--short";
-    public static final String TETHERING_ARG = "tethering";
+    private static final String TETHERING_ARG = "tethering";
 
     private static final boolean DBG = true;
     private static final boolean VDBG = false;
 
-    private static final boolean LOGD_RULES = false;
     private static final boolean LOGD_BLOCKED_NETWORKINFO = true;
 
     // TODO: create better separation between radio types and network types
@@ -243,7 +242,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @VisibleForTesting
     @GuardedBy("mVpns")
-    protected final SparseArray<Vpn> mVpns = new SparseArray<Vpn>();
+    protected final SparseArray<Vpn> mVpns = new SparseArray<>();
 
     // TODO: investigate if mLockdownEnabled can be removed and replaced everywhere by
     // a direct call to LockdownVpnTracker.isEnabled().
@@ -253,23 +252,15 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private LockdownVpnTracker mLockdownTracker;
 
     final private Context mContext;
-    private int mNetworkPreference;
     // 0 is full bad, 100 is full good
     private int mDefaultInetConditionPublished = 0;
-
-    private boolean mTestMode;
-    private static ConnectivityService sServiceInstance;
 
     private INetworkManagementService mNetd;
     private INetworkStatsService mStatsService;
     private INetworkPolicyManager mPolicyManager;
     private NetworkPolicyManagerInternal mPolicyManagerInternal;
-    private IIpConnectivityMetrics mIpConnectivityMetrics;
 
     private String mCurrentTcpBufferSizes;
-
-    private static final int ENABLED  = 1;
-    private static final int DISABLED = 0;
 
     private static final SparseArray<String> sMagicDecoderRing = MessageUtils.findMessageNames(
             new Class[] { AsyncChannel.class, ConnectivityService.class, NetworkAgent.class,
@@ -283,17 +274,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // Don't reap networks.  This should be passed when some networks have not yet been
         // rematched against all NetworkRequests.
         DONT_REAP
-    };
+    }
 
     private enum UnneededFor {
         LINGER,    // Determine whether this network is unneeded and should be lingered.
         TEARDOWN,  // Determine whether this network is unneeded and should be torn down.
     }
-
-    /**
-     * used internally to change our mobile data enabled flag
-     */
-    private static final int EVENT_CHANGE_MOBILE_DATA_ENABLED = 2;
 
     /**
      * used internally to clear a wakelock when transitioning
@@ -448,29 +434,21 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private int mNetTransitionWakeLockTimeout;
     private final PowerManager.WakeLock mPendingIntentWakeLock;
 
-    // track the current default http proxy - tell the world if we get a new one (real change)
-    private volatile ProxyInfo mDefaultProxy = null;
-    private Object mProxyLock = new Object();
-    private boolean mDefaultProxyDisabled = false;
-
-    // track the global proxy.
-    private ProxyInfo mGlobalProxy = null;
-
-    private PacManager mPacManager = null;
+    // A helper object to track the current default HTTP proxy. ConnectivityService needs to tell
+    // the world when it changes.
+    private final ProxyTracker mProxyTracker;
 
     final private SettingsObserver mSettingsObserver;
 
     private UserManager mUserManager;
 
-    NetworkConfig[] mNetConfigs;
-    int mNetworksDefined;
+    private NetworkConfig[] mNetConfigs;
+    private int mNetworksDefined;
 
     // the set of network types that can only be enabled by system/sig apps
-    List mProtectedNetworks;
+    private List mProtectedNetworks;
 
-    private DataConnectionStats mDataConnectionStats;
-
-    TelephonyManager mTelephonyManager;
+    private TelephonyManager mTelephonyManager;
 
     private KeepaliveTracker mKeepaliveTracker;
     private NetworkNotificationManager mNotifier;
@@ -513,8 +491,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             mLog = log;
         }
     }
-    private final ArrayDeque<ValidationLog> mValidationLogs =
-            new ArrayDeque<ValidationLog>(MAX_VALIDATION_LOGS);
+    private final ArrayDeque<ValidationLog> mValidationLogs = new ArrayDeque<>(MAX_VALIDATION_LOGS);
 
     private void addValidationLogs(ReadOnlyLocalLog log, Network network, String name) {
         synchronized (mValidationLogs) {
@@ -587,7 +564,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 throw new IllegalStateException(
                         "legacy list for type " + type + "already initialized");
             }
-            mTypeLists[type] = new ArrayList<NetworkAgentInfo>();
+            mTypeLists[type] = new ArrayList<>();
         }
 
         public boolean isTypeSupported(int type) {
@@ -690,7 +667,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         private String naiToString(NetworkAgentInfo nai) {
-            String name = (nai != null) ? nai.name() : "null";
+            String name = nai.name();
             String state = (nai.networkInfo != null) ?
                     nai.networkInfo.getState() + "/" + nai.networkInfo.getDetailedState() :
                     "???/???";
@@ -783,6 +760,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mPolicyManagerInternal = checkNotNull(
                 LocalServices.getService(NetworkPolicyManagerInternal.class),
                 "missing NetworkPolicyManagerInternal");
+        mProxyTracker = new ProxyTracker(context, mHandler, EVENT_PROXY_HAS_CHANGED);
 
         mKeyStore = KeyStore.getInstance();
         mTelephonyManager = (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
@@ -864,9 +842,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
             }
         }
 
-        mTestMode = mSystemProperties.get("cm.test.mode").equals("true")
-                && mSystemProperties.get("ro.build.type").equals("eng");
-
         mTethering = makeTethering();
 
         mPermissionMonitor = new PermissionMonitor(mContext, mNetd);
@@ -893,10 +868,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mSettingsObserver = new SettingsObserver(mContext, mHandler);
         registerSettingsCallbacks();
 
-        mDataConnectionStats = new DataConnectionStats(mContext);
-        mDataConnectionStats.startMonitoring();
-
-        mPacManager = new PacManager(mContext, mHandler, EVENT_PROXY_HAS_CHANGED);
+        final DataConnectionStats dataConnectionStats = new DataConnectionStats(mContext);
+        dataConnectionStats.startMonitoring();
 
         mUserManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
 
@@ -929,6 +902,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
             public boolean isTetheringSupported() {
                 return ConnectivityService.this.isTetheringSupported();
             }
+            @Override
+            public NetworkRequest getDefaultNetworkRequest() {
+                return mDefaultRequest;
+            }
         };
         return new Tethering(mContext, mNetd, mStatsService, mPolicyManager,
                 IoThread.get().getLooper(), new MockableSystemProperties(),
@@ -946,7 +923,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private NetworkRequest createDefaultInternetRequestForTransport(
             int transportType, NetworkRequest.Type type) {
-        NetworkCapabilities netCap = new NetworkCapabilities();
+        final NetworkCapabilities netCap = new NetworkCapabilities();
         netCap.addCapability(NET_CAPABILITY_INTERNET);
         netCap.addCapability(NET_CAPABILITY_NOT_RESTRICTED);
         if (transportType > -1) {
@@ -1026,7 +1003,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         throw new IllegalStateException("No free netIds");
     }
 
-    private NetworkState getFilteredNetworkState(int networkType, int uid, boolean ignoreBlocked) {
+    private NetworkState getFilteredNetworkState(int networkType, int uid) {
         if (mLegacyTypeTracker.isTypeSupported(networkType)) {
             final NetworkAgentInfo nai = mLegacyTypeTracker.getNetworkForType(networkType);
             final NetworkState state;
@@ -1044,14 +1021,15 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 state = new NetworkState(info, new LinkProperties(), capabilities,
                         null, null, null);
             }
-            filterNetworkStateForUid(state, uid, ignoreBlocked);
+            filterNetworkStateForUid(state, uid, false);
             return state;
         } else {
             return NetworkState.EMPTY;
         }
     }
 
-    private NetworkAgentInfo getNetworkAgentInfoForNetwork(Network network) {
+    @VisibleForTesting
+    protected NetworkAgentInfo getNetworkAgentInfoForNetwork(Network network) {
         if (network == null) {
             return null;
         }
@@ -1249,7 +1227,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 return state.networkInfo;
             }
         }
-        final NetworkState state = getFilteredNetworkState(networkType, uid, false);
+        final NetworkState state = getFilteredNetworkState(networkType, uid);
         return state.networkInfo;
     }
 
@@ -1284,7 +1262,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     public Network getNetworkForType(int networkType) {
         enforceAccessPermission();
         final int uid = Binder.getCallingUid();
-        NetworkState state = getFilteredNetworkState(networkType, uid, false);
+        NetworkState state = getFilteredNetworkState(networkType, uid);
         if (!isNetworkWithLinkPropertiesBlocked(state.linkProperties, uid, false)) {
             return state.network;
         }
@@ -1321,7 +1299,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // default.
         enforceAccessPermission();
 
-        HashMap<Network, NetworkCapabilities> result = new HashMap<Network, NetworkCapabilities>();
+        HashMap<Network, NetworkCapabilities> result = new HashMap<>();
 
         NetworkAgentInfo nai = getDefaultNetwork();
         NetworkCapabilities nc = getNetworkCapabilitiesInternal(nai);
@@ -1608,15 +1586,16 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @VisibleForTesting
     protected void registerNetdEventCallback() {
-        mIpConnectivityMetrics =
-                (IIpConnectivityMetrics) IIpConnectivityMetrics.Stub.asInterface(
-                ServiceManager.getService(IpConnectivityLog.SERVICE_NAME));
-        if (mIpConnectivityMetrics == null) {
+        final IIpConnectivityMetrics ipConnectivityMetrics =
+                IIpConnectivityMetrics.Stub.asInterface(
+                        ServiceManager.getService(IpConnectivityLog.SERVICE_NAME));
+        if (ipConnectivityMetrics == null) {
             Slog.wtf(TAG, "Missing IIpConnectivityMetrics");
+            return;
         }
 
         try {
-            mIpConnectivityMetrics.addNetdEventCallback(
+            ipConnectivityMetrics.addNetdEventCallback(
                     INetdEventCallback.CALLBACK_CALLER_CONNECTIVITY_SERVICE,
                     mNetdEventCallback);
         } catch (Exception e) {
@@ -1794,7 +1773,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 try {
                     bs.noteConnectivityChanged(intent.getIntExtra(
                             ConnectivityManager.EXTRA_NETWORK_TYPE, ConnectivityManager.TYPE_NONE),
-                            ni != null ? ni.getState().toString() : "?");
+                            ni.getState().toString());
                 } catch (RemoteException e) {
                 }
                 intent.addFlags(Intent.FLAG_RECEIVER_VISIBLE_TO_INSTANT_APPS);
@@ -1880,7 +1859,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (iface != null && (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
                               caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI))) {
             try {
-                // the call fails silently if no idletimer setup for this interface
+                // the call fails silently if no idle timer setup for this interface
                 mNetd.removeIdleTimer(iface);
             } catch (Exception e) {
                 loge("Exception in removeDataActivityTracking " + e);
@@ -1889,7 +1868,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     /**
-     * Reads the network specific MTU size from reources.
+     * Reads the network specific MTU size from resources.
      * and set it on it's iface.
      */
     private void updateMtu(LinkProperties newLp, LinkProperties oldLp) {
@@ -2255,6 +2234,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                         updateCapabilities(oldScore, nai, nai.networkCapabilities);
                         // If score has changed, rebroadcast to NetworkFactories. b/17726566
                         if (oldScore != nai.getCurrentScore()) sendUpdatedScoreToFactories(nai);
+                        if (valid) handleFreshlyValidatedNetwork(nai);
                     }
                     updateInetCondition(nai);
                     // Let the NetworkAgent know the state of its network
@@ -2347,6 +2327,16 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private boolean networkRequiresValidation(NetworkAgentInfo nai) {
         return NetworkMonitor.isValidationRequired(
                 mDefaultRequest.networkCapabilities, nai.networkCapabilities);
+    }
+
+    private void handleFreshlyValidatedNetwork(NetworkAgentInfo nai) {
+        if (nai == null) return;
+        // If the Private DNS mode is opportunistic, reprogram the DNS servers
+        // in order to restart a validation pass from within netd.
+        final PrivateDnsConfig cfg = mDnsManager.getPrivateDnsConfig();
+        if (cfg.useTls && TextUtils.isEmpty(cfg.hostname)) {
+            updateDnses(nai.linkProperties, null, nai.network.netId);
+        }
     }
 
     private void handlePrivateDnsSettingsChanged() {
@@ -2849,7 +2839,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (!accept) {
             // Tell the NetworkAgent to not automatically reconnect to the network.
             nai.asyncChannel.sendMessage(NetworkAgent.CMD_PREVENT_AUTOMATIC_RECONNECT);
-            // Teardown the nework.
+            // Teardown the network.
             teardownUnneededNetwork(nai);
         }
 
@@ -3121,8 +3111,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     public int tether(String iface, String callerPkg) {
         ConnectivityManager.enforceTetherChangePermission(mContext, callerPkg);
         if (isTetheringSupported()) {
-            final int status = mTethering.tether(iface);
-            return status;
+            return mTethering.tether(iface);
         } else {
             return ConnectivityManager.TETHER_ERROR_UNSUPPORTED;
         }
@@ -3134,8 +3123,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         ConnectivityManager.enforceTetherChangePermission(mContext, callerPkg);
 
         if (isTetheringSupported()) {
-            final int status = mTethering.untether(iface);
-            return status;
+            return mTethering.untether(iface);
         } else {
             return ConnectivityManager.TETHER_ERROR_UNSUPPORTED;
         }
@@ -3367,22 +3355,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         nai.networkMonitor.forceReevaluation(uid);
     }
 
-    private ProxyInfo getDefaultProxy() {
-        // this information is already available as a world read/writable jvm property
-        // so this API change wouldn't have a benifit.  It also breaks the passing
-        // of proxy info to all the JVMs.
-        // enforceAccessPermission();
-        synchronized (mProxyLock) {
-            ProxyInfo ret = mGlobalProxy;
-            if ((ret == null) && !mDefaultProxyDisabled) ret = mDefaultProxy;
-            return ret;
-        }
-    }
-
     @Override
     public ProxyInfo getProxyForNetwork(Network network) {
-        if (network == null) return getDefaultProxy();
-        final ProxyInfo globalProxy = getGlobalProxy();
+        if (network == null) return mProxyTracker.getDefaultProxy();
+        final ProxyInfo globalProxy = mProxyTracker.getGlobalProxy();
         if (globalProxy != null) return globalProxy;
         if (!NetworkUtils.queryUserAccess(Binder.getCallingUid(), network.netId)) return null;
         // Don't call getLinkProperties() as it requires ACCESS_NETWORK_STATE permission, which
@@ -3396,80 +3372,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
-    // Convert empty ProxyInfo's to null as null-checks are used to determine if proxies are present
-    // (e.g. if mGlobalProxy==null fall back to network-specific proxy, if network-specific
-    // proxy is null then there is no proxy in place).
-    private ProxyInfo canonicalizeProxyInfo(ProxyInfo proxy) {
-        if (proxy != null && TextUtils.isEmpty(proxy.getHost())
-                && (proxy.getPacFileUrl() == null || Uri.EMPTY.equals(proxy.getPacFileUrl()))) {
-            proxy = null;
-        }
-        return proxy;
-    }
-
-    // ProxyInfo equality function with a couple modifications over ProxyInfo.equals() to make it
-    // better for determining if a new proxy broadcast is necessary:
-    // 1. Canonicalize empty ProxyInfos to null so an empty proxy compares equal to null so as to
-    //    avoid unnecessary broadcasts.
-    // 2. Make sure all parts of the ProxyInfo's compare true, including the host when a PAC URL
-    //    is in place.  This is important so legacy PAC resolver (see com.android.proxyhandler)
-    //    changes aren't missed.  The legacy PAC resolver pretends to be a simple HTTP proxy but
-    //    actually uses the PAC to resolve; this results in ProxyInfo's with PAC URL, host and port
-    //    all set.
-    private boolean proxyInfoEqual(ProxyInfo a, ProxyInfo b) {
-        a = canonicalizeProxyInfo(a);
-        b = canonicalizeProxyInfo(b);
-        // ProxyInfo.equals() doesn't check hosts when PAC URLs are present, but we need to check
-        // hosts even when PAC URLs are present to account for the legacy PAC resolver.
-        return Objects.equals(a, b) && (a == null || Objects.equals(a.getHost(), b.getHost()));
-    }
-
-    public void setGlobalProxy(ProxyInfo proxyProperties) {
+    @Override
+    public void setGlobalProxy(final ProxyInfo proxyProperties) {
         enforceConnectivityInternalPermission();
-
-        synchronized (mProxyLock) {
-            if (proxyProperties == mGlobalProxy) return;
-            if (proxyProperties != null && proxyProperties.equals(mGlobalProxy)) return;
-            if (mGlobalProxy != null && mGlobalProxy.equals(proxyProperties)) return;
-
-            String host = "";
-            int port = 0;
-            String exclList = "";
-            String pacFileUrl = "";
-            if (proxyProperties != null && (!TextUtils.isEmpty(proxyProperties.getHost()) ||
-                    !Uri.EMPTY.equals(proxyProperties.getPacFileUrl()))) {
-                if (!proxyProperties.isValid()) {
-                    if (DBG)
-                        log("Invalid proxy properties, ignoring: " + proxyProperties.toString());
-                    return;
-                }
-                mGlobalProxy = new ProxyInfo(proxyProperties);
-                host = mGlobalProxy.getHost();
-                port = mGlobalProxy.getPort();
-                exclList = mGlobalProxy.getExclusionListAsString();
-                if (!Uri.EMPTY.equals(proxyProperties.getPacFileUrl())) {
-                    pacFileUrl = proxyProperties.getPacFileUrl().toString();
-                }
-            } else {
-                mGlobalProxy = null;
-            }
-            ContentResolver res = mContext.getContentResolver();
-            final long token = Binder.clearCallingIdentity();
-            try {
-                Settings.Global.putString(res, Settings.Global.GLOBAL_HTTP_PROXY_HOST, host);
-                Settings.Global.putInt(res, Settings.Global.GLOBAL_HTTP_PROXY_PORT, port);
-                Settings.Global.putString(res, Settings.Global.GLOBAL_HTTP_PROXY_EXCLUSION_LIST,
-                        exclList);
-                Settings.Global.putString(res, Settings.Global.GLOBAL_HTTP_PROXY_PAC, pacFileUrl);
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-
-            if (mGlobalProxy == null) {
-                proxyProperties = mDefaultProxy;
-            }
-            sendProxyBroadcast(proxyProperties);
-        }
+        mProxyTracker.setGlobalProxy(proxyProperties);
     }
 
     private void loadGlobalProxy() {
@@ -3491,20 +3397,16 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 return;
             }
 
-            synchronized (mProxyLock) {
-                mGlobalProxy = proxyProperties;
+            synchronized (mProxyTracker.mProxyLock) {
+                mProxyTracker.mGlobalProxy = proxyProperties;
             }
         }
     }
 
+    @Override
+    @Nullable
     public ProxyInfo getGlobalProxy() {
-        // this information is already available as a world read/writable jvm property
-        // so this API change wouldn't have a benifit.  It also breaks the passing
-        // of proxy info to all the JVMs.
-        // enforceAccessPermission();
-        synchronized (mProxyLock) {
-            return mGlobalProxy;
-        }
+        return mProxyTracker.getGlobalProxy();
     }
 
     private void handleApplyDefaultProxy(ProxyInfo proxy) {
@@ -3512,33 +3414,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 && Uri.EMPTY.equals(proxy.getPacFileUrl())) {
             proxy = null;
         }
-        synchronized (mProxyLock) {
-            if (mDefaultProxy != null && mDefaultProxy.equals(proxy)) return;
-            if (mDefaultProxy == proxy) return; // catches repeated nulls
-            if (proxy != null &&  !proxy.isValid()) {
-                if (DBG) log("Invalid proxy properties, ignoring: " + proxy.toString());
-                return;
-            }
-
-            // This call could be coming from the PacManager, containing the port of the local
-            // proxy.  If this new proxy matches the global proxy then copy this proxy to the
-            // global (to get the correct local port), and send a broadcast.
-            // TODO: Switch PacManager to have its own message to send back rather than
-            // reusing EVENT_HAS_CHANGED_PROXY and this call to handleApplyDefaultProxy.
-            if ((mGlobalProxy != null) && (proxy != null)
-                    && (!Uri.EMPTY.equals(proxy.getPacFileUrl()))
-                    && proxy.getPacFileUrl().equals(mGlobalProxy.getPacFileUrl())) {
-                mGlobalProxy = proxy;
-                sendProxyBroadcast(mGlobalProxy);
-                return;
-            }
-            mDefaultProxy = proxy;
-
-            if (mGlobalProxy != null) return;
-            if (!mDefaultProxyDisabled) {
-                sendProxyBroadcast(proxy);
-            }
-        }
+        mProxyTracker.setDefaultProxy(proxy);
     }
 
     // If the proxy has changed from oldLp to newLp, resend proxy broadcast with default proxy.
@@ -3546,17 +3422,17 @@ public class ConnectivityService extends IConnectivityManager.Stub
     // the default proxy (even if it hasn't changed).
     // TODO: Deprecate the broadcast extras as they aren't necessarily applicable in a multi-network
     // world where an app might be bound to a non-default network.
-    private void updateProxy(LinkProperties newLp, LinkProperties oldLp, NetworkAgentInfo nai) {
+    private void updateProxy(LinkProperties newLp, LinkProperties oldLp) {
         ProxyInfo newProxyInfo = newLp == null ? null : newLp.getHttpProxy();
         ProxyInfo oldProxyInfo = oldLp == null ? null : oldLp.getHttpProxy();
 
-        if (!proxyInfoEqual(newProxyInfo, oldProxyInfo)) {
-            sendProxyBroadcast(getDefaultProxy());
+        if (!ProxyTracker.proxyInfoEqual(newProxyInfo, oldProxyInfo)) {
+            mProxyTracker.sendProxyBroadcast(mProxyTracker.getDefaultProxy());
         }
     }
 
     private void handleDeprecatedGlobalHttpProxy() {
-        String proxy = Settings.Global.getString(mContext.getContentResolver(),
+        final String proxy = Settings.Global.getString(mContext.getContentResolver(),
                 Settings.Global.HTTP_PROXY);
         if (!TextUtils.isEmpty(proxy)) {
             String data[] = proxy.split(":");
@@ -3564,7 +3440,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 return;
             }
 
-            String proxyHost =  data[0];
+            final String proxyHost = data[0];
             int proxyPort = 8080;
             if (data.length > 1) {
                 try {
@@ -3573,24 +3449,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     return;
                 }
             }
-            ProxyInfo p = new ProxyInfo(data[0], proxyPort, "");
+            final ProxyInfo p = new ProxyInfo(proxyHost, proxyPort, "");
             setGlobalProxy(p);
-        }
-    }
-
-    private void sendProxyBroadcast(ProxyInfo proxy) {
-        if (proxy == null) proxy = new ProxyInfo("", 0, "");
-        if (mPacManager.setCurrentProxyScriptUrl(proxy)) return;
-        if (DBG) log("sending Proxy Broadcast for " + proxy);
-        Intent intent = new Intent(Proxy.PROXY_CHANGE_ACTION);
-        intent.addFlags(Intent.FLAG_RECEIVER_REPLACE_PENDING |
-            Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
-        intent.putExtra(Proxy.EXTRA_PROXY_INFO, proxy);
-        final long ident = Binder.clearCallingIdentity();
-        try {
-            mContext.sendStickyBroadcastAsUser(intent, UserHandle.ALL);
-        } finally {
-            Binder.restoreCallingIdentity(ident);
         }
     }
 
@@ -3601,7 +3461,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         SettingsObserver(Context context, Handler handler) {
             super(null);
-            mUriEventMap = new HashMap<Uri, Integer>();
+            mUriEventMap = new HashMap<>();
             mContext = context;
             mHandler = handler;
         }
@@ -3907,7 +3767,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         synchronized (mVpns) {
             Vpn vpn = mVpns.get(userId);
             if (vpn == null) {
-                // Shouldn't happen as all codepaths that point here should have checked the Vpn
+                // Shouldn't happen as all code paths that point here should have checked the Vpn
                 // exists already.
                 Slog.wtf(TAG, "User " + userId + " has no Vpn configuration");
                 return false;
@@ -4071,7 +3931,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             url = String.format(url,
                     mTelephonyManager.getSimSerialNumber() /* ICCID */,
                     mTelephonyManager.getDeviceId() /* IMEI */,
-                    phoneNumber /* Phone numer */);
+                    phoneNumber /* Phone number */);
         }
 
         return url;
@@ -4198,10 +4058,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     };
 
-    private final HashMap<Messenger, NetworkFactoryInfo> mNetworkFactoryInfos =
-            new HashMap<Messenger, NetworkFactoryInfo>();
-    private final HashMap<NetworkRequest, NetworkRequestInfo> mNetworkRequests =
-            new HashMap<NetworkRequest, NetworkRequestInfo>();
+    private final HashMap<Messenger, NetworkFactoryInfo> mNetworkFactoryInfos = new HashMap<>();
+    private final HashMap<NetworkRequest, NetworkRequestInfo> mNetworkRequests = new HashMap<>();
 
     private static final int MAX_NETWORK_REQUESTS_PER_UID = 100;
     // Map from UID to number of NetworkRequests that UID has filed.
@@ -4315,7 +4173,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     private ArrayList<Integer> getSignalStrengthThresholds(NetworkAgentInfo nai) {
-        final SortedSet<Integer> thresholds = new TreeSet();
+        final SortedSet<Integer> thresholds = new TreeSet<>();
         synchronized (nai) {
             for (NetworkRequestInfo nri : mNetworkRequests.values()) {
                 if (nri.request.networkCapabilities.hasSignalStrength() &&
@@ -4324,7 +4182,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 }
             }
         }
-        return new ArrayList<Integer>(thresholds);
+        return new ArrayList<>(thresholds);
     }
 
     private void updateSignalStrengthThresholds(
@@ -4604,13 +4462,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
      */
     // NOTE: Accessed on multiple threads, must be synchronized on itself.
     @GuardedBy("mNetworkForRequestId")
-    private final SparseArray<NetworkAgentInfo> mNetworkForRequestId =
-            new SparseArray<NetworkAgentInfo>();
+    private final SparseArray<NetworkAgentInfo> mNetworkForRequestId = new SparseArray<>();
 
     // NOTE: Accessed on multiple threads, must be synchronized on itself.
     @GuardedBy("mNetworkForNetId")
-    private final SparseArray<NetworkAgentInfo> mNetworkForNetId =
-            new SparseArray<NetworkAgentInfo>();
+    private final SparseArray<NetworkAgentInfo> mNetworkForNetId = new SparseArray<>();
     // NOTE: Accessed on multiple threads, synchronized with mNetworkForNetId.
     // An entry is first added to mNetIdInUse, prior to mNetworkForNetId, so
     // there may not be a strict 1:1 correlation between the two.
@@ -4620,11 +4476,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
     // NetworkAgentInfo keyed off its connecting messenger
     // TODO - eval if we can reduce the number of lists/hashmaps/sparsearrays
     // NOTE: Only should be accessed on ConnectivityServiceThread, except dump().
-    private final HashMap<Messenger, NetworkAgentInfo> mNetworkAgentInfos =
-            new HashMap<Messenger, NetworkAgentInfo>();
+    private final HashMap<Messenger, NetworkAgentInfo> mNetworkAgentInfos = new HashMap<>();
 
     @GuardedBy("mBlockedAppUids")
-    private final HashSet<Integer> mBlockedAppUids = new HashSet();
+    private final HashSet<Integer> mBlockedAppUids = new HashSet<>();
 
     // Note: if mDefaultRequest is changed, NetworkMonitor needs to be updated.
     private final NetworkRequest mDefaultRequest;
@@ -4734,7 +4589,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (isDefaultNetwork(networkAgent)) {
             handleApplyDefaultProxy(newLp.getHttpProxy());
         } else {
-            updateProxy(newLp, oldLp, networkAgent);
+            updateProxy(newLp, oldLp);
         }
         // TODO - move this check to cover the whole function
         if (!Objects.equals(newLp, oldLp)) {
@@ -4749,7 +4604,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     private void wakeupModifyInterface(String iface, NetworkCapabilities caps, boolean add) {
-        // Marks are only available on WiFi interaces. Checking for
+        // Marks are only available on WiFi interfaces. Checking for
         // marks on unsupported interfaces is harmless.
         if (!caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
             return;
@@ -4781,7 +4636,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private void updateInterfaces(LinkProperties newLp, LinkProperties oldLp, int netId,
                                   NetworkCapabilities caps) {
-        CompareResult<String> interfaceDiff = new CompareResult<String>(
+        CompareResult<String> interfaceDiff = new CompareResult<>(
                 oldLp != null ? oldLp.getAllInterfaceNames() : null,
                 newLp != null ? newLp.getAllInterfaceNames() : null);
         for (String iface : interfaceDiff.added) {
@@ -4816,7 +4671,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         // add routes before removing old in case it helps with continuous connectivity
 
-        // do this twice, adding non-nexthop routes first, then routes they are dependent on
+        // do this twice, adding non-next-hop routes first, then routes they are dependent on
         for (RouteInfo route : routeDiff.added) {
             if (route.hasGateway()) continue;
             if (VDBG) log("Adding Route [" + route + "] to network " + netId);
@@ -5269,8 +5124,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         // Find and migrate to this Network any NetworkRequests for
         // which this network is now the best.
-        ArrayList<NetworkAgentInfo> affectedNetworks = new ArrayList<NetworkAgentInfo>();
-        ArrayList<NetworkRequestInfo> addedRequests = new ArrayList<NetworkRequestInfo>();
+        ArrayList<NetworkAgentInfo> affectedNetworks = new ArrayList<>();
+        ArrayList<NetworkRequestInfo> addedRequests = new ArrayList<>();
         NetworkCapabilities nc = newNetwork.networkCapabilities;
         if (VDBG) log(" network has: " + nc);
         for (NetworkRequestInfo nri : mNetworkRequests.values()) {
@@ -5334,7 +5189,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     keep = true;
                     // Tell NetworkFactories about the new score, so they can stop
                     // trying to connect if they know they cannot match it.
-                    // TODO - this could get expensive if we have alot of requests for this
+                    // TODO - this could get expensive if we have a lot of requests for this
                     // network.  Think about if there is a way to reduce this.  Push
                     // netid->request mapping to each factory?
                     sendUpdatedScoreToFactories(nri.request, score);
@@ -5455,7 +5310,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
             // This has to happen after the notifyNetworkCallbacks as that tickles each
             // ConnectivityManager instance so that legacy requests correctly bind dns
-            // requests to this network.  The legacy users are listening for this bcast
+            // requests to this network.  The legacy users are listening for this broadcast
             // and will generally do a dns request so they can ensureRouteToHost and if
             // they do that before the callbacks happen they'll use the default network.
             //
@@ -5520,7 +5375,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // TODO: This may get slow.  The "changed" parameter is provided for future optimization
         // to avoid the slowness.  It is not simply enough to process just "changed", for
         // example in the case where "changed"'s score decreases and another network should begin
-        // satifying a NetworkRequest that "changed" currently satisfies.
+        // satisfying a NetworkRequest that "changed" currently satisfies.
 
         // Optimization: Only reprocess "changed" if its score improved.  This is safe because it
         // can only add more NetworkRequests satisfied by "changed", and this is exactly what
@@ -5619,20 +5474,24 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (!networkAgent.everConnected && state == NetworkInfo.State.CONNECTED) {
             networkAgent.everConnected = true;
 
+            if (networkAgent.linkProperties == null) {
+                Slog.wtf(TAG, networkAgent.name() + " connected with null LinkProperties");
+            }
+
             handlePerNetworkPrivateDnsConfig(networkAgent, mDnsManager.getPrivateDnsConfig());
             updateLinkProperties(networkAgent, null);
-            notifyIfacesChangedForNetworkStats();
 
             networkAgent.networkMonitor.sendMessage(NetworkMonitor.CMD_NETWORK_CONNECTED);
             scheduleUnvalidatedPrompt(networkAgent);
 
             if (networkAgent.isVPN()) {
                 // Temporarily disable the default proxy (not global).
-                synchronized (mProxyLock) {
-                    if (!mDefaultProxyDisabled) {
-                        mDefaultProxyDisabled = true;
-                        if (mGlobalProxy == null && mDefaultProxy != null) {
-                            sendProxyBroadcast(null);
+                synchronized (mProxyTracker.mProxyLock) {
+                    if (!mProxyTracker.mDefaultProxyDisabled) {
+                        mProxyTracker.mDefaultProxyDisabled = true;
+                        if (mProxyTracker.mGlobalProxy == null
+                                && mProxyTracker.mDefaultProxy != null) {
+                            mProxyTracker.sendProxyBroadcast(null);
                         }
                     }
                 }
@@ -5657,11 +5516,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
         } else if (state == NetworkInfo.State.DISCONNECTED) {
             networkAgent.asyncChannel.disconnect();
             if (networkAgent.isVPN()) {
-                synchronized (mProxyLock) {
-                    if (mDefaultProxyDisabled) {
-                        mDefaultProxyDisabled = false;
-                        if (mGlobalProxy == null && mDefaultProxy != null) {
-                            sendProxyBroadcast(mDefaultProxy);
+                synchronized (mProxyTracker.mProxyLock) {
+                    if (mProxyTracker.mDefaultProxyDisabled) {
+                        mProxyTracker.mDefaultProxyDisabled = false;
+                        if (mProxyTracker.mGlobalProxy == null
+                                && mProxyTracker.mDefaultProxy != null) {
+                            mProxyTracker.sendProxyBroadcast(mProxyTracker.mDefaultProxy);
                         }
                     }
                 }
@@ -5670,7 +5530,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             disconnectAndDestroyNetwork(networkAgent);
         } else if ((oldInfo != null && oldInfo.getState() == NetworkInfo.State.SUSPENDED) ||
                 state == NetworkInfo.State.SUSPENDED) {
-            // going into or coming out of SUSPEND: rescore and notify
+            // going into or coming out of SUSPEND: re-score and notify
             if (networkAgent.getCurrentScore() != oldScore) {
                 rematchAllNetworksAndRequests(networkAgent, oldScore);
             }

@@ -236,9 +236,6 @@
     <string name="global_actions_toggle_airplane_mode" msgid="5884330306926307456">"โหมดใช้งานบนเครื่องบิน"</string>
     <string name="global_actions_airplane_mode_on_status" msgid="2719557982608919750">"เปิดโหมดใช้งานบนเครื่องบิน"</string>
     <string name="global_actions_airplane_mode_off_status" msgid="5075070442854490296">"โหมดใช้งานบนเครื่องบินปิดทำงานอยู่"</string>
-    <string name="global_action_toggle_battery_saver" msgid="708515500418994208">"โหมดประหยัดแบตเตอรี่"</string>
-    <string name="global_action_battery_saver_on_status" msgid="484059130698197787">"ปิดโหมดประหยัดแบตเตอรี่อยู่"</string>
-    <string name="global_action_battery_saver_off_status" msgid="75550964969478405">"เปิดโหมดประหยัดแบตเตอรี่อยู่"</string>
     <string name="global_action_settings" msgid="1756531602592545966">"การตั้งค่า"</string>
     <string name="global_action_assist" msgid="3892832961594295030">"ผู้ช่วย"</string>
     <string name="global_action_voice_assist" msgid="7751191495200504480">"ตัวช่วยเสียง"</string>
@@ -276,6 +273,9 @@
     <string name="permgrouplab_location" msgid="7275582855722310164">"ตำแหน่ง"</string>
     <string name="permgroupdesc_location" msgid="1346617465127855033">"เข้าถึงตำแหน่งของอุปกรณ์นี้"</string>
     <string name="permgrouprequest_location" msgid="3788275734953323491">"อนุญาตให้ &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; เข้าถึงตำแหน่งของอุปกรณ์นี้ไหม"</string>
+    <string name="permgrouprequestdetail_location" msgid="1113400215566814664">"แอปจะมีสิทธิ์เข้าถึงตำแหน่งได้ในขณะที่คุณกำลังใช้แอปเท่านั้น"</string>
+    <string name="permgroupbackgroundrequest_location" msgid="8461841153030844390">"อนุญาตให้ &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; เข้าถึงตำแหน่งของอุปกรณ์นี้ทุกครั้งไหม"</string>
+    <string name="permgroupbackgroundrequestdetail_location" msgid="1715668276378108654">"แอปจะมีสิทธิ์เข้าถึงตำแหน่งเสมอแม้ว่าคุณจะไม่ได้ใช้แอป"</string>
     <string name="permgrouplab_calendar" msgid="5863508437783683902">"ปฏิทิน"</string>
     <string name="permgroupdesc_calendar" msgid="3889615280211184106">"เข้าถึงปฏิทิน"</string>
     <string name="permgrouprequest_calendar" msgid="289900767793189421">"อนุญาตให้ &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; เข้าถึงปฏิทินไหม"</string>
@@ -402,12 +402,14 @@
     <string name="permdesc_writeCalendar" product="default" msgid="7592791790516943173">"แอปนี้สามารถเพิ่ม นำออก หรือเปลี่ยนกิจกรรมในปฏิทินบนโทรศัพท์ของคุณ แอปนี้สามารถส่งข้อความที่ดูเหมือนว่ามาจากเจ้าของปฏิทิน หรือเปลี่ยนแปลงกิจกรรมโดยไม่แจ้งให้เจ้าของทราบ"</string>
     <string name="permlab_accessLocationExtraCommands" msgid="2836308076720553837">"เข้าถึงคำสั่งของโปรแกรมแจ้งตำแหน่งพิเศษ"</string>
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"อนุญาตให้แอปเข้าถึงคำสั่งของผู้ให้บริการตำแหน่งเพิ่มเติม ซึ่งอาจทำให้แอปสามารถแทรกแซงการทำงานของ GPS หรือต้นทางของตำแหน่งอื่นๆ ได้"</string>
-    <string name="permlab_accessFineLocation" msgid="251034415460950944">"เข้าถึงตำแหน่งที่แม่นยำ (อิงจาก GPS และเครือข่าย)"</string>
-    <string name="permdesc_accessFineLocation" msgid="5821994817969957884">"แอปนี้สามารถรับตำแหน่งของคุณโดยอิงจากแหล่งข้อมูลเครือข่าย เช่น เสาสัญญาณมือถือและเครือข่าย Wi-Fi แอปจะใช้บริการตำแหน่งเหล่านี้ได้ต่อเมื่อคุณเปิดบริการและบริการพร้อมใช้งานในโทรศัพท์ของคุณ การเปิดบริการนี้อาจเพิ่มการใช้แบตเตอรี่"</string>
+    <string name="permlab_accessFineLocation" msgid="6265109654698562427">"เข้าถึงตำแหน่งที่แม่นยำเมื่ออยู่เบื้องหน้าเท่านั้น"</string>
+    <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"แอปนี้รับตำแหน่งที่แม่นยำของคุณได้เมื่อทำงานอยู่เบื้องหน้าเท่านั้น แอปจะใช้บริการตำแหน่งเหล่านี้ได้ต่อเมื่อคุณเปิดบริการและบริการพร้อมใช้งานในโทรศัพท์ของคุณ ซึ่งอาจทำให้มีการใช้แบตเตอรี่มากขึ้น"</string>
     <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"เข้าถึงตำแหน่งโดยประมาณ (อิงจากเครือข่าย)"</string>
     <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"แอปนี้สามารถรับตำแหน่งของคุณโดยอิงจากแหล่งข้อมูลเครือข่าย เช่น เสาสัญญาณมือถือและเครือข่าย Wi-Fi แอปจะใช้บริการตำแหน่งเหล่านี้ได้ต่อเมื่อคุณเปิดบริการและบริการพร้อมใช้งานในแท็บเล็ตของคุณ"</string>
     <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"แอปนี้สามารถรับตำแหน่งของคุณโดยอิงจากแหล่งข้อมูลเครือข่าย เช่น เสาสัญญาณมือถือและเครือข่าย Wi-Fi แอปจะใช้บริการตำแหน่งเหล่านี้ได้ต่อเมื่อคุณเปิดบริการและบริการพร้อมใช้งานในทีวีของคุณ"</string>
     <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"แอปนี้สามารถรับตำแหน่งของคุณโดยอิงจากแหล่งข้อมูลเครือข่าย เช่น เสาสัญญาณมือถือและเครือข่าย Wi-Fi แอปจะใช้บริการตำแหน่งเหล่านี้ได้ต่อเมื่อคุณเปิดบริการและบริการพร้อมใช้งานในโทรศัพท์ของคุณ"</string>
+    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"เข้าถึงตำแหน่งที่แม่นยำเมื่ออยู่เบื้องหลัง"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"แอปนี้รับตำแหน่งที่แม่นยำของคุณได้ทุกเมื่อที่ทำงานอยู่เบื้องหลัง แอปจะใช้บริการตำแหน่งเหล่านี้ได้ต่อเมื่อคุณเปิดบริการและบริการพร้อมใช้งานในโทรศัพท์ของคุณ ซึ่งอาจทำให้มีการใช้แบตเตอรี่มากขึ้น"</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"เปลี่ยนการตั้งค่าเสียงของคุณ"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"อนุญาตให้แอปพลิเคชันปรับเปลี่ยนการตั้งค่าเสียงทั้งหมดได้ เช่น ระดับเสียงและลำโพงที่จะใช้งาน"</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"บันทึกเสียง"</string>
@@ -515,6 +517,37 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"ไอคอนลายนิ้วมือ"</string>
+    <string name="permlab_manageFace" msgid="2137540986007309781">"จัดการฮาร์ดแวร์ตรวจสอบสิทธิ์ด้วยใบหน้า"</string>
+    <string name="permdesc_manageFace" msgid="8919637120670185330">"อนุญาตให้แอปเรียกใช้วิธีเพิ่มและลบเทมเพลตใบหน้าสำหรับการใช้งาน"</string>
+    <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"ใช้ฮาร์ดแวร์ตรวจสอบสิทธิ์ด้วยใบหน้า"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"อนุญาตให้แอปใช้ฮาร์ดแวร์ตรวจสอบสิทธิ์ด้วยใบหน้าเพื่อตรวจสอบสิทธิ์"</string>
+    <string name="face_acquired_insufficient" msgid="5901287247766106330">"ประมวลผลใบหน้าไม่ได้ โปรดลองอีกครั้ง"</string>
+    <string name="face_acquired_too_bright" msgid="610606792381297174">"ใบหน้าสว่างเกินไป โปรดลดแสง"</string>
+    <string name="face_acquired_too_dark" msgid="7229162716976778371">"ใบหน้ามืดเกินไป โปรดเปิดแหล่งกำเนิดแสง"</string>
+    <string name="face_acquired_too_close" msgid="1980310037427755293">"โปรดขยับเซ็นเซอร์ให้ห่างจากใบหน้ามากขึ้น"</string>
+    <string name="face_acquired_too_far" msgid="4494571381828850007">"โปรดขยับเซ็นเซอร์ให้ใกล้ใบหน้ามากขึ้น"</string>
+    <string name="face_acquired_too_high" msgid="228411096134808372">"โปรดขยับเซ็นเซอร์ให้สูงขึ้น"</string>
+    <string name="face_acquired_too_low" msgid="4539774649296349109">"โปรดขยับเซ็นเซอร์ให้ต่ำลง"</string>
+    <string name="face_acquired_too_right" msgid="1650292067226118760">"โปรดขยับเซ็นเซอร์ไปทางขวา"</string>
+    <string name="face_acquired_too_left" msgid="2712489669456176505">"โปรดขยับเซ็นเซอร์ไปทางซ้าย"</string>
+    <string name="face_acquired_poor_gaze" msgid="8344973502980415859">"โปรดมองที่เซ็นเซอร์"</string>
+    <string name="face_acquired_not_detected" msgid="5707782294589511391">"ไม่พบใบหน้า"</string>
+    <string name="face_acquired_not_steady" msgid="3722829465011040042">"ให้ใบหน้าอยู่นิ่งๆ หน้าอุปกรณ์"</string>
+  <string-array name="face_acquired_vendor">
+  </string-array>
+    <string name="face_error_hw_not_available" msgid="6255891785768984615">"ฮาร์ดแวร์รู้จำใบหน้าไม่พร้อมใช้งาน"</string>
+    <string name="face_error_timeout" msgid="4014326147867150054">"หมดเวลาใช้ใบหน้าแล้ว โปรดลองอีกครั้ง"</string>
+    <string name="face_error_no_space" msgid="8224993703466381314">"จัดเก็บข้อมูลใบหน้าไม่ได้"</string>
+    <string name="face_error_canceled" msgid="283945501061931023">"ยกเลิกการดำเนินการกับใบหน้าแล้ว"</string>
+    <string name="face_error_lockout" msgid="3407426963155388504">"ดำเนินการหลายครั้งเกินไป ลองอีกครั้งในภายหลัง"</string>
+    <string name="face_error_lockout_permanent" msgid="8198354656746088890">"ดำเนินการหลายครั้งเกินไป ปิดใช้การตรวจสอบสิทธิ์ด้วยใบหน้าแล้ว"</string>
+    <string name="face_error_unable_to_process" msgid="238761109287767270">"ลองอีกครั้ง"</string>
+    <string name="face_error_not_enrolled" msgid="9166792142679691323">"ไม่ได้ลงทะเบียนใบหน้าไว้"</string>
+    <string name="face_error_hw_not_present" msgid="4737289254517095671">"อุปกรณ์นี้ไม่มีเซ็นเซอร์ตรวจสอบสิทธิ์ด้วยใบหน้า"</string>
+    <string name="face_name_template" msgid="7004562145809595384">"ใบหน้า <xliff:g id="FACEID">%d</xliff:g>"</string>
+  <string-array name="face_error_vendor">
+  </string-array>
+    <string name="face_icon_content_description" msgid="4024817159806482191">"ไอคอนใบหน้า"</string>
     <string name="permlab_readSyncSettings" msgid="6201810008230503052">"อ่านการตั้งค่าการซิงค์แล้ว"</string>
     <string name="permdesc_readSyncSettings" msgid="2706745674569678644">"อนุญาตให้แอปพลิเคชันอ่านการตั้งค่าการซิงค์ของบัญชี ตัวอย่างเช่น การอนุญาตนี้สามารถระบุได้ว่าแอปพลิเคชัน People ซิงค์กับบัญชีหรือไม่"</string>
     <string name="permlab_writeSyncSettings" msgid="5408694875793945314">"สลับระหว่างเปิดและปิดการซิงค์"</string>
@@ -1175,6 +1208,9 @@
     <skip />
     <string name="wifi_no_internet" msgid="8938267198124654938">"Wi-Fi เชื่อมต่ออินเทอร์เน็ตไม่ได้"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"แตะเพื่อดูตัวเลือก"</string>
+    <string name="wifi_softap_config_change" msgid="8475911871165857607">"มีการเปลี่ยนแปลงการตั้งค่าฮอตสปอต"</string>
+    <string name="wifi_softap_config_change_summary" msgid="7601233252456548891">"ย่านความถี่ฮอตสปอตมีการเปลี่ยนแปลง"</string>
+    <string name="wifi_softap_config_change_detailed" msgid="8022936822860678033">"อุปกรณ์นี้ไม่รองรับค่ากำหนดของคุณเฉพาะสำหรับ 5 GHz เท่านั้น และจะใช้ย่านความถี่ 5 GHz แทน เมื่อใช้ได้"</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"เปลี่ยนเป็น <xliff:g id="NETWORK_TYPE">%1$s</xliff:g>"</string>
     <string name="network_switch_metered_detail" msgid="775163331794506615">"อุปกรณ์จะใช้ <xliff:g id="NEW_NETWORK">%1$s</xliff:g> เมื่อ <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> เข้าถึงอินเทอร์เน็ตไม่ได้ โดยอาจมีค่าบริการ"</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"เปลี่ยนจาก <xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> เป็น <xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
@@ -1252,7 +1288,7 @@
     <string name="usb_notification_message" msgid="3370903770828407960">"แตะเพื่อดูตัวเลือกเพิ่มเติม"</string>
     <string name="usb_power_notification_message" msgid="4647527153291917218">"กำลังชาร์จอุปกรณ์ที่เชื่อมต่อ แตะเพื่อดูตัวเลือกเพิ่มเติม"</string>
     <string name="usb_unsupported_audio_accessory_title" msgid="3529881374464628084">"ตรวจพบอุปกรณ์เสริมสำหรับเสียงแบบแอนะล็อก"</string>
-    <string name="usb_unsupported_audio_accessory_message" msgid="6309553946441565215">"อุปกรณ์ที่พ่วงไม่สามารถใช้งานร่วมกับโทรศัพท์นี้ แตะเพื่อเรียนรู้เพิ่มเติม"</string>
+    <string name="usb_unsupported_audio_accessory_message" msgid="6309553946441565215">"อุปกรณ์ที่พ่วงไม่สามารถใช้งานร่วมกับโทรศัพท์นี้ แตะเพื่อดูข้อมูลเพิ่มเติม"</string>
     <string name="adb_active_notification_title" msgid="6729044778949189918">"เชื่อมต่อการแก้ไขข้อบกพร่องผ่าน USB แล้ว"</string>
     <string name="adb_active_notification_message" msgid="7463062450474107752">"แตะเพื่อปิดการแก้ไขข้อบกพร่อง USB"</string>
     <string name="adb_active_notification_message" product="tv" msgid="8470296818270110396">"เลือกเพื่อปิดใช้งานการแก้ไขข้อบกพร่อง USB"</string>
@@ -1262,7 +1298,7 @@
     <string name="share_remote_bugreport_notification_message_finished" msgid="6029609949340992866">"ผู้ดูแลระบบของคุณขอรายงานข้อบกพร่องเพื่อช่วยในการแก้ปัญหาอุปกรณ์นี้ อาจมีการแชร์แอปและข้อมูล"</string>
     <string name="share_remote_bugreport_action" msgid="6249476773913384948">"แชร์"</string>
     <string name="decline_remote_bugreport_action" msgid="6230987241608770062">"ปฏิเสธ"</string>
-    <string name="select_input_method" msgid="8547250819326693584">"เปลี่ยนแป้นพิมพ์"</string>
+    <string name="select_input_method" msgid="4653387336791222978">"เลือกวิธีการป้อนข้อมูล"</string>
     <string name="show_ime" msgid="2506087537466597099">"เปิดทิ้งไว้บนหน้าจอในระหว่างใช้งานแป้นพิมพ์จริง"</string>
     <string name="hardware" msgid="194658061510127999">"แสดงแป้นพิมพ์เสมือน"</string>
     <string name="select_keyboard_layout_notification_title" msgid="597189518763083494">"กำหนดค่าแป้นพิมพ์จริง"</string>

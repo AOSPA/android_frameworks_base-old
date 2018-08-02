@@ -18,6 +18,7 @@ package com.android.systemui.qs;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -45,10 +46,12 @@ public class DataUsageGraph extends View {
     public DataUsageGraph(Context context, AttributeSet attrs) {
         super(context, attrs);
         final Resources res = context.getResources();
-        mTrackColor = Utils.getDefaultColor(context, R.color.data_usage_graph_track);
-        mWarningColor = Utils.getDefaultColor(context, R.color.data_usage_graph_warning);
-        mUsageColor = Utils.getColorAccent(context);
-        mOverlimitColor = Utils.getColorError(context);
+        mTrackColor = Utils.getColorStateListDefaultColor(context,
+                R.color.data_usage_graph_track);
+        mWarningColor = Utils.getColorStateListDefaultColor(context,
+                R.color.data_usage_graph_warning);
+        mUsageColor = Utils.getColorAccentDefaultColor(context);
+        mOverlimitColor = Utils.getColorErrorDefaultColor(context);
         mMarkerWidth = res.getDimensionPixelSize(R.dimen.data_usage_graph_marker_width);
     }
 

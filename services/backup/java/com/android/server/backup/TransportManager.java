@@ -176,9 +176,27 @@ public class TransportManager {
         return mTransportWhitelist;
     }
 
+    /** Returns the name of the selected transport or {@code null} if no transport selected. */
     @Nullable
-    String getCurrentTransportName() {
+    public String getCurrentTransportName() {
         return mCurrentTransportName;
+    }
+
+    /**
+     * Returns the {@link ComponentName} of the host service of the selected transport or
+     * {@code null} if no transport selected.
+     *
+     * @throws TransportNotRegisteredException if the selected transport is not registered.
+     */
+    @Nullable
+    public ComponentName getCurrentTransportComponent()
+            throws TransportNotRegisteredException {
+        synchronized (mTransportLock) {
+            if (mCurrentTransportName == null) {
+                return null;
+            }
+            return getRegisteredTransportComponentOrThrowLocked(mCurrentTransportName);
+        }
     }
 
     /**
@@ -325,6 +343,16 @@ public class TransportManager {
     }
 
     @GuardedBy("mTransportLock")
+    private ComponentName getRegisteredTransportComponentOrThrowLocked(String transportName)
+            throws TransportNotRegisteredException {
+        ComponentName transportComponent = getRegisteredTransportComponentLocked(transportName);
+        if (transportComponent == null) {
+            throw new TransportNotRegisteredException(transportName);
+        }
+        return transportComponent;
+    }
+
+    @GuardedBy("mTransportLock")
     private TransportDescription getRegisteredTransportDescriptionOrThrowLocked(
             ComponentName transportComponent) throws TransportNotRegisteredException {
         TransportDescription description =
@@ -424,9 +452,13 @@ public class TransportManager {
      *     {@link TransportClient#connectAsync(TransportConnectionListener, String)} for more
      *     details.
      * @return A {@link TransportClient} or null if not registered.
+     * @throws IllegalStateException if no transport is selected.
      */
     @Nullable
     public TransportClient getCurrentTransportClient(String caller) {
+        if (mCurrentTransportName == null) {
+            throw new IllegalStateException("No transport selected");
+        }
         synchronized (mTransportLock) {
             return getTransportClient(mCurrentTransportName, caller);
         }
@@ -440,9 +472,13 @@ public class TransportManager {
      *     details.
      * @return A {@link TransportClient}.
      * @throws TransportNotRegisteredException if the transport is not registered.
+     * @throws IllegalStateException if no transport is selected.
      */
     public TransportClient getCurrentTransportClientOrThrow(String caller)
             throws TransportNotRegisteredException {
+        if (mCurrentTransportName == null) {
+            throw new IllegalStateException("No transport selected");
+        }
         synchronized (mTransportLock) {
             return getTransportClientOrThrow(mCurrentTransportName, caller);
         }
@@ -555,8 +591,9 @@ public class TransportManager {
     /** Transport has to be whitelisted and privileged. */
     private boolean isTransportTrusted(ComponentName transport) {
         if (!mTransportWhitelist.contains(transport)) {
-            Slog.w(TAG, "BackupTransport " + transport.flattenToShortString() +
-                    " not whitelisted.");
+            Slog.w(
+                    TAG,
+                    "BackupTransport " + transport.flattenToShortString() + " not whitelisted.");
             return false;
         }
         try {
@@ -596,8 +633,9 @@ public class TransportManager {
         Bundle extras = new Bundle();
         extras.putBoolean(BackupTransport.EXTRA_TRANSPORT_REGISTRATION, true);
 
-        TransportClient transportClient = mTransportClientManager.getTransportClient(
-            transportComponent, extras, callerLogString);
+        TransportClient transportClient =
+                mTransportClientManager.getTransportClient(
+                        transportComponent, extras, callerLogString);
         final IBackupTransport transport;
         try {
             transport = transportClient.connectOrThrow(callerLogString);

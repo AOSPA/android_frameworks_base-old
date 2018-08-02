@@ -72,7 +72,7 @@ public class PowerWhitelistBackendTest {
         doNothing().when(mDeviceIdleService).removePowerSaveWhitelistApp(anyString());
         mPackageManager = Shadow.extract(mContext.getPackageManager());
         mPackageManager.setSystemFeature(PackageManager.FEATURE_TELEPHONY, true);
-
+        doReturn(mDevicePolicyManager).when(mContext).getSystemService(DevicePolicyManager.class);
 
         mPowerWhitelistBackend = new PowerWhitelistBackend(mContext, mDeviceIdleService);
     }

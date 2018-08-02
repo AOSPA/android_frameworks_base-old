@@ -48,7 +48,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
-import android.support.annotation.NonNull;
+import androidx.annotation.NonNull;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.TextUtils;
@@ -836,10 +836,7 @@ public class AccessPoint implements Comparable<AccessPoint> {
     }
 
     public CharSequence getSsid() {
-        final SpannableString str = new SpannableString(ssid);
-        str.setSpan(new TtsSpan.TelephoneBuilder(ssid).build(), 0, ssid.length(),
-                Spannable.SPAN_INCLUSIVE_INCLUSIVE);
-        return str;
+        return ssid;
     }
 
     public String getConfigName() {

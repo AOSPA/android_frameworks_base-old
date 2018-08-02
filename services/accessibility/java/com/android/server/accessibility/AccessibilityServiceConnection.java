@@ -258,7 +258,11 @@ class AccessibilityServiceConnection extends AbstractAccessibilityServiceConnect
                 return;
             }
             mWasConnectedAndDied = true;
-            resetLocked();
+            mSystemSupport.getKeyEventDispatcher().flush(this);
+            UserState userState = mUserStateWeakReference.get();
+            if (userState != null) {
+                userState.serviceDisconnectedLocked(this);
+            }
             if (mId == mSystemSupport.getMagnificationController().getIdOfLastServiceToMagnify()) {
                 mSystemSupport.getMagnificationController().resetIfNeeded(true);
             }

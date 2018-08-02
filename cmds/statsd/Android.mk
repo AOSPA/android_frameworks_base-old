@@ -35,12 +35,13 @@ statsd_common_src := \
     src/config/ConfigListener.cpp \
     src/config/ConfigManager.cpp \
     src/external/Perfetto.cpp \
+    src/external/Perfprofd.cpp \
     src/external/StatsPuller.cpp \
     src/external/StatsCompanionServicePuller.cpp \
     src/external/SubsystemSleepStatePuller.cpp \
     src/external/ResourceHealthManagerPuller.cpp \
     src/external/ResourceThermalManagerPuller.cpp \
-    src/external/StatsPullerManagerImpl.cpp \
+    src/external/StatsPullerManager.cpp \
     src/external/puller_util.cpp \
     src/logd/LogEvent.cpp \
     src/logd/LogListener.cpp \
@@ -70,6 +71,11 @@ statsd_common_src := \
     src/guardrail/StatsdStats.cpp \
     src/socket/StatsSocketListener.cpp
 
+# TODO(b/110563449): Once statsd is using a blueprint file, migrate to the proper filegroups.
+statsd_common_src += \
+    ../../../../system/extras/perfprofd/binder_interface/aidl/android/os/IPerfProfd.aidl \
+    src/perfprofd/perfprofd_config.proto
+
 statsd_common_c_includes := \
     $(LOCAL_PATH)/src \
     $(LOCAL_PATH)/../../libs/services/include
@@ -78,8 +84,7 @@ statsd_common_aidl_includes := \
     $(LOCAL_PATH)/../../core/java
 
 statsd_common_static_libraries := \
-    libhealthhalutils \
-    libplatformprotos \
+    libhealthhalutils
 
 statsd_common_shared_libraries := \
     libbase \
@@ -141,10 +146,14 @@ LOCAL_SHARED_LIBRARIES := $(statsd_common_shared_libraries) \
 
 LOCAL_MODULE_CLASS := EXECUTABLES
 
-# Enable sanitizer and allow very verbose printing on eng builds
+# Enable sanitizer ONLY on eng builds.
 ifeq ($(TARGET_BUILD_VARIANT),eng)
     LOCAL_CLANG := true
     LOCAL_SANITIZE := address
+endif
+
+# Add a flag to enable stats log printing from statsd on debug builds.
+ifneq (,$(filter userdebug eng, $(TARGET_BUILD_VARIANT)))
     LOCAL_CFLAGS += \
         -DVERY_VERBOSE_PRINTING
 endif
@@ -224,7 +233,9 @@ LOCAL_SRC_FILES := \
 
 LOCAL_STATIC_LIBRARIES := \
     $(statsd_common_static_libraries) \
-    libgmock
+    libgmock \
+    libmetricprotos \
+    libplatformprotos
 
 LOCAL_PROTOC_OPTIMIZE_TYPE := full
 
@@ -244,9 +255,11 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := statsdprotolite
 
 LOCAL_SRC_FILES := \
+    src/metrics_constants/metrics_constants.proto \
     src/stats_log.proto \
     src/statsd_config.proto \
     src/perfetto/perfetto_config.proto \
+    src/perfprofd/perfprofd_config.proto \
     src/atoms.proto
 
 LOCAL_PROTOC_OPTIMIZE_TYPE := lite
@@ -290,7 +303,6 @@ LOCAL_PROTOC_FLAGS := \
 LOCAL_SHARED_LIBRARIES := $(statsd_common_shared_libraries) \
                         libprotobuf-cpp-full
 
-
 LOCAL_STATIC_JAVA_LIBRARIES := \
     platformprotoslite
 
@@ -308,7 +320,9 @@ LOCAL_CFLAGS += -Wno-varargs
 LOCAL_AIDL_INCLUDES := $(statsd_common_aidl_includes)
 
 LOCAL_STATIC_LIBRARIES := \
-    $(statsd_common_static_libraries)
+    $(statsd_common_static_libraries) \
+    libmetricprotos \
+    libplatformprotos
 
 LOCAL_SHARED_LIBRARIES := $(statsd_common_shared_libraries) \
     libgtest_prod \

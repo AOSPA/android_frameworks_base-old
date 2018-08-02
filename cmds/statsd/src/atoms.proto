@@ -29,6 +29,7 @@ import "frameworks/base/core/proto/android/server/enums.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
+import "frameworks/base/proto/src/metrics_constants.proto";
 
 /**
  * The master atom class. This message defines all of the available
@@ -121,12 +122,11 @@ message Atom {
         ANROccurred anr_occurred = 79;
         WTFOccurred wtf_occurred = 80;
         LowMemReported low_mem_reported = 81;
-
-
+        GenericAtom generic_atom = 82;
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10022
+    // Next: 10023
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -150,6 +150,7 @@ message Atom {
         RemainingBatteryCapacity remaining_battery_capacity = 10019;
         FullBatteryCapacity full_battery_capacity = 10020;
         Temperature temperature = 10021;
+        BinderCalls binder_calls = 10022;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP. Field numbers above
@@ -579,7 +580,7 @@ message WakeupAlarmOccurred {
  * Changing from LOW to MEDIUM or HIGH can be considered the app waking the mobile radio.
  *
  * Logged from:
- *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
+ *   frameworks/base/services/core/java/com/android/server/NetworkManagementService.java
  */
 message MobileRadioPowerStateChanged {
     repeated AttributionNode attribution_node = 1;
@@ -593,7 +594,7 @@ message MobileRadioPowerStateChanged {
  * Changing from LOW to MEDIUM or HIGH can be considered the app waking the wifi radio.
  *
  * Logged from:
- *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
+ *   frameworks/base/services/core/java/com/android/server/NetworkManagementService.java
  */
 message WifiRadioPowerStateChanged {
     repeated AttributionNode attribution_node = 1;
@@ -1484,6 +1485,7 @@ message ForegroundServiceStateChanged {
 message IsolatedUidChanged {
     // The host UID. Generally, we should attribute metrics from the isolated uid to the host uid.
     // NOTE: DO NOT annotate uid field in this atom. This atom is specially handled in statsd.
+    // This field is ignored when event == REMOVED.
     optional int32 parent_uid = 1;
 
     optional int32 isolated_uid = 2;
@@ -1973,4 +1975,51 @@ message Temperature {
 
     // Temperature in tenths of a degree C.
     optional int32 temperature_dC = 3;
+}
+
+/**
+ * Pulls the statistics of calls to Binder.
+ *
+ * Binder stats are cumulative from boot unless somebody reset the data using
+ * > adb shell dumpsys binder_calls_stats --reset
+ */
+message BinderCalls {
+   // TODO(gaillard): figure out if binder call stats includes data from isolated uids, if a uid
+   // gets recycled and we have isolated uids, we might attribute the data incorrectly.
+   // TODO(gaillard): there is a high dimensions cardinality, figure out if we should drop the less
+   // commonly used APIs.
+   optional int32 uid = 1 [(is_uid) = true];
+   // Fully qualified class name of the API call.
+   optional string service_class_name = 2;
+   // Method name of the API call. It can also be a transaction code if we cannot resolve it to a
+   // name. See Binder#getTransactionName.
+   optional string service_method_name = 3;
+   // Total number of API calls.
+   optional int64 call_count = 4;
+   // Number of exceptions thrown by the API.
+   optional int64 exception_count = 5;
+   // Total latency of all API calls.
+   // Average can be computed using total_latency_micros / call_count.
+   optional int64 total_latency_micros = 6;
+   // Maximum latency of one API call.
+   optional int64 max_latency_micros = 7;
+   // Total CPU usage of all API calls.
+   optional int64 total_cpu_micros = 8;
+   // Maximum CPU usage of one API call.
+   optional int64 max_cpu_micros = 9;
+   // Maximum parcel reply size of one API call.
+   optional int64 max_reply_size_bytes = 10;
+   // Maximum parcel request size of one API call.
+   optional int64 max_request_size_bytes = 11;
+}
+
+/**
+ * An atom for generic metrics logging. Available from Android Q.
+ * One has to add an enum to frameworks/base/proto/src/metrics_constants.proto
+ * to extend another metric.
+ */
+message GenericAtom {
+  // Type of event. Previously it only indicated visual elements but now it
+  // is expanded to describe any type of event.
+  optional com_android_internal_logging.MetricsEvent.View view = 1;
 }

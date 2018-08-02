@@ -16,8 +16,6 @@
 
 package com.android.server.autofill;
 
-import static android.app.ActivityManagerInternal.ASSIST_KEY_RECEIVER_EXTRAS;
-import static android.app.ActivityManagerInternal.ASSIST_KEY_STRUCTURE;
 import static android.service.autofill.AutofillFieldClassificationService.EXTRA_SCORES;
 import static android.service.autofill.FillRequest.FLAG_MANUAL_REQUEST;
 import static android.service.autofill.FillRequest.INVALID_REQUEST_ID;
@@ -33,11 +31,14 @@ import static com.android.server.autofill.Helper.sPartitionMaxCount;
 import static com.android.server.autofill.Helper.sVerbose;
 import static com.android.server.autofill.Helper.toArray;
 import static com.android.server.autofill.ViewState.STATE_RESTARTED_SESSION;
+import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_RECEIVER_EXTRAS;
+import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_STRUCTURE;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.app.IAssistDataReceiver;
 import android.app.assist.AssistStructure;
 import android.app.assist.AssistStructure.AutofillOverlay;
@@ -94,7 +95,6 @@ import com.android.server.autofill.ui.AutoFillUI;
 import com.android.server.autofill.ui.PendingUi;
 
 import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -269,7 +269,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 // change AssistStructure so it provides a "one-way" writeToParcel() method that
                 // sends all the data
                 try {
-                    structure.ensureDataForAutofill();
+                    structure.ensureData();
                 } catch (RuntimeException e) {
                     wtf(e, "Exception lazy loading assist structure for %s: %s",
                             structure.getActivityComponent(), e);
@@ -516,7 +516,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             receiverExtras.putInt(EXTRA_REQUEST_ID, requestId);
             final long identity = Binder.clearCallingIdentity();
             try {
-                if (!ActivityManager.getService().requestAutofillData(mAssistReceiver,
+                if (!ActivityTaskManager.getService().requestAutofillData(mAssistReceiver,
                         receiverExtras, mActivityToken, flags)) {
                     Slog.w(TAG, "failed to request autofill data for " + mActivityToken);
                 }
@@ -704,19 +704,18 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
     // FillServiceCallbacks
     @Override
-    public void onFillRequestFailure(int requestId, @Nullable CharSequence message,
-            @NonNull String servicePackageName) {
-        onFillRequestFailureOrTimeout(requestId, false, message, servicePackageName);
+    public void onFillRequestFailure(int requestId, @Nullable CharSequence message) {
+        onFillRequestFailureOrTimeout(requestId, false, message);
     }
 
     // FillServiceCallbacks
     @Override
-    public void onFillRequestTimeout(int requestId, @NonNull String servicePackageName) {
-        onFillRequestFailureOrTimeout(requestId, true, null, servicePackageName);
+    public void onFillRequestTimeout(int requestId) {
+        onFillRequestFailureOrTimeout(requestId, true, null);
     }
 
     private void onFillRequestFailureOrTimeout(int requestId, boolean timedOut,
-            @Nullable CharSequence message, @NonNull String servicePackageName) {
+            @Nullable CharSequence message) {
         synchronized (mLock) {
             if (mDestroyed) {
                 Slog.w(TAG, "Call to Session#onFillRequestFailureOrTimeout(req=" + requestId
@@ -994,6 +993,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         final int requestId = AutofillManager.getRequestIdFromAuthenticationId(authenticationId);
         final FillResponse authenticatedResponse = mResponses.get(requestId);
         if (authenticatedResponse == null || data == null) {
+            Slog.w(TAG, "no authenticated response");
             removeSelf();
             return;
         }
@@ -1004,6 +1004,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         if (datasetIdx != AutofillManager.AUTHENTICATION_ID_DATASET_ID_UNDEFINED) {
             final Dataset dataset = authenticatedResponse.getDatasets().get(datasetIdx);
             if (dataset == null) {
+                Slog.w(TAG, "no dataset with index " + datasetIdx + " on fill response");
                 removeSelf();
                 return;
             }
@@ -1013,7 +1014,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         final Bundle newClientState = data.getBundle(AutofillManager.EXTRA_CLIENT_STATE);
         if (sDebug) {
             Slog.d(TAG, "setAuthenticationResultLocked(): result=" + result
-                    + ", clientState=" + newClientState);
+                    + ", clientState=" + newClientState + ", authenticationId=" + authenticationId);
         }
         if (result instanceof FillResponse) {
             logAuthenticationStatusLocked(requestId, MetricsEvent.AUTOFILL_AUTHENTICATED);
@@ -1030,6 +1031,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 authenticatedResponse.getDatasets().set(datasetIdx, dataset);
                 autoFill(requestId, datasetIdx, dataset, false);
             } else {
+                Slog.w(TAG, "invalid index (" + datasetIdx + ") for authentication id "
+                        + authenticationId);
                 logAuthenticationStatusLocked(requestId,
                         MetricsEvent.AUTOFILL_INVALID_DATASET_AUTHENTICATION);
             }
@@ -2854,14 +2857,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             return;
         }
         requestLog.addTaggedData(tag, value);
-    }
-
-    private static String requestLogToString(@NonNull LogMaker log) {
-        final StringWriter sw = new StringWriter();
-        final PrintWriter pw = new PrintWriter(sw);
-        dumpRequestLog(pw, log);
-        pw.flush();
-        return sw.toString();
     }
 
     private void wtf(@Nullable Exception e, String fmt, Object...args) {

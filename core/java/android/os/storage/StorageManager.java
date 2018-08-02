@@ -71,6 +71,8 @@ import com.android.internal.os.RoSystemProperties;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.util.Preconditions;
 
+import dalvik.system.BlockGuard;
+
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileNotFoundException;
@@ -1131,6 +1133,7 @@ public class StorageManager {
 
     /** {@hide} */
     public void mkdirs(File file) {
+        BlockGuard.getVmPolicy().onPathAccess(file.getAbsolutePath());
         try {
             mStorageManager.mkdirs(mContext.getOpPackageName(), file.getAbsolutePath());
         } catch (RemoteException e) {
@@ -1835,7 +1838,6 @@ public class StorageManager {
      * @throws IOException when the storage device isn't present, or when it
      *             doesn't support allocating space, or if the device had
      *             trouble allocating the requested space.
-     * @see #getAllocatableBytes(UUID, int)
      * @see #isAllocationSupported(FileDescriptor)
      * @see Environment#isExternalStorageEmulated(File)
      */

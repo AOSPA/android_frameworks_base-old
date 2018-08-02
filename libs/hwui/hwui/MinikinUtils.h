@@ -25,11 +25,11 @@
 #define _ANDROID_GRAPHICS_MINIKIN_UTILS_H_
 
 #include <cutils/compiler.h>
+#include <log/log.h>
 #include <minikin/Layout.h>
 #include "MinikinSkia.h"
 #include "Paint.h"
 #include "Typeface.h"
-#include <log/log.h>
 
 namespace minikin {
 class MeasuredText;
@@ -44,7 +44,8 @@ public:
 
     ANDROID_API static minikin::Layout doLayout(const Paint* paint, minikin::Bidi bidiFlags,
                                                 const Typeface* typeface, const uint16_t* buf,
-                                                size_t start, size_t count, size_t bufSize,
+                                                size_t bufSize, size_t start, size_t count,
+                                                size_t contextStart, size_t contextCount,
                                                 minikin::MeasuredText* mt);
 
     ANDROID_API static float measureText(const Paint* paint, minikin::Bidi bidiFlags,

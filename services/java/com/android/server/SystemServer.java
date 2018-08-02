@@ -65,6 +65,7 @@ import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.widget.ILockSettings;
 import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.am.ActivityManagerService;
+import com.android.server.am.ActivityTaskManagerService;
 import com.android.server.audio.AudioService;
 import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
@@ -76,7 +77,8 @@ import com.android.server.display.ColorDisplayService;
 import com.android.server.display.DisplayManagerService;
 import com.android.server.dreams.DreamManagerService;
 import com.android.server.emergency.EmergencyAffordanceService;
-import com.android.server.fingerprint.FingerprintService;
+import com.android.server.biometrics.face.FaceService;
+import com.android.server.biometrics.fingerprint.FingerprintService;
 import com.android.server.hdmi.HdmiControlService;
 import com.android.server.input.InputManagerService;
 import com.android.server.job.JobSchedulerService;
@@ -205,10 +207,10 @@ public final class SystemServer {
             "com.android.server.search.SearchManagerService$Lifecycle";
     private static final String THERMAL_OBSERVER_CLASS =
             "com.google.android.clockwork.ThermalObserver";
-    private static final String WEAR_CONFIG_SERVICE_CLASS =
-            "com.google.android.clockwork.WearConfigManagerService";
     private static final String WEAR_CONNECTIVITY_SERVICE_CLASS =
             "com.android.clockwork.connectivity.WearConnectivityService";
+    private static final String WEAR_POWER_SERVICE_CLASS =
+            "com.android.clockwork.power.WearPowerService";
     private static final String WEAR_SIDEKICK_SERVICE_CLASS =
             "com.google.android.clockwork.sidekick.SidekickService";
     private static final String WEAR_DISPLAY_SERVICE_CLASS =
@@ -230,11 +232,15 @@ public final class SystemServer {
     private static final String TIME_ZONE_RULES_MANAGER_SERVICE_CLASS =
             "com.android.server.timezone.RulesManagerService$Lifecycle";
     private static final String IOT_SERVICE_CLASS =
-            "com.google.android.things.services.IoTSystemService";
+            "com.android.things.server.IoTSystemService";
     private static final String SLICE_MANAGER_SERVICE_CLASS =
             "com.android.server.slice.SliceManagerService$Lifecycle";
     private static final String CAR_SERVICE_HELPER_SERVICE_CLASS =
             "com.android.internal.car.CarServiceHelperService";
+    private static final String TIME_DETECTOR_SERVICE_CLASS =
+            "com.android.server.timedetector.TimeDetectorService$Lifecycle";
+    private static final String TIME_ZONE_DETECTOR_SERVICE_CLASS =
+            "com.android.server.timezonedetector.TimeZoneDetectorService$Lifecycle";
 
     private static final String PERSISTENT_DATA_BLOCK_PROP = "ro.frp.pst";
 
@@ -562,8 +568,11 @@ public final class SystemServer {
 
         // Activity manager runs the show.
         traceBeginAndSlog("StartActivityManager");
-        mActivityManagerService = mSystemServiceManager.startService(
-                ActivityManagerService.Lifecycle.class).getService();
+        // TODO: Might need to move after migration to WM.
+        ActivityTaskManagerService atm = mSystemServiceManager.startService(
+                ActivityTaskManagerService.Lifecycle.class).getService();
+        mActivityManagerService = ActivityManagerService.Lifecycle.startService(
+                mSystemServiceManager, atm);
         mActivityManagerService.setSystemServiceManager(mSystemServiceManager);
         mActivityManagerService.setInstaller(installer);
         traceEnd();
@@ -726,7 +735,7 @@ public final class SystemServer {
 
         // Tracks cpu time spent in binder calls
         traceBeginAndSlog("StartBinderCallsStatsService");
-        BinderCallsStatsService.start();
+        mSystemServiceManager.startService(BinderCallsStatsService.LifeCycle.class);
         traceEnd();
     }
 
@@ -747,7 +756,6 @@ public final class SystemServer {
         WindowManagerService wm = null;
         SerialService serial = null;
         NetworkTimeUpdateService networkTimeUpdater = null;
-        CommonTimeManagementService commonTimeMgmtService = null;
         InputManagerService inputManager = null;
         TelephonyRegistry telephonyRegistry = null;
         ConsumerIrService consumerIr = null;
@@ -1280,6 +1288,25 @@ public final class SystemServer {
             }
             traceEnd();
 
+            final boolean useNewTimeServices = true;
+            if (useNewTimeServices) {
+                traceBeginAndSlog("StartTimeDetectorService");
+                try {
+                    mSystemServiceManager.startService(TIME_DETECTOR_SERVICE_CLASS);
+                } catch (Throwable e) {
+                    reportWtf("starting StartTimeDetectorService service", e);
+                }
+                traceEnd();
+
+                traceBeginAndSlog("StartTimeZoneDetectorService");
+                try {
+                    mSystemServiceManager.startService(TIME_ZONE_DETECTOR_SERVICE_CLASS);
+                } catch (Throwable e) {
+                    reportWtf("starting StartTimeZoneDetectorService service", e);
+                }
+                traceEnd();
+            }
+
             if (!isWatch) {
                 traceBeginAndSlog("StartSearchManagerService");
                 try {
@@ -1395,7 +1422,7 @@ public final class SystemServer {
 
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_APP_WIDGETS)
                 || context.getResources().getBoolean(R.bool.config_enableAppWidgetService)) {
-                traceBeginAndSlog("StartAppWidgerService");
+                traceBeginAndSlog("StartAppWidgetService");
                 mSystemServiceManager.startService(APPWIDGET_SERVICE_CLASS);
                 traceEnd();
             }
@@ -1445,22 +1472,18 @@ public final class SystemServer {
             if (!isWatch) {
                 traceBeginAndSlog("StartNetworkTimeUpdateService");
                 try {
-                    networkTimeUpdater = new NetworkTimeUpdateService(context);
+                    if (useNewTimeServices) {
+                        networkTimeUpdater = new NewNetworkTimeUpdateService(context);
+                    } else {
+                        networkTimeUpdater = new OldNetworkTimeUpdateService(context);
+                    }
+                    Slog.d(TAG, "Using networkTimeUpdater class=" + networkTimeUpdater.getClass());
                     ServiceManager.addService("network_time_update_service", networkTimeUpdater);
                 } catch (Throwable e) {
                     reportWtf("starting NetworkTimeUpdate service", e);
                 }
                 traceEnd();
             }
-
-            traceBeginAndSlog("StartCommonTimeManagementService");
-            try {
-                commonTimeMgmtService = new CommonTimeManagementService(context);
-                ServiceManager.addService("commontime_management", commonTimeMgmtService);
-            } catch (Throwable e) {
-                reportWtf("starting CommonTimeManagementService service", e);
-            }
-            traceEnd();
 
             traceBeginAndSlog("CertBlacklister");
             try {
@@ -1551,6 +1574,12 @@ public final class SystemServer {
             }
             traceEnd();
 
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_FACE)) {
+                traceBeginAndSlog("StartFaceSensor");
+                mSystemServiceManager.startService(FaceService.class);
+                traceEnd();
+            }
+
             if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
                 traceBeginAndSlog("StartFingerprintSensor");
                 mSystemServiceManager.startService(FingerprintService.class);
@@ -1594,16 +1623,20 @@ public final class SystemServer {
         }
 
         if (isWatch) {
-            traceBeginAndSlog("StartWearConfigService");
-            mSystemServiceManager.startService(WEAR_CONFIG_SERVICE_CLASS);
+            // Must be started before services that depend it, e.g. WearConnectivityService
+            traceBeginAndSlog("StartWearPowerService");
+            mSystemServiceManager.startService(WEAR_POWER_SERVICE_CLASS);
             traceEnd();
 
             traceBeginAndSlog("StartWearConnectivityService");
             mSystemServiceManager.startService(WEAR_CONNECTIVITY_SERVICE_CLASS);
             traceEnd();
 
-            traceBeginAndSlog("StartWearTimeService");
+            traceBeginAndSlog("StartWearDisplayService");
             mSystemServiceManager.startService(WEAR_DISPLAY_SERVICE_CLASS);
+            traceEnd();
+
+            traceBeginAndSlog("StartWearTimeService");
             mSystemServiceManager.startService(WEAR_TIME_SERVICE_CLASS);
             traceEnd();
 
@@ -1795,7 +1828,6 @@ public final class SystemServer {
         final LocationManagerService locationF = location;
         final CountryDetectorService countryDetectorF = countryDetector;
         final NetworkTimeUpdateService networkTimeUpdaterF = networkTimeUpdater;
-        final CommonTimeManagementService commonTimeMgmtServiceF = commonTimeMgmtService;
         final InputManagerService inputManagerF = inputManager;
         final TelephonyRegistry telephonyRegistryF = telephonyRegistry;
         final MediaRouterService mediaRouterF = mediaRouter;
@@ -1932,15 +1964,6 @@ public final class SystemServer {
                 if (networkTimeUpdaterF != null) networkTimeUpdaterF.systemRunning();
             } catch (Throwable e) {
                 reportWtf("Notifying NetworkTimeService running", e);
-            }
-            traceEnd();
-            traceBeginAndSlog("MakeCommonTimeManagementServiceReady");
-            try {
-                if (commonTimeMgmtServiceF != null) {
-                    commonTimeMgmtServiceF.systemRunning();
-                }
-            } catch (Throwable e) {
-                reportWtf("Notifying CommonTimeManagementService running", e);
             }
             traceEnd();
             traceBeginAndSlog("MakeInputManagerServiceReady");

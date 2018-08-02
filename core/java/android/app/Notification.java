@@ -16,7 +16,7 @@
 
 package android.app;
 
-import static com.android.internal.util.NotificationColorUtil.satisfiesTextContrast;
+import static com.android.internal.util.ContrastColorUtil.satisfiesTextContrast;
 
 import android.annotation.ColorInt;
 import android.annotation.DrawableRes;
@@ -79,7 +79,7 @@ import android.widget.RemoteViews;
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.NotificationColorUtil;
+import com.android.internal.util.ContrastColorUtil;
 import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
@@ -202,6 +202,11 @@ public class Notification implements Parcelable
      */
     private static final int MAX_REPLY_HISTORY = 5;
 
+    /**
+     * Maximum numbers of action buttons in a notification.
+     * @hide
+     */
+    public static final int MAX_ACTION_BUTTONS = 3;
 
     /**
      * If the notification contained an unsent draft for a RemoteInput when the user clicked on it,
@@ -1121,11 +1126,11 @@ public class Notification implements Parcelable
     public static final String EXTRA_ALLOW_DURING_SETUP = "android.allowDuringSetup";
 
     /**
-     * {@link #extras} key: A
-     * {@link android.content.ContentUris content URI} pointing to an image that can be displayed
-     * in the background when the notification is selected. Used on television platforms.
-     * The URI must point to an image stream suitable for passing into
-     * {@link android.graphics.BitmapFactory#decodeStream(java.io.InputStream)
+     * {@link #extras} key:
+     * flat {@link String} representation of a {@link android.content.ContentUris content URI}
+     * pointing to an image that can be displayed in the background when the notification is
+     * selected. Used on television platforms. The URI must point to an image stream suitable for
+     * passing into {@link android.graphics.BitmapFactory#decodeStream(java.io.InputStream)
      * BitmapFactory.decodeStream}; all other content types will be ignored.
      */
     public static final String EXTRA_BACKGROUND_IMAGE_URI = "android.backgroundImageUri";
@@ -2346,7 +2351,9 @@ public class Notification implements Parcelable
 
         if (extras != null) {
             visitor.accept(extras.getParcelable(EXTRA_AUDIO_CONTENTS_URI));
-            visitor.accept(extras.getParcelable(EXTRA_BACKGROUND_IMAGE_URI));
+            if (extras.containsKey(EXTRA_BACKGROUND_IMAGE_URI)) {
+                visitor.accept(Uri.parse(extras.getString(EXTRA_BACKGROUND_IMAGE_URI)));
+            }
         }
 
         if (MessagingStyle.class.equals(getNotificationStyle()) && extras != null) {
@@ -2767,7 +2774,6 @@ public class Notification implements Parcelable
      */
     private void fixDuplicateExtras() {
         if (extras != null) {
-            fixDuplicateExtra(mSmallIcon, EXTRA_SMALL_ICON);
             fixDuplicateExtra(mLargeIcon, EXTRA_LARGE_ICON);
         }
     }
@@ -3150,8 +3156,6 @@ public class Notification implements Parcelable
         public static final String EXTRA_REBUILD_HEADS_UP_CONTENT_VIEW_ACTION_COUNT
                 = "android.rebuild.hudViewActionCount";
 
-        private static final int MAX_ACTION_BUTTONS = 3;
-
         private static final boolean USE_ONLY_TITLE_IN_LOW_PRIORITY_SUMMARY =
                 SystemProperties.getBoolean("notifications.only_title", true);
 
@@ -3174,7 +3178,7 @@ public class Notification implements Parcelable
         private Style mStyle;
         private ArrayList<Action> mActions = new ArrayList<Action>(MAX_ACTION_BUTTONS);
         private ArrayList<Person> mPersonList = new ArrayList<>();
-        private NotificationColorUtil mColorUtil;
+        private ContrastColorUtil mColorUtil;
         private boolean mIsLegacy;
         private boolean mIsLegacyInitialized;
 
@@ -3305,9 +3309,9 @@ public class Notification implements Parcelable
             }
         }
 
-        private NotificationColorUtil getColorUtil() {
+        private ContrastColorUtil getColorUtil() {
             if (mColorUtil == null) {
-                mColorUtil = NotificationColorUtil.getInstance(mContext);
+                mColorUtil = ContrastColorUtil.getInstance(mContext);
             }
             return mColorUtil;
         }
@@ -3877,7 +3881,6 @@ public class Notification implements Parcelable
          *
 
          * @see Notification#FLAG_ONGOING_EVENT
-         * @see Service#setForeground(boolean)
          */
         public Builder setOngoing(boolean ongoing) {
             setFlag(FLAG_ONGOING_EVENT, ongoing);
@@ -3896,7 +3899,7 @@ public class Notification implements Parcelable
          * However, for {@link MediaStyle} and {@link DecoratedMediaCustomViewStyle} notifications
          * that have a media session attached there is no such requirement.
          *
-         * @see Builder#setColor(int)
+         * @see #setColor(int)
          * @see MediaStyle#setMediaSession(MediaSession.Token)
          */
         public Builder setColorized(boolean colorize) {
@@ -4426,7 +4429,7 @@ public class Notification implements Parcelable
 
         private CharSequence processTextSpans(CharSequence text) {
             if (hasForegroundColor()) {
-                return NotificationColorUtil.clearColorSpans(text);
+                return ContrastColorUtil.clearColorSpans(text);
             }
             return text;
         }
@@ -4472,20 +4475,20 @@ public class Notification implements Parcelable
                     || mTextColorsAreForBackground != backgroundColor) {
                 mTextColorsAreForBackground = backgroundColor;
                 if (!hasForegroundColor() || !isColorized()) {
-                    mPrimaryTextColor = NotificationColorUtil.resolvePrimaryColor(mContext,
-                            backgroundColor);
-                    mSecondaryTextColor = NotificationColorUtil.resolveSecondaryColor(mContext,
-                            backgroundColor);
+                    mPrimaryTextColor = ContrastColorUtil.resolvePrimaryColor(mContext,
+                            backgroundColor, mInNightMode);
+                    mSecondaryTextColor = ContrastColorUtil.resolveSecondaryColor(mContext,
+                            backgroundColor, mInNightMode);
                     if (backgroundColor != COLOR_DEFAULT && isColorized()) {
-                        mPrimaryTextColor = NotificationColorUtil.findAlphaToMeetContrast(
+                        mPrimaryTextColor = ContrastColorUtil.findAlphaToMeetContrast(
                                 mPrimaryTextColor, backgroundColor, 4.5);
-                        mSecondaryTextColor = NotificationColorUtil.findAlphaToMeetContrast(
+                        mSecondaryTextColor = ContrastColorUtil.findAlphaToMeetContrast(
                                 mSecondaryTextColor, backgroundColor, 4.5);
                     }
                 } else {
-                    double backLum = NotificationColorUtil.calculateLuminance(backgroundColor);
-                    double textLum = NotificationColorUtil.calculateLuminance(mForegroundColor);
-                    double contrast = NotificationColorUtil.calculateContrast(mForegroundColor,
+                    double backLum = ContrastColorUtil.calculateLuminance(backgroundColor);
+                    double textLum = ContrastColorUtil.calculateLuminance(mForegroundColor);
+                    double contrast = ContrastColorUtil.calculateContrast(mForegroundColor,
                             backgroundColor);
                     // We only respect the given colors if worst case Black or White still has
                     // contrast
@@ -4495,46 +4498,46 @@ public class Notification implements Parcelable
                                     && !satisfiesTextContrast(backgroundColor, Color.WHITE);
                     if (contrast < 4.5f) {
                         if (backgroundLight) {
-                            mSecondaryTextColor = NotificationColorUtil.findContrastColor(
+                            mSecondaryTextColor = ContrastColorUtil.findContrastColor(
                                     mForegroundColor,
                                     backgroundColor,
                                     true /* findFG */,
                                     4.5f);
-                            mPrimaryTextColor = NotificationColorUtil.changeColorLightness(
+                            mPrimaryTextColor = ContrastColorUtil.changeColorLightness(
                                     mSecondaryTextColor, -LIGHTNESS_TEXT_DIFFERENCE_LIGHT);
                         } else {
                             mSecondaryTextColor =
-                                    NotificationColorUtil.findContrastColorAgainstDark(
+                                    ContrastColorUtil.findContrastColorAgainstDark(
                                     mForegroundColor,
                                     backgroundColor,
                                     true /* findFG */,
                                     4.5f);
-                            mPrimaryTextColor = NotificationColorUtil.changeColorLightness(
+                            mPrimaryTextColor = ContrastColorUtil.changeColorLightness(
                                     mSecondaryTextColor, -LIGHTNESS_TEXT_DIFFERENCE_DARK);
                         }
                     } else {
                         mPrimaryTextColor = mForegroundColor;
-                        mSecondaryTextColor = NotificationColorUtil.changeColorLightness(
+                        mSecondaryTextColor = ContrastColorUtil.changeColorLightness(
                                 mPrimaryTextColor, backgroundLight ? LIGHTNESS_TEXT_DIFFERENCE_LIGHT
                                         : LIGHTNESS_TEXT_DIFFERENCE_DARK);
-                        if (NotificationColorUtil.calculateContrast(mSecondaryTextColor,
+                        if (ContrastColorUtil.calculateContrast(mSecondaryTextColor,
                                 backgroundColor) < 4.5f) {
                             // oh well the secondary is not good enough
                             if (backgroundLight) {
-                                mSecondaryTextColor = NotificationColorUtil.findContrastColor(
+                                mSecondaryTextColor = ContrastColorUtil.findContrastColor(
                                         mSecondaryTextColor,
                                         backgroundColor,
                                         true /* findFG */,
                                         4.5f);
                             } else {
                                 mSecondaryTextColor
-                                        = NotificationColorUtil.findContrastColorAgainstDark(
+                                        = ContrastColorUtil.findContrastColorAgainstDark(
                                         mSecondaryTextColor,
                                         backgroundColor,
                                         true /* findFG */,
                                         4.5f);
                             }
-                            mPrimaryTextColor = NotificationColorUtil.changeColorLightness(
+                            mPrimaryTextColor = ContrastColorUtil.changeColorLightness(
                                     mSecondaryTextColor, backgroundLight
                                             ? -LIGHTNESS_TEXT_DIFFERENCE_LIGHT
                                             : -LIGHTNESS_TEXT_DIFFERENCE_DARK);
@@ -5246,7 +5249,7 @@ public class Notification implements Parcelable
                 ColorStateList[] outResultColor = null;
                 int background = resolveBackgroundColor();
                 if (isLegacy()) {
-                    title = NotificationColorUtil.clearColorSpans(title);
+                    title = ContrastColorUtil.clearColorSpans(title);
                 } else {
                     outResultColor = new ColorStateList[1];
                     title = ensureColorSpanContrast(title, background, outResultColor);
@@ -5259,8 +5262,8 @@ public class Notification implements Parcelable
                     // There's a span spanning the full text, let's take it and use it as the
                     // background color
                     background = outResultColor[0].getDefaultColor();
-                    int textColor = NotificationColorUtil.resolvePrimaryColor(mContext,
-                            background);
+                    int textColor = ContrastColorUtil.resolvePrimaryColor(mContext,
+                            background, mInNightMode);
                     button.setTextColor(R.id.action0, textColor);
                     rippleColor = textColor;
                 } else if (mN.color != COLOR_DEFAULT && !isColorized() && mTintActionButtons) {
@@ -5320,7 +5323,7 @@ public class Notification implements Parcelable
                             int[] colors = textColor.getColors();
                             int[] newColors = new int[colors.length];
                             for (int i = 0; i < newColors.length; i++) {
-                                newColors[i] = NotificationColorUtil.ensureLargeTextContrast(
+                                newColors[i] = ContrastColorUtil.ensureLargeTextContrast(
                                         colors[i], background, mInNightMode);
                             }
                             textColor = new ColorStateList(textColor.getStates().clone(),
@@ -5340,7 +5343,7 @@ public class Notification implements Parcelable
                     } else if (resultSpan instanceof ForegroundColorSpan) {
                         ForegroundColorSpan originalSpan = (ForegroundColorSpan) resultSpan;
                         int foregroundColor = originalSpan.getForegroundColor();
-                        foregroundColor = NotificationColorUtil.ensureLargeTextContrast(
+                        foregroundColor = ContrastColorUtil.ensureLargeTextContrast(
                                 foregroundColor, background, mInNightMode);
                         if (fullLength) {
                             outResultColor[0] = ColorStateList.valueOf(foregroundColor);
@@ -5440,14 +5443,14 @@ public class Notification implements Parcelable
                     com.android.internal.R.color.notification_material_background_color);
             if (mN.color == COLOR_DEFAULT) {
                 ensureColors();
-                color = NotificationColorUtil.resolveDefaultColor(mContext, background);
+                color = ContrastColorUtil.resolveDefaultColor(mContext, background, mInNightMode);
             } else {
-                color = NotificationColorUtil.resolveContrastColor(mContext, mN.color,
+                color = ContrastColorUtil.resolveContrastColor(mContext, mN.color,
                         background, mInNightMode);
             }
             if (Color.alpha(color) < 255) {
                 // alpha doesn't go well for color filters, so let's blend it manually
-                color = NotificationColorUtil.compositeColors(color, background);
+                color = ContrastColorUtil.compositeColors(color, background);
             }
             mCachedContrastColorIsFor = mN.color;
             return mCachedContrastColor = color;
@@ -5459,10 +5462,11 @@ public class Notification implements Parcelable
             }
             int background = mContext.getColor(
                     com.android.internal.R.color.notification_material_background_color);
-            mNeutralColor = NotificationColorUtil.resolveDefaultColor(mContext, background);
+            mNeutralColor = ContrastColorUtil.resolveDefaultColor(mContext, background,
+                    mInNightMode);
             if (Color.alpha(mNeutralColor) < 255) {
                 // alpha doesn't go well for color filters, so let's blend it manually
-                mNeutralColor = NotificationColorUtil.compositeColors(mNeutralColor, background);
+                mNeutralColor = ContrastColorUtil.compositeColors(mNeutralColor, background);
             }
             return mNeutralColor;
         }
@@ -5471,7 +5475,7 @@ public class Notification implements Parcelable
             if (mCachedAmbientColorIsFor == mN.color && mCachedAmbientColorIsFor != COLOR_INVALID) {
                 return mCachedAmbientColor;
             }
-            final int contrasted = NotificationColorUtil.resolveAmbientColor(mContext, mN.color);
+            final int contrasted = ContrastColorUtil.resolveAmbientColor(mContext, mN.color);
 
             mCachedAmbientColorIsFor = mN.color;
             return mCachedAmbientColor = contrasted;
@@ -6741,7 +6745,7 @@ public class Notification implements Parcelable
          * Should be unique amongst all individuals in the conversation, and should be
          * consistent during re-posts of the notification.
          *
-         * @see Message#Message(CharSequence, long, CharSequence)
+         * @see Message#Notification.MessagingStyle.Message(CharSequence, long, CharSequence)
          *
          * @return this object for method chaining
          *
@@ -6761,7 +6765,7 @@ public class Notification implements Parcelable
          * Should be <code>null</code> for messages by the current user, in which case
          * the platform will insert the user set in {@code MessagingStyle(Person)}.
          *
-         * @see Message#Message(CharSequence, long, CharSequence)
+         * @see Message#Notification.MessagingStyle.Message(CharSequence, long, CharSequence)
          *
          * @return this object for method chaining
          */
@@ -7162,8 +7166,8 @@ public class Notification implements Parcelable
         }
 
         public static final class Message {
-
-            static final String KEY_TEXT = "text";
+            /** @hide */
+            public static final String KEY_TEXT = "text";
             static final String KEY_TIMESTAMP = "time";
             static final String KEY_SENDER = "sender";
             static final String KEY_SENDER_PERSON = "sender_person";
@@ -7830,10 +7834,13 @@ public class Notification implements Parcelable
 
             // If the action buttons should not be tinted, then just use the default
             // notification color. Otherwise, just use the passed-in color.
+            Configuration currentConfig = mBuilder.mContext.getResources().getConfiguration();
+            boolean inNightMode = (currentConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK)
+                    == Configuration.UI_MODE_NIGHT_YES;
             int tintColor = mBuilder.shouldTintActionButtons() || mBuilder.isColorized()
                     ? color
-                    : NotificationColorUtil.resolveColor(mBuilder.mContext,
-                            Notification.COLOR_DEFAULT);
+                    : ContrastColorUtil.resolveColor(mBuilder.mContext,
+                            Notification.COLOR_DEFAULT, inNightMode);
 
             button.setDrawableTint(R.id.action0, false, tintColor,
                     PorterDuff.Mode.SRC_ATOP);

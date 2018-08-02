@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Afficher repère visuel pour éléments sélectionnés"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Affich. mise à jour surface"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Faire clignoter les surfaces à chaque mise à jour"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Afficher mises à jour GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Faire clignoter les éléments dessinés avec le GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Afficher m. à j. affichage"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Faire clignoter éléments dessinés dans les fenêtres"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Mises à jour couches mat."</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Couches matérielles en vert une fois mises à jour"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Déboguer les conflits GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Afficher les limites, les marges de clip, etc."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Forcer droite à gauche"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Forcer l\'orientation droite à gauche (toutes langues)"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Forcer le rendu GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Forcer l\'utilisation du GPU pour le dessin 2D"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Forcer MSAA 4x"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Activer MSAA 4x dans les applications OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Déboguer opérations de découpage non rectangulaire"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Rendu GPU du profil"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Rendu HWUI du profil"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Activ. couches débog. GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Autor. couches débog. GPU pour applis de débogage"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Échelle animation fenêtres"</string>

@@ -20,8 +20,9 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.admin.DevicePolicyManager;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.os.UserHandle;
-import android.support.annotation.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Slog;
@@ -142,6 +143,7 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
             mSecurityViewFlipper.addView(v);
             updateSecurityView(v);
             view = (KeyguardSecurityView)v;
+            view.reset();
         }
 
         return view;
@@ -537,9 +539,9 @@ public class KeyguardSecurityContainer extends FrameLayout implements KeyguardSe
         }
     }
 
-    public void showMessage(CharSequence message, int color) {
+    public void showMessage(CharSequence message, ColorStateList colorState) {
         if (mCurrentSecuritySelection != SecurityMode.None) {
-            getSecurityView(mCurrentSecuritySelection).showMessage(message, color);
+            getSecurityView(mCurrentSecuritySelection).showMessage(message, colorState);
         }
     }
 

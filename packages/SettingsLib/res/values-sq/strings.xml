@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Shfaq reagimet vizuale për trokitjet"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Shfaq përditësimet e sipërfaqes"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Ndriço të gjitha sipërfaqet e dritares kur ato të përditësohen"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Shfaq përditësimet e pamjes së GPU-së"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Ndriço pamjet brenda dritareve kur dizajnohen me GPU-në"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Shfaq përditësimet e pamjes"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Ndriço pamjet brenda dritareve kur dizajnohen"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Shfaq përditësimet e shtresave të harduerit"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Ndriço në të gjelbër shtresat e harduerit që përditësohen"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Korrigjo konfliktet e GPU-së"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Shfaq konturet e klipit, hapësirat etj."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Detyro drejtimin e shkrimit nga e djathta në të majtë"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Ndrysho me detyrim drejtimin e planit të ekranit nga e djathta në të majtë për të gjitha vendet"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Detyro interpretimin e GPU-së"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Detyro përdorimin e GPU-së për vizatimin e dytë"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Detyro 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Aktivizo 4x MSAA në aplikacionet OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Korrigjo veprimet mbi klipet jodrejtkëndore"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Interpretimi i profilit të GPU-së"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Interpretimi i profilit me HWUI"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Aktivizo shtresat e korrigjimit të GPU-së"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Lejo ngarkimin e shtresave të korrigjimit të GPU-së për aplikacionet e korrigjimit"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Animacioni i dritares"</string>

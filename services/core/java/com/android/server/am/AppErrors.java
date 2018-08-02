@@ -25,7 +25,6 @@ import com.android.server.Watchdog;
 
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
-import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.app.ApplicationErrorReport;
 import android.app.Dialog;
@@ -45,7 +44,6 @@ import android.provider.Settings;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.EventLog;
-import android.util.Log;
 import android.util.Slog;
 import android.util.StatsLog;
 import android.util.SparseArray;
@@ -57,7 +55,6 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Set;
 
 import static com.android.server.Watchdog.NATIVE_STACKS_OF_INTEREST;
@@ -314,9 +311,9 @@ class AppErrors {
     }
 
     void killAppAtUserRequestLocked(ProcessRecord app, Dialog fromDialog) {
-        app.crashing = false;
+        app.setCrashing(false);
         app.crashingReport = null;
-        app.notResponding = false;
+        app.setNotResponding(false);
         app.notRespondingReport = null;
         if (app.anrDialog == fromDialog) {
             app.anrDialog = null;
@@ -409,7 +406,7 @@ class AppErrors {
 
         // If a persistent app is stuck in a crash loop, the device isn't very
         // usable, so we want to consider sending out a rescue party.
-        if (r != null && r.persistent) {
+        if (r != null && r.isPersistent()) {
             RescueParty.notePersistentAppCrash(mContext, r.uid);
         }
 
@@ -471,7 +468,7 @@ class AppErrors {
                 mService.removeProcessLocked(r, false, true, "crash");
                 if (task != null) {
                     try {
-                        mService.startActivityFromRecents(task.taskId,
+                        mService.mActivityTaskManager.startActivityFromRecents(task.taskId,
                                 ActivityOptions.makeBasic().toBundle());
                     } catch (IllegalArgumentException e) {
                         // Hmm, that didn't work, app might have crashed before creating a
@@ -479,7 +476,7 @@ class AppErrors {
                         final Set<String> cats = task.intent != null
                                 ? task.intent.getCategories() : null;
                         if (cats != null && cats.contains(Intent.CATEGORY_LAUNCHER)) {
-                            mService.getActivityStartController().startActivityInPackage(
+                            mService.mActivityTaskManager.getActivityStartController().startActivityInPackage(
                                     task.mCallingUid, callingPid, callingUid, task.mCallingPackage,
                                     task.intent, null, null, null, 0, 0,
                                     new SafeActivityOptions(ActivityOptions.makeBasic()),
@@ -493,8 +490,8 @@ class AppErrors {
                 long orig = Binder.clearCallingIdentity();
                 try {
                     // Kill it with fire!
-                    mService.mStackSupervisor.handleAppCrashLocked(r);
-                    if (!r.persistent) {
+                    mService.mStackSupervisor.handleAppCrashLocked(r.getWindowProcessController());
+                    if (!r.isPersistent()) {
                         mService.removeProcessLocked(r, false, false, "crash");
                         mService.mStackSupervisor.resumeFocusedStackTopActivityLocked();
                     }
@@ -532,7 +529,7 @@ class AppErrors {
                                                        String shortMsg, String longMsg,
                                                        String stackTrace, long timeMillis,
                                                        int callingPid, int callingUid) {
-        if (mService.mController == null) {
+        if (mService.mActivityTaskManager.mController == null) {
             return false;
         }
 
@@ -540,7 +537,7 @@ class AppErrors {
             String name = r != null ? r.processName : null;
             int pid = r != null ? r.pid : callingPid;
             int uid = r != null ? r.info.uid : callingUid;
-            if (!mService.mController.appCrashed(name, pid,
+            if (!mService.mActivityTaskManager.mController.appCrashed(name, pid,
                     shortMsg, longMsg, timeMillis, crashInfo.stackTrace)) {
                 if ("1".equals(SystemProperties.get(SYSTEM_DEBUGGABLE, "0"))
                         && "Native crash".equals(crashInfo.exceptionClassName)) {
@@ -563,7 +560,7 @@ class AppErrors {
                 return true;
             }
         } catch (RemoteException e) {
-            mService.mController = null;
+            mService.mActivityTaskManager.mController = null;
             Watchdog.getInstance().setActivityController(null);
         }
         return false;
@@ -571,11 +568,11 @@ class AppErrors {
 
     private boolean makeAppCrashingLocked(ProcessRecord app,
             String shortMsg, String longMsg, String stackTrace, AppErrorDialog.Data data) {
-        app.crashing = true;
+        app.setCrashing(true);
         app.crashingReport = generateProcessError(app,
                 ActivityManager.ProcessErrorStateInfo.CRASHED, null, shortMsg, longMsg, stackTrace);
         startAppProblemLocked(app);
-        app.stopFreezingAllLocked();
+        app.getWindowProcessController().stopFreezingActivities();
         return handleAppCrashLocked(app, "force-crash" /*reason*/, shortMsg, longMsg, stackTrace,
                 data);
     }
@@ -643,7 +640,7 @@ class AppErrors {
             return null;
         }
 
-        if (!r.crashing && !r.notResponding && !r.forceCrashReport) {
+        if (!r.isCrashing() && !r.isNotResponding() && !r.forceCrashReport) {
             return null;
         }
 
@@ -654,10 +651,10 @@ class AppErrors {
         report.time = timeMillis;
         report.systemApp = (r.info.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
 
-        if (r.crashing || r.forceCrashReport) {
+        if (r.isCrashing() || r.forceCrashReport) {
             report.type = ApplicationErrorReport.TYPE_CRASH;
             report.crashInfo = crashInfo;
-        } else if (r.notResponding) {
+        } else if (r.isNotResponding()) {
             report.type = ApplicationErrorReport.TYPE_ANR;
             report.anrInfo = new ApplicationErrorReport.AnrInfo();
 
@@ -715,8 +712,8 @@ class AppErrors {
                     + " has crashed too many times: killing!");
             EventLog.writeEvent(EventLogTags.AM_PROCESS_CRASHED_TOO_MUCH,
                     app.userId, app.info.processName, app.uid);
-            mService.mStackSupervisor.handleAppCrashLocked(app);
-            if (!app.persistent) {
+            mService.mStackSupervisor.handleAppCrashLocked(app.getWindowProcessController());
+            if (!app.isPersistent()) {
                 // We don't want to start this process again until the user
                 // explicitly does so...  but for persistent process, we really
                 // need to keep it running.  If a persistent process is actually
@@ -744,7 +741,7 @@ class AppErrors {
             mService.mStackSupervisor.resumeFocusedStackTopActivityLocked();
         } else {
             final TaskRecord affectedTask =
-                    mService.mStackSupervisor.finishTopCrashedActivitiesLocked(app, reason);
+                    mService.mStackSupervisor.finishTopCrashedActivitiesLocked(app.getWindowProcessController(), reason);
             if (data != null) {
                 data.task = affectedTask;
             }
@@ -762,21 +759,11 @@ class AppErrors {
         // replaced by a third-party app, clear the package preferred activities from packages
         // with a home activity running in the process to prevent a repeatedly crashing app
         // from blocking the user to manually clear the list.
-        final ArrayList<ActivityRecord> activities = app.activities;
-        if (app == mService.mHomeProcess && activities.size() > 0
-                && (mService.mHomeProcess.info.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
-            for (int activityNdx = activities.size() - 1; activityNdx >= 0; --activityNdx) {
-                final ActivityRecord r = activities.get(activityNdx);
-                if (r.isActivityTypeHome()) {
-                    Log.i(TAG, "Clearing package preferred activities from " + r.packageName);
-                    try {
-                        ActivityThread.getPackageManager()
-                                .clearPackagePreferredActivities(r.packageName);
-                    } catch (RemoteException c) {
-                        // pm is in same process, this will never happen.
-                    }
-                }
-            }
+        final WindowProcessController proc = app.getWindowProcessController();
+        final WindowProcessController homeProc = mService.mActivityTaskManager.mHomeProcess;
+        if (proc == homeProc && proc.hasActivities()
+                && (homeProc.mInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
+            proc.clearPackagePreferredForHomeActivities();
         }
 
         if (!app.isolated) {
@@ -837,7 +824,8 @@ class AppErrors {
                     mService.mUserController.getCurrentUserId()) != 0;
             final boolean crashSilenced = mAppsNotReportingCrashes != null &&
                     mAppsNotReportingCrashes.contains(proc.info.packageName);
-            if ((mService.canShowErrorDialogs() || showBackground) && !crashSilenced
+            if ((mService.mActivityTaskManager.canShowErrorDialogs() || showBackground)
+                    && !crashSilenced
                     && (showFirstCrash || showFirstCrashDevOption || data.repeating)) {
                 proc.crashDialog = dialogToShow = new AppErrorDialog(mContext, mService, data);
             } else {
@@ -887,16 +875,16 @@ class AppErrors {
         ArrayList<Integer> firstPids = new ArrayList<Integer>(5);
         SparseArray<Boolean> lastPids = new SparseArray<Boolean>(20);
 
-        if (mService.mController != null) {
+        if (mService.mActivityTaskManager.mController != null) {
             try {
                 // 0 == continue, -1 = kill process immediately
-                int res = mService.mController.appEarlyNotResponding(
+                int res = mService.mActivityTaskManager.mController.appEarlyNotResponding(
                         app.processName, app.pid, annotation);
                 if (res < 0 && app.pid != MY_PID) {
                     app.kill("anr", true);
                 }
             } catch (RemoteException e) {
-                mService.mController = null;
+                mService.mActivityTaskManager.mController = null;
                 Watchdog.getInstance().setActivityController(null);
             }
         }
@@ -914,13 +902,13 @@ class AppErrors {
 
         synchronized (mService) {
             // PowerManager.reboot() can block for a long time, so ignore ANRs while shutting down.
-            if (mService.mShuttingDown) {
+            if (mService.mActivityTaskManager.mShuttingDown) {
                 Slog.i(TAG, "During shutdown skipping ANR: " + app + " " + annotation);
                 return;
-            } else if (app.notResponding) {
+            } else if (app.isNotResponding()) {
                 Slog.i(TAG, "Skipping duplicate ANR: " + app + " " + annotation);
                 return;
-            } else if (app.crashing) {
+            } else if (app.isCrashing()) {
                 Slog.i(TAG, "Crashing app skipping ANR: " + app + " " + annotation);
                 return;
             } else if (app.killedByAm) {
@@ -933,7 +921,7 @@ class AppErrors {
 
             // In case we come through here for the same app before completing
             // this one, mark as anring now so we will bail out.
-            app.notResponding = true;
+            app.setNotResponding(true);
 
             // Log the ANR to the event log.
             EventLog.writeEvent(EventLogTags.AM_ANR, app.userId, app.pid,
@@ -946,8 +934,8 @@ class AppErrors {
             isSilentANR = !showBackground && !isInterestingForBackgroundTraces(app);
             if (!isSilentANR) {
                 int parentPid = app.pid;
-                if (parent != null && parent.app != null && parent.app.pid > 0) {
-                    parentPid = parent.app.pid;
+                if (parent != null && parent.app != null && parent.app.getPid() > 0) {
+                    parentPid = parent.app.getPid();
                 }
                 if (parentPid != app.pid) firstPids.add(parentPid);
 
@@ -958,7 +946,7 @@ class AppErrors {
                     if (r != null && r.thread != null) {
                         int pid = r.pid;
                         if (pid > 0 && pid != app.pid && pid != parentPid && pid != MY_PID) {
-                            if (r.persistent) {
+                            if (r.isPersistent()) {
                                 firstPids.add(pid);
                                 if (DEBUG_ANR) Slog.i(TAG, "Adding persistent proc: " + r);
                             } else if (r.treatLikeActivity) {
@@ -1054,10 +1042,10 @@ class AppErrors {
         mService.addErrorToDropBox("anr", app, app.processName, activity, parent, annotation,
                 cpuInfo, tracesFile, null);
 
-        if (mService.mController != null) {
+        if (mService.mActivityTaskManager.mController != null) {
             try {
                 // 0 == show dialog, 1 = keep waiting, -1 = kill process immediately
-                int res = mService.mController.appNotResponding(
+                int res = mService.mActivityTaskManager.mController.appNotResponding(
                         app.processName, app.pid, info.toString());
                 if (res != 0) {
                     if (res < 0 && app.pid != MY_PID) {
@@ -1070,7 +1058,7 @@ class AppErrors {
                     return;
                 }
             } catch (RemoteException e) {
-                mService.mController = null;
+                mService.mActivityTaskManager.mController = null;
                 Watchdog.getInstance().setActivityController(null);
             }
         }
@@ -1100,12 +1088,12 @@ class AppErrors {
 
     private void makeAppNotRespondingLocked(ProcessRecord app,
             String activity, String shortMsg, String longMsg) {
-        app.notResponding = true;
+        app.setNotResponding(true);
         app.notRespondingReport = generateProcessError(app,
                 ActivityManager.ProcessErrorStateInfo.NOT_RESPONDING,
                 activity, shortMsg, longMsg, null);
         startAppProblemLocked(app);
-        app.stopFreezingAllLocked();
+        app.getWindowProcessController().stopFreezingActivities();
     }
 
     void handleShowAnrUi(Message msg) {
@@ -1135,7 +1123,7 @@ class AppErrors {
 
             boolean showBackground = Settings.Secure.getInt(mContext.getContentResolver(),
                     Settings.Secure.ANR_SHOW_BACKGROUND, 0) != 0;
-            if (mService.canShowErrorDialogs() || showBackground) {
+            if (mService.mActivityTaskManager.canShowErrorDialogs() || showBackground) {
                 dialogToShow = new AppNotRespondingDialog(mService, mContext, data);
                 proc.anrDialog = dialogToShow;
             } else {

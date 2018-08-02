@@ -22,6 +22,11 @@
 #include <SkTypeface.h>
 #include <log/log.h>
 
+#include <minikin/Font.h>
+#include <minikin/MinikinExtent.h>
+#include <minikin/MinikinPaint.h>
+#include <minikin/MinikinRect.h>
+
 namespace android {
 
 MinikinFontSkia::MinikinFontSkia(sk_sp<SkTypeface> typeface, const void* fontData, size_t fontSize,
@@ -81,7 +86,6 @@ void MinikinFontSkia::GetFontExtent(minikin::MinikinExtent* extent,
     skPaint.getFontMetrics(&metrics);
     extent->ascent = metrics.fAscent;
     extent->descent = metrics.fDescent;
-    extent->line_gap = metrics.fLeading;
 }
 
 SkTypeface* MinikinFontSkia::GetSkTypeface() const {
@@ -136,9 +140,8 @@ uint32_t MinikinFontSkia::packPaintFlags(const SkPaint* paint) {
     SkPaint::Hinting hinting = paint->getHinting();
     // select only flags that might affect text layout
     flags &= (SkPaint::kAntiAlias_Flag | SkPaint::kFakeBoldText_Flag | SkPaint::kLinearText_Flag |
-              SkPaint::kSubpixelText_Flag | SkPaint::kDevKernText_Flag |
-              SkPaint::kEmbeddedBitmapText_Flag | SkPaint::kAutoHinting_Flag |
-              SkPaint::kVerticalText_Flag);
+              SkPaint::kSubpixelText_Flag | SkPaint::kEmbeddedBitmapText_Flag |
+              SkPaint::kAutoHinting_Flag | SkPaint::kVerticalText_Flag);
     flags |= (hinting << 16);
     return flags;
 }

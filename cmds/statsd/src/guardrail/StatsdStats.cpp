@@ -100,10 +100,10 @@ const int FIELD_ID_UID_MAP_DROPPED_CHANGES = 3;
 const int FIELD_ID_UID_MAP_DELETED_APPS = 4;
 
 const std::map<int, std::pair<size_t, size_t>> StatsdStats::kAtomDimensionKeySizeLimitMap = {
+        {android::util::BINDER_CALLS, {6000, 10000}},
         {android::util::CPU_TIME_PER_UID_FREQ, {6000, 10000}},
 };
 
-// TODO: add stats for pulled atoms.
 StatsdStats::StatsdStats() {
     mPushedAtomStats.resize(android::util::kMaxPushedAtomId + 1);
     mStartTimeSec = getWallClockSec();

@@ -24,6 +24,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.Nullable;
+import android.app.Notification;
 import android.app.NotificationChannel;
 import android.content.Context;
 import android.content.pm.PackageInfo;
@@ -37,6 +38,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Build;
+import android.os.SystemClock;
 import android.os.Bundle;
 import android.service.notification.StatusBarNotification;
 import android.util.ArraySet;
@@ -63,7 +65,7 @@ import android.widget.RemoteViews;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
-import com.android.internal.util.NotificationColorUtil;
+import com.android.internal.util.ContrastColorUtil;
 import com.android.internal.widget.CachingIconView;
 import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
@@ -108,6 +110,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private static final int COLORED_DIVIDER_ALPHA = 0x7B;
     private static final int MENU_VIEW_INDEX = 0;
     private static final String TAG = "ExpandableNotifRow";
+    public static final float DEFAULT_HEADER_VISIBLE_AMOUNT = 1.0f;
 
     /**
      * Listener for when {@link ExpandableNotificationRow} is laid out.
@@ -122,12 +125,12 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private final NotificationInflater mNotificationInflater;
     private int mIconTransformContentShift;
     private int mIconTransformContentShiftNoIcon;
-    private int mNotificationMinHeightLegacy;
-    private int mNotificationMinHeightBeforeP;
-    private int mMaxHeadsUpHeightLegacy;
+    private int mMaxHeadsUpHeightBeforeN;
     private int mMaxHeadsUpHeightBeforeP;
     private int mMaxHeadsUpHeight;
     private int mMaxHeadsUpHeightIncreased;
+    private int mNotificationMinHeightBeforeN;
+    private int mNotificationMinHeightBeforeP;
     private int mNotificationMinHeight;
     private int mNotificationMinHeightLarge;
     private int mNotificationMaxHeight;
@@ -157,7 +160,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private boolean mSensitiveHiddenInGeneral;
     private boolean mShowingPublicInitialized;
     private boolean mHideSensitiveForIntrinsicHeight;
-    private float mHeaderVisibleAmount = 1.0f;
+    private float mHeaderVisibleAmount = DEFAULT_HEADER_VISIBLE_AMOUNT;
 
     /**
      * Is this notification expanded by the system. The expansion state can be overridden by the
@@ -438,7 +441,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      */
     public boolean getIsNonblockable() {
         boolean isNonblockable = Dependency.get(NotificationBlockingHelperManager.class)
-                .isNonblockablePackage(mStatusBarNotification.getPackageName());
+                .isNonblockable(mStatusBarNotification.getPackageName(),
+                        mEntry.channel.getId());
 
         // If the SystemNotifAsyncTask hasn't finished running or retrieved a value, we'll try once
         // again, but in-place on the main thread this time. This should rarely ever get called.
@@ -496,7 +500,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         StatusBarIconView expandedIcon = mEntry.expandedIcon;
         boolean isPreL = Boolean.TRUE.equals(expandedIcon.getTag(R.id.icon_is_pre_L));
         boolean colorize = !isPreL || NotificationUtils.isGrayscale(expandedIcon,
-                NotificationColorUtil.getInstance(mContext));
+                ContrastColorUtil.getInstance(mContext));
         int color = StatusBarIconView.NO_COLOR;
         if (colorize) {
             NotificationHeaderView header = getVisibleNotificationHeader();
@@ -543,7 +547,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         boolean beforeP = mEntry.targetSdk < Build.VERSION_CODES.P;
         int minHeight;
         if (customView && beforeP && !mIsSummaryWithChildren) {
-            minHeight = beforeN ? mNotificationMinHeightLegacy : mNotificationMinHeightBeforeP;
+            minHeight = beforeN ? mNotificationMinHeightBeforeN : mNotificationMinHeightBeforeP;
         } else if (mUseIncreasedCollapsedHeight && layout == mPrivateLayout) {
             minHeight = mNotificationMinHeightLarge;
         } else {
@@ -552,20 +556,20 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         boolean headsUpCustom = layout.getHeadsUpChild() != null &&
                 layout.getHeadsUpChild().getId()
                         != com.android.internal.R.id.status_bar_latest_event_content;
-        int headsUpheight;
+        int headsUpHeight;
         if (headsUpCustom && beforeP) {
-            headsUpheight = beforeN ? mMaxHeadsUpHeightLegacy : mMaxHeadsUpHeightBeforeP;
+            headsUpHeight = beforeN ? mMaxHeadsUpHeightBeforeN : mMaxHeadsUpHeightBeforeP;
         } else if (mUseIncreasedHeadsUpHeight && layout == mPrivateLayout) {
-            headsUpheight = mMaxHeadsUpHeightIncreased;
+            headsUpHeight = mMaxHeadsUpHeightIncreased;
         } else {
-            headsUpheight = mMaxHeadsUpHeight;
+            headsUpHeight = mMaxHeadsUpHeight;
         }
         NotificationViewWrapper headsUpWrapper = layout.getVisibleWrapper(
                 NotificationContentView.VISIBLE_TYPE_HEADSUP);
         if (headsUpWrapper != null) {
-            headsUpheight = Math.max(headsUpheight, headsUpWrapper.getMinLayoutHeight());
+            headsUpHeight = Math.max(headsUpHeight, headsUpWrapper.getMinLayoutHeight());
         }
-        layout.setHeights(minHeight, headsUpheight, mNotificationMaxHeight,
+        layout.setHeights(minHeight, headsUpHeight, mNotificationMaxHeight,
                 mNotificationAmbientHeight);
     }
 
@@ -991,6 +995,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        mEntry.setInitializationTime(SystemClock.elapsedRealtime());
         Dependency.get(PluginManager.class).addPluginListener(this,
                 NotificationMenuRowPlugin.class, false /* Allow multiple */);
     }
@@ -1049,6 +1054,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         super.onDensityOrFontScaleChanged();
         initDimens();
         initBackground();
+        reInflateViews();
+    }
+
+    private void reInflateViews() {
         // Let's update our childrencontainer. This is intentionally not guarded with
         // mIsSummaryWithChildren since we might have had children but not anymore.
         if (mChildrenContainer != null) {
@@ -1075,7 +1084,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             l.initView();
             l.reInflateViews();
         }
-        mNotificationInflater.onDensityOrFontScaleChanged();
+        mNotificationInflater.clearCachesAndReInflate();
         onNotificationUpdated();
     }
 
@@ -1083,6 +1092,17 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     public void onConfigurationChanged(Configuration newConfig) {
         if (mMenuRow.getMenuView() != null) {
             mMenuRow.onConfigurationChanged();
+        }
+    }
+
+    @Override
+    public void onUiModeChanged() {
+        super.onUiModeChanged();
+        reInflateViews();
+        if (mChildrenContainer != null) {
+            for (ExpandableNotificationRow child : mChildrenContainer.getNotificationChildren()) {
+                child.onUiModeChanged();
+            }
         }
     }
 
@@ -1120,10 +1140,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     private void updateNotificationColor() {
-        mNotificationColor = NotificationColorUtil.resolveContrastColor(mContext,
+        mNotificationColor = ContrastColorUtil.resolveContrastColor(mContext,
                 getStatusBarNotification().getNotification().color,
                 getBackgroundColorWithoutTint());
-        mNotificationColorAmbient = NotificationColorUtil.resolveAmbientColor(mContext,
+        mNotificationColorAmbient = ContrastColorUtil.resolveAmbientColor(mContext,
                 getStatusBarNotification().getNotification().color);
     }
 
@@ -1444,6 +1464,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mNotificationInflater.setUsesIncreasedHeight(use);
     }
 
+    public void setSmartActions(List<Notification.Action> smartActions) {
+        mNotificationInflater.setSmartActions(smartActions);
+    }
+
     public void setUseIncreasedHeadsUpHeight(boolean use) {
         mUseIncreasedHeadsUpHeight = use;
         mNotificationInflater.setUsesIncreasedHeadsUpHeight(use);
@@ -1483,7 +1507,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     private void initDimens() {
-        mNotificationMinHeightLegacy = NotificationUtils.getFontScaledHeight(mContext,
+        mNotificationMinHeightBeforeN = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_min_height_legacy);
         mNotificationMinHeightBeforeP = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_min_height_before_p);
@@ -1495,7 +1519,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 R.dimen.notification_max_height);
         mNotificationAmbientHeight = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_ambient_height);
-        mMaxHeadsUpHeightLegacy = NotificationUtils.getFontScaledHeight(mContext,
+        mMaxHeadsUpHeightBeforeN = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_max_heads_up_height_legacy);
         mMaxHeadsUpHeightBeforeP = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_max_heads_up_height_before_p);
@@ -2850,12 +2874,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     @Override
     public Path getCustomClipPath(View child) {
         if (child instanceof NotificationGuts) {
-            return getClipPath(true, /* ignoreTranslation */
-                    false /* clipRoundedToBottom */);
-        }
-        if (child instanceof NotificationChildrenContainer) {
-            return getClipPath(false, /* ignoreTranslation */
-                    true /* clipRoundedToBottom */);
+            return getClipPath(true /* ignoreTranslation */);
         }
         return super.getCustomClipPath(child);
     }

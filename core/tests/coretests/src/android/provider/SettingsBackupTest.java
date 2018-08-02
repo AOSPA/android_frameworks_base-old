@@ -57,7 +57,6 @@ public class SettingsBackupTest {
     private static final Set<String> BACKUP_BLACKLISTED_SYSTEM_SETTINGS =
             newHashSet(
                     Settings.System.ADVANCED_SETTINGS, // candidate for backup?
-                    Settings.System.ALARM_ALERT, // backup candidate?
                     Settings.System.ALARM_ALERT_CACHE, // internal cache
                     Settings.System.APPEND_FOR_LAST_AUDIBLE, // suffix deprecated since API 2
                     Settings.System.EGG_MODE, // I am the lolrus
@@ -67,9 +66,9 @@ public class SettingsBackupTest {
                     Settings.System.LOCKSCREEN_DISABLED, // ?
                     Settings.System.MEDIA_BUTTON_RECEIVER, // candidate for backup?
                     Settings.System.MUTE_STREAMS_AFFECTED, //  candidate for backup?
-                    Settings.System.NOTIFICATION_LIGHT_PULSE, // candidate for backup?
                     Settings.System.NOTIFICATION_SOUND_CACHE, // internal cache
                     Settings.System.POINTER_LOCATION, // backup candidate?
+                    Settings.System.DEBUG_ENABLE_ENHANCED_CALL_BLOCKING, // used for testing only
                     Settings.System.RINGTONE_CACHE, // internal cache
                     Settings.System.SCREEN_BRIGHTNESS, // removed in P
                     Settings.System.SETUP_WIZARD_HAS_RUN, // Only used by SuW
@@ -124,6 +123,7 @@ public class SettingsBackupTest {
                     Settings.Global.BATTERY_DISCHARGE_THRESHOLD,
                     Settings.Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS,
                     Settings.Global.BATTERY_STATS_CONSTANTS,
+                    Settings.Global.BINDER_CALLS_STATS,
                     Settings.Global.BLE_SCAN_ALWAYS_AVAILABLE,
                     Settings.Global.BLE_SCAN_LOW_POWER_WINDOW_MS,
                     Settings.Global.BLE_SCAN_LOW_POWER_INTERVAL_MS,
@@ -176,7 +176,6 @@ public class SettingsBackupTest {
                     Settings.Global.CONNECTIVITY_SAMPLING_INTERVAL_IN_SECONDS,
                     Settings.Global.CONTACT_METADATA_SYNC_ENABLED,
                     Settings.Global.CONTACTS_DATABASE_WAL_ENABLED,
-                    Settings.Global.CPU_SCALING_ENABLED,
                     Settings.Global.DATA_ACTIVITY_TIMEOUT_MOBILE,
                     Settings.Global.DATA_ACTIVITY_TIMEOUT_WIFI,
                     Settings.Global.DATABASE_CREATION_BUILDID,
@@ -237,6 +236,7 @@ public class SettingsBackupTest {
                     Settings.Global.EUICC_SUPPORTED_COUNTRIES,
                     Settings.Global.EUICC_FACTORY_RESET_TIMEOUT_MILLIS,
                     Settings.Global.FANCY_IME_ANIMATIONS,
+                    Settings.Global.FASTER_EMERGENCY_PHONE_CALL_ENABLED,
                     Settings.Global.FORCE_ALLOW_ON_EXTERNAL,
                     Settings.Global.FORCED_APP_STANDBY_ENABLED,
                     Settings.Global.FORCED_APP_STANDBY_FOR_SMALL_BATTERY_ENABLED,
@@ -272,6 +272,7 @@ public class SettingsBackupTest {
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_INTERVAL_MS,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_PROXIMITY_ALERT_INTERVAL_MS,
                     Settings.Global.LOCATION_BACKGROUND_THROTTLE_PACKAGE_WHITELIST,
+                    Settings.Global.LOCATION_LAST_LOCATION_MAX_AGE_MILLIS,
                     Settings.Global.LOCATION_GLOBAL_KILL_SWITCH,
                     Settings.Global.LOCATION_SETTINGS_LINK_TO_PERMISSIONS_ENABLED,
                     Settings.Global.LOCK_SOUND,
@@ -341,7 +342,6 @@ public class SettingsBackupTest {
                     Settings.Global.NTP_SERVER,
                     Settings.Global.NTP_TIMEOUT,
                     Settings.Global.OTA_DISABLE_AUTOMATIC_UPDATE,
-                    Settings.Global.USER_ABSENT_RADIOS_OFF_FOR_SMALL_BATTERY_ENABLED,
                     Settings.Global.OVERLAY_DISPLAY_DEVICES,
                     Settings.Global.PAC_CHANGE_DELAY,
                     Settings.Global.PACKAGE_VERIFIER_DEFAULT_RESPONSE,
@@ -403,7 +403,6 @@ public class SettingsBackupTest {
                     Settings.Global.SQLITE_COMPATIBILITY_WAL_FLAGS,
                     Settings.Global.STORAGE_BENCHMARK_INTERVAL,
                     Settings.Global.STORAGE_SETTINGS_CLOBBER_THRESHOLD,
-                    Settings.Global.SWAP_ENABLED,
                     Settings.Global.SYNC_MANAGER_CONSTANTS,
                     Settings.Global.SYNC_MAX_RETRY_DELAY_IN_SECONDS,
                     Settings.Global.SYS_FREE_STORAGE_LOG_INTERVAL,
@@ -436,6 +435,8 @@ public class SettingsBackupTest {
                     Settings.Global.UNGAZE_SLEEP_ENABLED,
                     Settings.Global.UNLOCK_SOUND,
                     Settings.Global.USE_GOOGLE_MAIL,
+                    Settings.Global.USER_ABSENT_RADIOS_OFF_FOR_SMALL_BATTERY_ENABLED,
+                    Settings.Global.USER_ABSENT_TOUCH_OFF_FOR_SMALL_BATTERY_ENABLED,
                     Settings.Global.VT_IMS_ENABLED,
                     Settings.Global.WAIT_FOR_DEBUGGER,
                     Settings.Global.ENABLE_GPU_DEBUG_LAYERS,
@@ -444,6 +445,7 @@ public class SettingsBackupTest {
                     Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING,
                     Settings.Global.INSTALL_CARRIER_APP_NOTIFICATION_PERSISTENT,
                     Settings.Global.INSTALL_CARRIER_APP_NOTIFICATION_SLEEP_MILLIS,
+                    Settings.Global.USER_SWITCHER_ENABLED,
                     Settings.Global.NETWORK_ACCESS_TIMEOUT_MS,
                     Settings.Global.WARNING_TEMPERATURE,
                     Settings.Global.WEBVIEW_DATA_REDUCTION_PROXY_KEY,
@@ -458,6 +460,8 @@ public class SettingsBackupTest {
                     Settings.Global.WIFI_BOUNCE_DELAY_OVERRIDE_MS,
                     Settings.Global.WIFI_CONNECTED_MAC_RANDOMIZATION_ENABLED,
                     Settings.Global.WIFI_COUNTRY_CODE,
+                    Settings.Global.WIFI_DATA_STALL_MIN_TX_BAD,
+                    Settings.Global.WIFI_DATA_STALL_MIN_TX_SUCCESS_WITHOUT_RX,
                     Settings.Global.WIFI_DEVICE_OWNER_CONFIGS_LOCKDOWN,
                     Settings.Global.WIFI_DISPLAY_CERTIFICATION_ON,
                     Settings.Global.WIFI_DISPLAY_ON,
@@ -467,6 +471,8 @@ public class SettingsBackupTest {
                     Settings.Global.WIFI_FRAMEWORK_SCAN_INTERVAL_MS,
                     Settings.Global.WIFI_FREQUENCY_BAND,
                     Settings.Global.WIFI_IDLE_MS,
+                    Settings.Global.WIFI_IS_UNUSABLE_EVENT_METRICS_ENABLED,
+                    Settings.Global.WIFI_LINK_SPEED_METRICS_ENABLED,
                     Settings.Global.WIFI_MAX_DHCP_RETRY_COUNT,
                     Settings.Global.WIFI_MOBILE_DATA_TRANSITION_WAKELOCK_TIMEOUT_MS,
                     Settings.Global.WIFI_NETWORK_SHOW_RSSI,
@@ -500,6 +506,7 @@ public class SettingsBackupTest {
     private static final Set<String> BACKUP_BLACKLISTED_SECURE_SETTINGS =
              newHashSet(
                  Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
+                 Settings.Secure.ACCESSIBILITY_SPEAK_PASSWORD, // Deprecated since O.
                  Settings.Secure.ALLOWED_GEOLOCATION_ORIGINS,
                  Settings.Secure.ALWAYS_ON_VPN_APP,
                  Settings.Secure.ALWAYS_ON_VPN_LOCKDOWN,
@@ -507,6 +514,8 @@ public class SettingsBackupTest {
                  Settings.Secure.ANR_SHOW_BACKGROUND,
                  Settings.Secure.ASSISTANT,
                  Settings.Secure.ASSIST_DISCLOSURE_ENABLED,
+                 Settings.Secure.ASSIST_GESTURE_SENSITIVITY,
+                 Settings.Secure.ASSIST_GESTURE_SETUP_COMPLETE,
                  Settings.Secure.ASSIST_SCREENSHOT_ENABLED,
                  Settings.Secure.ASSIST_STRUCTURE_ENABLED,
                  Settings.Secure.AUTOFILL_FEATURE_FIELD_CLASSIFICATION,
@@ -535,7 +544,6 @@ public class SettingsBackupTest {
                  Settings.Secure.DISABLED_PRINT_SERVICES,
                  Settings.Secure.DISABLED_SYSTEM_INPUT_METHODS,
                  Settings.Secure.DISPLAY_DENSITY_FORCED,
-                 Settings.Secure.DOZE_ALWAYS_ON,
                  Settings.Secure.DOZE_PULSE_ON_LONG_PRESS,
                  Settings.Secure.EMERGENCY_ASSISTANCE_APPLICATION,
                  Settings.Secure.ENABLED_INPUT_METHODS,  // Intentionally removed in P
@@ -551,10 +559,8 @@ public class SettingsBackupTest {
                  Settings.Secure.LAST_SETUP_SHOWN,
                  Settings.Secure.LOCATION_CHANGER,
                  Settings.Secure.LOCATION_MODE,
-                 Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, // Candidate?
                  Settings.Secure.LOCK_SCREEN_ALLOW_REMOTE_INPUT, // Candidate?
                  Settings.Secure.LOCK_SCREEN_LOCK_AFTER_TIMEOUT,
-                 Settings.Secure.LOCK_SCREEN_SHOW_NOTIFICATIONS, // Candidate?
                  Settings.Secure.LOCK_TO_APP_EXIT_LOCKED,
                  Settings.Secure.MANAGED_PROFILE_CONTACT_REMOTE_SEARCH,
                  Settings.Secure.MULTI_PRESS_TIMEOUT,
@@ -588,12 +594,15 @@ public class SettingsBackupTest {
                  Settings.Secure.SEARCH_THREAD_KEEPALIVE_SECONDS,
                  Settings.Secure.SEARCH_WEB_RESULTS_OVERRIDE_LIMIT,
                  Settings.Secure.SELECTED_INPUT_METHOD_SUBTYPE,
+                 Settings.Secure.SELECTED_SPELL_CHECKER,  // Intentionally removed in Q
+                 Settings.Secure.SELECTED_SPELL_CHECKER_SUBTYPE,  // Intentionally removed in Q
                  Settings.Secure.SETTINGS_CLASSNAME,
                  Settings.Secure.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING, // candidate?
                  Settings.Secure.SHOW_ROTATION_SUGGESTIONS,
                  Settings.Secure.SKIP_FIRST_USE_HINTS, // candidate?
+                 Settings.Secure.SLEEP_TIMEOUT,
                  Settings.Secure.SMS_DEFAULT_APPLICATION,
-                 Settings.Secure.THEME_MODE,
+                 Settings.Secure.SPELL_CHECKER_ENABLED,  // Intentionally removed in Q
                  Settings.Secure.TRUST_AGENTS_INITIALIZED,
                  Settings.Secure.TV_INPUT_CUSTOM_LABELS,
                  Settings.Secure.TV_INPUT_HIDDEN_INPUTS,
@@ -616,7 +625,9 @@ public class SettingsBackupTest {
                  Settings.Secure.LOW_POWER_MANUAL_ACTIVATION_COUNT,
                  Settings.Secure.LOW_POWER_WARNING_ACKNOWLEDGED,
                  Settings.Secure.SUPPRESS_AUTO_BATTERY_SAVER_SUGGESTION,
-                 Settings.Secure.PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE);
+                 Settings.Secure.PACKAGES_TO_CLEAR_DATA_BEFORE_FULL_RESTORE,
+                 Settings.Secure.FLASHLIGHT_AVAILABLE,
+                 Settings.Secure.FLASHLIGHT_ENABLED);
 
     @Test
     public void systemSettingsBackedUpOrBlacklisted() {

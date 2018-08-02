@@ -27,6 +27,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.when;
 
+import android.app.ActivityManagerInternal;
 import android.app.KeyguardManager;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.content.Context;
@@ -37,11 +38,13 @@ import android.content.pm.PackageManagerInternal;
 import android.content.pm.UserInfo;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.platform.test.annotations.Presubmit;
 import android.support.test.filters.SmallTest;
 import android.testing.DexmakerShareClassLoaderRule;
 
 import com.android.internal.app.SuspendedAppActivity;
 import com.android.internal.app.UnlaunchableAppActivity;
+import com.android.internal.app.HarmfulAppWarningActivity;
 import com.android.server.LocalServices;
 import com.android.server.pm.PackageManagerService;
 
@@ -55,8 +58,9 @@ import org.mockito.MockitoAnnotations;
  * Unit tests for {@link ActivityStartInterceptorTest}.
  *
  * Build/Install/Run:
- *  bit FrameworksServicesTests:com.android.server.am.ActivityStartInterceptorTest
+ *  atest FrameworksServicesTests:com.android.server.am.ActivityStartInterceptorTest
  */
+@Presubmit
 @SmallTest
 public class ActivityStartInterceptorTest {
     private static final int TEST_USER_ID = 1;
@@ -79,7 +83,9 @@ public class ActivityStartInterceptorTest {
     @Mock
     private Context mContext;
     @Mock
-    private ActivityManagerService mService;
+    private ActivityManagerService mAm;
+    @Mock
+    private ActivityTaskManagerService mService;
     @Mock
     private ActivityStackSupervisor mSupervisor;
     @Mock
@@ -89,11 +95,11 @@ public class ActivityStartInterceptorTest {
     @Mock
     private UserManager mUserManager;
     @Mock
-    private UserController mUserController;
-    @Mock
     private KeyguardManager mKeyguardManager;
     @Mock
     private PackageManagerService mPackageManager;
+    @Mock
+    private ActivityManagerInternal mAmInternal;
 
     private ActivityStartInterceptor mInterceptor;
     private ActivityInfo mAInfo = new ActivityInfo();
@@ -101,19 +107,23 @@ public class ActivityStartInterceptorTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        mInterceptor = new ActivityStartInterceptor(mService, mSupervisor, mContext,
-                mUserController);
+        mService.mAm = mAm;
+        mService.mAmInternal = mAmInternal;
+        mInterceptor = new ActivityStartInterceptor(mService, mSupervisor, mContext);
         mInterceptor.setStates(TEST_USER_ID, TEST_REAL_CALLING_PID, TEST_REAL_CALLING_UID,
                 TEST_START_FLAGS, TEST_CALLING_PACKAGE);
+
+        // Mock ActivityManagerInternal
+        LocalServices.removeServiceForTest(ActivityManagerInternal.class);
+        LocalServices.addService(ActivityManagerInternal.class, mAmInternal);
 
         // Mock DevicePolicyManagerInternal
         LocalServices.removeServiceForTest(DevicePolicyManagerInternal.class);
         LocalServices.addService(DevicePolicyManagerInternal.class,
                 mDevicePolicyManager);
-        when(mDevicePolicyManager
-                        .createShowAdminSupportIntent(TEST_USER_ID, true))
+        when(mDevicePolicyManager.createShowAdminSupportIntent(TEST_USER_ID, true))
                 .thenReturn(ADMIN_SUPPORT_INTENT);
-        when(mService.getPackageManagerInternalLocked()).thenReturn(mPackageManagerInternal);
+        when(mAm.getPackageManagerInternalLocked()).thenReturn(mPackageManagerInternal);
 
         // Mock UserManager
         when(mContext.getSystemService(Context.USER_SERVICE)).thenReturn(mUserManager);
@@ -126,7 +136,7 @@ public class ActivityStartInterceptorTest {
                 thenReturn(CONFIRM_CREDENTIALS_INTENT);
 
         // Mock PackageManager
-        when(mService.getPackageManager()).thenReturn(mPackageManager);
+        when(mAm.getPackageManager()).thenReturn(mPackageManager);
         when(mPackageManager.getHarmfulAppWarning(TEST_PACKAGE_NAME, TEST_USER_ID))
                 .thenReturn(null);
 
@@ -188,13 +198,27 @@ public class ActivityStartInterceptorTest {
     @Test
     public void testWorkChallenge() {
         // GIVEN that the user the activity is starting as is currently locked
-        when(mUserController.shouldConfirmCredentials(TEST_USER_ID)).thenReturn(true);
+        when(mAmInternal.shouldConfirmCredentials(TEST_USER_ID)).thenReturn(true);
 
         // THEN calling intercept returns true
         mInterceptor.intercept(null, null, mAInfo, null, null, 0, 0, null);
 
         // THEN the returned intent is the quiet mode intent
         assertTrue(CONFIRM_CREDENTIALS_INTENT.filterEquals(mInterceptor.mIntent));
+    }
+
+    @Test
+    public void testHarmfulAppWarning() {
+        // GIVEN the package we're about to launch has a harmful app warning set
+        when(mPackageManager.getHarmfulAppWarning(TEST_PACKAGE_NAME, TEST_USER_ID))
+                .thenReturn("This app is bad");
+
+        // THEN calling intercept returns true
+        assertTrue(mInterceptor.intercept(null, null, mAInfo, null, null, 0, 0, null));
+
+        // THEN the returned intent is the harmful app warning intent
+        assertTrue(mInterceptor.mIntent.getComponent().getClassName().equals(
+                HarmfulAppWarningActivity.class.getName()));
     }
 
     @Test

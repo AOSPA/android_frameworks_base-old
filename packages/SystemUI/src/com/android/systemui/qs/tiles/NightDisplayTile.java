@@ -24,7 +24,8 @@ import android.content.Intent;
 import android.metrics.LogMaker;
 import android.provider.Settings;
 import android.service.quicksettings.Tile;
-import android.support.annotation.StringRes;
+import androidx.annotation.StringRes;
+import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Switch;
 
@@ -35,8 +36,11 @@ import com.android.systemui.qs.QSHost;
 import com.android.systemui.plugins.qs.QSTile.BooleanState;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 
+import java.text.DateFormat;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Calendar;
+import java.util.TimeZone;
 
 public class NightDisplayTile extends QSTileImpl<BooleanState>
         implements ColorDisplayController.Callback {
@@ -47,6 +51,7 @@ public class NightDisplayTile extends QSTileImpl<BooleanState>
      */
     private static final String PATTERN_HOUR = "h a";
     private static final String PATTERN_HOUR_MINUTE = "h:mm a";
+    private static final String PATTERN_HOUR_NINUTE_24 = "HH:mm";
 
 
     private ColorDisplayController mController;
@@ -101,12 +106,14 @@ public class NightDisplayTile extends QSTileImpl<BooleanState>
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
         state.value = mController.isActivated();
-        state.label = state.contentDescription =
-                mContext.getString(R.string.quick_settings_night_display_label);
+        state.label = mContext.getString(R.string.quick_settings_night_display_label);
         state.icon = ResourceIcon.get(R.drawable.ic_qs_night_display_on);
         state.expandedAccessibilityClassName = Switch.class.getName();
         state.state = state.value ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
         state.secondaryLabel = getSecondaryLabel(state.value);
+        state.contentDescription = TextUtils.isEmpty(state.secondaryLabel)
+                ? state.label
+                : TextUtils.concat(state.label, ", ", state.secondaryLabel);
     }
 
     /**
@@ -139,12 +146,17 @@ public class NightDisplayTile extends QSTileImpl<BooleanState>
                     toggleTimeStringRes = R.string.quick_settings_night_secondary_label_on_at;
                 }
 
-                // Choose between just showing the hour or also showing the minutes (based on the
-                // user-selected toggle time). This helps reduce how much space the label takes.
-                toggleTimeFormat = DateTimeFormatter.ofPattern(
-                        toggleTime.getMinute() == 0 ? PATTERN_HOUR : PATTERN_HOUR_MINUTE);
-
-                return mContext.getString(toggleTimeStringRes, toggleTime.format(toggleTimeFormat));
+                // TODO(b/111085930): Move this calendar snippet to a common code location that
+                // settings lib can also access.
+                final Calendar c = Calendar.getInstance();
+                DateFormat nightTileFormat = android.text.format.DateFormat.getTimeFormat(mContext);
+                nightTileFormat.setTimeZone(TimeZone.getTimeZone("UTC"));
+                c.setTimeZone(nightTileFormat.getTimeZone());
+                c.set(Calendar.HOUR_OF_DAY, toggleTime.getHour());
+                c.set(Calendar.MINUTE, toggleTime.getMinute());
+                c.set(Calendar.SECOND, 0);
+                c.set(Calendar.MILLISECOND, 0);
+                return mContext.getString(toggleTimeStringRes, nightTileFormat.format(c.getTime()));
 
             default:
                 // No secondary label when auto mode is disabled.

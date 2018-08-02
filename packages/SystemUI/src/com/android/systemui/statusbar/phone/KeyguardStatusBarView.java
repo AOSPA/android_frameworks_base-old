@@ -57,6 +57,9 @@ import com.android.systemui.statusbar.policy.UserInfoController.OnUserInfoChange
 import com.android.systemui.statusbar.policy.UserInfoControllerImpl;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+
 /**
  * The header group on Keyguard.
  */
@@ -67,6 +70,7 @@ public class KeyguardStatusBarView extends RelativeLayout
     private static final int LAYOUT_CUTOUT = 1;
     private static final int LAYOUT_NO_CUTOUT = 2;
 
+    private boolean mShowPercentAvailable;
     private boolean mBatteryCharging;
     private boolean mKeyguardUserSwitcherShowing;
     private boolean mBatteryListening;
@@ -165,6 +169,8 @@ public class KeyguardStatusBarView extends RelativeLayout
                 R.dimen.system_icons_super_container_avatarless_margin_end);
         mCutoutSideNudge = getResources().getDimensionPixelSize(
                 R.dimen.display_cutout_margin_consumption);
+        mShowPercentAvailable = getContext().getResources().getBoolean(
+                com.android.internal.R.bool.config_battery_percentage_setting_available);
     }
 
     private void updateVisibilities() {
@@ -186,7 +192,7 @@ public class KeyguardStatusBarView extends RelativeLayout
                 mMultiUserSwitch.setVisibility(View.GONE);
             }
         }
-        mBatteryView.setForceShowPercent(mBatteryCharging);
+        mBatteryView.setForceShowPercent(mBatteryCharging && mShowPercentAvailable);
     }
 
     private void updateSystemIconsLayoutParams() {
@@ -434,9 +440,10 @@ public class KeyguardStatusBarView extends RelativeLayout
     }
 
     public void onThemeChanged() {
-        @ColorInt int textColor = Utils.getColorAttr(mContext, R.attr.wallpaperTextColor);
-        @ColorInt int iconColor = Utils.getDefaultColor(mContext, Color.luminance(textColor) < 0.5 ?
-                R.color.dark_mode_icon_color_single_tone :
+        @ColorInt int textColor = Utils.getColorAttrDefaultColor(mContext,
+                R.attr.wallpaperTextColor);
+        @ColorInt int iconColor = Utils.getColorStateListDefaultColor(mContext,
+                Color.luminance(textColor) < 0.5 ? R.color.dark_mode_icon_color_single_tone :
                 R.color.light_mode_icon_color_single_tone);
         float intensity = textColor == Color.WHITE ? 0 : 1;
         mCarrierLabel.setTextColor(iconColor);
@@ -455,6 +462,17 @@ public class KeyguardStatusBarView extends RelativeLayout
         View v = findViewById(id);
         if (v instanceof DarkReceiver) {
             ((DarkReceiver) v).onDarkChanged(tintArea, intensity, color);
+        }
+    }
+
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        pw.println("KeyguardStatusBarView:");
+        pw.println("  mBatteryCharging: " + mBatteryCharging);
+        pw.println("  mKeyguardUserSwitcherShowing: " + mKeyguardUserSwitcherShowing);
+        pw.println("  mBatteryListening: " + mBatteryListening);
+        pw.println("  mLayoutState: " + mLayoutState);
+        if (mBatteryView != null) {
+            mBatteryView.dump(fd, pw, args);
         }
     }
 }

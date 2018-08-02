@@ -76,6 +76,7 @@ import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CO
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_SCREEN_DECOR;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SHOW_FOR_ALL_USERS;
+import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_STATUS_BAR_EXPANDED;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_SYSTEM_ERROR;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT;
@@ -124,7 +125,6 @@ import static android.view.WindowManager.TAKE_SCREENSHOT_FULLSCREEN;
 import static android.view.WindowManager.TAKE_SCREENSHOT_SELECTED_REGION;
 import static android.view.WindowManagerGlobal.ADD_OKAY;
 import static android.view.WindowManagerGlobal.ADD_PERMISSION_DENIED;
-
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_COVERED;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_COVER_ABSENT;
 import static com.android.server.policy.WindowManagerPolicy.WindowManagerFuncs.CAMERA_LENS_UNCOVERED;
@@ -155,7 +155,7 @@ import static com.android.server.wm.WindowManagerPolicyProto.WINDOW_MANAGER_DRAW
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
-import android.app.ActivityManagerInternal.SleepToken;
+import android.app.ActivityTaskManager;
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.app.IUiModeManager;
@@ -274,8 +274,8 @@ import com.android.internal.policy.KeyguardDismissCallback;
 import com.android.internal.policy.PhoneWindow;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.ScreenshotHelper;
 import com.android.internal.util.ScreenShapeHelper;
+import com.android.internal.util.ScreenshotHelper;
 import com.android.internal.widget.PointerLocationView;
 import com.android.server.GestureLauncherService;
 import com.android.server.LocalServices;
@@ -285,10 +285,13 @@ import com.android.server.policy.keyguard.KeyguardServiceDelegate.DrawnListener;
 import com.android.server.policy.keyguard.KeyguardStateMonitor.StateCallback;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.vr.VrManagerInternal;
+import com.android.server.wm.ActivityTaskManagerInternal;
+import com.android.server.wm.ActivityTaskManagerInternal.SleepToken;
 import com.android.server.wm.AppTransition;
 import com.android.server.wm.DisplayFrames;
 import com.android.server.wm.WindowManagerInternal;
 import com.android.server.wm.WindowManagerInternal.AppTransitionListener;
+import com.android.server.wm.utils.InsetUtils;
 
 import java.io.File;
 import java.io.FileReader;
@@ -476,6 +479,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     WindowManagerInternal mWindowManagerInternal;
     PowerManager mPowerManager;
     ActivityManagerInternal mActivityManagerInternal;
+    ActivityTaskManagerInternal mActivityTaskManagerInternal;
     AutofillManagerInternal mAutofillManagerInternal;
     InputManagerInternal mInputManagerInternal;
     InputMethodManagerInternal mInputMethodManagerInternal;
@@ -1142,7 +1146,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (mWindowSleepToken != null) {
             return;
         }
-        mWindowSleepToken = mActivityManagerInternal.acquireSleepToken("WindowSleepToken",
+        mWindowSleepToken = mActivityTaskManagerInternal.acquireSleepToken("WindowSleepToken",
                 DEFAULT_DISPLAY);
     };
 
@@ -2026,6 +2030,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mWindowManagerFuncs = windowManagerFuncs;
         mWindowManagerInternal = LocalServices.getService(WindowManagerInternal.class);
         mActivityManagerInternal = LocalServices.getService(ActivityManagerInternal.class);
+        mActivityTaskManagerInternal = LocalServices.getService(ActivityTaskManagerInternal.class);
         mInputManagerInternal = LocalServices.getService(InputManagerInternal.class);
         mDreamManagerInternal = LocalServices.getService(DreamManagerInternal.class);
         mPowerManagerInternal = LocalServices.getService(PowerManagerInternal.class);
@@ -4080,22 +4085,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             hideRecentApps(true, false);
         }
 
-        // Handle keyboard layout switching.
-        // TODO: Deprecate this behavior when we fully migrate to IME subtype-based layout rotation.
-        if (down && repeatCount == 0 && keyCode == KeyEvent.KEYCODE_SPACE
-                && ((metaState & KeyEvent.META_CTRL_MASK) != 0)) {
+        // Handle keyboard language switching.
+        final boolean isCtrlOrMetaSpace = keyCode == KeyEvent.KEYCODE_SPACE
+                && (metaState & (KeyEvent.META_CTRL_MASK | KeyEvent.META_META_MASK)) != 0;
+        if (down && repeatCount == 0
+                && (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH || isCtrlOrMetaSpace)) {
             int direction = (metaState & KeyEvent.META_SHIFT_MASK) != 0 ? -1 : 1;
             mWindowManagerFuncs.switchKeyboardLayout(event.getDeviceId(), direction);
-            return -1;
-        }
-
-        // Handle input method switching.
-        if (down && repeatCount == 0
-                && (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH
-                        || (keyCode == KeyEvent.KEYCODE_SPACE
-                                && (metaState & KeyEvent.META_META_MASK) != 0))) {
-            final boolean forwardDirection = (metaState & KeyEvent.META_SHIFT_MASK) == 0;
-            mWindowManagerFuncs.switchInputMethod(forwardDirection);
             return -1;
         }
         if (mLanguageSwitchKeyPressed && !down
@@ -4542,7 +4538,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         @Override
-        public void onInputEvent(InputEvent event, int displayId) {
+        public void onInputEvent(InputEvent event) {
             boolean handled = false;
             try {
                 if (event instanceof MotionEvent
@@ -4621,16 +4617,15 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     @Override
     // TODO: Should probably be moved into DisplayFrames.
-    public boolean getLayoutHintLw(WindowManager.LayoutParams attrs, Rect taskBounds,
-            DisplayFrames displayFrames, Rect outFrame, Rect outContentInsets, Rect outStableInsets,
+    public boolean getLayoutHintLw(LayoutParams attrs, Rect taskBounds,
+            DisplayFrames displayFrames, boolean floatingStack, Rect outFrame,
+            Rect outContentInsets, Rect outStableInsets,
             Rect outOutsets, DisplayCutout.ParcelableWrapper outDisplayCutout) {
         final int fl = PolicyControl.getWindowFlags(null, attrs);
         final int pfl = attrs.privateFlags;
         final int requestedSysUiVis = PolicyControl.getSystemUiVisibility(null, attrs);
         final int sysUiVis = requestedSysUiVis | getImpliedSysUiFlagsForLayout(attrs);
         final int displayRotation = displayFrames.mRotation;
-        final int displayWidth = displayFrames.mDisplayWidth;
-        final int displayHeight = displayFrames.mDisplayHeight;
 
         final boolean useOutsets = outOutsets != null && shouldUseOutsets(attrs, fl);
         if (useOutsets) {
@@ -4654,45 +4649,40 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         final boolean screenDecor = (pfl & PRIVATE_FLAG_IS_SCREEN_DECOR) != 0;
 
         if (layoutInScreenAndInsetDecor && !screenDecor) {
-            int availRight, availBottom;
             if (canHideNavigationBar() &&
                     (sysUiVis & View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION) != 0) {
                 outFrame.set(displayFrames.mUnrestricted);
-                availRight = displayFrames.mUnrestricted.right;
-                availBottom = displayFrames.mUnrestricted.bottom;
             } else {
                 outFrame.set(displayFrames.mRestricted);
-                availRight = displayFrames.mRestricted.right;
-                availBottom = displayFrames.mRestricted.bottom;
             }
-            outStableInsets.set(displayFrames.mStable.left, displayFrames.mStable.top,
-                    availRight - displayFrames.mStable.right,
-                    availBottom - displayFrames.mStable.bottom);
 
-            if ((sysUiVis & View.SYSTEM_UI_FLAG_LAYOUT_STABLE) != 0) {
+            final Rect sf;
+            if (floatingStack) {
+                sf = null;
+            } else {
+                sf = displayFrames.mStable;
+            }
+
+            final Rect cf;
+            if (floatingStack) {
+                cf = null;
+            } else if ((sysUiVis & View.SYSTEM_UI_FLAG_LAYOUT_STABLE) != 0) {
                 if ((fl & FLAG_FULLSCREEN) != 0) {
-                    outContentInsets.set(displayFrames.mStableFullscreen.left,
-                            displayFrames.mStableFullscreen.top,
-                            availRight - displayFrames.mStableFullscreen.right,
-                            availBottom - displayFrames.mStableFullscreen.bottom);
+                    cf = displayFrames.mStableFullscreen;
                 } else {
-                    outContentInsets.set(outStableInsets);
+                    cf = displayFrames.mStable;
                 }
             } else if ((fl & FLAG_FULLSCREEN) != 0 || (fl & FLAG_LAYOUT_IN_OVERSCAN) != 0) {
-                outContentInsets.setEmpty();
+                cf = displayFrames.mOverscan;
             } else {
-                outContentInsets.set(displayFrames.mCurrent.left, displayFrames.mCurrent.top,
-                        availRight - displayFrames.mCurrent.right,
-                        availBottom - displayFrames.mCurrent.bottom);
+                cf = displayFrames.mCurrent;
             }
 
             if (taskBounds != null) {
-                calculateRelevantTaskInsets(taskBounds, outContentInsets,
-                        displayWidth, displayHeight);
-                calculateRelevantTaskInsets(taskBounds, outStableInsets,
-                        displayWidth, displayHeight);
                 outFrame.intersect(taskBounds);
             }
+            InsetUtils.insetsBetweenFrames(outFrame, cf, outContentInsets);
+            InsetUtils.insetsBetweenFrames(outFrame, sf, outStableInsets);
             outDisplayCutout.set(displayFrames.mDisplayCutout.calculateRelativeTo(outFrame)
                     .getDisplayCutout());
             return mForceShowSystemBars;
@@ -4711,22 +4701,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             outDisplayCutout.set(DisplayCutout.NO_CUTOUT);
             return mForceShowSystemBars;
         }
-    }
-
-    /**
-     * For any given task bounds, the insets relevant for these bounds given the insets relevant
-     * for the entire display.
-     */
-    private void calculateRelevantTaskInsets(Rect taskBounds, Rect inOutInsets, int displayWidth,
-            int displayHeight) {
-        mTmpRect.set(0, 0, displayWidth, displayHeight);
-        mTmpRect.inset(inOutInsets);
-        mTmpRect.intersect(taskBounds);
-        int leftInset = mTmpRect.left - taskBounds.left;
-        int topInset = mTmpRect.top - taskBounds.top;
-        int rightInset = taskBounds.right - mTmpRect.right;
-        int bottomInset = taskBounds.bottom - mTmpRect.bottom;
-        inOutInsets.set(leftInset, topInset, rightInset, bottomInset);
     }
 
     private boolean shouldUseOutsets(WindowManager.LayoutParams attrs, int fl) {
@@ -4772,8 +4746,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 navTranslucent &= areTranslucentBarsAllowed();
             }
             boolean statusBarExpandedNotKeyguard = !isKeyguardShowing && mStatusBar != null
-                    && mStatusBar.getAttrs().height == MATCH_PARENT
-                    && mStatusBar.getAttrs().width == MATCH_PARENT;
+                    && (mStatusBar.getAttrs().privateFlags & PRIVATE_FLAG_STATUS_BAR_EXPANDED) != 0;
 
             // When the navigation bar isn't visible, we put up a fake input window to catch all
             // touch events. This way we can detect when the user presses anywhere to bring back the
@@ -5776,7 +5749,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
 
         // Take note if a window wants to acquire a sleep token.
-        if (win.isVisibleLw() && (attrs.privateFlags & PRIVATE_FLAG_ACQUIRES_SLEEP_TOKEN) != 0
+        if ((attrs.privateFlags & PRIVATE_FLAG_ACQUIRES_SLEEP_TOKEN) != 0
                 && win.canAcquireSleepToken()) {
             mWindowSleepTokenNeeded = true;
         }
@@ -5832,9 +5805,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 mStatusBarController.setShowTransparent(true /* transparent */);
             }
 
-            WindowManager.LayoutParams statusBarAttrs = mStatusBar.getAttrs();
-            boolean statusBarExpanded = statusBarAttrs.height == MATCH_PARENT
-                    && statusBarAttrs.width == MATCH_PARENT;
+            boolean statusBarExpanded =
+                    (mStatusBar.getAttrs().privateFlags & PRIVATE_FLAG_STATUS_BAR_EXPANDED) != 0;
             boolean topAppHidesStatusBar = topAppHidesStatusBar();
             if (mForceStatusBar || mForceStatusBarFromKeyguard || mForceStatusBarTransparent
                     || statusBarExpanded) {
@@ -7034,7 +7006,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             } else {
                 if (DEBUG_WAKEUP) Slog.d(TAG,
                         "null mKeyguardDelegate: setting mKeyguardDrawComplete.");
-                finishKeyguardDrawn();
+                mHandler.sendEmptyMessage(MSG_KEYGUARD_DRAWN_COMPLETE);
             }
         }
     }
@@ -7901,7 +7873,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private void updateDreamingSleepToken(boolean acquire) {
         if (acquire) {
             if (mDreamingSleepToken == null) {
-                mDreamingSleepToken = mActivityManagerInternal.acquireSleepToken(
+                mDreamingSleepToken = mActivityTaskManagerInternal.acquireSleepToken(
                         "Dream", DEFAULT_DISPLAY);
             }
         } else {
@@ -7916,7 +7888,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private void updateScreenOffSleepToken(boolean acquire) {
         if (acquire) {
             if (mScreenOffSleepToken == null) {
-                mScreenOffSleepToken = mActivityManagerInternal.acquireSleepToken(
+                mScreenOffSleepToken = mActivityTaskManagerInternal.acquireSleepToken(
                         "ScreenOff", DEFAULT_DISPLAY);
             }
         } else {
@@ -8097,7 +8069,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     sendCloseSystemWindows();
                     Intent dock = createHomeDockIntent();
                     if (dock != null) {
-                        int result = ActivityManager.getService()
+                        int result = ActivityTaskManager.getService()
                                 .startActivityAsUser(null, null, dock,
                                         dock.resolveTypeIfNeeded(mContext.getContentResolver()),
                                         null, null, 0,
@@ -8108,7 +8080,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                         }
                     }
                 }
-                int result = ActivityManager.getService()
+                int result = ActivityTaskManager.getService()
                         .startActivityAsUser(null, null, mHomeIntent,
                                 mHomeIntent.resolveTypeIfNeeded(mContext.getContentResolver()),
                                 null, null, 0,

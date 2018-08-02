@@ -141,7 +141,7 @@
     <string name="launch_defaults_some" msgid="313159469856372621">"一部デフォルトで設定"</string>
     <string name="launch_defaults_none" msgid="4241129108140034876">"デフォルトの設定なし"</string>
     <string name="tts_settings" msgid="8186971894801348327">"テキスト読み上げの設定"</string>
-    <string name="tts_settings_title" msgid="1237820681016639683">"テキスト読み上げの出力"</string>
+    <string name="tts_settings_title" msgid="1237820681016639683">"テキスト読み上げの設定"</string>
     <string name="tts_default_rate_title" msgid="6030550998379310088">"音声の速度"</string>
     <string name="tts_default_rate_summary" msgid="4061815292287182801">"テキストの読み上げ速度"</string>
     <string name="tts_default_pitch_title" msgid="6135942113172488671">"音の高さ"</string>
@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"タップを視覚表示する"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"表示面の更新を表示"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"更新時にウィンドウの表示面全体を点滅させる"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU表示の更新を表示"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPUでの描画時にウィンドウ内の表示を点滅させる"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"画面の更新を表示"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"描画時にウィンドウ内の表示を点滅させる"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"ハードウェア層情報を表示"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"ハードウェア層が更新されると緑を表示する"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPUオーバードローをデバッグ"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"クリップの境界線、マージンなどを表示"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"RTLレイアウト方向を使用"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"すべての言語/地域で画面レイアウト方向をRTLに設定"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPUレンダリングを使用"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2D描画にGPUを常に使用する"</string>
     <string name="force_msaa" msgid="7920323238677284387">"4x MSAAを適用"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0アプリで4x MSAAを有効にする"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"非矩形クリップ操作をデバッグ"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"GPUレンダリングのプロファイル作成"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"HWUI レンダリングのプロファイル作成"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU デバッグレイヤの有効化"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"デバッグアプリに GPU デバッグレイヤの読み込みを許可"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"ウィンドウアニメスケール"</string>

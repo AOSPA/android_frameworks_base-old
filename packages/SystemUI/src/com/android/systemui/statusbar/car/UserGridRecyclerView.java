@@ -28,9 +28,7 @@ import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.os.AsyncTask;
-import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
-import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
-import android.support.v7.widget.RecyclerView;
+import android.os.UserHandle;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -39,6 +37,9 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.car.widget.PagedListView;
+import androidx.core.graphics.drawable.RoundedBitmapDrawable;
+import androidx.core.graphics.drawable.RoundedBitmapDrawableFactory;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.internal.util.UserIcons;
 import com.android.settingslib.users.UserManagerHelper;
@@ -102,8 +103,7 @@ public class UserGridRecyclerView extends PagedListView implements
                 // Don't display guests in the switcher.
                 continue;
             }
-            boolean isForeground =
-                mUserManagerHelper.getForegroundUserId() == userInfo.id;
+            boolean isForeground = mUserManagerHelper.getForegroundUserId() == userInfo.id;
             UserRecord record = new UserRecord(userInfo, false /* isStartGuestSession */,
                     false /* isAddUser */, isForeground);
             userRecords.add(record);

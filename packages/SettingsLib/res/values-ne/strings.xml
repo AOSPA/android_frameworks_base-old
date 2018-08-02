@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"ट्यापका लागि दृश्य प्रतिक्रिया देखाउनुहोस्"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"सतह अद्यावधिक देखाउनुहोस्"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"तिनीहरू अपडेट हुँदा पुरै विन्डो सतहहरूमा फ्यास गर्नुहोस्"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU दृश्य अद्यावधिक देखाउनुहोस्"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU को साथ कोरिएको बेला विन्डोहरू भित्र फ्ल्यास दृश्यहरू"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"दृश्यसम्बन्धी अद्यावधिकहरू देखाउनुहोस्"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"कोरिएको बेला विन्डोभित्रका फ्ल्यास दृश्यहरू"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"हार्डवेयर तह अद्यावधिक देखाउनुहोस्"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"फ्ल्यास हार्डवेयर तहहरू अपडेट हुँदा हरिया हुन्छन्"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU overdraw डिबग गर्नुहोस्"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"क्लिप सीमा, मार्जिन, इत्यादि देखाउनुहोस्।"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"RTL लेआउट दिशामा जबर्जस्ती गर्नुहोस्"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"सबै लोकेलहरूको लागि RTLमा स्क्रिन लेआउट दिशामा जबर्जस्ती गर्नुहोस्"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPU रेन्डर गर्न जोड गर्नुहोस्"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2d चित्र कोर्नका लागि GPU को प्रयोगलाई जोड दिनुहोस्"</string>
     <string name="force_msaa" msgid="7920323238677284387">"4x MSAA जोड गर्नुहोस्"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES २.० अनुप्रयोगमा ४x MSAA सक्षम पार्नुहोस्"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"गैर आयातकर क्लिप कार्यहरू डिबग गर्नुहोस्"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"प्रोफाइल GPU रेन्डर गर्दै"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"प्रोफाइल HWUI रेन्डर गरिँदै छ"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU का डिबग तहहरूलाई सक्षम पार्नुहोस्"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"डिबगसम्बन्धी अनुप्रयोगहरूका लागि GPU का डिबग तहहरूलाई लोड गर्न दिनुहोस्"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"विन्डो सजीविकरण स्केल"</string>
@@ -322,7 +320,7 @@
     <string name="show_notification_channel_warnings_summary" msgid="5536803251863694895">"अनुप्रयोगले कुनै मान्य च्यानल बिना सूचना पोस्ट गर्दा स्क्रिनमा चेतावनी देखाउँछ"</string>
     <string name="force_allow_on_external" msgid="3215759785081916381">"बाह्यमा बल प्रयोगको अनुमति प्राप्त अनुप्रयोगहरू"</string>
     <string name="force_allow_on_external_summary" msgid="3640752408258034689">"म्यानिफेेस्टका मानहरूको ख्याल नगरी कुनै पनि अनुप्रयोगलाई बाह्य भण्डारणमा लेख्न सकिने खाले बनाउँछ"</string>
-    <string name="force_resizable_activities" msgid="8615764378147824985">"गतिविधिहरू रिसाइज गर्नको लागि बाध्य गर्नुहोस्"</string>
+    <string name="force_resizable_activities" msgid="8615764378147824985">"आकार बदल्न योग्य हुने बनाउन गतिविधिहरूलाई बाध्यात्मक बनाउनुहोस्।"</string>
     <string name="force_resizable_activities_summary" msgid="6667493494706124459">"म्यानिफेेस्ट मानहरूको ख्याल नगरी, बहु-विन्डोको लागि सबै रिसाइज गर्न सकिने गतिविधिहरू बनाउनुहोस्।"</string>
     <string name="enable_freeform_support" msgid="1461893351278940416">"फ्रिफर्म विन्डोहरू सक्रिय गर्नुहोस्"</string>
     <string name="enable_freeform_support_summary" msgid="8247310463288834487">"प्रयोगात्मक फ्रिफर्म विन्डोहरूका लागि समर्थन सक्रिय गर्नुहोस्।"</string>

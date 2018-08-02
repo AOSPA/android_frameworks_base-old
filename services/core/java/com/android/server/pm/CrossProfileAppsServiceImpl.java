@@ -41,6 +41,7 @@ import android.text.TextUtils;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
+import com.android.server.wm.ActivityTaskManagerInternal;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -112,7 +113,7 @@ public class CrossProfileAppsServiceImpl extends ICrossProfileApps.Stub {
 
         launchIntent.setPackage(null);
         launchIntent.setComponent(component);
-        mInjector.getActivityManagerInternal().startActivityAsUser(
+        mInjector.getActivityTaskManagerInternal().startActivityAsUser(
                 caller, callingPackage, launchIntent,
                 ActivityOptions.makeOpenCrossProfileAppsAnimation().toBundle(),
                 user.getIdentifier());
@@ -241,6 +242,11 @@ public class CrossProfileAppsServiceImpl extends ICrossProfileApps.Stub {
         public ActivityManagerInternal getActivityManagerInternal() {
             return LocalServices.getService(ActivityManagerInternal.class);
         }
+
+        @Override
+        public ActivityTaskManagerInternal getActivityTaskManagerInternal() {
+            return LocalServices.getService(ActivityTaskManagerInternal.class);
+        }
     }
 
     @VisibleForTesting
@@ -264,5 +270,7 @@ public class CrossProfileAppsServiceImpl extends ICrossProfileApps.Stub {
         AppOpsManager getAppOpsManager();
 
         ActivityManagerInternal getActivityManagerInternal();
+
+        ActivityTaskManagerInternal getActivityTaskManagerInternal();
     }
 }

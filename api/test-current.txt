@@ -1,10 +1,13 @@
 package android {
 
   public static final class Manifest.permission {
+    field public static final java.lang.String ACCESS_NOTIFICATIONS = "android.permission.ACCESS_NOTIFICATIONS";
     field public static final java.lang.String ACTIVITY_EMBEDDING = "android.permission.ACTIVITY_EMBEDDING";
     field public static final java.lang.String BRIGHTNESS_SLIDER_USAGE = "android.permission.BRIGHTNESS_SLIDER_USAGE";
+    field public static final java.lang.String CHANGE_APP_IDLE_STATE = "android.permission.CHANGE_APP_IDLE_STATE";
     field public static final java.lang.String CONFIGURE_DISPLAY_BRIGHTNESS = "android.permission.CONFIGURE_DISPLAY_BRIGHTNESS";
     field public static final java.lang.String MANAGE_ACTIVITY_STACKS = "android.permission.MANAGE_ACTIVITY_STACKS";
+    field public static final java.lang.String READ_CELL_BROADCASTS = "android.permission.READ_CELL_BROADCASTS";
   }
 
 }
@@ -27,23 +30,10 @@ package android.app {
     method public long getTotalRam();
     method public int getUidImportance(int);
     method public void removeOnUidImportanceListener(android.app.ActivityManager.OnUidImportanceListener);
-    method public void removeStacksInWindowingModes(int[]) throws java.lang.SecurityException;
-    method public void removeStacksWithActivityTypes(int[]) throws java.lang.SecurityException;
-    method public void resizeStack(int, android.graphics.Rect) throws java.lang.SecurityException;
-    method public void setTaskWindowingMode(int, int, boolean) throws java.lang.SecurityException;
-    method public void setTaskWindowingModeSplitScreenPrimary(int, int, boolean, boolean, android.graphics.Rect, boolean) throws java.lang.SecurityException;
-    method public static boolean supportsMultiWindow(android.content.Context);
-    method public static boolean supportsSplitScreenMultiWindow(android.content.Context);
-    field public static final int SPLIT_SCREEN_CREATE_MODE_BOTTOM_OR_RIGHT = 1; // 0x1
-    field public static final int SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT = 0; // 0x0
   }
 
   public static abstract interface ActivityManager.OnUidImportanceListener {
     method public abstract void onUidImportance(int, int);
-  }
-
-  public static class ActivityManager.StackId {
-    field public static final int INVALID_STACK_ID = -1; // 0xffffffff
   }
 
   public static class ActivityManager.TaskDescription implements android.os.Parcelable {
@@ -58,12 +48,29 @@ package android.app {
     method public void setTaskOverlay(boolean, boolean);
   }
 
+  public class ActivityTaskManager {
+    method public void removeStacksInWindowingModes(int[]) throws java.lang.SecurityException;
+    method public void removeStacksWithActivityTypes(int[]) throws java.lang.SecurityException;
+    method public void resizeStack(int, android.graphics.Rect) throws java.lang.SecurityException;
+    method public void setTaskWindowingMode(int, int, boolean) throws java.lang.SecurityException;
+    method public void setTaskWindowingModeSplitScreenPrimary(int, int, boolean, boolean, android.graphics.Rect, boolean) throws java.lang.SecurityException;
+    method public static boolean supportsMultiWindow(android.content.Context);
+    method public static boolean supportsSplitScreenMultiWindow(android.content.Context);
+    field public static final int INVALID_STACK_ID = -1; // 0xffffffff
+    field public static final int SPLIT_SCREEN_CREATE_MODE_BOTTOM_OR_RIGHT = 1; // 0x1
+    field public static final int SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT = 0; // 0x0
+  }
+
   public class AppOpsManager {
+    method public static int getNumOps();
     method public static java.lang.String[] getOpStrs();
     method public boolean isOperationActive(int, int, java.lang.String);
+    method public static java.lang.String opToPermission(int);
+    method public static int permissionToOpCode(java.lang.String);
     method public void setMode(int, int, java.lang.String, int);
     method public void startWatchingActive(int[], android.app.AppOpsManager.OnOpActiveChangedListener);
     method public void stopWatchingActive(android.app.AppOpsManager.OnOpActiveChangedListener);
+    method public static int strOpToOp(java.lang.String);
     field public static final java.lang.String OPSTR_ACCEPT_HANDOVER = "android:accept_handover";
     field public static final java.lang.String OPSTR_ACCESS_NOTIFICATIONS = "android:access_notifications";
     field public static final java.lang.String OPSTR_ACTIVATE_VPN = "android:activate_vpn";
@@ -121,6 +128,12 @@ package android.app {
 
   public class NotificationManager {
     method public android.content.ComponentName getEffectsSuppressor();
+  }
+
+  public final class PictureInPictureParams implements android.os.Parcelable {
+    method public java.util.List<android.app.RemoteAction> getActions();
+    method public float getAspectRatio();
+    method public android.graphics.Rect getSourceRectHint();
   }
 
   public class TimePickerDialog extends android.app.AlertDialog implements android.content.DialogInterface.OnClickListener android.widget.TimePicker.OnTimeChangedListener {
@@ -222,9 +235,14 @@ package android.content {
   }
 
   public abstract class Context {
+    method public abstract java.lang.String getOpPackageName();
     method public android.os.UserHandle getUser();
     method public int getUserId();
     method public void setAutofillCompatibilityEnabled(boolean);
+  }
+
+  public class ContextWrapper extends android.content.Context {
+    method public java.lang.String getOpPackageName();
   }
 
 }
@@ -239,6 +257,8 @@ package android.content.pm {
   public class ApplicationInfo extends android.content.pm.PackageItemInfo implements android.os.Parcelable {
     method public boolean isPrivilegedApp();
     method public boolean isSystemApp();
+    field public static final int PRIVATE_FLAG_PRIVILEGED = 8; // 0x8
+    field public int privateFlags;
   }
 
   public class LauncherApps {
@@ -248,22 +268,27 @@ package android.content.pm {
   public abstract class PackageManager {
     method public abstract java.lang.String getDefaultBrowserPackageNameAsUser(int);
     method public abstract int getInstallReason(java.lang.String, android.os.UserHandle);
-    method public abstract java.util.List<android.content.pm.PackageInfo> getInstalledPackagesAsUser(int, int);
     method public abstract java.util.List<android.content.pm.ApplicationInfo> getInstalledApplicationsAsUser(int, int);
+    method public abstract java.util.List<android.content.pm.PackageInfo> getInstalledPackagesAsUser(int, int);
     method public abstract java.lang.String[] getNamesForUids(int[]);
     method public abstract java.lang.String getPermissionControllerPackageName();
     method public abstract java.lang.String getServicesSystemSharedLibraryPackageName();
     method public abstract java.lang.String getSharedSystemSharedLibraryPackageName();
+    method public abstract void grantRuntimePermission(java.lang.String, java.lang.String, android.os.UserHandle);
     method public abstract boolean isPermissionReviewModeEnabled();
+    method public abstract void revokeRuntimePermission(java.lang.String, java.lang.String, android.os.UserHandle);
     field public static final java.lang.String FEATURE_ADOPTABLE_STORAGE = "android.software.adoptable_storage";
     field public static final java.lang.String FEATURE_FILE_BASED_ENCRYPTION = "android.software.file_based_encryption";
     field public static final int MATCH_FACTORY_ONLY = 2097152; // 0x200000
     field public static final int MATCH_KNOWN_PACKAGES = 4202496; // 0x402000
+    field public static final java.lang.String SYSTEM_SHARED_LIBRARY_SERVICES = "android.ext.services";
+    field public static final java.lang.String SYSTEM_SHARED_LIBRARY_SHARED = "android.ext.shared";
   }
 
   public class PermissionInfo extends android.content.pm.PackageItemInfo implements android.os.Parcelable {
     field public static final int PROTECTION_FLAG_SYSTEM_TEXT_CLASSIFIER = 65536; // 0x10000
     field public static final int PROTECTION_FLAG_VENDOR_PRIVILEGED = 32768; // 0x8000
+    field public java.lang.String backgroundPermission;
   }
 
   public final class ShortcutInfo implements android.os.Parcelable {
@@ -285,6 +310,31 @@ package android.content.res {
 }
 
 package android.database.sqlite {
+
+  public final class SQLiteDebug {
+    method public static void dump(android.util.Printer, java.lang.String[]);
+    method public static android.database.sqlite.SQLiteDebug.PagerStats getDatabaseInfo();
+    field public static final boolean DEBUG_SQL_LOG;
+    field public static final boolean DEBUG_SQL_STATEMENTS;
+    field public static final boolean DEBUG_SQL_TIME;
+  }
+
+  public static class SQLiteDebug.DbStats {
+    ctor public SQLiteDebug.DbStats(java.lang.String, long, long, int, int, int, int);
+    field public java.lang.String cache;
+    field public java.lang.String dbName;
+    field public long dbSize;
+    field public int lookaside;
+    field public long pageSize;
+  }
+
+  public static class SQLiteDebug.PagerStats {
+    ctor public SQLiteDebug.PagerStats();
+    field public java.util.ArrayList<android.database.sqlite.SQLiteDebug.DbStats> dbStats;
+    field public int largestMemAlloc;
+    field public int memoryUsed;
+    field public int pageCacheOverflow;
+  }
 
   public final class SQLiteDirectCursorDriver implements android.database.sqlite.SQLiteCursorDriver {
     ctor public SQLiteDirectCursorDriver(android.database.sqlite.SQLiteDatabase, java.lang.String, java.lang.String, android.os.CancellationSignal);
@@ -475,6 +525,10 @@ package android.location {
     method public void setType(int);
   }
 
+  public class Location implements android.os.Parcelable {
+    method public void makeComplete();
+  }
+
   public class LocationManager {
     method public java.lang.String[] getBackgroundThrottlingWhitelist();
   }
@@ -584,6 +638,10 @@ package android.net {
 
 package android.os {
 
+  public class Build {
+    method public static boolean is64BitAbi(java.lang.String);
+  }
+
   public static class Build.VERSION {
     field public static final int FIRST_SDK_INT;
     field public static final int RESOURCES_SDK_INT;
@@ -596,6 +654,7 @@ package android.os {
 
   public class Environment {
     method public static java.io.File buildPath(java.io.File, java.lang.String...);
+    method public static java.io.File getStorageDirectory();
   }
 
   public class IncidentManager {
@@ -613,12 +672,14 @@ package android.os {
     method public void readFromParcel(android.os.Parcel);
     method public int sectionCount();
     method public void setAll(boolean);
+    method public void setPrivacyPolicy(int);
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.os.IncidentReportArgs> CREATOR;
   }
 
-  public final class PowerManager {
-    method public void nap(long);
+  public final class MessageQueue {
+    method public int postSyncBarrier();
+    method public void removeSyncBarrier(int);
   }
 
   public class Process {
@@ -639,23 +700,12 @@ package android.os {
   }
 
   public final class StrictMode {
+    method public static void conditionallyCheckInstanceCounts();
     method public static void setViolationLogger(android.os.StrictMode.ViolationLogger);
-    field public static final int DETECT_CUSTOM = 8; // 0x8
-    field public static final int DETECT_DISK_READ = 2; // 0x2
-    field public static final int DETECT_DISK_WRITE = 1; // 0x1
-    field public static final int DETECT_NETWORK = 4; // 0x4
-    field public static final int DETECT_RESOURCE_MISMATCH = 16; // 0x10
-    field public static final int DETECT_UNBUFFERED_IO = 32; // 0x20
-    field public static final int DETECT_VM_ACTIVITY_LEAKS = 1024; // 0x400
-    field public static final int DETECT_VM_CLEARTEXT_NETWORK = 16384; // 0x4000
-    field public static final int DETECT_VM_CLOSABLE_LEAKS = 512; // 0x200
-    field public static final int DETECT_VM_CONTENT_URI_WITHOUT_PERMISSION = 32768; // 0x8000
-    field public static final int DETECT_VM_CURSOR_LEAKS = 256; // 0x100
-    field public static final int DETECT_VM_FILE_URI_EXPOSURE = 8192; // 0x2000
-    field public static final int DETECT_VM_INSTANCE_LEAKS = 2048; // 0x800
-    field public static final int DETECT_VM_NON_SDK_API_USAGE = 1073741824; // 0x40000000
-    field public static final int DETECT_VM_REGISTRATION_LEAKS = 4096; // 0x1000
-    field public static final int DETECT_VM_UNTAGGED_SOCKET = -2147483648; // 0x80000000
+  }
+
+  public static final class StrictMode.ThreadPolicy.Builder {
+    method public android.os.StrictMode.ThreadPolicy.Builder detectExplicitGc();
   }
 
   public static final class StrictMode.ViolationInfo implements android.os.Parcelable {
@@ -663,9 +713,8 @@ package android.os {
     ctor public StrictMode.ViolationInfo(android.os.Parcel, boolean);
     method public int describeContents();
     method public void dump(android.util.Printer, java.lang.String);
-    method public int getPolicyMask();
     method public java.lang.String getStackTrace();
-    method public int getViolationBit();
+    method public java.lang.Class<? extends android.os.strictmode.Violation> getViolationClass();
     method public java.lang.String getViolationDetails();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.os.StrictMode.ViolationInfo> CREATOR;
@@ -683,18 +732,155 @@ package android.os {
   }
 
   public class SystemProperties {
+    method public static java.lang.String get(java.lang.String);
     method public static java.lang.String get(java.lang.String, java.lang.String);
   }
 
   public final class UserHandle implements android.os.Parcelable {
     method public static int getAppId(int);
     method public int getIdentifier();
+    method public static boolean isApp(int);
     field public static final android.os.UserHandle SYSTEM;
   }
 
   public class UserManager {
     method public static boolean isSplitSystemUser();
     field public static final java.lang.String ACTION_USER_RESTRICTIONS_CHANGED = "android.os.action.USER_RESTRICTIONS_CHANGED";
+  }
+
+  public abstract class VibrationEffect implements android.os.Parcelable {
+    method public static android.os.VibrationEffect get(int);
+    method public static android.os.VibrationEffect get(int, boolean);
+    method public static android.os.VibrationEffect get(android.net.Uri, android.content.Context);
+    method public abstract long getDuration();
+    method protected static int scale(int, float, int);
+    field public static final int EFFECT_CLICK = 0; // 0x0
+    field public static final int EFFECT_DOUBLE_CLICK = 1; // 0x1
+    field public static final int EFFECT_HEAVY_CLICK = 5; // 0x5
+    field public static final int EFFECT_POP = 4; // 0x4
+    field public static final int EFFECT_STRENGTH_LIGHT = 0; // 0x0
+    field public static final int EFFECT_STRENGTH_MEDIUM = 1; // 0x1
+    field public static final int EFFECT_STRENGTH_STRONG = 2; // 0x2
+    field public static final int EFFECT_THUD = 3; // 0x3
+    field public static final int EFFECT_TICK = 2; // 0x2
+    field public static final int[] RINGTONES;
+  }
+
+  public static class VibrationEffect.OneShot extends android.os.VibrationEffect implements android.os.Parcelable {
+    ctor public VibrationEffect.OneShot(android.os.Parcel);
+    ctor public VibrationEffect.OneShot(long, int);
+    method public int getAmplitude();
+    method public long getDuration();
+    method public android.os.VibrationEffect.OneShot scale(float, int);
+    method public void validate();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.os.VibrationEffect.OneShot> CREATOR;
+  }
+
+  public static class VibrationEffect.Prebaked extends android.os.VibrationEffect implements android.os.Parcelable {
+    ctor public VibrationEffect.Prebaked(android.os.Parcel);
+    ctor public VibrationEffect.Prebaked(int, boolean);
+    method public long getDuration();
+    method public int getEffectStrength();
+    method public int getId();
+    method public void setEffectStrength(int);
+    method public boolean shouldFallback();
+    method public void validate();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.os.VibrationEffect.Prebaked> CREATOR;
+  }
+
+  public static class VibrationEffect.Waveform extends android.os.VibrationEffect implements android.os.Parcelable {
+    ctor public VibrationEffect.Waveform(android.os.Parcel);
+    ctor public VibrationEffect.Waveform(long[], int[], int);
+    method public int[] getAmplitudes();
+    method public long getDuration();
+    method public int getRepeatIndex();
+    method public long[] getTimings();
+    method public android.os.VibrationEffect.Waveform scale(float, int);
+    method public void validate();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.os.VibrationEffect.Waveform> CREATOR;
+  }
+
+  public class WorkSource implements android.os.Parcelable {
+    ctor public WorkSource(int);
+    method public boolean add(int);
+    method public boolean add(int, java.lang.String);
+    method public deprecated android.os.WorkSource addReturningNewbs(android.os.WorkSource);
+    method public int get(int);
+    method public java.lang.String getName(int);
+    method public deprecated android.os.WorkSource[] setReturningDiffs(android.os.WorkSource);
+    method public int size();
+  }
+
+}
+
+package android.os.health {
+
+  public class HealthKeys {
+    ctor public HealthKeys();
+    field public static final int BASE_PACKAGE = 40000; // 0x9c40
+    field public static final int BASE_PID = 20000; // 0x4e20
+    field public static final int BASE_PROCESS = 30000; // 0x7530
+    field public static final int BASE_SERVICE = 50000; // 0xc350
+    field public static final int BASE_UID = 10000; // 0x2710
+    field public static final int TYPE_COUNT = 5; // 0x5
+    field public static final int TYPE_MEASUREMENT = 1; // 0x1
+    field public static final int TYPE_MEASUREMENTS = 4; // 0x4
+    field public static final int TYPE_STATS = 2; // 0x2
+    field public static final int TYPE_TIMER = 0; // 0x0
+    field public static final int TYPE_TIMERS = 3; // 0x3
+    field public static final int UNKNOWN_KEY = 0; // 0x0
+  }
+
+  public static abstract class HealthKeys.Constant implements java.lang.annotation.Annotation {
+  }
+
+  public static class HealthKeys.Constants {
+    ctor public HealthKeys.Constants(java.lang.Class);
+    method public java.lang.String getDataType();
+    method public int getIndex(int, int);
+    method public int[] getKeys(int);
+    method public int getSize(int);
+  }
+
+  public class HealthStats {
+    ctor public HealthStats(android.os.Parcel);
+  }
+
+  public class HealthStatsParceler implements android.os.Parcelable {
+    ctor public HealthStatsParceler(android.os.health.HealthStatsWriter);
+    ctor public HealthStatsParceler(android.os.Parcel);
+    method public int describeContents();
+    method public android.os.health.HealthStats getHealthStats();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.os.health.HealthStatsParceler> CREATOR;
+  }
+
+  public class HealthStatsWriter {
+    ctor public HealthStatsWriter(android.os.health.HealthKeys.Constants);
+    method public void addMeasurement(int, long);
+    method public void addMeasurements(int, java.lang.String, long);
+    method public void addStats(int, java.lang.String, android.os.health.HealthStatsWriter);
+    method public void addTimer(int, int, long);
+    method public void addTimers(int, java.lang.String, android.os.health.TimerStat);
+    method public void flattenToParcel(android.os.Parcel);
+  }
+
+}
+
+package android.os.storage {
+
+  public final class StorageVolume implements android.os.Parcelable {
+    method public java.lang.String getPath();
+  }
+
+}
+
+package android.os.strictmode {
+
+  public final class ExplicitGcViolation extends android.os.strictmode.Violation {
   }
 
 }
@@ -713,6 +899,14 @@ package android.print {
 }
 
 package android.provider {
+
+  public static final class ContactsContract.CommonDataKinds.Phone implements android.provider.ContactsContract.CommonDataKinds.CommonColumns android.provider.ContactsContract.DataColumnsWithJoins {
+    field public static final android.net.Uri ENTERPRISE_CONTENT_URI;
+  }
+
+  public static final class ContactsContract.RawContactsEntity implements android.provider.BaseColumns android.provider.ContactsContract.DataColumns android.provider.ContactsContract.RawContactsColumns {
+    field public static final android.net.Uri CORP_CONTENT_URI;
+  }
 
   public final class Settings {
     field public static final java.lang.String ACTION_ENTERPRISE_PRIVACY_SETTINGS = "android.settings.ENTERPRISE_PRIVACY_SETTINGS";
@@ -849,6 +1043,7 @@ package android.service.notification {
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.service.notification.Adjustment> CREATOR;
     field public static final java.lang.String KEY_PEOPLE = "key_people";
+    field public static final java.lang.String KEY_SMART_ACTIONS = "key_smart_actions";
     field public static final java.lang.String KEY_SNOOZE_CRITERIA = "key_snooze_criteria";
     field public static final java.lang.String KEY_USER_SENTIMENT = "key_user_sentiment";
   }
@@ -1237,6 +1432,11 @@ package android.view {
   public final class InputDevice implements android.os.Parcelable {
     method public void disable();
     method public void enable();
+  }
+
+  public class KeyEvent extends android.view.InputEvent implements android.os.Parcelable {
+    method public static java.lang.String actionToString(int);
+    field public static final int LAST_KEYCODE = 285; // 0x11d
   }
 
   public final class KeyboardShortcutGroup implements android.os.Parcelable {

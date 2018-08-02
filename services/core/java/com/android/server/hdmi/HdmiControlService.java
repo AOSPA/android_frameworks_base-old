@@ -68,6 +68,7 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.SystemService;
@@ -88,14 +89,14 @@ import libcore.util.EmptyArray;
  * Provides a service for sending and processing HDMI control messages,
  * HDMI-CEC and MHL control command, and providing the information on both standard.
  */
-public final class HdmiControlService extends SystemService {
+public class HdmiControlService extends SystemService {
     private static final String TAG = "HdmiControlService";
     private final Locale HONG_KONG = new Locale("zh", "HK");
     private final Locale MACAU = new Locale("zh", "MO");
 
     static final String PERMISSION = "android.permission.HDMI_CEC";
 
-    // The reason code to initiate intializeCec().
+    // The reason code to initiate initializeCec().
     static final int INITIATED_BY_ENABLE_CEC = 0;
     static final int INITIATED_BY_BOOT_UP = 1;
     static final int INITIATED_BY_SCREEN_ON = 2;
@@ -290,6 +291,9 @@ public final class HdmiControlService extends SystemService {
     @Nullable
     private PowerManager mPowerManager;
 
+    @Nullable
+    private Looper mIoLooper;
+
     // Last input port before switching to the MHL port. Should switch back to this port
     // when the mobile device sends the request one touch play with off.
     // Gets invalidated if we go to other port/input.
@@ -383,13 +387,18 @@ public final class HdmiControlService extends SystemService {
 
     @Override
     public void onStart() {
-        mIoThread.start();
+        if (mIoLooper == null) {
+            mIoThread.start();
+            mIoLooper = mIoThread.getLooper();
+        }
         mPowerStatus = HdmiControlManager.POWER_STATUS_TRANSIENT_TO_ON;
         mProhibitMode = false;
         mHdmiControlEnabled = readBooleanSetting(Global.HDMI_CONTROL_ENABLED, true);
         mMhlInputChangeEnabled = readBooleanSetting(Global.MHL_INPUT_SWITCHING_ENABLED, true);
 
-        mCecController = HdmiCecController.create(this);
+        if (mCecController == null) {
+            mCecController = HdmiCecController.create(this);
+        }
         if (mCecController != null) {
             if (mHdmiControlEnabled) {
                 initializeCec(INITIATED_BY_BOOT_UP);
@@ -398,15 +407,18 @@ public final class HdmiControlService extends SystemService {
             Slog.i(TAG, "Device does not support HDMI-CEC.");
             return;
         }
-
-        mMhlController = HdmiMhlControllerStub.create(this);
+        if (mMhlController == null) {
+            mMhlController = HdmiMhlControllerStub.create(this);
+        }
         if (!mMhlController.isReady()) {
             Slog.i(TAG, "Device does not support MHL-control.");
         }
         mMhlDevices = Collections.emptyList();
 
         initPortInfo();
-        mMessageValidator = new HdmiCecMessageValidator(this);
+        if (mMessageValidator == null) {
+            mMessageValidator = new HdmiCecMessageValidator(this);
+        }
         publishBinderService(Context.HDMI_CONTROL_SERVICE, new BinderService());
 
         if (mCecController != null) {
@@ -422,6 +434,16 @@ public final class HdmiControlService extends SystemService {
             registerContentObserver();
         }
         mMhlController.setOption(OPTION_MHL_SERVICE_CONTROL, ENABLED);
+    }
+
+    @VisibleForTesting
+    void setCecController(HdmiCecController cecController) {
+        mCecController = cecController;
+    }
+
+    @VisibleForTesting
+    void setHdmiMhlController(HdmiMhlControllerStub hdmiMhlController) {
+        mMhlController = hdmiMhlController;
     }
 
     @Override
@@ -582,7 +604,8 @@ public final class HdmiControlService extends SystemService {
     }
 
     @ServiceThreadOnly
-    private void allocateLogicalAddress(final ArrayList<HdmiCecLocalDevice> allocatingDevices,
+    @VisibleForTesting
+    protected void allocateLogicalAddress(final ArrayList<HdmiCecLocalDevice> allocatingDevices,
             final int initiatedBy) {
         assertRunOnServiceThread();
         mCecController.clearLogicalAddress();
@@ -649,7 +672,8 @@ public final class HdmiControlService extends SystemService {
     // Initialize HDMI port information. Combine the information from CEC and MHL HAL and
     // keep them in one place.
     @ServiceThreadOnly
-    private void initPortInfo() {
+    @VisibleForTesting
+    protected void initPortInfo() {
         assertRunOnServiceThread();
         HdmiPortInfo[] cecPortInfo = null;
 
@@ -747,8 +771,19 @@ public final class HdmiControlService extends SystemService {
      *
      * <p>Declared as package-private.
      */
+    @Nullable
     Looper getIoLooper() {
-        return mIoThread.getLooper();
+        return mIoLooper;
+    }
+
+    @VisibleForTesting
+    void setIoLooper(Looper ioLooper) {
+        mIoLooper = ioLooper;
+    }
+
+    @VisibleForTesting
+    void setMessageValidator(HdmiCecMessageValidator messageValidator) {
+        mMessageValidator = messageValidator;
     }
 
     /**

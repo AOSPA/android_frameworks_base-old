@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Wys visuele terugvoer vir tikke"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Wys oppervlakopdaterings"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Flits vensteroppervlaktes in geheel wanneer dit opdateer"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Wys GPU-aansigopdaterings"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Flits aansigte binne die vensters wanneer dit met die GPU geskets is"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Wys aansigopdaterings"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Flits aansigte binne vensters wanneer getrek word"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Wys hardewarelae se opdaterings"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Laat hardewarelae groen flits wanneer hulle opgedateer word"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Ontfout GPU-oortrek"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Wys snitgrense, kantlyne, ens."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Dwing RTL-uitlegrigting"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Dwing skermuitlegrigting na RTL vir alle locales"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Forseer GPU-lewering"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Dwing gebruik van GPU vir 2D-tekening"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Dwing 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Aktiveer 4x MSAA in OpenGL ES 2.0-programme"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Ontfout nie-reghoekige knipbedrywighede"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Profiel se GPU-lewering"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Profiel-HWUI-lewering"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Aktiveer GPU-ontfoutlae"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Laat laai van GPU-ontfoutlae vir ontfoutapps toe"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Vensteranimasieskaal"</string>

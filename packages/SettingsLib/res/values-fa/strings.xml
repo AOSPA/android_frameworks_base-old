@@ -159,7 +159,7 @@
     <string name="tts_default_sample_string" msgid="4040835213373086322">"این نمونه‌ای از ترکیب گفتار است"</string>
     <string name="tts_status_title" msgid="7268566550242584413">"وضعیت زبان پیش‌فرض"</string>
     <string name="tts_status_ok" msgid="1309762510278029765">"<xliff:g id="LOCALE">%1$s</xliff:g> کاملاً پشتیبانی می‌شود"</string>
-    <string name="tts_status_requires_network" msgid="6042500821503226892">"<xliff:g id="LOCALE">%1$s</xliff:g> به اتصال شبکه نیاز دارد"</string>
+    <string name="tts_status_requires_network" msgid="6042500821503226892">"<xliff:g id="LOCALE">%1$s</xliff:g> باید اتصال شبکه داشته باشد"</string>
     <string name="tts_status_not_supported" msgid="4491154212762472495">"<xliff:g id="LOCALE">%1$s</xliff:g> پشتیبانی نمی‌شود"</string>
     <string name="tts_status_checking" msgid="5339150797940483592">"در حال بررسی…"</string>
     <string name="tts_engine_settings_title" msgid="3499112142425680334">"تنظیمات برای <xliff:g id="TTS_ENGINE_NAME">%s</xliff:g>"</string>
@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"نمایش بازخورد تصویری برای ضربه‌ها"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"نمایش به‌روزرسانی سطح"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"هنگام به‌روزرسانی سطوح پنجره همه فلش شوند"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"‏نمایش به روزرسانی‌های نمای GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"‏در طراحی با GPU، نماها در داخل پنجره‌ها فلش شوند"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"نمایش به‌روزرسانی‌های نما"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"هنگام طراحی، نماها در داخل پنجره‌ها فلش شوند"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"نمایش به‌روزرسانی‌های لایه‌های سخت‌افزار"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"وقتی لایه‌های سخت‌افزاری به‌روزرسانی‌ می‌شوند، به رنگ سبز درآیند"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"‏اشکال‌زدایی بازنویسی GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"نمایش مرزها، حاشیه‌ها و ویژگی‌های دیگر کلیپ."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"‏اجباری کردن چیدمان RTL"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"‏اجباری کردن چیدمان RTL صفحه برای همه زبان‌ها"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"‏پردازش اجباری GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"‏استفاده اجباری از GPU برای طراحی دوم"</string>
     <string name="force_msaa" msgid="7920323238677284387">"‏اجبار 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"‏فعال کردن 4X MSAA در برنامه‌های OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"اشکال‌زدایی عملکردهای کلیپ غیرمربعی"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"‏پردازش GPU نمایه"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"‏پرداز زدن HWUI نمایه"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"‏فعال کردن لایه‌های اشکال‌زدایی GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"‏مجاز کردن بارگیری لایه‌های اشکال‌زدایی GPU برای برنامه‌های اشکا‌ل‌زدایی"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"مقیاس پویانمایی پنجره"</string>

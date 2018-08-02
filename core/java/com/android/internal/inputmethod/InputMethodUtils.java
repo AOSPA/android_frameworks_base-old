@@ -34,10 +34,6 @@ import android.os.LocaleList;
 import android.os.RemoteException;
 import android.provider.Settings;
 import android.text.TextUtils;
-import android.text.TextUtils.SimpleStringSplitter;
-import android.util.ArrayMap;
-import android.util.ArraySet;
-import android.util.Log;
 import android.util.Pair;
 import android.util.Printer;
 import android.util.Slog;
@@ -71,7 +67,6 @@ public class InputMethodUtils {
     private static final String NOT_A_SUBTYPE_ID_STR = String.valueOf(NOT_A_SUBTYPE_ID);
     private static final String TAG_ENABLED_WHEN_DEFAULT_IS_NOT_ASCII_CAPABLE =
             "EnabledWhenDefaultIsNotAsciiCapable";
-    private static final String TAG_ASCII_CAPABLE = "AsciiCapable";
 
     // The string for enabled input method is saved as follows:
     // example: ("ime0;subtype0;subtype1;subtype2:ime1:ime2;subtype0")
@@ -129,16 +124,11 @@ public class InputMethodUtils {
     }
     // ----------------------------------------------------------------------
 
-    public static boolean isSystemIme(InputMethodInfo inputMethod) {
-        return (inputMethod.getServiceInfo().applicationInfo.flags
-                & ApplicationInfo.FLAG_SYSTEM) != 0;
-    }
-
     public static boolean isSystemImeThatHasSubtypeOf(final InputMethodInfo imi,
             final Context context, final boolean checkDefaultAttribute,
             @Nullable final Locale requiredLocale, final boolean checkCountry,
             final String requiredSubtypeMode) {
-        if (!isSystemIme(imi)) {
+        if (!imi.isSystem()) {
             return false;
         }
         if (checkDefaultAttribute && !imi.isDefault(context)) {
@@ -182,7 +172,7 @@ public class InputMethodUtils {
 
     private static boolean isSystemAuxilialyImeThatHasAutomaticSubtype(final InputMethodInfo imi,
             final Context context, final boolean checkDefaultAttribute) {
-        if (!isSystemIme(imi)) {
+        if (!imi.isSystem()) {
             return false;
         }
         if (checkDefaultAttribute && !imi.isDefault(context)) {
@@ -435,12 +425,11 @@ public class InputMethodUtils {
             if (imi.isAuxiliaryIme()) {
                 continue;
             }
-            if (InputMethodUtils.isSystemIme(imi)
-                    && containsSubtypeOf(imi, ENGLISH_LOCALE, false /* checkCountry */,
-                            SUBTYPE_MODE_KEYBOARD)) {
+            if (imi.isSystem() && containsSubtypeOf(
+                    imi, ENGLISH_LOCALE, false /* checkCountry */, SUBTYPE_MODE_KEYBOARD)) {
                 return imi;
             }
-            if (firstFoundSystemIme < 0 && InputMethodUtils.isSystemIme(imi)) {
+            if (firstFoundSystemIme < 0 && imi.isSystem()) {
                 firstFoundSystemIme = i;
             }
         }
@@ -549,7 +538,7 @@ public class InputMethodUtils {
             final int numApplicationSubtypes = applicableSubtypes.size();
             for (int i = 0; i < numApplicationSubtypes; ++i) {
                 final InputMethodSubtype subtype = applicableSubtypes.get(i);
-                if (subtype.containsExtraValueKey(TAG_ASCII_CAPABLE)) {
+                if (subtype.isAsciiCapable()) {
                     hasAsciiCapableKeyboard = true;
                     break;
                 }
@@ -588,7 +577,7 @@ public class InputMethodUtils {
      * Returns the language component of a given locale string.
      * TODO: Use {@link Locale#toLanguageTag()} and {@link Locale#forLanguageTag(String)}
      */
-    public static String getLanguageFromLocaleString(String locale) {
+    private static String getLanguageFromLocaleString(String locale) {
         final int idx = locale.indexOf('_');
         if (idx < 0) {
             return locale;
@@ -784,58 +773,6 @@ public class InputMethodUtils {
     }
 
     /**
-     * Parses the setting stored input methods and subtypes string value.
-     *
-     * @param inputMethodsAndSubtypesString The input method subtypes value stored in settings.
-     * @return Map from input method ID to set of input method subtypes IDs.
-     */
-    @VisibleForTesting
-    public static ArrayMap<String, ArraySet<String>> parseInputMethodsAndSubtypesString(
-            @Nullable final String inputMethodsAndSubtypesString) {
-
-        final ArrayMap<String, ArraySet<String>> imeMap = new ArrayMap<>();
-        if (TextUtils.isEmpty(inputMethodsAndSubtypesString)) {
-            return imeMap;
-        }
-
-        final SimpleStringSplitter typeSplitter =
-                new SimpleStringSplitter(INPUT_METHOD_SEPARATOR);
-        final SimpleStringSplitter subtypeSplitter =
-                new SimpleStringSplitter(INPUT_METHOD_SUBTYPE_SEPARATOR);
-
-        List<Pair<String, ArrayList<String>>> allImeSettings =
-                InputMethodSettings.buildInputMethodsAndSubtypeList(inputMethodsAndSubtypesString,
-                        typeSplitter,
-                        subtypeSplitter);
-        for (Pair<String, ArrayList<String>> ime : allImeSettings) {
-            ArraySet<String> subtypes = new ArraySet<>();
-            if (ime.second != null) {
-                subtypes.addAll(ime.second);
-            }
-            imeMap.put(ime.first, subtypes);
-        }
-        return imeMap;
-    }
-
-    @NonNull
-    public static String buildInputMethodsAndSubtypesString(
-            @NonNull final ArrayMap<String, ArraySet<String>> map) {
-        // we want to use the canonical InputMethodSettings implementation,
-        // so we convert data structures first.
-        List<Pair<String, ArrayList<String>>> imeMap = new ArrayList<>(4);
-        for (ArrayMap.Entry<String, ArraySet<String>> entry : map.entrySet()) {
-            final String imeName = entry.getKey();
-            final ArraySet<String> subtypeSet = entry.getValue();
-            final ArrayList<String> subtypes = new ArrayList<>(2);
-            if (subtypeSet != null) {
-                subtypes.addAll(subtypeSet);
-            }
-            imeMap.add(new Pair<>(imeName, subtypes));
-        }
-        return InputMethodSettings.buildInputMethodsSettingString(imeMap);
-    }
-
-    /**
      * Utility class for putting and getting settings for InputMethod
      * TODO: Move all putters and getters of settings to this class.
      */
@@ -872,21 +809,7 @@ public class InputMethodUtils {
             }
         }
 
-        public static String buildInputMethodsSettingString(
-                List<Pair<String, ArrayList<String>>> allImeSettingsMap) {
-            final StringBuilder b = new StringBuilder();
-            boolean needsSeparator = false;
-            for (Pair<String, ArrayList<String>> ime : allImeSettingsMap) {
-                if (needsSeparator) {
-                    b.append(INPUT_METHOD_SEPARATOR);
-                }
-                buildEnabledInputMethodsSettingString(b, ime);
-                needsSeparator = true;
-            }
-            return b.toString();
-        }
-
-        public static List<Pair<String, ArrayList<String>>> buildInputMethodsAndSubtypeList(
+        private static List<Pair<String, ArrayList<String>>> buildInputMethodsAndSubtypeList(
                 String enabledInputMethodsStr,
                 TextUtils.SimpleStringSplitter inputMethodSplitter,
                 TextUtils.SimpleStringSplitter subtypeSplitter) {

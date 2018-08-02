@@ -17,6 +17,7 @@
 package android.location;
 
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -999,6 +1000,7 @@ public class Location implements Parcelable {
      * @see #isComplete
      * @hide
      */
+    @TestApi
     @SystemApi
     public void makeComplete() {
         if (mProvider == null) mProvider = "?";
@@ -1031,6 +1033,9 @@ public class Location implements Parcelable {
     /**
      * Sets the extra information associated with this fix to the
      * given Bundle.
+     *
+     * <p>Note this stores a copy of the given extras, so any changes to extras after calling this
+     * method won't be reflected in the location bundle.
      */
     public void setExtras(Bundle extras) {
         mExtras = (extras == null) ? null : new Bundle(extras);

@@ -16,9 +16,9 @@
 
 package com.android.server.voiceinteraction;
 
-import static android.app.ActivityManagerInternal.ASSIST_KEY_CONTENT;
-import static android.app.ActivityManagerInternal.ASSIST_KEY_DATA;
-import static android.app.ActivityManagerInternal.ASSIST_KEY_STRUCTURE;
+import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_CONTENT;
+import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_DATA;
+import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_STRUCTURE;
 import static android.app.AppOpsManager.OP_ASSIST_SCREENSHOT;
 import static android.app.AppOpsManager.OP_ASSIST_STRUCTURE;
 import static android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION;
@@ -27,6 +27,7 @@ import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 
 import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.assist.AssistContent;
@@ -143,7 +144,7 @@ final class VoiceInteractionSessionConnection implements ServiceConnection,
         mIWindowManager = IWindowManager.Stub.asInterface(
                 ServiceManager.getService(Context.WINDOW_SERVICE));
         mAppOps = context.getSystemService(AppOpsManager.class);
-        mAssistDataRequester = new AssistDataRequester(mContext, mAm, mIWindowManager,
+        mAssistDataRequester = new AssistDataRequester(mContext, mIWindowManager,
                 (AppOpsManager) mContext.getSystemService(Context.APP_OPS_SERVICE),
                 this, mLock, OP_ASSIST_STRUCTURE, OP_ASSIST_SCREENSHOT);
         IBinder permOwner = null;
@@ -359,7 +360,7 @@ final class VoiceInteractionSessionConnection implements ServiceConnection,
                 }
                 if (mSession != null) {
                     try {
-                        mAm.finishVoiceTask(mSession);
+                        ActivityTaskManager.getService().finishVoiceTask(mSession);
                     } catch (RemoteException e) {
                     }
                 }
@@ -387,7 +388,7 @@ final class VoiceInteractionSessionConnection implements ServiceConnection,
             }
             if (finishTask && mSession != null) {
                 try {
-                    mAm.finishVoiceTask(mSession);
+                    ActivityTaskManager.getService().finishVoiceTask(mSession);
                 } catch (RemoteException e) {
                 }
             }

@@ -339,13 +339,13 @@
                   then in code manually set your window's background to
                   null so it will not be drawn.
              </ul> -->
-        <attr name="windowBackground" format="reference" />
+        <attr name="windowBackground" format="reference|color" />
         <!-- Drawable to draw selectively within the inset areas when the windowBackground
              has been set to null. This protects against seeing visual garbage in the
              surface when the app has not drawn any content into this area. One example is
              when the user is resizing a window of an activity that has
              {@link android.R.attr#resizeableActivity} set for multi-window mode. -->
-        <attr name="windowBackgroundFallback" format="reference" />
+        <attr name="windowBackgroundFallback" format="reference|color" />
         <!-- Drawable to use as a frame around the window. -->
         <attr name="windowFrame" format="reference" />
         <!-- Flag indicating whether there should be no title on this window. -->
@@ -1477,7 +1477,7 @@
              used for, typically, account ID or password input.  It is expected that IMEs
              normally are able to input ASCII even without being told so (such IMEs
              already respect this flag in a sense), but there could be some cases they
-             aren't when, for instance, only non-ASCII input languagaes like Arabic,
+             aren't when, for instance, only non-ASCII input languages like Arabic,
              Greek, Hebrew, Russian are enabled in the IME.  Applications need to be
              aware that the flag is not a guarantee, and not all IMEs will respect it.
              However, it is strongly recommended for IME authors to respect this flag
@@ -3161,7 +3161,7 @@
              enabled by a ViewGroup for all its children in specific situations (for
              instance during a scrolling.) This property lets you persist the cache
              in memory after its initial usage. Persisting the cache consumes more
-             memory but may prevent frequent garbage collection is the cache is created
+             memory but may prevent frequent garbage collection if the cache is created
              over and over again. By default the persistence is set to scrolling.
              Deprecated: The view drawing cache was largely made obsolete with the introduction of
              hardware-accelerated rendering in API 11. -->
@@ -3419,10 +3419,16 @@
              constructor or 0. Arrays.hashCode(new Object[] {locale, mode, extraValue,
              isAuxiliary, overridesImplicitlyEnabledSubtype}) will be used instead. -->
         <attr name="subtypeId" format="integer"/>
-        <!-- Set to true if this subtype is ASCII capable. If the subtype is ASCII
+        <!-- Set to {@code true} if this subtype is ASCII capable. If the subtype is ASCII
              capable, it should guarantee that the user can input ASCII characters with
              this subtype. This is important because many password fields only allow
-             ASCII-characters. -->
+             ASCII-characters.
+
+             <p>Note: In order to avoid some known system issues on
+             {@link android.os.Build.VERSION_CODES#P} and prior OSes, you may want to include
+             {@code "AsciiCapable"} in
+             {@link android.R.styleable#InputMethod_Subtype_imeSubtypeExtraValue} when you specify
+             {@code true} to this attribute.-->
         <attr name="isAsciiCapable" format="boolean" />
         <!-- The BCP-47 Language Tag of the subtype.  This replaces
         {@link android.R.styleable#InputMethod_Subtype_imeSubtypeLocale}.  -->
@@ -5728,17 +5734,13 @@
         <!-- When a tint color is set, specifies its Porter-Duff blending mode. The
              default value is src_in, which treats the drawable as an alpha mask. -->
         <attr name="tintMode" />
-        <!-- Left optical inset.
-             @hide Until optical insets are fully supported. -->
+        <!-- Left optical inset. -->
         <attr name="opticalInsetLeft" />
-        <!-- Top optical inset.
-             @hide Until optical insets are fully supported. -->
+        <!-- Top optical inset. -->
         <attr name="opticalInsetTop" />
-        <!-- Right optical inset.
-             @hide Until optical insets are fully supported. -->
+        <!-- Right optical inset. -->
         <attr name="opticalInsetRight" />
-        <!-- Bottom optical inset.
-             @hide Until optical insets are fully supported. -->
+        <!-- Bottom optical inset. -->
         <attr name="opticalInsetBottom" />
     </declare-styleable>
 
@@ -6237,17 +6239,13 @@
         <!-- The opacity of the whole vector drawable, as a value between 0
              (completely transparent) and 1 (completely opaque). -->
         <attr name="alpha" />
-        <!-- Left optical inset.
-             @hide Until optical insets are fully supported. -->
+        <!-- Left optical inset. -->
         <attr name="opticalInsetLeft" format="dimension" />
-        <!-- Top optical inset.
-             @hide Until optical insets are fully supported. -->
+        <!-- Top optical inset. -->
         <attr name="opticalInsetTop" format="dimension" />
-        <!-- Right optical inset.
-             @hide Until optical insets are fully supported. -->
+        <!-- Right optical inset. -->
         <attr name="opticalInsetRight" format="dimension" />
-        <!-- Bottom optical inset.
-             @hide Until optical insets are fully supported. -->
+        <!-- Bottom optical inset. -->
         <attr name="opticalInsetBottom" format="dimension" />
     </declare-styleable>
 
@@ -8856,7 +8854,7 @@
         <attr name="fontWeight" format="integer" />
         <!-- The index of the font in the ttc (TrueType Collection) font file. If the font file
          referenced is not in the ttc format, this attribute needs not be specified.
-         {@see android.graphics.Typeface#Builder.setTtcIndex(int)}.
+         {@link android.graphics.Typeface.Builder#setTtcIndex(int)}.
          The default value is 0. More details about the TrueType Collection font format can be found
          here: https://en.wikipedia.org/wiki/TrueType#TrueType_Collection. -->
         <attr name="ttcIndex" format="integer" />

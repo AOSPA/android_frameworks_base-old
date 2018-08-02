@@ -246,6 +246,19 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
                     + " is already a child of container=" + child.getParent().getName()
                     + " can't add to container=" + getName());
         }
+
+        if ((index < 0 && index != POSITION_BOTTOM)
+                || (index > mChildren.size() && index != POSITION_TOP)) {
+            throw new IllegalArgumentException("addChild: invalid position=" + index
+                    + ", children number=" + mChildren.size());
+        }
+
+        if (index == POSITION_TOP) {
+            index = mChildren.size();
+        } else if (index == POSITION_BOTTOM) {
+            index = 0;
+        }
+
         mChildren.add(index, child);
         onChildAdded(child);
 
@@ -733,6 +746,20 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
 
         return candidate;
+    }
+
+    /**
+     * Seamlessly rotates the container, by recomputing the location in the new
+     * rotation, and rotating buffers until they are updated for the new rotation.
+     *
+     * @param t the transaction to perform the seamless rotation in
+     * @param oldRotation the rotation we are rotating from
+     * @param newRotation the rotation we are rotating to
+     */
+    void seamlesslyRotate(Transaction t, int oldRotation, int newRotation) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            mChildren.get(i).seamlesslyRotate(t, oldRotation, newRotation);
+        }
     }
 
     /**

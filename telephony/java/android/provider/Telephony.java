@@ -25,8 +25,8 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
-import android.database.Cursor;
 import android.database.ContentObserver;
+import android.database.Cursor;
 import android.database.sqlite.SqliteWrapper;
 import android.net.Uri;
 import android.telephony.Rlog;
@@ -39,7 +39,6 @@ import android.util.Patterns;
 
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.SmsApplication;
-
 
 import java.util.HashSet;
 import java.util.Set;
@@ -278,6 +277,70 @@ public final class Telephony {
          * @hide
          */
         public static final String PRIORITY = "priority";
+    }
+
+    /**
+     * Columns in sms_changes table.
+     * @hide
+     */
+    public interface TextBasedSmsChangesColumns {
+        /**
+         * The {@code content://} style URL for this table.
+         * @hide
+         */
+        public static final Uri CONTENT_URI = Uri.parse("content://sms-changes");
+
+        /**
+         * Primary key.
+         * <P>Type: INTEGER (long)</P>
+         * @hide
+         */
+        public static final String ID = "_id";
+
+        /**
+         * Triggers on sms table create a row in this table for each update/delete.
+         * This column is the "_id" of the row from sms table that was updated/deleted.
+         * <P>Type: INTEGER (long)</P>
+         * @hide
+         */
+        public static final String ORIG_ROW_ID = "orig_rowid";
+
+        /**
+         * Triggers on sms table create a row in this table for each update/delete.
+         * This column is the "sub_id" of the row from sms table that was updated/deleted.
+         * @hide
+         * <P>Type: INTEGER (long)</P>
+         */
+        public static final String SUB_ID = "sub_id";
+
+        /**
+         * The type of operation that created this row.
+         *    {@link #TYPE_UPDATE} = update op
+         *    {@link #TYPE_DELETE} = delete op
+         * @hide
+         * <P>Type: INTEGER (long)</P>
+         */
+        public static final String TYPE = "type";
+
+        /**
+         * One of the possible values for the above column "type". Indicates it is an update op.
+         * @hide
+         */
+        public static final int TYPE_UPDATE = 0;
+
+        /**
+         * One of the possible values for the above column "type". Indicates it is a delete op.
+         * @hide
+         */
+        public static final int TYPE_DELETE = 1;
+
+        /**
+         * This column contains a non-null value only if the operation on sms table is an update op
+         * and the column "read" is changed by the update op.
+         * <P>Type: INTEGER (boolean)</P>
+         * @hide
+         */
+        public static final String NEW_READ_STATUS = "new_read_status";
     }
 
     /**
@@ -3423,7 +3486,6 @@ public final class Telephony {
 
     /**
      * Contains carrier identification information for the current subscriptions.
-     * @see SubscriptionManager#getActiveSubscriptionIdList()
      */
     public static final class CarrierId implements BaseColumns {
         /**
@@ -3529,6 +3591,12 @@ public final class Telephony {
              * <P>Type: TEXT </P>
              */
             public static final String ICCID_PREFIX = "iccid_prefix";
+
+            /**
+             * Certificate for carrier privilege access rules.
+             * <P>Type: TEXT in hex string </P>
+             */
+            public static final String PRIVILEGE_ACCESS_RULE = "privilege_access_rule";
 
             /**
              * The {@code content://} URI for this table.

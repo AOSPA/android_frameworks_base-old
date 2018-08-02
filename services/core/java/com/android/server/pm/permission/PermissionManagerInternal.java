@@ -21,19 +21,11 @@ import android.annotation.Nullable;
 import android.content.pm.PackageParser;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
-import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.PackageManager.PermissionInfoFlags;
-import android.content.pm.PackageParser.Permission;
-
-import com.android.server.pm.SharedUserSetting;
-import com.android.server.pm.permission.PermissionManagerInternal.PermissionCallback;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * Internal interfaces to be used by other components within the system server.
@@ -115,7 +107,11 @@ public abstract class PermissionManagerInternal {
      */
     public abstract void addAllPermissions(@NonNull PackageParser.Package pkg, boolean chatty);
     public abstract void addAllPermissionGroups(@NonNull PackageParser.Package pkg, boolean chatty);
-    public abstract void removeAllPermissions(@NonNull PackageParser.Package pkg, boolean chatty);
+    public abstract void removeAllPermissions(
+            @NonNull PackageParser.Package pkg,
+            @NonNull List<String> allPackageNames,
+            @Nullable PermissionCallback permissionCallback,
+            boolean chatty);
     public abstract boolean addDynamicPermission(@NonNull PermissionInfo info, boolean async,
             int callingUid, @Nullable PermissionCallback callback);
     public abstract void removeDynamicPermission(@NonNull String permName, int callingUid,

@@ -27,7 +27,7 @@ import android.provider.Settings;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.UserIcons;
 import com.android.settingslib.drawable.UserIconDrawable;
-import com.android.settingslib.wrapper.LocationManagerWrapper;
+
 import java.text.NumberFormat;
 
 public class Utils {
@@ -69,8 +69,7 @@ public class Utils {
                 intent, UserHandle.of(userId), android.Manifest.permission.WRITE_SECURE_SETTINGS);
         LocationManager locationManager =
                 (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
-        LocationManagerWrapper wrapper = new LocationManagerWrapper(locationManager);
-        wrapper.setLocationEnabledForUser(enabled, UserHandle.of(userId));
+        locationManager.setLocationEnabledForUser(enabled, UserHandle.of(userId));
     }
 
     public static boolean updateLocationMode(Context context, int oldMode, int newMode, int userId,
@@ -203,21 +202,28 @@ public class Utils {
         return statusString;
     }
 
-    @ColorInt
-    public static int getColorAccent(Context context) {
+    public static ColorStateList getColorAccent(Context context) {
         return getColorAttr(context, android.R.attr.colorAccent);
     }
 
-    @ColorInt
-    public static int getColorError(Context context) {
+    public static ColorStateList getColorError(Context context) {
         return getColorAttr(context, android.R.attr.colorError);
     }
 
     @ColorInt
-    public static int getDefaultColor(Context context, int resId) {
+    public static int getColorAccentDefaultColor(Context context) {
+        return getColorAttrDefaultColor(context, android.R.attr.colorAccent);
+    }
+
+    @ColorInt
+    public static int getColorErrorDefaultColor(Context context) {
+        return getColorAttrDefaultColor(context, android.R.attr.colorError);
+    }
+
+    @ColorInt
+    public static int getColorStateListDefaultColor(Context context, int resId) {
         final ColorStateList list =
                 context.getResources().getColorStateList(resId, context.getTheme());
-
         return list.getDefaultColor();
     }
 
@@ -242,11 +248,22 @@ public class Utils {
     }
 
     @ColorInt
-    public static int getColorAttr(Context context, int attr) {
+    public static int getColorAttrDefaultColor(Context context, int attr) {
         TypedArray ta = context.obtainStyledAttributes(new int[]{attr});
         @ColorInt int colorAccent = ta.getColor(0, 0);
         ta.recycle();
         return colorAccent;
+    }
+
+    public static ColorStateList getColorAttr(Context context, int attr) {
+        TypedArray ta = context.obtainStyledAttributes(new int[]{attr});
+        ColorStateList stateList = null;
+        try {
+            stateList = ta.getColorStateList(0);
+        } finally {
+            ta.recycle();
+        }
+        return stateList;
     }
 
     public static int getThemeAttr(Context context, int attr) {

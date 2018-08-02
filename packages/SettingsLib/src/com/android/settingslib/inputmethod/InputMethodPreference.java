@@ -24,9 +24,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.UserHandle;
-import android.support.v7.preference.Preference;
-import android.support.v7.preference.Preference.OnPreferenceChangeListener;
-import android.support.v7.preference.Preference.OnPreferenceClickListener;
+import androidx.preference.Preference;
+import androidx.preference.Preference.OnPreferenceChangeListener;
+import androidx.preference.Preference.OnPreferenceClickListener;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.inputmethod.InputMethodInfo;
@@ -35,7 +35,6 @@ import android.view.inputmethod.InputMethodSubtype;
 import android.widget.Toast;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.inputmethod.InputMethodUtils;
 import com.android.settingslib.R;
 import com.android.settingslib.RestrictedLockUtils;
 import com.android.settingslib.RestrictedSwitchPreference;
@@ -124,8 +123,8 @@ public class InputMethodPreference extends RestrictedSwitchPreference implements
             setIntent(intent);
         }
         mInputMethodSettingValues = InputMethodSettingValuesWrapper.getInstance(context);
-        mHasPriorityInSorting = InputMethodUtils.isSystemIme(imi)
-                && mInputMethodSettingValues.isValidSystemNonAuxAsciiCapableIme(imi, context);
+        mHasPriorityInSorting = imi.isSystem()
+                && InputMethodAndSubtypeUtil.isValidSystemNonAuxAsciiCapableIme(imi);
         setOnPreferenceClickListener(this);
         setOnPreferenceChangeListener(this);
     }
@@ -153,7 +152,7 @@ public class InputMethodPreference extends RestrictedSwitchPreference implements
             setCheckedInternal(false);
             return false;
         }
-        if (InputMethodUtils.isSystemIme(mImi)) {
+        if (mImi.isSystem()) {
             // Enable a system IME. No need to show a security warning dialog,
             // but we might need to prompt if it's not Direct Boot aware.
             // TV doesn't doesn't need to worry about this, but other platforms should show
@@ -198,8 +197,7 @@ public class InputMethodPreference extends RestrictedSwitchPreference implements
     }
 
     public void updatePreferenceViews() {
-        final boolean isAlwaysChecked = mInputMethodSettingValues.isAlwaysCheckedIme(
-                mImi, getContext());
+        final boolean isAlwaysChecked = mInputMethodSettingValues.isAlwaysCheckedIme(mImi);
         // When this preference has a switch and an input method should be always enabled,
         // this preference should be disabled to prevent accidentally disabling an input method.
         // This preference should also be disabled in case the admin does not allow this input

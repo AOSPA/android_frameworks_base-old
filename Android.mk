@@ -168,37 +168,25 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS := \
     -hidePackage com.android.internal.util \
     -hidePackage com.android.okhttp \
     -hidePackage com.android.org.conscrypt \
-    -hidePackage com.android.server \
-    -since $(SRC_API_DIR)/1.xml 1 \
-    -since $(SRC_API_DIR)/2.xml 2 \
-    -since $(SRC_API_DIR)/3.xml 3 \
-    -since $(SRC_API_DIR)/4.xml 4 \
-    -since $(SRC_API_DIR)/5.xml 5 \
-    -since $(SRC_API_DIR)/6.xml 6 \
-    -since $(SRC_API_DIR)/7.xml 7 \
-    -since $(SRC_API_DIR)/8.xml 8 \
-    -since $(SRC_API_DIR)/9.xml 9 \
-    -since $(SRC_API_DIR)/10.xml 10 \
-    -since $(SRC_API_DIR)/11.xml 11 \
-    -since $(SRC_API_DIR)/12.xml 12 \
-    -since $(SRC_API_DIR)/13.xml 13 \
-    -since $(SRC_API_DIR)/14.txt 14 \
-    -since $(SRC_API_DIR)/15.txt 15 \
-    -since $(SRC_API_DIR)/16.txt 16 \
-    -since $(SRC_API_DIR)/17.txt 17 \
-    -since $(SRC_API_DIR)/18.txt 18 \
-    -since $(SRC_API_DIR)/19.txt 19 \
-    -since $(SRC_API_DIR)/20.txt 20 \
-    -since $(SRC_API_DIR)/21.txt 21 \
-    -since $(SRC_API_DIR)/22.txt 22 \
-    -since $(SRC_API_DIR)/23.txt 23 \
-    -since $(SRC_API_DIR)/24.txt 24 \
-    -since $(SRC_API_DIR)/25.txt 25 \
-    -since $(SRC_API_DIR)/26.txt 26 \
-    -since $(SRC_API_DIR)/27.txt 27 \
-    -since $(SRC_API_DIR)/28.txt 28 \
+    -hidePackage com.android.server
+
+# Convert an sdk level to a "since" argument.
+since-arg = -since $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/$(1)/public/api/android.*) $(1)
+
+finalized_sdks := $(patsubst $(HISTORICAL_SDK_VERSIONS_ROOT)/%/public/api/android.xml,%,\
+    $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/*/public/api/android.xml))
+finalized_sdks += $(patsubst $(HISTORICAL_SDK_VERSIONS_ROOT)/%/public/api/android.txt,%,\
+    $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/*/public/api/android.txt))
+finalized_sdks := $(call numerically_sort,$(finalized_sdks))
+
+framework_docs_LOCAL_DROIDDOC_OPTIONS += $(foreach sdk,$(finalized_sdks),$(call since-arg,$(sdk)))
+ifneq ($(PLATFORM_VERSION_CODENAME),REL)
+  framework_docs_LOCAL_DROIDDOC_OPTIONS += \
+      -since ./frameworks/base/api/current.txt $(PLATFORM_VERSION_CODENAME)
+endif
+framework_docs_LOCAL_DROIDDOC_OPTIONS += \
     -werror -lerror -hide 111 -hide 113 -hide 125 -hide 126 -hide 127 -hide 128 \
-    -overview $(LOCAL_PATH)/core/java/overview.html \
+    -overview $(LOCAL_PATH)/core/java/overview.html
 
 framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR:= \
 	$(call intermediates-dir-for,JAVA_LIBRARIES,framework,,COMMON)
@@ -257,14 +245,17 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS += \
 		-federate AndroidX https://developer.android.com \
 		-federationapi AndroidX prebuilts/sdk/current/androidx-api.txt
 
-framework_metalava_docs_LOCAL_DROIDDOC_OPTIONS := \
-    --manifest ./frameworks/base/core/res/AndroidManifest.xml \
-    --hide-package com.android.okhttp \
-    --hide-package com.android.org.conscrypt --hide-package com.android.server \
-    --hide RequiresPermission \
-    --hide MissingPermission --hide BroadcastBehavior \
-    --hide HiddenSuperclass --hide DeprecationMismatch --hide UnavailableSymbol \
-    --hide SdkConstant --hide HiddenTypeParameter --hide Todo --hide Typo
+# Get the highest numbered api txt for the given api level.
+# $(1): the api level (e.g. public, system)
+define highest_sdk_txt
+$(HISTORICAL_SDK_VERSIONS_ROOT)/$(lastword $(call numerically_sort, \
+    $(patsubst \
+        $(HISTORICAL_SDK_VERSIONS_ROOT)/%,\
+        %,\
+        $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/*/$(1)/api/android.txt)\
+    ) \
+))
+endef
 
 # ====  Public API diff ===========================
 include $(CLEAR_VARS)
@@ -281,13 +272,8 @@ LOCAL_ADDITIONAL_DEPENDENCIES := \
 
 LOCAL_MODULE := offline-sdk-referenceonly
 
-last_released_sdk_version := $(lastword $(call numerically_sort, \
-			$(filter-out current, \
-				$(patsubst $(SRC_API_DIR)/%.txt,%, $(wildcard $(SRC_API_DIR)/*.txt)) \
-			 )\
-		))
-
-LOCAL_APIDIFF_OLDAPI := $(LOCAL_PATH)/../../$(SRC_API_DIR)/$(last_released_sdk_version)
+# Basename, because apidiff adds .txt internally.
+LOCAL_APIDIFF_OLDAPI := $(basename $(call highest_sdk_txt,public))
 LOCAL_APIDIFF_NEWAPI := $(LOCAL_PATH)/../../$(basename $(INTERNAL_PLATFORM_API_FILE))
 
 include $(BUILD_APIDIFF)
@@ -311,13 +297,8 @@ LOCAL_ADDITIONAL_DEPENDENCIES := \
 
 LOCAL_MODULE := offline-system-sdk-referenceonly
 
-last_released_sdk_version := $(lastword $(call numerically_sort, \
-			$(filter-out current, \
-				$(patsubst $(SRC_SYSTEM_API_DIR)/%.txt,%, $(wildcard $(SRC_SYSTEM_API_DIR)/*.txt)) \
-			 )\
-		))
-
-LOCAL_APIDIFF_OLDAPI := $(LOCAL_PATH)/../../$(SRC_SYSTEM_API_DIR)/$(last_released_sdk_version)
+# Basename, because apidiff adds .txt internally.
+LOCAL_APIDIFF_OLDAPI := $(basename $(call highest_sdk_txt,system))
 LOCAL_APIDIFF_NEWAPI := $(LOCAL_PATH)/../../$(basename $(INTERNAL_PLATFORM_SYSTEM_API_FILE))
 
 include $(BUILD_APIDIFF)
@@ -326,263 +307,9 @@ include $(BUILD_APIDIFF)
 out_zip := $(OUT_DOCS)/$(LOCAL_MODULE)-docs.zip
 $(out_zip): $(full_target)
 
-# ====  the api stubs and current.xml ===========================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := api-stubs
-
-LOCAL_DROIDDOC_STUB_OUT_DIR := $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/android_stubs_current_intermediates/src
-
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-referenceonly \
-		-api $(INTERNAL_PLATFORM_API_FILE) \
-		-removedApi $(INTERNAL_PLATFORM_REMOVED_API_FILE) \
-		-nodocs
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-LOCAL_UNINSTALLABLE_MODULE := true
-
-include $(BUILD_DROIDDOC)
-
-$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_API_FILE) \
-                                          $(INTERNAL_PLATFORM_REMOVED_API_FILE)
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_API_FILE))
-
-# ====  the metalava api stubs and current.xml ===========================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := metalava-api-stubs
-LOCAL_DROIDDOC_USE_METALAVA := true
-LOCAL_DROIDDOC_METALAVA_PREVIOUS_API := prebuilts/sdk/api/27.txt
-LOCAL_DROIDDOC_METALAVA_ANNOTATIONS_ENABLED := true
-LOCAL_DROIDDOC_METALAVA_MERGE_ANNOTATIONS_DIR := tools/metalava/manual
-
-LOCAL_DROIDDOC_STUB_OUT_DIR := $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/metalava_android_stubs_current_intermediates/src
-
-INTERNAL_PLATFORM_METALAVA_PUBLIC_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava_public_api.txt
-INTERNAL_PLATFORM_METALAVA_PUBLIC_REMOVED_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava_removed.txt
-
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_metalava_docs_LOCAL_DROIDDOC_OPTIONS) \
-		--api $(INTERNAL_PLATFORM_METALAVA_PUBLIC_API_FILE) \
-		--removed-api $(INTERNAL_PLATFORM_METALAVA_PUBLIC_REMOVED_API_FILE) \
-		-nodocs
-
-LOCAL_UNINSTALLABLE_MODULE := true
-
-include $(BUILD_DROIDDOC)
-
-$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_METALAVA_PUBLIC_API_FILE) \
-                                          $(INTERNAL_PLATFORM_METALAVA_PUBLIC_REMOVED_API_FILE)
-$(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_METALAVA_PUBLIC_API_FILE))
-
-# ====  the system api stubs ===================================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := system-api-stubs
-
-LOCAL_DROIDDOC_STUB_OUT_DIR := $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/android_system_stubs_current_intermediates/src
-
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-referenceonly \
-		-showAnnotation android.annotation.SystemApi \
-		-api $(INTERNAL_PLATFORM_SYSTEM_API_FILE) \
-		-removedApi $(INTERNAL_PLATFORM_SYSTEM_REMOVED_API_FILE) \
-		-exactApi $(INTERNAL_PLATFORM_SYSTEM_EXACT_API_FILE) \
-		-nodocs
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-LOCAL_UNINSTALLABLE_MODULE := true
-
-include $(BUILD_DROIDDOC)
-
-$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_SYSTEM_API_FILE) \
-                                          $(INTERNAL_PLATFORM_SYSTEM_REMOVED_API_FILE) \
-                                          $(INTERNAL_PLATFORM_SYSTEM_EXACT_API_FILE)
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_SYSTEM_API_FILE))
-
-# ====  the metalava system api stubs ===================================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := metalava-system-api-stubs
-LOCAL_DROIDDOC_USE_METALAVA := true
-LOCAL_DROIDDOC_METALAVA_PREVIOUS_API := prebuilts/sdk/api/27.txt
-LOCAL_DROIDDOC_METALAVA_ANNOTATIONS_ENABLED := true
-LOCAL_DROIDDOC_METALAVA_MERGE_ANNOTATIONS_DIR := tools/metalava/manual
-
-LOCAL_DROIDDOC_STUB_OUT_DIR := $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/metalava_android_system_stubs_current_intermediates/src
-
-INTERNAL_PLATFORM_METALAVA_SYSTEM_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava-system-api.txt
-INTERNAL_PLATFORM_METALAVA_SYSTEM_REMOVED_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava-system-removed.txt
-
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_metalava_docs_LOCAL_DROIDDOC_OPTIONS) \
-		--show-annotation android.annotation.SystemApi \
-		--api $(INTERNAL_PLATFORM_METALAVA_SYSTEM_API_FILE) \
-		--removed-api $(INTERNAL_PLATFORM_METALAVA_SYSTEM_REMOVED_API_FILE) \
-		-nodocs
-
-LOCAL_UNINSTALLABLE_MODULE := true
-
-include $(BUILD_DROIDDOC)
-
-$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_METALAVA_SYSTEM_API_FILE) \
-                                          $(INTERNAL_PLATFORM_METALAVA_SYSTEM_REMOVED_API_FILE) \
-$(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_METALAVA_SYSTEM_API_FILE))
-
-# ====  the test api stubs ===================================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := test-api-stubs
-
-LOCAL_DROIDDOC_STUB_OUT_DIR := $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/android_test_stubs_current_intermediates/src
-
-LOCAL_DROIDDOC_OPTIONS:=\
-               $(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-               -referenceonly \
-               -stubs $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/android_test_stubs_current_intermediates/src \
-               -showAnnotation android.annotation.TestApi \
-               -api $(INTERNAL_PLATFORM_TEST_API_FILE) \
-               -removedApi $(INTERNAL_PLATFORM_TEST_REMOVED_API_FILE) \
-               -exactApi $(INTERNAL_PLATFORM_TEST_EXACT_API_FILE) \
-               -nodocs
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-LOCAL_UNINSTALLABLE_MODULE := true
-
-include $(BUILD_DROIDDOC)
-
-$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_TEST_API_FILE) \
-                                          $(INTERNAL_PLATFORM_TEST_REMOVED_API_FILE) \
-                                          $(INTERNAL_PLATFORM_TEST_EXACT_API_FILE)
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_TEST_API_FILE))
-
-# ====  the metalava test api stubs ===================================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := metalava-test-api-stubs
-LOCAL_DROIDDOC_USE_METALAVA := true
-LOCAL_DROIDDOC_METALAVA_PREVIOUS_API := prebuilts/sdk/api/27.txt
-LOCAL_DROIDDOC_METALAVA_ANNOTATIONS_ENABLED := true
-LOCAL_DROIDDOC_METALAVA_MERGE_ANNOTATIONS_DIR := tools/metalava/manual
-
-LOCAL_DROIDDOC_STUB_OUT_DIR := $(TARGET_OUT_COMMON_INTERMEDIATES)/JAVA_LIBRARIES/metalava_android_test_stubs_current_intermediates/src
-
-INTERNAL_PLATFORM_METALAVA_TEST_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava-test-api.txt
-INTERNAL_PLATFORM_METALAVA_TEST_REMOVED_API_FILE := $(TARGET_OUT_COMMON_INTERMEDIATES)/PACKAGING/metalava-test-removed.txt
-
-LOCAL_DROIDDOC_OPTIONS:=\
-               $(framework_metalava_docs_LOCAL_DROIDDOC_OPTIONS) \
-               --show-annotation android.annotation.TestApi \
-               --api $(INTERNAL_PLATFORM_METALAVA_TEST_API_FILE) \
-               --removed-api $(INTERNAL_PLATFORM_METALAVA_TEST_REMOVED_API_FILE) \
-               -nodocs
-
-LOCAL_UNINSTALLABLE_MODULE := true
-
-include $(BUILD_DROIDDOC)
-
-$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_METALAVA_TEST_API_FILE) \
-                                          $(INTERNAL_PLATFORM_METALAVA_TEST_REMOVED_API_FILE) \
-$(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_METALAVA_TEST_API_FILE))
-
-# ====  the complete hidden api list ===================================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_API_CHECK_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_API_CHECK_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_API_CHECK_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := hidden-api-list
-
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-referenceonly \
-		-showUnannotated \
-		-showAnnotation android.annotation.SystemApi \
-		-showAnnotation android.annotation.TestApi \
-		-dexApi $(INTERNAL_PLATFORM_DEX_API_FILE) \
-		-privateDexApi $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE) \
-		-removedDexApi $(INTERNAL_PLATFORM_REMOVED_DEX_API_FILE) \
-		-nodocs
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-LOCAL_UNINSTALLABLE_MODULE := true
-
-include $(BUILD_DROIDDOC)
-
-$(full_target): .KATI_IMPLICIT_OUTPUTS := $(INTERNAL_PLATFORM_DEX_API_FILE) \
-                                          $(INTERNAL_PLATFORM_PRIVATE_DEX_API_FILE) \
-                                          $(INTERNAL_PLATFORM_REMOVED_DEX_API_FILE)
 
 # ====  check javadoc comments but don't generate docs ========
 include $(CLEAR_VARS)
@@ -942,23 +669,6 @@ LOCAL_DROIDDOC_OPTIONS:=\
 LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
 
 include $(BUILD_DROIDDOC)
-
-# ====  java proto host library  ==============================
-include $(CLEAR_VARS)
-LOCAL_MODULE := platformprotos
-LOCAL_PROTOC_OPTIMIZE_TYPE := full
-LOCAL_PROTOC_FLAGS := \
-    -Iexternal/protobuf/src
-LOCAL_SOURCE_FILES_ALL_GENERATED := true
-LOCAL_SRC_FILES := \
-    cmds/am/proto/instrumentation_data.proto \
-    cmds/statsd/src/perfetto/perfetto_config.proto \
-    $(call all-proto-files-under, core/proto) \
-    $(call all-proto-files-under, libs/incident/proto) \
-    $(call all-proto-files-under, cmds/statsd/src)
-# b/72714520
-LOCAL_ERROR_PRONE_FLAGS := -Xep:MissingOverride:OFF
-include $(BUILD_HOST_JAVA_LIBRARY)
 
 # ====  java proto device library (for test only)  ==============================
 include $(CLEAR_VARS)

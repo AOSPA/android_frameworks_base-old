@@ -194,7 +194,7 @@
     <string name="clear_adb_keys" msgid="4038889221503122743">"Odwołaj dostęp do debugowania USB"</string>
     <string name="bugreport_in_power" msgid="7923901846375587241">"Skrót do zgłoszenia błędu"</string>
     <string name="bugreport_in_power_summary" msgid="1778455732762984579">"Pokaż w menu zasilania przycisk zgłaszania błędu"</string>
-    <string name="keep_screen_on" msgid="1146389631208760344">"Pozostaw ekran włączony"</string>
+    <string name="keep_screen_on" msgid="1146389631208760344">"Pozostaw włączony ekran"</string>
     <string name="keep_screen_on_summary" msgid="2173114350754293009">"Ekran nie będzie gaszony podczas ładowania telefonu"</string>
     <string name="bt_hci_snoop_log" msgid="3340699311158865670">"Włącz dziennik snoop Bluetooth HCI"</string>
     <string name="bt_hci_snoop_log_summary" msgid="366083475849911315">"Przechwyć wszystkie pakiety Bluetooth HCI do pliku (przełącz Bluetooth po zmianie tego ustawienia)"</string>
@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Pokaż potwierdzenie wizualne po dotknięciu"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Pokaż zmiany powierzchni"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Podświetlaj całe aktualizowane powierzchnie okien"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Pokaż zmiany widoku z GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Podświetlaj elementy w oknach, jeśli są rysowane przez GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Pokaż aktualizacje widoku"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Podświetlaj elementy w oknach podczas rysowania"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Pokaż zmiany warstw sprzęt."</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Oznaczaj aktualizowane warstwy sprzętowe na zielono"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Debuguj przerysowania GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Pokaż granice przycięcia, marginesy itd."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Układ od prawej do lewej"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Wymuś wszędzie układ ekranu od prawej do lewej"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Renderowanie na GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Wymuszaj użycie GPU do rysowania 2D"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Wymuś 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Włącz 4x MSAA w aplikacjach OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Debuguj operacje przycinania nieprostokątnego"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Profil renderowania GPU"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Profil renderowania HWUI"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Warstwy debugowania GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Zezwól na ładowanie warstw debugowania GPU"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Skala animacji okna"</string>

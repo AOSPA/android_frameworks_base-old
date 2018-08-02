@@ -48,6 +48,7 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.drawable.Icon;
 import android.media.AudioAttributes;
 import android.metrics.LogMaker;
 import android.net.Uri;
@@ -61,6 +62,7 @@ import android.support.test.runner.AndroidJUnit4;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Slog;
 
+import com.android.internal.R;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.server.UiServiceTestCase;
 
@@ -70,6 +72,7 @@ import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.ArrayList;
 import java.util.Objects;
 
 @SmallTest
@@ -696,5 +699,21 @@ public class NotificationRecordTest extends UiServiceTestCase {
 
         record.calculateGrantableUris();
         // should not throw
+    }
+
+    @Test
+    public void testSmartActions() {
+        StatusBarNotification sbn = getNotification(PKG_O, true /* noisy */,
+                true /* defaultSound */, false /* buzzy */, false /* defaultBuzz */,
+                false /* lights */, false /* defaultLights */, groupId /* group */);
+        NotificationRecord record = new NotificationRecord(mMockContext, sbn, channel);
+        assertNull(record.getSmartActions());
+
+        ArrayList<Notification.Action> smartActions = new ArrayList<>();
+        smartActions.add(new Notification.Action.Builder(
+                Icon.createWithResource(getContext(), R.drawable.btn_default),
+                "text", null).build());
+        record.setSmartActions(smartActions);
+        assertEquals(smartActions, record.getSmartActions());
     }
 }

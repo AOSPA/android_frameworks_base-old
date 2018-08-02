@@ -60,10 +60,7 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
     metric.mutable_value_field()->add_child()->set_field(2);
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    // TODO: pending refactor of StatsPullerManager
-    // For now we still need this so that it doesn't do real pulling.
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillOnce(Return());
 
@@ -83,13 +80,11 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    valueProducer.setBucketSize(60 * NS_PER_SEC);
 
-    // startUpdated:true tainted:0 sum:0 start:11
+    // startUpdated:true sum:0 start:11
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(11, curInterval.start);
+    EXPECT_EQ(false, curInterval.hasValue);
+    EXPECT_EQ(11, curInterval.start.long_value);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     allData.clear();
@@ -102,13 +97,12 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // tartUpdated:false tainted:0 sum:12
+    // tartUpdated:false sum:12
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(0, curInterval.value.long_value);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 
     allData.clear();
     event = make_shared<LogEvent>(tagId, bucket4StartTimeNs + 1);
@@ -119,13 +113,12 @@ TEST(ValueMetricProducerTest, TestNonDimensionalEvents) {
     valueProducer.onDataPulled(allData);
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // startUpdated:false tainted:0 sum:12
+    // startUpdated:false sum:12
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(0, curInterval.value.long_value);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(2UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(13, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(13, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 }
 
 /*
@@ -140,8 +133,7 @@ TEST(ValueMetricProducerTest, TestPulledEventsTakeAbsoluteValueOnReset) {
     metric.set_use_absolute_value_on_reset(true);
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillOnce(Return());
 
@@ -161,12 +153,10 @@ TEST(ValueMetricProducerTest, TestPulledEventsTakeAbsoluteValueOnReset) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(11, curInterval.start);
+    EXPECT_EQ(false, curInterval.hasValue);
+    EXPECT_EQ(11, curInterval.start.long_value);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     allData.clear();
@@ -180,11 +170,10 @@ TEST(ValueMetricProducerTest, TestPulledEventsTakeAbsoluteValueOnReset) {
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(10, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(10, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 
     allData.clear();
     event = make_shared<LogEvent>(tagId, bucket4StartTimeNs + 1);
@@ -196,11 +185,10 @@ TEST(ValueMetricProducerTest, TestPulledEventsTakeAbsoluteValueOnReset) {
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(2UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(26, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(26, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 }
 
 /*
@@ -214,8 +202,7 @@ TEST(ValueMetricProducerTest, TestPulledEventsTakeZeroOnReset) {
     metric.mutable_value_field()->add_child()->set_field(2);
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillOnce(Return());
 
@@ -235,12 +222,10 @@ TEST(ValueMetricProducerTest, TestPulledEventsTakeZeroOnReset) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(11, curInterval.start);
+    EXPECT_EQ(false, curInterval.hasValue);
+    EXPECT_EQ(11, curInterval.start.long_value);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     allData.clear();
@@ -254,8 +239,7 @@ TEST(ValueMetricProducerTest, TestPulledEventsTakeZeroOnReset) {
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     allData.clear();
@@ -268,11 +252,10 @@ TEST(ValueMetricProducerTest, TestPulledEventsTakeZeroOnReset) {
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(26, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(26, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 }
 
 /*
@@ -287,8 +270,7 @@ TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition) {
     metric.set_condition(StringToId("SCREEN_ON"));
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillRepeatedly(Return());
 
@@ -322,11 +304,10 @@ TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // startUpdated:false tainted:0 sum:0 start:100
-    EXPECT_EQ(100, curInterval.start);
+    // startUpdated:false sum:0 start:100
+    EXPECT_EQ(100, curInterval.start.long_value);
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     vector<shared_ptr<LogEvent>> allData;
@@ -341,19 +322,19 @@ TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // startUpdated:false tainted:0 sum:0 start:110
-    EXPECT_EQ(110, curInterval.start);
+    // startUpdated:false sum:0 start:110
+    EXPECT_EQ(110, curInterval.start.long_value);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(10, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(10, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 
     valueProducer.onConditionChanged(false, bucket2StartTimeNs + 1);
 
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // startUpdated:false tainted:0 sum:0 start:110
-    EXPECT_EQ(10, curInterval.sum);
+    // startUpdated:false sum:0 start:110
+    EXPECT_EQ(10, curInterval.value.long_value);
     EXPECT_EQ(false, curInterval.startUpdated);
 }
 
@@ -365,8 +346,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithUpgrade) {
     metric.mutable_value_field()->add_child()->set_field(2);
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
                                       bucketStartTimeNs, pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
@@ -408,8 +388,7 @@ TEST(ValueMetricProducerTest, TestPulledValueWithUpgrade) {
     metric.mutable_value_field()->add_child()->set_field(2);
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, Pull(tagId, _, _))
@@ -441,7 +420,7 @@ TEST(ValueMetricProducerTest, TestPulledValueWithUpgrade) {
     valueProducer.notifyAppUpgrade(eventUpgradeTimeNs, "ANY.APP", 1, 1);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(eventUpgradeTimeNs, valueProducer.mCurrentBucketStartTimeNs);
-    EXPECT_EQ(20L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mValue);
+    EXPECT_EQ(20L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mValueLong);
 
     allData.clear();
     event = make_shared<LogEvent>(tagId, bucket2StartTimeNs + 1);
@@ -452,7 +431,7 @@ TEST(ValueMetricProducerTest, TestPulledValueWithUpgrade) {
     valueProducer.onDataPulled(allData);
     EXPECT_EQ(2UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(bucket2StartTimeNs, valueProducer.mCurrentBucketStartTimeNs);
-    EXPECT_EQ(30L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][1].mValue);
+    EXPECT_EQ(30L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][1].mValueLong);
 }
 
 TEST(ValueMetricProducerTest, TestPulledValueWithUpgradeWhileConditionFalse) {
@@ -464,8 +443,7 @@ TEST(ValueMetricProducerTest, TestPulledValueWithUpgradeWhileConditionFalse) {
     metric.set_condition(StringToId("SCREEN_ON"));
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, Pull(tagId, _, _))
@@ -502,7 +480,7 @@ TEST(ValueMetricProducerTest, TestPulledValueWithUpgradeWhileConditionFalse) {
     EXPECT_EQ(bucket2StartTimeNs-50, valueProducer.mCurrentBucketStartTimeNs);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY].size());
     EXPECT_EQ(bucketStartTimeNs, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mBucketStartNs);
-    EXPECT_EQ(20L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mValue);
+    EXPECT_EQ(20L, valueProducer.mPastBuckets[DEFAULT_METRIC_DIMENSION_KEY][0].mValueLong);
     EXPECT_FALSE(valueProducer.mCondition);
 }
 
@@ -514,8 +492,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithoutCondition) {
     metric.mutable_value_field()->add_child()->set_field(2);
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
 
     ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
                                       bucketStartTimeNs, pullerManager);
@@ -533,19 +510,20 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithoutCondition) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    EXPECT_EQ(10, curInterval.sum);
+    EXPECT_EQ(10, curInterval.value.long_value);
+    EXPECT_EQ(true, curInterval.hasValue);
 
     valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event2);
 
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    EXPECT_EQ(30, curInterval.sum);
+    EXPECT_EQ(30, curInterval.value.long_value);
 
     valueProducer.flushIfNeededLocked(bucket3StartTimeNs);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(30, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(30, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 }
 
 TEST(ValueMetricProducerTest, TestPushedEventsWithCondition) {
@@ -556,8 +534,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithCondition) {
     metric.mutable_value_field()->add_child()->set_field(2);
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
 
     ValueMetricProducer valueProducer(kConfigKey, metric, 1, wizard, -1, bucketStartTimeNs,
                                       bucketStartTimeNs, pullerManager);
@@ -583,7 +560,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithCondition) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    EXPECT_EQ(20, curInterval.sum);
+    EXPECT_EQ(20, curInterval.value.long_value);
 
     shared_ptr<LogEvent> event3 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 30);
     event3->write(1);
@@ -594,7 +571,7 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithCondition) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    EXPECT_EQ(50, curInterval.sum);
+    EXPECT_EQ(50, curInterval.value.long_value);
 
     valueProducer.onConditionChangedLocked(false, bucketStartTimeNs + 35);
     shared_ptr<LogEvent> event4 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 40);
@@ -606,12 +583,12 @@ TEST(ValueMetricProducerTest, TestPushedEventsWithCondition) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    EXPECT_EQ(50, curInterval.sum);
+    EXPECT_EQ(50, curInterval.value.long_value);
 
     valueProducer.flushIfNeededLocked(bucket3StartTimeNs);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(50, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(50, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 }
 
 TEST(ValueMetricProducerTest, TestAnomalyDetection) {
@@ -631,8 +608,10 @@ TEST(ValueMetricProducerTest, TestAnomalyDetection) {
     metric.mutable_value_field()->add_child()->set_field(2);
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     ValueMetricProducer valueProducer(kConfigKey, metric, -1 /*-1 meaning no condition*/, wizard,
-                                      -1 /*not pulled*/, bucketStartTimeNs, bucketStartTimeNs);
+                                      -1 /*not pulled*/, bucketStartTimeNs, bucketStartTimeNs,
+                                      pullerManager);
     valueProducer.setBucketSize(60 * NS_PER_SEC);
 
     sp<AnomalyTracker> anomalyTracker = valueProducer.addAnomalyTracker(alert, alarmMonitor);
@@ -705,8 +684,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition) {
     metric.mutable_value_field()->add_child()->set_field(2);
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillOnce(Return());
 
@@ -728,11 +706,10 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition) {
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
 
-    // startUpdated:true tainted:0 sum:0 start:11
+    // startUpdated:true sum:0 start:11
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
-    EXPECT_EQ(11, curInterval.start);
+    EXPECT_EQ(false, curInterval.hasValue);
+    EXPECT_EQ(11, curInterval.start.long_value);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // pull 2 at correct time
@@ -746,13 +723,12 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // tartUpdated:false tainted:0 sum:12
+    // tartUpdated:false sum:12
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 
     // pull 3 come late.
     // The previous bucket gets closed with error. (Has start value 23, no ending)
@@ -767,14 +743,13 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition) {
     valueProducer.onDataPulled(allData);
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // startUpdated:false tainted:0 sum:12
+    // startUpdated:false sum:12
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(36, curInterval.start);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(36, curInterval.start.long_value);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
     EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
-    EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second.back().mValue);
+    EXPECT_EQ(12, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 }
 
 /*
@@ -790,8 +765,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition) {
     metric.set_condition(StringToId("SCREEN_ON"));
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillRepeatedly(Return());
 
@@ -827,19 +801,17 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // startUpdated:false tainted:0 sum:0 start:100
-    EXPECT_EQ(100, curInterval.start);
+    // startUpdated:false sum:0 start:100
+    EXPECT_EQ(100, curInterval.start.long_value);
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // pull on bucket boundary come late, condition change happens before it
     valueProducer.onConditionChanged(false, bucket2StartTimeNs + 1);
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(false, curInterval.startUpdated);
-    EXPECT_EQ(1, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // Now the alarm is delivered.
@@ -855,8 +827,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition) {
 
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(false, curInterval.startUpdated);
-    EXPECT_EQ(1, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 }
 
@@ -873,8 +844,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2) {
     metric.set_condition(StringToId("SCREEN_ON"));
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillRepeatedly(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillRepeatedly(Return());
 
@@ -921,28 +891,25 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // startUpdated:false tainted:0 sum:0 start:100
-    EXPECT_EQ(100, curInterval.start);
+    // startUpdated:false sum:0 start:100
+    EXPECT_EQ(100, curInterval.start.long_value);
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // pull on bucket boundary come late, condition change happens before it
     valueProducer.onConditionChanged(false, bucket2StartTimeNs + 1);
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(false, curInterval.startUpdated);
-    EXPECT_EQ(1, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // condition changed to true again, before the pull alarm is delivered
     valueProducer.onConditionChanged(true, bucket2StartTimeNs + 25);
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(130, curInterval.start);
-    EXPECT_EQ(1, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(130, curInterval.start.long_value);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // Now the alarm is delivered, but it is considered late, it has no effect
@@ -957,9 +924,8 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2) {
 
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(130, curInterval.start);
-    EXPECT_EQ(1, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(130, curInterval.start.long_value);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 }
 
@@ -976,8 +942,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition3) {
     metric.set_condition(StringToId("SCREEN_ON"));
 
     sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
-    shared_ptr<MockStatsPullerManager> pullerManager =
-            make_shared<StrictMock<MockStatsPullerManager>>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
     EXPECT_CALL(*pullerManager, RegisterReceiver(tagId, _, _, _)).WillOnce(Return());
     EXPECT_CALL(*pullerManager, UnRegisterReceiver(tagId, _)).WillRepeatedly(Return());
 
@@ -1013,11 +978,10 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition3) {
     // has one slice
     EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
     ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
-    // startUpdated:false tainted:0 sum:0 start:100
-    EXPECT_EQ(100, curInterval.start);
+    // startUpdated:false sum:0 start:100
+    EXPECT_EQ(100, curInterval.start.long_value);
     EXPECT_EQ(true, curInterval.startUpdated);
-    EXPECT_EQ(0, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // pull on bucket boundary come late, condition change happens before it.
@@ -1025,8 +989,7 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition3) {
     valueProducer.onConditionChanged(false, bucket2StartTimeNs + 1);
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(false, curInterval.startUpdated);
-    EXPECT_EQ(1, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
 
     // Alarm is delivered in time, but the pull is very slow, and pullers are called in order,
@@ -1042,9 +1005,245 @@ TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition3) {
 
     curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
     EXPECT_EQ(false, curInterval.startUpdated);
-    EXPECT_EQ(1, curInterval.tainted);
-    EXPECT_EQ(0, curInterval.sum);
+    EXPECT_EQ(false, curInterval.hasValue);
     EXPECT_EQ(0UL, valueProducer.mPastBuckets.size());
+}
+
+TEST(ValueMetricProducerTest, TestPushedAggregateMin) {
+    ValueMetric metric;
+    metric.set_id(metricId);
+    metric.set_bucket(ONE_MINUTE);
+    metric.mutable_value_field()->set_field(tagId);
+    metric.mutable_value_field()->add_child()->set_field(2);
+    metric.set_aggregation_type(ValueMetric::MIN);
+
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
+
+    ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
+                                      bucketStartTimeNs, pullerManager);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
+
+    shared_ptr<LogEvent> event1 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 10);
+    event1->write(1);
+    event1->write(10);
+    event1->init();
+    shared_ptr<LogEvent> event2 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 20);
+    event2->write(1);
+    event2->write(20);
+    event2->init();
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event1);
+    // has one slice
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(10, curInterval.value.long_value);
+    EXPECT_EQ(true, curInterval.hasValue);
+
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event2);
+
+    // has one slice
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(10, curInterval.value.long_value);
+
+    valueProducer.flushIfNeededLocked(bucket3StartTimeNs);
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
+    EXPECT_EQ(10, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
+}
+
+TEST(ValueMetricProducerTest, TestPushedAggregateMax) {
+    ValueMetric metric;
+    metric.set_id(metricId);
+    metric.set_bucket(ONE_MINUTE);
+    metric.mutable_value_field()->set_field(tagId);
+    metric.mutable_value_field()->add_child()->set_field(2);
+    metric.set_aggregation_type(ValueMetric::MAX);
+
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
+
+    ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
+                                      bucketStartTimeNs, pullerManager);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
+
+    shared_ptr<LogEvent> event1 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 10);
+    event1->write(1);
+    event1->write(10);
+    event1->init();
+    shared_ptr<LogEvent> event2 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 20);
+    event2->write(1);
+    event2->write(20);
+    event2->init();
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event1);
+    // has one slice
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(10, curInterval.value.long_value);
+    EXPECT_EQ(true, curInterval.hasValue);
+
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event2);
+
+    // has one slice
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(20, curInterval.value.long_value);
+
+    valueProducer.flushIfNeededLocked(bucket3StartTimeNs);
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
+    EXPECT_EQ(20, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
+}
+
+TEST(ValueMetricProducerTest, TestPushedAggregateAvg) {
+    ValueMetric metric;
+    metric.set_id(metricId);
+    metric.set_bucket(ONE_MINUTE);
+    metric.mutable_value_field()->set_field(tagId);
+    metric.mutable_value_field()->add_child()->set_field(2);
+    metric.set_aggregation_type(ValueMetric::AVG);
+
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
+
+    ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
+                                      bucketStartTimeNs, pullerManager);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
+
+    shared_ptr<LogEvent> event1 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 10);
+    event1->write(1);
+    event1->write(10);
+    event1->init();
+    shared_ptr<LogEvent> event2 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 20);
+    event2->write(1);
+    event2->write(15);
+    event2->init();
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event1);
+    // has one slice
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    ValueMetricProducer::Interval curInterval;
+    curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(10, curInterval.value.long_value);
+    EXPECT_EQ(true, curInterval.hasValue);
+    EXPECT_EQ(1, curInterval.sampleSize);
+
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event2);
+
+    // has one slice
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(25, curInterval.value.long_value);
+    EXPECT_EQ(2, curInterval.sampleSize);
+
+    valueProducer.flushIfNeededLocked(bucket3StartTimeNs);
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
+    EXPECT_EQ(12.5, valueProducer.mPastBuckets.begin()->second.back().mValueDouble);
+}
+
+TEST(ValueMetricProducerTest, TestPushedAggregateSum) {
+    ValueMetric metric;
+    metric.set_id(metricId);
+    metric.set_bucket(ONE_MINUTE);
+    metric.mutable_value_field()->set_field(tagId);
+    metric.mutable_value_field()->add_child()->set_field(2);
+    metric.set_aggregation_type(ValueMetric::SUM);
+
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
+
+    ValueMetricProducer valueProducer(kConfigKey, metric, -1, wizard, -1, bucketStartTimeNs,
+                                      bucketStartTimeNs, pullerManager);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
+
+    shared_ptr<LogEvent> event1 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 10);
+    event1->write(1);
+    event1->write(10);
+    event1->init();
+    shared_ptr<LogEvent> event2 = make_shared<LogEvent>(tagId, bucketStartTimeNs + 20);
+    event2->write(1);
+    event2->write(15);
+    event2->init();
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event1);
+    // has one slice
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(10, curInterval.value.long_value);
+    EXPECT_EQ(true, curInterval.hasValue);
+
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, *event2);
+
+    // has one slice
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(25, curInterval.value.long_value);
+
+    valueProducer.flushIfNeededLocked(bucket3StartTimeNs);
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
+    EXPECT_EQ(25, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
+}
+
+TEST(ValueMetricProducerTest, TestPushedAggregateSumSliced) {
+    string slicedConditionName = "UID";
+    const int conditionTagId = 2;
+    ValueMetric metric;
+    metric.set_id(metricId);
+    metric.set_bucket(ONE_MINUTE);
+    metric.mutable_value_field()->set_field(tagId);
+    metric.mutable_value_field()->add_child()->set_field(1);
+    metric.set_aggregation_type(ValueMetric::SUM);
+
+    metric.set_condition(StringToId(slicedConditionName));
+    MetricConditionLink* link = metric.add_links();
+    link->set_condition(StringToId(slicedConditionName));
+    buildSimpleAtomFieldMatcher(tagId, 2, link->mutable_fields_in_what());
+    buildSimpleAtomFieldMatcher(conditionTagId, 2, link->mutable_fields_in_condition());
+
+    LogEvent event1(tagId, bucketStartTimeNs + 10);
+    event1.write(10);  // value
+    event1.write("111"); // uid
+    event1.init();
+    ConditionKey key1;
+    key1[StringToId(slicedConditionName)] =
+        {getMockedDimensionKey(conditionTagId, 2, "111")};
+
+    LogEvent event2(tagId, bucketStartTimeNs + 20);
+    event2.write(15);
+    event2.write("222");
+    event2.init();
+    ConditionKey key2;
+    key2[StringToId(slicedConditionName)] =
+        {getMockedDimensionKey(conditionTagId, 2, "222")};
+
+    sp<MockConditionWizard> wizard = new NaggyMock<MockConditionWizard>();
+    EXPECT_CALL(*wizard, query(_, key1, _, _, _, _)).WillOnce(Return(ConditionState::kFalse));
+
+    EXPECT_CALL(*wizard, query(_, key2, _, _, _, _)).WillOnce(Return(ConditionState::kTrue));
+
+    sp<MockStatsPullerManager> pullerManager = new StrictMock<MockStatsPullerManager>();
+
+    ValueMetricProducer valueProducer(kConfigKey, metric, 1, wizard, -1, bucketStartTimeNs,
+                                      bucketStartTimeNs, pullerManager);
+    valueProducer.setBucketSize(60 * NS_PER_SEC);
+
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, event1);
+
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    ValueMetricProducer::Interval curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(false, curInterval.hasValue);
+
+    valueProducer.onMatchedLogEvent(1 /*log matcher index*/, event2);
+
+    // has one slice
+    EXPECT_EQ(1UL, valueProducer.mCurrentSlicedBucket.size());
+    curInterval = valueProducer.mCurrentSlicedBucket.begin()->second;
+    EXPECT_EQ(15, curInterval.value.long_value);
+
+    valueProducer.flushIfNeededLocked(bucket3StartTimeNs);
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.size());
+    EXPECT_EQ(1UL, valueProducer.mPastBuckets.begin()->second.size());
+    EXPECT_EQ(15, valueProducer.mPastBuckets.begin()->second.back().mValueLong);
 }
 
 }  // namespace statsd

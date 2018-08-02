@@ -22,22 +22,18 @@
 #include "EglManager.h"
 #include "Frame.h"
 #include "LayerUpdateQueue.h"
-#include "OpenGLPipeline.h"
 #include "Properties.h"
 #include "RenderThread.h"
 #include "hwui/Canvas.h"
 #include "pipeline/skia/SkiaOpenGLPipeline.h"
 #include "pipeline/skia/SkiaPipeline.h"
 #include "pipeline/skia/SkiaVulkanPipeline.h"
-#include "protos/hwui.pb.h"
 #include "renderstate/RenderState.h"
-#include "renderstate/Stencil.h"
 #include "utils/GLUtils.h"
 #include "utils/TimeUtils.h"
 #include "../Properties.h"
 
 #include <cutils/properties.h>
-#include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <private/hwui/DrawGlInfo.h>
 #include <strings.h>
 
@@ -50,8 +46,6 @@
 
 #define TRIM_MEMORY_COMPLETE 80
 #define TRIM_MEMORY_UI_HIDDEN 20
-
-#define ENABLE_RENDERNODE_SERIALIZATION false
 
 #define LOG_FRAMETIME_MMA 0
 
@@ -70,9 +64,6 @@ CanvasContext* CanvasContext::create(RenderThread& thread, bool translucent,
     auto renderType = Properties::getRenderPipelineType();
 
     switch (renderType) {
-        case RenderPipelineType::OpenGL:
-            return new CanvasContext(thread, translucent, rootRenderNode, contextFactory,
-                                     std::make_unique<OpenGLPipeline>(thread));
         case RenderPipelineType::SkiaGL:
             return new CanvasContext(thread, translucent, rootRenderNode, contextFactory,
                                      std::make_unique<skiapipeline::SkiaOpenGLPipeline>(thread));
@@ -87,28 +78,13 @@ CanvasContext* CanvasContext::create(RenderThread& thread, bool translucent,
 }
 
 void CanvasContext::destroyLayer(RenderNode* node) {
-    auto renderType = Properties::getRenderPipelineType();
-    switch (renderType) {
-        case RenderPipelineType::OpenGL:
-            OpenGLPipeline::destroyLayer(node);
-            break;
-        case RenderPipelineType::SkiaGL:
-        case RenderPipelineType::SkiaVulkan:
-            skiapipeline::SkiaPipeline::destroyLayer(node);
-            break;
-        default:
-            LOG_ALWAYS_FATAL("canvas context type %d not supported", (int32_t)renderType);
-            break;
-    }
+    skiapipeline::SkiaPipeline::destroyLayer(node);
 }
 
 void CanvasContext::invokeFunctor(const RenderThread& thread, Functor* functor) {
     ATRACE_CALL();
     auto renderType = Properties::getRenderPipelineType();
     switch (renderType) {
-        case RenderPipelineType::OpenGL:
-            OpenGLPipeline::invokeFunctor(thread, functor);
-            break;
         case RenderPipelineType::SkiaGL:
             skiapipeline::SkiaOpenGLPipeline::invokeFunctor(thread, functor);
             break;
@@ -122,19 +98,7 @@ void CanvasContext::invokeFunctor(const RenderThread& thread, Functor* functor) 
 }
 
 void CanvasContext::prepareToDraw(const RenderThread& thread, Bitmap* bitmap) {
-    auto renderType = Properties::getRenderPipelineType();
-    switch (renderType) {
-        case RenderPipelineType::OpenGL:
-            OpenGLPipeline::prepareToDraw(thread, bitmap);
-            break;
-        case RenderPipelineType::SkiaGL:
-        case RenderPipelineType::SkiaVulkan:
-            skiapipeline::SkiaPipeline::prepareToDraw(thread, bitmap);
-            break;
-        default:
-            LOG_ALWAYS_FATAL("canvas context type %d not supported", (int32_t)renderType);
-            break;
-    }
+    skiapipeline::SkiaPipeline::prepareToDraw(thread, bitmap);
 }
 
 CanvasContext::CanvasContext(RenderThread& thread, bool translucent, RenderNode* rootRenderNode,
@@ -290,7 +254,7 @@ bool CanvasContext::isSwapChainStuffed() {
 
         // If there's a multi-frameInterval gap we effectively already dropped a frame,
         // so consider the queue healthy.
-        if (swapA.swapCompletedTime - swapB.swapCompletedTime > frameInterval * 3) {
+        if (std::abs(swapA.swapCompletedTime - swapB.swapCompletedTime) > frameInterval * 3) {
             return false;
         }
 
@@ -622,37 +586,15 @@ void CanvasContext::destroyHardwareResources() {
 }
 
 void CanvasContext::trimMemory(RenderThread& thread, int level) {
-    auto renderType = Properties::getRenderPipelineType();
-    switch (renderType) {
-        case RenderPipelineType::OpenGL: {
-            // No context means nothing to free
-            if (!thread.eglManager().hasEglContext()) return;
-            ATRACE_CALL();
-            if (level >= TRIM_MEMORY_COMPLETE) {
-                thread.renderState().flush(Caches::FlushMode::Full);
-                thread.eglManager().destroy();
-            } else if (level >= TRIM_MEMORY_UI_HIDDEN) {
-                thread.renderState().flush(Caches::FlushMode::Moderate);
-            }
-            break;
-        }
-        case RenderPipelineType::SkiaGL:
-        case RenderPipelineType::SkiaVulkan: {
-            // No context means nothing to free
-            if (!thread.getGrContext()) return;
-            ATRACE_CALL();
-            if (level >= TRIM_MEMORY_COMPLETE) {
-                thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::Complete);
-                thread.eglManager().destroy();
-                thread.vulkanManager().destroy();
-            } else if (level >= TRIM_MEMORY_UI_HIDDEN) {
-                thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::UiHidden);
-            }
-            break;
-        }
-        default:
-            LOG_ALWAYS_FATAL("canvas context type %d not supported", (int32_t)renderType);
-            break;
+    ATRACE_CALL();
+    if (!thread.getGrContext()) return;
+    ATRACE_CALL();
+    if (level >= TRIM_MEMORY_COMPLETE) {
+        thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::Complete);
+        thread.destroyGlContext();
+        thread.vulkanManager().destroy();
+    } else if (level >= TRIM_MEMORY_UI_HIDDEN) {
+        thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::UiHidden);
     }
 }
 
@@ -671,39 +613,6 @@ void CanvasContext::resetFrameStats() {
 
 void CanvasContext::setName(const std::string&& name) {
     mJankTracker.setDescription(JankTrackerType::Window, std::move(name));
-}
-
-void CanvasContext::serializeDisplayListTree() {
-#if ENABLE_RENDERNODE_SERIALIZATION
-    using namespace google::protobuf::io;
-    char package[128];
-    // Check whether tracing is enabled for this process.
-    FILE* file = fopen("/proc/self/cmdline", "r");
-    if (file) {
-        if (!fgets(package, 128, file)) {
-            ALOGE("Error reading cmdline: %s (%d)", strerror(errno), errno);
-            fclose(file);
-            return;
-        }
-        fclose(file);
-    } else {
-        ALOGE("Error opening /proc/self/cmdline: %s (%d)", strerror(errno), errno);
-        return;
-    }
-    char path[1024];
-    snprintf(path, 1024, "/data/data/%s/cache/rendertree_dump", package);
-    int fd = open(path, O_CREAT | O_WRONLY, S_IRWXU | S_IRGRP | S_IROTH);
-    if (fd == -1) {
-        ALOGD("Failed to open '%s'", path);
-        return;
-    }
-    proto::RenderNode tree;
-    // TODO: Streaming writes?
-    mRootRenderNode->copyTo(&tree);
-    std::string data = tree.SerializeAsString();
-    write(fd, data.c_str(), data.length());
-    close(fd);
-#endif
 }
 
 void CanvasContext::waitOnFences() {

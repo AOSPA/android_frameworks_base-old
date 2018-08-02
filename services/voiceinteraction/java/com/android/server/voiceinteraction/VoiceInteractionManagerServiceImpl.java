@@ -23,10 +23,11 @@ import static android.app.ActivityManager.START_VOICE_NOT_ACTIVE_SESSION;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 
 import android.app.ActivityManager;
-import android.app.ActivityManager.StackId;
-import android.app.ActivityManagerInternal;
 import android.app.ActivityOptions;
+import android.app.ActivityTaskManager;
+import com.android.server.wm.ActivityTaskManagerInternal;
 import android.app.IActivityManager;
+import android.app.IActivityTaskManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -48,7 +49,6 @@ import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.view.IWindowManager;
 
-import com.android.internal.app.IVoiceInteractionSessionListener;
 import com.android.internal.app.IVoiceInteractionSessionShowCallback;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.server.LocalServices;
@@ -71,6 +71,7 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
     final int mUser;
     final ComponentName mComponent;
     final IActivityManager mAm;
+    final IActivityTaskManager mAtm;
     final VoiceInteractionServiceInfo mInfo;
     final ComponentName mSessionComponentName;
     final IWindowManager mIWindowManager;
@@ -126,6 +127,7 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
         mUser = userHandle;
         mComponent = service;
         mAm = ActivityManager.getService();
+        mAtm = ActivityTaskManager.getService();
         VoiceInteractionServiceInfo info;
         try {
             info = new VoiceInteractionServiceInfo(context.getPackageManager(), service, mUser);
@@ -168,7 +170,7 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
             activityTokens.add(activityToken);
         } else {
             // Let's get top activities from all visible stacks
-            activityTokens = LocalServices.getService(ActivityManagerInternal.class)
+            activityTokens = LocalServices.getService(ActivityTaskManagerInternal.class)
                     .getTopVisibleActivities();
         }
         return mActiveSession.showLocked(args, flags, mDisabledShowContext, showCallback,
@@ -206,7 +208,7 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
             intent = new Intent(intent);
             intent.addCategory(Intent.CATEGORY_VOICE);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
-            return mAm.startVoiceActivity(mComponent.getPackageName(), callingPid, callingUid,
+            return mAtm.startVoiceActivity(mComponent.getPackageName(), callingPid, callingUid,
                     intent, resolvedType, mActiveSession.mSession, mActiveSession.mInteractor,
                     0, null, null, mUser);
         } catch (RemoteException e) {
@@ -229,7 +231,7 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             final ActivityOptions options = ActivityOptions.makeBasic();
             options.setLaunchActivityType(ACTIVITY_TYPE_ASSISTANT);
-            return mAm.startAssistantActivity(mComponent.getPackageName(), callingPid, callingUid,
+            return mAtm.startAssistantActivity(mComponent.getPackageName(), callingPid, callingUid,
                     intent, resolvedType, options.toBundle(), mUser);
         } catch (RemoteException e) {
             throw new IllegalStateException("Unexpected remote error", e);
@@ -242,7 +244,7 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
                 Slog.w(TAG, "setKeepAwake does not match active session");
                 return;
             }
-            mAm.setVoiceKeepAwake(mActiveSession.mSession, keepAwake);
+            mAtm.setVoiceKeepAwake(mActiveSession.mSession, keepAwake);
         } catch (RemoteException e) {
             throw new IllegalStateException("Unexpected remote error", e);
         }

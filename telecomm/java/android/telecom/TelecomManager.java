@@ -1283,7 +1283,7 @@ public class TelecomManager {
      * @hide
      */
     @SystemApi
-    public int getCallState() {
+    public @TelephonyManager.CallState int getCallState() {
         try {
             if (isServiceConnected()) {
                 return getTelecomService().getCallState();

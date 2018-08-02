@@ -35,8 +35,10 @@ import android.annotation.IdRes;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManagerNative;
+import android.app.ActivityTaskManager;
 import android.app.Fragment;
 import android.app.IActivityManager;
+import android.app.IActivityTaskManager;
 import android.app.StatusBarManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
@@ -57,7 +59,7 @@ import android.os.Message;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
-import android.support.annotation.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
 import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -882,7 +884,7 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
     private boolean onLongPressNavigationButtons(View v, @IdRes int btnId1, @IdRes int btnId2) {
         try {
             boolean sendBackLongPress = false;
-            IActivityManager activityManager = ActivityManagerNative.getDefault();
+            IActivityTaskManager activityManager = ActivityTaskManager.getService();
             boolean touchExplorationEnabled = mAccessibilityManager.isTouchExplorationEnabled();
             boolean inLockTaskMode = activityManager.isInLockTaskMode();
             if (inLockTaskMode && !touchExplorationEnabled) {
@@ -936,7 +938,7 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
     }
 
     private boolean onLongPressRecents() {
-        if (mRecents == null || !ActivityManager.supportsMultiWindow(getContext())
+        if (mRecents == null || !ActivityTaskManager.supportsMultiWindow(getContext())
                 || !mDivider.getView().getSnapAlgorithm().isSplitScreenFeasible()
                 || Recents.getConfiguration().isLowRamDevice
                 // If we are connected to the overview service, then disable the recents button

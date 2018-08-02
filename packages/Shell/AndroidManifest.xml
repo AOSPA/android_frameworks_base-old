@@ -152,12 +152,13 @@
     <uses-permission android:name="android.permission.WATCH_APPOPS" />
 
     <uses-permission android:name="android.permission.CONTROL_KEYGUARD" />
+    <uses-permission android:name="android.permission.SUSPEND_APPS" />
 
     <application android:label="@string/app_label"
                  android:defaultToDeviceProtectedStorage="true"
                  android:directBootAware="true">
         <provider
-            android:name="android.support.v4.content.FileProvider"
+            android:name="androidx.core.content.FileProvider"
             android:authorities="com.android.shell"
             android:grantUriPermissions="true"
             android:exported="false">

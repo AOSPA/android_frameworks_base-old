@@ -147,19 +147,19 @@
     <!-- Displayed to tell the user that they cannot change the caller ID setting. -->
     <string name="CLIRPermanent">You can\'t change the caller ID setting.</string>
 
-    <!-- Notification title to tell the user that data service is blocked by access control. -->
+    <!-- Notification title to tell the user that data service is blocked by access control. [CHAR LIMIT=NOTIF_TITLE] -->
     <string name="RestrictedOnDataTitle">No mobile data service</string>
-    <!-- Notification title to tell the user that emergency calling is blocked by access control. -->
+    <!-- Notification title to tell the user that emergency calling is blocked by access control. [CHAR LIMIT=NOTIF_TITLE] -->
     <string name="RestrictedOnEmergencyTitle">Emergency calling unavailable</string>
-    <!-- Notification title to tell the user that normal service is blocked by access control. -->
+    <!-- Notification title to tell the user that normal service is blocked by access control. [CHAR LIMIT=NOTIF_TITLE] -->
     <string name="RestrictedOnNormalTitle">No voice service</string>
-    <!-- Notification title to tell the user that all emergency and normal voice services are blocked by access control. -->
+    <!-- Notification title to tell the user that all emergency and normal voice services are blocked by access control. [CHAR LIMIT=NOTIF_TITLE] -->
     <string name="RestrictedOnAllVoiceTitle">No voice service or emergency calling</string>
 
-    <!-- Notification content to tell the user that voice/data/emergency service is blocked by access control. -->
+    <!-- Notification content to tell the user that voice/data/emergency service is blocked by access control. [CHAR LIMIT=NOTIF_BODY] -->
     <string name="RestrictedStateContent">Temporarily turned off by your carrier</string>
 
-    <!-- Notification content to tell the user that voice/data/emergency service is blocked by access control when multiple SIMs are active. -->
+    <!-- Notification content to tell the user that voice/data/emergency service is blocked by access control when multiple SIMs are active. [CHAR LIMIT=NOTIF_BODY] -->
     <string name="RestrictedStateContentMsimTemplate">Temporarily turned off by your carrier for SIM <xliff:g id="simNumber" example="1">%d</xliff:g></string>
 
     <!-- Displayed to tell the user that they should switch their network preference. -->
@@ -321,18 +321,18 @@
     <!-- Sync notifications --> <skip />
     <!-- A notification is shown when there is a sync error.  This is the text that will scroll through the notification bar (will be seen by the user as he uses another application). -->
     <string name="contentServiceSync">Sync</string>
-    <!-- A notification is shown when there is a sync error.  This is the title of the notification.  It will be seen in the pull-down notification tray. -->
+    <!-- A notification is shown when there is a sync error.  This is the title of the notification.  It will be seen in the pull-down notification tray. [CHAR LIMIT=NOTIF_TITLE] -->
     <string name="contentServiceSyncNotificationTitle">Can\'t sync</string>
-    <!-- A notification is shown when there is a sync error.  This is the message of the notification.  It describes the error, in this case is there were too many deletes. The argument is the type of content, for example Gmail or Calendar. It will be seen in the pull-down notification tray. -->
+    <!-- A notification is shown when there is a sync error.  This is the message of the notification.  It describes the error, in this case is there were too many deletes. The argument is the type of content, for example Gmail or Calendar. It will be seen in the pull-down notification tray. [CHAR LIMIT=NOTIF_BODY] -->
     <string name="contentServiceTooManyDeletesNotificationDesc">Attempted to delete too many <xliff:g id="content_type">%s</xliff:g>.</string>
 
-    <!-- If MMS discovers there isn't much space left on the device, it will show a toast with this message. -->
+    <!-- If MMS discovers there isn't much space left on the device, it will show a toast with this message. [CHAR LIMIT=TOAST] -->
     <string name="low_memory" product="tablet">Tablet storage is full. Delete some files to free space.</string>
-    <!-- If MMS discovers there isn't much space left on the device, it will show a toast with this message. -->
+    <!-- If MMS discovers there isn't much space left on the device, it will show a toast with this message. [CHAR LIMIT=TOAST] -->
     <string name="low_memory" product="watch">Watch storage is full. Delete some files to free space.</string>
-    <!-- If MMS discovers there isn't much space left on the device, it will show a toast with this message. -->
+    <!-- If MMS discovers there isn't much space left on the device, it will show a toast with this message. [CHAR LIMIT=TOAST] -->
     <string name="low_memory" product="tv">TV storage is full. Delete some files to free space.</string>
-    <!-- If MMS discovers there isn't much space left on the device, it will show a toast with this message. -->
+    <!-- If MMS discovers there isn't much space left on the device, it will show a toast with this message. [CHAR LIMIT=TOAST] -->
     <string name="low_memory" product="default">Phone storage is full. Delete some files to free space.</string>
 
     <!-- SSL CA cert notification --> <skip />
@@ -539,15 +539,6 @@
     <!-- status message in phone options dialog for when airplane mode is off -->
     <string name="global_actions_airplane_mode_off_status">Airplane mode is OFF</string>
 
-    <!-- label for item that enables battery saver in phone options dialog -->
-    <string name="global_action_toggle_battery_saver">Battery saver</string>
-
-    <!-- status message in phone options dialog for when battery saver is enabled -->
-    <string name="global_action_battery_saver_on_status">Battery saver is OFF</string>
-
-    <!-- status message in phone options dialog for when battery saver is disabled -->
-    <string name="global_action_battery_saver_off_status">Battery saver is ON</string>
-
     <!-- label for item that launches settings in phone options dialog [CHAR LIMIT=15]-->
     <string name="global_action_settings">Settings</string>
 
@@ -671,7 +662,7 @@
     <string name="permgrouplab_contacts">Contacts</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_contacts">access your contacts</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_contacts">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your contacts?</string>
 
@@ -679,15 +670,22 @@
     <string name="permgrouplab_location">Location</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_location">access this device\'s location</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_location">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access this device\'s location?</string>
+    <!-- Subtitle of the message shown to the user when the apps requests permission to use the location only while app is in foreground [CHAR LIMIT=150]-->
+    <string name="permgrouprequestdetail_location">The app will only have access to the location while you\u2019re using the app.</string>
+    <!-- Message shown to the user when the apps requests permission to use the location while app is in foreground and background. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
+    <string name="permgroupbackgroundrequest_location">Always allow
+        &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access this device\u2019s location?</string>
+    <!-- Subtitle of the message shown to the user when the apps requests permission to use the location while app is in foreground and background [CHAR LIMIT=150] -->
+    <string name="permgroupbackgroundrequestdetail_location">The app will always have access to the location, even when you\u2019re not using the app.</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_calendar">Calendar</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_calendar">access your calendar</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_calendar">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your calendar?</string>
 
@@ -695,7 +693,7 @@
     <string name="permgrouplab_sms">SMS</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_sms">send and view SMS messages</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_sms">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to send and view SMS messages?</string>
 
@@ -703,7 +701,7 @@
     <string name="permgrouplab_storage">Storage</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_storage">access photos, media, and files on your device</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_storage">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access photos, media, and files on your device?</string>
 
@@ -711,7 +709,7 @@
     <string name="permgrouplab_microphone">Microphone</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_microphone">record audio</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_microphone">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to record audio?</string>
 
@@ -719,7 +717,7 @@
     <string name="permgrouplab_camera">Camera</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_camera">take pictures and record video</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_camera">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to take pictures and record video?</string>
 
@@ -727,7 +725,7 @@
     <string name="permgrouplab_calllog">Call logs</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_calllog">read and write phone call log</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_calllog">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access your phone call logs?</string>
 
@@ -735,7 +733,7 @@
     <string name="permgrouplab_phone">Phone</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_phone">make and manage phone calls</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_phone">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to make and manage phone calls?</string>
 
@@ -743,7 +741,7 @@
     <string name="permgrouplab_sensors">Body Sensors</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgroupdesc_sensors">access sensor data about your vital signs</string>
-    <!-- Message shown to the user when the apps requests permission from this group -->
+    <!-- Message shown to the user when the apps requests permission from this group. If ever possible this should stay below 80 characters (assuming the parameters takes 20 characters). Don't abbreviate until the message reaches 120 characters though. [CHAR LIMIT=120] -->
     <string name="permgrouprequest_sensors">Allow
         &lt;b><xliff:g id="app_name" example="Gmail">%1$s</xliff:g>&lt;/b> to access sensor data about your vital signs?</string>
 
@@ -1082,10 +1080,9 @@
         with the operation of the GPS or other location sources.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permlab_accessFineLocation">access precise location (GPS and
-      network-based)</string>
+    <string name="permlab_accessFineLocation">access precise location only in the foreground</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_accessFineLocation">This app can get your location based on GPS or network location sources such as cell towers and Wi-Fi networks. These location services must be turned on and available on your phone for the app to be able to use them. This may increase battery consumption.</string>
+    <string name="permdesc_accessFineLocation">This app can get your exact location only when it is in the foreground. These location services must be turned on and available on your phone for the app to be able to use them. This may increase battery consumption.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_accessCoarseLocation">access approximate location
@@ -1097,7 +1094,12 @@
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_accessCoarseLocation" product="default">This app can get your location based on network sources such as cell towers and Wi-Fi networks. These location services must be turned on and available on your phone for the app to be able to use them.</string>
 
- <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permlab_accessBackgroundLocation">access precise location in the background</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
+    <string name="permdesc_accessBackgroundLocation">This app can get your exact location any time it is in the background. These location services must be turned on and available on your phone for the app to be able to use them. This may increase battery consumption.</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_modifyAudioSettings">change your audio settings</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permdesc_modifyAudioSettings">Allows the app to modify global audio settings such as volume and which speaker is used for output.</string>
@@ -1396,6 +1398,72 @@
 
     <!-- Content description which should be used for the fingerprint icon. -->
     <string name="fingerprint_icon_content_description">Fingerprint icon</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=50] -->
+    <string name="permlab_manageFace">manage face authentication hardware</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=90] -->
+    <string name="permdesc_manageFace">Allows the app to invoke methods to add and delete facial templates for use.</string>
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=50] -->
+    <string name="permlab_useFaceAuthentication">use face authentication hardware</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=90] -->
+    <string name="permdesc_useFaceAuthentication">Allows the app to use face authentication hardware for authentication</string>
+
+    <!-- Message shown during face acquisition when the face cannot be recognized [CHAR LIMIT=50] -->
+    <string name="face_acquired_insufficient">Couldn\u2019t process face. Please try again.</string>
+    <!-- Message shown during face acquisition when the image is too bright [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_bright">Face is too bright. Please try in lower light.</string>
+    <!-- Message shown during face acquisition when the image is too dark [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_dark">Face is too dark. Please uncover light source.</string>
+    <!-- Message shown during face acquisition when the user is too close to sensor [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_close">Please move sensor farther from face.</string>
+    <!-- Message shown during face acquisition when the user is too far from sensor [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_far">Please bring sensor closer to face.</string>
+    <!-- Message shown during face acquisition when the user is too high relatively to sensor [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_high">Please move sensor higher.</string>
+    <!-- Message shown during face acquisition when the user is too low relatively to sensor [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_low">Please move sensor lower.</string>
+    <!-- Message shown during face acquisition when the user is too right relatively to sensor [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_right">Please move sensor to the right.</string>
+    <!-- Message shown during face acquisition when the user is too left relatively to sensor [CHAR LIMIT=50] -->
+    <string name="face_acquired_too_left">Please move sensor to the left.</string>
+    <!-- Message shown during face acquisition when the user is not front facing the sensor [CHAR LIMIT=50] -->
+    <string name="face_acquired_poor_gaze">Please look at the sensor.</string>
+    <!-- Message shown during face acquisition when the user is not detected [CHAR LIMIT=50] -->
+    <string name="face_acquired_not_detected">No face detected.</string>
+    <!-- Message shown during face acquisition when the face is not kept steady infront of device [CHAR LIMIT=50] -->
+    <string name="face_acquired_not_steady">Keep face steady infront of device.</string>
+    <!-- Array containing custom messages shown during face acquisition from vendor.  Vendor is expected to add and translate these strings -->
+    <string-array name="face_acquired_vendor">
+    </string-array>
+
+    <!-- Error message shown when the face hardware can't be accessed. [CHAR LIMIT=50] -->
+    <string name="face_error_hw_not_available">Face hardware not available.</string>
+    <!-- Error message shown when the face hardware timer has expired and the user needs to restart the operation. [CHAR LIMIT=50] -->
+    <string name="face_error_timeout">Face time out reached. Try again.</string>
+    <!-- Error message shown when the face hardware has run out of room for storing faces. [CHAR LIMIT=50] -->
+    <string name="face_error_no_space">Face can\u2019t be stored.</string>
+    <!-- Generic error message shown when the face operation (e.g. enrollment or authentication) is canceled. Generally not shown to the user. [CHAR LIMIT=50] -->
+    <string name="face_error_canceled">Face operation canceled.</string>
+    <!-- Generic error message shown when the face operation fails because too many attempts have been made. [CHAR LIMIT=50] -->
+    <string name="face_error_lockout">Too many attempts. Try again later.</string>
+    <!-- Generic error message shown when the face operation fails because strong authentication is required. [CHAR LIMIT=50] -->
+    <string name="face_error_lockout_permanent">Too many attempts. Facial authentication disabled.</string>
+    <!-- Generic error message shown when the face hardware can't recognize the face. [CHAR LIMIT=50] -->
+    <string name="face_error_unable_to_process">Try again.</string>
+    <!-- Generic error message shown when the user has no enrolled face. [CHAR LIMIT=50] -->
+    <string name="face_error_not_enrolled">No face enrolled.</string>
+    <!-- Generic error message shown when the app requests face authentication on a device without a sensor. [CHAR LIMIT=60] -->
+    <string name="face_error_hw_not_present">This device does not have a face authentication sensor</string>
+
+    <!-- Template to be used to name enrolled faces by default. [CHAR LIMIT=10] -->
+    <string name="face_name_template">Face <xliff:g id="faceId" example="1">%d</xliff:g></string>
+
+    <!-- Array containing custom error messages from vendor.  Vendor is expected to add and translate these strings -->
+    <string-array name="face_error_vendor">
+    </string-array>
+
+    <!-- Content description which should be used for the face icon. [CHAR LIMIT=10] -->
+    <string name="face_icon_content_description">Face icon</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_readSyncSettings">read sync settings</string>
@@ -3169,6 +3237,21 @@
     <!-- A notification is shown when the user connects to a Wi-Fi network and the system detects that that network has no Internet access. This is the notification's message. -->
     <string name="wifi_no_internet_detailed">Tap for options</string>
 
+    <!-- A notification is shown when the user's softap config has been changed due to underlying
+         hardware restrictions. This is the notifications's title.
+         [CHAR_LIMIT=NONE] -->
+    <string name="wifi_softap_config_change">Changes to your hotspot settings</string>
+
+    <!-- A notification is shown when the user's softap config has been changed due to underlying
+         hardware restrictions. This is the notification's summary message.
+         [CHAR_LIMIT=NONE] -->
+    <string name="wifi_softap_config_change_summary">Your hotspot band has changed.</string>
+
+    <!-- A notification is shown when the user's softap config has been changed due to underlying
+         hardware restrictions. This is the notification's full message.
+         [CHAR_LIMIT=NONE] -->
+    <string name="wifi_softap_config_change_detailed">This device doesn\u2019t support your preference for 5GHz only. Instead, this device will use the 5GHz band when available.</string>
+
     <!-- A notification might be shown if the device switches to another network type (e.g., mobile data) because it detects that the network it was using (e.g., Wi-Fi) has lost Internet connectivity. This is the notification's title. %1$s is the network type that the device switched to, e.g., cellular data. It is one of the strings in the network_switch_type_name array. -->
     <string name="network_switch_metered">Switched to <xliff:g id="network_type">%1$s</xliff:g></string>
 
@@ -3362,7 +3445,7 @@
     <string name="locale_replacement">""</string>
 
     <!-- Title of the pop-up dialog in which the user switches keyboard, also known as input method. -->
-    <string name="select_input_method">Change keyboard</string>
+    <string name="select_input_method">Choose input method</string>
     <!-- Summary text of a toggle switch to enable/disable use of the IME while a physical
          keyboard is connected -->
     <string name="show_ime">Keep it on screen while physical keyboard is active</string>

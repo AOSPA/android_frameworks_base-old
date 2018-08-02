@@ -20,6 +20,7 @@ import android.annotation.CallSuper;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.app.Service;
 import android.content.Intent;
 import android.net.LinkProperties;
@@ -43,17 +44,18 @@ import java.util.List;
 /**
  * Base class of data service. Services that extend DataService must register the service in
  * their AndroidManifest to be detected by the framework. They must be protected by the permission
- * "android.permission.BIND_DATA_SERVICE". The data service definition in the manifest must follow
- * the following format:
+ * "android.permission.BIND_TELEPHONY_DATA_SERVICE". The data service definition in the manifest
+ * must follow the following format:
  * ...
  * <service android:name=".xxxDataService"
- *     android:permission="android.permission.BIND_DATA_SERVICE" >
+ *     android:permission="android.permission.BIND_TELEPHONY_DATA_SERVICE" >
  *     <intent-filter>
  *         <action android:name="android.telephony.data.DataService" />
  *     </intent-filter>
  * </service>
  * @hide
  */
+@SystemApi
 public abstract class DataService extends Service {
     private static final String TAG = DataService.class.getSimpleName();
 

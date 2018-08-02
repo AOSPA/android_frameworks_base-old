@@ -89,9 +89,7 @@ public:
 
     SkBlendMode xferMode() const { return mMode; }
 
-    bool setColorFilter(SkColorFilter* filter);
-
-    SkColorFilter* colorFilter() const { return mColorFilter; }
+    SkColorFilter* getColorFilter() const { return mColorFilter.get(); }
 
     // Sets alpha, xfermode, and colorfilter from an SkPaint
     // paint may be NULL, in which case defaults will be set
@@ -105,6 +103,7 @@ private:
     LayerProperties();
     ~LayerProperties();
     void reset();
+    bool setColorFilter(SkColorFilter* filter);
 
     // Private since external users should go through properties().effectiveLayerType()
     LayerType type() const { return mType; }
@@ -116,7 +115,7 @@ private:
     bool mOpaque;
     uint8_t mAlpha;
     SkBlendMode mMode;
-    SkColorFilter* mColorFilter = nullptr;
+    sk_sp<SkColorFilter> mColorFilter;
 };
 
 /*
@@ -328,9 +327,7 @@ public:
 
     bool isPivotExplicitlySet() const { return mPrimitiveFields.mPivotExplicitlySet; }
 
-    bool resetPivot() {
-        return RP_SET_AND_DIRTY(mPrimitiveFields.mPivotExplicitlySet, false);
-    }
+    bool resetPivot() { return RP_SET_AND_DIRTY(mPrimitiveFields.mPivotExplicitlySet, false); }
 
     bool setCameraDistance(float distance) {
         if (distance != getCameraDistance()) {
@@ -510,17 +507,13 @@ public:
                getOutline().getAlpha() != 0.0f;
     }
 
-    SkColor getSpotShadowColor() const {
-        return mPrimitiveFields.mSpotShadowColor;
-    }
+    SkColor getSpotShadowColor() const { return mPrimitiveFields.mSpotShadowColor; }
 
     bool setSpotShadowColor(SkColor shadowColor) {
         return RP_SET(mPrimitiveFields.mSpotShadowColor, shadowColor);
     }
 
-    SkColor getAmbientShadowColor() const {
-        return mPrimitiveFields.mAmbientShadowColor;
-    }
+    SkColor getAmbientShadowColor() const { return mPrimitiveFields.mAmbientShadowColor; }
 
     bool setAmbientShadowColor(SkColor shadowColor) {
         return RP_SET(mPrimitiveFields.mAmbientShadowColor, shadowColor);

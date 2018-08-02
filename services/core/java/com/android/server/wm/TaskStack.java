@@ -16,8 +16,8 @@
 
 package com.android.server.wm;
 
-import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_BOTTOM_OR_RIGHT;
-import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
+import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_BOTTOM_OR_RIGHT;
+import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
@@ -726,18 +726,33 @@ public class TaskStack extends WindowContainer<Task> implements
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
         final int prevWindowingMode = getWindowingMode();
+        final boolean prevIsAlwaysOnTop = isAlwaysOnTop();
         super.onConfigurationChanged(newParentConfig);
 
         // Only need to update surface size here since the super method will handle updating
         // surface position.
         updateSurfaceSize(getPendingTransaction());
         final int windowingMode = getWindowingMode();
+        final boolean isAlwaysOnTop = isAlwaysOnTop();
 
-        if (mDisplayContent == null || prevWindowingMode == windowingMode) {
+        if (mDisplayContent == null) {
             return;
         }
-        mDisplayContent.onStackWindowingModeChanged(this);
-        updateBoundsForWindowModeChange();
+
+        if (prevWindowingMode != windowingMode) {
+            mDisplayContent.onStackWindowingModeChanged(this);
+            updateBoundsForWindowModeChange();
+        }
+
+        if (prevIsAlwaysOnTop != isAlwaysOnTop) {
+            // positionStackAt(POSITION_TOP, this) must be called even when always on top gets
+            // turned off because we need to make sure that the stack is moved from among always on
+            // top windows to below other always on top windows. Since the position the stack should
+            // be inserted into is calculated properly in
+            // {@link DisplayContent#findPositionForStack()} in both cases, we can just request that
+            // the stack is put at top here.
+            mDisplayContent.positionStackAt(POSITION_TOP, this);
+        }
     }
 
     private void updateSurfaceBounds() {
@@ -1614,7 +1629,7 @@ public class TaskStack extends WindowContainer<Task> implements
         }
 
         try {
-            mService.mActivityManager.resizePinnedStack(stackBounds, tempTaskBounds);
+            mService.mActivityTaskManager.resizePinnedStack(stackBounds, tempTaskBounds);
         } catch (RemoteException e) {
             // I don't believe you.
         }
@@ -1630,9 +1645,14 @@ public class TaskStack extends WindowContainer<Task> implements
     }
 
     @Override  // AnimatesBounds
-    public void onAnimationStart(boolean schedulePipModeChangedCallback, boolean forceUpdate) {
+    public boolean onAnimationStart(boolean schedulePipModeChangedCallback, boolean forceUpdate) {
         // Hold the lock since this is called from the BoundsAnimator running on the UiThread
         synchronized (mService.mWindowMap) {
+            if (!isAttached()) {
+                // Don't run the animation if the stack is already detached
+                return false;
+            }
+
             mBoundsAnimatingRequested = false;
             mBoundsAnimating = true;
             mCancelCurrentBoundsAnimation = false;
@@ -1647,7 +1667,7 @@ public class TaskStack extends WindowContainer<Task> implements
 
         if (inPinnedWindowingMode()) {
             try {
-                mService.mActivityManager.notifyPinnedStackAnimationStarted();
+                mService.mActivityTaskManager.notifyPinnedStackAnimationStarted();
             } catch (RemoteException e) {
                 // I don't believe you...
             }
@@ -1662,6 +1682,7 @@ public class TaskStack extends WindowContainer<Task> implements
                 controller.updatePictureInPictureModeForPinnedStackAnimation(null, forceUpdate);
             }
         }
+        return true;
     }
 
     @Override  // AnimatesBounds
@@ -1689,9 +1710,9 @@ public class TaskStack extends WindowContainer<Task> implements
             }
 
             try {
-                mService.mActivityManager.notifyPinnedStackAnimationEnded();
+                mService.mActivityTaskManager.notifyPinnedStackAnimationEnded();
                 if (moveToFullscreen) {
-                    mService.mActivityManager.moveTasksToFullscreenStack(mStackId,
+                    mService.mActivityTaskManager.moveTasksToFullscreenStack(mStackId,
                             true /* onTop */);
                 }
             } catch (RemoteException e) {
@@ -1703,38 +1724,49 @@ public class TaskStack extends WindowContainer<Task> implements
         }
     }
 
+    @Override
+    public boolean isAttached() {
+        synchronized (mService.mWindowMap) {
+            return mDisplayContent != null;
+        }
+    }
+
     /**
      * Called immediately prior to resizing the tasks at the end of the pinned stack animation.
      */
     public void onPipAnimationEndResize() {
-        mBoundsAnimating = false;
-        for (int i = 0; i < mChildren.size(); i++) {
-            final Task t = mChildren.get(i);
-            t.clearPreserveNonFloatingState();
+        synchronized (mService.mWindowMap) {
+            mBoundsAnimating = false;
+            for (int i = 0; i < mChildren.size(); i++) {
+                final Task t = mChildren.get(i);
+                t.clearPreserveNonFloatingState();
+            }
+            mService.requestTraversal();
         }
-        mService.requestTraversal();
     }
 
     @Override
     public boolean shouldDeferStartOnMoveToFullscreen() {
-        // Workaround for the recents animation -- normally we need to wait for the new activity to
-        // show before starting the PiP animation, but because we start and show the home activity
-        // early for the recents animation prior to the PiP animation starting, there is no
-        // subsequent all-drawn signal. In this case, we can skip the pause when the home stack is
-        // already visible and drawn.
-        final TaskStack homeStack = mDisplayContent.getHomeStack();
-        if (homeStack == null) {
-            return true;
+        synchronized (mService.mWindowMap) {
+            // Workaround for the recents animation -- normally we need to wait for the new activity
+            // to show before starting the PiP animation, but because we start and show the home
+            // activity early for the recents animation prior to the PiP animation starting, there
+            // is no subsequent all-drawn signal. In this case, we can skip the pause when the home
+            // stack is already visible and drawn.
+            final TaskStack homeStack = mDisplayContent.getHomeStack();
+            if (homeStack == null) {
+                return true;
+            }
+            final Task homeTask = homeStack.getTopChild();
+            if (homeTask == null) {
+                return true;
+            }
+            final AppWindowToken homeApp = homeTask.getTopVisibleAppToken();
+            if (!homeTask.isVisible() || homeApp == null) {
+                return true;
+            }
+            return !homeApp.allDrawn;
         }
-        final Task homeTask = homeStack.getTopChild();
-        if (homeTask == null) {
-            return true;
-        }
-        final AppWindowToken homeApp = homeTask.getTopVisibleAppToken();
-        if (!homeTask.isVisible() || homeApp == null) {
-            return true;
-        }
-        return !homeApp.allDrawn;
     }
 
     /**

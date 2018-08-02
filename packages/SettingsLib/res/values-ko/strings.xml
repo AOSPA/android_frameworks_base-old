@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"탭한 항목에 대해 시각적인 의견 표시"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"표면 업데이트 표시"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"전체 창 표면이 업데이트되었을 때 플래시 처리"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU 보기 업데이트 표시"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU로 드로잉했을 때 창 내부 보기 플래시 처리"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"업데이트 보기 표시"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"드로잉했을 때 창 내부 보기 플래시 처리"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"하드웨어 레이어 업데이트 표시"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"업데이트할 때 하드웨어 레이어 녹색으로 깜박이기"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU 오버드로 디버그"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"클립 경계, 여백 등을 표시"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"RTL 레이아웃 방향 강제 적용"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"모든 언어에 대해 화면 레이아웃 방향을 RTL로 강제 적용"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPU 렌더링 강제 설정"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2D 드로잉용으로 GPU 강제 사용"</string>
     <string name="force_msaa" msgid="7920323238677284387">"4x MSAA 강제 사용"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 앱에서 4x MSAA 사용"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"사각형이 아닌 클립 작업 디버그"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"프로필 GPU 렌더링"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"프로필 HWUI 렌더링"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU 디버그 레이어 사용 설정"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"디버그 앱에 GPU 디버그 레이어 로드 허용"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"창 애니메이션 배율"</string>

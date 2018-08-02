@@ -29,11 +29,14 @@ import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
+import android.app.ActivityManagerInternal;
 import android.app.ActivityOptions;
 import com.android.server.wm.DisplayWindowController;
 
 import org.junit.Rule;
+import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 
 import android.app.IApplicationThread;
@@ -48,6 +51,7 @@ import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.UserHandle;
 import android.service.voice.IVoiceInteractionSession;
 import android.support.test.InstrumentationRegistry;
 import android.testing.DexmakerShareClassLoaderRule;
@@ -101,19 +105,36 @@ public class ActivityTestsBase {
         mHandlerThread.quitSafely();
     }
 
-    protected ActivityManagerService createActivityManagerService() {
-        final ActivityManagerService service =
-                setupActivityManagerService(new TestActivityManagerService(mContext));
-        AttributeCache.init(mContext);
-        return service;
+    protected ActivityTaskManagerService createActivityTaskManagerService() {
+        final TestActivityTaskManagerService atm =
+                spy(new TestActivityTaskManagerService(mContext));
+        setupActivityManagerService(atm);
+        return atm;
     }
 
-    protected ActivityManagerService setupActivityManagerService(ActivityManagerService service) {
-        service = spy(service);
-        doReturn(mock(IPackageManager.class)).when(service).getPackageManager();
-        doNothing().when(service).grantEphemeralAccessLocked(anyInt(), any(), anyInt(), anyInt());
-        service.mWindowManager = prepareMockWindowManager();
-        return service;
+    ActivityManagerService createActivityManagerService() {
+        final TestActivityTaskManagerService atm =
+                spy(new TestActivityTaskManagerService(mContext));
+        return setupActivityManagerService(atm);
+    }
+
+    ActivityManagerService setupActivityManagerService(TestActivityTaskManagerService atm) {
+        final ActivityManagerService am = spy(new TestActivityManagerService(mContext, atm));
+        setupActivityManagerService(am, atm);
+        AttributeCache.init(mContext);
+        return am;
+    }
+
+    void setupActivityManagerService(ActivityManagerService am, ActivityTaskManagerService atm) {
+        atm.setActivityManagerService(am);
+        atm.mAmInternal = am.new LocalService();
+        am.mAtmInternal = atm.new LocalService();
+        // Makes sure the supervisor is using with the spy object.
+        atm.mStackSupervisor.setService(atm);
+        doReturn(mock(IPackageManager.class)).when(am).getPackageManager();
+        doNothing().when(am).grantEphemeralAccessLocked(anyInt(), any(), anyInt(), anyInt());
+        am.mWindowManager = prepareMockWindowManager();
+        atm.setWindowManager(am.mWindowManager);
     }
 
     /**
@@ -125,7 +146,7 @@ public class ActivityTestsBase {
 
 
 
-        private final ActivityManagerService mService;
+        private final ActivityTaskManagerService mService;
 
         private ComponentName mComponent;
         private TaskRecord mTaskRecord;
@@ -134,7 +155,7 @@ public class ActivityTestsBase {
         private ActivityStack mStack;
         private int mActivityFlags;
 
-        ActivityBuilder(ActivityManagerService service) {
+        ActivityBuilder(ActivityTaskManagerService service) {
             mService = service;
         }
 
@@ -205,10 +226,12 @@ public class ActivityTestsBase {
                 mTaskRecord.addActivityToTop(activity);
             }
 
-            activity.setProcess(new ProcessRecord(null, null,
-                    mService.mContext.getApplicationInfo(), "name", 12345));
-            activity.app.thread = mock(IApplicationThread.class);
-
+            final WindowProcessController wpc = new WindowProcessController(mService,
+                    mService.mContext.getApplicationInfo(), "name", 12345,
+                    UserHandle.getUserId(12345), mock(Object.class),
+                    mock(WindowProcessListener.class));
+            wpc.setThread(mock(IApplicationThread.class));
+            activity.setProcess(wpc);
             return activity;
         }
     }
@@ -316,7 +339,7 @@ public class ActivityTestsBase {
         }
 
         private static class TestTaskRecord extends TaskRecord {
-            TestTaskRecord(ActivityManagerService service, int _taskId, ActivityInfo info,
+            TestTaskRecord(ActivityTaskManagerService service, int _taskId, ActivityInfo info,
                        Intent _intent, IVoiceInteractionSession _voiceSession,
                        IVoiceInteractor _voiceInteractor) {
                 super(service, _taskId, info, _intent, _voiceSession, _voiceInteractor);
@@ -333,42 +356,30 @@ public class ActivityTestsBase {
         }
     }
 
-    /**
-     * An {@link ActivityManagerService} subclass which provides a test
-     * {@link ActivityStackSupervisor}.
-     */
-    protected static class TestActivityManagerService extends ActivityManagerService {
-        private ClientLifecycleManager mLifecycleManager;
+    protected static class TestActivityTaskManagerService extends ActivityTaskManagerService {
         private LockTaskController mLockTaskController;
 
-        TestActivityManagerService(Context context) {
+        TestActivityTaskManagerService(Context context) {
             super(context);
             mSupportsMultiWindow = true;
             mSupportsMultiDisplay = true;
             mSupportsSplitScreenMultiWindow = true;
             mSupportsFreeformWindowManagement = true;
             mSupportsPictureInPicture = true;
-            mWindowManager = WindowTestUtils.getMockWindowManagerService();
         }
 
         @Override
-        public ClientLifecycleManager getLifecycleManager() {
-            if (mLifecycleManager == null) {
-                return super.getLifecycleManager();
-            }
-            return mLifecycleManager;
+        int handleIncomingUser(int callingPid, int callingUid, int userId, String name) {
+            return userId;
         }
 
+        @Override
         public LockTaskController getLockTaskController() {
             if (mLockTaskController == null) {
                 mLockTaskController = spy(super.getLockTaskController());
             }
 
             return mLockTaskController;
-        }
-
-        void setLifecycleManager(ClientLifecycleManager manager) {
-            mLifecycleManager = manager;
         }
 
         @Override
@@ -397,11 +408,27 @@ public class ActivityTestsBase {
         }
 
         protected ActivityStackSupervisor createTestSupervisor() {
-            return new TestActivityStackSupervisor(this, mHandlerThread.getLooper());
+            return new TestActivityStackSupervisor(this, mH.getLooper());
+        }
+    }
+
+    /**
+     * An {@link ActivityManagerService} subclass which provides a test
+     * {@link ActivityStackSupervisor}.
+     */
+    protected static class TestActivityManagerService extends ActivityManagerService {
+
+        TestActivityManagerService(Context context, TestActivityTaskManagerService atm) {
+            super(context, atm);
         }
 
         @Override
         void updateUsageStats(ActivityRecord component, boolean resumed) {
+        }
+
+        @Override
+        Configuration getGlobalConfiguration() {
+            return mContext.getResources().getConfiguration();
         }
     }
 
@@ -413,7 +440,7 @@ public class ActivityTestsBase {
         private ActivityDisplay mDisplay;
         private KeyguardController mKeyguardController;
 
-        public TestActivityStackSupervisor(ActivityManagerService service, Looper looper) {
+        public TestActivityStackSupervisor(ActivityTaskManagerService service, Looper looper) {
             super(service, looper);
             mDisplayManager =
                     (DisplayManager) mService.mContext.getSystemService(Context.DISPLAY_SERVICE);

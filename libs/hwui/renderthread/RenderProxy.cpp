@@ -21,6 +21,7 @@
 #include "Properties.h"
 #include "Readback.h"
 #include "Rect.h"
+#include "pipeline/skia/SkiaOpenGLPipeline.h"
 #include "pipeline/skia/VectorDrawableAtlas.h"
 #include "renderstate/RenderState.h"
 #include "renderthread/CanvasContext.h"
@@ -65,10 +66,7 @@ void RenderProxy::setSwapBehavior(SwapBehavior swapBehavior) {
 
 bool RenderProxy::loadSystemProperties() {
     return mRenderThread.queue().runSync([this]() -> bool {
-        bool needsRedraw = false;
-        if (Caches::hasInstance()) {
-            needsRedraw = Properties::load();
-        }
+        bool needsRedraw = Properties::load();
         if (mContext->profiler().consumeProperties()) {
             needsRedraw = true;
         }
@@ -195,8 +193,11 @@ void RenderProxy::fence() {
     mRenderThread.queue().runSync([]() {});
 }
 
-void RenderProxy::staticFence() {
-    RenderThread::getInstance().queue().runSync([]() {});
+int RenderProxy::maxTextureSize() {
+    static int maxTextureSize = RenderThread::getInstance().queue().runSync([]() {
+        return DeviceInfo::get()->maxTextureSize();
+    });
+    return maxTextureSize;
 }
 
 void RenderProxy::stopDrawing() {
@@ -278,10 +279,6 @@ void RenderProxy::setFrameCompleteCallback(std::function<void(int64_t)>&& callba
     mDrawFrameTask.setFrameCompleteCallback(std::move(callback));
 }
 
-void RenderProxy::serializeDisplayListTree() {
-    mRenderThread.queue().post([=]() { mContext->serializeDisplayListTree(); });
-}
-
 void RenderProxy::addFrameMetricsObserver(FrameMetricsObserver* observerPtr) {
     mRenderThread.queue().post([ this, observer = sp{observerPtr} ]() {
         mContext->addFrameMetricsObserver(observer.get());
@@ -329,14 +326,9 @@ void RenderProxy::prepareToDraw(Bitmap& bitmap) {
     }
 }
 
-sk_sp<Bitmap> RenderProxy::allocateHardwareBitmap(SkBitmap& bitmap) {
-    auto& thread = RenderThread::getInstance();
-    return thread.queue().runSync([&]() -> auto { return thread.allocateHardwareBitmap(bitmap); });
-}
-
 int RenderProxy::copyGraphicBufferInto(GraphicBuffer* buffer, SkBitmap* bitmap) {
     RenderThread& thread = RenderThread::getInstance();
-    if (Properties::isSkiaEnabled() && gettid() == thread.getTid()) {
+    if (gettid() == thread.getTid()) {
         // TODO: fix everything that hits this. We should never be triggering a readback ourselves.
         return (int)thread.readback().copyGraphicBufferInto(buffer, bitmap);
     } else {

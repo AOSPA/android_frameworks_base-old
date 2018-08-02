@@ -29,6 +29,7 @@
 #include <media/stagefright/Utils.h>
 #include <media/stagefright/foundation/ByteUtils.h>  // for FOURCC definition
 #include <mediaplayer2/JAudioTrack.h>
+#include <mediaplayer2/JavaVMHelper.h>
 #include <mediaplayer2/mediaplayer2.h>
 #include <stdio.h>
 #include <assert.h>
@@ -39,7 +40,7 @@
 #include "jni.h"
 #include <nativehelper/JNIHelp.h>
 #include "android/native_window_jni.h"
-#include "android_runtime/Log.h"
+#include "log/log.h"
 #include "utils/Errors.h"  // for status_t
 #include "utils/KeyedVector.h"
 #include "utils/String8.h"
@@ -184,14 +185,14 @@ JNIMediaPlayer2Listener::JNIMediaPlayer2Listener(JNIEnv* env, jobject thiz, jobj
 JNIMediaPlayer2Listener::~JNIMediaPlayer2Listener()
 {
     // remove global references
-    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    JNIEnv *env = JavaVMHelper::getJNIEnv();
     env->DeleteGlobalRef(mObject);
     env->DeleteGlobalRef(mClass);
 }
 
 void JNIMediaPlayer2Listener::notify(int64_t srcId, int msg, int ext1, int ext2, const Parcel *obj)
 {
-    JNIEnv *env = AndroidRuntime::getJNIEnv();
+    JNIEnv *env = JavaVMHelper::getJNIEnv();
     if (obj && obj->dataSize() > 0) {
         jobject jParcel = createJavaParcelObject(env);
         if (jParcel != NULL) {
@@ -207,7 +208,7 @@ void JNIMediaPlayer2Listener::notify(int64_t srcId, int msg, int ext1, int ext2,
     }
     if (env->ExceptionCheck()) {
         ALOGW("An exception occurred while notifying an event.");
-        LOGW_EX(env);
+        jniLogException(env, ANDROID_LOG_WARN, LOG_TAG);
         env->ExceptionClear();
     }
 }
@@ -568,18 +569,6 @@ android_media_MediaPlayer2_start(JNIEnv *env, jobject thiz)
 }
 
 static void
-android_media_MediaPlayer2_stop(JNIEnv *env, jobject thiz)
-{
-    ALOGV("stop");
-    sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
-    if (mp == NULL ) {
-        jniThrowException(env, "java/lang/IllegalStateException", NULL);
-        return;
-    }
-    process_media_player_call( env, thiz, mp->stop(), NULL, NULL );
-}
-
-static void
 android_media_MediaPlayer2_pause(JNIEnv *env, jobject thiz)
 {
     ALOGV("pause");
@@ -786,13 +775,13 @@ android_media_MediaPlayer2_notifyAt(JNIEnv *env, jobject thiz, jlong mediaTimeUs
 }
 
 static jint
-android_media_MediaPlayer2_getMediaPlayer2State(JNIEnv *env, jobject thiz)
+android_media_MediaPlayer2_getState(JNIEnv *env, jobject thiz)
 {
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
     if (mp == NULL) {
         return MEDIAPLAYER2_STATE_IDLE;
     }
-    return (jint)mp->getMediaPlayer2State();
+    return (jint)mp->getState();
 }
 
 static jint
@@ -1501,8 +1490,7 @@ static const JNINativeMethod gMethods[] = {
     {"_setBufferingParams", "(Landroid/media/BufferingParams;)V", (void *)android_media_MediaPlayer2_setBufferingParams},
     {"_prepare",            "()V",                              (void *)android_media_MediaPlayer2_prepare},
     {"_start",              "()V",                              (void *)android_media_MediaPlayer2_start},
-    {"_stop",               "()V",                              (void *)android_media_MediaPlayer2_stop},
-    {"native_getMediaPlayer2State", "()I",                      (void *)android_media_MediaPlayer2_getMediaPlayer2State},
+    {"native_getState",     "()I",                              (void *)android_media_MediaPlayer2_getState},
     {"getVideoWidth",       "()I",                              (void *)android_media_MediaPlayer2_getVideoWidth},
     {"getVideoHeight",      "()I",                              (void *)android_media_MediaPlayer2_getVideoHeight},
     {"native_getMetrics",   "()Landroid/os/PersistableBundle;", (void *)android_media_MediaPlayer2_native_getMetrics},
@@ -1552,8 +1540,7 @@ static const JNINativeMethod gMethods[] = {
 // This function only registers the native methods
 static int register_android_media_MediaPlayer2Impl(JNIEnv *env)
 {
-    return AndroidRuntime::registerNativeMethods(env,
-                "android/media/MediaPlayer2Impl", gMethods, NELEM(gMethods));
+    return jniRegisterNativeMethods(env, "android/media/MediaPlayer2Impl", gMethods, NELEM(gMethods));
 }
 
 jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
@@ -1571,6 +1558,8 @@ jint JNI_OnLoad(JavaVM* vm, void* /* reserved */)
         ALOGE("ERROR: MediaPlayer2 native registration failed\n");
         goto bail;
     }
+
+    JavaVMHelper::setJavaVM(vm);
 
     /* success -- return valid version number */
     result = JNI_VERSION_1_4;

@@ -55,7 +55,7 @@
     <dimen name="status_bar_left_clock_end_padding">7dp</dimen>
 
     <!-- Spacing after the wifi signals that is present if there are any icons following it. -->
-    <dimen name="status_bar_wifi_signal_spacer_width">4dp</dimen>
+    <dimen name="status_bar_wifi_signal_spacer_width">2.5dp</dimen>
 
     <!-- Spacing before the airplane mode icon if there are any icons preceding it. -->
     <dimen name="status_bar_airplane_spacer_width">4dp</dimen>
@@ -252,6 +252,9 @@
          -->
     <dimen name="qs_header_system_icons_area_height">48dp</dimen>
 
+    <!-- How far the quick-quick settings panel extends below the status bar -->
+    <dimen name="qs_quick_header_panel_height">128dp</dimen>
+
     <!-- The height of the container that holds the system icons in the quick settings header in the
          car setting. -->
     <dimen name="car_qs_header_system_icons_area_height">54dp</dimen>
@@ -277,7 +280,6 @@
 
     <!-- Width for the notification panel and related windows -->
     <dimen name="match_parent">-1px</dimen>
-    <dimen name="standard_notification_panel_width">416dp</dimen>
 
     <!-- The top margin of the panel that holds the list of notifications. -->
     <dimen name="notification_panel_margin_top">0dp</dimen>
@@ -349,8 +351,8 @@
     <dimen name="qs_tile_margin_top_bottom">12dp</dimen>
     <dimen name="qs_tile_margin_top">18dp</dimen>
     <dimen name="qs_quick_tile_size">48dp</dimen>
-    <!-- Width for the spacer, used between QS tiles. -->
-    <dimen name="qs_quick_tile_space_width">0dp</dimen>
+    <!-- Maximum width of quick quick settings panel. Defaults to MATCH_PARENT-->
+    <dimen name="qs_quick_layout_width">-1px</dimen>
     <dimen name="qs_quick_tile_padding">12dp</dimen>
     <dimen name="qs_header_gear_translation">16dp</dimen>
     <dimen name="qs_header_tile_margin_horizontal">0dp</dimen>
@@ -764,9 +766,6 @@
     <dimen name="volume_expander_margin_end">2dp</dimen>
     <dimen name="volume_expander_margin_top">6dp</dimen>
 
-    <!-- Padding between icon and text for managed profile toast -->
-    <dimen name="managed_profile_toast_padding">4dp</dimen>
-
     <!-- Thickness of the assist disclosure beams -->
     <dimen name="assist_disclosure_thickness">2.5dp</dimen>
 
@@ -922,13 +921,21 @@
 
     <dimen name="global_actions_top_padding">120dp</dimen>
 
-    <!-- the maximum offset in either direction that elements are moved horizontally to prevent
-            burn-in on AOD -->
+    <dimen name="global_actions_padding">12dp</dimen>
+
+    <dimen name="global_actions_translate">9dp</dimen>
+
+    <!-- The maximum offset in either direction that elements are moved horizontally to prevent
+         burn-in on AOD. -->
     <dimen name="burn_in_prevention_offset_x">8dp</dimen>
 
-    <!-- the maximum offset in either direction that elements are moved vertically to prevent
-            burn-in on AOD -->
+    <!-- The maximum offset in either direction that elements are moved vertically to prevent
+         burn-in on AOD. -->
     <dimen name="burn_in_prevention_offset_y">50dp</dimen>
+
+    <!-- The maximum offset in either direction that the charging indication moves vertically
+         to prevent burn-in on AOD. -->
+    <dimen name="charging_indication_burn_in_prevention_offset_y">5dp</dimen>
 
     <dimen name="corner_size">8dp</dimen>
     <dimen name="top_padding">0dp</dimen>
@@ -1012,4 +1019,7 @@
     <!-- How much into a DisplayCutout's bounds we can go, on each side -->
     <dimen name="display_cutout_margin_consumption">0px</dimen>
 
+    <!-- How much we expand the touchable region of the status bar below the notch to catch touches
+         that just start below the notch. -->
+    <dimen name="display_cutout_touchable_region_size">12dp</dimen>
 </resources>

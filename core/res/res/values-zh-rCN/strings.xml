@@ -236,9 +236,6 @@
     <string name="global_actions_toggle_airplane_mode" msgid="5884330306926307456">"飞行模式"</string>
     <string name="global_actions_airplane_mode_on_status" msgid="2719557982608919750">"已开启飞行模式"</string>
     <string name="global_actions_airplane_mode_off_status" msgid="5075070442854490296">"未开启飞行模式"</string>
-    <string name="global_action_toggle_battery_saver" msgid="708515500418994208">"省电模式"</string>
-    <string name="global_action_battery_saver_on_status" msgid="484059130698197787">"省电模式已关闭"</string>
-    <string name="global_action_battery_saver_off_status" msgid="75550964969478405">"省电模式已开启"</string>
     <string name="global_action_settings" msgid="1756531602592545966">"设置"</string>
     <string name="global_action_assist" msgid="3892832961594295030">"助手应用"</string>
     <string name="global_action_voice_assist" msgid="7751191495200504480">"语音助理"</string>
@@ -276,6 +273,9 @@
     <string name="permgrouplab_location" msgid="7275582855722310164">"位置信息"</string>
     <string name="permgroupdesc_location" msgid="1346617465127855033">"获取此设备的位置信息"</string>
     <string name="permgrouprequest_location" msgid="3788275734953323491">"允许&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;获取此设备的位置信息吗？"</string>
+    <string name="permgrouprequestdetail_location" msgid="1113400215566814664">"只有当您使用该应用时，该应用才有权获取位置信息。"</string>
+    <string name="permgroupbackgroundrequest_location" msgid="8461841153030844390">"一律允许&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;获取此设备的位置信息吗？"</string>
+    <string name="permgroupbackgroundrequestdetail_location" msgid="1715668276378108654">"即使您并未使用该应用，该应用也将始终有权获取位置信息。"</string>
     <string name="permgrouplab_calendar" msgid="5863508437783683902">"日历"</string>
     <string name="permgroupdesc_calendar" msgid="3889615280211184106">"访问您的日历"</string>
     <string name="permgrouprequest_calendar" msgid="289900767793189421">"允许&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;访问您的日历吗？"</string>
@@ -402,12 +402,14 @@
     <string name="permdesc_writeCalendar" product="default" msgid="7592791790516943173">"此应用可在手机上添加、移除或更改日历活动。此应用可能会以日历所有者的身份发送消息，或在不通知所有者的情况下更改活动。"</string>
     <string name="permlab_accessLocationExtraCommands" msgid="2836308076720553837">"获取额外的位置信息提供程序命令"</string>
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"允许该应用使用其他的位置信息提供程序命令。此权限使该应用可以干扰GPS或其他位置信息源的运作。"</string>
-    <string name="permlab_accessFineLocation" msgid="251034415460950944">"访问确切位置信息（以 GPS 和网络为依据）"</string>
-    <string name="permdesc_accessFineLocation" msgid="5821994817969957884">"此应用可根据 GPS 或网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。这可能会增加耗电量。"</string>
+    <string name="permlab_accessFineLocation" msgid="6265109654698562427">"只能在前台获取精确的位置信息"</string>
+    <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"此应用只有在前台运行时才能获取您的精确位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。这可能会增加耗电量。"</string>
     <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"访问大致位置信息（以网络为依据）"</string>
     <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"此应用可根据网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的平板电脑必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
     <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"此应用可根据网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的电视必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
     <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"此应用可根据网络来源（例如基站和 WLAN 网络）获取您的位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。"</string>
+    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"在后台获取精确的位置信息"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"此应用在后台运行时可随时获取您的精确位置信息。您的手机必须支持并开启这些位置信息服务，此应用才能使用这些服务。这可能会增加耗电量。"</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"更改您的音频设置"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"允许该应用修改全局音频设置，例如音量和用于输出的扬声器。"</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"录音"</string>
@@ -515,6 +517,37 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"指纹图标"</string>
+    <string name="permlab_manageFace" msgid="2137540986007309781">"管理人脸身份验证硬件"</string>
+    <string name="permdesc_manageFace" msgid="8919637120670185330">"允许该应用调用方法来添加和删除可用的人脸模板。"</string>
+    <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"使用人脸身份验证硬件"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"允许该应用使用人脸身份验证硬件进行身份验证"</string>
+    <string name="face_acquired_insufficient" msgid="5901287247766106330">"无法识别此面孔，请重试。"</string>
+    <string name="face_acquired_too_bright" msgid="610606792381297174">"面部太亮，请在光线适中的环境下重试。"</string>
+    <string name="face_acquired_too_dark" msgid="7229162716976778371">"面部太暗，请不要挡住光线。"</string>
+    <string name="face_acquired_too_close" msgid="1980310037427755293">"请将传感器移到距离面孔较远处。"</string>
+    <string name="face_acquired_too_far" msgid="4494571381828850007">"请将传感器靠近面孔。"</string>
+    <string name="face_acquired_too_high" msgid="228411096134808372">"请上移传感器。"</string>
+    <string name="face_acquired_too_low" msgid="4539774649296349109">"请下移传感器。"</string>
+    <string name="face_acquired_too_right" msgid="1650292067226118760">"请右移传感器。"</string>
+    <string name="face_acquired_too_left" msgid="2712489669456176505">"请左移传感器。"</string>
+    <string name="face_acquired_poor_gaze" msgid="8344973502980415859">"请目视传感器。"</string>
+    <string name="face_acquired_not_detected" msgid="5707782294589511391">"未检测到任何面孔。"</string>
+    <string name="face_acquired_not_steady" msgid="3722829465011040042">"请将面孔保持在设备前不动。"</string>
+  <string-array name="face_acquired_vendor">
+  </string-array>
+    <string name="face_error_hw_not_available" msgid="6255891785768984615">"无法使用面孔识别硬件"</string>
+    <string name="face_error_timeout" msgid="4014326147867150054">"面孔处理操作超时，请重试。"</string>
+    <string name="face_error_no_space" msgid="8224993703466381314">"无法存储面孔。"</string>
+    <string name="face_error_canceled" msgid="283945501061931023">"面孔处理操作已取消。"</string>
+    <string name="face_error_lockout" msgid="3407426963155388504">"尝试次数过多，请稍后重试。"</string>
+    <string name="face_error_lockout_permanent" msgid="8198354656746088890">"尝试次数过多，系统已停用人脸身份验证功能。"</string>
+    <string name="face_error_unable_to_process" msgid="238761109287767270">"请重试。"</string>
+    <string name="face_error_not_enrolled" msgid="9166792142679691323">"未注册任何面孔。"</string>
+    <string name="face_error_hw_not_present" msgid="4737289254517095671">"此设备没有人脸身份验证传感器"</string>
+    <string name="face_name_template" msgid="7004562145809595384">"面孔 <xliff:g id="FACEID">%d</xliff:g>"</string>
+  <string-array name="face_error_vendor">
+  </string-array>
+    <string name="face_icon_content_description" msgid="4024817159806482191">"面孔图标"</string>
     <string name="permlab_readSyncSettings" msgid="6201810008230503052">"读取同步设置"</string>
     <string name="permdesc_readSyncSettings" msgid="2706745674569678644">"允许该应用读取某个帐号的同步设置。例如，此权限可确定“联系人”应用是否与某个帐号同步。"</string>
     <string name="permlab_writeSyncSettings" msgid="5408694875793945314">"启用和停用同步"</string>
@@ -1175,6 +1208,9 @@
     <skip />
     <string name="wifi_no_internet" msgid="8938267198124654938">"此 WLAN 网络无法访问互联网"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"点按即可查看相关选项"</string>
+    <string name="wifi_softap_config_change" msgid="8475911871165857607">"您的热点设置已变更"</string>
+    <string name="wifi_softap_config_change_summary" msgid="7601233252456548891">"您的热点频段已变更。"</string>
+    <string name="wifi_softap_config_change_detailed" msgid="8022936822860678033">"此设备不支持您的偏好设置（仅限 5GHz），而且会在 5GHz 频段可用时使用该频段。"</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"已切换至<xliff:g id="NETWORK_TYPE">%1$s</xliff:g>"</string>
     <string name="network_switch_metered_detail" msgid="775163331794506615">"设备会在<xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g>无法访问互联网时使用<xliff:g id="NEW_NETWORK">%1$s</xliff:g>（可能需要支付相应的费用）。"</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"已从<xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g>切换至<xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
@@ -1262,7 +1298,7 @@
     <string name="share_remote_bugreport_notification_message_finished" msgid="6029609949340992866">"您的管理员希望获取错误报告，以便排查此设备的问题。报告可能会透露您设备上的应用和数据。"</string>
     <string name="share_remote_bugreport_action" msgid="6249476773913384948">"分享"</string>
     <string name="decline_remote_bugreport_action" msgid="6230987241608770062">"拒绝"</string>
-    <string name="select_input_method" msgid="8547250819326693584">"更改键盘"</string>
+    <string name="select_input_method" msgid="4653387336791222978">"选择输入法"</string>
     <string name="show_ime" msgid="2506087537466597099">"开启后，连接到实体键盘时，它会一直显示在屏幕上"</string>
     <string name="hardware" msgid="194658061510127999">"显示虚拟键盘"</string>
     <string name="select_keyboard_layout_notification_title" msgid="597189518763083494">"配置实体键盘"</string>

@@ -62,7 +62,7 @@ public:
     }
 
     bool valid() {
-        return mBitmap;
+        return mBitmap != nullptr;
     }
 
     Bitmap& bitmap() {
@@ -205,9 +205,12 @@ jobject createBitmap(JNIEnv* env, Bitmap* bitmap,
     // native SkBitmap stays in sync with the Java Bitmap.
     assert_premultiplied(bitmap->info(), isPremultiplied);
     BitmapWrapper* bitmapWrapper = new BitmapWrapper(bitmap);
+    if (!isMutable) {
+        bitmapWrapper->bitmap().setImmutable();
+    }
     jobject obj = env->NewObject(gBitmap_class, gBitmap_constructorMethodID,
             reinterpret_cast<jlong>(bitmapWrapper), bitmap->width(), bitmap->height(), density,
-            isMutable, isPremultiplied, ninePatchChunk, ninePatchInsets);
+            isPremultiplied, ninePatchChunk, ninePatchInsets);
 
     if (env->ExceptionCheck() != 0) {
         ALOGE("*** Uncaught exception returned from Java call!\n");
@@ -848,10 +851,9 @@ static jlong Bitmap_getNativeFinalizer(JNIEnv*, jobject) {
     return static_cast<jlong>(reinterpret_cast<uintptr_t>(&Bitmap_destruct));
 }
 
-static jboolean Bitmap_recycle(JNIEnv* env, jobject, jlong bitmapHandle) {
+static void Bitmap_recycle(JNIEnv* env, jobject, jlong bitmapHandle) {
     LocalScopedBitmap bitmap(bitmapHandle);
     bitmap->freePixels();
-    return JNI_TRUE;
 }
 
 static void Bitmap_reconfigure(JNIEnv* env, jobject clazz, jlong bitmapHandle,
@@ -1571,6 +1573,20 @@ static void Bitmap_copyColorSpace(JNIEnv* env, jobject, jlong srcBitmapPtr, jlon
     dstBitmapHandle->bitmap().setColorSpace(srcBitmapHandle->bitmap().info().refColorSpace());
 }
 
+static jboolean Bitmap_isImmutable(jlong bitmapHandle) {
+    LocalScopedBitmap bitmapHolder(bitmapHandle);
+    if (!bitmapHolder.valid()) return JNI_FALSE;
+
+    return bitmapHolder->bitmap().isImmutable() ? JNI_TRUE : JNI_FALSE;
+}
+
+static void Bitmap_setImmutable(JNIEnv* env, jobject, jlong bitmapHandle) {
+    LocalScopedBitmap bitmapHolder(bitmapHandle);
+    if (!bitmapHolder.valid()) return;
+
+    return bitmapHolder->bitmap().setImmutable();
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 static const JNINativeMethod gBitmapMethods[] = {
@@ -1583,7 +1599,7 @@ static const JNINativeMethod gBitmapMethods[] = {
     {   "nativeCopyAshmemConfig",   "(JI)Landroid/graphics/Bitmap;",
         (void*)Bitmap_copyAshmemConfig },
     {   "nativeGetNativeFinalizer", "()J", (void*)Bitmap_getNativeFinalizer },
-    {   "nativeRecycle",            "(J)Z", (void*)Bitmap_recycle },
+    {   "nativeRecycle",            "(J)V", (void*)Bitmap_recycle },
     {   "nativeReconfigure",        "(JIIIZ)V", (void*)Bitmap_reconfigure },
     {   "nativeCompress",           "(JIILjava/io/OutputStream;[B)Z",
         (void*)Bitmap_compress },
@@ -1626,13 +1642,18 @@ static const JNINativeMethod gBitmapMethods[] = {
     {   "nativeIsSRGBLinear",       "(J)Z", (void*)Bitmap_isSRGBLinear},
     {   "nativeCopyColorSpace",     "(JJ)V",
         (void*)Bitmap_copyColorSpace },
+    {   "nativeSetImmutable",       "(J)V", (void*)Bitmap_setImmutable},
+
+    // ------------ @CriticalNative ----------------
+    {   "nativeIsImmutable",        "(J)Z", (void*)Bitmap_isImmutable}
+
 };
 
 int register_android_graphics_Bitmap(JNIEnv* env)
 {
     gBitmap_class = MakeGlobalRefOrDie(env, FindClassOrDie(env, "android/graphics/Bitmap"));
     gBitmap_nativePtr = GetFieldIDOrDie(env, gBitmap_class, "mNativePtr", "J");
-    gBitmap_constructorMethodID = GetMethodIDOrDie(env, gBitmap_class, "<init>", "(JIIIZZ[BLandroid/graphics/NinePatch$InsetStruct;)V");
+    gBitmap_constructorMethodID = GetMethodIDOrDie(env, gBitmap_class, "<init>", "(JIIIZ[BLandroid/graphics/NinePatch$InsetStruct;)V");
     gBitmap_reinitMethodID = GetMethodIDOrDie(env, gBitmap_class, "reinit", "(IIZ)V");
     gBitmap_getAllocationByteCountMethodID = GetMethodIDOrDie(env, gBitmap_class, "getAllocationByteCount", "()I");
     return android::RegisterMethodsOrDie(env, "android/graphics/Bitmap", gBitmapMethods,

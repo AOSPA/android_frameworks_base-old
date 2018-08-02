@@ -788,6 +788,13 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     protected static final String VIEW_LOG_TAG = "View";
 
     /**
+     * The logging tag used by this class when logging verbose, autofill-related messages.
+     */
+    // NOTE: We cannot use android.view.autofill.Helper.sVerbose because that variable is not
+    // set if a session is not started.
+    private static final String AUTOFILL_LOG_TAG = "View.Autofill";
+
+    /**
      * When set to true, apps will draw debugging information about their layouts.
      *
      * @hide
@@ -2297,19 +2304,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     static final int PFLAG_DIRTY                       = 0x00200000;
 
     /**
-     * View flag indicating whether this view was invalidated by an opaque
-     * invalidate request.
+     * Mask for {@link #PFLAG_DIRTY}.
      *
      * @hide
      */
-    static final int PFLAG_DIRTY_OPAQUE                = 0x00400000;
-
-    /**
-     * Mask for {@link #PFLAG_DIRTY} and {@link #PFLAG_DIRTY_OPAQUE}.
-     *
-     * @hide
-     */
-    static final int PFLAG_DIRTY_MASK                  = 0x00600000;
+    static final int PFLAG_DIRTY_MASK                  = 0x00200000;
 
     /**
      * Indicates whether the background is opaque.
@@ -3429,7 +3428,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see WindowManager.LayoutParams#layoutInDisplayCutoutMode
      * @see WindowManager.LayoutParams#LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
-     * @see WindowManager.LayoutParams#LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+     * @see WindowManager.LayoutParams#LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
      * @see WindowManager.LayoutParams#LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER
      */
     public static final int SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN = 0x00000400;
@@ -3833,7 +3832,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             name = "DRAWING_CACHE_INVALID", outputIf = false),
         @ViewDebug.FlagToString(mask = PFLAG_DRAWN, equals = PFLAG_DRAWN, name = "DRAWN", outputIf = true),
         @ViewDebug.FlagToString(mask = PFLAG_DRAWN, equals = PFLAG_DRAWN, name = "NOT_DRAWN", outputIf = false),
-        @ViewDebug.FlagToString(mask = PFLAG_DIRTY_MASK, equals = PFLAG_DIRTY_OPAQUE, name = "DIRTY_OPAQUE"),
         @ViewDebug.FlagToString(mask = PFLAG_DIRTY_MASK, equals = PFLAG_DIRTY, name = "DIRTY")
     }, formatToHexString = true)
 
@@ -6121,14 +6119,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
         x += getScrollX();
         y += getScrollY();
-        if (isVerticalScrollBarEnabled() && !isVerticalScrollBarHidden()) {
+        final boolean canScrollVertically =
+                computeVerticalScrollRange() > computeVerticalScrollExtent();
+        if (isVerticalScrollBarEnabled() && !isVerticalScrollBarHidden() && canScrollVertically) {
             final Rect touchBounds = mScrollCache.mScrollBarTouchBounds;
             getVerticalScrollBarBounds(null, touchBounds);
             if (touchBounds.contains((int) x, (int) y)) {
                 return true;
             }
         }
-        if (isHorizontalScrollBarEnabled()) {
+        final boolean canScrollHorizontally =
+                computeHorizontalScrollRange() > computeHorizontalScrollExtent();
+        if (isHorizontalScrollBarEnabled() && canScrollHorizontally) {
             final Rect touchBounds = mScrollCache.mScrollBarTouchBounds;
             getHorizontalScrollBarBounds(null, touchBounds);
             if (touchBounds.contains((int) x, (int) y)) {
@@ -6143,18 +6145,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private boolean isOnVerticalScrollbarThumb(float x, float y) {
-        if (mScrollCache == null) {
+        if (mScrollCache == null || !isVerticalScrollBarEnabled() || isVerticalScrollBarHidden()) {
             return false;
         }
-        if (isVerticalScrollBarEnabled() && !isVerticalScrollBarHidden()) {
+        final int range = computeVerticalScrollRange();
+        final int extent = computeVerticalScrollExtent();
+        if (range > extent) {
             x += getScrollX();
             y += getScrollY();
             final Rect bounds = mScrollCache.mScrollBarBounds;
             final Rect touchBounds = mScrollCache.mScrollBarTouchBounds;
             getVerticalScrollBarBounds(bounds, touchBounds);
-            final int range = computeVerticalScrollRange();
             final int offset = computeVerticalScrollOffset();
-            final int extent = computeVerticalScrollExtent();
             final int thumbLength = ScrollBarUtils.getThumbLength(bounds.height(), bounds.width(),
                     extent, range);
             final int thumbOffset = ScrollBarUtils.getThumbOffset(bounds.height(), thumbLength,
@@ -6170,18 +6172,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     private boolean isOnHorizontalScrollbarThumb(float x, float y) {
-        if (mScrollCache == null) {
+        if (mScrollCache == null || !isHorizontalScrollBarEnabled()) {
             return false;
         }
-        if (isHorizontalScrollBarEnabled()) {
+        final int range = computeHorizontalScrollRange();
+        final int extent = computeHorizontalScrollExtent();
+        if (range > extent) {
             x += getScrollX();
             y += getScrollY();
             final Rect bounds = mScrollCache.mScrollBarBounds;
             final Rect touchBounds = mScrollCache.mScrollBarTouchBounds;
             getHorizontalScrollBarBounds(bounds, touchBounds);
-            final int range = computeHorizontalScrollRange();
             final int offset = computeHorizontalScrollOffset();
-            final int extent = computeHorizontalScrollExtent();
+
             final int thumbLength = ScrollBarUtils.getThumbLength(bounds.width(), bounds.height(),
                     extent, range);
             final int thumbOffset = ScrollBarUtils.getThumbOffset(bounds.width(), thumbLength,
@@ -7544,7 +7547,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public void onPopulateAccessibilityEventInternal(AccessibilityEvent event) {
         if ((event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
-                && !TextUtils.isEmpty(getAccessibilityPaneTitle())) {
+                && isAccessibilityPane()) {
             event.getText().add(getAccessibilityPaneTitle());
         }
     }
@@ -7988,10 +7991,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private void onProvideVirtualStructureCompat(ViewStructure structure, boolean forAutofill) {
         final AccessibilityNodeProvider provider = getAccessibilityNodeProvider();
         if (provider != null) {
-            if (android.view.autofill.Helper.sVerbose && forAutofill) {
-                Log.v(VIEW_LOG_TAG, "onProvideVirtualStructureCompat() for " + this);
+            if (forAutofill && Log.isLoggable(AUTOFILL_LOG_TAG, Log.VERBOSE)) {
+                Log.v(AUTOFILL_LOG_TAG, "onProvideVirtualStructureCompat() for " + this);
             }
-
             final AccessibilityNodeInfo info = createAccessibilityNodeInfo();
             structure.setChildCount(1);
             final ViewStructure root = structure.newChild(0);
@@ -8229,8 +8231,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     public void setAutofillId(@Nullable AutofillId id) {
         // TODO(b/37566627): add unit / CTS test for all possible combinations below
-        if (android.view.autofill.Helper.sVerbose) {
-            Log.v(VIEW_LOG_TAG, "setAutofill(): from " + mAutofillId + " to " + id);
+        if (Log.isLoggable(AUTOFILL_LOG_TAG, Log.VERBOSE)) {
+            Log.v(AUTOFILL_LOG_TAG, "setAutofill(): from " + mAutofillId + " to " + id);
         }
         if (isAttachedToWindow()) {
             throw new IllegalStateException("Cannot set autofill id when view is attached");
@@ -8433,6 +8435,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             final int parentImportance = ((View) parent).getImportantForAutofill();
             if (parentImportance == IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
                     || parentImportance == IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS) {
+                if (Log.isLoggable(AUTOFILL_LOG_TAG, Log.VERBOSE)) {
+                    Log.v(AUTOFILL_LOG_TAG, "View (autofillId=" +  getAutofillViewId() + ", "
+                            + getClass() + ") is not important for autofill because parent "
+                            + parent + "'s importance is " + parentImportance);
+                }
                 return false;
             }
             parent = parent.getParent();
@@ -11914,6 +11921,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             if ((getVisibility() == VISIBLE)
                     || (changeType == AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_DISAPPEARED)) {
                 final AccessibilityEvent event = AccessibilityEvent.obtain();
+                onInitializeAccessibilityEvent(event);
                 event.setEventType(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED);
                 event.setContentChangeTypes(changeType);
                 event.setSource(this);
@@ -12956,7 +12964,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 }
             }
         }
-        if (!TextUtils.isEmpty(getAccessibilityPaneTitle())) {
+        if (isAccessibilityPane()) {
             if (isVisible != oldVisible) {
                 notifyViewAccessibilityStateChangedIfNeeded(isVisible
                         ? AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_APPEARED
@@ -17316,7 +17324,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #computeHorizontalScrollExtent()
      * @see #computeHorizontalScrollOffset()
-     * @see android.widget.ScrollBarDrawable
      */
     protected int computeHorizontalScrollRange() {
         return getWidth();
@@ -17337,7 +17344,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #computeHorizontalScrollRange()
      * @see #computeHorizontalScrollExtent()
-     * @see android.widget.ScrollBarDrawable
      */
     protected int computeHorizontalScrollOffset() {
         return mScrollX;
@@ -17358,7 +17364,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #computeHorizontalScrollRange()
      * @see #computeHorizontalScrollOffset()
-     * @see android.widget.ScrollBarDrawable
      */
     protected int computeHorizontalScrollExtent() {
         return getWidth();
@@ -17377,7 +17382,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #computeVerticalScrollExtent()
      * @see #computeVerticalScrollOffset()
-     * @see android.widget.ScrollBarDrawable
      */
     protected int computeVerticalScrollRange() {
         return getHeight();
@@ -17398,7 +17402,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #computeVerticalScrollRange()
      * @see #computeVerticalScrollExtent()
-     * @see android.widget.ScrollBarDrawable
      */
     protected int computeVerticalScrollOffset() {
         return mScrollY;
@@ -17419,7 +17422,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #computeVerticalScrollRange()
      * @see #computeVerticalScrollOffset()
-     * @see android.widget.ScrollBarDrawable
      */
     protected int computeVerticalScrollExtent() {
         return getHeight();
@@ -17754,7 +17756,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #computeHorizontalScrollRange()
      * @see #computeHorizontalScrollExtent()
      * @see #computeHorizontalScrollOffset()
-     * @see android.widget.ScrollBarDrawable
      * @hide
      */
     protected void onDrawHorizontalScrollBar(Canvas canvas, Drawable scrollBar,
@@ -17774,7 +17775,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #computeVerticalScrollRange()
      * @see #computeVerticalScrollExtent()
      * @see #computeVerticalScrollOffset()
-     * @see android.widget.ScrollBarDrawable
      * @hide
      */
     protected void onDrawVerticalScrollBar(Canvas canvas, Drawable scrollBar,
@@ -18657,10 +18657,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
                 if ((mPrivateFlags3 & PFLAG3_AUTOFILLID_EXPLICITLY_SET) != 0) {
                     // Ignore when view already set it through setAutofillId();
-                    if (android.view.autofill.Helper.sDebug) {
-                        Log.d(VIEW_LOG_TAG, "onRestoreInstanceState(): not setting autofillId to "
-                                + baseState.mAutofillViewId + " because view explicitly set it to "
-                                + mAutofillId);
+                    if (Log.isLoggable(AUTOFILL_LOG_TAG, Log.DEBUG)) {
+                        Log.d(AUTOFILL_LOG_TAG, "onRestoreInstanceState(): not setting autofillId "
+                                + "to " + baseState.mAutofillViewId + " because view explicitly set"
+                                + " it to " + mAutofillId);
                     }
                 } else {
                     mAutofillViewId = baseState.mAutofillViewId;
@@ -20179,8 +20179,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @CallSuper
     public void draw(Canvas canvas) {
         final int privateFlags = mPrivateFlags;
-        final boolean dirtyOpaque = (privateFlags & PFLAG_DIRTY_MASK) == PFLAG_DIRTY_OPAQUE &&
-                (mAttachInfo == null || !mAttachInfo.mIgnoreDirtyState);
         mPrivateFlags = (privateFlags & ~PFLAG_DIRTY_MASK) | PFLAG_DRAWN;
 
         /*
@@ -20198,9 +20196,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // Step 1, draw the background, if needed
         int saveCount;
 
-        if (!dirtyOpaque) {
-            drawBackground(canvas);
-        }
+        drawBackground(canvas);
 
         // skip step 2 & 5 if possible (common case)
         final int viewFlags = mViewFlags;
@@ -20208,7 +20204,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         boolean verticalEdges = (viewFlags & FADING_EDGE_VERTICAL) != 0;
         if (!verticalEdges && !horizontalEdges) {
             // Step 3, draw the content
-            if (!dirtyOpaque) onDraw(canvas);
+            onDraw(canvas);
 
             // Step 4, draw the children
             dispatchDraw(canvas);
@@ -20322,7 +20318,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         // Step 3, draw the content
-        if (!dirtyOpaque) onDraw(canvas);
+        onDraw(canvas);
 
         // Step 4, draw the children
         dispatchDraw(canvas);
@@ -20450,6 +20446,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     private RenderNode getDrawableRenderNode(Drawable drawable, RenderNode renderNode) {
         if (renderNode == null) {
             renderNode = RenderNode.create(drawable.getClass().getName(), this);
+            renderNode.setUsageHint(RenderNode.USAGE_BACKGROUND);
         }
 
         final Rect bounds = drawable.getBounds();
@@ -24006,6 +24003,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             Log.w(VIEW_LOG_TAG, "startDragAndDrop called on a detached view.");
             return false;
         }
+        if (!mAttachInfo.mViewRootImpl.mSurface.isValid()) {
+            Log.w(VIEW_LOG_TAG, "startDragAndDrop called with an invalid surface.");
+            return false;
+        }
 
         if (data != null) {
             data.prepareToLeaveProcess((flags & View.DRAG_FLAG_GLOBAL) != 0);
@@ -26480,17 +26481,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         long mDrawingTime;
 
         /**
-         * Indicates whether or not ignoring the DIRTY_MASK flags.
-         */
-        boolean mIgnoreDirtyState;
-
-        /**
-         * This flag tracks when the mIgnoreDirtyState flag is set during draw(),
-         * to avoid clearing that flag prematurely.
-         */
-        boolean mSetIgnoreDirtyState = false;
-
-        /**
          * Indicates whether the view's window is currently in touch mode.
          */
         boolean mInTouchMode;
@@ -27152,7 +27142,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
          * @param arguments A {@link Bundle} holding any arguments relevant for this request.
          *                  May be {@code null} if the if the service provided no arguments.
          *
-         * @see AccessibilityNodeInfo#setExtraAvailableData
+         * @see AccessibilityNodeInfo#setAvailableExtraData(List)
          */
         public void addExtraDataToAccessibilityNodeInfo(@NonNull View host,
                 @NonNull AccessibilityNodeInfo info, @NonNull String extraDataKey,

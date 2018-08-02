@@ -100,7 +100,8 @@ public final class DocumentsContract {
     public static final String PROVIDER_INTERFACE = "android.content.action.DOCUMENTS_PROVIDER";
 
     /** {@hide} */
-    public static final String EXTRA_PACKAGE_NAME = "android.content.extra.PACKAGE_NAME";
+    @Deprecated
+    public static final String EXTRA_PACKAGE_NAME = Intent.EXTRA_PACKAGE_NAME;
 
     /** {@hide} */
     public static final String EXTRA_SHOW_ADVANCED = "android.content.extra.SHOW_ADVANCED";
@@ -157,8 +158,6 @@ public final class DocumentsContract {
      * <li>When supplying information in {@link DocumentsProvider#queryChildDocuments}, include
      * {@link Document#FLAG_SUPPORTS_SETTINGS} in the flags for each document that supports
      * settings.
-     *
-     * @see DocumentsContact#Document#FLAG_SUPPORTS_SETTINGS
      */
     public static final String
             ACTION_DOCUMENT_SETTINGS = "android.provider.action.DOCUMENT_SETTINGS";
@@ -434,7 +433,7 @@ public final class DocumentsContract {
          * Flag indicating that a Web link can be obtained for the document.
          *
          * @see #COLUMN_FLAGS
-         * @see DocumentsContract#createWebLinkIntent(PackageManager, Uri, Bundle)
+         * @see DocumentsProvider#createWebLinkIntent(String, Bundle)
          */
         public static final int FLAG_WEB_LINKABLE = 1 << 12;
 

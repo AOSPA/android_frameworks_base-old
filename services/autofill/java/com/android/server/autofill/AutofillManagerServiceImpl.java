@@ -26,9 +26,11 @@ import static com.android.server.autofill.Helper.sVerbose;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
 import android.app.IActivityManager;
+import android.app.IActivityTaskManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -80,6 +82,7 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.server.LocalServices;
 import com.android.server.autofill.AutofillManagerService.AutofillCompatState;
 import com.android.server.autofill.ui.AutoFillUI;
+import com.android.server.wm.ActivityTaskManagerInternal;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -1296,13 +1299,13 @@ final class AutofillManagerServiceImpl {
                 }
             }
 
-            IActivityManager am = ActivityManager.getService();
+            final IActivityTaskManager atm = ActivityTaskManager.getService();
 
             // Only remove sessions which's activities are not known to the activity manager anymore
             for (int i = 0; i < numSessionsToRemove; i++) {
                 try {
                     // The activity manager cannot resolve activities that have been removed
-                    if (am.getActivityClassForToken(sessionsToRemove.valueAt(i)) != null) {
+                    if (atm.getActivityClassForToken(sessionsToRemove.valueAt(i)) != null) {
                         sessionsToRemove.removeAt(i);
                         i--;
                         numSessionsToRemove--;

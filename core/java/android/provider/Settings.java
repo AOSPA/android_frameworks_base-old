@@ -3767,6 +3767,14 @@ public final class Settings {
         public static final Validator VIBRATE_WHEN_RINGING_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
+         * When {@code 1}, Telecom enhanced call blocking functionality is enabled.  When
+         * {@code 0}, enhanced call blocking functionality is disabled.
+         * @hide
+         */
+        public static final String DEBUG_ENABLE_ENHANCED_CALL_BLOCKING =
+                "debug.enable_enhanced_calling";
+
+        /**
          * Whether the audible DTMF tones are played by the dialer when dialing. The value is
          * boolean (1 or 0).
          */
@@ -4154,7 +4162,9 @@ public final class Settings {
             SHOW_BATTERY_PERCENT,
             NOTIFICATION_VIBRATION_INTENSITY,
             HAPTIC_FEEDBACK_INTENSITY,
-            DISPLAY_COLOR_MODE
+            DISPLAY_COLOR_MODE,
+            ALARM_ALERT,
+            NOTIFICATION_LIGHT_PULSE,
         };
 
         /**
@@ -4357,6 +4367,7 @@ public final class Settings {
             VALIDATORS.put(WIFI_STATIC_DNS1, WIFI_STATIC_DNS1_VALIDATOR);
             VALIDATORS.put(WIFI_STATIC_DNS2, WIFI_STATIC_DNS2_VALIDATOR);
             VALIDATORS.put(SHOW_BATTERY_PERCENT, SHOW_BATTERY_PERCENT_VALIDATOR);
+            VALIDATORS.put(NOTIFICATION_LIGHT_PULSE, BOOLEAN_VALIDATOR);
         }
 
         /**
@@ -5372,7 +5383,7 @@ public final class Settings {
          *
          * For more information about how the platform handles {@code ANDROID_ID}
          * in Android 8.0 (API level 26) and higher, see <a
-         * href="{@docRoot}preview/behavior-changes.html#privacy-all">
+         * href="{@docRoot}about/versions/oreo/android-8.0-changes.html#privacy-all">
          * Android 8.0 Behavior Changes</a>.
          *
          * <p class="note"><strong>Note:</strong> For apps that were installed
@@ -6016,7 +6027,7 @@ public final class Settings {
                 new SettingsValidators.ComponentNameListValidator(":");
 
         /**
-         * Whether the hush gesture has ever been used // TODO: beverlyt
+         * Whether the hush gesture has ever been used
          * @hide
          */
         public static final String HUSH_GESTURE_USED = "hush_gesture_used";
@@ -6031,6 +6042,15 @@ public final class Settings {
 
         private static final Validator MANUAL_RINGER_TOGGLE_COUNT_VALIDATOR =
                 NON_NEGATIVE_INTEGER_VALIDATOR;
+
+        /**
+         * Whether the in call notification is enabled to play sound during calls.  The value is
+         * boolean (1 or 0).
+         * @hide
+         */
+        public static final String IN_CALL_NOTIFICATION_ENABLED = "in_call_notification_enabled";
+
+        private static final Validator IN_CALL_NOTIFICATION_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
          * Uri of the slice that's presented on the keyguard.
@@ -6049,8 +6069,6 @@ public final class Settings {
          */
         @Deprecated
         public static final String ACCESSIBILITY_SPEAK_PASSWORD = "speak_password";
-
-        private static final Validator ACCESSIBILITY_SPEAK_PASSWORD_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
          * Whether to draw text with high contrast while in accessibility mode.
@@ -6988,19 +7006,15 @@ public final class Settings {
          */
         public static final String SELECTED_SPELL_CHECKER = "selected_spell_checker";
 
-        private static final Validator SELECTED_SPELL_CHECKER_VALIDATOR = COMPONENT_NAME_VALIDATOR;
-
         /**
-         * The {@link ComponentName} string of the selected subtype of the selected spell checker
-         * service which is one of the services managed by the text service manager.
+         * {@link android.view.textservice.SpellCheckerSubtype#hashCode()} of the selected subtype
+         * of the selected spell checker service which is one of the services managed by the text
+         * service manager.
          *
          * @hide
          */
         public static final String SELECTED_SPELL_CHECKER_SUBTYPE =
                 "selected_spell_checker_subtype";
-
-        private static final Validator SELECTED_SPELL_CHECKER_SUBTYPE_VALIDATOR =
-                COMPONENT_NAME_VALIDATOR;
 
         /**
          * Whether spell checker is enabled or not.
@@ -7008,8 +7022,6 @@ public final class Settings {
          * @hide
          */
         public static final String SPELL_CHECKER_ENABLED = "spell_checker_enabled";
-
-        private static final Validator SPELL_CHECKER_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
          * What happens when the user presses the Power button while in-call
@@ -7096,6 +7108,8 @@ public final class Settings {
          */
         public static final String DOZE_ALWAYS_ON = "doze_always_on";
 
+        private static final Validator DOZE_ALWAYS_ON_VALIDATOR = BOOLEAN_VALIDATOR;
+
         /**
          * Whether the device should pulse on pick up gesture.
          * @hide
@@ -7125,35 +7139,6 @@ public final class Settings {
          * @hide
          */
         public static final String UI_NIGHT_MODE = "ui_night_mode";
-
-        /**
-         * The current device UI theme mode effect SystemUI and Launcher.<br/>
-         * <b>Values:</b><br/>
-         * 0 - The mode that theme will controlled by wallpaper color.<br/>
-         * 1 - The mode that will always light theme.<br/>
-         * 2 - The mode that will always dark theme.<br/>
-         *
-         * @hide
-         */
-        public static final String THEME_MODE = "theme_mode";
-
-        /**
-         * THEME_MODE value for wallpaper mode.
-         * @hide
-         */
-        public static final int THEME_MODE_WALLPAPER = 0;
-
-        /**
-         * THEME_MODE value for light theme mode.
-         * @hide
-         */
-        public static final int THEME_MODE_LIGHT = 1;
-
-        /**
-         * THEME_MODE value for dark theme mode.
-         * @hide
-         */
-        public static final int THEME_MODE_DARK = 2;
 
         /**
          * Whether screensavers are enabled.
@@ -7306,7 +7291,7 @@ public final class Settings {
          * see and assist with all of the user's notifications.
          *
          * @deprecated Use
-         * {@link NotificationManager#isNotificationListenerAccessGranted(ComponentName)}.
+         * {@link NotificationManager#isNotificationAssistantAccessGranted(ComponentName)}.
          * @hide
          */
         @Deprecated
@@ -7322,7 +7307,7 @@ public final class Settings {
          *
          * @hide
          * @deprecated Use
-         * {@link NotificationManager#isNotificationAssistantAccessGranted(ComponentName)}.
+         * {@link NotificationManager#isNotificationListenerAccessGranted(ComponentName)}.
          */
         @Deprecated
         public static final String ENABLED_NOTIFICATION_LISTENERS = "enabled_notification_listeners";
@@ -7446,9 +7431,6 @@ public final class Settings {
          */
         public static final String SLEEP_TIMEOUT = "sleep_timeout";
 
-        private static final Validator SLEEP_TIMEOUT_VALIDATOR =
-                new SettingsValidators.InclusiveIntegerRangeValidator(-1, Integer.MAX_VALUE);
-
         /**
          * Controls whether double tap to wake is enabled.
          * @hide
@@ -7526,6 +7508,21 @@ public final class Settings {
         public static final int CAMERA_LIFT_TRIGGER_ENABLED_DEFAULT = 1;
 
         /**
+         * Whether or not the flashlight (camera torch mode) is available required to turn
+         * on flashlight.
+         *
+         * @hide
+         */
+        public static final String FLASHLIGHT_AVAILABLE = "flashlight_available";
+
+        /**
+         * Whether or not flashlight is enabled.
+         *
+         * @hide
+         */
+        public static final String FLASHLIGHT_ENABLED = "flashlight_enabled";
+
+        /**
          * Whether the assist gesture should be enabled.
          *
          * @hide
@@ -7541,9 +7538,6 @@ public final class Settings {
          * @hide
          */
         public static final String ASSIST_GESTURE_SENSITIVITY = "assist_gesture_sensitivity";
-
-        private static final Validator ASSIST_GESTURE_SENSITIVITY_VALIDATOR =
-                new SettingsValidators.InclusiveFloatRangeValidator(0.0f, 1.0f);
 
         /**
          * Whether the assist gesture should silence alerts.
@@ -7573,8 +7567,6 @@ public final class Settings {
          * @hide
          */
         public static final String ASSIST_GESTURE_SETUP_COMPLETE = "assist_gesture_setup_complete";
-
-        private static final Validator ASSIST_GESTURE_SETUP_COMPLETE_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
          * Control whether Night display is currently activated.
@@ -7974,7 +7966,6 @@ public final class Settings {
             ACCESSIBILITY_SHORTCUT_DIALOG_SHOWN,
             ACCESSIBILITY_SHORTCUT_ENABLED,
             ACCESSIBILITY_SHORTCUT_ON_LOCK_SCREEN,
-            ACCESSIBILITY_SPEAK_PASSWORD,
             ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED,
             ACCESSIBILITY_CAPTIONING_PRESET,
             ACCESSIBILITY_CAPTIONING_ENABLED,
@@ -7995,14 +7986,10 @@ public final class Settings {
             WIFI_NETWORKS_AVAILABLE_NOTIFICATION_ON,            // moved to global
             WIFI_NETWORKS_AVAILABLE_REPEAT_DELAY,               // moved to global
             WIFI_NUM_OPEN_NETWORKS_KEPT,                        // moved to global
-            SELECTED_SPELL_CHECKER,
-            SELECTED_SPELL_CHECKER_SUBTYPE,
-            SPELL_CHECKER_ENABLED,
             MOUNT_PLAY_NOTIFICATION_SND,
             MOUNT_UMS_AUTOSTART,
             MOUNT_UMS_PROMPT,
             MOUNT_UMS_NOTIFY_ENABLED,
-            SLEEP_TIMEOUT,
             DOUBLE_TAP_TO_WAKE,
             WAKE_GESTURE_ENABLED,
             LONG_PRESS_TIMEOUT,
@@ -8026,13 +8013,12 @@ public final class Settings {
             SYSTEM_NAVIGATION_KEYS_ENABLED,
             QS_TILES,
             DOZE_ENABLED,
+            DOZE_ALWAYS_ON,
             DOZE_PULSE_ON_PICK_UP,
             DOZE_PULSE_ON_DOUBLE_TAP,
             NFC_PAYMENT_DEFAULT_COMPONENT,
             AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN,
             ASSIST_GESTURE_ENABLED,
-            ASSIST_GESTURE_SENSITIVITY,
-            ASSIST_GESTURE_SETUP_COMPLETE,
             ASSIST_GESTURE_SILENCE_ALERTS_ENABLED,
             ASSIST_GESTURE_WAKE_ENABLED,
             VR_DISPLAY_MODE,
@@ -8047,6 +8033,9 @@ public final class Settings {
             VOLUME_HUSH_GESTURE,
             MANUAL_RINGER_TOGGLE_COUNT,
             HUSH_GESTURE_USED,
+            IN_CALL_NOTIFICATION_ENABLED,
+            LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS,
+            LOCK_SCREEN_SHOW_NOTIFICATIONS,
             WIFI_DISCONNECT_DELAY_DURATION
         };
 
@@ -8091,7 +8080,6 @@ public final class Settings {
                     ACCESSIBILITY_SHORTCUT_ENABLED_VALIDATOR);
             VALIDATORS.put(ACCESSIBILITY_SHORTCUT_ON_LOCK_SCREEN,
                     ACCESSIBILITY_SHORTCUT_ON_LOCK_SCREEN_VALIDATOR);
-            VALIDATORS.put(ACCESSIBILITY_SPEAK_PASSWORD, ACCESSIBILITY_SPEAK_PASSWORD_VALIDATOR);
             VALIDATORS.put(ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED,
                     ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED_VALIDATOR);
             VALIDATORS.put(ACCESSIBILITY_CAPTIONING_PRESET,
@@ -8125,15 +8113,10 @@ public final class Settings {
             VALIDATORS.put(WIFI_NETWORKS_AVAILABLE_REPEAT_DELAY,
                     WIFI_NETWORKS_AVAILABLE_REPEAT_DELAY_VALIDATOR);
             VALIDATORS.put(WIFI_NUM_OPEN_NETWORKS_KEPT, WIFI_NUM_OPEN_NETWORKS_KEPT_VALIDATOR);
-            VALIDATORS.put(SELECTED_SPELL_CHECKER, SELECTED_SPELL_CHECKER_VALIDATOR);
-            VALIDATORS.put(SELECTED_SPELL_CHECKER_SUBTYPE,
-                    SELECTED_SPELL_CHECKER_SUBTYPE_VALIDATOR);
-            VALIDATORS.put(SPELL_CHECKER_ENABLED, SPELL_CHECKER_ENABLED_VALIDATOR);
             VALIDATORS.put(MOUNT_PLAY_NOTIFICATION_SND, MOUNT_PLAY_NOTIFICATION_SND_VALIDATOR);
             VALIDATORS.put(MOUNT_UMS_AUTOSTART, MOUNT_UMS_AUTOSTART_VALIDATOR);
             VALIDATORS.put(MOUNT_UMS_PROMPT, MOUNT_UMS_PROMPT_VALIDATOR);
             VALIDATORS.put(MOUNT_UMS_NOTIFY_ENABLED, MOUNT_UMS_NOTIFY_ENABLED_VALIDATOR);
-            VALIDATORS.put(SLEEP_TIMEOUT, SLEEP_TIMEOUT_VALIDATOR);
             VALIDATORS.put(DOUBLE_TAP_TO_WAKE, DOUBLE_TAP_TO_WAKE_VALIDATOR);
             VALIDATORS.put(WAKE_GESTURE_ENABLED, WAKE_GESTURE_ENABLED_VALIDATOR);
             VALIDATORS.put(LONG_PRESS_TIMEOUT, LONG_PRESS_TIMEOUT_VALIDATOR);
@@ -8166,14 +8149,13 @@ public final class Settings {
                     SYSTEM_NAVIGATION_KEYS_ENABLED_VALIDATOR);
             VALIDATORS.put(QS_TILES, QS_TILES_VALIDATOR);
             VALIDATORS.put(DOZE_ENABLED, DOZE_ENABLED_VALIDATOR);
+            VALIDATORS.put(DOZE_ALWAYS_ON, DOZE_ALWAYS_ON_VALIDATOR);
             VALIDATORS.put(DOZE_PULSE_ON_PICK_UP, DOZE_PULSE_ON_PICK_UP_VALIDATOR);
             VALIDATORS.put(DOZE_PULSE_ON_DOUBLE_TAP, DOZE_PULSE_ON_DOUBLE_TAP_VALIDATOR);
             VALIDATORS.put(NFC_PAYMENT_DEFAULT_COMPONENT, NFC_PAYMENT_DEFAULT_COMPONENT_VALIDATOR);
             VALIDATORS.put(AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN,
                     AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN_VALIDATOR);
             VALIDATORS.put(ASSIST_GESTURE_ENABLED, ASSIST_GESTURE_ENABLED_VALIDATOR);
-            VALIDATORS.put(ASSIST_GESTURE_SENSITIVITY, ASSIST_GESTURE_SENSITIVITY_VALIDATOR);
-            VALIDATORS.put(ASSIST_GESTURE_SETUP_COMPLETE, ASSIST_GESTURE_SETUP_COMPLETE_VALIDATOR);
             VALIDATORS.put(ASSIST_GESTURE_SILENCE_ALERTS_ENABLED,
                     ASSIST_GESTURE_SILENCE_ALERTS_ENABLED_VALIDATOR);
             VALIDATORS.put(ASSIST_GESTURE_WAKE_ENABLED, ASSIST_GESTURE_WAKE_ENABLED_VALIDATOR);
@@ -8196,6 +8178,9 @@ public final class Settings {
                     ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES_VALIDATOR); //legacy restore setting
             VALIDATORS.put(HUSH_GESTURE_USED, HUSH_GESTURE_USED_VALIDATOR);
             VALIDATORS.put(MANUAL_RINGER_TOGGLE_COUNT, MANUAL_RINGER_TOGGLE_COUNT_VALIDATOR);
+            VALIDATORS.put(IN_CALL_NOTIFICATION_ENABLED, IN_CALL_NOTIFICATION_ENABLED_VALIDATOR);
+            VALIDATORS.put(LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(LOCK_SCREEN_SHOW_NOTIFICATIONS, BOOLEAN_VALIDATOR);
             VALIDATORS.put(WIFI_DISCONNECT_DELAY_DURATION, WIFI_DISCONNECT_DELAY_DURATION_VALIDATOR);
         }
 
@@ -9023,6 +9008,14 @@ public final class Settings {
             "location_background_throttle_package_whitelist";
 
         /**
+         * Maximum staleness allowed for last location when returned to clients with only foreground
+         * location permissions.
+         * @hide
+         */
+        public static final String LOCATION_LAST_LOCATION_MAX_AGE_MILLIS =
+                "location_last_location_max_age_millis";
+
+        /**
         * Whether TV will switch to MHL port when a mobile device is plugged in.
         * (0 = false, 1 = true)
         * @hide
@@ -9421,6 +9414,12 @@ public final class Settings {
         * to Gmail on the device must change to Google Mail.
         */
        public static final String USE_GOOGLE_MAIL = "use_google_mail";
+
+        /**
+         * Whether or not switching/creating users is enabled by user.
+         * @hide
+         */
+        public static final String USER_SWITCHER_ENABLED = "user_switcher_enabled";
 
         /**
          * Webview Data reduction proxy key.
@@ -9911,6 +9910,39 @@ public final class Settings {
          */
         public static final String WIFI_SCORE_PARAMS =
                 "wifi_score_params";
+
+        /**
+         * Setting to enable logging WifiIsUnusableEvent in metrics
+         * which gets triggered when wifi becomes unusable.
+         * Disabled by default, and setting it to 1 will enable it.
+         * @hide
+         */
+        public static final String WIFI_IS_UNUSABLE_EVENT_METRICS_ENABLED =
+                "wifi_is_unusable_event_metrics_enabled";
+
+        /**
+         * The minimum number of txBad the framework has to observe
+         * to trigger a wifi data stall.
+         * @hide
+         */
+        public static final String WIFI_DATA_STALL_MIN_TX_BAD =
+                "wifi_data_stall_min_tx_bad";
+
+        /**
+         * The minimum number of txSuccess the framework has to observe
+         * to trigger a wifi data stall when rxSuccess is 0.
+         * @hide
+         */
+        public static final String WIFI_DATA_STALL_MIN_TX_SUCCESS_WITHOUT_RX =
+                "wifi_data_stall_min_tx_success_without_rx";
+
+        /**
+         * Setting to enable logging Wifi LinkSpeedCounts in metrics.
+         * Disabled by default, and setting it to 1 will enable it.
+         * @hide
+         */
+        public static final String WIFI_LINK_SPEED_METRICS_ENABLED =
+                "wifi_link_speed_metrics_enabled";
 
        /**
         * The maximum number of times we will retry a connection to an access
@@ -10954,6 +10986,8 @@ public final class Settings {
          * proc_state_cpu_times_read_delay_ms (long)
          * external_stats_collection_rate_limit_ms (long)
          * battery_level_collection_delay_ms (long)
+         * max_history_files (int)
+         * max_history_buffer_kb (int)
          * </pre>
          *
          * <p>
@@ -10982,6 +11016,7 @@ public final class Settings {
          * @hide
          * @see #ADAPTIVE_BATTERY_MANAGEMENT_ENABLED
          */
+        @SystemApi
         public static final String APP_STANDBY_ENABLED = "app_standby_enabled";
 
         /**
@@ -11037,6 +11072,15 @@ public final class Settings {
                 = "user_absent_radios_off_for_small_battery_enabled";
 
         /**
+         * Whether or not to enable the User Absent, Touch Off feature on small battery devices.
+         * Type: int (0 for false, 1 for true)
+         * Default: 0
+         * @hide
+         */
+        public static final String USER_ABSENT_TOUCH_OFF_FOR_SMALL_BATTERY_ENABLED
+                = "user_absent_touch_off_for_small_battery_enabled";
+
+        /**
          * Whether or not to turn on Wifi when proxy is disconnected.
          * Type: int (0 for false, 1 for true)
          * Default: 1
@@ -11053,6 +11097,7 @@ public final class Settings {
          *
          * <pre>
          * enabled                  (boolean)
+         * disable_home             (boolean)
          * disable_tilt_to_wake     (boolean)
          * disable_touch_to_wake    (boolean)
          * </pre>
@@ -11253,6 +11298,14 @@ public final class Settings {
          * @hide
          */
         public static final String EMERGENCY_AFFORDANCE_NEEDED = "emergency_affordance_needed";
+
+        /**
+         * Enable faster emergency phone call feature.
+         * The value is a boolean (1 or 0).
+         * @hide
+         */
+        public static final String FASTER_EMERGENCY_PHONE_CALL_ENABLED =
+                "faster_emergency_phone_call_enabled";
 
         /**
          * See RIL_PreferredNetworkType in ril.h
@@ -12847,16 +12900,6 @@ public final class Settings {
                 "zram_enabled";
 
         /**
-         * Whether we have enable CPU frequency scaling for this device.
-         * For Wear, default is disable.
-         *
-         * The value is "1" for enable, "0" for disable.
-         * @hide
-         */
-        public static final String CPU_SCALING_ENABLED =
-                "cpu_frequency_scaling_enabled";
-
-        /**
          * Configuration flags for smart replies in notifications.
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -12943,15 +12986,6 @@ public final class Settings {
                 "backup_agent_timeout_parameters";
 
         /**
-         * Whether we have enabled swapping on this device. For Wear, default is
-         * enabled.
-         *
-         * The value is "1" for enable, "0" for disable.
-         * @hide
-         */
-         public static final String SWAP_ENABLED = "swap_enabled";
-
-        /**
          * Blacklist of GNSS satellites.
          *
          * This is a list of integers separated by commas to represent pairs of (constellation,
@@ -12976,6 +13010,21 @@ public final class Settings {
          */
         public static final String GNSS_HAL_LOCATION_REQUEST_DURATION_MILLIS =
                 "gnss_hal_location_request_duration_millis";
+
+        /**
+         * Binder call stats settings.
+         *
+         * The following strings are supported as keys:
+         * <pre>
+         *     enabled              (boolean)
+         *     detailed_tracking    (boolean)
+         *     upload_data          (boolean)
+         *     sampling_interval    (int)
+         * </pre>
+         *
+         * @hide
+         */
+        public static final String BINDER_CALLS_STATS = "binder_calls_stats";
     }
 
     /**
@@ -13178,19 +13227,6 @@ public final class Settings {
             ResolveInfo info = packageManager.resolveActivity(intent, 0);
             return info != null ? info.loadLabel(packageManager) : "";
         }
-    }
-
-    /**
-     * Returns the device ID that we should use when connecting to the mobile gtalk server.
-     * This is a string like "android-0x1242", where the hex string is the Android ID obtained
-     * from the GoogleLoginService.
-     *
-     * @param androidId The Android ID for this device.
-     * @return The device ID that should be used when connecting to the mobile gtalk server.
-     * @hide
-     */
-    public static String getGTalkDeviceId(long androidId) {
-        return "android-" + Long.toHexString(androidId);
     }
 
     private static final String[] PM_WRITE_SETTINGS = {

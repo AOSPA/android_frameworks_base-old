@@ -45,7 +45,7 @@ import android.widget.TextView;
 
 import com.android.internal.R;
 import com.android.internal.graphics.ColorUtils;
-import com.android.internal.util.NotificationColorUtil;
+import com.android.internal.util.ContrastColorUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -60,6 +60,13 @@ import java.util.regex.Pattern;
 public class MessagingLayout extends FrameLayout {
 
     private static final float COLOR_SHIFT_AMOUNT = 60;
+    /**
+     *  Pattren for filter some ingonable characters.
+     *  p{Z} for any kind of whitespace or invisible separator.
+     *  p{C} for any kind of punctuation character.
+     */
+    private static final Pattern IGNORABLE_CHAR_PATTERN
+            = Pattern.compile("[\\p{C}\\p{Z}]");
     private static final Pattern SPECIAL_CHAR_PATTERN
             = Pattern.compile ("[!@#$%&*()_+=|<>?{}\\[\\]~-]");
     private static final Consumer<MessagingMessage> REMOVE_MESSAGE
@@ -233,7 +240,10 @@ public class MessagingLayout extends FrameLayout {
                 continue;
             }
             if (!uniqueNames.containsKey(senderName)) {
-                char c = senderName.charAt(0);
+                // Only use visible characters to get uniqueNames
+                String pureSenderName = IGNORABLE_CHAR_PATTERN
+                        .matcher(senderName).replaceAll("" /* replacement */);
+                char c = pureSenderName.charAt(0);
                 if (uniqueCharacters.containsKey(c)) {
                     // this character was already used, lets make it more unique. We first need to
                     // resolve the existing character if it exists
@@ -245,7 +255,7 @@ public class MessagingLayout extends FrameLayout {
                     uniqueNames.put(senderName, findNameSplit((String) senderName));
                 } else {
                     uniqueNames.put(senderName, Character.toString(c));
-                    uniqueCharacters.put(c, senderName);
+                    uniqueCharacters.put(c, pureSenderName);
                 }
             }
         }
@@ -315,13 +325,13 @@ public class MessagingLayout extends FrameLayout {
     }
 
     private int findColor(CharSequence senderName, int layoutColor) {
-        double luminance = NotificationColorUtil.calculateLuminance(layoutColor);
+        double luminance = ContrastColorUtil.calculateLuminance(layoutColor);
         float shift = Math.abs(senderName.hashCode()) % 5 / 4.0f - 0.5f;
 
         // we need to offset the range if the luminance is too close to the borders
         shift += Math.max(COLOR_SHIFT_AMOUNT / 2.0f / 100 - luminance, 0);
         shift -= Math.max(COLOR_SHIFT_AMOUNT / 2.0f / 100 - (1.0f - luminance), 0);
-        return NotificationColorUtil.getShiftedColor(layoutColor,
+        return ContrastColorUtil.getShiftedColor(layoutColor,
                 (int) (shift * COLOR_SHIFT_AMOUNT));
     }
 

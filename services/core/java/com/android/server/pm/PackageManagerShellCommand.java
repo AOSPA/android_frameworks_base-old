@@ -109,6 +109,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
 import libcore.io.IoUtils;
@@ -2930,7 +2931,7 @@ class PackageManagerShellCommand extends ShellCommand {
     }
 
     private static class LocalIntentReceiver {
-        private final SynchronousQueue<Intent> mResult = new SynchronousQueue<>();
+        private final LinkedBlockingQueue<Intent> mResult = new LinkedBlockingQueue<>();
 
         private IIntentSender.Stub mLocalSender = new IIntentSender.Stub() {
             @Override

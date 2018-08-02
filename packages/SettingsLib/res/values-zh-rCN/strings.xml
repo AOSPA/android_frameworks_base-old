@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"显示点按操作的视觉反馈"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"显示面 (surface) 更新"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"窗口中的面 (surface) 更新时全部闪烁"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"显示 GPU 视图更新"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"使用 GPU 进行绘图时闪烁显示窗口中的视图"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"显示视图更新"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"绘图时闪烁显示窗口中的视图"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"显示硬件层更新"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Flash 硬件层在进行更新时会显示为绿色"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"调试 GPU 过度绘制"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"显示剪辑边界、边距等。"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"强制使用从右到左的布局方向"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"强制将所有语言区域的屏幕布局方向改为从右到左"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"强制进行 GPU 渲染"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"强制使用 GPU 进行 2D 绘图"</string>
     <string name="force_msaa" msgid="7920323238677284387">"强制启用 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"在 OpenGL ES 2.0 应用中启用 4x MSAA"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"调试非矩形剪裁操作"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"GPU 渲染模式分析"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"HWUI 呈现模式分析"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"启用 GPU 调试层"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"允许为调试应用加载 GPU 调试层"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"窗口动画缩放"</string>

@@ -17,6 +17,8 @@
 package com.android.server.wm;
 
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
+import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
@@ -380,21 +382,58 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     /**
-     * This test enforces that the pinned stack is always kept as the top stack.
+     * This test enforces that alwaysOnTop stack is placed at proper position.
      */
     @Test
-    public void testPinnedStackLocation() {
+    public void testAlwaysOnTopStackLocation() {
+        final TaskStack alwaysOnTopStack = createStackControllerOnStackOnDisplay(
+                WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD, mDisplayContent).mContainer;
+        final Task task = createTaskInStack(alwaysOnTopStack, 0 /* userId */);
+        alwaysOnTopStack.setAlwaysOnTop(true);
+        mDisplayContent.positionStackAt(POSITION_TOP, alwaysOnTopStack);
+        assertTrue(alwaysOnTopStack.isAlwaysOnTop());
+        // Ensure always on top state is synced to the children of the stack.
+        assertTrue(alwaysOnTopStack.getTopChild().isAlwaysOnTop());
+        assertEquals(alwaysOnTopStack, mDisplayContent.getTopStack());
+
         final TaskStack pinnedStack = createStackControllerOnStackOnDisplay(
                 WINDOWING_MODE_PINNED, ACTIVITY_TYPE_STANDARD, mDisplayContent).mContainer;
-        // Ensure that the pinned stack is the top stack
         assertEquals(pinnedStack, mDisplayContent.getPinnedStack());
         assertEquals(pinnedStack, mDisplayContent.getTopStack());
-        // By default, this should try to create a new stack on top
-        final TaskStack otherStack = createTaskStackOnDisplay(mDisplayContent);
-        // Ensure that the other stack is on the display.
-        assertEquals(mDisplayContent, otherStack.getDisplayContent());
-        // Ensure that the pinned stack is still on top
-        assertEquals(pinnedStack, mDisplayContent.getTopStack());
+
+        final TaskStack anotherAlwaysOnTopStack = createStackControllerOnStackOnDisplay(
+                WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD, mDisplayContent).mContainer;
+        anotherAlwaysOnTopStack.setAlwaysOnTop(true);
+        mDisplayContent.positionStackAt(POSITION_TOP, anotherAlwaysOnTopStack);
+        assertTrue(anotherAlwaysOnTopStack.isAlwaysOnTop());
+        int topPosition = mDisplayContent.getStacks().size() - 1;
+        // Ensure the new alwaysOnTop stack is put below the pinned stack, but on top of the
+        // existing alwaysOnTop stack.
+        assertEquals(anotherAlwaysOnTopStack, mDisplayContent.getStacks().get(topPosition - 1));
+
+        final TaskStack nonAlwaysOnTopStack = createStackControllerOnStackOnDisplay(
+                WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD, mDisplayContent).mContainer;
+        assertEquals(mDisplayContent, nonAlwaysOnTopStack.getDisplayContent());
+        topPosition = mDisplayContent.getStacks().size() - 1;
+        // Ensure the non-alwaysOnTop stack is put below the three alwaysOnTop stacks, but above the
+        // existing other non-alwaysOnTop stacks.
+        assertEquals(nonAlwaysOnTopStack, mDisplayContent.getStacks().get(topPosition - 3));
+
+        anotherAlwaysOnTopStack.setAlwaysOnTop(false);
+        mDisplayContent.positionStackAt(POSITION_TOP, anotherAlwaysOnTopStack);
+        assertFalse(anotherAlwaysOnTopStack.isAlwaysOnTop());
+        // Ensure, when always on top is turned off for a stack, the stack is put just below all
+        // other always on top stacks.
+        assertEquals(anotherAlwaysOnTopStack, mDisplayContent.getStacks().get(topPosition - 2));
+        anotherAlwaysOnTopStack.setAlwaysOnTop(true);
+
+        // Ensure always on top state changes properly when windowing mode changes.
+        anotherAlwaysOnTopStack.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+        assertFalse(anotherAlwaysOnTopStack.isAlwaysOnTop());
+        assertEquals(anotherAlwaysOnTopStack, mDisplayContent.getStacks().get(topPosition - 2));
+        anotherAlwaysOnTopStack.setWindowingMode(WINDOWING_MODE_FREEFORM);
+        assertTrue(anotherAlwaysOnTopStack.isAlwaysOnTop());
+        assertEquals(anotherAlwaysOnTopStack, mDisplayContent.getStacks().get(topPosition - 1));
     }
 
     /**

@@ -34,8 +34,8 @@ import android.provider.Settings.Global;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.Pair;
-import android.widget.RemoteViews;
 
+import androidx.annotation.VisibleForTesting;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -96,11 +96,7 @@ public class TileUtils {
     /**
      * The key used to get the category from metadata of activities of action
      * {@link #EXTRA_SETTINGS_ACTION}
-     * The value must be one of:
-     * <li>com.android.settings.category.wireless</li>
-     * <li>com.android.settings.category.device</li>
-     * <li>com.android.settings.category.personal</li>
-     * <li>com.android.settings.category.system</li>
+     * The value must be from {@link CategoryKey}.
      */
     private static final String EXTRA_CATEGORY_KEY = "com.android.settings.category";
 
@@ -171,18 +167,35 @@ public class TileUtils {
     public static final String META_DATA_PREFERENCE_SUMMARY_URI =
             "com.android.settings.summary_uri";
 
-    /**
-     * Name of the meta-data item that should be set in the AndroidManifest.xml to specify the
-     * custom view which should be displayed for the preference. The custom view will be inflated
-     * as a remote view.
-     *
-     * This also can be used with {@link #META_DATA_PREFERENCE_SUMMARY_URI}, by setting the id
-     * of the summary TextView to '@android:id/summary'.
-     */
-    public static final String META_DATA_PREFERENCE_CUSTOM_VIEW =
-            "com.android.settings.custom_view";
-
     public static final String SETTING_PKG = "com.android.settings";
+
+    /**
+     * Value for {@link #META_DATA_KEY_PROFILE}. When the device has a managed profile,
+     * the app will always be run in the primary profile.
+     *
+     * @see #META_DATA_KEY_PROFILE
+     */
+    public static final String PROFILE_PRIMARY = "primary_profile_only";
+
+    /**
+     * Value for {@link #META_DATA_KEY_PROFILE}. When the device has a managed profile, the user
+     * will be presented with a dialog to choose the profile the app will be run in.
+     *
+     * @see #META_DATA_KEY_PROFILE
+     */
+    public static final String PROFILE_ALL = "all_profiles";
+
+    /**
+     * Name of the meta-data item that should be set in the AndroidManifest.xml
+     * to specify the profile in which the app should be run when the device has a managed profile.
+     * The default value is {@link #PROFILE_ALL} which means the user will be presented with a
+     * dialog to choose the profile. If set to {@link #PROFILE_PRIMARY} the app will always be
+     * run in the primary profile.
+     *
+     * @see #PROFILE_PRIMARY
+     * @see #PROFILE_ALL
+     */
+    public static final String META_DATA_KEY_PROFILE = "com.android.settings.profile";
 
     /**
      * Build a list of DashboardCategory. Each category must be defined in manifest.
@@ -441,11 +454,6 @@ public class TileUtils {
                         } else {
                             keyHint = metaData.getString(META_DATA_PREFERENCE_KEYHINT);
                         }
-                    }
-                    if (metaData.containsKey(META_DATA_PREFERENCE_CUSTOM_VIEW)) {
-                        int layoutId = metaData.getInt(META_DATA_PREFERENCE_CUSTOM_VIEW);
-                        tile.remoteViews = new RemoteViews(applicationInfo.packageName, layoutId);
-                        updateSummaryAndTitle(context, providerMap, tile);
                     }
                 }
             } catch (PackageManager.NameNotFoundException | Resources.NotFoundException e) {

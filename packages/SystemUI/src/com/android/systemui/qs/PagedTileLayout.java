@@ -8,8 +8,8 @@ import android.animation.PropertyValuesHolder;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.support.v4.view.PagerAdapter;
-import android.support.v4.view.ViewPager;
+import androidx.viewpager.widget.PagerAdapter;
+import androidx.viewpager.widget.ViewPager;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -189,8 +189,9 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
         // marquee. This will ensure that accessibility doesn't announce the TYPE_VIEW_SELECTED
         // event on any of the children.
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        int currentItem = isLayoutRtl() ? mPages.size() - 1 - getCurrentItem() : getCurrentItem();
         for (int i = 0; i < mPages.size(); i++) {
-            mPages.get(i).setSelected(i == getCurrentItem() ? selected : false);
+            mPages.get(i).setSelected(i == currentItem ? selected : false);
         }
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
     }

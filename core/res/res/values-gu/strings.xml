@@ -236,9 +236,6 @@
     <string name="global_actions_toggle_airplane_mode" msgid="5884330306926307456">"એરપ્લેન મોડ"</string>
     <string name="global_actions_airplane_mode_on_status" msgid="2719557982608919750">"એરપ્લેન મોડ ચાલુ છે."</string>
     <string name="global_actions_airplane_mode_off_status" msgid="5075070442854490296">"એરપ્લેન મોડ બંધ છે."</string>
-    <string name="global_action_toggle_battery_saver" msgid="708515500418994208">"બૅટરી સેવર"</string>
-    <string name="global_action_battery_saver_on_status" msgid="484059130698197787">"બૅટરી સેવર બંધ છે"</string>
-    <string name="global_action_battery_saver_off_status" msgid="75550964969478405">"બૅટરી સેવર ચાલુ છે"</string>
     <string name="global_action_settings" msgid="1756531602592545966">"સેટિંગ્સ"</string>
     <string name="global_action_assist" msgid="3892832961594295030">"સહાય"</string>
     <string name="global_action_voice_assist" msgid="7751191495200504480">"વૉઇસ સહાય"</string>
@@ -276,6 +273,9 @@
     <string name="permgrouplab_location" msgid="7275582855722310164">"સ્થાન"</string>
     <string name="permgroupdesc_location" msgid="1346617465127855033">"આ ઉપકરણના સ્થાનને ઍક્સેસ કરવાની"</string>
     <string name="permgrouprequest_location" msgid="3788275734953323491">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;ને આ ઉપકરણના સ્થાનને ઍક્સેસ કરવાની મંજૂરી આપીએ?"</string>
+    <string name="permgrouprequestdetail_location" msgid="1113400215566814664">"માત્ર જ્યારે તમે ઍપનો ઉપયોગ કરી રહ્યાં હોય ત્યારે જ ઍપ સ્થાનને ઍક્સેસ કરી શકશે."</string>
+    <string name="permgroupbackgroundrequest_location" msgid="8461841153030844390">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;ને હંમેશાં આ ઉપકરણના સ્થાનને ઍક્સેસ કરવાની મંજૂરી આપીએ?"</string>
+    <string name="permgroupbackgroundrequestdetail_location" msgid="1715668276378108654">"તમે ઍપનો ઉપયોગ કરી રહ્યાં ન હોય, તો પણ ઍપ હંમેશાં સ્થાનને ઍક્સેસ કરી શકશે."</string>
     <string name="permgrouplab_calendar" msgid="5863508437783683902">"કૅલેન્ડર"</string>
     <string name="permgroupdesc_calendar" msgid="3889615280211184106">"તમારા કેલેન્ડરને ઍક્સેસ કરવાની"</string>
     <string name="permgrouprequest_calendar" msgid="289900767793189421">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;ને તમારા કૅલેન્ડરને ઍક્સેસ કરવાની મંજૂરી આપીએ?"</string>
@@ -402,12 +402,14 @@
     <string name="permdesc_writeCalendar" product="default" msgid="7592791790516943173">"આ ઍપ્લિકેશન, તમારા ફોન પર કૅલેન્ડર ઇવેન્ટ્સ ઉમેરી, દૂર કરી અથવા બદલી શકે છે. આ ઍપ્લિકેશન, કૅલેન્ડર માલિકો તરફથી આવતાં હોય તેવા લાગતાં સંદેશા મોકલી શકે છે અથવા તેમના માલિકોને સૂચિત કર્યા વિના ઇવેન્ટ્સ બદલી શકે છે."</string>
     <string name="permlab_accessLocationExtraCommands" msgid="2836308076720553837">"વધારાના સ્થાન પ્રદાતા આદેશોને ઍક્સેસ કરો"</string>
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"એપ્લિકેશનને વધારાના સ્થાન પ્રદાતા આદેશોને ઍક્સેસ કરવાની મંજૂરી આપે છે. આ એપ્લિકેશનને GPS અથવા અન્ય સ્થાન સ્રોતોના ઓપરેશનમાં દખલ કરવાની મંજૂરી આપી શકે છે."</string>
-    <string name="permlab_accessFineLocation" msgid="251034415460950944">"નિશ્ચિત સ્થાન ઍક્સેસ કરો (GPS અને નેટવર્ક-આધારિત)"</string>
-    <string name="permdesc_accessFineLocation" msgid="5821994817969957884">"આ ઍપ્લિકેશન, GPS અથવા સેલ ટાવર્સ અને વાઇ-ફાઇ નેટવર્ક્સ જેવા નેટવર્ક સ્રોતોના આધારે તમારું સ્થાન મેળવી શકે છે. ઍપ્લિકેશન દ્વારા આ સ્થાન સેવાઓનો ઉપયોગ કરવામાં સમર્થ થવા માટે તમારા ફોન પર આ ઉપલબ્ધ અને ચાલુ હોવી આવશ્યક છે. આ બૅટરી વપરાશ વધારી શકે છે."</string>
+    <string name="permlab_accessFineLocation" msgid="6265109654698562427">"ફૉરગ્રાઉન્ડમાં ફક્ત ચોક્કસ સ્થાન ઍક્સેસ કરો"</string>
+    <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"આ ઍપ ફક્ત બૅકગ્રાઉન્ડમાં હોય ત્યારે જ તમારું ચોક્કસ સ્થાન મેળવી શકે છે. ઍપ આ સ્થાન સેવાઓનો ઉપયોગ કરી શકે તે માટે તમારા ફોન પર આ સેવાઓ ઉપલબ્ધ અને ચાલુ હોવી આવશ્યક છે. આ બૅટરી વપરાશ વધારી શકે છે."</string>
     <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"અંદાજિત સ્થાન ઍક્સેસ કરો (નેટવર્ક-આધારિત)"</string>
     <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"આ ઍપ્લિકેશન, સેલ ટાવર્સ અને વાઇ-ફાઇ નેટવર્ક્સ જેવા નેટવર્ક સ્રોતોના આધારે તમારું સ્થાન મેળવી શકે છે. ઍપ્લિકેશન દ્વારા આ સ્થાન સેવાઓનો ઉપયોગ કરવામાં સમર્થ થવા માટે તમારા ટેબ્લેટ પર આ ઉપલબ્ધ અને ચાલુ હોવી આવશ્યક છે."</string>
     <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"આ ઍપ્લિકેશન, સેલ ટાવર્સ અને વાઇ-ફાઇ નેટવર્ક્સ જેવા નેટવર્ક સ્રોતોના આધારે તમારું સ્થાન મેળવી શકે છે. ઍપ્લિકેશન દ્વારા આ સ્થાન સેવાઓનો ઉપયોગ કરવામાં સમર્થ થવા માટે તમારા ટીવી પર આ ઉપલબ્ધ અને ચાલુ હોવી આવશ્યક છે."</string>
     <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"આ ઍપ્લિકેશન, સેલ ટાવર્સ અને વાઇ-ફાઇ નેટવર્ક્સ જેવા નેટવર્ક સ્રોતોના આધારે તમારું સ્થાન મેળવી શકે છે. ઍપ્લિકેશન દ્વારા આ સ્થાન સેવાઓનો ઉપયોગ કરવામાં સમર્થ થવા માટે તમારા ફોન પર આ ઉપલબ્ધ અને ચાલુ હોવી આવશ્યક છે."</string>
+    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"બૅકગ્રાઉન્ડમાં ચોક્કસ સ્થાન ઍક્સેસ કરો"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"આ ઍપ બૅકગ્રાઉન્ડમાં હોય ત્યારે કોઈપણ સમયે તમારું ચોક્કસ સ્થાન મેળવી શકે છે. ઍપ આ સ્થાન સેવાઓનો ઉપયોગ કરી શકે તે માટે તમારા ફોન પર આ સેવાઓ ઉપલબ્ધ અને ચાલુ હોવી આવશ્યક છે. આ બૅટરી વપરાશ વધારી શકે છે."</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"તમારી ઑડિઓ સેટિંગ્સ બદલો"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"એપ્લિકેશનને વૈશ્વિક ઑડિઓ સેટિંગ્સને સંશોધિત કરવાની મંજૂરી આપે છે, જેમ કે વૉલ્યૂમ અને આઉટપુટ માટે કયા સ્પીકરનો ઉપયોગ કરવો."</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"ઑડિઓ રેકોર્ડ કરવાની"</string>
@@ -515,6 +517,37 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"ફિંગરપ્રિન્ટ આયકન"</string>
+    <string name="permlab_manageFace" msgid="2137540986007309781">"ચહેરા પ્રમાણીકરણના હાર્ડવેરને મેનેજ કરો"</string>
+    <string name="permdesc_manageFace" msgid="8919637120670185330">"ઍપને ઉપયોગ માટે ચહેરાના નમૂના ઉમેરવા અને ડિલીટ કરવાની પદ્ધતિને રદ કરવાની મંજૂરી આપે છે."</string>
+    <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"ચહેરા પ્રમાણીકરણના હાર્ડવેરનો ઉપયોગ કરો"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"ઍપને પ્રમાણીકરણ માટે ચહેરા પ્રમાણીકરણના હાર્ડવેરનો ઉપયોગ કરવાની મંજૂરી આપે છે"</string>
+    <string name="face_acquired_insufficient" msgid="5901287247766106330">"ચહેરાની પ્રક્રિયા કરી શકાઈ નથી. ફરી પ્રયાસ કરો."</string>
+    <string name="face_acquired_too_bright" msgid="610606792381297174">"ચહેરો ખૂબ ચળકે છે. કૃપા કરીને ઓછા પ્રકાશવાળા સ્થાનમાં પ્રયાસ કરો."</string>
+    <string name="face_acquired_too_dark" msgid="7229162716976778371">"ચહેરો ખૂબ શ્યામ છે. કૃપા કરીને પ્રકાશના સૉર્સ ઉઘાડો."</string>
+    <string name="face_acquired_too_close" msgid="1980310037427755293">"કૃપા કરીને સેન્સરને ચહેરાથી દૂર ખસેડો."</string>
+    <string name="face_acquired_too_far" msgid="4494571381828850007">"કૃપા કરીને સેન્સરને ચહેરાની નજીક ખસેડો."</string>
+    <string name="face_acquired_too_high" msgid="228411096134808372">"કૃપા કરીને સેન્સરને ઉપર ખસેડો."</string>
+    <string name="face_acquired_too_low" msgid="4539774649296349109">"કૃપા કરીને સેન્સર નીચે ખસેડો."</string>
+    <string name="face_acquired_too_right" msgid="1650292067226118760">"કૃપા કરીને સેન્સરને જમણી બાજુ ખસેડો."</string>
+    <string name="face_acquired_too_left" msgid="2712489669456176505">"કૃપા કરીને સેન્સરને ડાબી બાજુ ખસેડો."</string>
+    <string name="face_acquired_poor_gaze" msgid="8344973502980415859">"કૃપા કરીને સેન્સરની સામે જુઓ."</string>
+    <string name="face_acquired_not_detected" msgid="5707782294589511391">"કોઈ ચહેરો મળ્યો નથી."</string>
+    <string name="face_acquired_not_steady" msgid="3722829465011040042">"ઉપકરણની સામે ચહેરો સ્થિર રાખો."</string>
+  <string-array name="face_acquired_vendor">
+  </string-array>
+    <string name="face_error_hw_not_available" msgid="6255891785768984615">"ચહેરા માટેનું હાર્ડવેર ઉપલબ્ધ નથી."</string>
+    <string name="face_error_timeout" msgid="4014326147867150054">"ચહેરા માટેનો સમય સમાપ્ત થયો. ફરી પ્રયાસ કરો."</string>
+    <string name="face_error_no_space" msgid="8224993703466381314">"ચહેરો સંગ્રહિત કરી શકાશે નહીં."</string>
+    <string name="face_error_canceled" msgid="283945501061931023">"ચહેરા સંબંધિત કાર્યવાહી રદ કરવામાં આવી છે."</string>
+    <string name="face_error_lockout" msgid="3407426963155388504">"ઘણા બધા પ્રયત્નો. થોડા સમય પછી ફરી પ્રયાસ કરો."</string>
+    <string name="face_error_lockout_permanent" msgid="8198354656746088890">"ઘણા બધા પ્રયત્નો. ચહેરાનું પ્રમાણીકરણ બંધ કરવામાં આવ્યું છે."</string>
+    <string name="face_error_unable_to_process" msgid="238761109287767270">"ફરી પ્રયાસ કરો."</string>
+    <string name="face_error_not_enrolled" msgid="9166792142679691323">"કોઈ ચહેરાની નોંધણી કરવામાં આવી નથી."</string>
+    <string name="face_error_hw_not_present" msgid="4737289254517095671">"આ ઉપકરણમાં ચહેરાના પ્રમાણીકરણ માટે કોઈ સેન્સર નથી"</string>
+    <string name="face_name_template" msgid="7004562145809595384">"ચહેરાનું <xliff:g id="FACEID">%d</xliff:g>"</string>
+  <string-array name="face_error_vendor">
+  </string-array>
+    <string name="face_icon_content_description" msgid="4024817159806482191">"ચહેરા આઇકન"</string>
     <string name="permlab_readSyncSettings" msgid="6201810008230503052">"સમન્વયન સેટિંગ્સ વાંચો"</string>
     <string name="permdesc_readSyncSettings" msgid="2706745674569678644">"ઍપ્લિકેશનને એકાઉન્ટ માટે સમન્વયન સેટિંગ્સને વાંચવાની મંજૂરી આપે છે. ઉદાહરણ તરીકે, આ એકાઉન્ટ સાથે લોકો ઍપ્લિકેશન સમન્વયિત થઈ છે કે કેમ તે નિર્ધારિત કરી શકે છે."</string>
     <string name="permlab_writeSyncSettings" msgid="5408694875793945314">"સમન્વયન ચાલુ અને બંધ ટોગલ કરો"</string>
@@ -1175,6 +1208,9 @@
     <skip />
     <string name="wifi_no_internet" msgid="8938267198124654938">"વાઇ-ફાઇને કોઈ ઇન્ટરનેટ ઍક્સેસ નથી"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"વિકલ્પો માટે ટૅપ કરો"</string>
+    <string name="wifi_softap_config_change" msgid="8475911871165857607">"તમારી હૉટસ્પૉટ સેટિંગને બદલે છે"</string>
+    <string name="wifi_softap_config_change_summary" msgid="7601233252456548891">"તમારું હૉટસ્પૉટ બેન્ડ બદલાયેલ છે."</string>
+    <string name="wifi_softap_config_change_detailed" msgid="8022936822860678033">"આ ઉપકરણ તમારી ફક્ત 5GHz માટેની પસંદગીને સમર્થન આપતું નથી. તેના બદલે, જ્યારે આ ઉપકરણ જ્યારે 5GHz બેન્ડ ઉપલબ્ધ હશે ત્યારે તેનો ઉપયોગ કરશે."</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"<xliff:g id="NETWORK_TYPE">%1$s</xliff:g> પર સ્વિચ કર્યું"</string>
     <string name="network_switch_metered_detail" msgid="775163331794506615">"જ્યારે <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> પાસે કોઈ ઇન્ટરનેટ ઍક્સેસ ન હોય ત્યારે ઉપકરણ <xliff:g id="NEW_NETWORK">%1$s</xliff:g>નો ઉપયોગ કરે છે. શુલ્ક લાગુ થઈ શકે છે."</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"<xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> પરથી <xliff:g id="NEW_NETWORK">%2$s</xliff:g> પર સ્વિચ કર્યું"</string>
@@ -1263,7 +1299,7 @@
     <string name="share_remote_bugreport_notification_message_finished" msgid="6029609949340992866">"તમારા વ્યવસ્થાપકે આ ઉપકરણના સમસ્યા નિવારણમાં સહાય માટે બગ રિપોર્ટની વિનંતી કરી છે. ઍપ્લિકેશનો અને ડેટા શેર કરવામાં આવી શકે છે."</string>
     <string name="share_remote_bugreport_action" msgid="6249476773913384948">"શેર કરો"</string>
     <string name="decline_remote_bugreport_action" msgid="6230987241608770062">"નકારો"</string>
-    <string name="select_input_method" msgid="8547250819326693584">"કીબોર્ડ બદલો"</string>
+    <string name="select_input_method" msgid="4653387336791222978">"ઇનપુટ પદ્ધતિ પસંદ કરો"</string>
     <string name="show_ime" msgid="2506087537466597099">"જ્યારે ભૌતિક કીબોર્ડ સક્રિય હોય ત્યારે તેને સ્ક્રીન પર રાખો"</string>
     <string name="hardware" msgid="194658061510127999">"વર્ચ્યુઅલ કીબોર્ડ બતાવો"</string>
     <string name="select_keyboard_layout_notification_title" msgid="597189518763083494">"ભૌતિક કીબોર્ડ ગોઠવો"</string>

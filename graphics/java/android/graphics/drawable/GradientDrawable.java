@@ -392,6 +392,7 @@ public class GradientDrawable extends Drawable {
             e = new DashPathEffect(new float[] { dashWidth, dashGap }, 0);
         }
         mStrokePaint.setPathEffect(e);
+        mGradientIsDirty = true;
         invalidateSelf();
     }
 
@@ -930,16 +931,15 @@ public class GradientDrawable extends Drawable {
      * @see #getColor
      */
     public void setColor(@Nullable ColorStateList colorStateList) {
-        mGradientState.setSolidColors(colorStateList);
-        final int color;
         if (colorStateList == null) {
-            color = Color.TRANSPARENT;
+            setColor(Color.TRANSPARENT);
         } else {
             final int[] stateSet = getState();
-            color = colorStateList.getColorForState(stateSet, 0);
+            final int color = colorStateList.getColorForState(stateSet, 0);
+            mGradientState.setSolidColors(colorStateList);
+            mFillPaint.setColor(color);
+            invalidateSelf();
         }
-        mFillPaint.setColor(color);
-        invalidateSelf();
     }
 
     /**
@@ -1698,7 +1698,6 @@ public class GradientDrawable extends Drawable {
         return mGradientState.mHeight;
     }
 
-    /** @hide */
     @Override
     public Insets getOpticalInsets() {
         return mGradientState.mOpticalInsets;

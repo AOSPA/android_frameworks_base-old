@@ -119,7 +119,7 @@ public:
     void OnConfigRemoved(const ConfigKey& key);
 
     void assignIsolatedUid(int isolatedUid, int parentUid);
-    void removeIsolatedUid(int isolatedUid, int parentUid);
+    void removeIsolatedUid(int isolatedUid);
 
     // Returns the host uid if it exists. Otherwise, returns the same uid that was passed-in.
     virtual int getHostUidOrSelf(int uid) const;
@@ -146,7 +146,6 @@ private:
 
     void getListenerListCopyLocked(std::vector<wp<PackageInfoListener>>* output);
 
-    // TODO: Use shared_mutex for improved read-locking if a library can be found in Android.
     mutable mutex mMutex;
     mutable mutex mIsolatedMutex;
 

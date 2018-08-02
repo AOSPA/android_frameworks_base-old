@@ -247,6 +247,7 @@ import java.util.function.Supplier;
  * @attr ref android.R.styleable#TextView_textColorHint
  * @attr ref android.R.styleable#TextView_textAppearance
  * @attr ref android.R.styleable#TextView_textColorLink
+ * @attr ref android.R.styleable#TextView_textFontWeight
  * @attr ref android.R.styleable#TextView_textSize
  * @attr ref android.R.styleable#TextView_textScaleX
  * @attr ref android.R.styleable#TextView_fontFamily
@@ -1508,6 +1509,13 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
 
         setText(text, bufferType);
+        if (mText == null) {
+            mText = "";
+        }
+        if (mTransformed == null) {
+            mTransformed = "";
+        }
+
         if (textIsSetFromXml) {
             mTextSetFromXmlOrResourceId = true;
         }
@@ -2189,6 +2197,14 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     public Editable getEditableText() {
         return (mText instanceof Editable) ? (Editable) mText : null;
+    }
+
+    /**
+     * @hide
+     */
+    @VisibleForTesting
+    public CharSequence getTransformed() {
+        return mTransformed;
     }
 
     /**
@@ -3279,14 +3295,22 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     /**
      * Updates the top padding of the TextView so that {@code firstBaselineToTopHeight} is
-     * equal to the distance between the firt text baseline and the top of this TextView.
+     * the distance between the top of the TextView and first line's baseline.
+     * <p>
+     * <img src="{@docRoot}reference/android/images/text/widget/first_last_baseline.png" />
+     * <figcaption>First and last baseline metrics for a TextView.</figcaption>
+     *
      * <strong>Note</strong> that if {@code FontMetrics.top} or {@code FontMetrics.ascent} was
      * already greater than {@code firstBaselineToTopHeight}, the top padding is not updated.
+     * Moreover since this function sets the top padding, if the height of the TextView is less than
+     * the sum of top padding, line height and bottom padding, top of the line will be pushed
+     * down and bottom will be clipped.
      *
      * @param firstBaselineToTopHeight distance between first baseline to top of the container
      *      in pixels
      *
      * @see #getFirstBaselineToTopHeight()
+     * @see #setLastBaselineToBottomHeight(int)
      * @see #setPadding(int, int, int, int)
      * @see #setPaddingRelative(int, int, int, int)
      *
@@ -3314,14 +3338,22 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
     /**
      * Updates the bottom padding of the TextView so that {@code lastBaselineToBottomHeight} is
-     * equal to the distance between the last text baseline and the bottom of this TextView.
+     * the distance between the bottom of the TextView and the last line's baseline.
+     * <p>
+     * <img src="{@docRoot}reference/android/images/text/widget/first_last_baseline.png" />
+     * <figcaption>First and last baseline metrics for a TextView.</figcaption>
+     *
      * <strong>Note</strong> that if {@code FontMetrics.bottom} or {@code FontMetrics.descent} was
      * already greater than {@code lastBaselineToBottomHeight}, the bottom padding is not updated.
+     * Moreover since this function sets the bottom padding, if the height of the TextView is less
+     * than the sum of top padding, line height and bottom padding, bottom of the text will be
+     * clipped.
      *
      * @param lastBaselineToBottomHeight distance between last baseline to bottom of the container
      *      in pixels
      *
      * @see #getLastBaselineToBottomHeight()
+     * @see #setFirstBaselineToTopHeight(int)
      * @see #setPadding(int, int, int, int)
      * @see #setPaddingRelative(int, int, int, int)
      *
@@ -3419,7 +3451,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         ColorStateList mTextColor = null;
         ColorStateList mTextColorHint = null;
         ColorStateList mTextColorLink = null;
-        int mTextSize = 0;
+        int mTextSize = -1;
         String mFontFamily = null;
         Typeface mFontTypeface = null;
         boolean mFontFamilyExplicit = false;
@@ -3630,7 +3662,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             setHighlightColor(attributes.mTextColorHighlight);
         }
 
-        if (attributes.mTextSize != 0) {
+        if (attributes.mTextSize != -1) {
             setRawTextSize(attributes.mTextSize, true /* shouldRequestLayout */);
         }
 
@@ -5193,7 +5225,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @param lineHeight the line height in pixels
      *
      * @see #setLineSpacing(float, float)
-     * @see #getLineSpacing()
+     * @see #getLineSpacingExtra()
      *
      * @attr ref android.R.styleable#TextView_lineHeight
      */
@@ -5555,6 +5587,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * {@link android.text.Editable.Factory} to create final or intermediate
      * {@link Editable Editables}.
      *
+     * Subclasses overriding this method should ensure that the following post condition holds,
+     * in order to guarantee the safety of the view's measurement and layout operations:
+     * regardless of the input, after calling #setText both {@code mText} and {@code mTransformed}
+     * will be different from {@code null}.
+     *
      * @param text text to be displayed
      * @param type a {@link android.widget.TextView.BufferType} which defines whether the text is
      *              stored as a static text, styleable/spannable text, or editable text
@@ -5689,6 +5726,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             mTransformed = text;
         } else {
             mTransformed = mTransformation.getTransformation(text, this);
+        }
+        if (mTransformed == null) {
+            // Should not happen if the transformation method follows the non-null postcondition.
+            mTransformed = "";
         }
 
         final int textLength = text.length();
@@ -6932,7 +6973,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public boolean hasOverlappingRendering() {
         // horizontal fading edge causes SaveLayerAlpha, which doesn't support alpha modulation
         return ((getBackground() != null && getBackground().getCurrent() != null)
-                || mSpannable != null || hasSelection() || isHorizontalFadingEdgeEnabled());
+                || mSpannable != null || hasSelection() || isHorizontalFadingEdgeEnabled()
+                || mShadowColor != 0);
     }
 
     /**

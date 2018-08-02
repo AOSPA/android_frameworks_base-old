@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‏‎‏‎‎‏‎‏‎‏‎‏‏‏‏‎‎‎‎‎‏‏‎‏‏‏‎‏‏‏‏‏‎‎‎‏‎‎‏‎‏‎‏‏‏‏‏‏‎‏‎‏‎‎‎‏‏‎‏‎‎‎Show visual feedback for taps‎‏‎‎‏‎"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‎‏‎‏‏‏‏‏‎‏‏‎‎‎‎‏‏‏‏‎‎‏‎‏‎‏‎‎‏‎‏‏‏‎‏‏‎‎‎‎‎‏‏‎‏‏‎‏‎‏‎‎‏‎‏‏‎‎‏‎‎‎Show surface updates‎‏‎‎‏‎"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‎‏‎‎‎‏‏‏‎‏‎‏‎‎‏‎‎‏‎‎‎‏‎‎‏‎‎‏‎‏‎‏‎‏‏‎‏‏‎‎‏‎‎‏‎‎‏‏‎‏‏‎‎‎‎‎‏‏‏‏‎‎‏‎Flash entire window surfaces when they update‎‏‎‎‏‎"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‎‎‏‎‏‏‏‏‎‎‏‏‎‏‎‏‎‏‏‏‎‎‎‎‎‎‎‏‎‎‏‎‎‏‎‏‏‏‏‎‏‎‏‎‏‏‎‏‏‎‎‎‎‎‏‎‏‎‏‏‎‎Show GPU view updates‎‏‎‎‏‎"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‎‎‏‏‏‏‎‏‏‏‏‎‏‏‎‏‏‎‎‎‏‎‎‏‏‏‎‎‎‎‎‎‎‎‎‏‎‏‏‏‏‏‎‏‎‏‏‏‏‏‏‏‎‏‎‏‏‎‎‏‎‏‎Flash views inside windows when drawn with the GPU‎‏‎‎‏‎"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‎‏‏‏‎‎‏‎‎‏‎‎‎‏‏‎‏‏‏‏‏‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‎‏‎‏‏‏‎‏‏‎‎‏‎‏‏‏‏‎‏‏‎‎‎‏‎‏‎Show view updates‎‏‎‎‏‎"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‏‏‎‏‎‎‏‎‎‏‏‎‏‎‏‎‎‏‏‏‎‏‎‎‏‏‎‏‏‏‎‎‎‏‏‎‏‏‏‎‎‏‎‎‎‏‎‏‏‏‏‏‎‏‏‎‎‎‏‏‏‎Flash views inside windows when drawn‎‏‎‎‏‎"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‎‏‏‏‎‎‏‎‏‏‎‎‏‏‎‏‎‏‎‎‎‎‏‏‎‎‏‏‎‎‏‏‎‎‏‎‎‎‎‏‎‎‎‎‏‏‏‏‎‎‎‎‎‏‏‏‎‏‏‎‏‎Show hardware layers updates‎‏‎‎‏‎"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‎‏‎‎‏‏‎‎‎‎‎‏‎‎‏‏‎‏‏‏‎‎‎‏‎‏‎‎‎‏‏‎‎‏‎‏‏‏‎‏‏‎‏‏‏‎‏‎‏‎‏‎‎‏‏‎‏‏‎‎‏‎Flash hardware layers green when they update‎‏‎‎‏‎"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‎‏‎‏‎‎‏‎‎‏‏‎‎‏‎‏‏‏‎‏‎‏‎‎‎‎‎‎‏‏‎‏‏‏‏‎‎‏‎‏‎‎‏‏‎‏‏‏‎‎‏‏‎‏‎‎‏‏‎‏‎‎‏‎Debug GPU overdraw‎‏‎‎‏‎"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‎‏‏‏‎‏‏‏‏‎‎‎‏‏‏‏‎‏‏‏‏‎‎‎‎‎‎‏‎‏‏‎‎‎‏‏‎‏‎‎‎‏‎‎‎‏‎‏‏‏‏‏‏‎‏‎‏‏‏‎‎‏‎‎Show clip bounds, margins, etc.‎‏‎‎‏‎"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‎‏‏‏‏‏‏‎‏‎‏‏‏‎‎‏‏‎‎‏‏‎‏‎‎‎‏‏‏‏‎‎‏‎‎‏‏‏‏‎‎‎‏‏‏‎‎‏‎‏‎‏‏‏‎‎‎‏‎‎‎‏‎‎Force RTL layout direction‎‏‎‎‏‎"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‏‏‏‏‏‏‏‎‎‏‎‎‏‏‎‏‏‎‎‎‎‎‏‏‏‎‎‎‏‏‏‏‏‏‎‏‏‏‎‏‎‎‏‏‎‎‎‏‎‏‎‏‏‏‏‎‏‏‎‏‏‎‎Force screen layout direction to RTL for all locales‎‏‎‎‏‎"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‏‏‎‎‏‎‎‏‎‏‏‏‏‎‎‎‏‏‎‎‏‏‎‏‏‎‏‎‏‏‏‏‏‎‎‏‎‎‎‎‎‎‎‎‎‏‎‎‏‏‏‎‏‏‎‎‏‏‏‎‎‎Force GPU rendering‎‏‎‎‏‎"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‎‏‏‎‎‏‏‎‏‎‎‏‏‏‏‎‎‏‎‏‎‏‎‏‎‎‎‏‎‎‏‏‏‎‏‎‏‏‎‎‏‎‏‏‏‏‎‏‏‎‏‏‏‏‏‎‎‏‎‏‏‎Force use of GPU for 2d drawing‎‏‎‎‏‎"</string>
     <string name="force_msaa" msgid="7920323238677284387">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‏‎‏‏‎‏‏‏‏‎‏‎‏‎‏‎‏‎‎‏‎‎‎‎‎‎‎‏‎‏‏‎‎‏‏‎‏‏‏‎‏‎‎‎‎‏‏‎‎‎‎‏‏‎‎‎‏‎‎‎‏‏‎Force 4x MSAA‎‏‎‎‏‎"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‏‏‏‏‏‎‏‎‎‏‏‏‎‏‎‏‎‏‏‏‏‏‎‏‎‎‏‏‎‎‏‏‎‏‏‏‏‏‏‎‎‏‎‏‏‎‎‏‎‏‎‏‎‏‎‏‎‎‎‎‎‏‎Enable 4x MSAA in OpenGL ES 2.0 apps‎‏‎‎‏‎"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‎‏‏‏‏‏‎‎‎‎‎‏‎‏‏‎‎‎‎‎‏‏‎‏‎‏‏‎‎‎‏‏‎‎‎‏‏‏‎‏‏‎‎‎‏‏‎‏‏‏‏‎‏‏‎‏‏‎‎‏‎‎‎Debug non-rectangular clip operations‎‏‎‎‏‎"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‏‎‏‎‏‎‏‎‎‏‏‎‎‎‎‏‏‏‏‎‏‎‎‏‎‏‏‎‎‏‎‏‏‎‏‎‎‎‎‏‎‎‎‎‏‏‏‏‏‎‎‏‎‏‎‎‏‎‎‏‏‎Profile GPU rendering‎‏‎‎‏‎"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‏‎‏‎‎‏‎‎‏‎‎‏‏‏‎‎‎‏‎‎‎‏‏‎‎‎‎‎‎‏‏‏‏‎‏‎‏‏‎‎‎‏‎‎‎‎‎‏‎‎‎‏‎‏‏‎‏‏‏‏‏‎Profile HWUI rendering‎‏‎‎‏‎"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‎‏‏‎‏‎‏‎‏‏‎‏‎‎‏‏‏‎‏‎‎‏‎‎‎‎‎‏‎‎‏‎‏‎‎‎‎‏‏‎‏‏‏‎‏‏‏‏‎‏‎‏‏‏‎‏‎‏‏‏‎‎‏‎Enable GPU debug layers‎‏‎‎‏‎"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‏‎‏‏‏‏‎‎‏‎‎‏‏‎‎‎‏‎‏‎‏‏‏‎‎‏‏‏‎‏‎‎‎‎‎‎‏‎‎‎‏‎‏‎‏‎‎‏‎‏‎‏‏‏‎‎‏‏‏‏‎‎‎Allow loading GPU debug layers for debug apps‎‏‎‎‏‎"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"‎‏‎‎‎‎‎‏‎‏‏‏‎‎‎‎‎‏‎‎‏‎‎‎‏‎‏‏‏‏‏‏‏‎‏‎‏‎‏‏‎‎‎‎‏‎‏‏‏‏‎‏‎‎‎‏‏‎‎‎‎‏‎‏‎‏‏‏‎‎‏‏‏‎‏‏‏‏‏‎‏‎‏‏‏‎‏‏‎‎‎‏‏‎‎‎Window animation scale‎‏‎‎‏‎"</string>

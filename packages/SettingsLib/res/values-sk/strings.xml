@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Vizuálne znázorňovať klepnutia"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Ukazovať obnovenia obsahu"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Rozblikať obsah okna pri aktualizácii"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Ukazovať obnovenia grafickým procesorom"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Rozblikať zobrazenia v oknách vykresľované grafickým procesorom"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Ukazovať obnovenia zobrazenia"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Rozblikať zobrazenia vo vykresľovaných oknách"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Ukazovať obnovenia hardvérových vrstiev"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Rozblikať zelenou hardvérové vrstvy pri obnovení"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Ladiť prekresľovanie grafickým procesorom"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Zobraziť vo výstrižku ohraničenie, okraje a pod."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Rozloženia sprava doľava"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Vynútiť pre všetky jazyky rozloženie obrazovky sprava doľava"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Vykresľovať grafickým procesorom"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Vynútiť použitie grafického procesora na dvojrozmerné vykresľovanie"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Vynútiť 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Povoliť 4x MSAA v aplikáciách OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Ladenie operácií s neobdĺžnikovými výstrižkami"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Profil vykresľovania grafickým procesorom"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Vykresľovanie HWUI profilu"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Povoliť vrstvy ladenia grafického procesora"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Povoliť načítanie vrstiev ladenia grafického procesora na ladenie aplikácií"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Mierka animácie okna"</string>

@@ -40,12 +40,13 @@ import static android.os.Build.VERSION_CODES.O;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_UNSPECIFIED;
 
+import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
-import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -303,7 +304,13 @@ public class PackageParser {
                     android.os.Build.VERSION_CODES.JELLY_BEAN),
             new PackageParser.SplitPermissionInfo(android.Manifest.permission.WRITE_CONTACTS,
                     new String[] { android.Manifest.permission.WRITE_CALL_LOG },
-                    android.os.Build.VERSION_CODES.JELLY_BEAN)
+                    android.os.Build.VERSION_CODES.JELLY_BEAN),
+            new PackageParser.SplitPermissionInfo(Manifest.permission.ACCESS_FINE_LOCATION,
+                    new String[] { android.Manifest.permission.ACCESS_BACKGROUND_LOCATION },
+                    android.os.Build.VERSION_CODES.P0),
+            new PackageParser.SplitPermissionInfo(Manifest.permission.ACCESS_COARSE_LOCATION,
+                    new String[] { android.Manifest.permission.ACCESS_BACKGROUND_LOCATION },
+                    android.os.Build.VERSION_CODES.P0),
     };
 
     /**
@@ -639,11 +646,19 @@ public class PackageParser {
      */
     private static boolean checkUseInstalledOrHidden(int flags, PackageUserState state,
             ApplicationInfo appInfo) {
+        // Returns false if the package is hidden system app until installed.
+        if ((flags & PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS) == 0
+                && !state.installed
+                && appInfo != null && appInfo.hiddenUntilInstalled) {
+            return false;
+        }
+
         // If available for the target user, or trying to match uninstalled packages and it's
         // a system app.
         return state.isAvailable(flags)
                 || (appInfo != null && appInfo.isSystemApp()
-                        && (flags & PackageManager.MATCH_KNOWN_PACKAGES) != 0);
+                        && ((flags & PackageManager.MATCH_KNOWN_PACKAGES) != 0
+                        || (flags & PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS) != 0));
     }
 
     public static boolean isAvailable(PackageUserState state) {
@@ -2199,10 +2214,10 @@ public class PackageParser {
                             com.android.internal.R.styleable.AndroidManifestUsesSdk_minSdkVersion);
                     if (val != null) {
                         if (val.type == TypedValue.TYPE_STRING && val.string != null) {
-                            targetCode = minCode = val.string.toString();
+                            minCode = val.string.toString();
                         } else {
                             // If it's not a string, it's an integer.
-                            targetVers = minVers = val.data;
+                            minVers = val.data;
                         }
                     }
 
@@ -2218,6 +2233,9 @@ public class PackageParser {
                             // If it's not a string, it's an integer.
                             targetVers = val.data;
                         }
+                    } else {
+                        targetVers = minVers;
+                        targetCode = minCode;
                     }
 
                     sa.recycle();
@@ -3090,6 +3108,14 @@ public class PackageParser {
                 0);
         perm.info.requestRes = sa.getResourceId(
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup_request, 0);
+        perm.info.requestDetailResourceId = sa.getResourceId(
+                com.android.internal.R.styleable.AndroidManifestPermissionGroup_requestDetail, 0);
+        perm.info.backgroundRequestResourceId = sa.getResourceId(
+                com.android.internal.R.styleable.AndroidManifestPermissionGroup_backgroundRequest,
+                0);
+        perm.info.backgroundRequestDetailResourceId = sa.getResourceId(
+                com.android.internal.R.styleable
+                        .AndroidManifestPermissionGroup_backgroundRequestDetail, 0);
         perm.info.flags = sa.getInt(
                 com.android.internal.R.styleable.AndroidManifestPermissionGroup_permissionGroupFlags, 0);
         perm.info.priority = sa.getInt(
@@ -3143,6 +3169,19 @@ public class PackageParser {
 
         perm.info.requestRes = sa.getResourceId(
                 com.android.internal.R.styleable.AndroidManifestPermission_request, 0);
+
+        if (sa.hasValue(
+                com.android.internal.R.styleable.AndroidManifestPermission_backgroundPermission)) {
+            if ("android".equals(owner.packageName)) {
+                perm.info.backgroundPermission = sa.getNonResourceString(
+                        com.android.internal.R.styleable
+                                .AndroidManifestPermission_backgroundPermission);
+            } else {
+                Slog.w(TAG, owner.packageName + " defines permission '" + perm.info.name
+                        + "' with a background permission. Only the 'android' package can do "
+                        + "that.");
+            }
+        }
 
         perm.info.protectionLevel = sa.getInt(
                 com.android.internal.R.styleable.AndroidManifestPermission_protectionLevel,
@@ -4225,7 +4264,7 @@ public class PackageParser {
                     ActivityInfo.DOCUMENT_LAUNCH_NONE);
             a.info.maxRecents = sa.getInt(
                     R.styleable.AndroidManifestActivity_maxRecents,
-                    ActivityManager.getDefaultAppRecentsLimitStatic());
+                    ActivityTaskManager.getDefaultAppRecentsLimitStatic());
             a.info.configChanges = getActivityConfigChanges(
                     sa.getInt(R.styleable.AndroidManifestActivity_configChanges, 0),
                     sa.getInt(R.styleable.AndroidManifestActivity_recreateOnConfigChanges, 0));

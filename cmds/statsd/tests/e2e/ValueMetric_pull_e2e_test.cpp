@@ -66,7 +66,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
         baseTimeNs, configAddedTimeNs, config, cfgKey);
     EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
-    processor->mStatsPullerManager.ForceClearPullerCache();
+    processor->mPullerManager->ForceClearPullerCache();
 
     int startBucketNum = processor->mMetricsManagers.begin()->second->
             mAllMetricProducers[0]->getCurrentBucketNum();
@@ -74,12 +74,11 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
 
     // When creating the config, the gauge metric producer should register the alarm at the
     // end of the current bucket.
-    EXPECT_EQ((size_t)1, StatsPullerManagerImpl::GetInstance().mReceivers.size());
+    EXPECT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
     EXPECT_EQ(bucketSizeNs,
-              StatsPullerManagerImpl::GetInstance().mReceivers.begin()->
-                    second.front().intervalNs);
-    int64_t& expectedPullTimeNs = StatsPullerManagerImpl::GetInstance().mReceivers.begin()->
-            second.front().nextPullTimeNs;
+              processor->mPullerManager->mReceivers.begin()->second.front().intervalNs);
+    int64_t& expectedPullTimeNs =
+            processor->mPullerManager->mReceivers.begin()->second.front().nextPullTimeNs;
     EXPECT_EQ(baseTimeNs + startBucketNum * bucketSizeNs + bucketSizeNs, expectedPullTimeNs);
 
     auto screenOffEvent = CreateScreenStateChangedEvent(android::view::DISPLAY_STATE_OFF,
@@ -142,23 +141,23 @@ TEST(ValueMetricE2eTest, TestPulledEvents) {
 
     EXPECT_EQ(baseTimeNs + 2 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(0).has_value());
+    EXPECT_TRUE(data.bucket_info(0).has_value_long());
 
     EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(1).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(1).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(1).has_value());
+    EXPECT_TRUE(data.bucket_info(1).has_value_long());
 
     EXPECT_EQ(baseTimeNs + 4 * bucketSizeNs, data.bucket_info(2).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 5 * bucketSizeNs, data.bucket_info(2).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(2).has_value());
+    EXPECT_TRUE(data.bucket_info(2).has_value_long());
 
     EXPECT_EQ(baseTimeNs + 6 * bucketSizeNs, data.bucket_info(3).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(3).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(3).has_value());
+    EXPECT_TRUE(data.bucket_info(3).has_value_long());
 
     EXPECT_EQ(baseTimeNs + 7 * bucketSizeNs, data.bucket_info(4).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 8 * bucketSizeNs, data.bucket_info(4).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(4).has_value());
+    EXPECT_TRUE(data.bucket_info(4).has_value_long());
 }
 
 TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
@@ -173,7 +172,7 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
         baseTimeNs, configAddedTimeNs, config, cfgKey);
     EXPECT_EQ(processor->mMetricsManagers.size(), 1u);
     EXPECT_TRUE(processor->mMetricsManagers.begin()->second->isConfigValid());
-    processor->mStatsPullerManager.ForceClearPullerCache();
+    processor->mPullerManager->ForceClearPullerCache();
 
     int startBucketNum = processor->mMetricsManagers.begin()->second->
             mAllMetricProducers[0]->getCurrentBucketNum();
@@ -181,12 +180,11 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
 
     // When creating the config, the gauge metric producer should register the alarm at the
     // end of the current bucket.
-    EXPECT_EQ((size_t)1, StatsPullerManagerImpl::GetInstance().mReceivers.size());
+    EXPECT_EQ((size_t)1, processor->mPullerManager->mReceivers.size());
     EXPECT_EQ(bucketSizeNs,
-              StatsPullerManagerImpl::GetInstance().mReceivers.begin()->
-                    second.front().intervalNs);
-    int64_t& expectedPullTimeNs = StatsPullerManagerImpl::GetInstance().mReceivers.begin()->
-            second.front().nextPullTimeNs;
+              processor->mPullerManager->mReceivers.begin()->second.front().intervalNs);
+    int64_t& expectedPullTimeNs =
+            processor->mPullerManager->mReceivers.begin()->second.front().nextPullTimeNs;
     EXPECT_EQ(baseTimeNs + startBucketNum * bucketSizeNs + bucketSizeNs, expectedPullTimeNs);
 
     // Screen off/on/off events.
@@ -250,15 +248,15 @@ TEST(ValueMetricE2eTest, TestPulledEvents_LateAlarm) {
 
     EXPECT_EQ(baseTimeNs + 2 * bucketSizeNs, data.bucket_info(0).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 3 * bucketSizeNs, data.bucket_info(0).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(0).has_value());
+    EXPECT_TRUE(data.bucket_info(0).has_value_long());
 
     EXPECT_EQ(baseTimeNs + 8 * bucketSizeNs, data.bucket_info(1).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 9 * bucketSizeNs, data.bucket_info(1).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(1).has_value());
+    EXPECT_TRUE(data.bucket_info(1).has_value_long());
 
     EXPECT_EQ(baseTimeNs + 9 * bucketSizeNs, data.bucket_info(2).start_bucket_elapsed_nanos());
     EXPECT_EQ(baseTimeNs + 10 * bucketSizeNs, data.bucket_info(2).end_bucket_elapsed_nanos());
-    EXPECT_TRUE(data.bucket_info(2).has_value());
+    EXPECT_TRUE(data.bucket_info(2).has_value_long());
 }
 
 #else

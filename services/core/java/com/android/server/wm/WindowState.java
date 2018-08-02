@@ -16,7 +16,7 @@
 
 package com.android.server.wm;
 
-import static android.app.ActivityManager.StackId.INVALID_STACK_ID;
+import static android.app.ActivityTaskManager.INVALID_STACK_ID;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.MODE_DEFAULT;
 import static android.app.AppOpsManager.OP_NONE;
@@ -100,6 +100,7 @@ import static com.android.server.wm.WindowManagerService.MAX_ANIMATION_DURATION;
 import static com.android.server.wm.WindowManagerService.TYPE_LAYER_MULTIPLIER;
 import static com.android.server.wm.WindowManagerService.TYPE_LAYER_OFFSET;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
+import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_REMOVING_FOCUS;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
 import static com.android.server.wm.WindowManagerService.WINDOWS_FREEZING_SCREENS_TIMEOUT;
 import static com.android.server.wm.WindowManagerService.localLOGV;
@@ -151,6 +152,8 @@ import static com.android.server.wm.WindowStateProto.VIEW_VISIBILITY;
 import static com.android.server.wm.WindowStateProto.VISIBLE_FRAME;
 import static com.android.server.wm.WindowStateProto.VISIBLE_INSETS;
 import static com.android.server.wm.WindowStateProto.WINDOW_CONTAINER;
+import static com.android.server.wm.utils.CoordinateTransforms.transformRect;
+import static com.android.server.wm.utils.CoordinateTransforms.transformToRotation;
 
 import android.annotation.CallSuper;
 import android.app.AppOpsManager;
@@ -445,7 +448,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     /**
      * Usually empty. Set to the task's tempInsetFrame. See
-     *{@link android.app.IActivityManager#resizeDockedStack}.
+     *{@link android.app.IActivityTaskManager#resizeDockedStack}.
      */
     private final Rect mInsetFrame = new Rect();
 
@@ -1812,7 +1815,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 && (mAttrs.privateFlags & PRIVATE_FLAG_NO_MOVE_ANIMATION) == 0
                 && !isDragResizing() && !adjustedForMinimizedDockOrIme
                 && getWindowConfiguration().hasMovementAnimations()
-                && !mWinAnimator.mLastHidden) {
+                && !mWinAnimator.mLastHidden
+                && !mSeamlesslyRotated) {
             startMoveAnimation(left, top);
         }
 
@@ -2061,7 +2065,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             if (wasVisible && mService.updateOrientationFromAppTokensLocked(displayId)) {
                 mService.mH.obtainMessage(SEND_NEW_CONFIGURATION, displayId).sendToTarget();
             }
-            mService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, true /*updateInputWindows*/);
+            mService.updateFocusedWindowLocked(mService.mCurrentFocus == this
+                            ? UPDATE_FOCUS_REMOVING_FOCUS
+                            : UPDATE_FOCUS_NORMAL,
+                    true /*updateInputWindows*/);
         } finally {
             Binder.restoreCallingIdentity(origId);
         }
@@ -2130,7 +2137,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             super(inputChannel, mService.mH.getLooper());
         }
         @Override
-        public void onInputEvent(InputEvent event, int displayId) {
+        public void onInputEvent(InputEvent event) {
             finishInputEvent(event, true);
         }
     }
@@ -2448,7 +2455,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     try {
                         // Note: this calls into ActivityManager, so we must *not* hold the window
                         // manager lock while calling this.
-                        mService.mActivityManager.setSplitScreenResizing(false);
+                        mService.mActivityTaskManager.setSplitScreenResizing(false);
                     } catch (RemoteException e) {
                         // Local call, shouldn't return RemoteException.
                         throw e.rethrowAsRuntimeException();
@@ -4854,6 +4861,29 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     void setFrameNumber(long frameNumber) {
         mFrameNumber = frameNumber;
+    }
+
+    @Override
+    void seamlesslyRotate(Transaction t, int oldRotation, int newRotation) {
+        if (!isVisibleNow() || mIsWallpaper) {
+            return;
+        }
+        final Matrix transform = mTmpMatrix;
+
+        mService.markForSeamlessRotation(this, true);
+
+        // We rotated the screen, but have not performed a new layout pass yet. In the mean time,
+        // we recompute the coordinates of mFrame in the new orientation, so the surface can be
+        // properly placed.
+        transformToRotation(oldRotation, newRotation, getDisplayInfo(), transform);
+        transformRect(transform, mFrame, null /* tmpRectF */);
+
+        updateSurfacePosition(t);
+        mWinAnimator.seamlesslyRotate(t, oldRotation, newRotation);
+
+        // Dispatch to children only after mFrame has been updated, as it's needed in the
+        // child's updateSurfacePosition.
+        super.seamlesslyRotate(t, oldRotation, newRotation);
     }
 
     private final class MoveAnimationSpec implements AnimationSpec {

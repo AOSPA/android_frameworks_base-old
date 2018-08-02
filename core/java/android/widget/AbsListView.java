@@ -6511,7 +6511,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @param listener The recycler listener to be notified of views set aside
      *        in the recycler.
      *
-     * @see android.widget.AbsListView.RecycleBin
      * @see android.widget.AbsListView.RecyclerListener
      */
     public void setRecyclerListener(RecyclerListener listener) {
@@ -6697,7 +6696,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * inside the RecycleBin's scrap heap. This listener is used to free resources
      * associated to Views placed in the RecycleBin.
      *
-     * @see android.widget.AbsListView.RecycleBin
      * @see android.widget.AbsListView#setRecyclerListener(android.widget.AbsListView.RecyclerListener)
      */
     public static interface RecyclerListener {

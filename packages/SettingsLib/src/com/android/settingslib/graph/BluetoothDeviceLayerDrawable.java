@@ -28,7 +28,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
-import android.support.annotation.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
 import android.view.Gravity;
 import android.view.View;
 
@@ -117,7 +117,8 @@ public class BluetoothDeviceLayerDrawable extends LayerDrawable {
                     R.fraction.bt_battery_button_height_fraction, 1, 1);
             mAspectRatio = resources.getFraction(R.fraction.bt_battery_ratio_fraction, 1, 1);
 
-            final int tintColor = Utils.getColorAttr(context, android.R.attr.colorControlNormal);
+            final int tintColor = Utils.getColorAttrDefaultColor(context,
+                    android.R.attr.colorControlNormal);
             setColorFilter(new PorterDuffColorFilter(tintColor, PorterDuff.Mode.SRC_IN));
             setBatteryLevel(batteryLevel);
             mFrameColor = frameColor;

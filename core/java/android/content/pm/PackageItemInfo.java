@@ -53,6 +53,12 @@ public class PackageItemInfo {
     private static final int LINE_FEED_CODE_POINT = 10;
     private static final int NBSP_CODE_POINT = 160;
 
+    /** The maximum length of a safe label, in characters */
+    private static final int MAX_SAFE_LABEL_LENGTH = 50000;
+
+    /** @hide */
+    public static final float DEFAULT_MAX_LABEL_SIZE_PX = 500f;
+
     /**
      * Flags for {@link #loadSafeLabel(PackageManager, float, int)}
      *
@@ -71,6 +77,7 @@ public class PackageItemInfo {
      * @see #loadSafeLabel(PackageManager, float, int)
      * @hide
      */
+    @SystemApi
     public static final int SAFE_LABEL_FLAG_TRIM = 0x1;
 
     /**
@@ -80,6 +87,7 @@ public class PackageItemInfo {
      * @see #loadSafeLabel(PackageManager, float, int)
      * @hide
      */
+    @SystemApi
     public static final int SAFE_LABEL_FLAG_SINGLE_LINE = 0x2;
 
     /**
@@ -89,11 +97,8 @@ public class PackageItemInfo {
      * @see #loadSafeLabel(PackageManager, float, int)
      * @hide
      */
+    @SystemApi
     public static final int SAFE_LABEL_FLAG_FIRST_LINE = 0x4;
-
-    private static final float MAX_LABEL_SIZE_PX = 500f;
-    /** The maximum length of a safe label, in characters */
-    private static final int MAX_SAFE_LABEL_LENGTH = 50000;
 
     private static volatile boolean sForceSafeLabels = false;
 
@@ -189,7 +194,8 @@ public class PackageItemInfo {
      */
     public @NonNull CharSequence loadLabel(@NonNull PackageManager pm) {
         if (sForceSafeLabels) {
-            return loadSafeLabel(pm);
+            return loadSafeLabel(pm, DEFAULT_MAX_LABEL_SIZE_PX, SAFE_LABEL_FLAG_TRIM
+                    | SAFE_LABEL_FLAG_FIRST_LINE);
         } else {
             return loadUnsafeLabel(pm);
         }
@@ -212,57 +218,6 @@ public class PackageItemInfo {
         return packageName;
     }
 
-    /**
-     * Deprecated use loadSafeLabel(PackageManager, float, int) instead
-     *
-     * @hide
-     */
-    @SystemApi
-    public @NonNull CharSequence loadSafeLabel(@NonNull PackageManager pm) {
-        // loadLabel() always returns non-null
-        String label = loadUnsafeLabel(pm).toString();
-        // strip HTML tags to avoid <br> and other tags overwriting original message
-        String labelStr = Html.fromHtml(label).toString();
-
-        // If the label contains new line characters it may push the UI
-        // down to hide a part of it. Labels shouldn't have new line
-        // characters, so just truncate at the first time one is seen.
-        final int labelLength = Math.min(labelStr.length(), MAX_SAFE_LABEL_LENGTH);
-        final StringBuffer sb = new StringBuffer(labelLength);
-        int offset = 0;
-        while (offset < labelLength) {
-            final int codePoint = labelStr.codePointAt(offset);
-            final int type = Character.getType(codePoint);
-            if (type == Character.LINE_SEPARATOR
-                    || type == Character.CONTROL
-                    || type == Character.PARAGRAPH_SEPARATOR) {
-                labelStr = labelStr.substring(0, offset);
-                break;
-            }
-            // replace all non-break space to " " in order to be trimmed
-            final int charCount = Character.charCount(codePoint);
-            if (type == Character.SPACE_SEPARATOR) {
-                sb.append(' ');
-            } else {
-                sb.append(labelStr.charAt(offset));
-                if (charCount == 2) {
-                    sb.append(labelStr.charAt(offset + 1));
-                }
-            }
-            offset += charCount;
-        }
-
-        labelStr = sb.toString().trim();
-        if (labelStr.isEmpty()) {
-            return packageName;
-        }
-        TextPaint paint = new TextPaint();
-        paint.setTextSize(42);
-
-        return TextUtils.ellipsize(labelStr, paint, MAX_LABEL_SIZE_PX,
-                TextUtils.TruncateAt.END);
-    }
-
     private static boolean isNewline(int codePoint) {
         int type = Character.getType(codePoint);
         return type == Character.PARAGRAPH_SEPARATOR || type == Character.LINE_SEPARATOR
@@ -271,6 +226,17 @@ public class PackageItemInfo {
 
     private static boolean isWhiteSpace(int codePoint) {
         return Character.isWhitespace(codePoint) || codePoint == NBSP_CODE_POINT;
+    }
+
+    /**
+     * @hide
+     * @deprecated use loadSafeLabel(PackageManager, float, int) instead
+     */
+    @SystemApi
+    @Deprecated
+    public @NonNull CharSequence loadSafeLabel(@NonNull PackageManager pm) {
+        return loadSafeLabel(pm, DEFAULT_MAX_LABEL_SIZE_PX, SAFE_LABEL_FLAG_TRIM
+                | SAFE_LABEL_FLAG_FIRST_LINE);
     }
 
     /**
@@ -387,6 +353,7 @@ public class PackageItemInfo {
      * @return The safe label
      * @hide
      */
+    @SystemApi
     public @NonNull CharSequence loadSafeLabel(@NonNull PackageManager pm,
             @FloatRange(from = 0) float ellipsizeDip, @SafeLabelFlags int flags) {
         boolean onlyKeepFirstLine = ((flags & SAFE_LABEL_FLAG_FIRST_LINE) != 0);
@@ -399,7 +366,7 @@ public class PackageItemInfo {
                 | SAFE_LABEL_FLAG_FIRST_LINE);
         Preconditions.checkArgument(!(onlyKeepFirstLine && forceSingleLine),
                 "Cannot set SAFE_LABEL_FLAG_SINGLE_LINE and SAFE_LABEL_FLAG_FIRST_LINE at the same "
-                        + "time");
+                + "time");
 
         // loadLabel() always returns non-null
         String label = loadUnsafeLabel(pm).toString();

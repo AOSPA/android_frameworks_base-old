@@ -27,7 +27,12 @@ ifeq ($(PRODUCT_IOT),true)
 
 LOCAL_SHARED_LIBRARIES += \
     libandroidthings \
+    libandroidthings_protos \
     libchrome \
+    libprotobuf-cpp-lite \
+
+LOCAL_STATIC_LIBRARIES += \
+    libjsoncpp
 
 LOCAL_SRC_FILES += \
     iot/iotbootanimation_main.cpp \
@@ -94,3 +99,5 @@ LOCAL_32_BIT_ONLY := true
 endif
 
 include ${BUILD_SHARED_LIBRARY}
+
+include $(call all-makefiles-under,$(LOCAL_PATH))

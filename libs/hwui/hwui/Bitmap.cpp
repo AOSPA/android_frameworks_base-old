@@ -16,9 +16,8 @@
 #include "Bitmap.h"
 
 #include "Caches.h"
-#include "renderthread/EglManager.h"
+#include "HardwareBitmapUploader.h"
 #include "renderthread/RenderProxy.h"
-#include "renderthread/RenderThread.h"
 #include "utils/Color.h"
 
 #include <sys/mman.h>
@@ -34,17 +33,16 @@
 #include <SkImagePriv.h>
 #include <SkToSRGBColorFilter.h>
 
+#include <limits>
+
 namespace android {
 
+// returns true if rowBytes * height can be represented by a positive int32_t value
+// and places that value in size.
 static bool computeAllocationSize(size_t rowBytes, int height, size_t* size) {
-    int32_t rowBytes32 = SkToS32(rowBytes);
-    int64_t bigSize = (int64_t)height * rowBytes32;
-    if (rowBytes32 < 0 || !sk_64_isS32(bigSize)) {
-        return false;  // allocation will be too large
-    }
-
-    *size = sk_64_asS32(bigSize);
-    return true;
+    return 0 <= height && height <= std::numeric_limits<size_t>::max() &&
+           !__builtin_mul_overflow(rowBytes, (size_t)height, size) &&
+           *size <= std::numeric_limits<int32_t>::max();
 }
 
 typedef sk_sp<Bitmap> (*AllocPixelRef)(size_t allocSize, const SkImageInfo& info, size_t rowBytes);
@@ -85,7 +83,7 @@ static sk_sp<Bitmap> allocateHeapBitmap(size_t size, const SkImageInfo& info, si
 }
 
 sk_sp<Bitmap> Bitmap::allocateHardwareBitmap(SkBitmap& bitmap) {
-    return uirenderer::renderthread::RenderProxy::allocateHardwareBitmap(bitmap);
+    return uirenderer::HardwareBitmapUploader::allocateHardwareBitmap(bitmap);
 }
 
 sk_sp<Bitmap> Bitmap::allocateHeapBitmap(SkBitmap* bitmap) {
@@ -205,10 +203,8 @@ Bitmap::Bitmap(GraphicBuffer* buffer, const SkImageInfo& info)
     mPixelStorage.hardware.buffer = buffer;
     buffer->incStrong(buffer);
     setImmutable();  // HW bitmaps are always immutable
-    if (uirenderer::Properties::isSkiaEnabled()) {
-        mImage = SkImage::MakeFromAHardwareBuffer(reinterpret_cast<AHardwareBuffer*>(buffer),
-                                                  mInfo.alphaType(), mInfo.refColorSpace());
-    }
+    mImage = SkImage::MakeFromAHardwareBuffer(reinterpret_cast<AHardwareBuffer*>(buffer),
+                                              mInfo.alphaType(), mInfo.refColorSpace());
 }
 
 Bitmap::~Bitmap() {
@@ -288,13 +284,8 @@ void Bitmap::setAlphaType(SkAlphaType alphaType) {
 void Bitmap::getSkBitmap(SkBitmap* outBitmap) {
     outBitmap->setHasHardwareMipMap(mHasHardwareMipMap);
     if (isHardware()) {
-        if (uirenderer::Properties::isSkiaEnabled()) {
-            outBitmap->allocPixels(SkImageInfo::Make(info().width(), info().height(),
-                                                     info().colorType(), info().alphaType(),
-                                                     nullptr));
-        } else {
-            outBitmap->allocPixels(info());
-        }
+        outBitmap->allocPixels(SkImageInfo::Make(info().width(), info().height(),
+                                                 info().colorType(), info().alphaType(), nullptr));
         uirenderer::renderthread::RenderProxy::copyGraphicBufferInto(graphicBuffer(), outBitmap);
         if (mInfo.colorSpace()) {
             sk_sp<SkPixelRef> pixelRef = sk_ref_sp(outBitmap->pixelRef());
@@ -322,7 +313,7 @@ GraphicBuffer* Bitmap::graphicBuffer() {
 sk_sp<SkImage> Bitmap::makeImage(sk_sp<SkColorFilter>* outputColorFilter) {
     sk_sp<SkImage> image = mImage;
     if (!image) {
-        SkASSERT(!(isHardware() && uirenderer::Properties::isSkiaEnabled()));
+        SkASSERT(!isHardware());
         SkBitmap skiaBitmap;
         skiaBitmap.setInfo(info(), rowBytes());
         skiaBitmap.setPixelRef(sk_ref_sp(this), 0, 0);
@@ -332,8 +323,7 @@ sk_sp<SkImage> Bitmap::makeImage(sk_sp<SkColorFilter>* outputColorFilter) {
         // TODO: refactor Bitmap to not derive from SkPixelRef, which would allow caching here.
         image = SkMakeImageFromRasterBitmap(skiaBitmap, kNever_SkCopyPixelsMode);
     }
-    if (uirenderer::Properties::isSkiaEnabled() && image->colorSpace() != nullptr &&
-        !image->colorSpace()->isSRGB()) {
+    if (image->colorSpace() != nullptr && !image->colorSpace()->isSRGB()) {
         *outputColorFilter = SkToSRGBColorFilter::Make(image->refColorSpace());
     }
     return image;

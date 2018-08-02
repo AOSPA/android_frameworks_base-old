@@ -35,6 +35,7 @@ import android.app.servertransaction.ActivityLifecycleItem.LifecycleState;
 import android.app.servertransaction.ActivityRelaunchItem;
 import android.app.servertransaction.ActivityResultItem;
 import android.app.servertransaction.ClientTransaction;
+import android.app.servertransaction.ClientTransactionItem;
 import android.app.servertransaction.PendingTransactionActions;
 import android.app.servertransaction.PendingTransactionActions.StopInfo;
 import android.app.servertransaction.TransactionExecutor;
@@ -94,6 +95,7 @@ import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.Process;
+import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.StrictMode;
@@ -176,6 +178,7 @@ import java.net.InetAddress;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -257,6 +260,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     final H mH = new H();
     final Executor mExecutor = new HandlerExecutor(mH);
     final ArrayMap<IBinder, ActivityClientRecord> mActivities = new ArrayMap<>();
+    final Map<IBinder, ClientTransactionItem> mActivitiesToBeDestroyed =
+            Collections.synchronizedMap(new ArrayMap<IBinder, ClientTransactionItem>());
     // List of new activities (via ActivityRecord.nextIdle) that should
     // be reported when next we idle.
     ActivityClientRecord mNewActivities = null;
@@ -740,6 +745,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         public boolean runGc;
         String path;
         ParcelFileDescriptor fd;
+        RemoteCallback finishCallback;
     }
 
     static final class UpdateCompatibilityData {
@@ -999,13 +1005,14 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         @Override
         public void dumpHeap(boolean managed, boolean mallocInfo, boolean runGc, String path,
-                ParcelFileDescriptor fd) {
+                ParcelFileDescriptor fd, RemoteCallback finishCallback) {
             DumpHeapData dhd = new DumpHeapData();
             dhd.managed = managed;
             dhd.mallocInfo = mallocInfo;
             dhd.runGc = runGc;
             dhd.path = path;
             dhd.fd = fd;
+            dhd.finishCallback = finishCallback;
             sendMessage(H.DUMP_HEAP, dhd, 0, 0, true /*async*/);
         }
 
@@ -1838,7 +1845,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
             if (a != null) {
                 mNewActivities = null;
-                IActivityManager am = ActivityManager.getService();
+                IActivityTaskManager am = ActivityTaskManager.getService();
                 ActivityClientRecord prev;
                 do {
                     if (localLOGV) Slog.v(
@@ -2991,7 +2998,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     private ContextImpl createBaseContextForActivity(ActivityClientRecord r) {
         final int displayId;
         try {
-            displayId = ActivityManager.getService().getActivityDisplayId(r.token);
+            displayId = ActivityTaskManager.getService().getActivityDisplayId(r.token);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3059,7 +3066,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         } else {
             // If there was an error, for any reason, tell the activity manager to stop us.
             try {
-                ActivityManager.getService()
+                ActivityTaskManager.getService()
                         .finishActivity(r.token, Activity.RESULT_CANCELED, null,
                                 Activity.DONT_FINISH_TASK_WITH_ACTIVITY);
             } catch (RemoteException ex) {
@@ -3091,7 +3098,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
         }
         try {
-            ActivityManager.getService().reportSizeConfigurations(r.token,
+            ActivityTaskManager.getService().reportSizeConfigurations(r.token,
                     horizontal.copyKeys(), vertical.copyKeys(), smallest.copyKeys());
         } catch (RemoteException ex) {
             throw ex.rethrowFromSystemServer();
@@ -3208,7 +3215,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         structure.setAcquisitionEndTime(SystemClock.uptimeMillis());
 
         mLastAssistStructures.add(new WeakReference<>(structure));
-        IActivityManager mgr = ActivityManager.getService();
+        IActivityTaskManager mgr = ActivityTaskManager.getService();
         try {
             mgr.reportAssistContextExtras(cmd.requestToken, data, structure, content, referrer);
         } catch (RemoteException e) {
@@ -3836,7 +3843,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         boolean willBeVisible = !a.mStartedActivity;
         if (!willBeVisible) {
             try {
-                willBeVisible = ActivityManager.getService().willActivityBeVisible(
+                willBeVisible = ActivityTaskManager.getService().willActivityBeVisible(
                         a.getActivityToken());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -4141,7 +4148,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         try {
-            r.activity.performStop(false /*preserveWindow*/, reason);
+            r.activity.performStop(r.mPreserveWindow, reason);
         } catch (SuperNotCalledException e) {
             throw e;
         } catch (Exception e) {
@@ -4288,7 +4295,7 @@ public final class ActivityThread extends ClientTransactionHandler {
 
             // Tell activity manager we slept.
             try {
-                ActivityManager.getService().activitySlept(r.token);
+                ActivityTaskManager.getService().activitySlept(r.token);
             } catch (RemoteException ex) {
                 throw ex.rethrowFromSystemServer();
             }
@@ -4472,6 +4479,11 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @Override
+    public Map<IBinder, ClientTransactionItem> getActivitiesToBeDestroyed() {
+        return mActivitiesToBeDestroyed;
+    }
+
+    @Override
     public void handleDestroyActivity(IBinder token, boolean finishing, int configChanges,
             boolean getNonConfigInstance, String reason) {
         ActivityClientRecord r = performDestroyActivity(token, finishing,
@@ -4535,7 +4547,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
         if (finishing) {
             try {
-                ActivityManager.getService().activityDestroyed(token);
+                ActivityTaskManager.getService().activityDestroyed(token);
             } catch (RemoteException ex) {
                 throw ex.rethrowFromSystemServer();
             }
@@ -4788,7 +4800,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     @Override
     public void reportRelaunch(IBinder token, PendingTransactionActions pendingActions) {
         try {
-            ActivityManager.getService().activityRelaunched(token);
+            ActivityTaskManager.getService().activityRelaunched(token);
             final ActivityClientRecord r = mActivities.get(token);
             if (pendingActions.shouldReportRelaunchToWindowManager() && r != null
                     && r.window != null) {
@@ -5310,6 +5322,9 @@ public final class ActivityThread extends ClientTransactionHandler {
             ActivityManager.getService().dumpHeapFinished(dhd.path);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+        if (dhd.finishCallback != null) {
+            dhd.finishCallback.sendResult(null);
         }
     }
 
@@ -6532,7 +6547,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                                 + " used=" + (dalvikUsed/1024));
                         mSomeActivitiesChanged = false;
                         try {
-                            mgr.releaseSomeActivities(mAppThread);
+                            ActivityTaskManager.getService().releaseSomeActivities(mAppThread);
                         } catch (RemoteException e) {
                             throw e.rethrowFromSystemServer();
                         }

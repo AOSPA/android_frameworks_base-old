@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"แสดงความคิดเห็นด้วยภาพสำหรับการแตะ"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"แสดงการอัปเดตพื้นผิว"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"แฟลชพื้นผิวหน้าต่างทั้งหมดเมื่อมีการอัปเดต"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"แสดงการอัปเดตมุมมอง GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"แฟลชมุมมองภายในหน้าต่างเมื่อวาดด้วย GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"แสดงมุมมองการอัปเดต"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"แสดงมุมมองภายในหน้าต่างขณะลาก"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"แสดงอัปเดตเลเยอร์ฮาร์ดแวร์"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"เลเยอร์ฮาร์ดแวร์กะพริบเป็นสีเขียว เมื่อมีการอัปเดต"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"แก้ปัญหาการแสดงพิกเซลซ้ำด้วย GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"แสดงหน้าปกคลิป ขอบ ฯลฯ"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"บังคับทิศทางการจัดวาง RTL"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"บังคับทิศทางการจัดวางหน้าจอเป็น RTL สำหรับทุกภาษา"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"เร่งการแสดงผลของ GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"ต้องใช้ GPU สำหรับการวาดภาพ 2 มิติ"</string>
     <string name="force_msaa" msgid="7920323238677284387">"บังคับใช้ 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"เปิดใช้งาน 4x MSAA ในแอปพลิเคชัน OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"แก้ไขการทำงานของคลิปที่ไม่ใช่สี่เหลี่ยม"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"การแสดงผล GPU ตามโปรไฟล์"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"การแสดงผล HWUI ตามโปรไฟล์"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"เปิดใช้เลเยอร์การแก้ไขข้อบกพร่อง GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"อนุญาตให้โหลดเลเยอร์การแก้ไขข้อบกพร่อง GPU สำหรับแอปแก้ไขข้อบกพร่อง"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"อัตราการเคลื่อนไหวของหน้าต่าง"</string>

@@ -16,14 +16,9 @@
 
 #include "Caches.h"
 
-#include "GammaFontRenderer.h"
 #include "GlLayer.h"
 #include "Properties.h"
-#include "ShadowTessellator.h"
 #include "renderstate/RenderState.h"
-#ifdef BUGREPORT_FONT_CACHE_USAGE
-#include "font/FontCacheHistoryTracker.h"
-#endif
 #include "utils/GLUtils.h"
 
 #include <cutils/properties.h>
@@ -49,17 +44,10 @@ Caches* Caches::sInstance = nullptr;
 // Constructors/destructor
 ///////////////////////////////////////////////////////////////////////////////
 
-Caches::Caches(RenderState& renderState)
-        : gradientCache(extensions())
-        , patchCache(renderState)
-        , programCache(extensions())
-        , mRenderState(&renderState)
-        , mInitialized(false) {
+Caches::Caches(RenderState& renderState) : mInitialized(false) {
     INIT_LOGD("Creating OpenGL renderer caches");
     init();
-    initConstraints();
     initStaticProperties();
-    initExtensions();
 }
 
 bool Caches::init() {
@@ -68,7 +56,6 @@ bool Caches::init() {
     ATRACE_NAME("Caches::init");
 
     mRegionMesh = nullptr;
-    mProgram = nullptr;
 
     mInitialized = true;
 
@@ -77,23 +64,6 @@ bool Caches::init() {
     mTextureState->constructTexture(*this);
 
     return true;
-}
-
-void Caches::initExtensions() {
-    if (extensions().hasDebugMarker()) {
-        eventMark = glInsertEventMarkerEXT;
-
-        startMark = glPushGroupMarkerEXT;
-        endMark = glPopGroupMarkerEXT;
-    } else {
-        eventMark = eventMarkNull;
-        startMark = startMarkNull;
-        endMark = endMarkNull;
-    }
-}
-
-void Caches::initConstraints() {
-    maxTextureSize = DeviceInfo::get()->maxTextureSize();
 }
 
 void Caches::initStaticProperties() {
@@ -106,13 +76,6 @@ void Caches::terminate() {
     if (!mInitialized) return;
     mRegionMesh.reset(nullptr);
 
-    fboCache.clear();
-
-    programCache.clear();
-    mProgram = nullptr;
-
-    patchCache.clear();
-
     clearGarbage();
 
     delete mPixelBufferState;
@@ -122,153 +85,19 @@ void Caches::terminate() {
     mInitialized = false;
 }
 
-void Caches::setProgram(const ProgramDescription& description) {
-    setProgram(programCache.get(description));
-}
-
-void Caches::setProgram(Program* program) {
-    if (!program || !program->isInUse()) {
-        if (mProgram) {
-            mProgram->remove();
-        }
-        if (program) {
-            program->use();
-        }
-        mProgram = program;
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Debug
-///////////////////////////////////////////////////////////////////////////////
-
-uint32_t Caches::getOverdrawColor(uint32_t amount) const {
-    static uint32_t sOverdrawColors[2][4] = {{0x2f0000ff, 0x2f00ff00, 0x3fff0000, 0x7fff0000},
-                                             {0x2f0000ff, 0x4fffff00, 0x5fff8ad8, 0x7fff0000}};
-    if (amount < 1) amount = 1;
-    if (amount > 4) amount = 4;
-
-    int overdrawColorIndex = static_cast<int>(Properties::overdrawColorSet);
-    return sOverdrawColors[overdrawColorIndex][amount - 1];
-}
-
-void Caches::dumpMemoryUsage() {
-    String8 stringLog;
-    dumpMemoryUsage(stringLog);
-    ALOGD("%s", stringLog.string());
-}
-
-void Caches::dumpMemoryUsage(String8& log) {
-    uint32_t total = 0;
-    log.appendFormat("Current memory usage / total memory usage (bytes):\n");
-    log.appendFormat("  TextureCache         %8d / %8d\n", textureCache.getSize(),
-                     textureCache.getMaxSize());
-    if (mRenderState) {
-        int memused = 0;
-        for (std::set<Layer*>::iterator it = mRenderState->mActiveLayers.begin();
-             it != mRenderState->mActiveLayers.end(); it++) {
-            const Layer* layer = *it;
-            LOG_ALWAYS_FATAL_IF(layer->getApi() != Layer::Api::OpenGL);
-            const GlLayer* glLayer = static_cast<const GlLayer*>(layer);
-            log.appendFormat("    GlLayer size %dx%d; texid=%u refs=%d\n", layer->getWidth(),
-                             layer->getHeight(), glLayer->getTextureId(), layer->getStrongCount());
-            memused += layer->getWidth() * layer->getHeight() * 4;
-        }
-        log.appendFormat("  Layers total   %8d (numLayers = %zu)\n", memused,
-                         mRenderState->mActiveLayers.size());
-        total += memused;
-    }
-    log.appendFormat("  RenderBufferCache    %8d / %8d\n", renderBufferCache.getSize(),
-                     renderBufferCache.getMaxSize());
-    log.appendFormat("  GradientCache        %8d / %8d\n", gradientCache.getSize(),
-                     gradientCache.getMaxSize());
-    log.appendFormat("  PathCache            %8d / %8d\n", pathCache.getSize(),
-                     pathCache.getMaxSize());
-    log.appendFormat("  TessellationCache    %8d / %8d\n", tessellationCache.getSize(),
-                     tessellationCache.getMaxSize());
-    log.appendFormat("  TextDropShadowCache  %8d / %8d\n", dropShadowCache.getSize(),
-                     dropShadowCache.getMaxSize());
-    log.appendFormat("  PatchCache           %8d / %8d\n", patchCache.getSize(),
-                     patchCache.getMaxSize());
-
-    fontRenderer.dumpMemoryUsage(log);
-
-    log.appendFormat("Other:\n");
-    log.appendFormat("  FboCache             %8d / %8d\n", fboCache.getSize(),
-                     fboCache.getMaxSize());
-
-    total += textureCache.getSize();
-    total += renderBufferCache.getSize();
-    total += gradientCache.getSize();
-    total += pathCache.getSize();
-    total += tessellationCache.getSize();
-    total += dropShadowCache.getSize();
-    total += patchCache.getSize();
-    total += fontRenderer.getSize();
-
-    log.appendFormat("Total memory usage:\n");
-    log.appendFormat("  %d bytes, %.2f MB\n", total, total / 1024.0f / 1024.0f);
-
-#ifdef BUGREPORT_FONT_CACHE_USAGE
-    fontRenderer.getFontRenderer().historyTracker().dump(log);
-#endif
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // Memory management
 ///////////////////////////////////////////////////////////////////////////////
 
-void Caches::clearGarbage() {
-    pathCache.clearGarbage();
-    patchCache.clearGarbage();
-}
+void Caches::clearGarbage() {}
 
 void Caches::flush(FlushMode mode) {
-    FLUSH_LOGD("Flushing caches (mode %d)", mode);
-
-    switch (mode) {
-        case FlushMode::Full:
-            textureCache.clear();
-            patchCache.clear();
-            dropShadowCache.clear();
-            gradientCache.clear();
-            fontRenderer.clear();
-            fboCache.clear();
-        // fall through
-        case FlushMode::Moderate:
-            fontRenderer.flush();
-            textureCache.flush();
-            pathCache.clear();
-            tessellationCache.clear();
-        // fall through
-        case FlushMode::Layers:
-            renderBufferCache.clear();
-            break;
-    }
-
     clearGarbage();
     glFinish();
     // Errors during cleanup should be considered non-fatal, dump them and
     // and move on. TODO: All errors or just errors like bad surface?
     GLUtils::dumpGLErrors();
 }
-
-///////////////////////////////////////////////////////////////////////////////
-// Regions
-///////////////////////////////////////////////////////////////////////////////
-
-TextureVertex* Caches::getRegionMesh() {
-    // Create the mesh, 2 triangles and 4 vertices per rectangle in the region
-    if (!mRegionMesh) {
-        mRegionMesh.reset(new TextureVertex[kMaxNumberOfQuads * 4]);
-    }
-
-    return mRegionMesh.get();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Temporary Properties
-///////////////////////////////////////////////////////////////////////////////
 
 };  // namespace uirenderer
 };  // namespace android

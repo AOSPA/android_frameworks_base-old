@@ -351,8 +351,16 @@ public class TextUtils {
     }
 
     /**
-     * String.split() returns [''] when the string to be split is empty. This returns []. This does
-     * not remove any empty strings from the result. For example split("a,", ","  ) returns {"a", ""}.
+     *
+     * This method yields the same result as {@code text.split(expression, -1)} except that if
+     * {@code text.isEmpty()} then this method returns an empty array whereas
+     * {@code "".split(expression, -1)} would have returned an array with a single {@code ""}.
+     *
+     * The {@code -1} means that trailing empty Strings are not removed from the result; for
+     * example split("a,", ","  ) returns {"a", ""}. Note that whether a leading zero-width match
+     * can result in a leading {@code ""} depends on whether your app
+     * {@link android.content.pm.ApplicationInfo#targetSdkVersion targets an SDK version}
+     * {@code <= 28}; see {@link Pattern#split(CharSequence, int)}.
      *
      * @param text the string to split
      * @param expression the regular expression to match
@@ -369,8 +377,16 @@ public class TextUtils {
     }
 
     /**
-     * Splits a string on a pattern. String.split() returns [''] when the string to be
-     * split is empty. This returns []. This does not remove any empty strings from the result.
+     * Splits a string on a pattern. This method yields the same result as
+     * {@code pattern.split(text, -1)} except that if {@code text.isEmpty()} then this method
+     * returns an empty array whereas {@code pattern.split("", -1)} would have returned an array
+     * with a single {@code ""}.
+     *
+     * The {@code -1} means that trailing empty Strings are not removed from the result;
+     * Note that whether a leading zero-width match can result in a leading {@code ""} depends
+     * on whether your app {@link android.content.pm.ApplicationInfo#targetSdkVersion targets
+     * an SDK version} {@code <= 28}; see {@link Pattern#split(CharSequence, int)}.
+     *
      * @param text the string to split
      * @param pattern the regular expression to match
      * @return an array of strings. The array will be empty if text is empty
@@ -498,7 +514,7 @@ public class TextUtils {
 
     /** {@hide} */
     public static int length(@Nullable String s) {
-        return isEmpty(s) ? 0 : s.length();
+        return s != null ? s.length() : 0;
     }
 
     /**
@@ -676,7 +692,8 @@ public class TextUtils {
      * Flatten a CharSequence and whatever styles can be copied across processes
      * into the parcel.
      */
-    public static void writeToParcel(CharSequence cs, Parcel p, int parcelableFlags) {
+    public static void writeToParcel(@Nullable CharSequence cs, @NonNull Parcel p,
+            int parcelableFlags) {
         if (cs instanceof Spanned) {
             p.writeInt(0);
             p.writeString(cs.toString());
@@ -2072,6 +2089,25 @@ public class TextUtils {
             size = size - 1;
         }
         return (T) text.subSequence(0, size);
+    }
+
+    /**
+     * Trims the {@code text} to the first {@code size} characters and adds an ellipsis if the
+     * resulting string is shorter than the input. This will result in an output string which is
+     * longer than {@code size} for most inputs.
+     *
+     * @param size length of the result, should be greater than 0
+     *
+     * @hide
+     */
+    @Nullable
+    public static <T extends CharSequence> T trimToLengthWithEllipsis(@Nullable T text,
+            @IntRange(from = 1) int size) {
+        T trimmed = trimToSize(text, size);
+        if (trimmed.length() < text.length()) {
+            trimmed = (T) (trimmed.toString() + "...");
+        }
+        return trimmed;
     }
 
     private static Object sLock = new Object();

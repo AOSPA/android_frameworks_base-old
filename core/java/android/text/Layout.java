@@ -562,7 +562,9 @@ public abstract class Layout {
                 // XXX: assumes there's nothing additional to be done
                 canvas.drawText(buf, start, end, x, lbaseline, paint);
             } else {
-                tl.set(paint, buf, start, end, dir, directions, hasTab, tabStops);
+                tl.set(paint, buf, start, end, dir, directions, hasTab, tabStops,
+                        getEllipsisStart(lineNum),
+                        getEllipsisStart(lineNum) + getEllipsisCount(lineNum));
                 if (justify) {
                     tl.justify(right - left - indentWidth);
                 }
@@ -1029,8 +1031,10 @@ public abstract class Layout {
      *
      * @returns true if offset is at the BiDi level transition point and trailing BiDi level is
      *          higher than previous BiDi level. See above for the detail.
+     * @hide
      */
-    private boolean primaryIsTrailingPrevious(int offset) {
+    @VisibleForTesting
+    public boolean primaryIsTrailingPrevious(int offset) {
         int line = getLineForOffset(offset);
         int lineStart = getLineStart(line);
         int lineEnd = getLineEnd(line);
@@ -1084,8 +1088,10 @@ public abstract class Layout {
      * #primaryIsTrailingPrevious for all offsets on a line.
      * @param line The line giving the offsets we compute the information for
      * @return The array of results, indexed from 0, where 0 corresponds to the line start offset
+     * @hide
      */
-    private boolean[] primaryIsTrailingPreviousAllLineOffsets(int line) {
+    @VisibleForTesting
+    public boolean[] primaryIsTrailingPreviousAllLineOffsets(int line) {
         int lineStart = getLineStart(line);
         int lineEnd = getLineEnd(line);
         int[] runs = getLineDirections(line).mDirections;
@@ -1180,7 +1186,8 @@ public abstract class Layout {
         }
 
         TextLine tl = TextLine.obtain();
-        tl.set(mPaint, mText, start, end, dir, directions, hasTab, tabStops);
+        tl.set(mPaint, mText, start, end, dir, directions, hasTab, tabStops,
+                getEllipsisStart(line), getEllipsisStart(line) + getEllipsisCount(line));
         float wid = tl.measure(offset - start, trailing, null);
         TextLine.recycle(tl);
 
@@ -1219,7 +1226,8 @@ public abstract class Layout {
         }
 
         TextLine tl = TextLine.obtain();
-        tl.set(mPaint, mText, start, end, dir, directions, hasTab, tabStops);
+        tl.set(mPaint, mText, start, end, dir, directions, hasTab, tabStops,
+                getEllipsisStart(line), getEllipsisStart(line) + getEllipsisCount(line));
         boolean[] trailings = primaryIsTrailingPreviousAllLineOffsets(line);
         if (!primary) {
             for (int offset = 0; offset < trailings.length; ++offset) {
@@ -1361,7 +1369,8 @@ public abstract class Layout {
         final TextPaint paint = mWorkPaint;
         paint.set(mPaint);
         paint.setHyphenEdit(getHyphen(line));
-        tl.set(paint, mText, start, end, dir, directions, hasTabs, tabStops);
+        tl.set(paint, mText, start, end, dir, directions, hasTabs, tabStops,
+                getEllipsisStart(line), getEllipsisStart(line) + getEllipsisCount(line));
         if (isJustificationRequired(line)) {
             tl.justify(getJustifyWidth(line));
         }
@@ -1389,7 +1398,8 @@ public abstract class Layout {
         final TextPaint paint = mWorkPaint;
         paint.set(mPaint);
         paint.setHyphenEdit(getHyphen(line));
-        tl.set(paint, mText, start, end, dir, directions, hasTabs, tabStops);
+        tl.set(paint, mText, start, end, dir, directions, hasTabs, tabStops,
+                getEllipsisStart(line), getEllipsisStart(line) + getEllipsisCount(line));
         if (isJustificationRequired(line)) {
             tl.justify(getJustifyWidth(line));
         }
@@ -1474,7 +1484,8 @@ public abstract class Layout {
         TextLine tl = TextLine.obtain();
         // XXX: we don't care about tabs as we just use TextLine#getOffsetToLeftRightOf here.
         tl.set(mPaint, mText, lineStartOffset, lineEndOffset, getParagraphDirection(line), dirs,
-                false, null);
+                false, null,
+                getEllipsisStart(line), getEllipsisStart(line) + getEllipsisCount(line));
         final HorizontalMeasurementProvider horizontal =
                 new HorizontalMeasurementProvider(line, primary);
 
@@ -1728,7 +1739,8 @@ public abstract class Layout {
 
         TextLine tl = TextLine.obtain();
         // XXX: we don't care about tabs
-        tl.set(mPaint, mText, lineStart, lineEnd, lineDir, directions, false, null);
+        tl.set(mPaint, mText, lineStart, lineEnd, lineDir, directions, false, null,
+                getEllipsisStart(line), getEllipsisStart(line) + getEllipsisCount(line));
         caret = lineStart + tl.getOffsetToLeftRightOf(caret - lineStart, toLeft);
         TextLine.recycle(tl);
         return caret;
@@ -2110,7 +2122,8 @@ public abstract class Layout {
                     break;
                 }
             }
-            tl.set(paint, text, start, end, dir, directions, hasTabs, tabStops);
+            tl.set(paint, text, start, end, dir, directions, hasTabs, tabStops,
+                    0 /* ellipsisStart */, 0 /* ellipsisEnd */);
             return margin + Math.abs(tl.metrics(null));
         } finally {
             TextLine.recycle(tl);
@@ -2123,12 +2136,13 @@ public abstract class Layout {
     /**
      * @hide
      */
-    /* package */ static class TabStops {
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public static class TabStops {
         private int[] mStops;
         private int mNumStops;
         private int mIncrement;
 
-        TabStops(int increment, Object[] spans) {
+        public TabStops(int increment, Object[] spans) {
             reset(increment, spans);
         }
 

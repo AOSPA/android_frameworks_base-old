@@ -38,7 +38,7 @@ import android.graphics.drawable.Icon;
 import android.os.Parcelable;
 import android.os.UserHandle;
 import android.service.notification.StatusBarNotification;
-import android.support.v4.graphics.ColorUtils;
+import androidx.core.graphics.ColorUtils;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.FloatProperty;
@@ -50,7 +50,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.animation.Interpolator;
 
 import com.android.internal.statusbar.StatusBarIcon;
-import com.android.internal.util.NotificationColorUtil;
+import com.android.internal.util.ContrastColorUtil;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.notification.NotificationIconDozeHelper;
@@ -652,7 +652,7 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
         }
         // We'll modify the color if it doesn't pass GAR
         int contrastedColor = mDrawableColor;
-        if (!NotificationColorUtil.satisfiesTextContrast(mCachedContrastBackgroundColor,
+        if (!ContrastColorUtil.satisfiesTextContrast(mCachedContrastBackgroundColor,
                 contrastedColor)) {
             float[] hsl = new float[3];
             ColorUtils.colorToHSL(mDrawableColor, hsl);
@@ -661,8 +661,9 @@ public class StatusBarIconView extends AnimatedImageView implements StatusIconDi
             if (hsl[1] < 0.2f) {
                 contrastedColor = Notification.COLOR_DEFAULT;
             }
-            contrastedColor = NotificationColorUtil.resolveContrastColor(mContext,
-                    contrastedColor, mCachedContrastBackgroundColor);
+            boolean isDark = !ContrastColorUtil.isColorLight(mCachedContrastBackgroundColor);
+            contrastedColor = ContrastColorUtil.resolveContrastColor(mContext,
+                    contrastedColor, mCachedContrastBackgroundColor, isDark);
         }
         mContrastedDrawableColor = contrastedColor;
     }

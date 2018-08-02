@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Vis visuell tilbakemelding for trykk"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Vis overflateoppdateringer"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Fremhev hele vindusoverflater når de oppdateres"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Vis GPU-visningsoppdateringer"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Fremhev visninger i vinduer når tegnet med GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Vis «Se oppdateringer»"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Fremhev visninger i vinduer når de tegnes"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Vis maskinvarelag-oppdat."</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Maskinvarelag blinker grønt under oppdatering"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Feilsøk GPU-overtrekk"</string>
@@ -300,16 +300,14 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Vis kanter, marger osv."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Tving layoutretning for RTL"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Tving RTL-retning på skjermen for alle språk"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Tving GPU-gjengivelse"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Tving bruk av GPU for 2D-tegning"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Tving 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Slå på 4x MSAA i OpenGL ES 2.0-apper"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Feilsøk ikke-rektangulær klipping"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"GPU-gjengivelse av profil"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"HWUI-gjengivelse av profil"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Slå på GPU-feilsøkingslag"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Tillat GPU-feilsøkingslag for feilsøkingsapper"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Animasjonsskala for vindu"</string>
-    <string name="transition_animation_scale_title" msgid="387527540523595875">"Overgangsanimasjonsskala"</string>
+    <string name="transition_animation_scale_title" msgid="387527540523595875">"Animasjonsskala for overgang"</string>
     <string name="animator_duration_scale_title" msgid="3406722410819934083">"Varighetsskala for animasjon"</string>
     <string name="overlay_display_devices_title" msgid="5364176287998398539">"Simulering av sekundærskjermer"</string>
     <string name="debug_applications_category" msgid="4206913653849771549">"Apper"</string>

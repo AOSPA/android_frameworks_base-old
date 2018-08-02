@@ -34,7 +34,6 @@ import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
@@ -42,15 +41,13 @@ import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Handler;
 import android.service.notification.StatusBarNotification;
-import android.support.annotation.NonNull;
-import android.support.annotation.VisibleForTesting;
-import android.support.v4.graphics.ColorUtils;
+import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
+import androidx.core.graphics.ColorUtils;
 import android.util.AttributeSet;
-import android.util.FloatProperty;
 import android.util.Log;
 import android.util.MathUtils;
 import android.util.Pair;
-import android.util.Property;
 import android.view.ContextThemeWrapper;
 import android.view.InputDevice;
 import android.view.MotionEvent;
@@ -101,6 +98,7 @@ import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.HeadsUpAppearanceController;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.NotificationIconAreaController;
 import com.android.systemui.statusbar.phone.ScrimController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.HeadsUpUtil;
@@ -140,7 +138,6 @@ public class NotificationStackScrollLayout extends ViewGroup
     private boolean mSwipingInProgress;
     private int mCurrentStackHeight = Integer.MAX_VALUE;
     private final Paint mBackgroundPaint = new Paint();
-    private final Path mBackgroundPath = new Path();
     private final boolean mShouldDrawNotificationBackground;
 
     private float mExpandedHeight;
@@ -375,20 +372,22 @@ public class NotificationStackScrollLayout extends ViewGroup
     private boolean mScrollable;
     private View mForcedScroll;
     private View mNeedingPulseAnimation;
-    private float mDarkAmount = 0f;
-    private static final Property<NotificationStackScrollLayout, Float> DARK_AMOUNT =
-            new FloatProperty<NotificationStackScrollLayout>("darkAmount") {
-                @Override
-                public void setValue(NotificationStackScrollLayout object, float value) {
-                    object.setDarkAmount(value);
-                }
 
-                @Override
-                public Float get(NotificationStackScrollLayout object) {
-                    return object.getDarkAmount();
-                }
-            };
-    private ObjectAnimator mDarkAmountAnimator;
+    /**
+     * @see #setDarkAmount(float, float)
+     */
+    private float mInterpolatedDarkAmount = 0f;
+
+    /**
+     * @see #setDarkAmount(float, float)
+     */
+    private float mLinearDarkAmount = 0f;
+
+    /**
+     * How fast the background scales in the X direction as a factor of the Y expansion.
+     */
+    private float mBackgroundXFactor = 1f;
+
     private boolean mUsingLightTheme;
     private boolean mQsExpanded;
     private boolean mForwardScrollable;
@@ -416,6 +415,10 @@ public class NotificationStackScrollLayout extends ViewGroup
     private ArrayList<BiConsumer<Float, Float>> mExpandedHeightListeners = new ArrayList<>();
     private int mHeadsUpInset;
     private HeadsUpAppearanceController mHeadsUpAppearanceController;
+    private NotificationIconAreaController mIconAreaController;
+    private float mVerticalPanelTranslation;
+
+    private Interpolator mDarkXInterpolator = Interpolators.FAST_OUT_SLOW_IN;
 
     public NotificationStackScrollLayout(Context context) {
         this(context, null);
@@ -511,6 +514,20 @@ public class NotificationStackScrollLayout extends ViewGroup
         mSwipeHelper.onMenuShown(row);
     }
 
+    public void onUiModeChanged() {
+        mBgColor = mContext.getColor(R.color.notification_shade_background_color);
+        updateBackgroundDimming();
+
+        // Re-inflate all notification views
+        int childCount = getChildCount();
+        for (int i = 0; i < childCount; i++) {
+            View child = getChildAt(i);
+            if (child instanceof ActivatableNotificationView) {
+                ((ActivatableNotificationView) child).onUiModeChanged();
+            }
+        }
+    }
+
     protected void onDraw(Canvas canvas) {
         if (mShouldDrawNotificationBackground
                 && (mCurrentBounds.top < mCurrentBounds.bottom || mAmbientState.isDark())) {
@@ -532,10 +549,16 @@ public class NotificationStackScrollLayout extends ViewGroup
         final int lockScreenRight = getWidth() - mSidePaddings;
         final int lockScreenTop = mCurrentBounds.top;
         final int lockScreenBottom = mCurrentBounds.bottom;
-        final int darkLeft = getWidth() / 2 - mSeparatorWidth / 2;
-        final int darkRight = darkLeft + mSeparatorWidth;
-        final int darkTop = (int) (mRegularTopPadding + mSeparatorThickness / 2f);
-        final int darkBottom = darkTop + mSeparatorThickness;
+        int separatorWidth = 0;
+        int separatorThickness = 0;
+        if (mIconAreaController.hasShelfIconsWhenFullyDark()) {
+            separatorThickness = mSeparatorThickness;
+            separatorWidth = mSeparatorWidth;
+        }
+        final int darkLeft = getWidth() / 2 - separatorWidth / 2;
+        final int darkRight = darkLeft + separatorWidth;
+        final int darkTop = (int) (mRegularTopPadding + separatorThickness / 2f);
+        final int darkBottom = darkTop + separatorThickness;
 
         if (mAmbientState.hasPulsingNotifications()) {
             // No divider, we have a notification icon instead
@@ -545,16 +568,16 @@ public class NotificationStackScrollLayout extends ViewGroup
                 canvas.drawRect(darkLeft, darkTop, darkRight, darkBottom, mBackgroundPaint);
             }
         } else {
-            float inverseDark = 1 - mDarkAmount;
-            float yProgress = Interpolators.FAST_OUT_SLOW_IN.getInterpolation(inverseDark);
-            float xProgress = Interpolators.FAST_OUT_SLOW_IN
-                    .getInterpolation(inverseDark * 2f);
+            float yProgress = 1 - mInterpolatedDarkAmount;
+            float xProgress = mDarkXInterpolator.getInterpolation(
+                    (1 - mLinearDarkAmount) * mBackgroundXFactor);
 
             mBackgroundAnimationRect.set(
                     (int) MathUtils.lerp(darkLeft, lockScreenLeft, xProgress),
                     (int) MathUtils.lerp(darkTop, lockScreenTop, yProgress),
                     (int) MathUtils.lerp(darkRight, lockScreenRight, xProgress),
                     (int) MathUtils.lerp(darkBottom, lockScreenBottom, yProgress));
+
             if (!mAmbientState.isDark() || mFirstVisibleBackgroundChild != null) {
                 canvas.drawRoundRect(mBackgroundAnimationRect.left, mBackgroundAnimationRect.top,
                         mBackgroundAnimationRect.right, mBackgroundAnimationRect.bottom,
@@ -572,14 +595,15 @@ public class NotificationStackScrollLayout extends ViewGroup
 
         float alpha =
                 BACKGROUND_ALPHA_DIMMED + (1 - BACKGROUND_ALPHA_DIMMED) * (1.0f - mDimAmount);
-        alpha *= 1f - mDarkAmount;
+        alpha *= 1f - mInterpolatedDarkAmount;
         // We need to manually blend in the background color.
         int scrimColor = mScrimController.getBackgroundColor();
         int awakeColor = ColorUtils.blendARGB(scrimColor, mBgColor, alpha);
 
         // Interpolate between semi-transparent notification panel background color
         // and white AOD separator.
-        float colorInterpolation = Interpolators.DECELERATE_QUINT.getInterpolation(mDarkAmount);
+        float colorInterpolation = MathUtils.smoothStep(0.4f /* start */, 1f /* end */,
+                mLinearDarkAmount);
         int color = ColorUtils.blendARGB(awakeColor, Color.WHITE, colorInterpolation);
 
         if (mCachedBackgroundColor != color) {
@@ -652,11 +676,15 @@ public class NotificationStackScrollLayout extends ViewGroup
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int childWidthSpec = MeasureSpec.makeMeasureSpec(width - mSidePaddings * 2,
                 MeasureSpec.getMode(widthMeasureSpec));
+        // Don't constrain the height of the children so we know how big they'd like to be
+        int childHeightSpec = MeasureSpec.makeMeasureSpec(MeasureSpec.getSize(heightMeasureSpec),
+                MeasureSpec.UNSPECIFIED);
+
         // We need to measure all children even the GONE ones, such that the heights are calculated
         // correctly as they are used to calculate how many we can fit on the screen.
         final int size = getChildCount();
         for (int i = 0; i < size; i++) {
-            measureChild(getChildAt(i), childWidthSpec, heightMeasureSpec);
+            measureChild(getChildAt(i), childWidthSpec, childHeightSpec);
         }
     }
 
@@ -723,7 +751,8 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     private void updateAlgorithmHeightAndPadding() {
-        mTopPadding = (int) MathUtils.lerp(mRegularTopPadding, mDarkTopPadding, mDarkAmount);
+        mTopPadding = (int) MathUtils.lerp(mRegularTopPadding, mDarkTopPadding,
+                mInterpolatedDarkAmount);
         mAmbientState.setLayoutHeight(getLayoutHeight());
         updateAlgorithmLayoutMinHeight();
         mAmbientState.setTopPadding(mTopPadding);
@@ -948,7 +977,7 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     public void updateClipping() {
-        boolean animatingClipping = mDarkAmount > 0 && mDarkAmount < 1;
+        boolean animatingClipping = mInterpolatedDarkAmount > 0 && mInterpolatedDarkAmount < 1;
         boolean clipped = mRequestedClipBounds != null && !mInHeadsUpPinnedMode
                 && !mHeadsUpAnimatingAway;
         if (mIsClipped != clipped) {
@@ -970,7 +999,7 @@ public class NotificationStackScrollLayout extends ViewGroup
      *         Measured relative to the resting position.
      */
     private float getExpandTranslationStart() {
-        return - mTopPadding;
+        return -mTopPadding + getMinExpansionHeight();
     }
 
     /**
@@ -1410,7 +1439,8 @@ public class NotificationStackScrollLayout extends ViewGroup
      */
     private int targetScrollForView(ExpandableView v, int positionInLinearLayout) {
         return positionInLinearLayout + v.getIntrinsicHeight() +
-                getImeInset() - getHeight() + getTopPadding();
+                getImeInset() - getHeight()
+                + ((!isExpanded() && isPinnedHeadsUp(v)) ? mHeadsUpInset : getTopPadding());
     }
 
     @Override
@@ -2041,11 +2071,15 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     private int getScrollRange() {
-        int contentHeight = getContentHeight();
+        // In current design, it only use the top HUN to treat all of HUNs
+        // although there are more than one HUNs
+        int contentHeight = mContentHeight;
+        if (!isExpanded() && mHeadsUpManager.hasPinnedHeadsUp()) {
+            contentHeight = mHeadsUpInset + getTopHeadsUpPinnedHeight();
+        }
         int scrollRange = Math.max(0, contentHeight - mMaxLayoutHeight);
         int imeInset = getImeInset();
-        scrollRange += Math.min(imeInset, Math.max(0,
-                getContentHeight() - (getHeight() - imeInset)));
+        scrollRange += Math.min(imeInset, Math.max(0, contentHeight - (getHeight() - imeInset)));
         return scrollRange;
     }
 
@@ -2146,10 +2180,6 @@ public class NotificationStackScrollLayout extends ViewGroup
         return count;
     }
 
-    public int getContentHeight() {
-        return mContentHeight;
-    }
-
     private void updateContentHeight() {
         int height = 0;
         float previousPaddingRequest = mPaddingBetweenElements;
@@ -2213,7 +2243,11 @@ public class NotificationStackScrollLayout extends ViewGroup
             }
         }
         mIntrinsicContentHeight = height;
-        mContentHeight = height + mTopPadding + mBottomMargin;
+
+        // We don't want to use the toppadding since that might be interpolated and we want
+        // to take the final value of the animation.
+        int topPadding = mAmbientState.isFullyDark() ? mDarkTopPadding : mRegularTopPadding;
+        mContentHeight = height + topPadding + mBottomMargin;
         updateScrollability();
         clampScrollPosition();
         mAmbientState.setLayoutMaxHeight(mContentHeight);
@@ -2410,7 +2444,7 @@ public class NotificationStackScrollLayout extends ViewGroup
             return;
         }
 
-        final boolean awake = mDarkAmount != 0 || mAmbientState.isDark();
+        final boolean awake = mInterpolatedDarkAmount != 0 || mAmbientState.isDark();
         mScrimController.setExcludedBackgroundArea(
                 mFadingOut || mParentNotFullyVisible || awake || mIsClipped ? null
                         : mCurrentBounds);
@@ -3158,7 +3192,7 @@ public class NotificationStackScrollLayout extends ViewGroup
 
     private void startAnimationToState() {
         if (mNeedsAnimation) {
-            generateChildHierarchyEvents();
+            generateAllAnimationEvents();
             mNeedsAnimation = false;
         }
         if (!mAnimationEvents.isEmpty() || isCurrentlyAnimating()) {
@@ -3175,7 +3209,7 @@ public class NotificationStackScrollLayout extends ViewGroup
         mGoToFullShadeDelay = 0;
     }
 
-    private void generateChildHierarchyEvents() {
+    private void generateAllAnimationEvents() {
         generateHeadsUpAnimationEvents();
         generateChildRemovalEvents();
         generateChildAdditionEvents();
@@ -3192,7 +3226,6 @@ public class NotificationStackScrollLayout extends ViewGroup
         generateGroupExpansionEvent();
         generateAnimateEverythingEvent();
         generatePulsingAnimationEvent();
-        mNeedsAnimation = false;
     }
 
     private void generateHeadsUpAnimationEvents() {
@@ -3403,7 +3436,6 @@ public class NotificationStackScrollLayout extends ViewGroup
                             .animateY(mShelf));
             ev.darkAnimationOriginIndex = mDarkAnimationOriginIndex;
             mAnimationEvents.add(ev);
-            startDarkAmountAnimation();
         }
         mDarkNeedsAnimation = false;
     }
@@ -3931,7 +3963,7 @@ public class NotificationStackScrollLayout extends ViewGroup
         mUsingLightTheme = lightTheme;
         Context context = new ContextThemeWrapper(mContext,
                 lightTheme ? R.style.Theme_SystemUI_Light : R.style.Theme_SystemUI);
-        final int textColor = Utils.getColorAttr(context, R.attr.wallpaperTextColor);
+        final int textColor = Utils.getColorAttrDefaultColor(context, R.attr.wallpaperTextColor);
         mFooterView.setTextColor(textColor);
         mEmptyShadeView.setTextColor(textColor);
     }
@@ -3979,11 +4011,8 @@ public class NotificationStackScrollLayout extends ViewGroup
         if (animate && mAnimationsEnabled) {
             mDarkNeedsAnimation = true;
             mDarkAnimationOriginIndex = findDarkAnimationOriginIndex(touchWakeUpScreenLocation);
-            mNeedsAnimation =  true;
+            mNeedsAnimation = true;
         } else {
-            if (mDarkAmountAnimator != null) {
-                mDarkAmountAnimator.cancel();
-            }
             setDarkAmount(dark ? 1f : 0f);
             updateBackground();
         }
@@ -3993,8 +4022,13 @@ public class NotificationStackScrollLayout extends ViewGroup
         notifyHeightChangeListener(mShelf);
     }
 
-    private void updateAntiBurnInTranslation() {
-        setTranslationX(mAntiBurnInOffsetX * mDarkAmount);
+    private void updatePanelTranslation() {
+        setTranslationX(mVerticalPanelTranslation + mAntiBurnInOffsetX * mInterpolatedDarkAmount);
+    }
+
+    public void setVerticalPanelTranslation(float verticalPanelTranslation) {
+        mVerticalPanelTranslation = verticalPanelTranslation;
+        updatePanelTranslation();
     }
 
     /**
@@ -4008,42 +4042,57 @@ public class NotificationStackScrollLayout extends ViewGroup
     }
 
     private void setDarkAmount(float darkAmount) {
-        mDarkAmount = darkAmount;
+        setDarkAmount(darkAmount, darkAmount);
+    }
+
+    /**
+     * Sets the current dark amount.
+     *
+     * @param linearDarkAmount The dark amount that follows linear interpoloation in the animation,
+     *                         i.e. animates from 0 to 1 or vice-versa in a linear manner.
+     * @param interpolatedDarkAmount The dark amount that follows the actual interpolation of the
+     *                                animation curve.
+     */
+    public void setDarkAmount(float linearDarkAmount, float interpolatedDarkAmount) {
+        mLinearDarkAmount = linearDarkAmount;
+        mInterpolatedDarkAmount = interpolatedDarkAmount;
         boolean wasFullyDark = mAmbientState.isFullyDark();
-        mAmbientState.setDarkAmount(darkAmount);
-        if (mAmbientState.isFullyDark() != wasFullyDark) {
+        mAmbientState.setDarkAmount(interpolatedDarkAmount);
+        boolean nowFullyDark = mAmbientState.isFullyDark();
+        if (nowFullyDark != wasFullyDark) {
             updateContentHeight();
             DozeParameters dozeParameters = DozeParameters.getInstance(mContext);
-            if (mAmbientState.isFullyDark() && dozeParameters.shouldControlScreenOff()) {
+            if (nowFullyDark && dozeParameters.shouldControlScreenOff()) {
                 mShelf.fadeInTranslating();
+            }
+            if (mIconAreaController != null) {
+                mIconAreaController.setFullyDark(nowFullyDark);
             }
         }
         updateAlgorithmHeightAndPadding();
         updateBackgroundDimming();
-        updateAntiBurnInTranslation();
+        updatePanelTranslation();
         requestChildrenUpdate();
     }
 
-    public float getDarkAmount() {
-        return mDarkAmount;
+    public void notifyDarkAnimationStart(boolean dark) {
+        // We only swap the scaling factor if we're fully dark or fully awake to avoid
+        // interpolation issues when playing with the power button.
+        if (mInterpolatedDarkAmount == 0 || mInterpolatedDarkAmount == 1) {
+            mBackgroundXFactor = dark ? 1.8f : 1.5f;
+            mDarkXInterpolator = dark
+                    ? Interpolators.FAST_OUT_SLOW_IN_REVERSE
+                    : Interpolators.FAST_OUT_SLOW_IN;
+        }
     }
 
-    private void startDarkAmountAnimation() {
-        ObjectAnimator darkAnimator = ObjectAnimator.ofFloat(this, DARK_AMOUNT, mDarkAmount,
-                mAmbientState.isDark() ? 1f : 0);
-        darkAnimator.setDuration(StackStateAnimator.ANIMATION_DURATION_WAKEUP);
-        darkAnimator.setInterpolator(Interpolators.ALPHA_IN);
-        darkAnimator.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                mDarkAmountAnimator = null;
-            }
-        });
-        if (mDarkAmountAnimator != null) {
-            mDarkAmountAnimator.cancel();
+    public long getDarkAnimationDuration(boolean dark) {
+        long duration = StackStateAnimator.ANIMATION_DURATION_WAKEUP;
+        // Longer animation when sleeping with more than 1 notification
+        if (dark && getNotGoneChildCount() > 2) {
+            duration *= 1.2f;
         }
-        mDarkAmountAnimator = darkAnimator;
-        mDarkAmountAnimator.start();
+        return duration;
     }
 
     private int findDarkAnimationOriginIndex(@Nullable PointF screenLocation) {
@@ -4572,7 +4621,7 @@ public class NotificationStackScrollLayout extends ViewGroup
 
     public void setAntiBurnInOffsetX(int antiBurnInOffsetX) {
         mAntiBurnInOffsetX = antiBurnInOffsetX;
-        updateAntiBurnInTranslation();
+        updatePanelTranslation();
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
@@ -4616,6 +4665,10 @@ public class NotificationStackScrollLayout extends ViewGroup
     public void setHeadsUpAppearanceController(
             HeadsUpAppearanceController headsUpAppearanceController) {
         mHeadsUpAppearanceController = headsUpAppearanceController;
+    }
+
+    public void setIconAreaController(NotificationIconAreaController controller) {
+        mIconAreaController = controller;
     }
 
     /**
@@ -4681,10 +4734,13 @@ public class NotificationStackScrollLayout extends ViewGroup
 
             if (currView instanceof ExpandableNotificationRow) {
                 ExpandableNotificationRow row = (ExpandableNotificationRow) currView;
-                mCurrMenuRow = row.createMenu();
-                mCurrMenuRow.setSwipeActionHelper(NotificationSwipeHelper.this);
-                mCurrMenuRow.setMenuClickListener(NotificationStackScrollLayout.this);
-                mCurrMenuRow.onTouchEvent(currView, ev, 0 /* velocity */);
+
+                if (row.getEntry().hasFinishedInitialization()) {
+                    mCurrMenuRow = row.createMenu();
+                    mCurrMenuRow.setSwipeActionHelper(NotificationSwipeHelper.this);
+                    mCurrMenuRow.setMenuClickListener(NotificationStackScrollLayout.this);
+                    mCurrMenuRow.onTouchEvent(currView, ev, 0 /* velocity */);
+                }
             }
         }
 
@@ -5031,11 +5087,13 @@ public class NotificationStackScrollLayout extends ViewGroup
                 // ANIMATION_TYPE_PULSE_APPEAR
                 new AnimationFilter()
                         .animateAlpha()
+                        .hasDelays()
                         .animateY(),
 
                 // ANIMATION_TYPE_PULSE_DISAPPEAR
                 new AnimationFilter()
                         .animateAlpha()
+                        .hasDelays()
                         .animateY(),
         };
 
@@ -5099,10 +5157,10 @@ public class NotificationStackScrollLayout extends ViewGroup
                 StackStateAnimator.ANIMATION_DURATION_STANDARD,
 
                 // ANIMATION_TYPE_PULSE_APPEAR
-                KeyguardSliceView.DEFAULT_ANIM_DURATION,
+                StackStateAnimator.ANIMATION_DURATION_PULSE_APPEAR,
 
                 // ANIMATION_TYPE_PULSE_DISAPPEAR
-                KeyguardSliceView.DEFAULT_ANIM_DURATION / 2,
+                StackStateAnimator.ANIMATION_DURATION_PULSE_APPEAR / 2,
         };
 
         static final int ANIMATION_TYPE_ADD = 0;

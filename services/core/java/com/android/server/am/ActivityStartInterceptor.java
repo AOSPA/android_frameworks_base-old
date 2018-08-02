@@ -66,10 +66,9 @@ import com.android.server.LocalServices;
  */
 class ActivityStartInterceptor {
 
-    private final ActivityManagerService mService;
+    private final ActivityTaskManagerService mService;
     private final ActivityStackSupervisor mSupervisor;
     private final Context mServiceContext;
-    private final UserController mUserController;
 
     // UserManager cannot be final as it's not ready when this class is instantiated during boot
     private UserManager mUserManager;
@@ -99,17 +98,17 @@ class ActivityStartInterceptor {
     TaskRecord mInTask;
     ActivityOptions mActivityOptions;
 
-    ActivityStartInterceptor(ActivityManagerService service, ActivityStackSupervisor supervisor) {
-        this(service, supervisor, service.mContext, service.mUserController);
+    ActivityStartInterceptor(
+            ActivityTaskManagerService service, ActivityStackSupervisor supervisor) {
+        this(service, supervisor, service.mContext);
     }
 
     @VisibleForTesting
-    ActivityStartInterceptor(ActivityManagerService service, ActivityStackSupervisor supervisor,
-            Context context, UserController userController) {
+    ActivityStartInterceptor(ActivityTaskManagerService service, ActivityStackSupervisor supervisor,
+            Context context) {
         mService = service;
         mSupervisor = supervisor;
         mServiceContext = context;
-        mUserController = userController;
     }
 
     /**
@@ -127,7 +126,7 @@ class ActivityStartInterceptor {
 
     private IntentSender createIntentSenderForOriginalIntent(int callingUid, int flags) {
         Bundle activityOptions = deferCrossProfileAppsAnimationIfNecessary();
-        final IIntentSender target = mService.getIntentSenderLocked(
+        final IIntentSender target = mService.mAm.getIntentSenderLocked(
                 INTENT_SENDER_ACTIVITY, mCallingPackage, callingUid, mUserId, null /*token*/,
                 null /*resultCode*/, 0 /*requestCode*/,
                 new Intent[] { mIntent }, new String[] { mResolvedType },
@@ -238,7 +237,7 @@ class ActivityStartInterceptor {
                 (mAInfo.applicationInfo.flags & FLAG_SUSPENDED) == 0) {
             return false;
         }
-        final PackageManagerInternal pmi = mService.getPackageManagerInternalLocked();
+        final PackageManagerInternal pmi = mService.mAm.getPackageManagerInternalLocked();
         if (pmi == null) {
             return false;
         }
@@ -297,7 +296,7 @@ class ActivityStartInterceptor {
      * @return The intercepting intent if needed.
      */
     private Intent interceptWithConfirmCredentialsIfNeeded(ActivityInfo aInfo, int userId) {
-        if (!mUserController.shouldConfirmCredentials(userId)) {
+        if (!mService.mAmInternal.shouldConfirmCredentials(userId)) {
             return null;
         }
         // TODO(b/28935539): should allow certain activities to bypass work challenge
@@ -319,7 +318,7 @@ class ActivityStartInterceptor {
     private boolean interceptHarmfulAppIfNeeded() {
         CharSequence harmfulAppWarning;
         try {
-            harmfulAppWarning = mService.getPackageManager()
+            harmfulAppWarning = mService.mAm.getPackageManager()
                     .getHarmfulAppWarning(mAInfo.packageName, mUserId);
         } catch (RemoteException ex) {
             return false;

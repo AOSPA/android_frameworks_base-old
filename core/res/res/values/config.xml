@@ -42,13 +42,13 @@
         <item><xliff:g id="id">@string/status_bar_phone_evdo_signal</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_phone_signal</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_secure</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_bluetooth</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_managed_profile</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_cast</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_vpn</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_bluetooth</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_location</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_mute</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_volume</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_location</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_zen</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_ethernet</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_wifi</xliff:g></item>
@@ -491,12 +491,20 @@
 
          Note also: the order of this is important. The first upstream type
          for which a satisfying network exists is used.
-      -->
+    -->
     <integer-array translatable="false" name="config_tether_upstream_types">
         <item>1</item>
         <item>7</item>
         <item>0</item>
     </integer-array>
+
+    <!-- When true, the tethering upstream network follows the current default
+         Internet network (except when the current default network is mobile,
+         in which case a DUN network will be used if required).
+
+         When true, overrides the config_tether_upstream_types setting above.
+    -->
+    <bool translatable="false" name="config_tether_upstream_automatic">true</bool>
 
     <!-- If the DUN connection for this CDMA device supports more than just DUN -->
     <!-- traffic you should list them here. -->
@@ -575,12 +583,14 @@
     <integer translatable="false" name="config_wifi_framework_min_rx_rate_for_staying_on_network">16</integer>
     <!-- Integer parameters of the wifi to cellular handover feature
          wifi should not stick to bad networks -->
-    <integer translatable="false" name="config_wifi_framework_wifi_score_bad_rssi_threshold_5GHz">-82</integer>
-    <integer translatable="false" name="config_wifi_framework_wifi_score_entry_rssi_threshold_5GHz">-82</integer>
+    <!-- Integer threshold for low network score, should be somewhat less than the entry threshhold -->
+    <integer translatable="false" name="config_wifi_framework_wifi_score_bad_rssi_threshold_5GHz">-80</integer>
+    <!-- Integer threshold, do not connect to APs with RSSI lower than the entry threshold -->
+    <integer translatable="false" name="config_wifi_framework_wifi_score_entry_rssi_threshold_5GHz">-77</integer>
     <integer translatable="false" name="config_wifi_framework_wifi_score_low_rssi_threshold_5GHz">-70</integer>
     <integer translatable="false" name="config_wifi_framework_wifi_score_good_rssi_threshold_5GHz">-57</integer>
-    <integer translatable="false" name="config_wifi_framework_wifi_score_bad_rssi_threshold_24GHz">-85</integer>
-    <integer translatable="false" name="config_wifi_framework_wifi_score_entry_rssi_threshold_24GHz">-85</integer>
+    <integer translatable="false" name="config_wifi_framework_wifi_score_bad_rssi_threshold_24GHz">-83</integer>
+    <integer translatable="false" name="config_wifi_framework_wifi_score_entry_rssi_threshold_24GHz">-80</integer>
     <integer translatable="false" name="config_wifi_framework_wifi_score_low_rssi_threshold_24GHz">-73</integer>
     <integer translatable="false" name="config_wifi_framework_wifi_score_good_rssi_threshold_24GHz">-60</integer>
     <integer translatable="false" name="config_wifi_framework_wifi_score_bad_link_speed_24">6</integer>
@@ -659,9 +669,27 @@
     <!-- Boolean indicating that wifi only link configuratios that have exact same credentials (i.e PSK) -->
     <bool translatable="false" name="config_wifi_only_link_same_credential_configurations">true</bool>
 
-    <!-- Boolean indicating whether framework needs to set the tx power limit for meeting SAR requirements
-         during voice calls -->
-    <bool translatable="false" name="config_wifi_framework_enable_voice_call_sar_tx_power_limit">false</bool>
+    <!-- Boolean indicating whether framework needs to set the tx power limit for meeting SAR requirements -->
+    <bool translatable="false" name="config_wifi_framework_enable_sar_tx_power_limit">false</bool>
+
+    <!-- Boolean indicating whether framework needs to use body proximity to set the tx power limit
+         for meeting SAR requirements -->
+    <bool translatable="false" name="config_wifi_framework_enable_body_proximity_sar_tx_power_limit">false</bool>
+
+    <!-- String for the sensor type for body/head proximity for SAR -->
+    <string translatable="false" name="config_wifi_sar_sensor_type"></string>
+
+    <!-- Integer indicating event id by sar sensor for free space -->
+    <integer translatable="false" name="config_wifi_framework_sar_free_space_event_id">1</integer>
+
+    <!-- Integer indicating event id by sar sensor for near hand -->
+    <integer translatable="false" name="config_wifi_framework_sar_near_hand_event_id">2</integer>
+
+    <!-- Integer indicating event id by sar sensor for near head -->
+    <integer translatable="false" name="config_wifi_framework_sar_near_head_event_id">3</integer>
+
+    <!-- Integer indicating event id by sar sensor for near body -->
+    <integer translatable="false" name="config_wifi_framework_sar_near_body_event_id">4</integer>
 
     <!-- Wifi driver supports batched scan -->
     <bool translatable="false" name="config_wifi_batched_scan_supported">false</bool>
@@ -2088,6 +2116,10 @@
          states. -->
     <bool name="config_dozeAlwaysOnDisplayAvailable">false</bool>
 
+    <!-- Control whether the always on display mode is enabled by default. This value will be used
+         during initialization when the setting is still null. -->
+    <bool name="config_dozeAlwaysOnEnabled">true</bool>
+
     <!-- Whether the display blanks itself when transitioning from a doze to a non-doze state -->
     <bool name="config_displayBlanksAfterDoze">false</bool>
 
@@ -2575,6 +2607,7 @@
          "silent" = silent mode
          "users" = list of users
          "restart" = restart device
+         "emergency" = Launch emergency dialer
          "lockdown" = Lock down device until the user authenticates
          "logout" =  Logout the current user
          -->
@@ -2585,6 +2618,7 @@
         <item>logout</item>
         <item>bugreport</item>
         <item>screenshot</item>
+        <item>emergency</item>
     </string-array>
 
     <!-- Number of milliseconds to hold a wake lock to ensure that drawing is fully
@@ -2887,6 +2921,9 @@
     <!-- Keyguard component -->
     <string name="config_keyguardComponent" translatable="false">com.android.systemui/com.android.systemui.keyguard.KeyguardService</string>
 
+    <!-- Limit for the number of face templates per user -->
+    <integer name="config_faceMaxTemplatesPerUser">1</integer>
+
     <!-- For performance and storage reasons, limit the number of fingerprints per user -->
     <integer name="config_fingerprintMaxTemplatesPerUser">5</integer>
 
@@ -2936,6 +2973,14 @@
          @see https://www.w3.org/TR/SVG/paths.html#PathData
          -->
     <string translatable="false" name="config_mainBuiltInDisplayCutout"></string>
+
+    <!-- Like config_mainBuiltInDisplayCutout, but this path is used to report the
+         one single bounding rect per device edge to the app via
+         {@link DisplayCutout#getBoundingRect}. Note that this path should try to match the visual
+         appearance of the cutout as much as possible, and may be smaller than
+         config_mainBuiltInDisplayCutout
+         -->
+    <string translatable="false" name="config_mainBuiltInDisplayCutoutRectApproximation">@string/config_mainBuiltInDisplayCutout</string>
 
     <!-- Whether the display cutout region of the main built-in display should be forced to
          black in software (to avoid aliasing or emulate a cutout that is not physically existent).
@@ -3143,6 +3188,9 @@
     <!-- True if camera app should be pinned via Pinner Service -->
     <bool name="config_pinnerCameraApp">false</bool>
 
+    <!-- True if home app should be pinned via Pinner Service -->
+    <bool name="config_pinnerHomeApp">false</bool>
+
     <!-- Number of days preloaded file cache should be preserved on a device before it can be
          deleted -->
     <integer name="config_keepPreloadsMinDays">7</integer>
@@ -3345,6 +3393,9 @@
     <!-- URI for in call notification sound -->
     <string translatable="false" name="config_inCallNotificationSound">/system/media/audio/ui/InCallNotification.ogg</string>
 
+    <!-- Default number of notifications from the same app before they are automatically grouped by the OS -->
+    <integer translatable="false" name="config_autoGroupAtCount">4</integer>
+
     <!-- The OEM specified sensor type for the lift trigger to launch the camera app. -->
     <integer name="config_cameraLiftTriggerSensorType">-1</integer>
     <!-- The OEM specified sensor string type for the gesture to launch camera app, this value
@@ -3372,7 +3423,7 @@
     <string-array translatable="false" name="config_batteryPackageTypeService"/>
 
     <!-- Flag indicating whether or not to enable night mode detection. -->
-    <bool name="config_enableNightMode">false</bool>
+    <bool name="config_enableNightMode">true</bool>
 
     <!-- Flag indicating that the actions buttons for a notification should be tinted with by the
          color supplied by the Notification.Builder if present. -->
@@ -3462,6 +3513,16 @@
     <!-- Whether or not swipe up gesture's opt-in setting is available on this device -->
     <bool name="config_swipe_up_gesture_setting_available">false</bool>
 
+    <!-- Applications which are disabled unless matching a particular sku -->
+    <string-array name="config_disableApksUnlessMatchedSku_apk_list" translatable="false" />
+    <string-array name="config_disableApkUnlessMatchedSku_skus_list" translatable="false" />
+
+    <!-- Whether or not we should show the option to show battery percentage -->
+    <bool name="config_battery_percentage_setting_available">true</bool>
+
+    <!-- Whether or not battery saver should be "sticky" when manually enabled. -->
+    <bool name="config_batterySaverStickyBehaviourDisabled">false</bool>
+    
     <!-- List of names that represent dual SoftAp interfaces. -->
     <string-array translatable="false" name="config_wifi_dual_sap_interfaces">
     </string-array>

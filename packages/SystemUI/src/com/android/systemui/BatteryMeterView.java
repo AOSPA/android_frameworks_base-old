@@ -55,7 +55,10 @@ import com.android.systemui.statusbar.policy.IconLogger;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 import com.android.systemui.util.Utils.DisableStateTracker;
+import com.android.systemui.R;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 import java.text.NumberFormat;
 
 public class BatteryMeterView extends LinearLayout implements
@@ -72,6 +75,7 @@ public class BatteryMeterView extends LinearLayout implements
     private int mTextColor;
     private int mLevel;
     private boolean mForceShowPercent;
+    private boolean mShowPercentAvailable;
 
     private int mDarkModeBackgroundColor;
     private int mDarkModeFillColor;
@@ -111,6 +115,9 @@ public class BatteryMeterView extends LinearLayout implements
         atts.recycle();
 
         mSettingObserver = new SettingObserver(new Handler(context.getMainLooper()));
+        mShowPercentAvailable = context.getResources().getBoolean(
+                com.android.internal.R.bool.config_battery_percentage_setting_available);
+
 
         addOnAttachStateChangeListener(
                 new DisableStateTracker(DISABLE_NONE, DISABLE2_SYSTEM_ICONS));
@@ -167,8 +174,8 @@ public class BatteryMeterView extends LinearLayout implements
 
         if (mUseWallpaperTextColors) {
             updateColors(
-                    Utils.getColorAttr(mContext, R.attr.wallpaperTextColor),
-                    Utils.getColorAttr(mContext, R.attr.wallpaperTextColorSecondary));
+                    Utils.getColorAttrDefaultColor(mContext, R.attr.wallpaperTextColor),
+                    Utils.getColorAttrDefaultColor(mContext, R.attr.wallpaperTextColorSecondary));
         } else {
             updateColors(mNonAdaptedForegroundColor, mNonAdaptedBackgroundColor);
         }
@@ -183,10 +190,13 @@ public class BatteryMeterView extends LinearLayout implements
                 Utils.getThemeAttr(context, R.attr.darkIconTheme));
         Context dualToneLightTheme = new ContextThemeWrapper(context,
                 Utils.getThemeAttr(context, R.attr.lightIconTheme));
-        mDarkModeBackgroundColor = Utils.getColorAttr(dualToneDarkTheme, R.attr.backgroundColor);
-        mDarkModeFillColor = Utils.getColorAttr(dualToneDarkTheme, R.attr.fillColor);
-        mLightModeBackgroundColor = Utils.getColorAttr(dualToneLightTheme, R.attr.backgroundColor);
-        mLightModeFillColor = Utils.getColorAttr(dualToneLightTheme, R.attr.fillColor);
+        mDarkModeBackgroundColor = Utils.getColorAttrDefaultColor(dualToneDarkTheme,
+                R.attr.backgroundColor);
+        mDarkModeFillColor = Utils.getColorAttrDefaultColor(dualToneDarkTheme,
+                R.attr.fillColor);
+        mLightModeBackgroundColor = Utils.getColorAttrDefaultColor(dualToneLightTheme,
+                R.attr.backgroundColor);
+        mLightModeFillColor = Utils.getColorAttrDefaultColor(dualToneLightTheme, R.attr.fillColor);
     }
 
     @Override
@@ -259,8 +269,11 @@ public class BatteryMeterView extends LinearLayout implements
 
     private void updateShowPercent() {
         final boolean showing = mBatteryPercentView != null;
-        if (0 != Settings.System.getIntForUser(getContext().getContentResolver(),
-                SHOW_BATTERY_PERCENT, 0, mUser) || mForceShowPercent) {
+        final boolean systemSetting = 0 != Settings.System
+                .getIntForUser(getContext().getContentResolver(),
+                SHOW_BATTERY_PERCENT, 0, mUser);
+
+        if ((mShowPercentAvailable && systemSetting) || mForceShowPercent) {
             if (!showing) {
                 mBatteryPercentView = loadPercentView();
                 if (mTextColor != 0) mBatteryPercentView.setTextColor(mTextColor);
@@ -338,6 +351,17 @@ public class BatteryMeterView extends LinearLayout implements
 
     private int getColorForDarkIntensity(float darkIntensity, int lightColor, int darkColor) {
         return (int) ArgbEvaluator.getInstance().evaluate(darkIntensity, lightColor, darkColor);
+    }
+
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        String powerSave = mDrawable == null ? null : mDrawable.getPowerSave() + "";
+        CharSequence percent = mBatteryPercentView == null ? null : mBatteryPercentView.getText();
+        pw.println("  BatteryMeterView:");
+        pw.println("    mDrawable.getPowerSave: " + powerSave);
+        pw.println("    mBatteryPercentView.getText(): " + percent);
+        pw.println("    mTextColor: #" + Integer.toHexString(mTextColor));
+        pw.println("    mLevel: " + mLevel);
+        pw.println("    mForceShowPercent: " + mForceShowPercent);
     }
 
     private final class SettingObserver extends ContentObserver {

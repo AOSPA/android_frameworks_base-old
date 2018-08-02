@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Zobrazování vizuální zpětné vazby pro klepnutí"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Zobrazit obnovení obsahu"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Rozblikat obsah okna při aktualizaci"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Zobrazit obnovení s GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Rozblikat zobrazení v oknech při vykreslování pomocí GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Zobrazit aktualizace"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Rozblikat zobrazení v oknech při vykreslování"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Zobrazit aktual. HW vrstev"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Rozblikat zeleně hardwarové vrstvy při aktualizaci"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Ladit překreslování GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Zobrazit u výstřižku ohraničení, okraje atd."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Vynutit rozvržení zprava doleva"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Vynutit ve všech jazycích rozvržení obrazovky zprava doleva"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Vykreslování pomocí GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Vynutit použití GPU pro 2D vykreslování"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Vynutit 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Povolit 4x MSAA v aplikacích OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Ladit operace s neobdélníkovými výstřižky"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Profil – vykreslování GPU"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Profil – vykres. HWUI"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Povolit vrstvy ladění GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Povolit načítání vrstev ladění GPU pro ladicí aplikace"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Měřítko animace okna"</string>

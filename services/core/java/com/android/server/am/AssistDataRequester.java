@@ -17,12 +17,12 @@
 package com.android.server.am;
 
 import static android.app.ActivityManager.ASSIST_CONTEXT_FULL;
-import static android.app.ActivityManagerInternal.ASSIST_KEY_RECEIVER_EXTRAS;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.OP_NONE;
+import static com.android.server.wm.ActivityTaskManagerInternal.ASSIST_KEY_RECEIVER_EXTRAS;
 
+import android.app.ActivityTaskManager;
 import android.app.AppOpsManager;
-import android.app.IActivityManager;
 import android.app.IAssistDataReceiver;
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -48,7 +48,6 @@ public class AssistDataRequester extends IAssistDataReceiver.Stub {
     public static final String KEY_RECEIVER_EXTRA_COUNT = "count";
     public static final String KEY_RECEIVER_EXTRA_INDEX = "index";
 
-    private IActivityManager mService;
     private IWindowManager mWindowManager;
     private Context mContext;
     private AppOpsManager mAppOpsManager;
@@ -117,14 +116,13 @@ public class AssistDataRequester extends IAssistDataReceiver.Stub {
      *                                This can be {@link AppOpsManager#OP_NONE} to indicate that
      *                                screenshots should never be fetched.
      */
-    public AssistDataRequester(Context context, IActivityManager service,
+    public AssistDataRequester(Context context,
             IWindowManager windowManager, AppOpsManager appOpsManager,
             AssistDataRequesterCallbacks callbacks, Object callbacksLock,
             int requestStructureAppOps, int requestScreenshotAppOps) {
         mCallbacks = callbacks;
         mCallbacksLock = callbacksLock;
         mWindowManager = windowManager;
-        mService = service;
         mContext = context;
         mAppOpsManager = appOpsManager;
         mRequestStructureAppOps = requestStructureAppOps;
@@ -163,7 +161,8 @@ public class AssistDataRequester extends IAssistDataReceiver.Stub {
         // Ensure that the current activity supports assist data
         boolean isAssistDataAllowed = false;
         try {
-            isAssistDataAllowed = mService.isAssistDataAllowedOnCurrentActivity();
+            isAssistDataAllowed =
+                    ActivityTaskManager.getService().isAssistDataAllowedOnCurrentActivity();
         } catch (RemoteException e) {
             // Should never happen
         }
@@ -188,9 +187,9 @@ public class AssistDataRequester extends IAssistDataReceiver.Stub {
                         Bundle receiverExtras = new Bundle();
                         receiverExtras.putInt(KEY_RECEIVER_EXTRA_INDEX, i);
                         receiverExtras.putInt(KEY_RECEIVER_EXTRA_COUNT, numActivities);
-                        if (mService.requestAssistContextExtras(ASSIST_CONTEXT_FULL, this,
-                                receiverExtras, topActivity, /* focused= */ i == 0,
-                                    /* newSessionId= */ i == 0)) {
+                        if (ActivityTaskManager.getService().requestAssistContextExtras(
+                                ASSIST_CONTEXT_FULL, this, receiverExtras, topActivity,
+                                /* focused= */ i == 0, /* newSessionId= */ i == 0)) {
                             mPendingDataCount++;
                         } else if (i == 0) {
                             // Wasn't allowed... given that, let's not do the screenshot either.

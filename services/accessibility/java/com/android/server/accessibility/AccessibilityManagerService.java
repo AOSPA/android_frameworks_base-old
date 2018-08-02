@@ -20,7 +20,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
 import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_ACCESSIBILITY_FOCUSED;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS;
-
 import static com.android.internal.util.FunctionalUtils.ignoreRemoteException;
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
@@ -30,7 +29,6 @@ import android.accessibilityservice.AccessibilityServiceInfo;
 import android.accessibilityservice.IAccessibilityServiceClient;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.app.ActivityManagerInternal;
 import android.app.AlertDialog;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
@@ -111,9 +109,8 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IntPair;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
+import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
-
-import libcore.util.EmptyArray;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -132,6 +129,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
+
+import libcore.util.EmptyArray;
 
 /**
  * This class is instantiated by the system as a system level service and can be
@@ -2624,7 +2623,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     PowerManager.USER_ACTIVITY_EVENT_ACCESSIBILITY, 0);
 
             if (activityToken != null) {
-                LocalServices.getService(ActivityManagerInternal.class)
+                LocalServices.getService(ActivityTaskManagerInternal.class)
                         .setFocusedActivity(activityToken);
             }
             connection.mConnection.performAccessibilityAction(accessibilityNodeId, action,
@@ -3743,6 +3742,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
         /**
          * Removes a service.
+         * There are three states to a service here: off, bound, and binding.
+         * This stops tracking the service as bound.
          *
          * @param serviceConnection The service.
          */
@@ -3757,6 +3758,19 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 mComponentNameToServiceMap.put(boundClient.mComponentName, boundClient);
             }
             scheduleNotifyClientsOfServicesStateChange(this);
+        }
+
+        /**
+         * Make sure a services disconnected but still 'on' state is reflected in UserState
+         * There are three states to a service here: off, bound, and binding.
+         * This drops a service from a bound state, to the binding state.
+         * The binding state describes the situation where a service is on, but not bound.
+         *
+         * @param serviceConnection The service.
+         */
+        public void serviceDisconnectedLocked(AccessibilityServiceConnection serviceConnection) {
+            removeServiceLocked(serviceConnection);
+            mBindingServices.add(serviceConnection.getComponentName());
         }
 
         public Set<ComponentName> getBindingServicesLocked() {

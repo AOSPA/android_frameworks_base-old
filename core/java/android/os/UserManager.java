@@ -367,8 +367,12 @@ public class UserManager {
     public static final String DISALLOW_REMOVE_MANAGED_PROFILE = "no_remove_managed_profile";
 
     /**
-     * Specifies if a user is disallowed from enabling or
-     * accessing debugging features. The default value is <code>false</code>.
+     * Specifies if a user is disallowed from enabling or accessing debugging features. When set on
+     * the primary user, disables debugging features altogether, including USB debugging. When set
+     * on a managed profile or a secondary user, blocks debugging for that user only, including
+     * starting activities, making service calls, accessing content providers, sending broadcasts,
+     * installing/uninstalling packages, clearing user data, etc.
+     * The default value is <code>false</code>.
      *
      * <p>Key for user restrictions.
      * <p>Type: Boolean
@@ -2661,6 +2665,12 @@ public class UserManager {
         }
         // If Demo Mode is on, don't show user switcher
         if (isDeviceInDemoMode(mContext)) {
+            return false;
+        }
+        // If user disabled this feature, don't show switcher
+        final boolean userSwitcherEnabled = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.USER_SWITCHER_ENABLED, 1) != 0;
+        if (!userSwitcherEnabled) {
             return false;
         }
         List<UserInfo> users = getUsers(true);

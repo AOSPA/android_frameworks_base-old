@@ -39,13 +39,22 @@ enum class Bidi : uint8_t;
 }
 
 namespace android {
+class PaintFilter;
 
 namespace uirenderer {
 class CanvasPropertyPaint;
 class CanvasPropertyPrimitive;
 class DeferredLayerUpdater;
-class DisplayList;
 class RenderNode;
+
+namespace skiapipeline {
+class SkiaDisplayList;
+}
+
+/**
+ * Data structure that holds the list of commands used in display list stream
+ */
+using DisplayList = skiapipeline::SkiaDisplayList;
 }
 
 namespace SaveFlags {
@@ -205,8 +214,8 @@ public:
     virtual bool clipPath(const SkPath* path, SkClipOp op) = 0;
 
     // filters
-    virtual SkDrawFilter* getDrawFilter() = 0;
-    virtual void setDrawFilter(SkDrawFilter* drawFilter) = 0;
+    virtual PaintFilter* getPaintFilter() = 0;
+    virtual void setPaintFilter(sk_sp<PaintFilter> paintFilter) = 0;
 
     // WebView only
     virtual SkCanvasState* captureCanvasState() const { return nullptr; }
@@ -268,9 +277,9 @@ public:
      * Converts utf16 text to glyphs, calculating position and boundary,
      * and delegating the final draw to virtual drawGlyphs method.
      */
-    void drawText(const uint16_t* text, int start, int count, int contextCount, float x, float y,
-                  minikin::Bidi bidiFlags, const Paint& origPaint, const Typeface* typeface,
-                  minikin::MeasuredText* mt);
+    void drawText(const uint16_t* text, int textSize, int start, int count, int contextStart,
+                  int contextCount, float x, float y, minikin::Bidi bidiFlags,
+                  const Paint& origPaint, const Typeface* typeface, minikin::MeasuredText* mt);
 
     void drawTextOnPath(const uint16_t* text, int count, minikin::Bidi bidiFlags,
                         const SkPath& path, float hOffset, float vOffset, const Paint& paint,

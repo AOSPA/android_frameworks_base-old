@@ -19,20 +19,16 @@
 #include "MinikinUtils.h"
 #include "Paint.h"
 #include "Properties.h"
-#include "RecordingCanvas.h"
 #include "RenderNode.h"
 #include "Typeface.h"
 #include "pipeline/skia/SkiaRecordingCanvas.h"
 
-#include <SkDrawFilter.h>
+#include "hwui/PaintFilter.h"
 
 namespace android {
 
 Canvas* Canvas::create_recording_canvas(int width, int height, uirenderer::RenderNode* renderNode) {
-    if (uirenderer::Properties::isSkiaEnabled()) {
-        return new uirenderer::skiapipeline::SkiaRecordingCanvas(renderNode, width, height);
-    }
-    return new uirenderer::RecordingCanvas(width, height);
+    return new uirenderer::skiapipeline::SkiaRecordingCanvas(renderNode, width, height);
 }
 
 static inline void drawStroke(SkScalar left, SkScalar right, SkScalar top, SkScalar thickness,
@@ -44,10 +40,10 @@ static inline void drawStroke(SkScalar left, SkScalar right, SkScalar top, SkSca
 
 void Canvas::drawTextDecorations(float x, float y, float length, const SkPaint& paint) {
     uint32_t flags;
-    SkDrawFilter* drawFilter = getDrawFilter();
-    if (drawFilter) {
+    PaintFilter* paintFilter = getPaintFilter();
+    if (paintFilter) {
         SkPaint paintCopy(paint);
-        drawFilter->filter(&paintCopy, SkDrawFilter::kText_Type);
+        paintFilter->filter(&paintCopy);
         flags = paintCopy.getFlags();
     } else {
         flags = paint.getFlags();
@@ -156,15 +152,14 @@ private:
     float totalAdvance;
 };
 
-void Canvas::drawText(const uint16_t* text, int start, int count, int contextCount, float x,
-                      float y, minikin::Bidi bidiFlags, const Paint& origPaint,
-                      const Typeface* typeface, minikin::MeasuredText* mt) {
+void Canvas::drawText(const uint16_t* text, int textSize, int start, int count, int contextStart,
+                      int contextCount, float x, float y, minikin::Bidi bidiFlags,
+                      const Paint& origPaint, const Typeface* typeface, minikin::MeasuredText* mt) {
     // minikin may modify the original paint
     Paint paint(origPaint);
 
-    minikin::Layout layout =
-            MinikinUtils::doLayout(&paint, bidiFlags, typeface, text, start, count, contextCount,
-                                   mt);
+    minikin::Layout layout = MinikinUtils::doLayout(&paint, bidiFlags, typeface, text, textSize,
+                                                    start, count, contextStart, contextCount, mt);
 
     x += MinikinUtils::xOffsetForTextAlign(&paint, layout);
 
@@ -212,7 +207,10 @@ void Canvas::drawTextOnPath(const uint16_t* text, int count, minikin::Bidi bidiF
                             const Typeface* typeface) {
     Paint paintCopy(paint);
     minikin::Layout layout =
-            MinikinUtils::doLayout(&paintCopy, bidiFlags, typeface, text, 0, count, count, nullptr);
+            MinikinUtils::doLayout(&paintCopy, bidiFlags, typeface, text, count,  // text buffer
+                                   0, count,                                      // draw range
+                                   0, count,                                      // context range
+                                   nullptr);
     hOffset += MinikinUtils::hOffsetForTextAlign(&paintCopy, layout, path);
 
     // Set align to left for drawing, as we don't want individual

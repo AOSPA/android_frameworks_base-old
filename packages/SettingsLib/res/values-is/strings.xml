@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Sýna snertingar myndrænt"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Sýna yfirborðsuppfærslur"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Láta allt yfirborð glugga blikka við uppfærslu"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Sýna uppfærslur skjákorts"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Láta svæði í gluggum blikka við skjákortsteiknun"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Sýna uppfærslur yfirlits"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Láta svæði í gluggum blikka við birtingu"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Sýna uppfærslur vélbúnaðar"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Láta vélbúnaðarlög blikka græn við uppfærslu"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Yfirteiknun skjákorts"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Sýna skurðlínur, spássíur o.s.frv."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Þvinga umbrot frá hægri til vinstri"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Þvinga umbrot skjás frá hægri til vinstri fyrir alla tungumálskóða"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Þvinga skjákortsteiknun"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Þvinga notkun skjákorts fyrir tvívíða teikningu"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Þvinga 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Virkja 4x MSAA í OpenGL ES 2.0 forritum"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Villuleita klippt svæði sem ekki eru rétthyrnd"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Greina skjákortsteiknun"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"HWUI-teiknun prófíls"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Virkja villuleit skják."</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Leyfa villuleit skjákorts fyrir villuleit forrita"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Kvarði gluggahreyfinga"</string>

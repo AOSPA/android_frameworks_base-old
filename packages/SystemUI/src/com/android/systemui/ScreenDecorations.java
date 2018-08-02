@@ -26,8 +26,12 @@ import static com.android.systemui.tuner.TunablePadding.FLAG_END;
 import static com.android.systemui.tuner.TunablePadding.FLAG_START;
 
 import android.annotation.Dimension;
+import android.app.ActivityManager;
 import android.app.Fragment;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
@@ -41,7 +45,6 @@ import android.graphics.Region;
 import android.hardware.display.DisplayManager;
 import android.os.SystemProperties;
 import android.provider.Settings.Secure;
-import android.support.annotation.VisibleForTesting;
 import android.util.DisplayMetrics;
 import android.view.DisplayCutout;
 import android.view.DisplayInfo;
@@ -68,6 +71,8 @@ import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
 import com.android.systemui.util.leak.RotationUtils;
 
+import androidx.annotation.VisibleForTesting;
+
 /**
  * An overlay that draws screen decorations in software (e.g for rounded corners or display cutout)
  * for antialiasing and emulation purposes.
@@ -89,6 +94,9 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private float mDensity;
     private WindowManager mWindowManager;
     private int mRotation;
+    private DisplayCutoutView mCutoutTop;
+    private DisplayCutoutView mCutoutBottom;
+    private SecureSetting mColorInversionSetting;
 
     @Override
     public void start() {
@@ -135,14 +143,14 @@ public class ScreenDecorations extends SystemUI implements Tunable {
     private void setupDecorations() {
         mOverlay = LayoutInflater.from(mContext)
                 .inflate(R.layout.rounded_corners, null);
-        DisplayCutoutView cutoutTop = new DisplayCutoutView(mContext, true,
+        mCutoutTop = new DisplayCutoutView(mContext, true,
                 this::updateWindowVisibilities);
-        ((ViewGroup)mOverlay).addView(cutoutTop);
+        ((ViewGroup)mOverlay).addView(mCutoutTop);
         mBottomOverlay = LayoutInflater.from(mContext)
                 .inflate(R.layout.rounded_corners, null);
-        DisplayCutoutView cutoutBottom = new DisplayCutoutView(mContext, false,
+        mCutoutBottom = new DisplayCutoutView(mContext, false,
                 this::updateWindowVisibilities);
-        ((ViewGroup)mBottomOverlay).addView(cutoutBottom);
+        ((ViewGroup)mBottomOverlay).addView(mCutoutBottom);
 
         mOverlay.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         mOverlay.setAlpha(0);
@@ -162,22 +170,19 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         Dependency.get(TunerService.class).addTunable(this, SIZE);
 
         // Watch color inversion and invert the overlay as needed.
-        SecureSetting setting = new SecureSetting(mContext, Dependency.get(Dependency.MAIN_HANDLER),
+        mColorInversionSetting = new SecureSetting(mContext, Dependency.get(Dependency.MAIN_HANDLER),
                 Secure.ACCESSIBILITY_DISPLAY_INVERSION_ENABLED) {
             @Override
             protected void handleValueChanged(int value, boolean observedChange) {
-                int tint = value != 0 ? Color.WHITE : Color.BLACK;
-                ColorStateList tintList = ColorStateList.valueOf(tint);
-                ((ImageView) mOverlay.findViewById(R.id.left)).setImageTintList(tintList);
-                ((ImageView) mOverlay.findViewById(R.id.right)).setImageTintList(tintList);
-                ((ImageView) mBottomOverlay.findViewById(R.id.left)).setImageTintList(tintList);
-                ((ImageView) mBottomOverlay.findViewById(R.id.right)).setImageTintList(tintList);
-                cutoutTop.setColor(tint);
-                cutoutBottom.setColor(tint);
+                updateColorInversion(value);
             }
         };
-        setting.setListening(true);
-        setting.onChange(false);
+        mColorInversionSetting.setListening(true);
+        mColorInversionSetting.onChange(false);
+
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_USER_SWITCHED);
+        mContext.registerReceiver(mIntentReceiver, filter);
 
         mOverlay.addOnLayoutChangeListener(new OnLayoutChangeListener() {
             @Override
@@ -195,6 +200,31 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                         .start();
             }
         });
+    }
+
+    private final BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            if (action.equals(Intent.ACTION_USER_SWITCHED)) {
+                int newUserId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE,
+                        ActivityManager.getCurrentUser());
+                // update color inversion setting to the new user
+                mColorInversionSetting.setUserId(newUserId);
+                updateColorInversion(mColorInversionSetting.getValue());
+            }
+        }
+    };
+
+    private void updateColorInversion(int colorsInvertedValue) {
+        int tint = colorsInvertedValue != 0 ? Color.WHITE : Color.BLACK;
+        ColorStateList tintList = ColorStateList.valueOf(tint);
+        ((ImageView) mOverlay.findViewById(R.id.left)).setImageTintList(tintList);
+        ((ImageView) mOverlay.findViewById(R.id.right)).setImageTintList(tintList);
+        ((ImageView) mBottomOverlay.findViewById(R.id.left)).setImageTintList(tintList);
+        ((ImageView) mBottomOverlay.findViewById(R.id.right)).setImageTintList(tintList);
+        mCutoutTop.setColor(tint);
+        mCutoutBottom.setColor(tint);
     }
 
     @Override
@@ -244,6 +274,9 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             updateView(bottomLeft, Gravity.BOTTOM | Gravity.LEFT, 270);
             updateView(bottomRight, Gravity.TOP | Gravity.LEFT, 0);
         }
+
+        mCutoutTop.setRotation(mRotation);
+        mCutoutBottom.setRotation(mRotation);
 
         updateWindowVisibilities();
     }
@@ -416,14 +449,16 @@ public class ScreenDecorations extends SystemUI implements Tunable {
         private final Rect mBoundingRect = new Rect();
         private final Path mBoundingPath = new Path();
         private final int[] mLocation = new int[2];
-        private final boolean mStart;
+        private final boolean mInitialStart;
         private final Runnable mVisibilityChangedListener;
         private int mColor = Color.BLACK;
+        private boolean mStart;
+        private int mRotation;
 
         public DisplayCutoutView(Context context, boolean start,
                 Runnable visibilityChangedListener) {
             super(context);
-            mStart = start;
+            mInitialStart = start;
             mVisibilityChangedListener = visibilityChangedListener;
             setId(R.id.display_cutout);
         }
@@ -475,7 +510,22 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             }
         }
 
+        public void setRotation(int rotation) {
+            mRotation = rotation;
+            update();
+        }
+
+        private boolean isStart() {
+            final boolean flipped = (mRotation == RotationUtils.ROTATION_SEASCAPE
+                    || mRotation == RotationUtils.ROTATION_UPSIDE_DOWN);
+            return flipped ? !mInitialStart : mInitialStart;
+        }
+
         private void update() {
+            mStart = isStart();
+            if (!isAttachedToWindow()) {
+                return;
+            }
             requestLayout();
             getDisplay().getDisplayInfo(mInfo);
             mBounds.setEmpty();
@@ -560,31 +610,34 @@ public class ScreenDecorations extends SystemUI implements Tunable {
                     resolveSizeAndState(mBoundingRect.height(), heightMeasureSpec, 0));
         }
 
-        public static void boundsFromDirection(DisplayCutout displayCutout, int gravity, Rect out) {
+        public static void boundsFromDirection(DisplayCutout displayCutout, int gravity,
+                Rect out) {
+            Region bounds = boundsFromDirection(displayCutout, gravity);
+            out.set(bounds.getBounds());
+            bounds.recycle();
+        }
+
+        public static Region boundsFromDirection(DisplayCutout displayCutout, int gravity) {
             Region bounds = displayCutout.getBounds();
             switch (gravity) {
                 case Gravity.TOP:
                     bounds.op(0, 0, Integer.MAX_VALUE, displayCutout.getSafeInsetTop(),
                             Region.Op.INTERSECT);
-                    out.set(bounds.getBounds());
                     break;
                 case Gravity.LEFT:
                     bounds.op(0, 0, displayCutout.getSafeInsetLeft(), Integer.MAX_VALUE,
                             Region.Op.INTERSECT);
-                    out.set(bounds.getBounds());
                     break;
                 case Gravity.BOTTOM:
                     bounds.op(0, displayCutout.getSafeInsetTop() + 1, Integer.MAX_VALUE,
                             Integer.MAX_VALUE, Region.Op.INTERSECT);
-                    out.set(bounds.getBounds());
                     break;
                 case Gravity.RIGHT:
                     bounds.op(displayCutout.getSafeInsetLeft() + 1, 0, Integer.MAX_VALUE,
                             Integer.MAX_VALUE, Region.Op.INTERSECT);
-                    out.set(bounds.getBounds());
                     break;
             }
-            bounds.recycle();
+            return bounds;
         }
 
         private void localBounds(Rect out) {

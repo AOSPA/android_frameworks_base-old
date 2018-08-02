@@ -71,6 +71,12 @@ message IncidentProto {
         (section).args = "getprop"
     ];
 
+    optional string kernel_version = 1002 [
+        (section).type = SECTION_FILE,
+        (section).args = "/proc/version",
+        (privacy).dest = DEST_AUTOMATIC
+    ];
+
     // Device Logs
     optional android.util.EventLogTagMapProto event_log_tag_map = 1100 [
         (section).type = SECTION_FILE,
@@ -162,7 +168,6 @@ message IncidentProto {
 
     optional CpuFreqProto cpu_freq = 2004 [
         (section).type = SECTION_FILE,
-        (section).device_specific = true,
         (section).args = "/sys/devices/system/cpu/cpufreq/all_time_in_state"
     ];
 
@@ -173,7 +178,6 @@ message IncidentProto {
 
     optional BatteryTypeProto battery_type = 2006 [
         (section).type = SECTION_FILE,
-        (section).device_specific = true,
         (section).args = "/sys/class/power_supply/bms/battery_type"
     ];
 
@@ -184,7 +188,7 @@ message IncidentProto {
     ];
 
     // System Services
-    optional com.android.server.fingerprint.FingerprintServiceDumpProto fingerprint = 3000 [
+    optional com.android.server.biometrics.fingerprint.FingerprintServiceDumpProto fingerprint = 3000 [
         (section).type = SECTION_DUMPSYS,
         (section).args = "fingerprint --proto --incident"
     ];

@@ -117,7 +117,7 @@ class SafeActivityOptions {
      * @param callerApp The record of the caller.
      */
     ActivityOptions getOptions(@Nullable Intent intent, @Nullable ActivityInfo aInfo,
-            @Nullable ProcessRecord callerApp,
+            @Nullable WindowProcessController callerApp,
             ActivityStackSupervisor supervisor) throws SecurityException {
         if (mOriginalOptions != null) {
             checkPermissions(intent, aInfo, callerApp, supervisor, mOriginalOptions,
@@ -186,13 +186,13 @@ class SafeActivityOptions {
     }
 
     private void checkPermissions(@Nullable Intent intent, @Nullable ActivityInfo aInfo,
-            @Nullable ProcessRecord callerApp, ActivityStackSupervisor supervisor,
+            @Nullable WindowProcessController callerApp, ActivityStackSupervisor supervisor,
             ActivityOptions options, int callingPid, int callingUid) {
         // If a launch task id is specified, then ensure that the caller is the recents
         // component or has the START_TASKS_FROM_RECENTS permission
         if (options.getLaunchTaskId() != INVALID_TASK_ID
                 && !supervisor.mRecentTasks.isCallerRecents(callingUid)) {
-            final int startInTaskPerm = supervisor.mService.checkPermission(
+            final int startInTaskPerm = ActivityTaskManagerService.checkPermission(
                     START_TASKS_FROM_RECENTS, callingPid, callingUid);
             if (startInTaskPerm == PERMISSION_DENIED) {
                 final String msg = "Permission Denial: starting " + getIntentString(intent)

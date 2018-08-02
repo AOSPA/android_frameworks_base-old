@@ -23,6 +23,7 @@
 #include "../condition/ConditionTracker.h"
 #include "../external/PullDataReceiver.h"
 #include "../external/StatsPullerManager.h"
+#include "../stats_log_util.h"
 #include "MetricProducer.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
 
@@ -33,17 +34,20 @@ namespace statsd {
 struct ValueBucket {
     int64_t mBucketStartNs;
     int64_t mBucketEndNs;
-    int64_t mValue;
+    int64_t mValueLong;
+    double mValueDouble;
 };
 
 class ValueMetricProducer : public virtual MetricProducer, public virtual PullDataReceiver {
 public:
     ValueMetricProducer(const ConfigKey& key, const ValueMetric& valueMetric,
                         const int conditionIndex, const sp<ConditionWizard>& wizard,
-                        const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs);
+                        const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs,
+                        const sp<StatsPullerManager>& pullerManager);
 
     virtual ~ValueMetricProducer();
 
+    // Process data pulled on bucket boundary.
     void onDataPulled(const std::vector<std::shared_ptr<LogEvent>>& data) override;
 
     // ValueMetric needs special logic if it's a pulled atom.
@@ -53,7 +57,7 @@ public:
 
         if (mPullTagId != -1 && (mCondition == true || mConditionTrackerIndex < 0) ) {
             vector<shared_ptr<LogEvent>> allData;
-            mStatsPullerManager->Pull(mPullTagId, eventTimeNs, &allData);
+            mPullerManager->Pull(mPullTagId, eventTimeNs, &allData);
             if (allData.size() == 0) {
                 // This shouldn't happen since this valuemetric is not useful now.
             }
@@ -112,33 +116,29 @@ private:
 
     void dropDataLocked(const int64_t dropTimeNs) override;
 
+    sp<StatsPullerManager> mPullerManager;
+
     const FieldMatcher mValueField;
-
-    std::shared_ptr<StatsPullerManager> mStatsPullerManager;
-
-    // for testing
-    ValueMetricProducer(const ConfigKey& key, const ValueMetric& valueMetric,
-                        const int conditionIndex, const sp<ConditionWizard>& wizard,
-                        const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs,
-                        std::shared_ptr<StatsPullerManager> statsPullerManager);
 
     // tagId for pulled data. -1 if this is not pulled
     const int mPullTagId;
+
+    // if this is pulled metric
+    const bool mIsPulled;
 
     int mField;
 
     // internal state of a bucket.
     typedef struct {
         // Pulled data always come in pair of <start, end>. This holds the value
-        // for start. The diff (end - start) is added to sum.
-        int64_t start;
+        // for start. The diff (end - start) is taken as the real value.
+        Value start;
         // Whether the start data point is updated
         bool startUpdated;
-        // If end data point comes before the start, record this pair as tainted
-        // and the value is not added to the running sum.
-        int tainted;
-        // Running sum of known pairs in this bucket
-        int64_t sum;
+        // Current value, depending on the aggregation type.
+        Value value;
+        // Number of samples collected.
+        int sampleSize;
         // If this dimension has any non-tainted value. If not, don't report the
         // dimension.
         bool hasValue;
@@ -149,7 +149,6 @@ private:
     std::unordered_map<MetricDimensionKey, int64_t> mCurrentFullBucket;
 
     // Save the past buckets and we can clear when the StatsLogReport is dumped.
-    // TODO: Add a lock to mPastBuckets.
     std::unordered_map<MetricDimensionKey, std::vector<ValueBucket>> mPastBuckets;
 
     // Pairs of (elapsed start, elapsed end) denoting buckets that were skipped.
@@ -168,6 +167,10 @@ private:
 
     const bool mUseAbsoluteValueOnReset;
 
+    const ValueMetric::AggregationType mAggregationType;
+
+    const Type mValueType;
+
     FRIEND_TEST(ValueMetricProducerTest, TestNonDimensionalEvents);
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsTakeAbsoluteValueOnReset);
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsTakeZeroOnReset);
@@ -182,6 +185,11 @@ private:
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2);
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition3);
+    FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateMin);
+    FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateMax);
+    FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateAvg);
+    FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateSum);
+    FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateSumSliced);
 };
 
 }  // namespace statsd

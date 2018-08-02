@@ -1236,8 +1236,6 @@ public class PackageInstaller {
         /**
          * Sets the UID that initiated the package installation. This is informational
          * and may be used as a signal for anti-malware purposes.
-         *
-         * @see Intent#EXTRA_ORIGINATING_UID
          */
         public void setOriginatingUid(int originatingUid) {
             this.originatingUid = originatingUid;
@@ -1329,6 +1327,15 @@ public class PackageInstaller {
 
         /**
          * Set the reason for installing this package.
+         * <p>
+         * The install reason should be a pre-defined integer. The behavior is
+         * undefined if other values are used.
+         *
+         * @see PackageManager#INSTALL_REASON_UNKNOWN
+         * @see PackageManager#INSTALL_REASON_POLICY
+         * @see PackageManager#INSTALL_REASON_DEVICE_RESTORE
+         * @see PackageManager#INSTALL_REASON_DEVICE_SETUP
+         * @see PackageManager#INSTALL_REASON_USER
          */
         public void setInstallReason(@InstallReason int installReason) {
             this.installReason = installReason;

@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Hiển thị phản hồi trực quan cho các lần nhấn"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Hiển thị bản cập nhật giao diện"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Chuyển nhanh toàn bộ các giao diện cửa sổ khi các giao diện này cập nhật"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Hiện cập nhật giao diện GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Chuyển nhanh chế độ xem trong cửa sổ khi được vẽ bằng GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Hiện cập nhật chế độ xem"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Chuyển nhanh chế độ xem trong cửa sổ khi được vẽ"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Hiện bản cập nhật lớp phần cứng"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Lớp phần cứng flash có màu xanh khi chúng cập nhật"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Gỡ lỗi mức vẽ quá GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Hiển thị viền đoạn video, lề, v.v.."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Buộc hướng bố cục phải sang trái"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Buộc hướng bố cục màn hình phải sang trái cho tất cả ngôn ngữ"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Bắt buộc kết xuất GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Bắt buộc sử dụng GPU cho bản vẽ 2d"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Bắt buộc 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Bật 4x MSAA trong ứng dụng OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Gỡ lỗi hoạt động của clip không phải là hình chữ nhật"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Kết xuất GPU cấu hình"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Kết xuất HWUI cấu hình"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Bật lớp gỡ lỗi GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Cho phép tải lớp gỡ lỗi GPU cho ứng dụng gỡ lỗi"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Tỷ lệ hình động của cửa sổ"</string>

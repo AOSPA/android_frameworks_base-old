@@ -16,10 +16,8 @@
 
 #include "RenderNode.h"
 
-#include "BakedOpRenderer.h"
 #include "DamageAccumulator.h"
 #include "Debug.h"
-#include "RecordedOp.h"
 #include "TreeInfo.h"
 #include "VectorDrawable.h"
 #include "renderstate/RenderState.h"
@@ -28,9 +26,6 @@
 #include "utils/MathUtils.h"
 #include "utils/StringUtils.h"
 #include "utils/TraceUtils.h"
-
-#include "protos/ProtoHelpers.h"
-#include "protos/hwui.pb.h"
 
 #include <SkPathOps.h>
 #include <algorithm>
@@ -101,77 +96,6 @@ void RenderNode::output(std::ostream& output, uint32_t level) {
     output << std::endl;
 }
 
-void RenderNode::copyTo(proto::RenderNode* pnode) {
-    pnode->set_id(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(this)));
-    pnode->set_name(mName.string(), mName.length());
-
-    proto::RenderProperties* pprops = pnode->mutable_properties();
-    pprops->set_left(properties().getLeft());
-    pprops->set_top(properties().getTop());
-    pprops->set_right(properties().getRight());
-    pprops->set_bottom(properties().getBottom());
-    pprops->set_clip_flags(properties().getClippingFlags());
-    pprops->set_alpha(properties().getAlpha());
-    pprops->set_translation_x(properties().getTranslationX());
-    pprops->set_translation_y(properties().getTranslationY());
-    pprops->set_translation_z(properties().getTranslationZ());
-    pprops->set_elevation(properties().getElevation());
-    pprops->set_rotation(properties().getRotation());
-    pprops->set_rotation_x(properties().getRotationX());
-    pprops->set_rotation_y(properties().getRotationY());
-    pprops->set_scale_x(properties().getScaleX());
-    pprops->set_scale_y(properties().getScaleY());
-    pprops->set_pivot_x(properties().getPivotX());
-    pprops->set_pivot_y(properties().getPivotY());
-    pprops->set_has_overlapping_rendering(properties().getHasOverlappingRendering());
-    pprops->set_pivot_explicitly_set(properties().isPivotExplicitlySet());
-    pprops->set_project_backwards(properties().getProjectBackwards());
-    pprops->set_projection_receiver(properties().isProjectionReceiver());
-    set(pprops->mutable_clip_bounds(), properties().getClipBounds());
-
-    const Outline& outline = properties().getOutline();
-    if (outline.getType() != Outline::Type::None) {
-        proto::Outline* poutline = pprops->mutable_outline();
-        poutline->clear_path();
-        if (outline.getType() == Outline::Type::Empty) {
-            poutline->set_type(proto::Outline_Type_Empty);
-        } else if (outline.getType() == Outline::Type::ConvexPath) {
-            poutline->set_type(proto::Outline_Type_ConvexPath);
-            if (const SkPath* path = outline.getPath()) {
-                set(poutline->mutable_path(), *path);
-            }
-        } else if (outline.getType() == Outline::Type::RoundRect) {
-            poutline->set_type(proto::Outline_Type_RoundRect);
-        } else {
-            ALOGW("Uknown outline type! %d", static_cast<int>(outline.getType()));
-            poutline->set_type(proto::Outline_Type_None);
-        }
-        poutline->set_should_clip(outline.getShouldClip());
-        poutline->set_alpha(outline.getAlpha());
-        poutline->set_radius(outline.getRadius());
-        set(poutline->mutable_bounds(), outline.getBounds());
-    } else {
-        pprops->clear_outline();
-    }
-
-    const RevealClip& revealClip = properties().getRevealClip();
-    if (revealClip.willClip()) {
-        proto::RevealClip* prevealClip = pprops->mutable_reveal_clip();
-        prevealClip->set_x(revealClip.getX());
-        prevealClip->set_y(revealClip.getY());
-        prevealClip->set_radius(revealClip.getRadius());
-    } else {
-        pprops->clear_reveal_clip();
-    }
-
-    pnode->clear_children();
-    if (mDisplayList) {
-        for (auto&& child : mDisplayList->getChildren()) {
-            child->renderNode->copyTo(pnode->add_children());
-        }
-    }
-}
-
 int RenderNode::getDebugSize() {
     int size = sizeof(RenderNode);
     if (mStagingDisplayList) {
@@ -188,11 +112,7 @@ void RenderNode::prepareTree(TreeInfo& info) {
     LOG_ALWAYS_FATAL_IF(!info.damageAccumulator, "DamageAccumulator missing");
     MarkAndSweepRemoved observer(&info);
 
-    // The OpenGL renderer reserves the stencil buffer for overdraw debugging.  Functors
-    // will need to be drawn in a layer.
-    bool functorsNeedLayer = Properties::debugOverdraw && !Properties::isSkiaEnabled();
-
-    prepareTreeImpl(observer, info, functorsNeedLayer);
+    prepareTreeImpl(observer, info, false);
 }
 
 void RenderNode::addAnimator(const sp<BaseRenderNodeAnimator>& animator) {
@@ -455,78 +375,6 @@ void RenderNode::applyViewPropertyTransforms(mat4& matrix, bool true3dTransform)
 
                 matrix.multiply(true3dMat);
             }
-        }
-    }
-}
-
-/**
- * Organizes the DisplayList hierarchy to prepare for background projection reordering.
- *
- * This should be called before a call to defer() or drawDisplayList()
- *
- * Each DisplayList that serves as a 3d root builds its list of composited children,
- * which are flagged to not draw in the standard draw loop.
- */
-void RenderNode::computeOrdering() {
-    ATRACE_CALL();
-    mProjectedNodes.clear();
-
-    // TODO: create temporary DDLOp and call computeOrderingImpl on top DisplayList so that
-    // transform properties are applied correctly to top level children
-    if (mDisplayList == nullptr) return;
-    for (unsigned int i = 0; i < mDisplayList->getChildren().size(); i++) {
-        RenderNodeOp* childOp = mDisplayList->getChildren()[i];
-        childOp->renderNode->computeOrderingImpl(childOp, &mProjectedNodes, &mat4::identity());
-    }
-}
-
-void RenderNode::computeOrderingImpl(
-        RenderNodeOp* opState, std::vector<RenderNodeOp*>* compositedChildrenOfProjectionSurface,
-        const mat4* transformFromProjectionSurface) {
-    mProjectedNodes.clear();
-    if (mDisplayList == nullptr || mDisplayList->isEmpty()) return;
-
-    // TODO: should avoid this calculation in most cases
-    // TODO: just calculate single matrix, down to all leaf composited elements
-    Matrix4 localTransformFromProjectionSurface(*transformFromProjectionSurface);
-    localTransformFromProjectionSurface.multiply(opState->localMatrix);
-
-    if (properties().getProjectBackwards()) {
-        // composited projectee, flag for out of order draw, save matrix, and store in proj surface
-        opState->skipInOrderDraw = true;
-        opState->transformFromCompositingAncestor = localTransformFromProjectionSurface;
-        compositedChildrenOfProjectionSurface->push_back(opState);
-    } else {
-        // standard in order draw
-        opState->skipInOrderDraw = false;
-    }
-
-    if (mDisplayList->getChildren().size() > 0) {
-        const bool isProjectionReceiver = mDisplayList->projectionReceiveIndex >= 0;
-        bool haveAppliedPropertiesToProjection = false;
-        for (unsigned int i = 0; i < mDisplayList->getChildren().size(); i++) {
-            RenderNodeOp* childOp = mDisplayList->getChildren()[i];
-            RenderNode* child = childOp->renderNode;
-
-            std::vector<RenderNodeOp*>* projectionChildren = nullptr;
-            const mat4* projectionTransform = nullptr;
-            if (isProjectionReceiver && !child->properties().getProjectBackwards()) {
-                // if receiving projections, collect projecting descendant
-
-                // Note that if a direct descendant is projecting backwards, we pass its
-                // grandparent projection collection, since it shouldn't project onto its
-                // parent, where it will already be drawing.
-                projectionChildren = &mProjectedNodes;
-                projectionTransform = &mat4::identity();
-            } else {
-                if (!haveAppliedPropertiesToProjection) {
-                    applyViewPropertyTransforms(localTransformFromProjectionSurface);
-                    haveAppliedPropertiesToProjection = true;
-                }
-                projectionChildren = compositedChildrenOfProjectionSurface;
-                projectionTransform = &localTransformFromProjectionSurface;
-            }
-            child->computeOrderingImpl(childOp, projectionChildren, projectionTransform);
         }
     }
 }

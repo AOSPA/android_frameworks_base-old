@@ -171,6 +171,11 @@ enum DebugLevel {
 #define PROPERTY_CAPTURE_SKP_ENABLED "debug.hwui.capture_skp_enabled"
 
 /**
+ * Allows to record Skia drawing commands with systrace.
+ */
+#define PROPERTY_SKIA_ATRACE_ENABLED "debug.hwui.skia_atrace_enabled"
+
+/**
  * Defines how many frames in a sequence to capture.
  */
 #define PROPERTY_CAPTURE_SKP_FRAMES "debug.hwui.capture_skp_frames"
@@ -184,6 +189,8 @@ enum DebugLevel {
  * Property for whether this is running in the emulator.
  */
 #define PROPERTY_QEMU_KERNEL "ro.kernel.qemu"
+
+#define PROPERTY_FORCE_DARK "debug.hwui.force_dark"
 
 ///////////////////////////////////////////////////////////////////////////////
 // Misc
@@ -200,7 +207,7 @@ enum class OverdrawColorSet { Default = 0, Deuteranomaly };
 
 enum class StencilClipDebug { Hide, ShowHighlight, ShowRegion };
 
-enum class RenderPipelineType { OpenGL = 0, SkiaGL, SkiaVulkan, NotInitialized = 128 };
+enum class RenderPipelineType { SkiaGL, SkiaVulkan, NotInitialized = 128 };
 
 /**
  * Renderthread-only singleton which manages several static rendering properties. Most of these
@@ -240,7 +247,6 @@ public:
 
     static ProfileType getProfileType();
     ANDROID_API static RenderPipelineType getRenderPipelineType();
-    static bool isSkiaEnabled();
 
     ANDROID_API static bool enableHighContrastText;
 
@@ -259,6 +265,7 @@ public:
     static bool disableVsync;
 
     static bool skpCaptureEnabled;
+    static bool forceDarkMode;
 
     // For experimentation b/68769804
     ANDROID_API static bool enableRTAnimations;

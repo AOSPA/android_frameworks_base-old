@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Tampilkan masukan visual untuk ketukan"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Lihat pembaruan permukaan"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Sorot seluruh permukaan jendela saat diperbarui"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Tampilkan update tampilan GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Tampilan cepat dlm jendela saat digambar dgn GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Tampilkan update tampilan"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Tampilan cepat dalam jendela saat digambar"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Tunjukkan update lapisan hardware"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Lapisan hardware berkedip hijau saat memperbarui"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Debug overdraw oleh GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Tampilkan batas klip, margin, dll."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Paksa arah tata letak RTL"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Paksa arah tata letak layar RTL untuk semua lokal"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Paksa rendering GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Paksa penggunaan GPU untuk gambar 2d"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Paksa 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Aktifkan 4x MSAA dalam aplikasi OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Debug operasi klip non-kotak"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Penguraian GPU profil"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Rendering HWUI profil"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Aktifkan lapisan debug GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Izinkan memuat lapisan debug GPU untuk aplikasi debug"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Skala animasi jendela"</string>

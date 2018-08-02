@@ -522,7 +522,6 @@
     <string name="quick_settings_reset_confirmation_title" msgid="748792586749897883">"<xliff:g id="TILE_LABEL">%1$s</xliff:g> ဝှက်မည်လား?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2235970126803317374">"နောက်တစ်ကြိမ်သင် ချိန်ညှိချက်များဖွင့်လျှင် ၎င်းပေါ်လာပါမည်။"</string>
     <string name="quick_settings_reset_confirmation_button" msgid="2660339101868367515">"ဖျောက်ထားမည်"</string>
-    <string name="managed_profile_foreground_toast" msgid="5421487114739245972">"သင်သည် အလုပ်ပရိုဖိုင်းအား သုံးနေသည်"</string>
     <string name="stream_voice_call" msgid="4410002696470423714">"ဖုန်းခေါ်ရန်"</string>
     <string name="stream_system" msgid="7493299064422163147">"စနစ်"</string>
     <string name="stream_ring" msgid="8213049469184048338">"အသံမြည်စေသည်"</string>
@@ -677,7 +676,7 @@
     <string name="keyboard_shortcut_group_system_back" msgid="2207004531216446378">"နောက်သို့"</string>
     <string name="keyboard_shortcut_group_system_notifications" msgid="8366964080041773224">"အကြောင်းကြားချက်များ"</string>
     <string name="keyboard_shortcut_group_system_shortcuts_helper" msgid="4892255911160332762">"ကီးဘုတ် ဖြတ်လမ်းများ"</string>
-    <string name="keyboard_shortcut_group_system_switch_input" msgid="2334164096341310324">"စာရိုက်စနစ် ပြောင်းခြင်း"</string>
+    <string name="keyboard_shortcut_group_system_switch_input" msgid="8413348767825486492">"ကီးဘုတ်အပြင်အဆင် ပြောင်းခြင်း"</string>
     <string name="keyboard_shortcut_group_applications" msgid="9129465955073449206">"အက်ပ်များ"</string>
     <string name="keyboard_shortcut_group_applications_assist" msgid="9095441910537146013">"အထောက်အကူ"</string>
     <string name="keyboard_shortcut_group_applications_browser" msgid="6465985474000766533">"ဘရောင်ဇာ"</string>

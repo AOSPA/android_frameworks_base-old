@@ -121,6 +121,7 @@
     <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" />
     <uses-permission android:name="android.permission.ACCESS_KEYGUARD_SECURE_STORAGE" />
     <uses-permission android:name="android.permission.TRUST_LISTENER" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-permission android:name="android.permission.RESET_FINGERPRINT_LOCKOUT" />
     <uses-permission android:name="android.permission.MANAGE_SLICE_PERMISSIONS" />
@@ -230,7 +231,7 @@
         android:theme="@style/Theme.SystemUI"
         android:defaultToDeviceProtectedStorage="true"
         android:directBootAware="true"
-        android:appComponentFactory="android.support.v4.app.CoreComponentFactory">
+        android:appComponentFactory="androidx.core.app.CoreComponentFactory">
         <!-- Keep theme in sync with SystemUIApplication.onCreate().
              Setting the theme on the application does not affect views inflated by services.
              The application theme is set again from onCreate to take effect for those views. -->
@@ -339,19 +340,17 @@
             android:exported="false">
         </activity>
 
-        <!-- Springboard for launching the share activity -->
-        <receiver android:name=".screenshot.GlobalScreenshot$ScreenshotActionReceiver"
-            android:process=":screenshot"
+        <!-- Springboard for launching the share and edit activity. This needs to be in the main
+             system ui process since we need to notify the status bar to dismiss the keyguard -->
+        <receiver android:name=".screenshot.GlobalScreenshot$ActionProxyReceiver"
             android:exported="false" />
 
         <!-- Callback for dismissing screenshot notification after a share target is picked -->
         <receiver android:name=".screenshot.GlobalScreenshot$TargetChosenReceiver"
-            android:process=":screenshot"
             android:exported="false" />
 
         <!-- Callback for deleting screenshot notification -->
         <receiver android:name=".screenshot.GlobalScreenshot$DeleteScreenshotReceiver"
-            android:process=":screenshot"
             android:exported="false" />
 
         <!-- started from UsbDeviceSettingsManager -->
@@ -595,7 +594,7 @@
         </receiver>
 
         <provider
-            android:name="android.support.v4.content.FileProvider"
+            android:name="androidx.core.content.FileProvider"
             android:authorities="com.android.systemui.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">

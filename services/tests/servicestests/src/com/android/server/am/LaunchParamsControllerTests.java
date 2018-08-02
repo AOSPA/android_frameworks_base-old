@@ -57,14 +57,14 @@ import static org.junit.Assert.assertNotEquals;
 @Presubmit
 @RunWith(AndroidJUnit4.class)
 public class LaunchParamsControllerTests extends ActivityTestsBase {
-    private ActivityManagerService mService;
+    private ActivityTaskManagerService mService;
     private LaunchParamsController mController;
 
     @Before
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        mService = createActivityManagerService();
+        mService = createActivityTaskManagerService();
         mController = new LaunchParamsController(mService);
     }
 

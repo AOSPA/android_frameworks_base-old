@@ -49,7 +49,6 @@ public:
     virtual ~StatsService();
 
     /** The anomaly alarm registered with AlarmManager won't be updated by less than this. */
-    // TODO: Consider making this configurable. And choose a good number.
     const uint32_t MIN_DIFF_TO_UPDATE_REGISTERED_ALARM_SECS = 5;
 
     virtual status_t onTransact(uint32_t code, const Parcel& data, Parcel* reply, uint32_t flags);
@@ -246,9 +245,9 @@ private:
     sp<UidMap> mUidMap;
 
     /**
-     * Fetches external metrics.
+     * Fetches external metrics
      */
-    StatsPullerManager mStatsPullerManager;
+    sp<StatsPullerManager> mPullerManager;
 
     /**
      * Tracks the configurations that have been passed to statsd.

@@ -26,9 +26,11 @@ import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STR
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_TIMEOUT;
 
 import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.app.StatusBarManager;
+import android.hardware.biometrics.BiometricSourceType;
 import android.app.trust.TrustManager;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
@@ -81,8 +83,8 @@ import com.android.systemui.SystemUI;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.UiOffloadThread;
 import com.android.systemui.classifier.FalsingManager;
-import com.android.systemui.statusbar.phone.FingerprintUnlockController;
 import com.android.systemui.statusbar.phone.NotificationPanelView;
+import com.android.systemui.statusbar.phone.BiometricUnlockController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 
@@ -344,6 +346,11 @@ public class KeyguardViewMediator extends SystemUI {
      */
     private WorkLockActivityController mWorkLockController;
 
+    /**
+     * @see #setPulsing(boolean)
+     */
+    private boolean mPulsing;
+
     private boolean mLockLater;
 
     private boolean mWakeAndUnlocking;
@@ -495,6 +502,7 @@ public class KeyguardViewMediator extends SystemUI {
                     break;
                 case READY:
                     synchronized (KeyguardViewMediator.this) {
+                        if (DEBUG_SIM_STATES) Log.d(TAG, "READY, reset state? " + mShowing);
                         if (mShowing) {
                             resetStateLocked();
                         }
@@ -520,18 +528,18 @@ public class KeyguardViewMediator extends SystemUI {
         }
 
         @Override
-        public void onFingerprintAuthFailed() {
+        public void onBiometricAuthFailed(BiometricSourceType biometricSourceType) {
             final int currentUser = KeyguardUpdateMonitor.getCurrentUser();
             if (mLockPatternUtils.isSecure(currentUser)) {
-                mLockPatternUtils.getDevicePolicyManager().reportFailedFingerprintAttempt(
+                mLockPatternUtils.getDevicePolicyManager().reportFailedBiometricAttempt(
                         currentUser);
             }
         }
 
         @Override
-        public void onFingerprintAuthenticated(int userId) {
+        public void onBiometricAuthenticated(int userId, BiometricSourceType biometricSourceType) {
             if (mLockPatternUtils.isSecure(userId)) {
-                mLockPatternUtils.getDevicePolicyManager().reportSuccessfulFingerprintAttempt(
+                mLockPatternUtils.getDevicePolicyManager().reportSuccessfulBiometricAttempt(
                         userId);
             }
         }
@@ -1643,7 +1651,7 @@ public class KeyguardViewMediator extends SystemUI {
         }
 
         mUpdateMonitor.clearFailedUnlockAttempts();
-        mUpdateMonitor.clearFingerprintRecognized();
+        mUpdateMonitor.clearBiometricRecognized();
 
         if (mGoingToSleep) {
             Log.i(TAG, "Device is going to sleep, aborting keyguardDone");
@@ -1749,7 +1757,7 @@ public class KeyguardViewMediator extends SystemUI {
             int secondaryDisplayShowing) {
         mUiOffloadThread.submit(() -> {
             try {
-                ActivityManager.getService().setLockScreenShown(showing, aodShowing,
+                ActivityTaskManager.getService().setLockScreenShown(showing, aodShowing,
                         secondaryDisplayShowing);
             } catch (RemoteException e) {
             }
@@ -1798,10 +1806,12 @@ public class KeyguardViewMediator extends SystemUI {
 
                 int flags = 0;
                 if (mStatusBarKeyguardViewManager.shouldDisableWindowAnimationsForUnlock()
-                        || mWakeAndUnlocking) {
-                    flags |= WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
+                        || (mWakeAndUnlocking && !mPulsing)) {
+                    flags |= WindowManagerPolicyConstants
+                            .KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
                 }
-                if (mStatusBarKeyguardViewManager.isGoingToNotificationShade()) {
+                if (mStatusBarKeyguardViewManager.isGoingToNotificationShade()
+                        || (mWakeAndUnlocking && mPulsing)) {
                     flags |= WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_SHADE;
                 }
                 if (mStatusBarKeyguardViewManager.isUnlockWithWallpaper()) {
@@ -1812,7 +1822,7 @@ public class KeyguardViewMediator extends SystemUI {
                 // Don't actually hide the Keyguard at the moment, wait for window
                 // manager until it tells us it's safe to do so with
                 // startKeyguardExitAnimation.
-                ActivityManager.getService().keyguardGoingAway(flags);
+                ActivityTaskManager.getService().keyguardGoingAway(flags);
             } catch (RemoteException e) {
                 Log.e(TAG, "Error while calling WindowManager", e);
             }
@@ -2049,9 +2059,9 @@ public class KeyguardViewMediator extends SystemUI {
 
     public StatusBarKeyguardViewManager registerStatusBar(StatusBar statusBar,
             ViewGroup container, NotificationPanelView panelView,
-            FingerprintUnlockController fingerprintUnlockController) {
+            BiometricUnlockController biometricUnlockController) {
         mStatusBarKeyguardViewManager.registerStatusBar(statusBar, container, panelView,
-                fingerprintUnlockController, mDismissCallbackRegistry);
+                biometricUnlockController, mDismissCallbackRegistry);
         return mStatusBarKeyguardViewManager;
     }
 
@@ -2100,8 +2110,18 @@ public class KeyguardViewMediator extends SystemUI {
         pw.print("  mDrawnCallback: "); pw.println(mDrawnCallback);
     }
 
+    /**
+     * @param aodShowing true when AOD - or ambient mode - is showing.
+     */
     public void setAodShowing(boolean aodShowing) {
         setShowingLocked(mShowing, aodShowing);
+    }
+
+    /**
+     * @param pulsing true when device temporarily wakes up to display an incoming notification.
+     */
+    public void setPulsing(boolean pulsing) {
+        mPulsing = pulsing;
     }
 
     private static class StartKeyguardExitAnimParams {

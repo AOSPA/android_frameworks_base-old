@@ -18,6 +18,7 @@
 
 #include <DeviceInfo.h>
 #include <DisplayList.h>
+#include <GlLayer.h>
 #include <Matrix.h>
 #include <Properties.h>
 #include <Rect.h>
@@ -27,9 +28,6 @@
 #include <pipeline/skia/SkiaRecordingCanvas.h>
 #include <renderstate/RenderState.h>
 #include <renderthread/RenderThread.h>
-
-#include <RecordedOp.h>
-#include <RecordingCanvas.h>
 
 #include <memory>
 
@@ -60,18 +58,6 @@ namespace uirenderer {
         Properties::overrideRenderPipelineType(oldType);                       \
     };
 
-/**
- * Like gtests' TEST, but only runs with the OpenGL RenderPipelineType
- */
-#define OPENGL_PIPELINE_TEST(test_case_name, test_name)                        \
-    class test_case_name##_##test_name##_HwuiTest {                            \
-    public:                                                                    \
-        static void doTheThing();                                              \
-    };                                                                         \
-    INNER_PIPELINE_TEST(test_case_name, test_name, OpenGL,                     \
-                        test_case_name##_##test_name##_HwuiTest::doTheThing()) \
-    void test_case_name##_##test_name##_HwuiTest::doTheThing()
-
 #define INNER_PIPELINE_RENDERTHREAD_TEST(test_case_name, test_name, pipeline) \
     INNER_PIPELINE_TEST(test_case_name, test_name, pipeline,                  \
                         TestUtils::runOnRenderThread(                         \
@@ -86,23 +72,10 @@ namespace uirenderer {
     public:                                                                                 \
         static void doTheThing(renderthread::RenderThread& renderThread);                   \
     };                                                                                      \
-    INNER_PIPELINE_RENDERTHREAD_TEST(test_case_name, test_name, OpenGL);                    \
     INNER_PIPELINE_RENDERTHREAD_TEST(test_case_name, test_name, SkiaGL);                    \
     /* Temporarily disabling Vulkan until we can figure out a way to stub out the driver */ \
     /* INNER_PIPELINE_RENDERTHREAD_TEST(test_case_name, test_name, SkiaVulkan); */          \
     void test_case_name##_##test_name##_RenderThreadTest::doTheThing(                       \
-            renderthread::RenderThread& renderThread)
-
-/**
- * Like RENDERTHREAD_TEST, but only runs with the OpenGL RenderPipelineType
- */
-#define RENDERTHREAD_OPENGL_PIPELINE_TEST(test_case_name, test_name)      \
-    class test_case_name##_##test_name##_RenderThreadTest {               \
-    public:                                                               \
-        static void doTheThing(renderthread::RenderThread& renderThread); \
-    };                                                                    \
-    INNER_PIPELINE_RENDERTHREAD_TEST(test_case_name, test_name, OpenGL);  \
-    void test_case_name##_##test_name##_RenderThreadTest::doTheThing(     \
             renderthread::RenderThread& renderThread)
 
 /**
@@ -325,11 +298,6 @@ public:
 
     static SkColor interpolateColor(float fraction, SkColor start, SkColor end);
 
-    static void layoutTextUnscaled(const SkPaint& paint, const char* text,
-                                   std::vector<glyph_t>* outGlyphs,
-                                   std::vector<float>* outPositions, float* outTotalAdvance,
-                                   Rect* outBounds);
-
     static void drawUtf8ToCanvas(Canvas* canvas, const char* text, const SkPaint& paint, float x,
                                  float y);
 
@@ -365,16 +333,10 @@ private:
         }
         auto displayList = node->getDisplayList();
         if (displayList) {
-            if (displayList->isSkiaDL()) {
-                for (auto&& childDr : static_cast<skiapipeline::SkiaDisplayList*>(
-                                              const_cast<DisplayList*>(displayList))
-                                              ->mChildNodes) {
-                    syncHierarchyPropertiesAndDisplayListImpl(childDr.getRenderNode());
-                }
-            } else {
-                for (auto&& childOp : displayList->getChildren()) {
-                    syncHierarchyPropertiesAndDisplayListImpl(childOp->renderNode);
-                }
+            for (auto&& childDr : static_cast<skiapipeline::SkiaDisplayList*>(
+                                          const_cast<DisplayList*>(displayList))
+                                          ->mChildNodes) {
+                syncHierarchyPropertiesAndDisplayListImpl(childDr.getRenderNode());
             }
         }
     }

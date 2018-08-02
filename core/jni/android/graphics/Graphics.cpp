@@ -15,9 +15,6 @@
 #include <cutils/ashmem.h>
 #include <hwui/Canvas.h>
 
-#include <Caches.h>
-#include <TextureCache.h>
-
 using namespace android;
 
 void doThrowNPE(JNIEnv* env) {
@@ -358,11 +355,6 @@ void GraphicsJNI::getSkBitmap(JNIEnv* env, jobject bitmap, SkBitmap* outBitmap) 
     bitmap::toBitmap(env, bitmap).getSkBitmap(outBitmap);
 }
 
-SkPixelRef* GraphicsJNI::refSkPixelRef(JNIEnv* env, jobject jbitmap) {
-    android::Bitmap& bitmap = android::bitmap::toBitmap(env, jbitmap);
-    bitmap.ref();
-    return &bitmap;
-}
 SkColorType GraphicsJNI::getNativeBitmapColorType(JNIEnv* env, jobject jconfig) {
     ALOG_ASSERT(env);
     if (NULL == jconfig) {

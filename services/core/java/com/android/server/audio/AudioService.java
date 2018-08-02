@@ -20,8 +20,6 @@ import static android.Manifest.permission.REMOTE_AUDIO_PLAYBACK;
 import static android.media.AudioManager.RINGER_MODE_NORMAL;
 import static android.media.AudioManager.RINGER_MODE_SILENT;
 import static android.media.AudioManager.RINGER_MODE_VIBRATE;
-import static android.media.AudioManager.STREAM_ALARM;
-import static android.media.AudioManager.STREAM_MUSIC;
 import static android.media.AudioManager.STREAM_SYSTEM;
 import static android.os.Process.FIRST_APPLICATION_UID;
 import static android.provider.Settings.Secure.VOLUME_HUSH_MUTE;
@@ -141,6 +139,7 @@ import com.android.server.audio.AudioServiceEvents.PhoneStateEvent;
 import com.android.server.audio.AudioServiceEvents.VolumeEvent;
 import com.android.server.audio.AudioServiceEvents.WiredDevConnectEvent;
 import com.android.server.pm.UserManagerService;
+import com.android.server.wm.ActivityTaskManagerInternal;
 
 import org.xmlpull.v1.XmlPullParserException;
 
@@ -730,6 +729,14 @@ public class AudioService extends IAudioService.Stub
         int maxCallVolume = SystemProperties.getInt("ro.config.vc_call_vol_steps", -1);
         if (maxCallVolume != -1) {
             MAX_STREAM_VOLUME[AudioSystem.STREAM_VOICE_CALL] = maxCallVolume;
+        }
+
+        int defaultCallVolume = SystemProperties.getInt("ro.config.vc_call_vol_default", -1);
+        if (defaultCallVolume != -1 &&
+                defaultCallVolume <= MAX_STREAM_VOLUME[AudioSystem.STREAM_VOICE_CALL] &&
+                defaultCallVolume >= MIN_STREAM_VOLUME[AudioSystem.STREAM_VOICE_CALL]) {
+            AudioSystem.DEFAULT_STREAM_VOLUME[AudioSystem.STREAM_VOICE_CALL] = defaultCallVolume;
+        } else {
             AudioSystem.DEFAULT_STREAM_VOLUME[AudioSystem.STREAM_VOICE_CALL] =
                     (maxCallVolume * 3) / 4;
         }
@@ -741,7 +748,8 @@ public class AudioService extends IAudioService.Stub
 
         int defaultMusicVolume = SystemProperties.getInt("ro.config.media_vol_default", -1);
         if (defaultMusicVolume != -1 &&
-                defaultMusicVolume <= MAX_STREAM_VOLUME[AudioSystem.STREAM_MUSIC]) {
+                defaultMusicVolume <= MAX_STREAM_VOLUME[AudioSystem.STREAM_MUSIC] &&
+                defaultMusicVolume >= MIN_STREAM_VOLUME[AudioSystem.STREAM_MUSIC]) {
             AudioSystem.DEFAULT_STREAM_VOLUME[AudioSystem.STREAM_MUSIC] = defaultMusicVolume;
         } else {
             if (isPlatformTelevision()) {
@@ -2051,6 +2059,10 @@ public class AudioService extends IAudioService.Stub
 
     /** @see AudioManager#forceVolumeControlStream(int) */
     public void forceVolumeControlStream(int streamType, IBinder cb) {
+        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+                != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
         if (DEBUG_VOL) { Log.d(TAG, String.format("forceVolumeControlStream(%d)", streamType)); }
         synchronized(mForceControlStreamLock) {
             if (mVolumeControlStream != -1 && streamType != -1) {
@@ -3262,7 +3274,7 @@ public class AudioService extends IAudioService.Stub
             return;
         }
         // Only enable calls from system components
-        if (Binder.getCallingUid() >= FIRST_APPLICATION_UID) {
+        if (UserHandle.getCallingAppId() >= FIRST_APPLICATION_UID) {
             Log.i(TAG, "In setBluetoothScoOn(), on: "+on+". The calling application Uid: "
                   + Binder.getCallingUid() + ", is greater than FIRST_APPLICATION_UID"
                   + " exiting from setBluetoothScoOn()");
@@ -3918,6 +3930,10 @@ public class AudioService extends IAudioService.Stub
                             int delay = checkSendBecomingNoisyIntent(
                                     AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, intState,
                                     AudioSystem.DEVICE_NONE);
+                            final String addr = btDevice == null ? "null" : btDevice.getAddress();
+                            mDeviceLogger.log(new AudioEventLogger.StringEvent(
+                                    "A2DP service connected: device addr=" + addr
+                                    + " state=" + state));
                             queueMsgUnderWakeLock(mAudioHandler,
                                     MSG_SET_A2DP_SINK_CONNECTION_STATE,
                                     state,
@@ -4797,7 +4813,14 @@ public class AudioService extends IAudioService.Stub
     public int setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(BluetoothDevice device,
                 int state, int profile, boolean suppressNoisyIntent, int a2dpVolume)
     {
+        mDeviceLogger.log(new AudioEventLogger.StringEvent(
+                "setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent state=" + state
+                // only querying address as this is the only readily available field on the device
+                + " addr=" + device.getAddress()
+                + " prof=" + profile + " supprNoisy=" + suppressNoisyIntent
+                + " vol=" + a2dpVolume));
         if (mAudioHandler.hasMessages(MSG_SET_A2DP_SINK_CONNECTION_STATE, device)) {
+            mDeviceLogger.log(new AudioEventLogger.StringEvent("A2DP connection state ignored"));
             return 0;
         }
         return setBluetoothA2dpDeviceConnectionStateInt(
@@ -5751,7 +5774,7 @@ public class AudioService extends IAudioService.Stub
                 case MSG_SET_WIRED_DEVICE_CONNECTION_STATE:
                     {   WiredDeviceConnectionState connectState =
                             (WiredDeviceConnectionState)msg.obj;
-                        mWiredDevLogger.log(new WiredDevConnectEvent(connectState));
+                        mDeviceLogger.log(new WiredDevConnectEvent(connectState));
                         onSetWiredDeviceConnectionState(connectState.mType, connectState.mState,
                                 connectState.mAddress, connectState.mName, connectState.mCaller);
                         mAudioEventWakeLock.release();
@@ -6206,10 +6229,14 @@ public class AudioService extends IAudioService.Stub
         if (!BluetoothAdapter.checkBluetoothAddress(address)) {
             address = "";
         }
+        mDeviceLogger.log(new AudioEventLogger.StringEvent(
+                "onBluetoothA2dpDeviceConfigChange addr=" + address));
 
         int device = AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP;
         synchronized (mConnectedDevices) {
             if (mAudioHandler.hasMessages(MSG_SET_A2DP_SINK_CONNECTION_STATE, btDevice)) {
+                mDeviceLogger.log(new AudioEventLogger.StringEvent(
+                        "A2dp config change ignored"));
                 return;
             }
             final String key = makeDeviceListKey(device, address);
@@ -6860,7 +6887,8 @@ public class AudioService extends IAudioService.Stub
         // when the user switches back. For managed profiles, we should kill all recording apps
         ComponentName homeActivityName = null;
         if (!oldUser.isManagedProfile()) {
-            homeActivityName = mActivityManagerInternal.getHomeActivityForUser(oldUser.id);
+            homeActivityName = LocalServices.getService(
+                    ActivityTaskManagerInternal.class).getHomeActivityForUser(oldUser.id);
         }
         final String[] permissions = { Manifest.permission.RECORD_AUDIO };
         List<PackageInfo> packages;
@@ -7388,19 +7416,20 @@ public class AudioService extends IAudioService.Stub
     //==========================================================================================
     // AudioService logging and dumpsys
     //==========================================================================================
-    final int LOG_NB_EVENTS_PHONE_STATE = 20;
-    final int LOG_NB_EVENTS_WIRED_DEV_CONNECTION = 30;
-    final int LOG_NB_EVENTS_FORCE_USE = 20;
-    final int LOG_NB_EVENTS_VOLUME = 40;
-    final int LOG_NB_EVENTS_DYN_POLICY = 10;
+    static final int LOG_NB_EVENTS_PHONE_STATE = 20;
+    static final int LOG_NB_EVENTS_DEVICE_CONNECTION = 30;
+    static final int LOG_NB_EVENTS_FORCE_USE = 20;
+    static final int LOG_NB_EVENTS_VOLUME = 40;
+    static final int LOG_NB_EVENTS_DYN_POLICY = 10;
 
     final private AudioEventLogger mModeLogger = new AudioEventLogger(LOG_NB_EVENTS_PHONE_STATE,
             "phone state (logged after successfull call to AudioSystem.setPhoneState(int))");
 
-    final private AudioEventLogger mWiredDevLogger = new AudioEventLogger(
-            LOG_NB_EVENTS_WIRED_DEV_CONNECTION,
-            "wired device connection (logged before onSetWiredDeviceConnectionState() is executed)"
-            );
+    // logs for wired + A2DP device connections:
+    // - wired: logged before onSetWiredDeviceConnectionState() is executed
+    // - A2DP: logged at reception of method call
+    final private AudioEventLogger mDeviceLogger = new AudioEventLogger(
+            LOG_NB_EVENTS_DEVICE_CONNECTION, "wired/A2DP device connection");
 
     final private AudioEventLogger mForceUseLogger = new AudioEventLogger(
             LOG_NB_EVENTS_FORCE_USE,
@@ -7489,7 +7518,7 @@ public class AudioService extends IAudioService.Stub
         pw.println("\nEvent logs:");
         mModeLogger.dump(pw);
         pw.println("\n");
-        mWiredDevLogger.dump(pw);
+        mDeviceLogger.dump(pw);
         pw.println("\n");
         mForceUseLogger.dump(pw);
         pw.println("\n");

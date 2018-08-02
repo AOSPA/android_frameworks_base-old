@@ -2,7 +2,7 @@ package com.android.server.am;
 
 import static android.app.ActivityManager.START_SUCCESS;
 import static android.app.ActivityManager.START_TASK_TO_FRONT;
-import static android.app.ActivityManagerInternal.APP_TRANSITION_TIMEOUT;
+import static com.android.server.wm.ActivityTaskManagerInternal.APP_TRANSITION_TIMEOUT;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
@@ -133,7 +133,7 @@ class ActivityMetricsLogger {
 
     private final class WindowingModeTransitionInfoSnapshot {
         final private ApplicationInfo applicationInfo;
-        final private ProcessRecord processRecord;
+        final private WindowProcessController processRecord;
         final private String packageName;
         final private String launchedActivityName;
         final private String launchedActivityLaunchedFromPackage;
@@ -154,7 +154,7 @@ class ActivityMetricsLogger {
             launchedActivityLaunchToken = info.launchedActivity.info.launchToken;
             launchedActivityAppRecordRequiredAbi = info.launchedActivity.app == null
                     ? null
-                    : info.launchedActivity.app.requiredAbi;
+                    : info.launchedActivity.app.getRequiredAbi();
             reason = info.reason;
             startingWindowDelayMs = info.startingWindowDelayMs;
             bindApplicationDelayMs = info.bindApplicationDelayMs;
@@ -185,6 +185,10 @@ class ActivityMetricsLogger {
 
         mWindowState = WINDOW_STATE_INVALID;
         ActivityStack stack = mSupervisor.getFocusedStack();
+        if (stack == null) {
+            return;
+        }
+
         if (stack.isActivityTypeAssistant()) {
             mWindowState = WINDOW_STATE_ASSISTANT;
             return;
@@ -234,7 +238,7 @@ class ActivityMetricsLogger {
      * @param launchedActivity the activity that is being launched
      */
     void notifyActivityLaunched(int resultCode, ActivityRecord launchedActivity) {
-        final ProcessRecord processRecord = findProcessForActivity(launchedActivity);
+        final WindowProcessController processRecord = findProcessForActivity(launchedActivity);
         final boolean processRunning = processRecord != null;
 
         // We consider this a "process switch" if the process of the activity that gets launched
@@ -242,23 +246,9 @@ class ActivityMetricsLogger {
         // of caches might be purged so the time until it produces the first frame is very
         // interesting.
         final boolean processSwitch = processRecord == null
-                || !hasStartedActivity(processRecord, launchedActivity);
+                || !processRecord.hasStartedActivity(launchedActivity);
 
         notifyActivityLaunched(resultCode, launchedActivity, processRunning, processSwitch);
-    }
-
-    private boolean hasStartedActivity(ProcessRecord record, ActivityRecord launchedActivity) {
-        final ArrayList<ActivityRecord> activities = record.activities;
-        for (int i = activities.size() - 1; i >= 0; i--) {
-            final ActivityRecord activity = activities.get(i);
-            if (launchedActivity == activity) {
-                continue;
-            }
-            if (!activity.stopped) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
@@ -407,7 +397,7 @@ class ActivityMetricsLogger {
     }
 
     private void checkVisibility(TaskRecord t, ActivityRecord r) {
-        synchronized (mSupervisor.mService) {
+        synchronized (mSupervisor.mService.mGlobalLock) {
 
             final WindowingModeTransitionInfo info = mWindowingModeTransitionInfo.get(
                     r.getWindowingMode());
@@ -641,7 +631,7 @@ class ActivityMetricsLogger {
             return;
         }
 
-        final int pid = info.processRecord.pid;
+        final int pid = info.processRecord.getPid();
         final int uid = info.applicationInfo.uid;
         final MemoryStat memoryStat = readMemoryStatFromFilesystem(uid, pid);
         if (memoryStat == null) {
@@ -661,10 +651,10 @@ class ActivityMetricsLogger {
                 memoryStat.swapInBytes);
     }
 
-    private ProcessRecord findProcessForActivity(ActivityRecord launchedActivity) {
+    private WindowProcessController findProcessForActivity(ActivityRecord launchedActivity) {
         return launchedActivity != null
-                ? mSupervisor.mService.mProcessNames.get(launchedActivity.processName,
-                        launchedActivity.appInfo.uid)
+                ? mSupervisor.mService.mProcessNames.get(
+                        launchedActivity.processName, launchedActivity.appInfo.uid)
                 : null;
     }
 

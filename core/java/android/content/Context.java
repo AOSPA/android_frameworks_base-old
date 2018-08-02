@@ -729,6 +729,7 @@ public abstract class Context {
      * cases where system components are loaded into other app processes, in which
      * case this will be the name of the primary package in that process (so that app
      * ops uid verification will work with the name). */
+    @TestApi
     public abstract String getOpPackageName();
 
     /** Return the full application info for this context's package. */
@@ -3004,6 +3005,7 @@ public abstract class Context {
             NSD_SERVICE,
             AUDIO_SERVICE,
             FINGERPRINT_SERVICE,
+            //@hide: FACE_SERVICE,
             MEDIA_ROUTER_SERVICE,
             TELEPHONY_SERVICE,
             TELEPHONY_SUBSCRIPTION_SERVICE,
@@ -3058,6 +3060,8 @@ public abstract class Context {
             COMPANION_DEVICE_SERVICE,
             CROSS_PROFILE_APPS_SERVICE,
             //@hide: SYSTEM_UPDATE_SERVICE,
+            //@hide: TIME_DETECTOR_SERVICE,
+            //@hide: TIME_ZONE_DETECTOR_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -3323,6 +3327,16 @@ public abstract class Context {
      * @see android.app.ActivityManager
      */
     public static final String ACTIVITY_SERVICE = "activity";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.app.ActivityTaskManager} for interacting with the global system state.
+     *
+     * @see #getSystemService(String)
+     * @see android.app.ActivityTaskManager
+     * @hide
+     */
+    public static final String ACTIVITY_TASK_SERVICE = "activity_task";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -3640,6 +3654,18 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
+     * Use with {@link #getSystemService} to retrieve a
+     * {@link android.hardware.face.FaceManager} for handling management
+     * of face authentication.
+     *
+     * @hide
+     * @see #getSystemService
+     * @see android.hardware.face.FaceManager
+     */
+    public static final String FACE_SERVICE = "face";
+
+    /**
+     * Use with {@link #getSystemService} to retrieve a
      * {@link android.media.MediaRouter} for controlling and managing
      * routing of media.
      *
@@ -4208,6 +4234,24 @@ public abstract class Context {
      */
     @SystemApi
     public static final String SECURE_ELEMENT_SERVICE = "secure_element";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.app.timedetector.ITimeDetectorService}.
+     * @hide
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String TIME_DETECTOR_SERVICE = "time_detector";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve an
+     * {@link android.app.timezonedetector.ITimeZoneDetectorService}.
+     * @hide
+     *
+     * @see #getSystemService(String)
+     */
+    public static final String TIME_ZONE_DETECTOR_SERVICE = "time_zone_detector";
 
     /**
      * Determine whether the given permission is allowed for a particular

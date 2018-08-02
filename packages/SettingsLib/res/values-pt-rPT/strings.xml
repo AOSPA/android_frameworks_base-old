@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Mostrar feedback visual para toques"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Atualiz. de superfície"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Destacar a superfície da janela ao atualizar"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Most.atualiz. visual. GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Dest. visualiz. em janelas quando desenh. c/ GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Most. atualiz. de vistas"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Destacar vistas em janelas quando desenhadas"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Mostrar atual. cam. hard."</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Camadas de hard. flash verdes quando estão atuali."</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Depurar sobreposição GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Apresentar limites de clipes, margens, etc."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Forçar dir. do esq. RTL"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Forçar dir. do esq. do ecrã p. RTL tds os locais"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Forçar composição GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Forçar a utilização de GPU para desenho 2D"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Forçar 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Ativar o 4x MSAA em aplicações OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Depurar operações de clipe não retangulares"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Conversão GPU do perfil"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Renderiz. HWUI do perfil"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Ativar cam. depuração GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Permitir carreg. cam. depuração GPU p/ dep. aplic."</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Escala de anim. da janela"</string>

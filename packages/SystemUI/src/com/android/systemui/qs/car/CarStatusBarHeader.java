@@ -16,7 +16,7 @@ package com.android.systemui.qs.car;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.support.annotation.IdRes;
+import androidx.annotation.IdRes;
 import android.util.AttributeSet;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -40,7 +40,8 @@ public class CarStatusBarHeader extends LinearLayout {
         super.onFinishInflate();
 
         // Set the light/dark theming on the header status UI to match the current theme.
-        int colorForeground = Utils.getColorAttr(getContext(), android.R.attr.colorForeground);
+        int colorForeground = Utils.getColorAttrDefaultColor(getContext(),
+                android.R.attr.colorForeground);
         float intensity = colorForeground == Color.WHITE ? 0f : 1f;
         Rect tintArea = new Rect(0, 0, 0, 0);
 

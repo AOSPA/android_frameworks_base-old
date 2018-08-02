@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"ਟੈਪਾਂ ਲਈ ਨਜ਼ਰ ਸੰਬੰਧੀ ਪ੍ਰਤੀਕਰਮ ਦਿਖਾਓ"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"ਸਰਫ਼ੇਸ ਅੱਪਡੇਟ ਦਿਖਾਓ"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"ਸਮੁੱਚੀ ਵਿੰਡੋ ਸਰਫ਼ੇਸਾਂ ਫਲੈਸ਼ ਕਰੋ ਜਦੋਂ ਉਹ ਅੱਪਡੇਟ ਹੁੰਦੀਆਂ ਹਨ"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU ਦ੍ਰਿਸ਼ ਅੱਪਡੇਟ ਦਿਖਾਓ"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"ਜਦੋਂ GPU ਨਾਲ ਡ੍ਰਾ ਕੀਤਾ ਜਾਏ ਤਾਂ ਵਿੰਡੋਜ਼ ਦੇ ਅੰਦਰ ਦ੍ਰਿਸ਼ ਫਲੈਸ਼ ਕਰੋ"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"\'ਅੱਪਡੇਟ ਦੇਖੋ\' ਨੂੰ ਦਿਖਾਓ"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"ਡ੍ਰਾ ਕੀਤੇ ਜਾਣ \'ਤੇ ਵਿੰਡੋਜ਼ ਦੇ ਅੰਦਰ ਦ੍ਰਿਸ਼ ਫਲੈਸ਼ ਕਰੋ"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"ਹਾਰਡਵੇਅਰ ਲੇਅਰਾਂ ਦੇ ਅੱਪਡੇਟ ਦਿਖਾਓ"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"ਹਾਰਡਵੇਅਰ ਲੇਅਰਾਂ ਅੱਪਡੇਟ ਹੋਣ \'ਤੇ ਉਨ੍ਹਾਂ ਨੂੰ ਹਰਾ ਕਰੋ"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU ਓਵਰਡ੍ਰਾ ਡੀਬੱਗ ਕਰੋ"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"ਕਲਿਪ ਬਾਊਂਡਸ, ਮਾਰਜਿਨ ਆਦਿ ਦਿਖਾਓ"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"ਸੱਜੇ ਤੋਂ ਖੱਬੇ ਵਾਲਾ ਲੇਆਊਟ ਲਾਗੂ ਕਰੋ"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"ਸਾਰੇ ਸਥਾਨਾਂ ਲਈ ਸਕ੍ਰੀਨ \'ਤੇ ਸੱਜੇ ਤੋਂ ਖੱਬੇ ਵਾਲਾ ਲੇਆਊਟ ਲਾਗੂ ਕਰੋ"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPU ਰੈਂਡਰਿੰਗ ਤੇ ਜ਼ੋਰ ਪਾਓ"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2d ਡ੍ਰਾਇੰਗ ਲਈ GPU ਦੀ ਵਰਤੋਂ ਤੇ ਜ਼ੋਰ ਪਾਓ"</string>
     <string name="force_msaa" msgid="7920323238677284387">"4x MSAA ਤੇ ਜ਼ੋਰ ਪਾਓ"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 ਐਪਾਂ ਵਿੱਚ 4x MSAA ਨੂੰ ਚਾਲੂ ਕਰੋ"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"ਗੈਰ-ਆਇਤਾਕਾਰ ਕਲਿੱਪ ਓਪਰੇਸ਼ਨ ਡੀਬੱਗ ਕਰੋ"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"ਪ੍ਰੋਫਾਈਲ GPU ਰੈਂਡਰਿੰਗ"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"ਪ੍ਰੋਫਾਈਲ HWUI ਰੈਂਡਰਿੰਗ"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU ਡੀਬੱਗ ਲੇਅਰਾਂ ਚਾਲੂ ਕਰੋ"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"ਡੀਬੱਗ ਐਪਾਂ ਲਈ GPU ਡੀਬੱਗ ਲੇਅਰਾਂ ਨੂੰ ਲੋਡ ਹੋਣ ਦਿਓ"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"ਵਿੰਡੋ ਐਨੀਮੇਸ਼ਨ ਸਕੇਲ"</string>

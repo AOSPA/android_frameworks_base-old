@@ -222,6 +222,11 @@ static jboolean android_view_RenderNode_setHasOverlappingRendering(jlong renderN
             RenderNode::GENERIC);
 }
 
+static void android_view_RenderNode_setUsageHint(jlong renderNodePtr, jint usageHint) {
+    RenderNode* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
+    renderNode->setUsageHint(static_cast<UsageHint>(usageHint));
+}
+
 static jboolean android_view_RenderNode_setElevation(jlong renderNodePtr, float elevation) {
     return SET_AND_DIRTY(setElevation, elevation, RenderNode::Z);
 }
@@ -431,6 +436,14 @@ static jfloat android_view_RenderNode_getPivotY(jlong renderNodePtr) {
     return renderNode->stagingProperties().getPivotY();
 }
 
+static jint android_view_RenderNode_getWidth(jlong renderNodePtr) {
+    return reinterpret_cast<RenderNode*>(renderNodePtr)->stagingProperties().getWidth();
+}
+
+static jint android_view_RenderNode_getHeight(jlong renderNodePtr) {
+    return reinterpret_cast<RenderNode*>(renderNodePtr)->stagingProperties().getHeight();
+}
+
 // ----------------------------------------------------------------------------
 // RenderProperties - Animations
 // ----------------------------------------------------------------------------
@@ -606,6 +619,7 @@ static const JNINativeMethod gMethods[] = {
     { "nSetAlpha",             "(JF)Z",  (void*) android_view_RenderNode_setAlpha },
     { "nSetHasOverlappingRendering", "(JZ)Z",
             (void*) android_view_RenderNode_setHasOverlappingRendering },
+    { "nSetUsageHint",    "(JI)V", (void*) android_view_RenderNode_setUsageHint },
     { "nSetElevation",         "(JF)Z",  (void*) android_view_RenderNode_setElevation },
     { "nSetTranslationX",      "(JF)Z",  (void*) android_view_RenderNode_setTranslationX },
     { "nSetTranslationY",      "(JF)Z",  (void*) android_view_RenderNode_setTranslationY },
@@ -648,6 +662,8 @@ static const JNINativeMethod gMethods[] = {
 
     { "nGetPivotX",                "(J)F",  (void*) android_view_RenderNode_getPivotX },
     { "nGetPivotY",                "(J)F",  (void*) android_view_RenderNode_getPivotY },
+    { "nGetWidth",                 "(J)I",  (void*) android_view_RenderNode_getWidth },
+    { "nGetHeight",                "(J)I",  (void*) android_view_RenderNode_getHeight },
 };
 
 int register_android_view_RenderNode(JNIEnv* env) {

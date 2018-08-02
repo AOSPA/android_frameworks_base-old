@@ -41,6 +41,7 @@ import static com.android.server.am.ActivityStackSupervisor.REMOVE_FROM_RECENTS;
 import static com.android.server.am.TaskRecord.INVALID_TASK_ID;
 
 import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.app.AppGlobals;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -77,6 +78,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -137,8 +139,8 @@ class RecentTasks {
      * Save recent tasks information across reboots.
      */
     private final TaskPersister mTaskPersister;
-    private final ActivityManagerService mService;
-    private final UserController mUserController;
+    private final ActivityTaskManagerService mService;
+    private final ActivityStackSupervisor mSupervisor;
 
     /**
      * Keeps track of the static recents package/component which is granted additional permissions
@@ -179,22 +181,21 @@ class RecentTasks {
     private final TaskActivitiesReport mTmpReport = new TaskActivitiesReport();
 
     @VisibleForTesting
-    RecentTasks(ActivityManagerService service, TaskPersister taskPersister,
-            UserController userController) {
+    RecentTasks(ActivityTaskManagerService service, TaskPersister taskPersister) {
         mService = service;
-        mUserController = userController;
+        mSupervisor = mService.mStackSupervisor;
         mTaskPersister = taskPersister;
-        mGlobalMaxNumTasks = ActivityManager.getMaxRecentTasksStatic();
+        mGlobalMaxNumTasks = ActivityTaskManager.getMaxRecentTasksStatic();
         mHasVisibleRecentTasks = true;
     }
 
-    RecentTasks(ActivityManagerService service, ActivityStackSupervisor stackSupervisor) {
+    RecentTasks(ActivityTaskManagerService service, ActivityStackSupervisor stackSupervisor) {
         final File systemDir = Environment.getDataSystemDirectory();
         final Resources res = service.mContext.getResources();
         mService = service;
-        mUserController = service.mUserController;
+        mSupervisor = mService.mStackSupervisor;
         mTaskPersister = new TaskPersister(systemDir, stackSupervisor, service, this);
-        mGlobalMaxNumTasks = ActivityManager.getMaxRecentTasksStatic();
+        mGlobalMaxNumTasks = ActivityTaskManager.getMaxRecentTasksStatic();
         mHasVisibleRecentTasks = res.getBoolean(com.android.internal.R.bool.config_hasRecents);
         loadParametersFromResources(res);
     }
@@ -285,7 +286,7 @@ class RecentTasks {
      * @return whether the home app is also the active handler of recent tasks.
      */
     boolean isRecentsComponentHomeActivity(int userId) {
-        final ComponentName defaultHomeActivity = mService.getPackageManagerInternalLocked()
+        final ComponentName defaultHomeActivity = mService.mAm.getPackageManagerInternalLocked()
                 .getDefaultHomeActivity(userId);
         return defaultHomeActivity != null && mRecentsComponent != null &&
                 defaultHomeActivity.getPackageName().equals(mRecentsComponent.getPackageName());
@@ -441,7 +442,7 @@ class RecentTasks {
     }
 
     void flush() {
-        synchronized (mService) {
+        synchronized (mService.mGlobalLock) {
             syncPersistentTaskIdsLocked();
         }
         mTaskPersister.flush();
@@ -511,7 +512,7 @@ class RecentTasks {
                     && tr.realActivitySuspended != suspended) {
                tr.realActivitySuspended = suspended;
                if (suspended) {
-                   mService.mStackSupervisor.removeTaskByIdLocked(tr.taskId, false,
+                   mSupervisor.removeTaskByIdLocked(tr.taskId, false,
                            REMOVE_FROM_RECENTS, "suspended-package");
                }
                notifyTaskPersisterLocked(tr, false);
@@ -539,7 +540,7 @@ class RecentTasks {
             if (tr.userId != userId) continue;
             if (!taskPackageName.equals(packageName)) continue;
 
-            mService.mStackSupervisor.removeTaskByIdLocked(tr.taskId, true, REMOVE_FROM_RECENTS,
+            mSupervisor.removeTaskByIdLocked(tr.taskId, true, REMOVE_FROM_RECENTS,
                     "remove-package-task");
         }
     }
@@ -556,7 +557,7 @@ class RecentTasks {
             final boolean sameComponent = cn != null && cn.getPackageName().equals(packageName)
                     && (filterByClasses == null || filterByClasses.contains(cn.getClassName()));
             if (sameComponent) {
-                mService.mStackSupervisor.removeTaskByIdLocked(tr.taskId, false,
+                mSupervisor.removeTaskByIdLocked(tr.taskId, false,
                         REMOVE_FROM_RECENTS, "disabled-package");
             }
         }
@@ -708,6 +709,27 @@ class RecentTasks {
         return list;
     }
 
+    @VisibleForTesting
+    Set<Integer> getProfileIds(int userId) {
+        Set<Integer> userIds = new ArraySet<>();
+        final List<UserInfo> profiles = mService.getUserManager().getProfiles(userId,
+                false /* enabledOnly */);
+        for (int i = profiles.size() - 1; i >= 0; --i) {
+            userIds.add(profiles.get(i).id);
+        }
+        return userIds;
+    }
+
+    @VisibleForTesting
+    UserInfo getUserInfo(int userId) {
+        return mService.getUserManager().getUserInfo(userId);
+    }
+
+    @VisibleForTesting
+    int[] getCurrentProfileIds() {
+        return mService.mAmInternal.getCurrentProfileIds();
+    }
+
     /**
      * @return the list of recent tasks for presentation.
      */
@@ -715,13 +737,13 @@ class RecentTasks {
             boolean getTasksAllowed, boolean getDetailedTasks, int userId, int callingUid) {
         final boolean withExcluded = (flags & RECENT_WITH_EXCLUDED) != 0;
 
-        if (!mService.isUserRunning(userId, FLAG_AND_UNLOCKED)) {
+        if (!mService.mAm.isUserRunning(userId, FLAG_AND_UNLOCKED)) {
             Slog.i(TAG, "user " + userId + " is still locked. Cannot load recents");
             return ParceledListSlice.emptyList();
         }
         loadUserRecentsLocked(userId);
 
-        final Set<Integer> includedUsers = mUserController.getProfileIds(userId);
+        final Set<Integer> includedUsers = getProfileIds(userId);
         includedUsers.add(Integer.valueOf(userId));
 
         final ArrayList<ActivityManager.RecentTaskInfo> res = new ArrayList<>();
@@ -1036,10 +1058,10 @@ class RecentTasks {
         }
 
         // Remove any tasks that belong to currently quiet profiles
-        final int[] profileUserIds = mUserController.getCurrentProfileIds();
+        final int[] profileUserIds = getCurrentProfileIds();
         mTmpQuietProfileUserIds.clear();
         for (int userId : profileUserIds) {
-            final UserInfo userInfo = mUserController.getUserInfo(userId);
+            final UserInfo userInfo = getUserInfo(userId);
             if (userInfo != null && userInfo.isManagedProfile() && userInfo.isQuietModeEnabled()) {
                 mTmpQuietProfileUserIds.put(userId, true);
             }
@@ -1205,7 +1227,7 @@ class RecentTasks {
      */
     protected boolean isTrimmable(TaskRecord task) {
         final ActivityStack stack = task.getStack();
-        final ActivityStack homeStack = mService.mStackSupervisor.mHomeStack;
+        final ActivityStack homeStack = mSupervisor.mHomeStack;
 
         // No stack for task, just trim it
         if (stack == null) {

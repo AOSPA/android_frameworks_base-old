@@ -65,6 +65,13 @@ LOCAL_CERTIFICATE := platform
 FrameworkCoreTests_intermediates := $(call intermediates-dir-for,APPS,$(LOCAL_PACKAGE_NAME))/test_apks/res
 LOCAL_RESOURCE_DIR := $(FrameworkCoreTests_intermediates) $(LOCAL_PATH)/res
 
+# Disable AAPT2 because the hacks below depend on the AAPT rules implementation
+LOCAL_USE_AAPT2 := false
+# When AAPT2 is enabled it will need --warn-manifest-validation to fix:
+# frameworks/base/core/tests/coretests/AndroidManifest.xml:26: error: unknown element <meta-data> found.
+# TODO(b/79755007): Remove when AAPT2 recognizes the manifest elements.
+# LOCAL_AAPT_FLAGS += --warn-manifest-validation
+
 include $(BUILD_PACKAGE)
 # Rules to copy all the test apks to the intermediate raw resource directory
 FrameworkCoreTests_all_apks_res := $(addprefix $(FrameworkCoreTests_intermediates)/raw/, \

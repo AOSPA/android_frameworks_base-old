@@ -522,7 +522,6 @@
     <string name="quick_settings_reset_confirmation_title" msgid="748792586749897883">"Сокриј <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2235970126803317374">"Ќе се појави повторно следниот пат кога ќе го вклучите во поставки."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="2660339101868367515">"Сокриј"</string>
-    <string name="managed_profile_foreground_toast" msgid="5421487114739245972">"Го користите работниот профил"</string>
     <string name="stream_voice_call" msgid="4410002696470423714">"Повик"</string>
     <string name="stream_system" msgid="7493299064422163147">"Систем"</string>
     <string name="stream_ring" msgid="8213049469184048338">"Ѕвони"</string>
@@ -677,7 +676,7 @@
     <string name="keyboard_shortcut_group_system_back" msgid="2207004531216446378">"Назад"</string>
     <string name="keyboard_shortcut_group_system_notifications" msgid="8366964080041773224">"Известувања"</string>
     <string name="keyboard_shortcut_group_system_shortcuts_helper" msgid="4892255911160332762">"Кратенки на тастатурата"</string>
-    <string name="keyboard_shortcut_group_system_switch_input" msgid="2334164096341310324">"Префрли метод за внесување"</string>
+    <string name="keyboard_shortcut_group_system_switch_input" msgid="8413348767825486492">"Промени распоред на тастатура"</string>
     <string name="keyboard_shortcut_group_applications" msgid="9129465955073449206">"Апликации"</string>
     <string name="keyboard_shortcut_group_applications_assist" msgid="9095441910537146013">"Помош"</string>
     <string name="keyboard_shortcut_group_applications_browser" msgid="6465985474000766533">"Прелистувач"</string>

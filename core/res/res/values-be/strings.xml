@@ -220,7 +220,7 @@
     <string name="global_actions" product="default" msgid="2406416831541615258">"Параметры тэлефона"</string>
     <string name="global_action_lock" msgid="2844945191792119712">"Блакіроўка экрана"</string>
     <string name="global_action_power_off" msgid="4471879440839879722">"Выключыць"</string>
-    <string name="global_action_emergency" msgid="7112311161137421166">"SOS-выклік"</string>
+    <string name="global_action_emergency" msgid="7112311161137421166">"Экстранны выклік"</string>
     <string name="global_action_bug_report" msgid="7934010578922304799">"Справаздача пра памылкі"</string>
     <string name="global_action_logout" msgid="935179188218826050">"Скончыць сеанс"</string>
     <string name="global_action_screenshot" msgid="8329831278085426283">"Здымак экрана"</string>
@@ -242,9 +242,6 @@
     <string name="global_actions_toggle_airplane_mode" msgid="5884330306926307456">"Рэжым палёту"</string>
     <string name="global_actions_airplane_mode_on_status" msgid="2719557982608919750">"Уключаны рэжым \"У самалёце\""</string>
     <string name="global_actions_airplane_mode_off_status" msgid="5075070442854490296">"Рэжым \"У самалёце\" адключаны"</string>
-    <string name="global_action_toggle_battery_saver" msgid="708515500418994208">"Эканомія зараду"</string>
-    <string name="global_action_battery_saver_on_status" msgid="484059130698197787">"Рэжым эканоміі зараду выключаны"</string>
-    <string name="global_action_battery_saver_off_status" msgid="75550964969478405">"Рэжым эканоміі зараду ўключаны"</string>
     <string name="global_action_settings" msgid="1756531602592545966">"Налады"</string>
     <string name="global_action_assist" msgid="3892832961594295030">"Дапамога"</string>
     <string name="global_action_voice_assist" msgid="7751191495200504480">"Галас. дапамога"</string>
@@ -282,6 +279,9 @@
     <string name="permgrouplab_location" msgid="7275582855722310164">"Месцазнаходжанне"</string>
     <string name="permgroupdesc_location" msgid="1346617465127855033">"атрымліваць доступ да месцазнаходжання гэтай прылады"</string>
     <string name="permgrouprequest_location" msgid="3788275734953323491">"Дазволіць праграме &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; доступ да звестак аб месцазнаходжанні гэтай прылады?"</string>
+    <string name="permgrouprequestdetail_location" msgid="1113400215566814664">"Праграма будзе мець доступ да звестак пра месцазнаходжанне, толькі калі яна выкарыстоўваецца."</string>
+    <string name="permgroupbackgroundrequest_location" msgid="8461841153030844390">"Дазволіць праграме &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; мець доступ да месцазнаходжання?"</string>
+    <string name="permgroupbackgroundrequestdetail_location" msgid="1715668276378108654">"Праграма заўсёды будзе мець доступ да звестак пра месцазнаходжанне, нават калі яна не выкарыстоўваецца."</string>
     <string name="permgrouplab_calendar" msgid="5863508437783683902">"Каляндар"</string>
     <string name="permgroupdesc_calendar" msgid="3889615280211184106">"атрымліваць доступ да вашага календара"</string>
     <string name="permgrouprequest_calendar" msgid="289900767793189421">"Дазволіць праграме &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; доступ да вашага календара?"</string>
@@ -408,12 +408,14 @@
     <string name="permdesc_writeCalendar" product="default" msgid="7592791790516943173">"Гэта праграма можа дадаваць, выдаляць або змяняць падзеі календара на вашым тэлефоне. Гэта праграма можа адпраўляць паведамленні, якія могуць здавацца адпраўленымі ўладальнікамі календара, або змяняць падзеі без апавяшчэння іх уладальнікаў."</string>
     <string name="permlab_accessLocationExtraCommands" msgid="2836308076720553837">"доступ да дадатковых камандаў пастаўшчыка месцазнаходжання"</string>
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"Дазваляе праграме атрымліваць доступ да дадатковых каманд службаў вызначэння месцазнаходжання. Гэта можа дазволіць праграме ўмешвацца ў функцыянаванне GPS або іншых крыніц даных аб месцазнаходжаннi."</string>
-    <string name="permlab_accessFineLocation" msgid="251034415460950944">"атрымліваць доступ да дакладнага месцазнаходжання (на аснове GPS і сеткі)"</string>
-    <string name="permdesc_accessFineLocation" msgid="5821994817969957884">"Гэта праграма можа атрымліваць звесткі пра ваша месцазнаходжанне на падставе даных GPS або сеткавых крыніц звестак аб месцазнаходжанні, такіх як вышкі сотавай сувязі і сеткі Wi-Fi. Гэтыя сэрвісы вызначэння месцазнаходжання павінны быць уключаны i даступныя на вашым тэлефоне, каб праграма магла іх выкарыстоўваць. Гэта можа павялічыць спажыванне зараду акумулятара."</string>
+    <string name="permlab_accessFineLocation" msgid="6265109654698562427">"доступ да дакладнага месцазнаходжання толькі ў асноўным рэжыме"</string>
+    <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"Гэта праграма можа атрымліваць звесткі пра ваша дакладнае месцазнаходжанне толькі ў асноўным рэжыме. Службы геалакацыі павінны быць уключаны і даступныя на вашым тэлефоне, каб праграма магла імі карыстацца. Гэта можа павялічыць спажыванне зараду акумулятара."</string>
     <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"атрымліваць доступ да прыблізнага месцазнаходжання (на аснове даных сеткі)"</string>
     <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"Гэта праграма можа атрымліваць звесткі пра ваша месцазнаходжанне на падставе даных сеткавых крыніц, такіх як вышкі сотавай сувязі і сеткі Wi-Fi. Гэтыя сэрвісы вызначэння месцазнаходжання павінны быць уключаны i даступныя на вашым планшэце, каб праграма магла іх выкарыстоўваць."</string>
     <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"Гэта праграма можа атрымліваць звесткі пра ваша месцазнаходжанне на падставе даных сеткавых крыніц, такіх як вышкі сотавай сувязі і сеткі Wi-Fi. Гэтыя сэрвісы вызначэння месцазнаходжання павінны быць уключаны i даступныя на вашым тэлевізары, каб праграма магла іх выкарыстоўваць."</string>
     <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"Гэта праграма можа атрымліваць звесткі пра ваша месцазнаходжанне на падставе даных сеткавых крыніц, такіх як вышкі сотавай сувязі і сеткі Wi-Fi. Гэтыя сэрвісы вызначэння месцазнаходжання павінны быць уключаны i даступныя на вашым тэлефоне, каб праграма магла іх выкарыстоўваць."</string>
+    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"доступ да дакладнага месцазнаходжання ў фонавым рэжыме"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"Гэта праграма можа атрымліваць звесткі пра ваша дакладнае месцазнаходжанне ў любы час, калі яна працуе ў фонавым рэжыме. Службы геалакацыі павінны быць уключаны і даступныя на вашым тэлефоне, каб праграма магла імі карыстацца. Гэта можа павялічыць спажыванне зараду акумулятара."</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"змяняць налады аудыё"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"Дазваляе прыкладанням змяняць глабальныя налады гуку, такія як моц і тое, што дынамік выкарыстоўваецца для выхаду."</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"запісваць аўдыё"</string>
@@ -521,6 +523,37 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="2340202869968465936">"Значок адбіткаў пальцаў"</string>
+    <string name="permlab_manageFace" msgid="2137540986007309781">"кіраваць абсталяваннем для распазнавання твару"</string>
+    <string name="permdesc_manageFace" msgid="8919637120670185330">"Праграма зможа дадаваць і выдаляць шаблоны твару."</string>
+    <string name="permlab_useFaceAuthentication" msgid="8996134460546804535">"карыстацца абсталяваннем для распазнавання твару"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="5011118722951833089">"Праграма зможа выкарыстоўваць абсталяванне распазнавання твару для аўтэнтыфікацыі"</string>
+    <string name="face_acquired_insufficient" msgid="5901287247766106330">"Не ўдалося распазнаць твар. Паўтарыце спробу."</string>
+    <string name="face_acquired_too_bright" msgid="610606792381297174">"Твар занадта светлы. Паспрабуйце зменшыць святло."</string>
+    <string name="face_acquired_too_dark" msgid="7229162716976778371">"Твар занадта цёмны. Павялічце асвятленне."</string>
+    <string name="face_acquired_too_close" msgid="1980310037427755293">"Перамясціце датчык далей ад твару."</string>
+    <string name="face_acquired_too_far" msgid="4494571381828850007">"Наблізьце датчык да твару."</string>
+    <string name="face_acquired_too_high" msgid="228411096134808372">"Падыміце датчык вышэй."</string>
+    <string name="face_acquired_too_low" msgid="4539774649296349109">"Апусціце датчык ніжэй."</string>
+    <string name="face_acquired_too_right" msgid="1650292067226118760">"Перамясціце датчык управа."</string>
+    <string name="face_acquired_too_left" msgid="2712489669456176505">"Перамясціце датчык улева."</string>
+    <string name="face_acquired_poor_gaze" msgid="8344973502980415859">"Глядзіце на датчык."</string>
+    <string name="face_acquired_not_detected" msgid="5707782294589511391">"Твар не знойдзены."</string>
+    <string name="face_acquired_not_steady" msgid="3722829465011040042">"Трымайце твар перад прыладай."</string>
+  <string-array name="face_acquired_vendor">
+  </string-array>
+    <string name="face_error_hw_not_available" msgid="6255891785768984615">"Абсталяванне для распазнавання твару недаступнае."</string>
+    <string name="face_error_timeout" msgid="4014326147867150054">"Час чакання твару выйшаў. Паўтарыце спробу."</string>
+    <string name="face_error_no_space" msgid="8224993703466381314">"Не ўдалося захаваць твар."</string>
+    <string name="face_error_canceled" msgid="283945501061931023">"Распазнаванне твару скасавана."</string>
+    <string name="face_error_lockout" msgid="3407426963155388504">"Занадта шмат спроб. Паўтарыце спробу пазней."</string>
+    <string name="face_error_lockout_permanent" msgid="8198354656746088890">"Занадта шмат спроб. Аўтэнтыфікацыя твару адключана"</string>
+    <string name="face_error_unable_to_process" msgid="238761109287767270">"Паўтарыце спробу."</string>
+    <string name="face_error_not_enrolled" msgid="9166792142679691323">"Твар не зарэгістраваны."</string>
+    <string name="face_error_hw_not_present" msgid="4737289254517095671">"На гэтай прыладзе адсутнічае датчык аўтэнтыфікацыі твару"</string>
+    <string name="face_name_template" msgid="7004562145809595384">"Твар <xliff:g id="FACEID">%d</xliff:g>"</string>
+  <string-array name="face_error_vendor">
+  </string-array>
+    <string name="face_icon_content_description" msgid="4024817159806482191">"Значок твару"</string>
     <string name="permlab_readSyncSettings" msgid="6201810008230503052">"чытаць параметры сінхранізацыі"</string>
     <string name="permdesc_readSyncSettings" msgid="2706745674569678644">"Дазваляе прыкладанням чытаць параметры сінхранізацыі для ўліковага запісу. Напрыклад, яны могуць вызначыць, цi сiнхранiзавана з улiковым запiсам прыкладанне \"Кантакты\"."</string>
     <string name="permlab_writeSyncSettings" msgid="5408694875793945314">"уключэнне ці адключэнне сінхранізацыi"</string>
@@ -741,7 +774,7 @@
     <string name="lockscreen_instructions_when_pattern_enabled" msgid="46154051614126049">"Націсніце \"Меню\", каб разблакаваць, або зрабіце экстраны выклік."</string>
     <string name="lockscreen_instructions_when_pattern_disabled" msgid="686260028797158364">"Націсніце \"Меню\", каб разблакаваць."</string>
     <string name="lockscreen_pattern_instructions" msgid="7478703254964810302">"Намалюйце камбінацыю разблакоўкі, каб разблакаваць"</string>
-    <string name="lockscreen_emergency_call" msgid="5298642613417801888">"SOS-выклік"</string>
+    <string name="lockscreen_emergency_call" msgid="5298642613417801888">"Экстранны выклік"</string>
     <string name="lockscreen_return_to_call" msgid="5244259785500040021">"Вярнуцца да выкліку"</string>
     <string name="lockscreen_pattern_correct" msgid="9039008650362261237">"Правільна!"</string>
     <string name="lockscreen_pattern_wrong" msgid="4317955014948108794">"Паспрабуйце яшчэ раз"</string>
@@ -1219,6 +1252,9 @@
     <skip />
     <string name="wifi_no_internet" msgid="8938267198124654938">"У Wi-Fi няма доступу да інтэрнэту"</string>
     <string name="wifi_no_internet_detailed" msgid="8083079241212301741">"Дакраніцеся, каб убачыць параметры"</string>
+    <string name="wifi_softap_config_change" msgid="8475911871165857607">"Змяненні ў наладах хот-спота"</string>
+    <string name="wifi_softap_config_change_summary" msgid="7601233252456548891">"Частата хот-спота змянілася."</string>
+    <string name="wifi_softap_config_change_detailed" msgid="8022936822860678033">"Прылада не можа працаваць толькі на частаце 5 ГГц. Гэта частата будзе выкарыстоўвацца, калі гэта магчыма."</string>
     <string name="network_switch_metered" msgid="4671730921726992671">"Выкананы пераход да <xliff:g id="NETWORK_TYPE">%1$s</xliff:g>"</string>
     <string name="network_switch_metered_detail" msgid="775163331794506615">"Прылада выкарыстоўвае сетку <xliff:g id="NEW_NETWORK">%1$s</xliff:g>, калі ў сетцы <xliff:g id="PREVIOUS_NETWORK">%2$s</xliff:g> няма доступу да інтэрнэту. Можа спаганяцца плата."</string>
     <string name="network_switch_metered_toast" msgid="5779283181685974304">"Выкананы пераход з <xliff:g id="PREVIOUS_NETWORK">%1$s</xliff:g> да <xliff:g id="NEW_NETWORK">%2$s</xliff:g>"</string>
@@ -1306,7 +1342,7 @@
     <string name="share_remote_bugreport_notification_message_finished" msgid="6029609949340992866">"Ваш адміністратар запытаў справаздачу пра памылку для яе ліквідацыі на гэтай прыладзе. Звесткі праграм і даныя могуць быць абагулены."</string>
     <string name="share_remote_bugreport_action" msgid="6249476773913384948">"АБАГУЛІЦЬ"</string>
     <string name="decline_remote_bugreport_action" msgid="6230987241608770062">"АДХІЛІЦЬ"</string>
-    <string name="select_input_method" msgid="8547250819326693584">"Змяніць клавіятуру"</string>
+    <string name="select_input_method" msgid="4653387336791222978">"Выберыце метад уводу"</string>
     <string name="show_ime" msgid="2506087537466597099">"Захоўваць яе на экране ў той час, калі фізічная клавіятура актыўная"</string>
     <string name="hardware" msgid="194658061510127999">"Паказаць віртуальную клавіятуру"</string>
     <string name="select_keyboard_layout_notification_title" msgid="597189518763083494">"Наладжванне фізічнай клавіятуры"</string>

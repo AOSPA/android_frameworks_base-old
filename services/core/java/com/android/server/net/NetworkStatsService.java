@@ -160,8 +160,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     static final boolean LOGV = Log.isLoggable(TAG, Log.VERBOSE);
 
     private static final int MSG_PERFORM_POLL = 1;
-    private static final int MSG_UPDATE_IFACES = 2;
-    private static final int MSG_REGISTER_GLOBAL_ALERT = 3;
+    private static final int MSG_REGISTER_GLOBAL_ALERT = 2;
 
     /** Flags to control detail level of poll event. */
     private static final int FLAG_PERSIST_NETWORK = 0x1;
@@ -325,6 +324,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 wakeLock, getDefaultClock(), TelephonyManager.getDefault(),
                 new DefaultNetworkStatsSettings(context), new NetworkStatsObservers(),
                 getDefaultSystemDir(), getDefaultBaseDir());
+        service.registerLocalService();
 
         HandlerThread handlerThread = new HandlerThread(TAG);
         Handler.Callback callback = new HandlerCallback(service);
@@ -334,6 +334,8 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         return service;
     }
 
+    // This must not be called outside of tests, even within the same package, as this constructor
+    // does not register the local service. Use the create() helper above.
     @VisibleForTesting
     NetworkStatsService(Context context, INetworkManagementService networkManager,
             AlarmManager alarmManager, PowerManager.WakeLock wakeLock, Clock clock,
@@ -350,7 +352,9 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         mSystemDir = checkNotNull(systemDir, "missing systemDir");
         mBaseDir = checkNotNull(baseDir, "missing baseDir");
         mUseBpfTrafficStats = new File("/sys/fs/bpf/traffic_uid_stats_map").exists();
+    }
 
+    private void registerLocalService() {
         LocalServices.addService(NetworkStatsManagerInternal.class,
                 new NetworkStatsManagerInternalImpl());
     }
@@ -1671,10 +1675,6 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 case MSG_PERFORM_POLL: {
                     final int flags = msg.arg1;
                     mService.performPoll(flags);
-                    return true;
-                }
-                case MSG_UPDATE_IFACES: {
-                    mService.updateIfaces(null);
                     return true;
                 }
                 case MSG_REGISTER_GLOBAL_ALERT: {

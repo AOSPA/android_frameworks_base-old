@@ -151,11 +151,10 @@ DONE:
 }
 
 // ================================================================================
-Section::Section(int i, int64_t timeoutMs, bool userdebugAndEngOnly, bool deviceSpecific)
+Section::Section(int i, int64_t timeoutMs, bool userdebugAndEngOnly)
     : id(i),
       timeoutMs(timeoutMs),
-      userdebugAndEngOnly(userdebugAndEngOnly),
-      deviceSpecific(deviceSpecific) {}
+      userdebugAndEngOnly(userdebugAndEngOnly) {}
 
 Section::~Section() {}
 
@@ -240,10 +239,10 @@ status_t MetadataSection::Execute(ReportRequestSet* requests) const {
 // ================================================================================
 static inline bool isSysfs(const char* filename) { return strncmp(filename, "/sys/", 5) == 0; }
 
-FileSection::FileSection(int id, const char* filename, const bool deviceSpecific,
-                         const int64_t timeoutMs)
-    : Section(id, timeoutMs, false, deviceSpecific), mFilename(filename) {
-    name = filename;
+FileSection::FileSection(int id, const char* filename, const int64_t timeoutMs)
+    : Section(id, timeoutMs, false), mFilename(filename) {
+    name = "file ";
+    name += filename;
     mIsSysfs = isSysfs(filename);
 }
 
@@ -254,8 +253,10 @@ status_t FileSection::Execute(ReportRequestSet* requests) const {
     // add O_CLOEXEC to make sure it is closed when exec incident helper
     unique_fd fd(open(mFilename, O_RDONLY | O_CLOEXEC));
     if (fd.get() == -1) {
-        ALOGW("FileSection '%s' failed to open file", this->name.string());
-        return this->deviceSpecific ? NO_ERROR : -errno;
+        ALOGW("[%s] failed to open file", this->name.string());
+        // There may be some devices/architectures that won't have the file.
+        // Just return here without an error.
+        return NO_ERROR;
     }
 
     FdBuffer buffer;
@@ -263,13 +264,13 @@ status_t FileSection::Execute(ReportRequestSet* requests) const {
     Fpipe c2pPipe;
     // initiate pipes to pass data to/from incident_helper
     if (!p2cPipe.init() || !c2pPipe.init()) {
-        ALOGW("FileSection '%s' failed to setup pipes", this->name.string());
+        ALOGW("[%s] failed to setup pipes", this->name.string());
         return -errno;
     }
 
     pid_t pid = fork_execute_incident_helper(this->id, &p2cPipe, &c2pPipe);
     if (pid == -1) {
-        ALOGW("FileSection '%s' failed to fork", this->name.string());
+        ALOGW("[%s] failed to fork", this->name.string());
         return -errno;
     }
 
@@ -279,7 +280,7 @@ status_t FileSection::Execute(ReportRequestSet* requests) const {
                                                            this->timeoutMs, mIsSysfs);
     write_section_stats(requests->sectionStats(this->id), buffer);
     if (readStatus != NO_ERROR || buffer.timedOut()) {
-        ALOGW("FileSection '%s' failed to read data from incident helper: %s, timedout: %s",
+        ALOGW("[%s] failed to read data from incident helper: %s, timedout: %s",
               this->name.string(), strerror(-readStatus), buffer.timedOut() ? "true" : "false");
         kill_child(pid);
         return readStatus;
@@ -287,20 +288,11 @@ status_t FileSection::Execute(ReportRequestSet* requests) const {
 
     status_t ihStatus = wait_child(pid);
     if (ihStatus != NO_ERROR) {
-        ALOGW("FileSection '%s' abnormal child process: %s", this->name.string(),
-              strerror(-ihStatus));
+        ALOGW("[%s] abnormal child process: %s", this->name.string(), strerror(-ihStatus));
         return ihStatus;
     }
 
-    VLOG("FileSection '%s' wrote %zd bytes in %d ms", this->name.string(), buffer.size(),
-         (int)buffer.durationMs());
-    status_t err = write_report_requests(this->id, buffer, requests);
-    if (err != NO_ERROR) {
-        ALOGW("FileSection '%s' failed writing: %s", this->name.string(), strerror(-err));
-        return err;
-    }
-
-    return NO_ERROR;
+    return write_report_requests(this->id, buffer, requests);
 }
 // ================================================================================
 GZipSection::GZipSection(int id, const char* filename, ...) : Section(id) {
@@ -329,9 +321,8 @@ status_t GZipSection::Execute(ReportRequestSet* requests) const {
         ALOGW("GZipSection failed to open file %s", mFilenames[index]);
         index++;  // look at the next file.
     }
-    VLOG("GZipSection is using file %s, fd=%d", mFilenames[index], fd.get());
     if (fd.get() == -1) {
-        ALOGW("GZipSection %s can't open all the files", this->name.string());
+        ALOGW("[%s] can't open all the files", this->name.string());
         return NO_ERROR;  // e.g. LAST_KMSG will reach here in user build.
     }
     FdBuffer buffer;
@@ -339,13 +330,13 @@ status_t GZipSection::Execute(ReportRequestSet* requests) const {
     Fpipe c2pPipe;
     // initiate pipes to pass data to/from gzip
     if (!p2cPipe.init() || !c2pPipe.init()) {
-        ALOGW("GZipSection '%s' failed to setup pipes", this->name.string());
+        ALOGW("[%s] failed to setup pipes", this->name.string());
         return -errno;
     }
 
     pid_t pid = fork_execute_cmd((char* const*)GZIP, &p2cPipe, &c2pPipe);
     if (pid == -1) {
-        ALOGW("GZipSection '%s' failed to fork", this->name.string());
+        ALOGW("[%s] failed to fork", this->name.string());
         return -errno;
     }
     // parent process
@@ -364,24 +355,22 @@ status_t GZipSection::Execute(ReportRequestSet* requests) const {
     size_t editPos = internalBuffer->wp()->pos();
     internalBuffer->wp()->move(8);  // reserve 8 bytes for the varint of the data size.
     size_t dataBeginAt = internalBuffer->wp()->pos();
-    VLOG("GZipSection '%s' editPos=%zd, dataBeginAt=%zd", this->name.string(), editPos,
-         dataBeginAt);
+    VLOG("[%s] editPos=%zu, dataBeginAt=%zu", this->name.string(), editPos, dataBeginAt);
 
     status_t readStatus = buffer.readProcessedDataInStream(
             fd.get(), std::move(p2cPipe.writeFd()), std::move(c2pPipe.readFd()), this->timeoutMs,
             isSysfs(mFilenames[index]));
     write_section_stats(requests->sectionStats(this->id), buffer);
     if (readStatus != NO_ERROR || buffer.timedOut()) {
-        ALOGW("GZipSection '%s' failed to read data from gzip: %s, timedout: %s",
-              this->name.string(), strerror(-readStatus), buffer.timedOut() ? "true" : "false");
+        ALOGW("[%s] failed to read data from gzip: %s, timedout: %s", this->name.string(),
+              strerror(-readStatus), buffer.timedOut() ? "true" : "false");
         kill_child(pid);
         return readStatus;
     }
 
     status_t gzipStatus = wait_child(pid);
     if (gzipStatus != NO_ERROR) {
-        ALOGW("GZipSection '%s' abnormal child process: %s", this->name.string(),
-              strerror(-gzipStatus));
+        ALOGW("[%s] abnormal child process: %s", this->name.string(), strerror(-gzipStatus));
         return gzipStatus;
     }
     // Revisit the actual size from gzip result and edit the internal buffer accordingly.
@@ -389,15 +378,8 @@ status_t GZipSection::Execute(ReportRequestSet* requests) const {
     internalBuffer->wp()->rewind()->move(editPos);
     internalBuffer->writeRawVarint32(dataSize);
     internalBuffer->copy(dataBeginAt, dataSize);
-    VLOG("GZipSection '%s' wrote %zd bytes in %d ms, dataSize=%zd", this->name.string(),
-         buffer.size(), (int)buffer.durationMs(), dataSize);
-    status_t err = write_report_requests(this->id, buffer, requests);
-    if (err != NO_ERROR) {
-        ALOGW("GZipSection '%s' failed writing: %s", this->name.string(), strerror(-err));
-        return err;
-    }
 
-    return NO_ERROR;
+    return write_report_requests(this->id, buffer, requests);
 }
 
 // ================================================================================
@@ -482,8 +464,7 @@ status_t WorkerThreadSection::Execute(ReportRequestSet* requests) const {
     err = buffer.read(data->pipe.readFd().get(), this->timeoutMs);
     if (err != NO_ERROR) {
         // TODO: Log this error into the incident report.
-        ALOGW("WorkerThreadSection '%s' reader failed with error '%s'", this->name.string(),
-              strerror(-err));
+        ALOGW("[%s] reader failed with error '%s'", this->name.string(), strerror(-err));
     }
 
     // Done with the read fd. The worker thread closes the write one so
@@ -501,39 +482,25 @@ status_t WorkerThreadSection::Execute(ReportRequestSet* requests) const {
             if (data->workerError != NO_ERROR) {
                 err = data->workerError;
                 // TODO: Log this error into the incident report.
-                ALOGW("WorkerThreadSection '%s' worker failed with error '%s'", this->name.string(),
-                      strerror(-err));
+                ALOGW("[%s] worker failed with error '%s'", this->name.string(), strerror(-err));
             }
         }
     }
     write_section_stats(requests->sectionStats(this->id), buffer);
     if (timedOut || buffer.timedOut()) {
-        ALOGW("WorkerThreadSection '%s' timed out", this->name.string());
+        ALOGW("[%s] timed out", this->name.string());
         return NO_ERROR;
-    }
-
-    if (buffer.truncated()) {
-        // TODO: Log this into the incident report.
     }
 
     // TODO: There was an error with the command or buffering. Report that.  For now
     // just exit with a log messasge.
     if (err != NO_ERROR) {
-        ALOGW("WorkerThreadSection '%s' failed with error '%s'", this->name.string(),
-              strerror(-err));
+        ALOGW("[%s] failed with error '%s'", this->name.string(), strerror(-err));
         return NO_ERROR;
     }
 
     // Write the data that was collected
-    VLOG("WorkerThreadSection '%s' wrote %zd bytes in %d ms", name.string(), buffer.size(),
-         (int)buffer.durationMs());
-    err = write_report_requests(this->id, buffer, requests);
-    if (err != NO_ERROR) {
-        ALOGW("WorkerThreadSection '%s' failed writing: '%s'", this->name.string(), strerror(-err));
-        return err;
-    }
-
-    return NO_ERROR;
+    return write_report_requests(this->id, buffer, requests);
 }
 
 // ================================================================================
@@ -570,18 +537,18 @@ status_t CommandSection::Execute(ReportRequestSet* requests) const {
     Fpipe ihPipe;
 
     if (!cmdPipe.init() || !ihPipe.init()) {
-        ALOGW("CommandSection '%s' failed to setup pipes", this->name.string());
+        ALOGW("[%s] failed to setup pipes", this->name.string());
         return -errno;
     }
 
     pid_t cmdPid = fork_execute_cmd((char* const*)mCommand, NULL, &cmdPipe);
     if (cmdPid == -1) {
-        ALOGW("CommandSection '%s' failed to fork", this->name.string());
+        ALOGW("[%s] failed to fork", this->name.string());
         return -errno;
     }
     pid_t ihPid = fork_execute_incident_helper(this->id, &cmdPipe, &ihPipe);
     if (ihPid == -1) {
-        ALOGW("CommandSection '%s' failed to fork", this->name.string());
+        ALOGW("[%s] failed to fork", this->name.string());
         return -errno;
     }
 
@@ -589,7 +556,7 @@ status_t CommandSection::Execute(ReportRequestSet* requests) const {
     status_t readStatus = buffer.read(ihPipe.readFd().get(), this->timeoutMs);
     write_section_stats(requests->sectionStats(this->id), buffer);
     if (readStatus != NO_ERROR || buffer.timedOut()) {
-        ALOGW("CommandSection '%s' failed to read data from incident helper: %s, timedout: %s",
+        ALOGW("[%s] failed to read data from incident helper: %s, timedout: %s",
               this->name.string(), strerror(-readStatus), buffer.timedOut() ? "true" : "false");
         kill_child(cmdPid);
         kill_child(ihPid);
@@ -601,20 +568,13 @@ status_t CommandSection::Execute(ReportRequestSet* requests) const {
     status_t cmdStatus = wait_child(cmdPid);
     status_t ihStatus = wait_child(ihPid);
     if (cmdStatus != NO_ERROR || ihStatus != NO_ERROR) {
-        ALOGW("CommandSection '%s' abnormal child processes, return status: command: %s, incident "
+        ALOGW("[%s] abnormal child processes, return status: command: %s, incident "
               "helper: %s",
               this->name.string(), strerror(-cmdStatus), strerror(-ihStatus));
         return cmdStatus != NO_ERROR ? cmdStatus : ihStatus;
     }
 
-    VLOG("CommandSection '%s' wrote %zd bytes in %d ms", this->name.string(), buffer.size(),
-         (int)buffer.durationMs());
-    status_t err = write_report_requests(this->id, buffer, requests);
-    if (err != NO_ERROR) {
-        ALOGW("CommandSection '%s' failed writing: %s", this->name.string(), strerror(-err));
-        return err;
-    }
-    return NO_ERROR;
+    return write_report_requests(this->id, buffer, requests);
 }
 
 // ================================================================================
@@ -664,7 +624,7 @@ status_t DumpsysSection::BlockingCall(int pipeWriteFd) const {
 map<log_id_t, log_time> LogSection::gLastLogsRetrieved;
 
 LogSection::LogSection(int id, log_id_t logID) : WorkerThreadSection(id), mLogID(logID) {
-    name += "logcat ";
+    name = "logcat ";
     name += android_log_id_to_name(logID);
     switch (logID) {
         case LOG_ID_EVENTS:
@@ -705,7 +665,7 @@ status_t LogSection::BlockingCall(int pipeWriteFd) const {
             android_logger_list_free);
 
     if (android_logger_open(loggers.get(), mLogID) == NULL) {
-        ALOGE("LogSection %s: Can't get logger.", this->name.string());
+        ALOGE("[%s] Can't get logger.", this->name.string());
         return -1;
     }
 
@@ -721,7 +681,7 @@ status_t LogSection::BlockingCall(int pipeWriteFd) const {
         // err = -EAGAIN, graceful indication for ANDRODI_LOG_NONBLOCK that this is the end of data.
         if (err <= 0) {
             if (err != -EAGAIN) {
-                ALOGW("LogSection %s: fails to read a log_msg.\n", this->name.string());
+                ALOGW("[%s] fails to read a log_msg.\n", this->name.string());
             }
             // dump previous logs and don't consider this error a failure.
             break;
@@ -792,7 +752,7 @@ status_t LogSection::BlockingCall(int pipeWriteFd) const {
             AndroidLogEntry entry;
             err = android_log_processLogBuffer(&msg.entry_v1, &entry);
             if (err != NO_ERROR) {
-                ALOGW("LogSection %s: fails to process to an entry.\n", this->name.string());
+                ALOGW("[%s] fails to process to an entry.\n", this->name.string());
                 break;
             }
             lastTimestamp.tv_sec = entry.tv_sec;
@@ -821,7 +781,7 @@ status_t LogSection::BlockingCall(int pipeWriteFd) const {
 
 TombstoneSection::TombstoneSection(int id, const char* type, const int64_t timeoutMs)
     : WorkerThreadSection(id, timeoutMs), mType(type) {
-    name += "tombstone ";
+    name = "tombstone ";
     name += type;
 }
 
@@ -876,7 +836,7 @@ status_t TombstoneSection::BlockingCall(int pipeWriteFd) const {
 
         Fpipe dumpPipe;
         if (!dumpPipe.init()) {
-            ALOGW("TombstoneSection '%s' failed to setup dump pipe", this->name.string());
+            ALOGW("[%s] failed to setup dump pipe", this->name.string());
             err = -errno;
             break;
         }
@@ -910,7 +870,7 @@ status_t TombstoneSection::BlockingCall(int pipeWriteFd) const {
         // Wait on the child to avoid it becoming a zombie process.
         status_t cStatus = wait_child(child);
         if (err != NO_ERROR) {
-            ALOGW("TombstoneSection '%s' failed to read stack dump: %d", this->name.string(), err);
+            ALOGW("[%s] failed to read stack dump: %d", this->name.string(), err);
             dumpPipe.readFd().reset();
             break;
         }

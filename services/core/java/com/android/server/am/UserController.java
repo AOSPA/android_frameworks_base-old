@@ -28,9 +28,9 @@ import static android.os.Process.SYSTEM_UID;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_MU;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.am.ActivityManagerService.ALLOW_FULL_ONLY;
-import static com.android.server.am.ActivityManagerService.ALLOW_NON_FULL;
-import static com.android.server.am.ActivityManagerService.ALLOW_NON_FULL_IN_PROFILE;
+import static android.app.ActivityManagerInternal.ALLOW_FULL_ONLY;
+import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
+import static android.app.ActivityManagerInternal.ALLOW_NON_FULL_IN_PROFILE;
 import static com.android.server.am.ActivityManagerService.MY_PID;
 import static com.android.server.am.UserState.STATE_BOOTING;
 import static com.android.server.am.UserState.STATE_RUNNING_LOCKED;
@@ -41,6 +41,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import com.android.server.wm.ActivityTaskManagerInternal;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.Dialog;
@@ -80,7 +81,6 @@ import android.os.storage.StorageManager;
 import android.text.format.DateUtils;
 import android.util.ArraySet;
 import android.util.IntArray;
-import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -88,7 +88,6 @@ import android.util.SparseIntArray;
 import android.util.TimingsTraceLog;
 import android.util.proto.ProtoOutputStream;
 
-import android.view.Window;
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
@@ -260,11 +259,14 @@ class UserController implements Handler.Callback {
     }
 
     void finishUserSwitch(UserState uss) {
-        finishUserBoot(uss);
-        startProfiles();
-        synchronized (mLock) {
-            stopRunningUsersLU(mMaxRunningUsers);
-        }
+        // This call holds the AM lock so we post to the handler.
+        mHandler.post(() -> {
+            finishUserBoot(uss);
+            startProfiles();
+            synchronized (mLock) {
+                stopRunningUsersLU(mMaxRunningUsers);
+            }
+        });
     }
 
     List<Integer> getRunningUsersLU() {
@@ -1574,7 +1576,9 @@ class UserController implements Handler.Callback {
     }
 
     boolean hasStartedUserState(int userId) {
-        return mStartedUsers.get(userId) != null;
+        synchronized (mLock) {
+            return mStartedUsers.get(userId) != null;
+        }
     }
 
     private void updateStartedUserArrayLU() {
@@ -1750,7 +1754,7 @@ class UserController implements Handler.Callback {
         return ums != null ? ums.getUserIds() : new int[] { 0 };
     }
 
-    UserInfo getUserInfo(int userId) {
+    private UserInfo getUserInfo(int userId) {
         return mInjector.getUserManager().getUserInfo(userId);
     }
 
@@ -1776,7 +1780,7 @@ class UserController implements Handler.Callback {
         return mInjector.getUserManager().exists(userId);
     }
 
-    void enforceShellRestriction(String restriction, int userHandle) {
+    private void enforceShellRestriction(String restriction, int userHandle) {
         if (Binder.getCallingUid() == SHELL_UID) {
             if (userHandle < 0 || hasUserRestriction(restriction, userHandle)) {
                 throw new SecurityException("Shell does not have permission to access user "
@@ -1787,16 +1791,6 @@ class UserController implements Handler.Callback {
 
     boolean hasUserRestriction(String restriction, int userId) {
         return mInjector.getUserManager().hasUserRestriction(restriction, userId);
-    }
-
-    Set<Integer> getProfileIds(int userId) {
-        Set<Integer> userIds = new HashSet<>();
-        final List<UserInfo> profiles = mInjector.getUserManager().getProfiles(userId,
-                false /* enabledOnly */);
-        for (UserInfo user : profiles) {
-            userIds.add(user.id);
-        }
-        return userIds;
     }
 
     boolean isSameProfileGroup(int callingUserId, int targetUserId) {
@@ -2097,9 +2091,7 @@ class UserController implements Handler.Callback {
             return mService.mWindowManager;
         }
         void activityManagerOnUserStopped(int userId) {
-            synchronized (mService) {
-                mService.onUserStoppedLocked(userId);
-            }
+            LocalServices.getService(ActivityTaskManagerInternal.class).onUserStopped(userId);
         }
 
         void systemServiceManagerCleanupUser(int userId) {
@@ -2174,9 +2166,7 @@ class UserController implements Handler.Callback {
         }
 
         void updateUserConfiguration() {
-            synchronized (mService) {
-                mService.updateUserConfigurationLocked();
-            }
+            mService.mActivityTaskManager.updateUserConfiguration();
         }
 
         void clearBroadcastQueueForUser(int userId) {
@@ -2187,7 +2177,7 @@ class UserController implements Handler.Callback {
 
         void loadUserRecents(int userId) {
             synchronized (mService) {
-                mService.getRecentTasks().loadUserRecentsLocked(userId);
+                mService.mActivityTaskManager.getRecentTasks().loadUserRecentsLocked(userId);
             }
         }
 
@@ -2248,12 +2238,12 @@ class UserController implements Handler.Callback {
 
         protected void clearAllLockedTasks(String reason) {
             synchronized (mService) {
-                mService.getLockTaskController().clearLockedTasks(reason);
+                mService.mActivityTaskManager.getLockTaskController().clearLockedTasks(reason);
             }
         }
 
         protected boolean isCallerRecents(int callingUid) {
-            return mService.getRecentTasks().isCallerRecents(callingUid);
+            return mService.mActivityTaskManager.getRecentTasks().isCallerRecents(callingUid);
         }
     }
 }

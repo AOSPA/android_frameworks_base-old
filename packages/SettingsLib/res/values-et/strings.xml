@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Kuvab puudutuste visuaalse tagasiside"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Näita pinna värskendusi"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Akna pinna värskendamiseks kirjuta kogu akna pind üle"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Kuva GPU kuva värskendusi"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU-ga joonistades kirjuta akende kuvad üle"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Kuva ekraanikuva värsk."</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Joonistades kirjuta akende kuvad üle"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Kuva riistvarakihtide värskendusi"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Riistvara kihid vilguvad värskendamisel roheliselt"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Silu GPU ülejoonistust"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Kuva klipi piirid, veerised jms"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Jõusta paremalt vasakule paigutus"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Jõusta kõikides lokaatides paremalt vasakule ekraanipaigutus"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Jõusta GPU renderdamine"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Jõusta GPU kasutamine 2D-graafika puhul"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Jõusta 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Luba 4x MSAA OpenGL ES 2.0 rakendustes"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Silu mittetäisnurksed kärpimistoimingud"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"GPU renderduse profiil"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Profiili HWUI renderdam."</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU silumise kihtide lubamine"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"GPU silumise kihtide laadimise lubamine silumisrakendustele"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Akna animatsioonimastaap"</string>

@@ -516,7 +516,6 @@ public class AnimatedVectorDrawable extends Drawable implements Animatable2 {
         mAnimatedVectorState.mVectorDrawable.getOutline(outline);
     }
 
-    /** @hide */
     @Override
     public Insets getOpticalInsets() {
         return mAnimatedVectorState.mVectorDrawable.getOpticalInsets();

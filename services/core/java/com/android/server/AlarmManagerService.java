@@ -172,7 +172,8 @@ class AlarmManagerService extends SystemService {
     long mNativeData;
     private long mNextWakeup;
     private long mNextNonWakeup;
-    private long mLastWakeupSet;
+    private long mNextWakeUpSetAt;
+    private long mNextNonWakeUpSetAt;
     private long mLastWakeup;
     private long mLastTrigger;
     private long mLastTickSet;
@@ -1388,7 +1389,19 @@ class AlarmManagerService extends SystemService {
         }
 
         synchronized (mLock) {
-            return setKernelTime(mNativeData, millis) == 0;
+            final long currentTimeMillis = System.currentTimeMillis();
+            setKernelTime(mNativeData, millis);
+            final TimeZone timeZone = TimeZone.getDefault();
+            final int currentTzOffset = timeZone.getOffset(currentTimeMillis);
+            final int newTzOffset = timeZone.getOffset(millis);
+            if (currentTzOffset != newTzOffset) {
+                Slog.i(TAG, "Timezone offset has changed, updating kernel timezone");
+                setKernelTimezone(mNativeData, -(newTzOffset / 60000));
+            }
+            // The native implementation of setKernelTime can return -1 even when the kernel
+            // time was set correctly, so assume setting kernel time was successful and always
+            // return true.
+            return true;
         }
     }
 
@@ -1927,7 +1940,7 @@ class AlarmManagerService extends SystemService {
             TimeUtils.formatDuration(nowELAPSED - mLastAlarmDeliveryTime, pw);
             pw.println();
             pw.print("  Next non-wakeup delivery time: ");
-            TimeUtils.formatDuration(nowELAPSED - mNextNonWakeupDeliveryTime, pw);
+            TimeUtils.formatDuration(mNextNonWakeupDeliveryTime, nowELAPSED, pw);
             pw.println();
 
             long nextWakeupRTC = mNextWakeup + (nowRTC - nowELAPSED);
@@ -1936,11 +1949,21 @@ class AlarmManagerService extends SystemService {
                     TimeUtils.formatDuration(mNextNonWakeup, nowELAPSED, pw);
                     pw.print(" = "); pw.print(mNextNonWakeup);
                     pw.print(" = "); pw.println(sdf.format(new Date(nextNonWakeupRTC)));
+            pw.print("    set at "); TimeUtils.formatDuration(mNextNonWakeUpSetAt, nowELAPSED, pw);
+            pw.println();
             pw.print("  Next wakeup alarm: "); TimeUtils.formatDuration(mNextWakeup, nowELAPSED, pw);
                     pw.print(" = "); pw.print(mNextWakeup);
                     pw.print(" = "); pw.println(sdf.format(new Date(nextWakeupRTC)));
-            pw.print("    set at "); TimeUtils.formatDuration(mLastWakeupSet, nowELAPSED, pw);
+            pw.print("    set at "); TimeUtils.formatDuration(mNextWakeUpSetAt, nowELAPSED, pw);
                     pw.println();
+
+            pw.print("  Next kernel non-wakeup alarm: ");
+            TimeUtils.formatDuration(getNextAlarm(mNativeData, ELAPSED_REALTIME), pw);
+            pw.println();
+            pw.print("  Next kernel wakeup alarm: ");
+            TimeUtils.formatDuration(getNextAlarm(mNativeData, ELAPSED_REALTIME_WAKEUP), pw);
+            pw.println();
+
             pw.print("  Last wakeup: "); TimeUtils.formatDuration(mLastWakeup, nowELAPSED, pw);
                     pw.print(" = "); pw.println(mLastWakeup);
             pw.print("  Last trigger: "); TimeUtils.formatDuration(mLastTrigger, nowELAPSED, pw);
@@ -2270,7 +2293,7 @@ class AlarmManagerService extends SystemService {
             proto.write(AlarmManagerServiceDumpProto.TIME_SINCE_LAST_WAKEUP_MS,
                     nowElapsed - mLastWakeup);
             proto.write(AlarmManagerServiceDumpProto.TIME_SINCE_LAST_WAKEUP_SET_MS,
-                    nowElapsed - mLastWakeupSet);
+                    nowElapsed - mNextWakeUpSetAt);
             proto.write(AlarmManagerServiceDumpProto.TIME_CHANGE_EVENT_COUNT, mNumTimeChanged);
 
             final TreeSet<Integer> users = new TreeSet<>();
@@ -2655,16 +2678,53 @@ class AlarmManagerService extends SystemService {
                 DateFormat.format(pattern, info.getTriggerTime()).toString();
     }
 
+    /**
+     * If the last time AlarmThread woke up precedes any due wakeup or non-wakeup alarm that we set
+     * by more than half a minute, log a wtf.
+     */
+    private void validateLastAlarmExpiredLocked(long nowElapsed) {
+        final StringBuilder errorMsg = new StringBuilder();
+        boolean stuck = false;
+        if (mNextNonWakeup < (nowElapsed - 10_000) && mLastWakeup < mNextNonWakeup) {
+            stuck = true;
+            errorMsg.append("[mNextNonWakeup=");
+            TimeUtils.formatDuration(mNextNonWakeup - nowElapsed, errorMsg);
+            errorMsg.append(" set at ");
+            TimeUtils.formatDuration(mNextNonWakeUpSetAt - nowElapsed, errorMsg);
+            errorMsg.append(", mLastWakeup=");
+            TimeUtils.formatDuration(mLastWakeup - nowElapsed, errorMsg);
+            errorMsg.append(", timerfd_gettime=" + getNextAlarm(mNativeData, ELAPSED_REALTIME));
+            errorMsg.append("];");
+        }
+        if (mNextWakeup < (nowElapsed - 10_000) && mLastWakeup < mNextWakeup) {
+            stuck = true;
+            errorMsg.append("[mNextWakeup=");
+            TimeUtils.formatDuration(mNextWakeup - nowElapsed, errorMsg);
+            errorMsg.append(" set at ");
+            TimeUtils.formatDuration(mNextWakeUpSetAt - nowElapsed, errorMsg);
+            errorMsg.append(", mLastWakeup=");
+            TimeUtils.formatDuration(mLastWakeup - nowElapsed, errorMsg);
+            errorMsg.append(", timerfd_gettime="
+                    + getNextAlarm(mNativeData, ELAPSED_REALTIME_WAKEUP));
+            errorMsg.append("];");
+        }
+        if (stuck) {
+            Slog.wtf(TAG, "Alarm delivery stuck: " + errorMsg.toString());
+        }
+    }
+
     void rescheduleKernelAlarmsLocked() {
         // Schedule the next upcoming wakeup alarm.  If there is a deliverable batch
         // prior to that which contains no wakeups, we schedule that as well.
+        final long nowElapsed = SystemClock.elapsedRealtime();
+        validateLastAlarmExpiredLocked(nowElapsed);
         long nextNonWakeup = 0;
         if (mAlarmBatches.size() > 0) {
             final Batch firstWakeup = findFirstWakeupBatchLocked();
             final Batch firstBatch = mAlarmBatches.get(0);
             if (firstWakeup != null) {
                 mNextWakeup = firstWakeup.start;
-                mLastWakeupSet = SystemClock.elapsedRealtime();
+                mNextWakeUpSetAt = nowElapsed;
                 setLocked(ELAPSED_REALTIME_WAKEUP, firstWakeup.start);
             }
             if (firstBatch != firstWakeup) {
@@ -2678,6 +2738,7 @@ class AlarmManagerService extends SystemService {
         }
         if (nextNonWakeup != 0) {
             mNextNonWakeup = nextNonWakeup;
+            mNextNonWakeUpSetAt = nowElapsed;
             setLocked(ELAPSED_REALTIME, nextNonWakeup);
         }
     }
@@ -3051,6 +3112,7 @@ class AlarmManagerService extends SystemService {
     private native int waitForAlarm(long nativeData);
     private native int setKernelTime(long nativeData, long millis);
     private native int setKernelTimezone(long nativeData, int minuteswest);
+    private native long getNextAlarm(long nativeData, int type);
 
     private long getWhileIdleMinIntervalLocked(int uid) {
         final boolean dozing = mPendingIdleUntil != null;
@@ -3456,9 +3518,13 @@ class AlarmManagerService extends SystemService {
 
     private class AlarmThread extends Thread
     {
+        private int mFalseWakeups;
+        private int mWtfThreshold;
         public AlarmThread()
         {
             super("AlarmManager");
+            mFalseWakeups = 0;
+            mWtfThreshold = 10;
         }
 
         public void run()
@@ -3570,6 +3636,17 @@ class AlarmManagerService extends SystemService {
                                     mMaxDelayTime = thisDelayTime;
                                 }
                                 mPendingNonWakeupAlarms.clear();
+                            }
+                            if (mLastTimeChangeRealtime != nowELAPSED && triggerList.isEmpty()) {
+                                if (++mFalseWakeups >= mWtfThreshold) {
+                                    Slog.wtf(TAG, "Too many (" + mFalseWakeups
+                                            + ") false wakeups, nowElapsed=" + nowELAPSED);
+                                    if (mWtfThreshold < 100_000) {
+                                        mWtfThreshold *= 10;
+                                    } else {
+                                        mFalseWakeups = 0;
+                                    }
+                                }
                             }
                             final ArraySet<Pair<String, Integer>> triggerPackages =
                                     new ArraySet<>();

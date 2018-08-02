@@ -16,6 +16,7 @@
 
 package com.android.server.hdmi;
 
+import android.annotation.Nullable;
 import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.input.InputManager;
 import android.os.Handler;
@@ -31,6 +32,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.hdmi.HdmiAnnotations.ServiceThreadOnly;
 
+import com.android.server.hdmi.HdmiControlService.SendMessageCallback;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -167,6 +169,8 @@ abstract class HdmiCecLocalDevice {
             return new HdmiCecLocalDeviceTv(service);
         case HdmiDeviceInfo.DEVICE_PLAYBACK:
             return new HdmiCecLocalDevicePlayback(service);
+        case HdmiDeviceInfo.DEVICE_AUDIO_SYSTEM:
+            return new HdmiCecLocalDeviceAudioSystem(service);
         default:
             return null;
         }
@@ -249,11 +253,11 @@ abstract class HdmiCecLocalDevice {
             case Constants.MESSAGE_SET_MENU_LANGUAGE:
                 return handleSetMenuLanguage(message);
             case Constants.MESSAGE_GIVE_PHYSICAL_ADDRESS:
-                return handleGivePhysicalAddress();
+                return handleGivePhysicalAddress(null);
             case Constants.MESSAGE_GIVE_OSD_NAME:
                 return handleGiveOsdName(message);
             case Constants.MESSAGE_GIVE_DEVICE_VENDOR_ID:
-                return handleGiveDeviceVendorId();
+                return handleGiveDeviceVendorId(null);
             case Constants.MESSAGE_GET_CEC_VERSION:
                 return handleGetCecVersion(message);
             case Constants.MESSAGE_REPORT_PHYSICAL_ADDRESS:
@@ -262,14 +266,28 @@ abstract class HdmiCecLocalDevice {
                 return handleRoutingChange(message);
             case Constants.MESSAGE_ROUTING_INFORMATION:
                 return handleRoutingInformation(message);
+            case Constants.MESSAGE_REQUEST_ARC_INITIATION:
+                return handleRequestArcInitiate(message);
+            case Constants.MESSAGE_REQUEST_ARC_TERMINATION:
+                return handleRequestArcTermination(message);
             case Constants.MESSAGE_INITIATE_ARC:
                 return handleInitiateArc(message);
             case Constants.MESSAGE_TERMINATE_ARC:
                 return handleTerminateArc(message);
+            case Constants.MESSAGE_REPORT_ARC_INITIATED:
+                return handleReportArcInitiate(message);
+            case Constants.MESSAGE_REPORT_ARC_TERMINATED:
+                return handleReportArcTermination(message);
+            case Constants.MESSAGE_SYSTEM_AUDIO_MODE_REQUEST:
+                return handleSystemAudioModeRequest(message);
             case Constants.MESSAGE_SET_SYSTEM_AUDIO_MODE:
                 return handleSetSystemAudioMode(message);
             case Constants.MESSAGE_SYSTEM_AUDIO_MODE_STATUS:
                 return handleSystemAudioModeStatus(message);
+            case Constants.MESSAGE_GIVE_SYSTEM_AUDIO_MODE_STATUS:
+                return handleGiveSystemAudioModeStatus(message);
+            case Constants.MESSAGE_GIVE_AUDIO_STATUS:
+                return handleGiveAudioStatus(message);
             case Constants.MESSAGE_REPORT_AUDIO_STATUS:
                 return handleReportAudioStatus(message);
             case Constants.MESSAGE_STANDBY:
@@ -325,23 +343,23 @@ abstract class HdmiCecLocalDevice {
     }
 
     @ServiceThreadOnly
-    protected boolean handleGivePhysicalAddress() {
+    protected boolean handleGivePhysicalAddress(@Nullable SendMessageCallback callback) {
         assertRunOnServiceThread();
 
         int physicalAddress = mService.getPhysicalAddress();
         HdmiCecMessage cecMessage = HdmiCecMessageBuilder.buildReportPhysicalAddressCommand(
                 mAddress, physicalAddress, mDeviceType);
-        mService.sendCecCommand(cecMessage);
+        mService.sendCecCommand(cecMessage, callback);
         return true;
     }
 
     @ServiceThreadOnly
-    protected boolean handleGiveDeviceVendorId() {
+    protected boolean handleGiveDeviceVendorId(@Nullable SendMessageCallback callback) {
         assertRunOnServiceThread();
         int vendorId = mService.getVendorId();
         HdmiCecMessage cecMessage = HdmiCecMessageBuilder.buildDeviceVendorIdCommand(
                 mAddress, vendorId);
-        mService.sendCecCommand(cecMessage);
+        mService.sendCecCommand(cecMessage, callback);
         return true;
     }
 
@@ -417,7 +435,15 @@ abstract class HdmiCecLocalDevice {
         return false;
     }
 
+    protected boolean handleGiveSystemAudioModeStatus(HdmiCecMessage message) {
+        return false;
+    }
+
     protected boolean handleSetSystemAudioMode(HdmiCecMessage message) {
+        return false;
+    }
+
+    protected boolean handleSystemAudioModeRequest(HdmiCecMessage message) {
         return false;
     }
 
@@ -429,7 +455,27 @@ abstract class HdmiCecLocalDevice {
         return false;
     }
 
+    protected boolean handleRequestArcInitiate(HdmiCecMessage message) {
+        return false;
+    }
+
+    protected boolean handleRequestArcTermination(HdmiCecMessage message) {
+        return false;
+    }
+
+    protected boolean handleReportArcInitiate(HdmiCecMessage message) {
+        return false;
+    }
+
+    protected boolean handleReportArcTermination(HdmiCecMessage message) {
+        return false;
+    }
+
     protected boolean handleReportAudioStatus(HdmiCecMessage message) {
+        return false;
+    }
+
+    protected boolean handleGiveAudioStatus(HdmiCecMessage message) {
         return false;
     }
 
@@ -514,8 +560,7 @@ abstract class HdmiCecLocalDevice {
     static boolean isPowerOffOrToggleCommand(HdmiCecMessage message) {
         byte[] params = message.getParams();
         return message.getOpcode() == Constants.MESSAGE_USER_CONTROL_PRESSED
-                && (params[0] == HdmiCecKeycode.CEC_KEYCODE_POWER
-                        || params[0] == HdmiCecKeycode.CEC_KEYCODE_POWER_OFF_FUNCTION
+                && (params[0] == HdmiCecKeycode.CEC_KEYCODE_POWER_OFF_FUNCTION
                         || params[0] == HdmiCecKeycode.CEC_KEYCODE_POWER_TOGGLE_FUNCTION);
     }
 

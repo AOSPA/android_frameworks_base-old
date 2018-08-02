@@ -20,9 +20,9 @@ import android.content.Context;
 import android.content.res.XmlResourceParser;
 import android.icu.text.TimeZoneFormat;
 import android.icu.text.TimeZoneNames;
-import android.support.annotation.VisibleForTesting;
-import android.support.v4.text.BidiFormatter;
-import android.support.v4.text.TextDirectionHeuristicsCompat;
+import androidx.annotation.VisibleForTesting;
+import androidx.core.text.BidiFormatter;
+import androidx.core.text.TextDirectionHeuristicsCompat;
 import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
@@ -381,7 +381,7 @@ public class ZoneGetter {
 
             // Create a lookup of local zone IDs.
             final List<String> zoneIds = lookupTimeZoneIdsByCountry(locale.getCountry());
-            localZoneIds = new HashSet<>(zoneIds);
+            localZoneIds = zoneIds != null ? new HashSet<>(zoneIds) : new HashSet<>();
         }
 
         @VisibleForTesting

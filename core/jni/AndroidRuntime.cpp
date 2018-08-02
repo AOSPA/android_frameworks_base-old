@@ -20,6 +20,7 @@
 
 #include <android_runtime/AndroidRuntime.h>
 
+#include <android-base/macros.h>
 #include <android-base/properties.h>
 #include <binder/IBinder.h>
 #include <binder/IPCThreadState.h>
@@ -107,6 +108,7 @@ extern int register_android_media_AudioTrack(JNIEnv *env);
 extern int register_android_media_MicrophoneInfo(JNIEnv *env);
 extern int register_android_media_JetPlayer(JNIEnv *env);
 extern int register_android_media_ToneGenerator(JNIEnv *env);
+extern int register_android_media_midi(JNIEnv *env);
 
 namespace android {
 extern int register_android_util_SeempLog(JNIEnv* env);
@@ -599,7 +601,6 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
 {
     JavaVMInitArgs initArgs;
     char propBuf[PROPERTY_VALUE_MAX];
-    char stackTraceFileBuf[sizeof("-Xstacktracefile:")-1 + PROPERTY_VALUE_MAX];
     char jniOptsBuf[sizeof("-Xjniopts:")-1 + PROPERTY_VALUE_MAX];
     char heapstartsizeOptsBuf[sizeof("-Xms")-1 + PROPERTY_VALUE_MAX];
     char heapsizeOptsBuf[sizeof("-Xmx")-1 + PROPERTY_VALUE_MAX];
@@ -607,6 +608,7 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
     char heapminfreeOptsBuf[sizeof("-XX:HeapMinFree=")-1 + PROPERTY_VALUE_MAX];
     char heapmaxfreeOptsBuf[sizeof("-XX:HeapMaxFree=")-1 + PROPERTY_VALUE_MAX];
     char usejitOptsBuf[sizeof("-Xusejit:")-1 + PROPERTY_VALUE_MAX];
+    char jitpthreadpriorityOptsBuf[sizeof("-Xjitpthreadpriority:")-1 + PROPERTY_VALUE_MAX];
     char jitmaxsizeOptsBuf[sizeof("-Xjitmaxsize:")-1 + PROPERTY_VALUE_MAX];
     char jitinitialsizeOptsBuf[sizeof("-Xjitinitialsize:")-1 + PROPERTY_VALUE_MAX];
     char jitthresholdOptsBuf[sizeof("-Xjitthreshold:")-1 + PROPERTY_VALUE_MAX];
@@ -681,16 +683,6 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
         executionMode = kEMJitCompiler;
     }
 
-    // If dalvik.vm.stack-trace-dir is set, it enables the "new" stack trace
-    // dump scheme and a new file is created for each stack dump. If it isn't set,
-    // the old scheme is enabled.
-    property_get("dalvik.vm.stack-trace-dir", propBuf, "");
-    if (strlen(propBuf) > 0) {
-        addOption("-Xusetombstonedtraces");
-    } else {
-        parseRuntimeOption("dalvik.vm.stack-trace-file", stackTraceFileBuf, "-Xstacktracefile:");
-    }
-
     strcpy(jniOptsBuf, "-Xjniopts:");
     if (parseRuntimeOption("dalvik.vm.jniopts", jniOptsBuf, "-Xjniopts:")) {
         ALOGI("JNI options: '%s'\n", jniOptsBuf);
@@ -736,6 +728,9 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
     parseRuntimeOption("dalvik.vm.jitmaxsize", jitmaxsizeOptsBuf, "-Xjitmaxsize:");
     parseRuntimeOption("dalvik.vm.jitinitialsize", jitinitialsizeOptsBuf, "-Xjitinitialsize:");
     parseRuntimeOption("dalvik.vm.jitthreshold", jitthresholdOptsBuf, "-Xjitthreshold:");
+    parseRuntimeOption("dalvik.vm.jitpthreadpriority",
+                       jitpthreadpriorityOptsBuf,
+                       "-Xjitpthreadpriority:");
     property_get("dalvik.vm.usejitprofiles", useJitProfilesOptsBuf, "");
     if (strcmp(useJitProfilesOptsBuf, "true") == 0) {
         addOption("-Xjitsaveprofilinginfo");
@@ -833,12 +828,6 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
         addOption("-Ximage-compiler-option");
         addOption("--image-classes=/system/etc/preloaded-classes");
 
-        // If there is a compiled-classes file, push it.
-        if (hasFile("/system/etc/compiled-classes")) {
-            addOption("-Ximage-compiler-option");
-            addOption("--compiled-classes=/system/etc/compiled-classes");
-        }
-
         // If there is a dirty-image-objects file, push it.
         if (hasFile("/system/etc/dirty-image-objects")) {
             addOption("-Ximage-compiler-option");
@@ -875,34 +864,18 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
 
     // The runtime will compile a boot image, when necessary, not using installd. Thus, we need to
     // pass the instruction-set-features/variant as an image-compiler-option.
-    // TODO: Find a better way for the instruction-set.
-#if defined(__arm__)
-    constexpr const char* instruction_set = "arm";
-#elif defined(__aarch64__)
-    constexpr const char* instruction_set = "arm64";
-#elif defined(__mips__) && !defined(__LP64__)
-    constexpr const char* instruction_set = "mips";
-#elif defined(__mips__) && defined(__LP64__)
-    constexpr const char* instruction_set = "mips64";
-#elif defined(__i386__)
-    constexpr const char* instruction_set = "x86";
-#elif defined(__x86_64__)
-    constexpr const char* instruction_set = "x86_64";
-#else
-    constexpr const char* instruction_set = "unknown";
-#endif
     // Note: it is OK to reuse the buffer, as the values are exactly the same between
     //       * compiler-option, used for runtime compilation (DexClassLoader)
     //       * image-compiler-option, used for boot-image compilation on device
 
     // Copy the variant.
-    sprintf(dex2oat_isa_variant_key, "dalvik.vm.isa.%s.variant", instruction_set);
+    sprintf(dex2oat_isa_variant_key, "dalvik.vm.isa.%s.variant", ABI_STRING);
     parseCompilerOption(dex2oat_isa_variant_key, dex2oat_isa_variant,
                         "--instruction-set-variant=", "-Ximage-compiler-option");
     parseCompilerOption(dex2oat_isa_variant_key, dex2oat_isa_variant,
                         "--instruction-set-variant=", "-Xcompiler-option");
     // Copy the features.
-    sprintf(dex2oat_isa_features_key, "dalvik.vm.isa.%s.features", instruction_set);
+    sprintf(dex2oat_isa_features_key, "dalvik.vm.isa.%s.features", ABI_STRING);
     parseCompilerOption(dex2oat_isa_features_key, dex2oat_isa_features,
                         "--instruction-set-features=", "-Ximage-compiler-option");
     parseCompilerOption(dex2oat_isa_features_key, dex2oat_isa_features,
@@ -944,10 +917,13 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote)
     }
 
     // Native bridge library. "0" means that native bridge is disabled.
+    //
+    // Note: bridging is only enabled for the zygote. Other runs of
+    //       app_process may not have the permissions to mount etc.
     property_get("ro.dalvik.vm.native.bridge", propBuf, "");
     if (propBuf[0] == '\0') {
         ALOGW("ro.dalvik.vm.native.bridge is not expected to be empty");
-    } else if (strcmp(propBuf, "0") != 0) {
+    } else if (zygote && strcmp(propBuf, "0") != 0) {
         snprintf(nativeBridgeLibrary, sizeof("-XX:NativeBridge=") + PROPERTY_VALUE_MAX,
                  "-XX:NativeBridge=%s", propBuf);
         addOption(nativeBridgeLibrary);
@@ -1476,6 +1452,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_media_MicrophoneInfo),
     REG_JNI(register_android_media_RemoteDisplay),
     REG_JNI(register_android_media_ToneGenerator),
+    REG_JNI(register_android_media_midi),
 
     REG_JNI(register_android_opengl_classes),
     REG_JNI(register_android_server_NetworkManagementSocketTagger),

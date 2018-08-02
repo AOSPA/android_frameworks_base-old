@@ -20,6 +20,7 @@ import android.accounts.Account;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -5057,6 +5058,7 @@ public final class ContactsContract {
         *
         * @hide
         */
+        @TestApi
         public static final Uri CORP_CONTENT_URI =
                 Uri.withAppendedPath(AUTHORITY_URI, "raw_contact_entities_corp");
 
@@ -6064,6 +6066,7 @@ public final class ContactsContract {
             *
             * @hide
             */
+            @TestApi
             public static final Uri ENTERPRISE_CONTENT_URI =
                     Uri.withAppendedPath(Data.ENTERPRISE_CONTENT_URI, "phones");
 

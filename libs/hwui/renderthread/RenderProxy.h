@@ -95,7 +95,7 @@ public:
     ANDROID_API static void overrideProperty(const char* name, const char* value);
 
     ANDROID_API void fence();
-    ANDROID_API static void staticFence();
+    ANDROID_API static int maxTextureSize();
     ANDROID_API void stopDrawing();
     ANDROID_API void notifyFramePending();
 
@@ -108,8 +108,6 @@ public:
     ANDROID_API static void rotateProcessStatsBuffer();
     ANDROID_API static void setProcessStatsBuffer(int fd);
     ANDROID_API int getRenderThreadTid();
-
-    ANDROID_API void serializeDisplayListTree();
 
     ANDROID_API void addRenderNode(RenderNode* node, bool placeFront);
     ANDROID_API void removeRenderNode(RenderNode* node);
@@ -125,8 +123,6 @@ public:
     ANDROID_API static int copySurfaceInto(sp<Surface>& surface, int left, int top, int right,
                                            int bottom, SkBitmap* bitmap);
     ANDROID_API static void prepareToDraw(Bitmap& bitmap);
-
-    static sk_sp<Bitmap> allocateHardwareBitmap(SkBitmap& bitmap);
 
     static int copyGraphicBufferInto(GraphicBuffer* buffer, SkBitmap* bitmap);
 

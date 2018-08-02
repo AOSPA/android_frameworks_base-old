@@ -50,7 +50,7 @@ import static com.android.server.am.LaunchParamsController.LaunchParamsModifier.
 @RunWith(AndroidJUnit4.class)
 public class ActivityLaunchParamsModifierTests extends ActivityTestsBase {
     private ActivityLaunchParamsModifier mModifier;
-    private ActivityManagerService mService;
+    private ActivityTaskManagerService mService;
     private ActivityStack mStack;
     private TaskRecord mTask;
     private ActivityRecord mActivity;
@@ -62,7 +62,7 @@ public class ActivityLaunchParamsModifierTests extends ActivityTestsBase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        mService = createActivityManagerService();
+        mService = createActivityTaskManagerService();
         mModifier = new ActivityLaunchParamsModifier(mService.mStackSupervisor);
         mCurrent = new LaunchParams();
         mResult = new LaunchParams();

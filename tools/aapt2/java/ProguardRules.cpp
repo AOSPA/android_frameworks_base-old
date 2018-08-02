@@ -79,8 +79,10 @@ class BaseVisitor : public xml::Visitor {
     keep_set_->AddConditionalClass({file_.name, file_.source.WithLine(line_number)}, class_name);
   }
 
-  void AddMethod(size_t line_number, const std::string& method_name) {
-    keep_set_->AddMethod({file_.name, file_.source.WithLine(line_number)}, method_name);
+  void AddMethod(size_t line_number, const std::string& method_name,
+                 const std::string& method_signature) {
+    keep_set_->AddMethod({file_.name, file_.source.WithLine(line_number)},
+        {method_name, method_signature});
   }
 
   void AddReference(size_t line_number, Reference* ref) {
@@ -125,7 +127,7 @@ class LayoutVisitor : public BaseVisitor {
         AddClass(node->line_number, attr.value);
       } else if (attr.namespace_uri == xml::kSchemaAndroid &&
                  attr.name == "onClick") {
-        AddMethod(node->line_number, attr.value);
+        AddMethod(node->line_number, attr.value, "android.view.View");
       }
     }
 
@@ -149,7 +151,7 @@ class MenuVisitor : public BaseVisitor {
               util::IsJavaClassName(attr.value)) {
             AddClass(node->line_number, attr.value);
           } else if (attr.name == "onClick") {
-            AddMethod(node->line_number, attr.value);
+            AddMethod(node->line_number, attr.value, "android.view.MenuItem");
           }
         }
       }
@@ -187,6 +189,29 @@ class XmlResourceVisitor : public BaseVisitor {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(XmlResourceVisitor);
+};
+
+class NavigationVisitor : public BaseVisitor {
+ public:
+  NavigationVisitor(const ResourceFile& file, KeepSet* keep_set, const std::string& package)
+      : BaseVisitor(file, keep_set), package_(package) {
+  }
+
+  void Visit(xml::Element* node) override {
+    const auto& attr = node->FindAttribute(xml::kSchemaAndroid, "name");
+    if (attr != nullptr && !attr->value.empty()) {
+      std::string name = (attr->value[0] == '.') ? package_ + attr->value : attr->value;
+      if (util::IsJavaClassName(name)) {
+        AddClass(node->line_number, name);
+      }
+    }
+
+    BaseVisitor::Visit(node);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(NavigationVisitor);
+  const std::string package_;
 };
 
 class TransitionVisitor : public BaseVisitor {
@@ -291,7 +316,7 @@ bool CollectProguardRulesForManifest(xml::XmlResource* res, KeepSet* keep_set, b
   return false;
 }
 
-bool CollectProguardRules(xml::XmlResource* res, KeepSet* keep_set) {
+bool CollectProguardRules(IAaptContext* context_, xml::XmlResource* res, KeepSet* keep_set) {
   if (!res->root) {
     return false;
   }
@@ -305,6 +330,12 @@ bool CollectProguardRules(xml::XmlResource* res, KeepSet* keep_set) {
 
     case ResourceType::kXml: {
       XmlResourceVisitor visitor(res->file, keep_set);
+      res->root->Accept(&visitor);
+      break;
+    }
+
+    case ResourceType::kNavigation: {
+      NavigationVisitor visitor(res->file, keep_set, context_->GetCompilationPackage());
       res->root->Accept(&visitor);
       break;
     }
@@ -336,7 +367,7 @@ void WriteKeepSet(const KeepSet& keep_set, OutputStream* out) {
     for (const UsageLocation& location : entry.second) {
       printer.Print("# Referenced at ").Println(location.source.to_string());
     }
-    printer.Print("-keep class ").Print(entry.first).Println(" { <init>(...); }");
+    printer.Print("-keep class ").Print(entry.first).Println(" { <init>(); }");
   }
 
   for (const auto& entry : keep_set.conditional_class_set_) {
@@ -367,7 +398,8 @@ void WriteKeepSet(const KeepSet& keep_set, OutputStream* out) {
     for (const UsageLocation& location : entry.second) {
       printer.Print("# Referenced at ").Println(location.source.to_string());
     }
-    printer.Print("-keepclassmembers class * { *** ").Print(entry.first).Println("(...); }");
+    printer.Print("-keepclassmembers class * { *** ").Print(entry.first.name)
+        .Print("(").Print(entry.first.signature).Println("); }");
     printer.Println();
   }
 }

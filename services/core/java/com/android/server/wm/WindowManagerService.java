@@ -21,7 +21,7 @@ import static android.Manifest.permission.MANAGE_APP_TOKENS;
 import static android.Manifest.permission.READ_FRAME_BUFFER;
 import static android.Manifest.permission.REGISTER_WINDOW_MANAGER_LISTENERS;
 import static android.Manifest.permission.RESTRICTED_VR_ACCESS;
-import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
+import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.StatusBarManager.DISABLE_MASK;
 import static android.app.admin.DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED;
@@ -116,9 +116,11 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityManagerInternal;
+import android.app.ActivityTaskManager;
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
+import android.app.IActivityTaskManager;
 import android.app.IAssistDataReceiver;
 import android.app.admin.DevicePolicyCache;
 import android.content.BroadcastReceiver;
@@ -223,7 +225,6 @@ import android.view.WindowManager.TransitionFlags;
 import android.view.WindowManager.TransitionType;
 import android.view.WindowManagerGlobal;
 import android.view.WindowManagerPolicyConstants.PointerEventListener;
-import android.view.inputmethod.InputMethodManagerInternal;
 
 import com.android.internal.R;
 import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
@@ -348,6 +349,8 @@ public class WindowManagerService extends IWindowManager.Stub
     static final int UPDATE_FOCUS_WILL_ASSIGN_LAYERS = 1;
     static final int UPDATE_FOCUS_PLACING_SURFACES = 2;
     static final int UPDATE_FOCUS_WILL_PLACE_SURFACES = 3;
+    /** Indicates we are removing the focused window when updating the focus. */
+    static final int UPDATE_FOCUS_REMOVING_FOCUS = 4;
 
     private static final String SYSTEM_SECURE = "ro.secure";
     private static final String SYSTEM_DEBUGGABLE = "ro.debuggable";
@@ -438,7 +441,10 @@ public class WindowManagerService extends IWindowManager.Stub
     final WindowManagerPolicy mPolicy;
 
     final IActivityManager mActivityManager;
+    // TODO: Probably not needed once activities are fully in WM.
+    final IActivityTaskManager mActivityTaskManager;
     final ActivityManagerInternal mAmInternal;
+    final ActivityTaskManagerInternal mAtmInternal;
 
     final AppOpsManager mAppOps;
     final PackageManagerInternal mPmInternal;
@@ -870,7 +876,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             if (atoken.mLaunchTaskBehind) {
                 try {
-                    mActivityManager.notifyLaunchTaskBehindComplete(atoken.token);
+                    mActivityTaskManager.notifyLaunchTaskBehindComplete(atoken.token);
                 } catch (RemoteException e) {
                 }
                 atoken.mLaunchTaskBehind = false;
@@ -887,7 +893,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     } else {
                         atoken.mEnteringAnimation = false;
                         try {
-                            mActivityManager.notifyEnterAnimationComplete(atoken.token);
+                            mActivityTaskManager.notifyEnterAnimationComplete(atoken.token);
                         } catch (RemoteException e) {
                         }
                     }
@@ -1020,7 +1026,9 @@ public class WindowManagerService extends IWindowManager.Stub
                 AnimationThread.getHandler(), animationHandler);
 
         mActivityManager = ActivityManager.getService();
+        mActivityTaskManager = ActivityTaskManager.getService();
         mAmInternal = LocalServices.getService(ActivityManagerInternal.class);
+        mAtmInternal = LocalServices.getService(ActivityTaskManagerInternal.class);
         mAppOps = (AppOpsManager)context.getSystemService(Context.APP_OPS_SERVICE);
         AppOpsManager.OnOpChangedInternalListener opListener =
                 new AppOpsManager.OnOpChangedInternalListener() {
@@ -1071,13 +1079,13 @@ public class WindowManagerService extends IWindowManager.Stub
                 PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, TAG_WM);
         mHoldingScreenWakeLock.setReferenceCounted(false);
 
-        mSurfaceAnimationRunner = new SurfaceAnimationRunner();
+        mSurfaceAnimationRunner = new SurfaceAnimationRunner(mPowerManagerInternal);
 
         mAllowTheaterModeWakeFromLayout = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_allowTheaterModeWakeFromWindowLayout);
 
         mTaskPositioningController = new TaskPositioningController(
-                this, mInputManager, mInputMonitor, mActivityManager, mH.getLooper());
+                this, mInputManager, mInputMonitor, mActivityTaskManager, mH.getLooper());
         mDragDropController = new DragDropController(this, mH.getLooper());
 
         LocalServices.addService(WindowManagerInternal.class, new LocalService());
@@ -1473,14 +1481,18 @@ public class WindowManagerService extends IWindowManager.Stub
             displayFrames.onDisplayInfoUpdated(displayInfo,
                     displayContent.calculateDisplayCutoutForRotation(displayInfo.rotation));
             final Rect taskBounds;
+            final boolean floatingStack;
             if (atoken != null && atoken.getTask() != null) {
                 taskBounds = mTmpRect;
                 atoken.getTask().getBounds(mTmpRect);
+                floatingStack = atoken.getTask().isFloating();
             } else {
                 taskBounds = null;
+                floatingStack = false;
             }
-            if (mPolicy.getLayoutHintLw(win.mAttrs, taskBounds, displayFrames, outFrame,
-                    outContentInsets, outStableInsets, outOutsets, outDisplayCutout)) {
+            if (mPolicy.getLayoutHintLw(win.mAttrs, taskBounds, displayFrames, floatingStack,
+                    outFrame, outContentInsets, outStableInsets, outOutsets,
+                    outDisplayCutout)) {
                 res |= WindowManagerGlobal.ADD_FLAG_ALWAYS_CONSUME_NAV_BAR;
             }
 
@@ -2183,8 +2195,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 TAG_WM, "Relayout of " + win + ": focusMayChange=" + focusMayChange);
 
             result |= mInTouchMode ? WindowManagerGlobal.RELAYOUT_RES_IN_TOUCH_MODE : 0;
-
-            mInputMonitor.updateInputWindowsLw(true /*force*/);
 
             if (DEBUG_LAYOUT) {
                 Slog.v(TAG_WM, "Relayout complete " + win + ": outFrame=" + outFrame.toShortString());
@@ -3294,16 +3304,6 @@ public class WindowManagerService extends IWindowManager.Stub
     @Override
     public void switchKeyboardLayout(int deviceId, int direction) {
         mInputManager.switchKeyboardLayout(deviceId, direction);
-    }
-
-    // Called by window manager policy.  Not exposed externally.
-    @Override
-    public void switchInputMethod(boolean forwardDirection) {
-        final InputMethodManagerInternal inputMethodManagerInternal =
-                LocalServices.getService(InputMethodManagerInternal.class);
-        if (inputMethodManagerInternal != null) {
-            inputMethodManagerInternal.switchInputMethod(forwardDirection);
-        }
     }
 
     // Called by window manager policy.  Not exposed externally.
@@ -4421,7 +4421,7 @@ public class WindowManagerService extends IWindowManager.Stub
      */
     void sendNewConfiguration(int displayId) {
         try {
-            final boolean configUpdated = mActivityManager.updateDisplayOverrideConfiguration(
+            final boolean configUpdated = mActivityTaskManager.updateDisplayOverrideConfiguration(
                     null /* values */, displayId);
             if (!configUpdated) {
                 // Something changed (E.g. device rotation), but no configuration update is needed.
@@ -4576,7 +4576,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         try {
-            mActivityManager.updateConfiguration(null);
+            mActivityTaskManager.updateConfiguration(null);
         } catch (RemoteException e) {
         }
 
@@ -4587,7 +4587,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         try {
-            mActivityManager.updateConfiguration(null);
+            mActivityTaskManager.updateConfiguration(null);
         } catch (RemoteException e) {
         }
 
@@ -4942,7 +4942,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
                 case NOTIFY_ACTIVITY_DRAWN:
                     try {
-                        mActivityManager.notifyActivityDrawn((IBinder) msg.obj);
+                        mActivityTaskManager.notifyActivityDrawn((IBinder) msg.obj);
                     } catch (RemoteException e) {
                     }
                     break;
@@ -5029,16 +5029,16 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 break;
                 case NOTIFY_APP_TRANSITION_STARTING: {
-                    mAmInternal.notifyAppTransitionStarting((SparseIntArray) msg.obj,
+                    mAtmInternal.notifyAppTransitionStarting((SparseIntArray) msg.obj,
                             msg.getWhen());
                 }
                 break;
                 case NOTIFY_APP_TRANSITION_CANCELLED: {
-                    mAmInternal.notifyAppTransitionCancelled();
+                    mAtmInternal.notifyAppTransitionCancelled();
                 }
                 break;
                 case NOTIFY_APP_TRANSITION_FINISHED: {
-                    mAmInternal.notifyAppTransitionFinished();
+                    mAtmInternal.notifyAppTransitionFinished();
                 }
                 break;
                 case WINDOW_HIDE_TIMEOUT: {
@@ -5063,7 +5063,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 break;
                 case NOTIFY_DOCKED_STACK_MINIMIZED_CHANGED: {
-                    mAmInternal.notifyDockedStackMinimizedChanged(msg.arg1 == 1);
+                    mAtmInternal.notifyDockedStackMinimizedChanged(msg.arg1 == 1);
                 }
                 break;
                 case RESTORE_POINTER_ICON: {
@@ -5082,11 +5082,11 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 break;
                 case NOTIFY_KEYGUARD_FLAGS_CHANGED: {
-                    mAmInternal.notifyKeyguardFlagsChanged((Runnable) msg.obj);
+                    mAtmInternal.notifyKeyguardFlagsChanged((Runnable) msg.obj);
                 }
                 break;
                 case NOTIFY_KEYGUARD_TRUSTED_CHANGED: {
-                    mAmInternal.notifyKeyguardTrustedChanged();
+                    mAtmInternal.notifyKeyguardTrustedChanged();
                 }
                 break;
                 case SET_HAS_OVERLAY_UI: {
@@ -5706,9 +5706,9 @@ public class WindowManagerService extends IWindowManager.Stub
             boolean imWindowChanged = false;
             if (mInputMethodWindow != null) {
                 final WindowState prevTarget = mInputMethodTarget;
+
                 final WindowState newTarget =
                         displayContent.computeImeTarget(true /* updateImeTarget*/);
-
                 imWindowChanged = prevTarget != newTarget;
 
                 if (mode != UPDATE_FOCUS_WILL_ASSIGN_LAYERS
@@ -5756,6 +5756,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 displayContent.setLayoutNeeded();
                 if (mode == UPDATE_FOCUS_PLACING_SURFACES) {
                     displayContent.performLayout(true /*initial*/, updateInputWindows);
+                } else if (mode == UPDATE_FOCUS_REMOVING_FOCUS) {
+                    mRoot.performSurfacePlacement(false);
                 }
             }
 
@@ -6020,7 +6022,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public void setRecentsVisibility(boolean visible) {
-        mAmInternal.enforceCallerIsRecentsOrHasPermission(android.Manifest.permission.STATUS_BAR,
+        mAtmInternal.enforceCallerIsRecentsOrHasPermission(android.Manifest.permission.STATUS_BAR,
                 "setRecentsVisibility()");
         synchronized (mWindowMap) {
             mPolicy.setRecentsVisibilityLw(visible);
@@ -6042,7 +6044,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public void setShelfHeight(boolean visible, int shelfHeight) {
-        mAmInternal.enforceCallerIsRecentsOrHasPermission(android.Manifest.permission.STATUS_BAR,
+        mAtmInternal.enforceCallerIsRecentsOrHasPermission(android.Manifest.permission.STATUS_BAR,
                 "setShelfHeight()");
         synchronized (mWindowMap) {
             getDefaultDisplayContentLocked().getPinnedStackController().setAdjustedForShelf(visible,
@@ -7410,16 +7412,18 @@ public class WindowManagerService extends IWindowManager.Stub
 
         @Override
         public void updateInputMethodWindowStatus(@NonNull IBinder imeToken,
-                boolean imeWindowVisible, boolean dismissImeOnBackKeyPressed,
-                @Nullable IBinder targetWindowToken) {
+                boolean imeWindowVisible, boolean dismissImeOnBackKeyPressed) {
+            mPolicy.setDismissImeOnBackKeyPressed(dismissImeOnBackKeyPressed);
+        }
+
+        @Override
+        public void updateInputMethodTargetWindow(@NonNull IBinder imeToken,
+                @NonNull IBinder imeTargetWindowToken) {
             // TODO (b/34628091): Use this method to address the window animation issue.
             if (DEBUG_INPUT_METHOD) {
-                Slog.w(TAG_WM, "updateInputMethodWindowStatus: imeToken=" + imeToken
-                        + " dismissImeOnBackKeyPressed=" + dismissImeOnBackKeyPressed
-                        + " imeWindowVisible=" + imeWindowVisible
-                        + " targetWindowToken=" + targetWindowToken);
+                Slog.w(TAG_WM, "updateInputMethodTargetWindow: imeToken=" + imeToken
+                        + " imeTargetWindowToken=" + imeTargetWindowToken);
             }
-            mPolicy.setDismissImeOnBackKeyPressed(dismissImeOnBackKeyPressed);
         }
 
         @Override

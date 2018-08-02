@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"నొక్కినప్పుడు దృశ్యపరమైన ప్రతిస్పందన చూపు"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"సర్ఫేస్ అప్‌డేట్‌లను చూపండి"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"పూర్తి విండో ఉపరితలాలు అప్‌డేట్‌ చేయబడినప్పుడు వాటిని ఫ్లాష్ చేయండి"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU వీక్షణ అప్‌డేట్‌లను చూపు"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPUతో డ్రా చేసినప్పుడు విండోల లోపలి వీక్షణలను ఫ్లాష్ చేయి"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"వీక్షణ అప్‌డేట్‌లను చూపు"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"గీసినప్పుడు విండోల లోపల వీక్షణలను ఫ్లాష్ చేయి"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"హార్డ్‌వేర్ లేయర్‌ల అప్‌డేట్‌లను చూపు"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"హార్డ్‌వేర్ లేయర్‌లు అప్‌డేట్‌ చేయబడినప్పుడు వాటిని ఆకుపచ్చ రంగులో ఫ్లాష్ చేయి"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU ఓవర్‌డ్రాను డీబగ్ చేయండి"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"క్లిప్ సరిహద్దులు, అంచులు మొ. చూపు"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"RTL లేఅవుట్ దిశను నిర్భందం చేయండి"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"అన్ని లొకేల్‌ల కోసం RTLకి స్క్రీన్ లేఅవుట్ దిశను నిర్భందించు"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"తప్పనిసరి GPU రెండరింగ్"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2d డ్రాయింగ్ కోసం GPU నిర్భంద వినియోగం"</string>
     <string name="force_msaa" msgid="7920323238677284387">"నిర్భందం 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 యాప్‌లలో 4x MSAAను ప్రారంభించండి"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"దీర్ఘ చతురస్రం కాని క్లిప్ చర్యలను డీబగ్ చేయండి"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"ప్రొఫైల్ GPU రెండరింగ్"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"ప్రొఫైల్ HWUI రెండరింగ్"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU డీబగ్ లేయర్‌లను ప్రారంభించండి"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"డీబగ్ యాప్‌ల కోసం GPU డీబగ్ లేయర్‌లను లోడ్ చేయడాన్ని అనుమతించండి"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"విండో యానిమేషన్ ప్రమాణం"</string>

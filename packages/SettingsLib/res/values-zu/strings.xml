@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Bonisa izmpendulo ebukekayo ngamathebhu"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Buka izibuyekezo ezibonakalayo"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Khanyisa ukubonakala kwalo lonke iwindi uma libuyekezwa"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Buka izibuyekezo ze-GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Ukubuka okukhanyayo phakathi kwamawindi uma kudwetshwe nge-GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Bonisa izibuyekezo zokubuka"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Ukubukwa kwe-flash ngaphakathi kwamawindi uma adwetshiwe"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Bonisa izibuyekezo zezendlalelo izingxenyekazi zekhompyutha"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Izendlalelo zengxenyekazi zekhompyutha eziluhlaza uma zibuyekeza"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Susa iphutha lokukhipha okungaphezulu kwe-GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Bonisa imikhawulo, imiphetho, njll, yesiqeshana."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Phoqelela isikhombisi-ndlela sesakhiwo se-RTL"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Phoqelela isikhombisi-ndlela sesikrini ku-RTL kuzo zonke izifunda"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Phoqa ukunikeza i-GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Phoqelela ukusetshenziswa kwe-GPU ngomdwebo we-2d"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Phoqelela i-4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Nika amandla i-4x MSAA ezinhlelweni zokusebenza ze-OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Susa iphutha ekusebenzeniokungekhona unxantathu kwesiqeshana"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Iphrofayela ye-GPU iyasebenzeka"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Inikezela iphrofayela ye-HWUI"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Nika amandla izendlalelo zokususa amaphutha ze-GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Vumela izendlalelo zokususa amaphutha ze-GPU ngezinhlelo zokusebenza zokususa amaphutha"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Iwindi yesilinganisi sesithombe esinyakazayo"</string>

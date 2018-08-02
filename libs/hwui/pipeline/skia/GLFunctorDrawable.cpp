@@ -18,6 +18,7 @@
 #include <GrContext.h>
 #include <private/hwui/DrawGlInfo.h>
 #include "GlFunctorLifecycleListener.h"
+#include "Properties.h"
 #include "RenderNode.h"
 #include "SkAndroidFrameworkUtils.h"
 #include "SkClipStack.h"
@@ -25,7 +26,6 @@
 #include "GrBackendSurface.h"
 #include "GrRenderTarget.h"
 #include "GrRenderTargetContext.h"
-#include "GrGLTypes.h"
 
 namespace android {
 namespace uirenderer {
@@ -63,15 +63,13 @@ static bool GetFboDetails(SkCanvas* canvas, GLuint* outFboID, SkISize* outFboSiz
         return false;
     }
 
-    GrBackendRenderTarget backendTarget = renderTarget->getBackendRenderTarget();
-    const GrGLFramebufferInfo* fboInfo = backendTarget.getGLFramebufferInfo();
-
-    if (!fboInfo) {
+    GrGLFramebufferInfo fboInfo;
+    if (!renderTarget->getBackendRenderTarget().getGLFramebufferInfo(&fboInfo)) {
         ALOGW("Unable to extract renderTarget info from canvas; aborting GLFunctor draw");
         return false;
     }
 
-    *outFboID = fboInfo->fFBOID;
+    *outFboID = fboInfo.fFBOID;
     *outFboSize = SkISize::Make(renderTargetContext->width(), renderTargetContext->height());
     return true;
 }
@@ -109,14 +107,15 @@ void GLFunctorDrawable::onDraw(SkCanvas* canvas) {
                                                  surfaceInfo);
         tmpSurface->getCanvas()->clear(SK_ColorTRANSPARENT);
 
-        GrBackendObject backendObject;
-        if (!tmpSurface->getRenderTargetHandle(&backendObject, SkSurface::kFlushWrite_BackendHandleAccess)) {
+        GrGLFramebufferInfo fboInfo;
+        if (!tmpSurface->getBackendRenderTarget(SkSurface::kFlushWrite_BackendHandleAccess)
+                .getGLFramebufferInfo(&fboInfo)) {
             ALOGW("Unable to extract renderTarget info from offscreen canvas; aborting GLFunctor");
             return;
         }
 
         fboSize = SkISize::Make(surfaceInfo.width(), surfaceInfo.height());
-        fboID = (GLuint)backendObject;
+        fboID = fboInfo.fFBOID;
 
         // update the matrix and clip that we pass to the WebView to match the coordinates of
         // the offscreen layer

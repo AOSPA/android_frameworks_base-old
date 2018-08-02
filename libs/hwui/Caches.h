@@ -18,17 +18,7 @@
 
 #include "DeviceInfo.h"
 #include "Extensions.h"
-#include "FboCache.h"
-#include "GammaFontRenderer.h"
-#include "GradientCache.h"
-#include "PatchCache.h"
-#include "PathCache.h"
-#include "ProgramCache.h"
-#include "RenderBufferCache.h"
 #include "ResourceCache.h"
-#include "TessellationCache.h"
-#include "TextDropShadowCache.h"
-#include "TextureCache.h"
 #include "renderstate/PixelBufferState.h"
 #include "renderstate/TextureState.h"
 #include "thread/TaskManager.h"
@@ -100,28 +90,10 @@ public:
     void terminate();
 
     /**
-     * Returns a non-premultiplied ARGB color for the specified
-     * amount of overdraw (1 for 1x, 2 for 2x, etc.)
-     */
-    uint32_t getOverdrawColor(uint32_t amount) const;
-
-    /**
      * Call this on each frame to ensure that garbage is deleted from
      * GPU memory.
      */
     void clearGarbage();
-
-    /**
-     * Can be used to delete a layer from a non EGL thread.
-     */
-    void deleteLayerDeferred(Layer* layer);
-
-    /**
-     * Returns the mesh used to draw regions. Calling this method will
-     * bind a VBO of type GL_ELEMENT_ARRAY_BUFFER that contains the
-     * indices for the region mesh.
-     */
-    TextureVertex* getRegionMesh();
 
     /**
      * Returns the GL RGBA internal format to use for the current device
@@ -132,68 +104,30 @@ public:
         return extensions().hasLinearBlending() && needSRGB ? GL_SRGB8_ALPHA8 : GL_RGBA;
     }
 
-    /**
-     * Displays the memory usage of each cache and the total sum.
-     */
-    void dumpMemoryUsage();
-    void dumpMemoryUsage(String8& log);
-
-    // Misc
-    GLint maxTextureSize;
-
 public:
-    TextureCache textureCache;
-    RenderBufferCache renderBufferCache;
-    GradientCache gradientCache;
-    PatchCache patchCache;
-    PathCache pathCache;
-    ProgramCache programCache;
-    TessellationCache tessellationCache;
-    TextDropShadowCache dropShadowCache;
-    FboCache fboCache;
-
-    GammaFontRenderer fontRenderer;
-
     TaskManager tasks;
 
     bool gpuPixelBuffersEnabled;
 
-    // Debug methods
-    PFNGLINSERTEVENTMARKEREXTPROC eventMark;
-    PFNGLPUSHGROUPMARKEREXTPROC startMark;
-    PFNGLPOPGROUPMARKEREXTPROC endMark;
-
-    void setProgram(const ProgramDescription& description);
-    void setProgram(Program* program);
-
     const Extensions& extensions() const { return DeviceInfo::get()->extensions(); }
-    Program& program() { return *mProgram; }
     PixelBufferState& pixelBufferState() { return *mPixelBufferState; }
     TextureState& textureState() { return *mTextureState; }
 
 private:
-    void initExtensions();
-    void initConstraints();
     void initStaticProperties();
 
     static void eventMarkNull(GLsizei length, const GLchar* marker) {}
     static void startMarkNull(GLsizei length, const GLchar* marker) {}
     static void endMarkNull() {}
 
-    RenderState* mRenderState;
-
     // Used to render layers
     std::unique_ptr<TextureVertex[]> mRegionMesh;
-
-    mutable Mutex mGarbageLock;
-    std::vector<Layer*> mLayerGarbage;
 
     bool mInitialized;
 
     // TODO: move below to RenderState
     PixelBufferState* mPixelBufferState = nullptr;
     TextureState* mTextureState = nullptr;
-    Program* mProgram = nullptr;  // note: object owned by ProgramCache
 
 };  // class Caches
 

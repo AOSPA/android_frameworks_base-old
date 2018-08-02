@@ -114,7 +114,6 @@ public class AppOpsManager {
      * returned from {@link #checkOp}, {@link #noteOp}, {@link #startOp}; rather, when this
      * mode is set, these functions will return {@link #MODE_ALLOWED} when the app being
      * checked is currently in the foreground, otherwise {@link #MODE_IGNORED}.
-     * @hide
      */
     public static final int MODE_FOREGROUND = 4;
 
@@ -122,7 +121,6 @@ public class AppOpsManager {
      * Flag for {@link #startWatchingMode(String, String, int, OnOpChangedListener)}:
      * Also get reports if the foreground state of an op's uid changes.  This only works
      * when watching a particular op, not when watching a package.
-     * @hide
      */
     public static final int WATCH_FOREGROUND_CHANGES = 1 << 0;
 
@@ -352,8 +350,10 @@ public class AppOpsManager {
     public static final int OP_START_FOREGROUND = 76;
     /** @hide */
     public static final int OP_BLUETOOTH_SCAN = 77;
+    /** @hide Use the face authentication API. */
+    public static final int OP_USE_FACE = 78;
     /** @hide */
-    public static final int _NUM_OP = 78;
+    public static final int _NUM_OP = 79;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -598,6 +598,9 @@ public class AppOpsManager {
     /** @hide */
     public static final String OPSTR_BLUETOOTH_SCAN = "android:bluetooth_scan";
 
+    /** @hide Use the face authentication API. */
+    public static final String OPSTR_USE_FACE = "android:use_face";
+
     // Warning: If an permission is added here it also has to be added to
     // com.android.packageinstaller.permission.utils.EventLogger
     private static final int[] RUNTIME_AND_APPOP_PERMISSIONS_OPS = {
@@ -735,6 +738,7 @@ public class AppOpsManager {
             OP_MANAGE_IPSEC_TUNNELS,            // MANAGE_IPSEC_HANDOVERS
             OP_START_FOREGROUND,                // START_FOREGROUND
             OP_COARSE_LOCATION,                 // BLUETOOTH_SCAN
+            OP_USE_FACE,                        // FACE
     };
 
     /**
@@ -819,6 +823,7 @@ public class AppOpsManager {
             OPSTR_MANAGE_IPSEC_TUNNELS,
             OPSTR_START_FOREGROUND,
             OPSTR_BLUETOOTH_SCAN,
+            OPSTR_USE_FACE,
     };
 
     /**
@@ -904,6 +909,7 @@ public class AppOpsManager {
             "MANAGE_IPSEC_TUNNELS",
             "START_FOREGROUND",
             "BLUETOOTH_SCAN",
+            "USE_FACE",
     };
 
     /**
@@ -989,6 +995,7 @@ public class AppOpsManager {
             null, // no permission for OP_MANAGE_IPSEC_TUNNELS
             Manifest.permission.FOREGROUND_SERVICE,
             null, // no permission for OP_BLUETOOTH_SCAN
+            Manifest.permission.USE_BIOMETRIC,
     };
 
     /**
@@ -1075,6 +1082,7 @@ public class AppOpsManager {
             null, // MANAGE_IPSEC_TUNNELS
             null, // START_FOREGROUND
             null, // maybe should be UserManager.DISALLOW_SHARE_LOCATION, //BLUETOOTH_SCAN
+            null, // USE_FACE
     };
 
     /**
@@ -1160,6 +1168,7 @@ public class AppOpsManager {
             false, // MANAGE_IPSEC_HANDOVERS
             false, // START_FOREGROUND
             true, // BLUETOOTH_SCAN
+            false, // USE_FACE
     };
 
     /**
@@ -1244,6 +1253,7 @@ public class AppOpsManager {
             AppOpsManager.MODE_ERRORED,  // MANAGE_IPSEC_TUNNELS
             AppOpsManager.MODE_ALLOWED,  // OP_START_FOREGROUND
             AppOpsManager.MODE_ALLOWED,  // OP_BLUETOOTH_SCAN
+            AppOpsManager.MODE_ALLOWED,  // USE_FACE
     };
 
     /**
@@ -1332,6 +1342,7 @@ public class AppOpsManager {
             false, // MANAGE_IPSEC_TUNNELS
             false, // START_FOREGROUND
             false, // BLUETOOTH_SCAN
+            false, // USE_FACE
     };
 
     /**
@@ -1422,6 +1433,7 @@ public class AppOpsManager {
      * Retrieve the permission associated with an operation, or null if there is not one.
      * @hide
      */
+    @TestApi
     public static String opToPermission(int op) {
         return sOpPerms[op];
     }
@@ -1440,6 +1452,7 @@ public class AppOpsManager {
      * to the corresponding app op.
      * @hide
      */
+    @TestApi
     public static int permissionToOpCode(String permission) {
         Integer boxedOpCode = sPermToOp.get(permission);
         return boxedOpCode != null ? boxedOpCode : OP_NONE;
@@ -1485,11 +1498,15 @@ public class AppOpsManager {
      * Class holding all of the operation information associated with an app.
      * @hide
      */
-    public static class PackageOps implements Parcelable {
+    @SystemApi
+    public static final class PackageOps implements Parcelable {
         private final String mPackageName;
         private final int mUid;
         private final List<OpEntry> mEntries;
 
+        /**
+         * @hide
+         */
         public PackageOps(String packageName, int uid, List<OpEntry> entries) {
             mPackageName = packageName;
             mUid = uid;
@@ -1548,7 +1565,8 @@ public class AppOpsManager {
      * Class holding the information about one unique operation of an application.
      * @hide
      */
-    public static class OpEntry implements Parcelable {
+    @SystemApi
+    public static final class OpEntry implements Parcelable {
         private final int mOp;
         private final int mMode;
         private final long[] mTimes;
@@ -1558,6 +1576,9 @@ public class AppOpsManager {
         private final boolean mRunning;
         private final String mProxyPackageName;
 
+        /**
+         * @hide
+         */
         public OpEntry(int op, int mode, long time, long rejectTime, int duration,
                 int proxyUid, String proxyPackage) {
             mOp = op;
@@ -1572,6 +1593,9 @@ public class AppOpsManager {
             mProxyPackageName = proxyPackage;
         }
 
+        /**
+         * @hide
+         */
         public OpEntry(int op, int mode, long[] times, long[] rejectTimes, int duration,
                 boolean running, int proxyUid, String proxyPackage) {
             mOp = op;
@@ -1586,55 +1610,104 @@ public class AppOpsManager {
             mProxyPackageName = proxyPackage;
         }
 
+        /**
+         * @hide
+         */
         public OpEntry(int op, int mode, long[] times, long[] rejectTimes, int duration,
                 int proxyUid, String proxyPackage) {
             this(op, mode, times, rejectTimes, duration, duration == -1, proxyUid, proxyPackage);
         }
 
+        /**
+         * @hide
+         */
         public int getOp() {
             return mOp;
         }
 
+        /**
+         * Return this entry's op string name, such as {@link #OPSTR_COARSE_LOCATION}.
+         */
+        public String getOpStr() {
+            return sOpToString[mOp];
+        }
+
+        /**
+         * Return this entry's current mode, such as {@link #MODE_ALLOWED}.
+         */
         public int getMode() {
             return mMode;
         }
 
+        /**
+         * @hide
+         */
         public long getTime() {
             return maxTime(mTimes, 0, _NUM_UID_STATE);
         }
 
+        /**
+         * Return the last wall clock time this op was accessed by the app.
+         */
         public long getLastAccessTime() {
             return maxTime(mTimes, 0, _NUM_UID_STATE);
         }
 
+        /**
+         * Return the last wall clock time this op was accessed by the app while in the foreground.
+         */
         public long getLastAccessForegroundTime() {
             return maxTime(mTimes, UID_STATE_PERSISTENT, UID_STATE_LAST_NON_RESTRICTED + 1);
         }
 
+        /**
+         * Return the last wall clock time this op was accessed by the app while in the background.
+         */
         public long getLastAccessBackgroundTime() {
             return maxTime(mTimes, UID_STATE_LAST_NON_RESTRICTED + 1, _NUM_UID_STATE);
         }
 
+        /**
+         * @hide
+         */
         public long getLastTimeFor(int uidState) {
             return mTimes[uidState];
         }
 
+        /**
+         * @hide
+         */
         public long getRejectTime() {
             return maxTime(mRejectTimes, 0, _NUM_UID_STATE);
         }
 
+        /**
+         * Return the last wall clock time the app made an attempt to access this op but
+         * was rejected.
+         */
         public long getLastRejectTime() {
             return maxTime(mRejectTimes, 0, _NUM_UID_STATE);
         }
 
+        /**
+         * Return the last wall clock time the app made an attempt to access this op while in
+         * the foreground but was rejected.
+         */
         public long getLastRejectForegroundTime() {
             return maxTime(mRejectTimes, UID_STATE_PERSISTENT, UID_STATE_LAST_NON_RESTRICTED + 1);
         }
 
+        /**
+         * Return the last wall clock time the app made an attempt to access this op while in
+         * the background but was rejected.
+         */
         public long getLastRejectBackgroundTime() {
             return maxTime(mRejectTimes, UID_STATE_LAST_NON_RESTRICTED + 1, _NUM_UID_STATE);
         }
 
+        /**
+         * @hide
+         */
         public long getLastRejectTimeFor(int uidState) {
             return mRejectTimes[uidState];
         }
@@ -1757,6 +1830,7 @@ public class AppOpsManager {
      * @param ops The set of operations you are interested in, or null if you want all of them.
      * @hide
      */
+    @SystemApi
     @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS)
     public List<AppOpsManager.PackageOps> getOpsForPackage(int uid, String packageName, int[] ops) {
         try {
@@ -1929,7 +2003,6 @@ public class AppOpsManager {
      * @param packageName The name of the application to monitor.
      * @param flags Option flags: any combination of {@link #WATCH_FOREGROUND_CHANGES} or 0.
      * @param callback Where to report changes.
-     * @hide
      */
     public void startWatchingMode(String op, String packageName, int flags,
             final OnOpChangedListener callback) {
@@ -2088,6 +2161,7 @@ public class AppOpsManager {
     /**
      * {@hide}
      */
+    @TestApi
     public static int strOpToOp(String op) {
         Integer val = sOpStrToOp.get(op);
         if (val == null) {
@@ -2123,6 +2197,14 @@ public class AppOpsManager {
      * causing the app to crash).
      * @throws SecurityException If the app has been configured to crash on this op.
      */
+    public int unsafeCheckOp(String op, int uid, String packageName) {
+        return checkOp(strOpToOp(op), uid, packageName);
+    }
+
+    /**
+     * @deprecated Renamed to {@link #unsafeCheckOp(String, int, String)}.
+     */
+    @Deprecated
     public int checkOp(String op, int uid, String packageName) {
         return checkOp(strOpToOp(op), uid, packageName);
     }
@@ -2131,6 +2213,14 @@ public class AppOpsManager {
      * Like {@link #checkOp} but instead of throwing a {@link SecurityException} it
      * returns {@link #MODE_ERRORED}.
      */
+    public int unsafeCheckOpNoThrow(String op, int uid, String packageName) {
+        return checkOpNoThrow(strOpToOp(op), uid, packageName);
+    }
+
+    /**
+     * @deprecated Renamed to {@link #unsafeCheckOpNoThrow(String, int, String)}.
+     */
+    @Deprecated
     public int checkOpNoThrow(String op, int uid, String packageName) {
         return checkOpNoThrow(strOpToOp(op), uid, packageName);
     }
@@ -2138,7 +2228,6 @@ public class AppOpsManager {
     /**
      * Like {@link #checkOp} but returns the <em>raw</em> mode associated with the op.
      * Does not throw a security exception, does not translate {@link #MODE_FOREGROUND}.
-     * @hide
      */
     public int unsafeCheckOpRaw(String op, int uid, String packageName) {
         try {
@@ -2398,7 +2487,7 @@ public class AppOpsManager {
      */
     public int noteProxyOpNoThrow(int op, String proxiedPackageName) {
         try {
-            return mService.noteProxyOperation(op, mContext.getOpPackageName(),
+            return mService.noteProxyOperation(op, Process.myUid(), mContext.getOpPackageName(),
                     Binder.getCallingUid(), proxiedPackageName);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -2575,6 +2664,16 @@ public class AppOpsManager {
     @TestApi
     public static String[] getOpStrs() {
         return Arrays.copyOf(sOpToString, sOpToString.length);
+    }
+
+
+    /**
+     * @return number of App ops
+     * @hide
+     */
+    @TestApi
+    public static int getNumOps() {
+        return _NUM_OP;
     }
 
     /**

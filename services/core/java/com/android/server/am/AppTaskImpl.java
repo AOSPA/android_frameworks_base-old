@@ -20,7 +20,6 @@ import static com.android.server.am.ActivityStackSupervisor.MATCH_TASK_IN_STACKS
 import static com.android.server.am.ActivityStackSupervisor.REMOVE_FROM_RECENTS;
 
 import android.app.ActivityManager;
-import android.app.ActivityOptions;
 import android.app.IAppTask;
 import android.app.IApplicationThread;
 import android.content.Intent;
@@ -35,12 +34,12 @@ import android.os.UserHandle;
  * only the process that calls getAppTasks() can call the AppTask methods.
  */
 class AppTaskImpl extends IAppTask.Stub {
-    private ActivityManagerService mService;
+    private ActivityTaskManagerService mService;
 
     private int mTaskId;
     private int mCallingUid;
 
-    public AppTaskImpl(ActivityManagerService service, int taskId, int callingUid) {
+    public AppTaskImpl(ActivityTaskManagerService service, int taskId, int callingUid) {
         mService = service;
         mTaskId = taskId;
         mCallingUid = callingUid;
@@ -57,7 +56,7 @@ class AppTaskImpl extends IAppTask.Stub {
     public void finishAndRemoveTask() {
         checkCaller();
 
-        synchronized (mService) {
+        synchronized (mService.mGlobalLock) {
             long origId = Binder.clearCallingIdentity();
             try {
                 // We remove the task from recents to preserve backwards
@@ -75,7 +74,7 @@ class AppTaskImpl extends IAppTask.Stub {
     public ActivityManager.RecentTaskInfo getTaskInfo() {
         checkCaller();
 
-        synchronized (mService) {
+        synchronized (mService.mGlobalLock) {
             long origId = Binder.clearCallingIdentity();
             try {
                 TaskRecord tr = mService.mStackSupervisor.anyTaskForIdLocked(mTaskId,
@@ -98,7 +97,7 @@ class AppTaskImpl extends IAppTask.Stub {
         final int callingUid = Binder.getCallingUid();
         final long origId = Binder.clearCallingIdentity();
         try {
-            synchronized (mService) {
+            synchronized (mService.mGlobalLock) {
                 mService.mStackSupervisor.startActivityFromRecents(callingPid, callingUid, mTaskId,
                         null);
             }
@@ -115,7 +114,7 @@ class AppTaskImpl extends IAppTask.Stub {
         int callingUser = UserHandle.getCallingUserId();
         TaskRecord tr;
         IApplicationThread appThread;
-        synchronized (mService) {
+        synchronized (mService.mGlobalLock) {
             tr = mService.mStackSupervisor.anyTaskForIdLocked(mTaskId,
                     MATCH_TASK_IN_STACKS_OR_RECENT_TASKS);
             if (tr == null) {
@@ -141,7 +140,7 @@ class AppTaskImpl extends IAppTask.Stub {
     public void setExcludeFromRecents(boolean exclude) {
         checkCaller();
 
-        synchronized (mService) {
+        synchronized (mService.mGlobalLock) {
             long origId = Binder.clearCallingIdentity();
             try {
                 TaskRecord tr = mService.mStackSupervisor.anyTaskForIdLocked(mTaskId,

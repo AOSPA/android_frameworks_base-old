@@ -17,14 +17,13 @@
 package android.os;
 
 import android.annotation.Nullable;
+import android.annotation.TestApi;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.hardware.vibrator.V1_0.EffectStrength;
 import android.hardware.vibrator.V1_2.Effect;
 import android.net.Uri;
 import android.util.MathUtils;
-
-import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.Arrays;
 
@@ -55,6 +54,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(int)
      * @hide
      */
+    @TestApi
     public static final int EFFECT_CLICK = Effect.CLICK;
 
     /**
@@ -63,6 +63,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(int)
      * @hide
      */
+    @TestApi
     public static final int EFFECT_DOUBLE_CLICK = Effect.DOUBLE_CLICK;
 
     /**
@@ -70,6 +71,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(int)
      * @hide
      */
+    @TestApi
     public static final int EFFECT_TICK = Effect.TICK;
 
     /**
@@ -77,6 +79,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(int)
      * @hide
      */
+    @TestApi
     public static final int EFFECT_THUD = Effect.THUD;
 
     /**
@@ -84,6 +87,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(int)
      * @hide
      */
+    @TestApi
     public static final int EFFECT_POP = Effect.POP;
 
     /**
@@ -91,8 +95,20 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(int)
      * @hide
      */
+    @TestApi
     public static final int EFFECT_HEAVY_CLICK = Effect.HEAVY_CLICK;
 
+    /** {@hide} */
+    @TestApi
+    public static final int EFFECT_STRENGTH_LIGHT = EffectStrength.LIGHT;
+
+    /** {@hide} */
+    @TestApi
+    public static final int EFFECT_STRENGTH_MEDIUM = EffectStrength.MEDIUM;
+
+    /** {@hide} */
+    @TestApi
+    public static final int EFFECT_STRENGTH_STRONG = EffectStrength.STRONG;
 
     /**
      * Ringtone patterns. They may correspond with the device's ringtone audio, or may just be a
@@ -101,7 +117,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @see #get(Uri, Context)
      * @hide
      */
-    @VisibleForTesting
+    @TestApi
     public static final int[] RINGTONES = {
         Effect.RINGTONE_1,
         Effect.RINGTONE_2,
@@ -220,6 +236,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @return The desired effect.
      * @hide
      */
+    @TestApi
     public static VibrationEffect get(int effectId) {
         return get(effectId, true);
     }
@@ -246,6 +263,7 @@ public abstract class VibrationEffect implements Parcelable {
      * @return The desired effect.
      * @hide
      */
+    @TestApi
     public static VibrationEffect get(int effectId, boolean fallback) {
         VibrationEffect effect = new Prebaked(effectId, fallback);
         effect.validate();
@@ -268,6 +286,7 @@ public abstract class VibrationEffect implements Parcelable {
      *
      * @hide
      */
+    @TestApi
     @Nullable
     public static VibrationEffect get(Uri uri, Context context) {
         String[] uris = context.getResources().getStringArray(
@@ -305,6 +324,7 @@ public abstract class VibrationEffect implements Parcelable {
      *
      * @hide
      */
+    @TestApi
     public abstract long getDuration();
 
     /**
@@ -313,12 +333,14 @@ public abstract class VibrationEffect implements Parcelable {
      * This assumes that the previous value was in the range [0, MAX_AMPLITUDE]
      * @hide
      */
+    @TestApi
     protected static int scale(int amplitude, float gamma, int maxAmplitude) {
         float val = MathUtils.pow(amplitude / (float) MAX_AMPLITUDE, gamma);
         return (int) (val * maxAmplitude);
     }
 
     /** @hide */
+    @TestApi
     public static class OneShot extends VibrationEffect implements Parcelable {
         private final long mDuration;
         private final int mAmplitude;
@@ -346,11 +368,17 @@ public abstract class VibrationEffect implements Parcelable {
          * Scale the amplitude of this effect.
          *
          * @param gamma the gamma adjustment to apply
-         * @param maxAmplitude the new maximum amplitude of the effect
+         * @param maxAmplitude the new maximum amplitude of the effect, must be between 0 and
+         *         MAX_AMPLITUDE
+         * @throws IllegalArgumentException if maxAmplitude less than 0 or more than MAX_AMPLITUDE
          *
          * @return A {@link OneShot} effect with the same timing but scaled amplitude.
          */
-        public VibrationEffect scale(float gamma, int maxAmplitude) {
+        public OneShot scale(float gamma, int maxAmplitude) {
+            if (maxAmplitude > MAX_AMPLITUDE || maxAmplitude < 0) {
+                throw new IllegalArgumentException(
+                        "Amplitude is negative or greater than MAX_AMPLITUDE");
+            }
             int newAmplitude = scale(mAmplitude, gamma, maxAmplitude);
             return new OneShot(mDuration, newAmplitude);
         }
@@ -433,6 +461,7 @@ public abstract class VibrationEffect implements Parcelable {
     }
 
     /** @hide */
+    @TestApi
     public static class Waveform extends VibrationEffect implements Parcelable {
         private final long[] mTimings;
         private final int[] mAmplitudes;
@@ -478,12 +507,18 @@ public abstract class VibrationEffect implements Parcelable {
          * Scale the Waveform with the given gamma and new max amplitude.
          *
          * @param gamma the gamma adjustment to apply
-         * @param maxAmplitude the new maximum amplitude of the effect
+         * @param maxAmplitude the new maximum amplitude of the effect, must be between 0 and
+         *         MAX_AMPLITUDE
+         * @throws IllegalArgumentException if maxAmplitude less than 0 or more than MAX_AMPLITUDE
          *
          * @return A {@link Waveform} effect with the same timings and repeat index
          *         but scaled amplitude.
          */
-        public VibrationEffect scale(float gamma, int maxAmplitude) {
+        public Waveform scale(float gamma, int maxAmplitude) {
+            if (maxAmplitude > MAX_AMPLITUDE || maxAmplitude < 0) {
+                throw new IllegalArgumentException(
+                        "Amplitude is negative or greater than MAX_AMPLITUDE");
+            }
             if (gamma == 1.0f && maxAmplitude == MAX_AMPLITUDE) {
                 // Just return a copy of the original if there's no scaling to be done.
                 return new Waveform(mTimings, mAmplitudes, mRepeat);
@@ -614,6 +649,7 @@ public abstract class VibrationEffect implements Parcelable {
     }
 
     /** @hide */
+    @TestApi
     public static class Prebaked extends VibrationEffect implements Parcelable {
         private final int mEffectId;
         private final boolean mFallback;

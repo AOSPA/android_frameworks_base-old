@@ -623,12 +623,6 @@ interface ITelephony {
     void setCellInfoListRate(int rateInMillis);
 
     /**
-     * get default sim
-     * @return sim id
-     */
-    int getDefaultSim();
-
-    /**
      * Opens a logical channel to the ICC card.
      *
      * Input parameters equivalent to TS 27.007 AT+CCHO command.
@@ -821,12 +815,6 @@ interface ITelephony {
     * Returns the IImsConfig associated with the slot and feature specified.
     */
     IImsConfig getImsConfig(int slotId, int feature);
-
-    /**
-     * @return true if the IMS resolver is busy resolving a binding and should not be considered
-     * available, false if the IMS resolver is idle.
-     */
-    boolean isResolvingImsBinding();
 
     /**
     *  @return true if the ImsService to bind to for the slot id specified was set, false otherwise.
@@ -1129,16 +1117,19 @@ interface ITelephony {
     /**
      * Whether the DTMF tone length can be changed.
      *
+     * @param subId The subscription to use.
+     * @param callingPackage The package making the call.
      * @return {@code true} if the DTMF tone length can be changed.
      */
-    boolean canChangeDtmfToneLength();
+    boolean canChangeDtmfToneLength(int subId, String callingPackage);
 
     /**
      * Whether the device is a world phone.
      *
+     * @param callingPackage The package making the call.
      * @return {@code true} if the devices is a world phone.
      */
-    boolean isWorldPhone();
+    boolean isWorldPhone(int subId, String callingPackage);
 
     /**
      * Whether the phone supports TTY mode.
@@ -1204,6 +1195,13 @@ interface ITelephony {
     String getImeiForSlot(int slotIndex, String callingPackage);
 
     /**
+     * Returns the Type Allocation Code from the IMEI for the given slot.
+     *
+     * @param slotIndex - Which slot to retrieve the Type Allocation Code from.
+     */
+    String getTypeAllocationCodeForSlot(int slotIndex);
+
+    /**
      * Returns the MEID for the given slot.
      *
      * @param slotIndex - device slot.
@@ -1212,6 +1210,13 @@ interface ITelephony {
      *   {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      */
     String getMeidForSlot(int slotIndex, String callingPackage);
+
+    /**
+     * Returns the Manufacturer Code from the MEID for the given slot.
+     *
+     * @param slotIndex - Which slot to retrieve the Manufacturer Code from.
+     */
+    String getManufacturerCodeForSlot(int slotIndex);
 
     /**
      * Returns the device software version.

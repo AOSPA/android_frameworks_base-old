@@ -19,7 +19,6 @@ package android.text.util;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.UiThread;
 import android.content.Context;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.TelephonyManager;
@@ -30,17 +29,13 @@ import android.text.method.LinkMovementMethod;
 import android.text.method.MovementMethod;
 import android.text.style.URLSpan;
 import android.util.Patterns;
-import android.view.textclassifier.TextClassifier;
-import android.view.textclassifier.TextLinks;
-import android.view.textclassifier.TextLinks.TextLinkSpan;
-import android.view.textclassifier.TextLinksParams;
 import android.webkit.WebView;
 import android.widget.TextView;
 
 import com.android.i18n.phonenumbers.PhoneNumberMatch;
 import com.android.i18n.phonenumbers.PhoneNumberUtil;
 import com.android.i18n.phonenumbers.PhoneNumberUtil.Leniency;
-import com.android.internal.util.Preconditions;
+import com.android.internal.annotations.GuardedBy;
 
 import libcore.util.EmptyArray;
 
@@ -52,11 +47,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Locale;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Future;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -74,6 +64,10 @@ import java.util.regex.Pattern;
  *  does not have a URL scheme prefix, the supplied scheme will be prepended to
  *  create <code>http://example.com</code> when the clickable URL link is
  *  created.
+ *
+ * @see MatchFilter
+ * @see TransformFilter
+ * @see UrlSpanFactory
  */
 
 public class Linkify {
@@ -229,6 +223,44 @@ public class Linkify {
     }
 
     /**
+     * Factory class to create {@link URLSpan}s. While adding spans to a {@link Spannable},
+     * {@link Linkify} will call {@link UrlSpanFactory#create(String)} function to create a
+     * {@link URLSpan}.
+     *
+     * @see #addLinks(Spannable, int, UrlSpanFactory)
+     * @see #addLinks(Spannable, Pattern, String, String[], MatchFilter, TransformFilter,
+     * UrlSpanFactory)
+     */
+    public static class UrlSpanFactory {
+        private static final Object sInstanceLock = new Object();
+
+        @GuardedBy("sInstanceLock")
+        private static volatile UrlSpanFactory sInstance = null;
+
+        private static synchronized UrlSpanFactory getInstance() {
+            if (sInstance == null) {
+                synchronized (sInstanceLock) {
+                    if (sInstance == null) {
+                        sInstance = new UrlSpanFactory();
+                    }
+                }
+            }
+            return sInstance;
+        }
+
+        /**
+         * Factory function that will called by {@link Linkify} in order to create a
+         * {@link URLSpan}.
+         *
+         * @param url URL found
+         * @return a URLSpan instance
+         */
+        public URLSpan create(final String url) {
+            return new URLSpan(url);
+        }
+    }
+
+    /**
      *  Scans the text of the provided Spannable and turns all occurrences
      *  of the link types indicated in the mask into clickable links.
      *  If the mask is nonzero, it also removes any existing URLSpans
@@ -239,24 +271,55 @@ public class Linkify {
      *  @param mask Mask to define which kinds of links will be searched.
      *
      *  @return True if at least one link is found and applied.
+     *
+     * @see #addLinks(Spannable, int, UrlSpanFactory)
      */
     public static final boolean addLinks(@NonNull Spannable text, @LinkifyMask int mask) {
-        return addLinks(text, mask, null);
+        return addLinks(text, mask, null, null);
     }
 
+    /**
+     *  Scans the text of the provided Spannable and turns all occurrences
+     *  of the link types indicated in the mask into clickable links.
+     *  If the mask is nonzero, it also removes any existing URLSpans
+     *  attached to the Spannable, to avoid problems if you call it
+     *  repeatedly on the same text.
+     *
+     *  @param text Spannable whose text is to be marked-up with links
+     *  @param mask mask to define which kinds of links will be searched
+     *  @param urlSpanFactory factory class used to create {@link URLSpan}s
+     *  @return True if at least one link is found and applied.
+     */
+    public static final boolean addLinks(@NonNull Spannable text, @LinkifyMask int mask,
+            @Nullable UrlSpanFactory urlSpanFactory) {
+        return addLinks(text, mask, null, urlSpanFactory);
+    }
+
+    /**
+     *  Scans the text of the provided Spannable and turns all occurrences of the link types
+     *  indicated in the mask into clickable links. If the mask is nonzero, it also removes any
+     *  existing URLSpans attached to the Spannable, to avoid problems if you call it repeatedly
+     *  on the same text.
+     *
+     * @param text Spannable whose text is to be marked-up with links
+     * @param mask mask to define which kinds of links will be searched
+     * @param context Context to be used while identifying phone numbers
+     * @param urlSpanFactory factory class used to create {@link URLSpan}s
+     * @return true if at least one link is found and applied.
+     */
     private static boolean addLinks(@NonNull Spannable text, @LinkifyMask int mask,
-            @Nullable Context context) {
+            @Nullable Context context, @Nullable UrlSpanFactory urlSpanFactory) {
         if (mask == 0) {
             return false;
         }
 
-        URLSpan[] old = text.getSpans(0, text.length(), URLSpan.class);
+        final URLSpan[] old = text.getSpans(0, text.length(), URLSpan.class);
 
         for (int i = old.length - 1; i >= 0; i--) {
             text.removeSpan(old[i]);
         }
 
-        ArrayList<LinkSpec> links = new ArrayList<LinkSpec>();
+        final ArrayList<LinkSpec> links = new ArrayList<LinkSpec>();
 
         if ((mask & WEB_URLS) != 0) {
             gatherLinks(links, text, Patterns.AUTOLINK_WEB_URL,
@@ -285,7 +348,7 @@ public class Linkify {
         }
 
         for (LinkSpec link: links) {
-            applyLink(link.url, link.start, link.end, text);
+            applyLink(link.url, link.start, link.end, text, urlSpanFactory);
         }
 
         return true;
@@ -301,6 +364,8 @@ public class Linkify {
      *  @param mask Mask to define which kinds of links will be searched.
      *
      *  @return True if at least one link is found and applied.
+     *
+     *  @see #addLinks(Spannable, int, UrlSpanFactory)
      */
     public static final boolean addLinks(@NonNull TextView text, @LinkifyMask int mask) {
         if (mask == 0) {
@@ -310,7 +375,7 @@ public class Linkify {
         final Context context = text.getContext();
         final CharSequence t = text.getText();
         if (t instanceof Spannable) {
-            if (addLinks((Spannable) t, mask, context)) {
+            if (addLinks((Spannable) t, mask, context, null)) {
                 addLinkMovementMethod(text);
                 return true;
             }
@@ -319,7 +384,7 @@ public class Linkify {
         } else {
             SpannableString s = SpannableString.valueOf(t);
 
-            if (addLinks(s, mask, context)) {
+            if (addLinks(s, mask, context, null)) {
                 addLinkMovementMethod(text);
                 text.setText(s);
 
@@ -414,6 +479,8 @@ public class Linkify {
      *  @param pattern      Regex pattern to be used for finding links
      *  @param scheme       URL scheme string (eg <code>http://</code>) to be
      *                      prepended to the links that do not start with this scheme.
+     * @see #addLinks(Spannable, Pattern, String, String[], MatchFilter, TransformFilter,
+     * UrlSpanFactory)
      */
     public static final boolean addLinks(@NonNull Spannable text, @NonNull Pattern pattern,
             @Nullable String scheme) {
@@ -434,6 +501,8 @@ public class Linkify {
      * @param transformFilter Filter to allow the client code to update the link found.
      *
      * @return True if at least one link is found and applied.
+     * @see #addLinks(Spannable, Pattern, String, String[], MatchFilter, TransformFilter,
+     * UrlSpanFactory)
      */
     public static final boolean addLinks(@NonNull Spannable spannable, @NonNull Pattern pattern,
             @Nullable String scheme, @Nullable MatchFilter matchFilter,
@@ -457,10 +526,39 @@ public class Linkify {
      * @param transformFilter Filter to allow the client code to update the link found.
      *
      * @return True if at least one link is found and applied.
+     *
+     * @see #addLinks(Spannable, Pattern, String, String[], MatchFilter, TransformFilter,
+     * UrlSpanFactory)
      */
     public static final boolean addLinks(@NonNull Spannable spannable, @NonNull Pattern pattern,
-            @Nullable  String defaultScheme, @Nullable String[] schemes,
+            @Nullable String defaultScheme, @Nullable String[] schemes,
             @Nullable MatchFilter matchFilter, @Nullable TransformFilter transformFilter) {
+        return addLinks(spannable, pattern, defaultScheme, schemes, matchFilter, transformFilter,
+                null);
+    }
+
+    /**
+     * Applies a regex to a Spannable turning the matches into links.
+     *
+     * @param spannable       spannable whose text is to be marked-up with links.
+     * @param pattern         regex pattern to be used for finding links.
+     * @param defaultScheme   the default scheme to be prepended to links if the link does not
+     *                        start with one of the <code>schemes</code> given.
+     * @param schemes         array of schemes (eg <code>http://</code>) to check if the link found
+     *                        contains a scheme. Passing a null or empty value means prepend
+     *                        defaultScheme
+     *                        to all links.
+     * @param matchFilter     the filter that is used to allow the client code additional control
+     *                        over which pattern matches are to be converted into links.
+     * @param transformFilter filter to allow the client code to update the link found.
+     * @param urlSpanFactory  factory class used to create {@link URLSpan}s
+     *
+     * @return True if at least one link is found and applied.
+     */
+    public static final boolean addLinks(@NonNull Spannable spannable, @NonNull Pattern pattern,
+            @Nullable String defaultScheme, @Nullable String[] schemes,
+            @Nullable MatchFilter matchFilter, @Nullable TransformFilter transformFilter,
+            @Nullable UrlSpanFactory urlSpanFactory) {
         final String[] schemesCopy;
         if (defaultScheme == null) defaultScheme = "";
         if (schemes == null || schemes.length < 1) {
@@ -489,7 +587,7 @@ public class Linkify {
             if (allowed) {
                 String url = makeUrl(m.group(0), schemesCopy, m, transformFilter);
 
-                applyLink(url, start, end, spannable);
+                applyLink(url, start, end, spannable, urlSpanFactory);
                 hasMatches = true;
             }
         }
@@ -497,239 +595,12 @@ public class Linkify {
         return hasMatches;
     }
 
-    /**
-     * Scans the text of the provided TextView and turns all occurrences of the entity types
-     * specified by {@code options} into clickable links. If links are found, this method
-     * removes any pre-existing {@link TextLinkSpan} attached to the text (to avoid
-     * problems if you call it repeatedly on the same text) and sets the movement method for the
-     * TextView to LinkMovementMethod.
-     *
-     * <p><strong>Note:</strong> This method returns immediately but generates the links with
-     * the specified classifier on a background thread. The generated links are applied on the
-     * calling thread.
-     *
-     * @param textView TextView whose text is to be marked-up with links
-     * @param params optional parameters to specify how to generate the links
-     *
-     * @return a future that may be used to interrupt or query the background task
-     * @hide
-     */
-    @UiThread
-    public static Future<Void> addLinksAsync(
-            @NonNull TextView textView,
-            @Nullable TextLinksParams params) {
-        return addLinksAsync(textView, params, null /* executor */, null /* callback */);
-    }
-
-    /**
-     * Scans the text of the provided TextView and turns all occurrences of the entity types
-     * specified by {@code options} into clickable links. If links are found, this method
-     * removes any pre-existing {@link TextLinkSpan} attached to the text (to avoid
-     * problems if you call it repeatedly on the same text) and sets the movement method for the
-     * TextView to LinkMovementMethod.
-     *
-     * <p><strong>Note:</strong> This method returns immediately but generates the links with
-     * the specified classifier on a background thread. The generated links are applied on the
-     * calling thread.
-     *
-     * @param textView TextView whose text is to be marked-up with links
-     * @param mask mask to define which kinds of links will be generated
-     *
-     * @return a future that may be used to interrupt or query the background task
-     * @hide
-     */
-    @UiThread
-    public static Future<Void> addLinksAsync(
-            @NonNull TextView textView,
-            @LinkifyMask int mask) {
-        return addLinksAsync(textView, TextLinksParams.fromLinkMask(mask),
-                null /* executor */, null /* callback */);
-    }
-
-    /**
-     * Scans the text of the provided TextView and turns all occurrences of the entity types
-     * specified by {@code options} into clickable links. If links are found, this method
-     * removes any pre-existing {@link TextLinkSpan} attached to the text (to avoid
-     * problems if you call it repeatedly on the same text) and sets the movement method for the
-     * TextView to LinkMovementMethod.
-     *
-     * <p><strong>Note:</strong> This method returns immediately but generates the links with
-     * the specified classifier on a background thread. The generated links are applied on the
-     * calling thread.
-     *
-     * @param textView TextView whose text is to be marked-up with links
-     * @param params optional parameters to specify how to generate the links
-     * @param executor Executor that runs the background task
-     * @param callback Callback that receives the final status of the background task execution
-     *
-     * @return a future that may be used to interrupt or query the background task
-     * @hide
-     */
-    @UiThread
-    public static Future<Void> addLinksAsync(
-            @NonNull TextView textView,
-            @Nullable TextLinksParams params,
-            @Nullable Executor executor,
-            @Nullable Consumer<Integer> callback) {
-        Preconditions.checkNotNull(textView);
-        final CharSequence text = textView.getText();
-        final Spannable spannable = (text instanceof Spannable)
-                ? (Spannable) text : SpannableString.valueOf(text);
-        final Runnable modifyTextView = () -> {
-            addLinkMovementMethod(textView);
-            if (spannable != text) {
-                textView.setText(spannable);
-            }
-        };
-        return addLinksAsync(spannable, textView.getTextClassifier(),
-                params, executor, callback, modifyTextView);
-    }
-
-    /**
-     * Scans the text of the provided TextView and turns all occurrences of the entity types
-     * specified by {@code options} into clickable links. If links are found, this method
-     * removes any pre-existing {@link TextLinkSpan} attached to the text to avoid
-     * problems if you call it repeatedly on the same text.
-     *
-     * <p><strong>Note:</strong> This method returns immediately but generates the links with
-     * the specified classifier on a background thread. The generated links are applied on the
-     * calling thread.
-     *
-     * <p><strong>Note:</strong> If the text is currently attached to a TextView, this method
-     * should be called on the UI thread.
-     *
-     * @param text Spannable whose text is to be marked-up with links
-     * @param classifier the TextClassifier to use to generate the links
-     * @param params optional parameters to specify how to generate the links
-     *
-     * @return a future that may be used to interrupt or query the background task
-     * @hide
-     */
-    public static Future<Void> addLinksAsync(
-            @NonNull Spannable text,
-            @NonNull TextClassifier classifier,
-            @Nullable TextLinksParams params) {
-        return addLinksAsync(text, classifier, params, null /* executor */, null /* callback */);
-    }
-
-    /**
-     * Scans the text of the provided TextView and turns all occurrences of the entity types
-     * specified by the link {@code mask} into clickable links. If links are found, this method
-     * removes any pre-existing {@link TextLinkSpan} attached to the text to avoid
-     * problems if you call it repeatedly on the same text.
-     *
-     * <p><strong>Note:</strong> This method returns immediately but generates the links with
-     * the specified classifier on a background thread. The generated links are applied on the
-     * calling thread.
-     *
-     * <p><strong>Note:</strong> If the text is currently attached to a TextView, this method
-     * should be called on the UI thread.
-     *
-     * @param text Spannable whose text is to be marked-up with links
-     * @param classifier the TextClassifier to use to generate the links
-     * @param mask mask to define which kinds of links will be generated
-     *
-     * @return a future that may be used to interrupt or query the background task
-     * @hide
-     */
-    public static Future<Void> addLinksAsync(
-            @NonNull Spannable text,
-            @NonNull TextClassifier classifier,
-            @LinkifyMask int mask) {
-        return addLinksAsync(text, classifier, TextLinksParams.fromLinkMask(mask),
-                null /* executor */, null /* callback */);
-    }
-
-    /**
-     * Scans the text of the provided TextView and turns all occurrences of the entity types
-     * specified by {@code options} into clickable links. If links are found, this method
-     * removes any pre-existing {@link TextLinkSpan} attached to the text to avoid
-     * problems if you call it repeatedly on the same text.
-     *
-     * <p><strong>Note:</strong> This method returns immediately but generates the links with
-     * the specified classifier on a background thread. The generated links are applied on the
-     * calling thread.
-     *
-     * <p><strong>Note:</strong> If the text is currently attached to a TextView, this method
-     * should be called on the UI thread.
-     *
-     * @param text Spannable whose text is to be marked-up with links
-     * @param classifier the TextClassifier to use to generate the links
-     * @param params optional parameters to specify how to generate the links
-     * @param executor Executor that runs the background task
-     * @param callback Callback that receives the final status of the background task execution
-     *
-     * @return a future that may be used to interrupt or query the background task
-     * @hide
-     */
-    public static Future<Void> addLinksAsync(
-            @NonNull Spannable text,
-            @NonNull TextClassifier classifier,
-            @Nullable TextLinksParams params,
-            @Nullable Executor executor,
-            @Nullable Consumer<Integer> callback) {
-        return addLinksAsync(text, classifier, params, executor, callback,
-                null /* modifyTextView */);
-    }
-
-    private static Future<Void> addLinksAsync(
-            @NonNull Spannable text,
-            @NonNull TextClassifier classifier,
-            @Nullable TextLinksParams params,
-            @Nullable Executor executor,
-            @Nullable Consumer<Integer> callback,
-            @Nullable Runnable modifyTextView) {
-        Preconditions.checkNotNull(text);
-        Preconditions.checkNotNull(classifier);
-
-        // TODO: This is a bug. We shouldnot call getMaxGenerateLinksTextLength() on the UI thread.
-        // The input text may exceed the maximum length the text classifier can handle. In such
-        // cases, we process the text up to the maximum length.
-        final CharSequence truncatedText = text.subSequence(
-                0, Math.min(text.length(), classifier.getMaxGenerateLinksTextLength()));
-
-        final TextClassifier.EntityConfig entityConfig = (params == null)
-                ? null : params.getEntityConfig();
-        final TextLinks.Request request = new TextLinks.Request.Builder(truncatedText)
-                .setLegacyFallback(true)
-                .setEntityConfig(entityConfig)
-                .build();
-        final Supplier<TextLinks> supplier = () -> classifier.generateLinks(request);
-        final Consumer<TextLinks> consumer = links -> {
-            if (links.getLinks().isEmpty()) {
-                if (callback != null) {
-                    callback.accept(TextLinks.STATUS_NO_LINKS_FOUND);
-                }
-                return;
-            }
-
-            // Remove spans only for the part of the text we generated links for.
-            final TextLinkSpan[] old =
-                    text.getSpans(0, truncatedText.length(), TextLinkSpan.class);
-            for (int i = old.length - 1; i >= 0; i--) {
-                text.removeSpan(old[i]);
-            }
-
-            final @TextLinks.Status int result = params.apply(text, links);
-            if (result == TextLinks.STATUS_LINKS_APPLIED) {
-                if (modifyTextView != null) {
-                    modifyTextView.run();
-                }
-            }
-            if (callback != null) {
-                callback.accept(result);
-            }
-        };
-        if (executor == null) {
-            return CompletableFuture.supplyAsync(supplier).thenAccept(consumer);
-        } else {
-            return CompletableFuture.supplyAsync(supplier, executor).thenAccept(consumer);
+    private static void applyLink(String url, int start, int end, Spannable text,
+            @Nullable UrlSpanFactory urlSpanFactory) {
+        if (urlSpanFactory == null) {
+            urlSpanFactory = UrlSpanFactory.getInstance();
         }
-    }
-
-    private static final void applyLink(String url, int start, int end, Spannable text) {
-        URLSpan span = new URLSpan(url);
-
+        final URLSpan span = urlSpanFactory.create(url);
         text.setSpan(span, start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
 

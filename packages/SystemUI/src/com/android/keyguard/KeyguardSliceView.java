@@ -21,8 +21,8 @@ import android.animation.ObjectAnimator;
 import android.animation.PropertyValuesHolder;
 import android.annotation.ColorInt;
 import android.app.PendingIntent;
-import android.arch.lifecycle.LiveData;
-import android.arch.lifecycle.Observer;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.Observer;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
@@ -126,7 +126,8 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
         super.onFinishInflate();
         mTitle = findViewById(R.id.title);
         mRow = findViewById(R.id.row);
-        mTextColor = Utils.getColorAttr(mContext, R.attr.wallpaperTextColor);
+        mTextColor = Utils.getColorAttrDefaultColor(mContext, R.attr.wallpaperTextColor);
+        mIconSize = (int) mContext.getResources().getDimension(R.dimen.widget_icon_size);
     }
 
     @Override
@@ -156,7 +157,7 @@ public class KeyguardSliceView extends LinearLayout implements View.OnClickListe
             return;
         }
 
-        ListContent lc = new ListContent(getContext(), mSlice);
+        ListContent lc = new ListContent(getContext(), mSlice, null, 0, 0);
         mHasHeader = lc.hasHeader();
         List<SliceItem> subItems = new ArrayList<SliceItem>();
         for (int i = 0; i < lc.getRowItems().size(); i++) {

@@ -132,8 +132,8 @@ interface IDevicePolicyManager {
     void reportPasswordChanged(int userId);
     void reportFailedPasswordAttempt(int userHandle);
     void reportSuccessfulPasswordAttempt(int userHandle);
-    void reportFailedFingerprintAttempt(int userHandle);
-    void reportSuccessfulFingerprintAttempt(int userHandle);
+    void reportFailedBiometricAttempt(int userHandle);
+    void reportSuccessfulBiometricAttempt(int userHandle);
     void reportKeyguardDismissed(int userHandle);
     void reportKeyguardSecured(int userHandle);
 
@@ -347,6 +347,7 @@ interface IDevicePolicyManager {
     boolean isSecurityLoggingEnabled(in ComponentName admin);
     ParceledListSlice retrieveSecurityLogs(in ComponentName admin);
     ParceledListSlice retrievePreRebootSecurityLogs(in ComponentName admin);
+    long forceNetworkLogs();
     long forceSecurityLogs();
 
     boolean isUninstallInQueue(String packageName);

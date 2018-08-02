@@ -4,14 +4,14 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.Rect;
-import android.support.annotation.NonNull;
-import android.support.v4.util.ArrayMap;
+import androidx.annotation.NonNull;
+import androidx.collection.ArrayMap;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.FrameLayout;
 
 import com.android.internal.statusbar.StatusBarIcon;
-import com.android.internal.util.NotificationColorUtil;
+import com.android.internal.util.ContrastColorUtil;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.ExpandableNotificationRow;
@@ -32,7 +32,7 @@ import java.util.function.Function;
  * normally reserved for notifications.
  */
 public class NotificationIconAreaController implements DarkReceiver {
-    private final NotificationColorUtil mNotificationColorUtil;
+    private final ContrastColorUtil mContrastColorUtil;
     private final NotificationEntryManager mEntryManager;
     private final Runnable mUpdateStatusBarIcons = this::updateStatusBarIcons;
 
@@ -47,10 +47,12 @@ public class NotificationIconAreaController implements DarkReceiver {
     private final Rect mTintArea = new Rect();
     private NotificationStackScrollLayout mNotificationScrollLayout;
     private Context mContext;
+    private boolean mFullyDark;
+    private boolean mHasShelfIconsWhenFullyDark;
 
     public NotificationIconAreaController(Context context, StatusBar statusBar) {
         mStatusBar = statusBar;
-        mNotificationColorUtil = NotificationColorUtil.getInstance(context);
+        mContrastColorUtil = ContrastColorUtil.getInstance(context);
         mContext = context;
         mEntryManager = Dependency.get(NotificationEntryManager.class);
 
@@ -173,11 +175,38 @@ public class NotificationIconAreaController implements DarkReceiver {
     public void updateNotificationIcons() {
 
         updateStatusBarIcons();
-        updateIconsForLayout(entry -> entry.expandedIcon, mShelfIcons,
-                NotificationShelf.SHOW_AMBIENT_ICONS, false /* hideDismissed */,
-                false /* hideRepliedMessages */);
+        updateShelfIcons();
+        updateHasShelfIconsWhenFullyDark();
 
         applyNotificationIconsTint();
+    }
+
+    private void updateHasShelfIconsWhenFullyDark() {
+        boolean hasIconsWhenFullyDark = false;
+        for (int i = 0; i < mNotificationScrollLayout.getChildCount(); i++) {
+            View view = mNotificationScrollLayout.getChildAt(i);
+            if (view instanceof ExpandableNotificationRow) {
+                NotificationData.Entry ent = ((ExpandableNotificationRow) view).getEntry();
+                if (shouldShowNotificationIcon(ent,
+                        NotificationShelf.SHOW_AMBIENT_ICONS /* showAmbient */,
+                        false /* hideDismissed */,
+                        true /* hideReplied */)) {
+                    hasIconsWhenFullyDark = true;
+                    break;
+                }
+            }
+        }
+        mHasShelfIconsWhenFullyDark = hasIconsWhenFullyDark;
+    }
+
+    public boolean hasShelfIconsWhenFullyDark() {
+        return mHasShelfIconsWhenFullyDark;
+    }
+
+    private void updateShelfIcons() {
+        updateIconsForLayout(entry -> entry.expandedIcon, mShelfIcons,
+                NotificationShelf.SHOW_AMBIENT_ICONS, false /* hideDismissed */,
+                mFullyDark /* hideRepliedMessages */);
     }
 
     public void updateStatusBarIcons() {
@@ -312,12 +341,17 @@ public class NotificationIconAreaController implements DarkReceiver {
     private void updateTintForIcon(StatusBarIconView v) {
         boolean isPreL = Boolean.TRUE.equals(v.getTag(R.id.icon_is_pre_L));
         int color = StatusBarIconView.NO_COLOR;
-        boolean colorize = !isPreL || NotificationUtils.isGrayscale(v, mNotificationColorUtil);
+        boolean colorize = !isPreL || NotificationUtils.isGrayscale(v, mContrastColorUtil);
         if (colorize) {
             color = DarkIconDispatcher.getTint(mTintArea, v, mIconTint);
         }
         v.setStaticDrawableColor(color);
         v.setDecorColor(mIconTint);
+    }
+
+    public void setFullyDark(boolean fullyDark) {
+        mFullyDark = fullyDark;
+        updateShelfIcons();
     }
 
     public void setDark(boolean dark) {

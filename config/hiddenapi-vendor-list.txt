@@ -13,10 +13,6 @@ Landroid/app/ActivityView;->startActivity(Landroid/app/PendingIntent;)V
 Landroid/app/ActivityView;->startActivity(Landroid/content/Intent;)V
 Landroid/app/AppOpsManager$OpEntry;->getOp()I
 Landroid/app/AppOpsManager$OpEntry;->getTime()J
-Landroid/app/AppOpsManager$OpEntry;->isRunning()Z
-Landroid/app/AppOpsManager$PackageOps;->getOps()Ljava/util/List;
-Landroid/app/AppOpsManager$PackageOps;->getPackageName()Ljava/lang/String;
-Landroid/app/AppOpsManager$PackageOps;->getUid()I
 Landroid/app/AppOpsManager;->getPackagesForOps([I)Ljava/util/List;
 Landroid/app/AppOpsManager;->getToken(Lcom/android/internal/app/IAppOpsService;)Landroid/os/IBinder;
 Landroid/app/IActivityController$Stub;-><init>()V
@@ -58,8 +54,6 @@ Landroid/app/TaskStackListener;->onTaskProfileLocked(II)V
 Landroid/app/TaskStackListener;->onTaskRemoved(I)V
 Landroid/app/TaskStackListener;->onTaskSnapshotChanged(ILandroid/app/ActivityManager$TaskSnapshot;)V
 Landroid/app/TaskStackListener;->onTaskStackChanged()V
-Landroid/app/VrStateCallback;-><init>()V
-Landroid/app/VrStateCallback;->onPersistentVrStateChanged(Z)V
 Landroid/app/WallpaperColors;-><init>(Landroid/graphics/Color;Landroid/graphics/Color;Landroid/graphics/Color;I)V
 Landroid/bluetooth/BluetoothHeadset;->phoneStateChanged(IIILjava/lang/String;I)V
 Landroid/bluetooth/IBluetooth;->sendConnectionStateChange(Landroid/bluetooth/BluetoothDevice;III)V
@@ -82,7 +76,6 @@ Landroid/content/ContentProvider;->getIContentProvider()Landroid/content/IConten
 Landroid/content/ContentResolver;->registerContentObserver(Landroid/net/Uri;ZLandroid/database/ContentObserver;I)V
 Landroid/content/ContentValues;->getStringArrayList(Ljava/lang/String;)Ljava/util/ArrayList;
 Landroid/content/ContentValues;->putStringArrayList(Ljava/lang/String;Ljava/util/ArrayList;)V
-Landroid/content/Context;->getOpPackageName()Ljava/lang/String;
 Landroid/content/Context;->registerReceiverAsUser(Landroid/content/BroadcastReceiver;Landroid/os/UserHandle;Landroid/content/IntentFilter;Ljava/lang/String;Landroid/os/Handler;)Landroid/content/Intent;
 Landroid/content/Context;->startActivityAsUser(Landroid/content/Intent;Landroid/os/UserHandle;)V
 Landroid/content/Context;->startServiceAsUser(Landroid/content/Intent;Landroid/os/UserHandle;)Landroid/content/ComponentName;
@@ -527,7 +520,7 @@ Landroid/view/BatchedInputEventReceiver;-><init>(Landroid/view/InputChannel;Land
 Landroid/view/Choreographer;->getSfInstance()Landroid/view/Choreographer;
 Landroid/view/DisplayListCanvas;->drawRenderNode(Landroid/view/RenderNode;)V
 Landroid/view/IAppTransitionAnimationSpecsFuture$Stub;-><init>()V
-Landroid/view/InputEventReceiver;->onInputEvent(Landroid/view/InputEvent;I)V
+Landroid/view/InputEventReceiver;->onInputEvent(Landroid/view/InputEvent;)V
 Landroid/view/IRecentsAnimationController;->finish(Z)V
 Landroid/view/IRecentsAnimationController;->screenshotTask(I)Landroid/app/ActivityManager$TaskSnapshot;
 Landroid/view/IRecentsAnimationController;->setInputConsumerEnabled(Z)V

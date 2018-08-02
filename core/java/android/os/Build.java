@@ -165,6 +165,11 @@ public class Build {
     public static final String[] SUPPORTED_64_BIT_ABIS =
             getStringList("ro.product.cpu.abilist64", ",");
 
+    /** {@hide} */
+    @TestApi
+    public static boolean is64BitAbi(String abi) {
+        return VMRuntime.is64BitAbi(abi);
+    }
 
     static {
         /*
@@ -197,7 +202,11 @@ public class Build {
         public static final String INCREMENTAL = getString("ro.build.version.incremental");
 
         /**
-         * The user-visible version string.  E.g., "1.0" or "3.4b5".
+         * The user-visible version string.  E.g., "1.0" or "3.4b5" or "bananas".
+         *
+         * This field is an opaque string. Do not assume that its value
+         * has any particular structure or that values of RELEASE from
+         * different releases can be somehow ordered.
          */
         public static final String RELEASE = getString("ro.build.version.release");
 
@@ -227,8 +236,6 @@ public class Build {
          * increase when the hardware manufacturer provides an OTA update.
          * <p>
          * Possible values are defined in {@link Build.VERSION_CODES}.
-         *
-         * @see #FIRST_SDK_INT
          */
         public static final int SDK_INT = SystemProperties.getInt(
                 "ro.build.version.sdk", 0);
@@ -912,6 +919,21 @@ public class Build {
          * </ul>
          */
         public static final int P = 28;
+
+        /**
+         * Q.
+         * <p>
+         * <em>Why? Why, to give you a taste of your future, a preview of things
+         * to come. Con permiso, Capitan. The hall is rented, the orchestra
+         * engaged. It's now time to see if you can dance.</em>
+         */
+        public static final int Q = CUR_DEVELOPMENT;
+
+        /**
+         * Stub for a potential new API level after P.
+         * @hide
+         */
+        public static final int P0 = Q;
     }
 
     /** The type of build, like "user" or "eng". */

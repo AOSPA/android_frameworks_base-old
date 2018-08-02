@@ -19,7 +19,6 @@ package com.android.server.input;
 import android.app.IInputForwarder;
 import android.hardware.input.InputManagerInternal;
 import android.view.InputEvent;
-import android.os.Binder;
 
 import com.android.server.LocalServices;
 
@@ -40,7 +39,7 @@ class InputForwarder extends IInputForwarder.Stub {
 
     @Override
     public boolean forwardEvent(InputEvent event) {
-        return mInputManagerInternal.injectInputEvent(event, mDisplayId,
-                INJECT_INPUT_EVENT_MODE_ASYNC);
+        event.setDisplayId(mDisplayId);
+        return mInputManagerInternal.injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC);
     }
 }

@@ -22,11 +22,13 @@
 #include <androidfw/ResourceTypes.h>
 #include <hwui/Canvas.h>
 #include <hwui/Paint.h>
+#include <hwui/PaintFilter.h>
 #include <hwui/Typeface.h>
 #include <minikin/Layout.h>
+#include <nativehelper/ScopedPrimitiveArray.h>
+#include <nativehelper/ScopedStringChars.h>
 
 #include "Bitmap.h"
-#include "SkDrawFilter.h"
 #include "SkGraphics.h"
 #include "SkRegion.h"
 #include "SkVertices.h"
@@ -487,56 +489,66 @@ static void drawBitmapMesh(JNIEnv* env, jobject, jlong canvasHandle, jobject jbi
                                              colorA.ptr() + colorIndex, paint);
 }
 
-static void drawTextChars(JNIEnv* env, jobject, jlong canvasHandle, jcharArray text,
+static void drawTextChars(JNIEnv* env, jobject, jlong canvasHandle, jcharArray charArray,
                           jint index, jint count, jfloat x, jfloat y, jint bidiFlags,
                           jlong paintHandle) {
     Paint* paint = reinterpret_cast<Paint*>(paintHandle);
     const Typeface* typeface = paint->getAndroidTypeface();
-    jchar* jchars = env->GetCharArrayElements(text, NULL);
-    get_canvas(canvasHandle)->drawText(jchars + index, 0, count, count, x, y,
-            static_cast<minikin::Bidi>(bidiFlags), *paint, typeface, nullptr);
-    env->ReleaseCharArrayElements(text, jchars, JNI_ABORT);
+    ScopedCharArrayRO text(env, charArray);
+    get_canvas(canvasHandle)->drawText(
+            text.get(), text.size(),  // text buffer
+            index, count,  // draw range
+            0, text.size(),  // context range
+            x, y,  // draw position
+            static_cast<minikin::Bidi>(bidiFlags), *paint, typeface, nullptr /* measured text */);
 }
 
-static void drawTextString(JNIEnv* env, jobject, jlong canvasHandle, jstring text,
+static void drawTextString(JNIEnv* env, jobject, jlong canvasHandle, jstring strObj,
                            jint start, jint end, jfloat x, jfloat y, jint bidiFlags,
                            jlong paintHandle) {
+    ScopedStringChars text(env, strObj);
     Paint* paint = reinterpret_cast<Paint*>(paintHandle);
     const Typeface* typeface = paint->getAndroidTypeface();
-    const int count = end - start;
-    const jchar* jchars = env->GetStringChars(text, NULL);
-    get_canvas(canvasHandle)->drawText(jchars + start, 0, count, count, x, y,
-            static_cast<minikin::Bidi>(bidiFlags), *paint, typeface, nullptr);
-    env->ReleaseStringChars(text, jchars);
+    get_canvas(canvasHandle)->drawText(
+            text.get(), text.size(),  // text buffer
+            start, end - start,  // draw range
+            0, text.size(),  // context range
+            x, y,  // draw position
+            static_cast<minikin::Bidi>(bidiFlags), *paint, typeface, nullptr /* measured text */);
 }
 
-static void drawTextRunChars(JNIEnv* env, jobject, jlong canvasHandle, jcharArray text, jint index,
-                             jint count, jint contextIndex, jint contextCount, jfloat x, jfloat y,
-                             jboolean isRtl, jlong paintHandle, jlong mtHandle) {
-    Paint* paint = reinterpret_cast<Paint*>(paintHandle);
+static void drawTextRunChars(JNIEnv* env, jobject, jlong canvasHandle, jcharArray charArray,
+                             jint index, jint count, jint contextIndex, jint contextCount,
+                             jfloat x, jfloat y, jboolean isRtl, jlong paintHandle,
+                             jlong mtHandle) {
     minikin::MeasuredText* mt = reinterpret_cast<minikin::MeasuredText*>(mtHandle);
-    const Typeface* typeface = paint->getAndroidTypeface();
-
     const minikin::Bidi bidiFlags = isRtl ? minikin::Bidi::FORCE_RTL : minikin::Bidi::FORCE_LTR;
-    jchar* jchars = env->GetCharArrayElements(text, NULL);
-    get_canvas(canvasHandle)->drawText(jchars + contextIndex, index - contextIndex, count,
-                                       contextCount, x, y, bidiFlags, *paint, typeface, mt);
-    env->ReleaseCharArrayElements(text, jchars, JNI_ABORT);
+
+    ScopedCharArrayRO text(env, charArray);
+    Paint* paint = reinterpret_cast<Paint*>(paintHandle);
+    const Typeface* typeface = paint->getAndroidTypeface();
+    get_canvas(canvasHandle)->drawText(
+            text.get(), text.size(),  // text buffer
+            index, count,  // draw range
+            contextIndex, contextCount,  // context range,
+            x, y,  // draw position
+            bidiFlags, *paint, typeface, mt);
 }
 
-static void drawTextRunString(JNIEnv* env, jobject obj, jlong canvasHandle, jstring text,
+static void drawTextRunString(JNIEnv* env, jobject obj, jlong canvasHandle, jstring strObj,
                               jint start, jint end, jint contextStart, jint contextEnd,
                               jfloat x, jfloat y, jboolean isRtl, jlong paintHandle) {
+    const minikin::Bidi bidiFlags = isRtl ? minikin::Bidi::FORCE_RTL : minikin::Bidi::FORCE_LTR;
+
+    ScopedStringChars text(env, strObj);
     Paint* paint = reinterpret_cast<Paint*>(paintHandle);
     const Typeface* typeface = paint->getAndroidTypeface();
-
-    const minikin::Bidi bidiFlags = isRtl ? minikin::Bidi::FORCE_RTL : minikin::Bidi::FORCE_LTR;
-    jint count = end - start;
-    jint contextCount = contextEnd - contextStart;
-    const jchar* jchars = env->GetStringChars(text, NULL);
-    get_canvas(canvasHandle)->drawText(jchars + contextStart, start - contextStart, count,
-                                       contextCount, x, y, bidiFlags, *paint, typeface, nullptr);
-    env->ReleaseStringChars(text, jchars);
+    get_canvas(canvasHandle)->drawText(
+            text.get(), text.size(),  // text buffer
+            start, end - start,  // draw range
+            contextStart, contextEnd - contextStart,  // context range
+            x, y,  // draw position
+            bidiFlags, *paint, typeface, nullptr /* measured text */);
 }
 
 static void drawTextOnPathChars(JNIEnv* env, jobject, jlong canvasHandle, jcharArray text,
@@ -570,8 +582,9 @@ static void drawTextOnPathString(JNIEnv* env, jobject, jlong canvasHandle, jstri
     env->ReleaseStringChars(text, jchars);
 }
 
-static void setDrawFilter(jlong canvasHandle, jlong filterHandle) {
-    get_canvas(canvasHandle)->setDrawFilter(reinterpret_cast<SkDrawFilter*>(filterHandle));
+static void setPaintFilter(jlong canvasHandle, jlong filterHandle) {
+    PaintFilter* paintFilter = reinterpret_cast<PaintFilter*>(filterHandle);
+    get_canvas(canvasHandle)->setPaintFilter(sk_ref_sp(paintFilter));
 }
 
 static void freeCaches(JNIEnv* env, jobject) {
@@ -621,7 +634,7 @@ static const JNINativeMethod gMethods[] = {
     {"nQuickReject","(JFFFF)Z", (void*)CanvasJNI::quickRejectRect},
     {"nClipRect","(JFFFFI)Z", (void*) CanvasJNI::clipRect},
     {"nClipPath","(JJI)Z", (void*) CanvasJNI::clipPath},
-    {"nSetDrawFilter", "(JJ)V", (void*) CanvasJNI::setDrawFilter},
+    {"nSetDrawFilter", "(JJ)V", (void*) CanvasJNI::setPaintFilter},
 };
 
 // If called from Canvas these are regular JNI

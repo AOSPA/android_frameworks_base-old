@@ -224,8 +224,7 @@
     <string name="bluetooth_select_a2dp_codec_channel_mode" msgid="884855779449390540">"ବ୍ଲୁ-ଟୂଥ୍‍‌ ଅଡିଓ ଚ୍ୟାନେଲ୍‌ ମୋଡ୍"</string>
     <string name="bluetooth_select_a2dp_codec_channel_mode_dialog_title" msgid="7234956835280563341">"ବ୍ଲୁ-ଟୂଥ୍‍ ଅଡିଓ କୋଡେକ୍\nସିଲେକ୍ସନ୍‌କୁ ଗତିଶୀଳ କରନ୍ତୁ: ଚ୍ୟାନେଲ୍ ମୋଡ୍"</string>
     <string name="bluetooth_select_a2dp_codec_ldac_playback_quality" msgid="3619694372407843405">"ବ୍ଲୁ-ଟୂଥ୍‍‌ ଅଡିଓ LDAC କୋଡେକ୍‌: ପ୍ଲେବ୍ୟାକ୍‌ ଗୁଣବତ୍ତା"</string>
-    <!-- no translation found for bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title (6893955536658137179) -->
-    <skip />
+    <string name="bluetooth_select_a2dp_codec_ldac_playback_quality_dialog_title" msgid="6893955536658137179">"ବ୍ଲୁ-ଟୁଥ୍‌ ଅଡିଓ LDAC\nକୋଡେକ୍‌ ଚୟନକୁ ଗତିଶୀଳ କରନ୍ତୁ: ପ୍ଲେବ୍ୟାକ୍‌ କ୍ୱାଲିଟୀ"</string>
     <string name="bluetooth_select_a2dp_codec_streaming_label" msgid="5347862512596240506">"ଷ୍ଟ୍ରିମ୍ କରୁଛି: <xliff:g id="STREAMING_PARAMETER">%1$s</xliff:g>"</string>
     <string name="select_private_dns_configuration_title" msgid="3700456559305263922">"ବ୍ୟକ୍ତିଗତ DNS"</string>
     <string name="select_private_dns_configuration_dialog_title" msgid="9221994415765826811">"ବ୍ୟକ୍ତିଗତ DNS ମୋଡ୍‌ ବାଛନ୍ତୁ"</string>
@@ -286,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"ଟାପ୍ ପାଇଁ ଭିଜୁଆଲ୍ ମତାମତ ଦେଖାନ୍ତୁ"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"ସର୍ଫେସ୍‌ ଅପଡେଟ୍‌ ଦେଖାନ୍ତୁ"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"ସମଗ୍ର ୱିଣ୍ଡୋ ପୃଷ୍ଠ ଅପଡେଟ୍‌ ହେବା ବେଳେ ସେଗୁଡ଼ିକ ଫ୍ଲାସ୍‌ କରନ୍ତୁ"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU ଭ୍ୟୁ ଅପଡେଟ୍‌ ଦେଖନ୍ତୁ"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU ସହ ଅଙ୍କାଯାଇଥିବା ବେଳେ ୱିଣ୍ଡୋ ଭିତରେ ଦୃଶ୍ୟଗୁଡ଼ିକ ଫ୍ଲାଶ କରନ୍ତୁ"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"ଭ୍ୟୁ ଅପଡେଟ୍‌ଗୁଡ଼ିକୁ ଦେଖାନ୍ତୁ"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"ଅଙ୍କାଯିବାବେଳେ ୱିଣ୍ଡୋସ୍ ଭିତରେ ଫ୍ଲାଶ୍ ଭ୍ୟୁ"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"ହାର୍ଡୱେର୍‌ ଲେୟର୍‌ର ଅପଡେଟ୍ ଦେଖାନ୍ତୁ"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"ହାର୍ଡୱେର୍ ଲେୟାର୍ ଅପଡେଟ୍‌ ହେବାବେଳେ ସେଗୁଡ଼ିକୁ ସବୁଜ ରଙ୍ଗରେ ଦେଖାନ୍ତୁ"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU ଓଭର୍‌ଡ୍ର\' ଡିବଗ୍‌ କରନ୍ତୁ"</string>
@@ -301,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"କ୍ଲିପ୍‌ ବାଉଣ୍ଡ, ମାର୍ଜିନ୍‌ ଆଦି ଦେଖନ୍ତୁ"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"RTL ଲେଆଉଟ୍ ଦିଗ ବାଧ୍ୟ କରନ୍ତୁ"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"ସମସ୍ତ ଲୋକେଲ୍‌ ସକାଶେ ସ୍କ୍ରୀନ୍‌ ଲେଆଉଟ୍‌ ଦିଗ RTL ପାଇଁ ବାଧ୍ୟ କରନ୍ତୁ"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPU ରେଣ୍ଡରିଙ୍ଗ ପାଇଁ ବାଧ୍ୟ କରନ୍ତୁ"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2D ଅଙ୍କନ ପାଇଁ GUP ବ୍ୟବହାର ପାଇଁ ବାଧ୍ୟ କରିବା"</string>
     <string name="force_msaa" msgid="7920323238677284387">"4x MSAA ବାଧ୍ୟ କରନ୍ତୁ"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 ଆପ୍‌ରେ 4x MSAA ସକ୍ଷମ କରନ୍ତୁ"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"ଅଣ-ଆୟତାକାର କ୍ଲିପ୍‌ କାର୍ଯ୍ୟକୁ ଡିବଗ୍‌ କରନ୍ତୁ"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"ପ୍ରୋଫାଇଲ୍‌ GPU ରେଣ୍ଡରିଙ୍ଗ"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"ପ୍ରୋଫାଇଲ୍ HWUI ରେଣ୍ଡର୍ ହେଉଛି"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU ଡିବଗ୍‌ ଲେୟର୍‌ ସକ୍ଷମ କରନ୍ତୁ"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"ଡିବଗ୍‌ ଆପ୍‌ଗୁଡ଼ିକ ପାଇଁ GPU ଡିବଗ୍‌ ଲେୟର୍‌ ଲୋଡ୍ କରିବାର ଅନୁମତି ଦିଅନ୍ତୁ"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"ୱିଣ୍ଡୋ ଆନିମେଶନ୍‌ ସ୍କେଲ୍‌"</string>

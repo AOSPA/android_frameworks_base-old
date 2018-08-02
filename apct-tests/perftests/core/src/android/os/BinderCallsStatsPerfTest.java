@@ -45,7 +45,7 @@ public class BinderCallsStatsPerfTest {
 
     @Before
     public void setUp() {
-        mBinderCallsStats = new BinderCallsStats(true);
+        mBinderCallsStats = new BinderCallsStats();
     }
 
     @After
@@ -54,24 +54,25 @@ public class BinderCallsStatsPerfTest {
 
     @Test
     public void timeCallSession() {
+        mBinderCallsStats.setDetailedTracking(true);
         final BenchmarkState state = mPerfStatusReporter.getBenchmarkState();
         Binder b = new Binder();
         int i = 0;
         while (state.keepRunning()) {
             BinderCallsStats.CallSession s = mBinderCallsStats.callStarted(b, i % 100);
-            mBinderCallsStats.callEnded(s);
+            mBinderCallsStats.callEnded(s, 0, 0);
             i++;
         }
     }
 
     @Test
     public void timeCallSessionTrackingDisabled() {
+        mBinderCallsStats.setDetailedTracking(false);
         final BenchmarkState state = mPerfStatusReporter.getBenchmarkState();
         Binder b = new Binder();
-        mBinderCallsStats = new BinderCallsStats(false);
         while (state.keepRunning()) {
             BinderCallsStats.CallSession s = mBinderCallsStats.callStarted(b, 0);
-            mBinderCallsStats.callEnded(s);
+            mBinderCallsStats.callEnded(s, 0, 0);
         }
     }
 

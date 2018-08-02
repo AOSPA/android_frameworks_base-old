@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Ipakita ang visual na feedback para sa mga pag-tap"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Ipakita update sa surface"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"I-flash ang buong window surface kapag nag-update"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Ipakita GPU view update"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"I-flash ang view sa windows kapag ginuhit sa GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Ipakita update ng view"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"I-flash mga view sa loob ng window kapag na-draw"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Ipakita ang mga update ng hardware layers"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"I-flash nang berde ang hardware layer pag nag-update ito"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"I-debug ang GPU overdraw"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Ipakita ang mga hangganan ng clip, margin, atbp."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Ipilit ang RTL na dir. ng layout"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Ipilit ang RTL na direksyon ng screen layout sa lahat ng lokal"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Ipilit ang pag-render ng GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Sapilitang paggamit sa GPU para sa 2d na pagguhit"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Puwersahin ang 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Paganahin ang 4x MSAA sa OpenGL ES 2.0 na apps"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"I-debug ang di-parihabang mga clip operation"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Pag-render ng Profile GPU"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Rendering ng Profile HWUI"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"I-enable ang GPU debug layer"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Payagang i-load ang GPU debug layer sa debug app"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Scale ng window animation"</string>

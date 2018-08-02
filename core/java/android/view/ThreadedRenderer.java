@@ -793,14 +793,10 @@ public final class ThreadedRenderer {
      */
     void draw(View view, AttachInfo attachInfo, DrawCallbacks callbacks,
             FrameDrawingCallback frameDrawingCallback) {
-        attachInfo.mIgnoreDirtyState = true;
-
         final Choreographer choreographer = attachInfo.mViewRootImpl.mChoreographer;
         choreographer.mFrameInfo.markDrawStart();
 
         updateRootDisplayList(view, callbacks);
-
-        attachInfo.mIgnoreDirtyState = false;
 
         // register animating rendernodes which started animating prior to renderer
         // creation, which is typical for animators started prior to first draw
@@ -854,7 +850,9 @@ public final class ThreadedRenderer {
 
 
     void buildLayer(RenderNode node) {
-        nBuildLayer(mNativeProxy, node.getNativeDisplayList());
+        if (node.isValid()) {
+            nBuildLayer(mNativeProxy, node.mNativeRenderNode);
+        }
     }
 
 
@@ -916,10 +914,6 @@ public final class ThreadedRenderer {
                 animator.getAnimatorNativePtr());
     }
 
-    public void serializeDisplayListTree() {
-        nSerializeDisplayListTree(mNativeProxy);
-    }
-
     public static int copySurfaceInto(Surface surface, Rect srcRect, Bitmap bitmap) {
         if (srcRect == null) {
             // Empty rect means entire surface
@@ -936,7 +930,7 @@ public final class ThreadedRenderer {
      * not the RenderNode from a View.
      **/
     public static Bitmap createHardwareBitmap(RenderNode node, int width, int height) {
-        return nCreateHardwareBitmap(node.getNativeDisplayList(), width, height);
+        return nCreateHardwareBitmap(node.mNativeRenderNode, width, height);
     }
 
     /**
@@ -1222,8 +1216,6 @@ public final class ThreadedRenderer {
     private static native void nFence(long nativeProxy);
     private static native void nStopDrawing(long nativeProxy);
     private static native void nNotifyFramePending(long nativeProxy);
-
-    private static native void nSerializeDisplayListTree(long nativeProxy);
 
     private static native void nDumpProfileInfo(long nativeProxy, FileDescriptor fd,
             @DumpFlags int dumpFlags);

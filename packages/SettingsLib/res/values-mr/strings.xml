@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"टॅपसाठी दृश्यमान अभिप्राय दर्शवा"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"पृष्ठभाग अपडेट दर्शवा"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"संपूर्ण विंडो पृष्ठभाग अद्ययावत होतात तेव्हा ते फ्‍लॅश करा"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU दृश्य अपडेट दर्शवा"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU सह रेखांकित करताना विंडोच्या आतील दृश्ये फ्लॅश करा"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"व्‍ह्यू अपडेट दाखवा"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"रेखांकित केल्‍यावर विंडोच्‍या आतील फ्लॅश व्‍ह्यू"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"हार्डवेअर स्तर अपडेट दर्शवा"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"हार्डवेअर स्तर अद्ययावत झाल्यावर ते हिरव्या रंगात फ्लॅश करा"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU ओव्हरड्रॉ डीबग करा"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"क्लिप सीमा, समास इत्यादी दर्शवा."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"RTL लेआउट दिशानिर्देशाची सक्ती करा"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"सर्व लोकॅलसाठी RTL स्क्रीन लेआउट दिशानिर्देशाची सक्ती करा"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPU प्रस्तुतीस सक्ती करा"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2d रेखांकनासाठी GPU च्या वापराची सक्ती करा"</string>
     <string name="force_msaa" msgid="7920323238677284387">"4x MSAA ची सक्ती करा"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 अॅप्समध्ये 4x MSAA सुरू करा"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"आयताकृती नसलेले क्लिप ऑपरेशन डीबग करा"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"प्रोफाईल GPU प्रस्तुती"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"प्रोफाइल HWUI रेंडरिंग"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU डीबग स्तर सुरू करा"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"डीबग अॅप्ससाठी GPU डीबग स्तर लोड करण्याची अनुमती द्या"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"विंडो अॅनिमेशन स्केल"</string>

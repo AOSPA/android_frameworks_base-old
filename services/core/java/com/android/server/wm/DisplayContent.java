@@ -16,7 +16,7 @@
 
 package com.android.server.wm;
 
-import static android.app.ActivityManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
+import static android.app.ActivityTaskManager.SPLIT_SCREEN_CREATE_MODE_TOP_OR_LEFT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
@@ -404,7 +404,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         WindowStateAnimator winAnimator = w.mWinAnimator;
         final AppWindowToken atoken = w.mAppToken;
         if (winAnimator.mDrawState == READY_TO_SHOW) {
-            if (atoken == null || atoken.allDrawn) {
+            if (atoken == null || atoken.canShowWindows()) {
                 if (w.performShowLocked()) {
                     pendingLayoutChanges |= FINISH_LAYOUT_REDO_ANIM;
                     if (DEBUG_LAYOUT_REPEATS) {
@@ -1107,10 +1107,7 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         }
 
         if (rotateSeamlessly) {
-            forAllWindows(w -> {
-                    w.mWinAnimator.seamlesslyRotateWindow(getPendingTransaction(),
-                            oldRotation, rotation);
-            }, true /* traverseTopToBottom */);
+            seamlesslyRotate(getPendingTransaction(), oldRotation, rotation);
         }
 
         mService.mDisplayManagerInternal.performTraversal(getPendingTransaction());
@@ -1252,11 +1249,21 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
                     cutout, mInitialDisplayWidth, mInitialDisplayHeight);
         }
         final boolean rotated = (rotation == ROTATION_90 || rotation == ROTATION_270);
-        final Path bounds = cutout.getBounds().getBoundaryPath();
+        final List<Rect> bounds = WmDisplayCutout.computeSafeInsets(
+                        cutout, mInitialDisplayWidth, mInitialDisplayHeight)
+                .getDisplayCutout().getBoundingRects();
         transformPhysicalToLogicalCoordinates(rotation, mInitialDisplayWidth, mInitialDisplayHeight,
                 mTmpMatrix);
-        bounds.transform(mTmpMatrix);
-        return WmDisplayCutout.computeSafeInsets(DisplayCutout.fromBounds(bounds),
+        final Region region = Region.obtain();
+        for (int i = 0; i < bounds.size(); i++) {
+            final Rect rect = bounds.get(i);
+            final RectF rectF = new RectF(bounds.get(i));
+            mTmpMatrix.mapRect(rectF);
+            rectF.round(rect);
+            region.op(rect, Op.UNION);
+        }
+
+        return WmDisplayCutout.computeSafeInsets(DisplayCutout.fromBounds(region),
                 rotated ? mInitialDisplayHeight : mInitialDisplayWidth,
                 rotated ? mInitialDisplayWidth : mInitialDisplayHeight);
     }
@@ -1566,6 +1573,11 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
      */
     TaskStack getStack(int windowingMode, int activityType) {
         return mTaskStackContainers.getStack(windowingMode, activityType);
+    }
+
+    @VisibleForTesting
+    WindowList<TaskStack> getStacks() {
+        return mTaskStackContainers.mChildren;
     }
 
     @VisibleForTesting
@@ -2505,11 +2517,12 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
         if (DEBUG_INPUT_METHOD && updateImeTarget) Slog.v(TAG_WM,
                 "Proposed new IME target: " + target);
 
-        // Now, a special case -- if the last target's window is in the process of exiting, and the
-        // new target is home, keep on the last target to avoid flicker. Home is a special case
-        // since its above other stacks in the ordering list, but layed out below the others.
-        if (curTarget != null && curTarget.isDisplayedLw() && curTarget.isClosing()
-                && (target == null || target.isActivityTypeHome())) {
+        // Now, a special case -- if the last target's window is in the process of exiting, but
+        // not removed, and the new target is home, keep on the last target to avoid flicker.
+        // Home is a special case since its above other stacks in the ordering list, but layed
+        // out below the others.
+        if (curTarget != null && !curTarget.mRemoved && curTarget.isDisplayedLw()
+                && curTarget.isClosing() && (target == null || target.isActivityTypeHome())) {
             if (DEBUG_INPUT_METHOD) Slog.v(TAG_WM, "New target is home while current target is "
                     + "closing, not changing");
             return curTarget;
@@ -3425,25 +3438,51 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
          * @return The proper position for the stack.
          */
         private int findPositionForStack(int requestedPosition, TaskStack stack, boolean adding) {
+            if (stack.inPinnedWindowingMode()) {
+                return POSITION_TOP;
+            }
+
             final int topChildPosition = mChildren.size() - 1;
-            boolean toTop = requestedPosition == POSITION_TOP;
-            toTop |= adding ? requestedPosition >= topChildPosition + 1
-                    : requestedPosition >= topChildPosition;
-            int targetPosition = requestedPosition;
-
-            if (toTop && stack.getWindowingMode() != WINDOWING_MODE_PINNED && hasPinnedStack()) {
-                // The pinned stack is always the top most stack (always-on-top) when it is present.
-                TaskStack topStack = mChildren.get(topChildPosition);
-                if (topStack.getWindowingMode() != WINDOWING_MODE_PINNED) {
-                    throw new IllegalStateException("Pinned stack isn't top stack??? " + mChildren);
+            int belowAlwaysOnTopPosition = POSITION_BOTTOM;
+            for (int i = topChildPosition; i >= 0; --i) {
+                if (getStacks().get(i) != stack && !getStacks().get(i).isAlwaysOnTop()) {
+                    belowAlwaysOnTopPosition = i;
+                    break;
                 }
+            }
 
-                // So, stack is moved just below the pinned stack.
-                // When we're adding a new stack the target is the current pinned stack position.
-                // When we're positioning an existing stack the target is the position below pinned
-                // stack, because WindowContainer#positionAt() first removes element and then adds
-                // it to specified place.
-                targetPosition = adding ? topChildPosition : topChildPosition - 1;
+            // The max possible position we can insert the stack at.
+            int maxPosition = POSITION_TOP;
+            // The min possible position we can insert the stack at.
+            int minPosition = POSITION_BOTTOM;
+
+            if (stack.isAlwaysOnTop()) {
+                if (hasPinnedStack()) {
+                    // Always-on-top stacks go below the pinned stack.
+                    maxPosition = getStacks().indexOf(mPinnedStack) - 1;
+                }
+                // Always-on-top stacks need to be above all other stacks.
+                minPosition = belowAlwaysOnTopPosition !=
+                        POSITION_BOTTOM ? belowAlwaysOnTopPosition : topChildPosition;
+            } else {
+                // Other stacks need to be below the always-on-top stacks.
+                maxPosition = belowAlwaysOnTopPosition !=
+                        POSITION_BOTTOM ? belowAlwaysOnTopPosition : topChildPosition;
+            }
+
+            int targetPosition = requestedPosition;
+            targetPosition = Math.min(targetPosition, maxPosition);
+            targetPosition = Math.max(targetPosition, minPosition);
+
+            int prevPosition = getStacks().indexOf(stack);
+            // The positions we calculated above (maxPosition, minPosition) do not take into
+            // consideration the following edge cases.
+            // 1) We need to adjust the position depending on the value "adding".
+            // 2) When we are moving a stack to another position, we also need to adjust the
+            //    position depending on whether the stack is moving to a higher or lower position.
+            if ((targetPosition != requestedPosition) &&
+                    (adding || targetPosition < prevPosition)) {
+                targetPosition++;
             }
 
             return targetPosition;
@@ -3535,8 +3574,9 @@ class DisplayContent extends WindowContainer<DisplayContent.DisplayChildWindowCo
             if (isStackVisible(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY)
                     || isStackVisible(WINDOWING_MODE_FREEFORM)) {
                 // Apps and their containers are not allowed to specify an orientation while the
-                // docked or freeform stack is visible...except for the home stack/task if the
-                // docked stack is minimized and it actually set something.
+                // docked or freeform stack is visible...except for the home stack if the docked
+                // stack is minimized and it actually set something and the bounds is different from
+                // the display.
                 if (mHomeStack != null && mHomeStack.isVisible()
                         && mDividerControllerLocked.isMinimizedDock()
                         // TODO(b/110159357): Work around to unblock the release for failing test

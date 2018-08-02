@@ -39,8 +39,6 @@ namespace android {
 
 // Log debug messages about the dispatch cycle.
 static const bool kDebugDispatchCycle = false;
-// Display id for default(primary) display.
-static const int32_t kDefaultDisplayId = 0;
 
 static struct {
     jclass clazz;
@@ -116,8 +114,8 @@ status_t NativeInputEventSender::sendKeyEvent(uint32_t seq, const KeyEvent* even
 
     uint32_t publishedSeq = mNextPublishedSeq++;
     status_t status = mInputPublisher.publishKeyEvent(publishedSeq,
-            event->getDeviceId(), event->getSource(), event->getAction(), event->getFlags(),
-            event->getKeyCode(), event->getScanCode(), event->getMetaState(),
+            event->getDeviceId(), event->getSource(), event->getDisplayId(), event->getAction(),
+            event->getFlags(), event->getKeyCode(), event->getScanCode(), event->getMetaState(),
             event->getRepeatCount(), event->getDownTime(), event->getEventTime());
     if (status) {
         ALOGW("Failed to send key event on channel '%s'.  status=%d",
@@ -137,8 +135,7 @@ status_t NativeInputEventSender::sendMotionEvent(uint32_t seq, const MotionEvent
     for (size_t i = 0; i <= event->getHistorySize(); i++) {
         publishedSeq = mNextPublishedSeq++;
         status_t status = mInputPublisher.publishMotionEvent(publishedSeq,
-                event->getDeviceId(), event->getSource(),
-                kDefaultDisplayId /* TODO(multi-display): propagate display id */,
+                event->getDeviceId(), event->getSource(), event->getDisplayId(),
                 event->getAction(), event->getActionButton(), event->getFlags(),
                 event->getEdgeFlags(), event->getMetaState(), event->getButtonState(),
                 event->getXOffset(), event->getYOffset(),

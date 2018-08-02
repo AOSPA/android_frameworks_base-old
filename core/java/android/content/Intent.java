@@ -4614,30 +4614,12 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_INITIAL_INTENTS = "android.intent.extra.INITIAL_INTENTS";
 
     /**
-     * A {@link IntentSender} to start after ephemeral installation success.
-     * @deprecated Use {@link #EXTRA_INSTANT_APP_SUCCESS).
-     * @removed
-     * @hide
-     */
-    @Deprecated
-    public static final String EXTRA_EPHEMERAL_SUCCESS = "android.intent.extra.EPHEMERAL_SUCCESS";
-
-    /**
      * A {@link IntentSender} to start after instant app installation success.
      * @hide
      */
     @SystemApi
     public static final String EXTRA_INSTANT_APP_SUCCESS =
             "android.intent.extra.INSTANT_APP_SUCCESS";
-
-    /**
-     * A {@link IntentSender} to start after ephemeral installation failure.
-     * @deprecated Use {@link #EXTRA_INSTANT_APP_FAILURE).
-     * @removed
-     * @hide
-     */
-    @Deprecated
-    public static final String EXTRA_EPHEMERAL_FAILURE = "android.intent.extra.EPHEMERAL_FAILURE";
 
     /**
      * A {@link IntentSender} to start after instant app installation failure.
@@ -4648,30 +4630,12 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.extra.INSTANT_APP_FAILURE";
 
     /**
-     * The host name that triggered an ephemeral resolution.
-     * @deprecated Use {@link #EXTRA_INSTANT_APP_HOSTNAME).
-     * @removed
-     * @hide
-     */
-    @Deprecated
-    public static final String EXTRA_EPHEMERAL_HOSTNAME = "android.intent.extra.EPHEMERAL_HOSTNAME";
-
-    /**
      * The host name that triggered an instant app resolution.
      * @hide
      */
     @SystemApi
     public static final String EXTRA_INSTANT_APP_HOSTNAME =
             "android.intent.extra.INSTANT_APP_HOSTNAME";
-
-    /**
-     * An opaque token to track ephemeral resolution.
-     * @deprecated Use {@link #EXTRA_INSTANT_APP_TOKEN).
-     * @removed
-     * @hide
-     */
-    @Deprecated
-    public static final String EXTRA_EPHEMERAL_TOKEN = "android.intent.extra.EPHEMERAL_TOKEN";
 
     /**
      * An opaque token to track instant app resolution.
@@ -5420,19 +5384,23 @@ public class Intent implements Parcelable, Cloneable {
     public static final int FLAG_GRANT_PREFIX_URI_PERMISSION = 0x00000080;
 
     /**
-     * Internal flag used to indicate that a system component has done their
-     * homework and verified that they correctly handle packages and components
-     * that come and go over time. In particular:
-     * <ul>
-     * <li>Apps installed on external storage, which will appear to be
-     * uninstalled while the the device is ejected.
-     * <li>Apps with encryption unaware components, which will appear to not
-     * exist while the device is locked.
-     * </ul>
-     *
-     * @hide
+     * Flag used to automatically match intents based on their Direct Boot
+     * awareness and the current user state.
+     * <p>
+     * Since the default behavior is to automatically apply the current user
+     * state, this is effectively a sentinel value that doesn't change the
+     * output of any queries based on its presence or absence.
+     * <p>
+     * Instead, this value can be useful in conjunction with
+     * {@link android.os.StrictMode.VmPolicy.Builder#detectImplicitDirectBoot()}
+     * to detect when a caller is relying on implicit automatic matching,
+     * instead of confirming the explicit behavior they want.
      */
-    public static final int FLAG_DEBUG_TRIAGED_MISSING = 0x00000100;
+    public static final int FLAG_DIRECT_BOOT_AUTO = 0x00000100;
+
+    /** {@hide} */
+    @Deprecated
+    public static final int FLAG_DEBUG_TRIAGED_MISSING = FLAG_DIRECT_BOOT_AUTO;
 
     /**
      * Internal flag used to indicate ephemeral applications should not be

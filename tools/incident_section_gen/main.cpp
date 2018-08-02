@@ -110,9 +110,7 @@ static bool generateIncidentSectionsCpp(Descriptor const* descriptor)
     N = descriptor->field_count();
     for (int i=0; i<N; i++) {
         const FieldDescriptor* field = descriptor->field(i);
-        if (field->type() == FieldDescriptor::TYPE_MESSAGE) {
-            sections[field->name()] = field;
-        }
+        sections[field->name()] = field;
     }
 
     printf("IncidentSection const INCIDENT_SECTIONS[] = {\n");
@@ -404,7 +402,7 @@ static bool generateSectionListCpp(Descriptor const* descriptor) {
     for (int i=0; i<descriptor->field_count(); i++) {
         const FieldDescriptor* field = descriptor->field(i);
 
-        if (field->type() != FieldDescriptor::TYPE_MESSAGE) {
+        if (field->type() != FieldDescriptor::TYPE_MESSAGE && field->type() != FieldDescriptor::TYPE_STRING) {
             continue;
         }
         const SectionFlags s = getSectionFlags(field);
@@ -412,8 +410,7 @@ static bool generateSectionListCpp(Descriptor const* descriptor) {
             case SECTION_NONE:
                 continue;
             case SECTION_FILE:
-                printf("    new FileSection(%d, \"%s\", %s),\n", field->number(), s.args().c_str(),
-                       s.device_specific() ? "true" : "false");
+                printf("    new FileSection(%d, \"%s\"),\n", field->number(), s.args().c_str());
                 break;
             case SECTION_COMMAND:
                 printf("    new CommandSection(%d,", field->number());
@@ -457,13 +454,13 @@ static bool generateSectionListCpp(Descriptor const* descriptor) {
         const FieldDescriptor* field = fieldsInOrder[i];
         const string fieldName = getFieldName(field);
         const Destination fieldDest = getFieldDest(field);
-        const string fieldMessageName = getMessageName(field->message_type(), fieldDest);
-
-        skip[i] = true;
-
         if (field->type() != FieldDescriptor::TYPE_MESSAGE) {
+            printPrivacy(fieldName, field, "NULL", fieldDest, "NULL");
             continue;
         }
+
+        skip[i] = true;
+        const string fieldMessageName = getMessageName(field->message_type(), fieldDest);
         // generate privacy flags for each section.
         if (generatePrivacyFlags(field->message_type(), fieldDest, variableNames, &parents)) {
             printPrivacy(fieldName, field, fieldMessageName, fieldDest, "NULL");

@@ -72,9 +72,9 @@ GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric
                                          const int conditionIndex,
                                          const sp<ConditionWizard>& wizard, const int pullTagId,
                                          const int64_t timeBaseNs, const int64_t startTimeNs,
-                                         shared_ptr<StatsPullerManager> statsPullerManager)
+                                         const sp<StatsPullerManager>& pullerManager)
     : MetricProducer(metric.id(), key, timeBaseNs, conditionIndex, wizard),
-      mStatsPullerManager(statsPullerManager),
+      mPullerManager(pullerManager),
       mPullTagId(pullTagId),
       mMinBucketSizeNs(metric.min_bucket_size_nanos()),
       mDimensionSoftLimit(StatsdStats::kAtomDimensionKeySizeLimitMap.find(pullTagId) !=
@@ -101,7 +101,6 @@ GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric
         translateFieldMatcher(metric.gauge_fields_filter().fields(), &mFieldMatchers);
     }
 
-    // TODO: use UidMap if uid->pkg_name is required
     if (metric.has_dimensions_in_what()) {
         translateFieldMatcher(metric.dimensions_in_what(), &mDimensionsInWhat);
         mContainANYPositionInDimensionsInWhat = HasPositionANY(metric.dimensions_in_what());
@@ -127,8 +126,8 @@ GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric
     flushIfNeededLocked(startTimeNs);
     // Kicks off the puller immediately.
     if (mPullTagId != -1 && mSamplingType == GaugeMetric::RANDOM_ONE_SAMPLE) {
-        mStatsPullerManager->RegisterReceiver(
-                mPullTagId, this, getCurrentBucketEndTimeNs(), mBucketSizeNs);
+        mPullerManager->RegisterReceiver(mPullTagId, this, getCurrentBucketEndTimeNs(),
+                                         mBucketSizeNs);
     }
 
     VLOG("Gauge metric %lld created. bucket size %lld start_time: %lld sliced %d",
@@ -136,19 +135,10 @@ GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric
          mConditionSliced);
 }
 
-// for testing
-GaugeMetricProducer::GaugeMetricProducer(const ConfigKey& key, const GaugeMetric& metric,
-                                         const int conditionIndex,
-                                         const sp<ConditionWizard>& wizard, const int pullTagId,
-                                         const int64_t timeBaseNs, const int64_t startTimeNs)
-    : GaugeMetricProducer(key, metric, conditionIndex, wizard, pullTagId, timeBaseNs, startTimeNs,
-                          make_shared<StatsPullerManager>()) {
-}
-
 GaugeMetricProducer::~GaugeMetricProducer() {
     VLOG("~GaugeMetricProducer() called");
     if (mPullTagId != -1 && mSamplingType == GaugeMetric::RANDOM_ONE_SAMPLE) {
-        mStatsPullerManager->UnRegisterReceiver(mPullTagId, this);
+        mPullerManager->UnRegisterReceiver(mPullTagId, this);
     }
 }
 
@@ -308,7 +298,6 @@ void GaugeMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
     protoOutput->end(protoToken);
 
     mPastBuckets.clear();
-    // TODO: Clear mDimensionKeyMap once the report is dumped.
 }
 
 void GaugeMetricProducer::pullLocked(const int64_t timestampNs) {
@@ -336,7 +325,7 @@ void GaugeMetricProducer::pullLocked(const int64_t timestampNs) {
     }
 
     vector<std::shared_ptr<LogEvent>> allData;
-    if (!mStatsPullerManager->Pull(mPullTagId, timestampNs, &allData)) {
+    if (!mPullerManager->Pull(mPullTagId, timestampNs, &allData)) {
         ALOGE("Gauge Stats puller failed for tag: %d", mPullTagId);
         return;
     }

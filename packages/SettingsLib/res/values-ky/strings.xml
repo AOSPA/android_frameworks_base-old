@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Экранда басылган жерлер көрүнүп турат"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Экран жаңыруусун көрсөтүү"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Экран жаңырганда анын үстү жарык болот"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Экран жаңыртуусун көрсөтүү"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU менен тартканда экрандын аймактары жарык болот"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Жаңыртууларды көрсөтүү"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Тартканда көрүүлөрдү терезелердин ичинде көрсөтүү"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Аппараттык жаңыртууларды көрсөтүү"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Жаңырган аппараттык деңгээлдер жашыл түскө боелот"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU мүчүлүштүктөрүн оңдоо"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Кесилген нерсенин чектери жана жээктери көрүнөт"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Интерфейсти чагылдыруу"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Интерфейстин элементтери бардык тилдерде оңдон солго карай жайгаштырылат"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPU тездетүү"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Эки өлчөмдүү (2d) сүрөт үчүн ар дайым GPU колдонулат"</string>
     <string name="force_msaa" msgid="7920323238677284387">"4x MSAA иштетүү"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 колдонмолорунда 4x MSAA иштетилет"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Татаал формаларды кесүү операцияларынын мүчүлүштүктөрүн оңдоо"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"GPU иштетүү профили"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"HWUI профили түзүлүүдө"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU мүчүлүштүктөрдү оңдоо катмарларын иштетүү"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"GPU мүчүлүштүктөрдү оңдоо катмарларын иштетет"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Терезелердин анимациясы"</string>

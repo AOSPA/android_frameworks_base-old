@@ -29,7 +29,7 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Log;
 import android.bluetooth.BluetoothAdapter;
-import android.support.annotation.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
 import android.os.SystemProperties;
 
 import com.android.settingslib.R;
@@ -48,7 +48,6 @@ import java.util.List;
  */
 public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> {
     private static final String TAG = "CachedBluetoothDevice";
-    private static final boolean DEBUG = Utils.V;
 
     private final Context mContext;
     private final LocalBluetoothAdapter mLocalAdapter;
@@ -104,7 +103,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     public void setHiSyncId(long id) {
-        if (Utils.D) {
+        if (BluetoothUtils.D) {
             Log.d(TAG, "setHiSyncId: mDevice " + mDevice + ", id " + id);
         }
         mHiSyncId = id;
@@ -160,13 +159,15 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     void onProfileStateChanged(LocalBluetoothProfile profile, int newProfileState) {
-        if (Utils.D) {
+        if (BluetoothUtils.D) {
             Log.d(TAG, "onProfileStateChanged: profile " + profile +
                     " newProfileState " + newProfileState);
         }
         if (mLocalAdapter.getBluetoothState() == BluetoothAdapter.STATE_TURNING_OFF)
         {
-            if (Utils.D) Log.d(TAG, " BT Turninig Off...Profile conn state change ignored...");
+            if (BluetoothUtils.D) {
+                Log.d(TAG, " BT Turninig Off...Profile conn state change ignored...");
+            }
             return;
         }
         mProfileConnectionState.put(profile, newProfileState);
@@ -227,7 +228,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     public void disconnect(LocalBluetoothProfile profile) {
         if (profile.disconnect(mDevice)) {
-            if (Utils.D) {
+            if (BluetoothUtils.D) {
                 Log.d(TAG, "Command sent successfully:DISCONNECT " + describe(profile));
             }
         }
@@ -274,7 +275,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
                 }
             }
         }
-        if (DEBUG) Log.d(TAG, "Preferred profiles = " + preferredProfiles);
+        if (BluetoothUtils.D) Log.d(TAG, "Preferred profiles = " + preferredProfiles);
 
         if (preferredProfiles == 0) {
             connectAutoConnectableProfiles();
@@ -315,7 +316,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             return;
         }
         if (profile.connect(mDevice)) {
-            if (Utils.D) {
+            if (BluetoothUtils.D) {
                 Log.d(TAG, "Command sent successfully:CONNECT " + describe(profile));
             }
             return;
@@ -376,10 +377,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             if (dev != null) {
                 final boolean successful = dev.removeBond();
                 if (successful) {
-                    if (Utils.D) {
+                    if (BluetoothUtils.D) {
                         Log.d(TAG, "Command sent successfully:REMOVE_BOND " + describe(null));
                     }
-                } else if (Utils.V) {
+                } else if (BluetoothUtils.V) {
                     Log.v(TAG, "Framework rejected command immediately:REMOVE_BOND " +
                         describe(null));
                 }
@@ -398,7 +399,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     public void clearProfileConnectionState ()
     {
-        if (Utils.D) {
+        if (BluetoothUtils.D) {
             Log.d(TAG," Clearing all connection state for dev:" + mDevice.getName());
         }
         for (LocalBluetoothProfile profile :getProfiles()) {
@@ -502,7 +503,9 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
         if (TextUtils.isEmpty(mName)) {
             mName = mDevice.getAddress();
-            if (DEBUG) Log.d(TAG, "Device has no name (yet), use address: " + mName);
+            if (BluetoothUtils.D) {
+                Log.d(TAG, "Device has no name (yet), use address: " + mName);
+            }
         }
     }
 
@@ -658,7 +661,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         mProfileManager.updateProfiles(uuids, localUuids, mProfiles, mRemovedProfiles,
                                        mLocalNapRoleConnected, mDevice);
 
-        if (DEBUG) {
+        if (BluetoothUtils.D) {
             Log.e(TAG, "updating profiles for " + mDevice.getAliasName());
             BluetoothClass bluetoothClass = mDevice.getBluetoothClass();
 
@@ -707,7 +710,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             timeout = MAX_HOGP_DELAY_FOR_AUTO_CONNECT;
         }
 
-        if (DEBUG) {
+        if (BluetoothUtils.D) {
             Log.d(TAG, "onUuidChanged: Time since last connect"
                     + (SystemClock.elapsedRealtime() - mConnectAttempted));
         }
@@ -1030,7 +1033,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             switch (connectionStatus) {
                 case BluetoothProfile.STATE_CONNECTING:
                 case BluetoothProfile.STATE_DISCONNECTING:
-                    return mContext.getString(Utils.getConnectionStateSummary(connectionStatus));
+                    return mContext.getString(
+                            BluetoothUtils.getConnectionStateSummary(connectionStatus));
 
                 case BluetoothProfile.STATE_CONNECTED:
                     profileConnected = true;
@@ -1125,7 +1129,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             switch (connectionStatus) {
                 case BluetoothProfile.STATE_CONNECTING:
                 case BluetoothProfile.STATE_DISCONNECTING:
-                    return mContext.getString(Utils.getConnectionStateSummary(connectionStatus));
+                    return mContext.getString(
+                            BluetoothUtils.getConnectionStateSummary(connectionStatus));
 
                 case BluetoothProfile.STATE_CONNECTED:
                     profileConnected = true;
@@ -1241,7 +1246,17 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
      * @return {@code true} if {@code cachedBluetoothDevice} is HFP device
      */
     public boolean isHfpDevice() {
-        return mProfileManager.getHeadsetProfile().getConnectionStatus(mDevice) ==
+        HeadsetProfile headsetProfile = mProfileManager.getHeadsetProfile();
+        return headsetProfile != null && headsetProfile.getConnectionStatus(mDevice) ==
+                BluetoothProfile.STATE_CONNECTED;
+    }
+
+    /**
+     * @return {@code true} if {@code cachedBluetoothDevice} is Hearing Aid device
+     */
+    public boolean isConnectedHearingAidDevice() {
+        HearingAidProfile hearingAidProfile = mProfileManager.getHearingAidProfile();
+        return hearingAidProfile != null && hearingAidProfile.getConnectionStatus(mDevice) ==
                 BluetoothProfile.STATE_CONNECTED;
     }
 }

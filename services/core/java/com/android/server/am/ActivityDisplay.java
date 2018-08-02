@@ -30,16 +30,15 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;
 import static android.view.Display.REMOVE_MODE_DESTROY_CONTENT;
+import static com.android.server.am.ActivityDisplayProto.CONFIGURATION_CONTAINER;
+import static com.android.server.am.ActivityDisplayProto.ID;
+import static com.android.server.am.ActivityDisplayProto.STACKS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STACK;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_STACK;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.am.ActivityDisplayProto.CONFIGURATION_CONTAINER;
-import static com.android.server.am.ActivityDisplayProto.STACKS;
-import static com.android.server.am.ActivityDisplayProto.ID;
 
 import android.annotation.Nullable;
-import android.app.ActivityManagerInternal;
 import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
 import android.graphics.Point;
@@ -47,11 +46,13 @@ import android.util.IntArray;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
+
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.ConfigurationContainer;
 import com.android.server.wm.DisplayWindowController;
-
 import com.android.server.wm.WindowContainerListener;
+
 import java.io.PrintWriter;
 import java.util.ArrayList;
 
@@ -90,9 +91,9 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
     private IntArray mDisplayAccessUIDs = new IntArray();
 
     /** All tokens used to put activities on this stack to sleep (including mOffToken) */
-    final ArrayList<ActivityManagerInternal.SleepToken> mAllSleepTokens = new ArrayList<>();
+    final ArrayList<ActivityTaskManagerInternal.SleepToken> mAllSleepTokens = new ArrayList<>();
     /** The token acquired by ActivityStackSupervisor to put stacks on the display to sleep */
-    ActivityManagerInternal.SleepToken mOffToken;
+    ActivityTaskManagerInternal.SleepToken mOffToken;
 
     private boolean mSleeping;
 
@@ -166,19 +167,35 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         mStacks.remove(stack);
         final int insertPosition = getTopInsertPosition(stack, position);
         mStacks.add(insertPosition, stack);
-        mWindowContainerController.positionChildAt(stack.getWindowContainerController(),
-                insertPosition);
+        // Since positionChildAt() is called during the creation process of pinned stacks,
+        // ActivityStack#getWindowContainerController() can be null. In this special case,
+        // since DisplayContest#positionStackAt() is called in TaskStack#onConfigurationChanged(),
+        // we don't have to call WindowContainerController#positionChildAt() here.
+        if (stack.getWindowContainerController() != null) {
+            mWindowContainerController.positionChildAt(stack.getWindowContainerController(),
+                    insertPosition);
+        }
         onStackOrderChanged();
     }
 
     private int getTopInsertPosition(ActivityStack stack, int candidatePosition) {
         int position = mStacks.size();
-        if (position > 0) {
-            final ActivityStack topStack = mStacks.get(position - 1);
-            if (topStack.getWindowConfiguration().isAlwaysOnTop() && topStack != stack) {
-                // If the top stack is always on top, we move this stack just below it.
-                position--;
+        if (stack.inPinnedWindowingMode()) {
+            // Stack in pinned windowing mode is z-ordered on-top of all other stacks so okay to
+            // just return the candidate position.
+            return Math.min(position, candidatePosition);
+        }
+        while (position > 0) {
+            final ActivityStack targetStack = mStacks.get(position - 1);
+            if (!targetStack.isAlwaysOnTop()) {
+                // We reached a stack that isn't always-on-top.
+                break;
             }
+            if (stack.isAlwaysOnTop() && !targetStack.inPinnedWindowingMode()) {
+                // Always on-top non-pinned windowing mode stacks can go anywhere below pinned stack.
+                break;
+            }
+            position--;
         }
         return Math.min(position, candidatePosition);
     }
@@ -290,7 +307,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
             }
         }
 
-        final ActivityManagerService service = mSupervisor.mService;
+        final ActivityTaskManagerService service = mSupervisor.mService;
         if (!isWindowingModeSupported(windowingMode, service.mSupportsMultiWindow,
                 service.mSupportsSplitScreenMultiWindow, service.mSupportsFreeformWindowManagement,
                 service.mSupportsPictureInPicture, activityType)) {
@@ -526,7 +543,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         }
 
         // Make sure the windowing mode we are trying to use makes sense for what is supported.
-        final ActivityManagerService service = mSupervisor.mService;
+        final ActivityTaskManagerService service = mSupervisor.mService;
         boolean supportsMultiWindow = service.mSupportsMultiWindow;
         boolean supportsSplitScreen = service.mSupportsSplitScreenMultiWindow;
         boolean supportsFreeform = service.mSupportsFreeformWindowManagement;

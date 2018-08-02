@@ -863,12 +863,6 @@ static void android_view_ThreadedRenderer_notifyFramePending(JNIEnv* env, jobjec
     proxy->notifyFramePending();
 }
 
-static void android_view_ThreadedRenderer_serializeDisplayListTree(JNIEnv* env, jobject clazz,
-        jlong proxyPtr) {
-    RenderProxy* proxy = reinterpret_cast<RenderProxy*>(proxyPtr);
-    proxy->serializeDisplayListTree();
-}
-
 static void android_view_ThreadedRenderer_dumpProfileInfo(JNIEnv* env, jobject clazz,
         jlong proxyPtr, jobject javaFileDescriptor, jint dumpFlags) {
     RenderProxy* proxy = reinterpret_cast<RenderProxy*>(proxyPtr);
@@ -1144,7 +1138,6 @@ static const JNINativeMethod gMethods[] = {
     { "nFence", "(J)V", (void*) android_view_ThreadedRenderer_fence },
     { "nStopDrawing", "(J)V", (void*) android_view_ThreadedRenderer_stopDrawing },
     { "nNotifyFramePending", "(J)V", (void*) android_view_ThreadedRenderer_notifyFramePending },
-    { "nSerializeDisplayListTree", "(J)V", (void*) android_view_ThreadedRenderer_serializeDisplayListTree },
     { "nDumpProfileInfo", "(JLjava/io/FileDescriptor;I)V", (void*) android_view_ThreadedRenderer_dumpProfileInfo },
     { "setupShadersDiskCache", "(Ljava/lang/String;Ljava/lang/String;)V",
                 (void*) android_view_ThreadedRenderer_setupShadersDiskCache },

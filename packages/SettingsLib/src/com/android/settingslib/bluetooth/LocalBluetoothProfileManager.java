@@ -35,7 +35,7 @@ import android.bluetooth.BluetoothUuid;
 import android.content.Context;
 import android.content.Intent;
 import android.os.ParcelUuid;
-import android.support.annotation.VisibleForTesting;
+import androidx.annotation.VisibleForTesting;
 import android.util.Log;
 import com.android.internal.R;
 import java.util.ArrayList;
@@ -52,7 +52,7 @@ import android.os.SystemProperties;
  */
 public class LocalBluetoothProfileManager {
     private static final String TAG = "LocalBluetoothProfileManager";
-    private static final boolean DEBUG = Utils.D;
+    private static final boolean DEBUG = BluetoothUtils.D;
     /** Singleton instance. */
     private static LocalBluetoothProfileManager sInstance;
 

@@ -207,8 +207,8 @@ public class UsageStatsService extends SystemService implements
 
     @Override
     public void onBootPhase(int phase) {
+        mAppStandby.onBootPhase(phase);
         if (phase == PHASE_SYSTEM_SERVICES_READY) {
-            mAppStandby.onBootPhase(phase);
             // initialize mDpmInternal
             getDpmInternal();
 
@@ -712,13 +712,13 @@ public class UsageStatsService extends SystemService implements
 
             if (mPackageManagerInternal.getPackageUid(pkg, /*flags=*/ 0,
                     callingUserId) != callingUid) {
-                throw new SecurityException("Calling uid " + pkg + " cannot query events"
+                throw new SecurityException("Calling uid " + callingUid + " cannot query events"
                         + "for package " + pkg);
             }
         }
 
         private boolean isCallingUidSystem() {
-            final int uid = Binder.getCallingUid();
+            final int uid = UserHandle.getAppId(Binder.getCallingUid()); // ignores user
             return uid == Process.SYSTEM_UID;
         }
 
@@ -866,7 +866,7 @@ public class UsageStatsService extends SystemService implements
             final long token = Binder.clearCallingIdentity();
             try {
                 return UsageStatsService.this.queryEventsForPackage(userId, beginTime,
-                        endTime, callingPackage);
+                        endTime, pkg);
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -973,7 +973,8 @@ public class UsageStatsService extends SystemService implements
             final long token = Binder.clearCallingIdentity();
             try {
                 final int packageUid = mPackageManagerInternal.getPackageUid(packageName,
-                        PackageManager.MATCH_ANY_USER, userId);
+                        PackageManager.MATCH_ANY_USER | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+                        | PackageManager.MATCH_DIRECT_BOOT_AWARE, userId);
                 // Caller cannot set their own standby state
                 if (packageUid == callingUid) {
                     throw new IllegalArgumentException("Cannot set your own standby bucket");

@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"တို့ခြင်းများအတွက် အမြင်ဖြင့် တုံ့ပြန်မှုပြပါ"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"surface အဆင့်မြှင့်မှုများပြပါ"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"အပ်ဒိတ်လုပ်စဉ် ဝင်းဒိုးမျက်နှာပြင်တွင် အချက်ပြရန်"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU မြင်ကွင်းအပ်ဒိတ် ပြခြင်း"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU နှင့်ဆွဲစဉ် ၀င်းဒိုးအတွင်းပိုင်း လျှပ်တပြက်မြင်ကွင်းများ"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"အပ်ဒိတ်မြင်ကွင်း ပြရန်"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"ပုံရေးဆွဲစဉ် ဝင်းဒိုးအတွင်း လျှပ်တစ်ပြက်မြင်ကွင်းများ"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"ဟာ့ဒ်ဝဲအလွှာ အပ်ဒိတ်များပြခြင်း"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"အပ်ဒိတ်လုပ်ချိန် ဟာ့ဒ်ဝဲအလွှာများ အစိမ်းရောင်ပြပါ"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU ပိုသုံးစွဲမှု ပြင်ဆင်ခြင်း"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"ဖြတ်ပိုင်းအနားသတ်များ၊ အနားများ စသဖြင့် ပြပါ။"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"RTL ဖွဲ့စည်းပုံအညွှန်း မဖြစ်မနေလုပ်ပါ"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"ဘာသာစကား အားလုံးအတွက် မျက်နှာပြင် ဖွဲ့စည်းပုံအညွှန်း မဖြစ်မနေလုပ်ရန်"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPU ဖြစ်စေခြင်း"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2d ပုံဆွဲရန် GPU မဖြစ်မနေသုံးခြင်း"</string>
     <string name="force_msaa" msgid="7920323238677284387">"တွန်းအား ၄× MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 apps တွင် ၄×MSAA အသုံးပြုခွင့်ပေးရန်"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"စတုဂံပုံမကျသောဖြတ်ပိုင်း လုပ်ဆောင်ချက်များကို အမှားဖယ်ရှားသည်"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"GPU တင်ဆက်မှု ကိုယ်ရေးအချက်အလက်"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"HWUI ပြင်ဆင်စဉ် ပရိုဖိုင်"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU အမှားရှာ အလွှာများဖွင့်ထားပါ"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"အမှားရှာအက်ပ်များအတွက် GPU အမှားရှာအလွှာများ ထည့်သွင်းခွင့်ပြုပါ"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"လှုပ်ရှားသက်ဝင်ပုံစကေး"</string>

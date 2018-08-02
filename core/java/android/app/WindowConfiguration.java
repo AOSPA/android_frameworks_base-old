@@ -124,6 +124,24 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
     })
     public @interface ActivityType {}
 
+    /** The current always on top status of the configuration. */
+    private @AlwaysOnTop int mAlwaysOnTop;
+
+    /** Always on top is currently not defined. */
+    private static final int ALWAYS_ON_TOP_UNDEFINED = 0;
+    /** Always on top is currently on for this configuration. */
+    private static final int ALWAYS_ON_TOP_ON = 1;
+    /** Always on top is currently off for this configuration. */
+    private static final int ALWAYS_ON_TOP_OFF = 2;
+
+    /** @hide */
+    @IntDef(prefix = { "ALWAYS_ON_TOP_" }, value = {
+            ALWAYS_ON_TOP_UNDEFINED,
+            ALWAYS_ON_TOP_ON,
+            ALWAYS_ON_TOP_OFF,
+    })
+    private @interface AlwaysOnTop {}
+
     /** Bit that indicates that the {@link #mBounds} changed.
      * @hide */
     public static final int WINDOW_CONFIG_BOUNDS = 1 << 0;
@@ -136,13 +154,16 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
     /** Bit that indicates that the {@link #mActivityType} changed.
      * @hide */
     public static final int WINDOW_CONFIG_ACTIVITY_TYPE = 1 << 3;
-
+    /** Bit that indicates that the {@link #mAlwaysOnTop} changed.
+     * @hide */
+    public static final int WINDOW_CONFIG_ALWAYS_ON_TOP = 1 << 4;
     /** @hide */
     @IntDef(flag = true, prefix = { "WINDOW_CONFIG_" }, value = {
             WINDOW_CONFIG_BOUNDS,
             WINDOW_CONFIG_APP_BOUNDS,
             WINDOW_CONFIG_WINDOWING_MODE,
-            WINDOW_CONFIG_ACTIVITY_TYPE
+            WINDOW_CONFIG_ACTIVITY_TYPE,
+            WINDOW_CONFIG_ALWAYS_ON_TOP,
     })
     public @interface WindowConfig {}
 
@@ -168,6 +189,7 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
         dest.writeParcelable(mAppBounds, flags);
         dest.writeInt(mWindowingMode);
         dest.writeInt(mActivityType);
+        dest.writeInt(mAlwaysOnTop);
     }
 
     private void readFromParcel(Parcel source) {
@@ -175,6 +197,7 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
         mAppBounds = source.readParcelable(Rect.class.getClassLoader());
         mWindowingMode = source.readInt();
         mActivityType = source.readInt();
+        mAlwaysOnTop = source.readInt();
     }
 
     @Override
@@ -220,6 +243,21 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
         }
 
         setAppBounds(rect.left, rect.top, rect.right, rect.bottom);
+    }
+
+
+
+    /**
+     * Sets whether this window should be always on top.
+     * @param alwaysOnTop {@code true} to set window always on top, otherwise {@code false}
+     * @hide
+     */
+    public void setAlwaysOnTop(boolean alwaysOnTop) {
+        mAlwaysOnTop = alwaysOnTop ? ALWAYS_ON_TOP_ON : ALWAYS_ON_TOP_OFF;
+    }
+
+    private void setAlwaysOnTop(@AlwaysOnTop int alwaysOnTop) {
+        mAlwaysOnTop = alwaysOnTop;
     }
 
     /**
@@ -281,6 +319,7 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
         setAppBounds(other.mAppBounds);
         setWindowingMode(other.mWindowingMode);
         setActivityType(other.mActivityType);
+        setAlwaysOnTop(other.mAlwaysOnTop);
     }
 
     /** Set this object to completely undefined.
@@ -295,6 +334,7 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
         setBounds(null);
         setWindowingMode(WINDOWING_MODE_UNDEFINED);
         setActivityType(ACTIVITY_TYPE_UNDEFINED);
+        setAlwaysOnTop(ALWAYS_ON_TOP_UNDEFINED);
     }
 
     /**
@@ -325,6 +365,11 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
                 && mActivityType != delta.mActivityType) {
             changed |= WINDOW_CONFIG_ACTIVITY_TYPE;
             setActivityType(delta.mActivityType);
+        }
+        if (delta.mAlwaysOnTop != ALWAYS_ON_TOP_UNDEFINED
+                && mAlwaysOnTop != delta.mAlwaysOnTop) {
+            changed |= WINDOW_CONFIG_ALWAYS_ON_TOP;
+            setAlwaysOnTop(delta.mAlwaysOnTop);
         }
         return changed;
     }
@@ -364,6 +409,11 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
             changes |= WINDOW_CONFIG_ACTIVITY_TYPE;
         }
 
+        if ((compareUndefined || other.mAlwaysOnTop != ALWAYS_ON_TOP_UNDEFINED)
+                && mAlwaysOnTop != other.mAlwaysOnTop) {
+            changes |= WINDOW_CONFIG_ALWAYS_ON_TOP;
+        }
+
         return changes;
     }
 
@@ -398,6 +448,8 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
         if (n != 0) return n;
         n = mActivityType - that.mActivityType;
         if (n != 0) return n;
+        n = mAlwaysOnTop - that.mAlwaysOnTop;
+        if (n != 0) return n;
 
         // if (n != 0) return n;
         return n;
@@ -425,6 +477,7 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
 
         result = 31 * result + mWindowingMode;
         result = 31 * result + mActivityType;
+        result = 31 * result + mAlwaysOnTop;
         return result;
     }
 
@@ -434,7 +487,9 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
         return "{ mBounds=" + mBounds
                 + " mAppBounds=" + mAppBounds
                 + " mWindowingMode=" + windowingModeToString(mWindowingMode)
-                + " mActivityType=" + activityTypeToString(mActivityType) + "}";
+                + " mActivityType=" + activityTypeToString(mActivityType)
+                + " mAlwaysOnTop=" + alwaysOnTopToString(mAlwaysOnTop)
+                + "}";
     }
 
     /**
@@ -520,7 +575,8 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
      * @hide
      */
     public boolean isAlwaysOnTop() {
-        return mWindowingMode == WINDOWING_MODE_PINNED;
+        return mWindowingMode == WINDOWING_MODE_PINNED
+                || (mWindowingMode == WINDOWING_MODE_FREEFORM && mAlwaysOnTop == ALWAYS_ON_TOP_ON);
     }
 
     /**
@@ -596,5 +652,15 @@ public class WindowConfiguration implements Parcelable, Comparable<WindowConfigu
             case ACTIVITY_TYPE_ASSISTANT: return "assistant";
         }
         return String.valueOf(applicationType);
+    }
+
+    /** @hide */
+    public static String alwaysOnTopToString(@AlwaysOnTop int alwaysOnTop) {
+        switch (alwaysOnTop) {
+            case ALWAYS_ON_TOP_UNDEFINED: return "undefined";
+            case ALWAYS_ON_TOP_ON: return "on";
+            case ALWAYS_ON_TOP_OFF: return "off";
+        }
+        return String.valueOf(alwaysOnTop);
     }
 }

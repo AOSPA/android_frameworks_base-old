@@ -4652,7 +4652,7 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * which is added in order to fade it out in its old location should be removed
      * once the animation is complete.</p>
      *
-     * @param view The view to be added
+     * @param view The view to be added. The view must not have a parent.
      * @param index The index at which this view should be drawn, must be >= 0.
      * This value is relative to the {@link #getChildAt(int) index} values in the normal
      * child list of this container, where any transient view at a particular index will
@@ -4661,9 +4661,14 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
      * @hide
      */
     public void addTransientView(View view, int index) {
-        if (index < 0) {
+        if (index < 0 || view == null) {
             return;
         }
+        if (view.mParent != null) {
+            throw new IllegalStateException("The specified view already has a parent "
+                    + view.mParent);
+        }
+
         if (mTransientIndices == null) {
             mTransientIndices = new ArrayList<Integer>();
             mTransientViews = new ArrayList<View>();
@@ -4683,7 +4688,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             mTransientViews.add(view);
         }
         view.mParent = this;
-        view.dispatchAttachedToWindow(mAttachInfo, (mViewFlags&VISIBILITY_MASK));
+        if (mAttachInfo != null) {
+            view.dispatchAttachedToWindow(mAttachInfo, (mViewFlags & VISIBILITY_MASK));
+        }
         invalidate(true);
     }
 
@@ -4705,7 +4712,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 mTransientViews.remove(i);
                 mTransientIndices.remove(i);
                 view.mParent = null;
-                view.dispatchDetachedFromWindow();
+                if (view.mAttachInfo != null) {
+                    view.dispatchDetachedFromWindow();
+                }
                 invalidate(true);
                 return;
             }
@@ -5853,11 +5862,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
             // Views being animated or transformed are not considered opaque because we may
             // be invalidating their old position and need the parent to paint behind them.
             Matrix childMatrix = child.getMatrix();
-            final boolean isOpaque = child.isOpaque() && !drawAnimation &&
-                    child.getAnimation() == null && childMatrix.isIdentity();
             // Mark the child as dirty, using the appropriate flag
             // Make sure we do not set both flags at the same time
-            int opaqueFlag = isOpaque ? PFLAG_DIRTY_OPAQUE : PFLAG_DIRTY;
 
             if (child.mLayerType != LAYER_TYPE_NONE) {
                 mPrivateFlags |= PFLAG_INVALIDATED;
@@ -5911,12 +5917,8 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
                 // If the parent is dirty opaque or not dirty, mark it dirty with the opaque
                 // flag coming from the child that initiated the invalidate
                 if (view != null) {
-                    if ((view.mViewFlags & FADING_EDGE_MASK) != 0 &&
-                            view.getSolidColor() == 0) {
-                        opaqueFlag = PFLAG_DIRTY;
-                    }
                     if ((view.mPrivateFlags & PFLAG_DIRTY_MASK) != PFLAG_DIRTY) {
-                        view.mPrivateFlags = (view.mPrivateFlags & ~PFLAG_DIRTY_MASK) | opaqueFlag;
+                        view.mPrivateFlags = (view.mPrivateFlags & ~PFLAG_DIRTY_MASK) | PFLAG_DIRTY;
                     }
                 }
 

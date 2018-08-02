@@ -415,7 +415,6 @@ public final class ImsReasonInfo implements Parcelable {
      * The rejection cause is not known.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_UNKNOWN = 1600;
 
@@ -423,7 +422,6 @@ public final class ImsReasonInfo implements Parcelable {
      * Ongoing call, and call waiting is disabled.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_ONGOING_CALL_WAITING_DISABLED = 1601;
 
@@ -431,7 +429,6 @@ public final class ImsReasonInfo implements Parcelable {
      * A call is ongoing on another sub.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_CALL_ON_OTHER_SUB = 1602;
 
@@ -439,7 +436,6 @@ public final class ImsReasonInfo implements Parcelable {
      * CDMA call collision.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_1X_COLLISION = 1603;
 
@@ -447,7 +443,6 @@ public final class ImsReasonInfo implements Parcelable {
      * IMS is not registered for service yet.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_SERVICE_NOT_REGISTERED = 1604;
 
@@ -455,7 +450,6 @@ public final class ImsReasonInfo implements Parcelable {
      * The call type is not allowed on the current RAT.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_CALL_TYPE_NOT_ALLOWED = 1605;
 
@@ -463,7 +457,6 @@ public final class ImsReasonInfo implements Parcelable {
      * And emergency call is ongoing.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_ONGOING_E911_CALL = 1606;
 
@@ -471,7 +464,6 @@ public final class ImsReasonInfo implements Parcelable {
      * Another call is in the process of being establilshed.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_ONGOING_CALL_SETUP = 1607;
 
@@ -479,7 +471,6 @@ public final class ImsReasonInfo implements Parcelable {
      * Maximum number of allowed calls are already in progress.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_MAX_CALL_LIMIT_REACHED = 1608;
 
@@ -487,7 +478,6 @@ public final class ImsReasonInfo implements Parcelable {
      * Invalid/unsupported SIP headers received.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_UNSUPPORTED_SIP_HEADERS = 1609;
 
@@ -495,7 +485,6 @@ public final class ImsReasonInfo implements Parcelable {
      * Invalid/unsupported SDP headers received.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_UNSUPPORTED_SDP_HEADERS = 1610;
 
@@ -503,7 +492,6 @@ public final class ImsReasonInfo implements Parcelable {
      * A call transfer is in progress.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_ONGOING_CALL_TRANSFER = 1611;
 
@@ -511,7 +499,6 @@ public final class ImsReasonInfo implements Parcelable {
      * An internal error occured while processing the call.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_INTERNAL_ERROR = 1612;
 
@@ -519,7 +506,6 @@ public final class ImsReasonInfo implements Parcelable {
      * Call failure due to lack of dedicated bearer.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_QOS_FAILURE = 1613;
 
@@ -527,7 +513,6 @@ public final class ImsReasonInfo implements Parcelable {
      * A call handover is in progress.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_ONGOING_HANDOVER = 1614;
 
@@ -535,7 +520,6 @@ public final class ImsReasonInfo implements Parcelable {
      * Video calling not supported with TTY.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_VT_TTY_NOT_ALLOWED = 1615;
 
@@ -543,7 +527,6 @@ public final class ImsReasonInfo implements Parcelable {
      * A call upgrade is in progress.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_ONGOING_CALL_UPGRADE = 1616;
 
@@ -551,7 +534,6 @@ public final class ImsReasonInfo implements Parcelable {
      * Call from conference server, when TTY mode is ON.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_CONFERENCE_TTY_NOT_ALLOWED = 1617;
 
@@ -559,7 +541,6 @@ public final class ImsReasonInfo implements Parcelable {
      * A conference call is ongoing.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_ONGOING_CONFERENCE_CALL = 1618;
 
@@ -567,7 +548,6 @@ public final class ImsReasonInfo implements Parcelable {
      * A video call with AVPF is not supported.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_VT_AVPF_NOT_ALLOWED = 1619;
 
@@ -575,7 +555,6 @@ public final class ImsReasonInfo implements Parcelable {
      * And encrypted call is ongoing; other calls not supported.
      * <p>
      * Used with implicit call rejection.
-     * @hide
      */
     public static final int CODE_REJECT_ONGOING_ENCRYPTED_CALL = 1620;
 
@@ -583,8 +562,7 @@ public final class ImsReasonInfo implements Parcelable {
      * A CS call is ongoing.
      * <p>
      * Used with implicit call rejection.
-     * @hide
-    */
+     */
     public static final int CODE_REJECT_ONGOING_CS_CALL = 1621;
 
     /* OEM specific error codes. To be used by OEMs when they don't want to

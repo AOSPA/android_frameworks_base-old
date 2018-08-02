@@ -17,6 +17,7 @@
 #include "Properties.h"
 #include "Debug.h"
 #include "DeviceInfo.h"
+#include "SkTraceEventCommon.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -59,6 +60,7 @@ bool Properties::forceDrawFrame = false;
 bool Properties::filterOutTestOverhead = false;
 bool Properties::disableVsync = false;
 bool Properties::skpCaptureEnabled = false;
+bool Properties::forceDarkMode = false;
 bool Properties::enableRTAnimations = true;
 
 bool Properties::runningInEmulator = false;
@@ -140,7 +142,12 @@ bool Properties::load() {
 
     skpCaptureEnabled = debuggingEnabled && property_get_bool(PROPERTY_CAPTURE_SKP_ENABLED, false);
 
+    SkAndroidFrameworkTraceUtil::setEnableTracing(
+            property_get_bool(PROPERTY_SKIA_ATRACE_ENABLED, false));
+
     runningInEmulator = property_get_bool(PROPERTY_QEMU_KERNEL, false);
+
+    forceDarkMode = property_get_bool(PROPERTY_FORCE_DARK, false);
 
     return (prevDebugLayersUpdates != debugLayersUpdates) || (prevDebugOverdraw != debugOverdraw) ||
            (prevDebugStencilClip != debugStencilClip);
@@ -191,15 +198,12 @@ RenderPipelineType Properties::getRenderPipelineType() {
     }
     char prop[PROPERTY_VALUE_MAX];
     property_get(PROPERTY_RENDERER, prop, "skiagl");
-    if (!strcmp(prop, "skiagl")) {
-        ALOGD("Skia GL Pipeline");
-        sRenderPipelineType = RenderPipelineType::SkiaGL;
-    } else if (!strcmp(prop, "skiavk")) {
+    if (!strcmp(prop, "skiavk")) {
         ALOGD("Skia Vulkan Pipeline");
         sRenderPipelineType = RenderPipelineType::SkiaVulkan;
-    } else {  //"opengl"
-        ALOGD("HWUI GL Pipeline");
-        sRenderPipelineType = RenderPipelineType::OpenGL;
+    } else {  //"skiagl"
+        ALOGD("Skia GL Pipeline");
+        sRenderPipelineType = RenderPipelineType::SkiaGL;
     }
     return sRenderPipelineType;
 }
@@ -214,11 +218,6 @@ void Properties::overrideRenderPipelineType(RenderPipelineType type) {
     }
 #endif
     sRenderPipelineType = type;
-}
-
-bool Properties::isSkiaEnabled() {
-    auto renderType = getRenderPipelineType();
-    return RenderPipelineType::SkiaGL == renderType || RenderPipelineType::SkiaVulkan == renderType;
 }
 
 };  // namespace uirenderer

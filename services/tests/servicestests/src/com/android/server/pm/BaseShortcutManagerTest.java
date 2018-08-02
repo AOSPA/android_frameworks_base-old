@@ -92,6 +92,7 @@ import com.android.server.SystemService;
 import com.android.server.pm.LauncherAppsService.LauncherAppsImpl;
 import com.android.server.pm.ShortcutUser.PackageWithUser;
 
+import com.android.server.wm.ActivityTaskManagerInternal;
 import org.junit.Assert;
 import org.mockito.ArgumentCaptor;
 import org.mockito.invocation.InvocationOnMock;
@@ -613,6 +614,7 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
     protected UserManagerInternal mMockUserManagerInternal;
     protected UsageStatsManagerInternal mMockUsageStatsManagerInternal;
     protected ActivityManagerInternal mMockActivityManagerInternal;
+    protected ActivityTaskManagerInternal mMockActivityTaskManagerInternal;
 
     protected static final String CALLING_PACKAGE_1 = "com.android.test.1";
     protected static final int CALLING_UID_1 = 10001;
@@ -752,6 +754,7 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
         mMockUserManagerInternal = mock(UserManagerInternal.class);
         mMockUsageStatsManagerInternal = mock(UsageStatsManagerInternal.class);
         mMockActivityManagerInternal = mock(ActivityManagerInternal.class);
+        mMockActivityTaskManagerInternal = mock(ActivityTaskManagerInternal.class);
 
         LocalServices.removeServiceForTest(PackageManagerInternal.class);
         LocalServices.addService(PackageManagerInternal.class, mMockPackageManagerInternal);
@@ -759,6 +762,7 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
         LocalServices.addService(UsageStatsManagerInternal.class, mMockUsageStatsManagerInternal);
         LocalServices.removeServiceForTest(ActivityManagerInternal.class);
         LocalServices.addService(ActivityManagerInternal.class, mMockActivityManagerInternal);
+        LocalServices.addService(ActivityTaskManagerInternal.class, mMockActivityTaskManagerInternal);
         LocalServices.removeServiceForTest(UserManagerInternal.class);
         LocalServices.addService(UserManagerInternal.class, mMockUserManagerInternal);
 
@@ -1641,11 +1645,11 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
 
     protected Intent[] launchShortcutAndGetIntentsInner(Runnable shortcutStarter,
             @NonNull String packageName, @NonNull String shortcutId, int userId) {
-        reset(mMockActivityManagerInternal);
+        reset(mMockActivityTaskManagerInternal);
         shortcutStarter.run();
 
         final ArgumentCaptor<Intent[]> intentsCaptor = ArgumentCaptor.forClass(Intent[].class);
-        verify(mMockActivityManagerInternal).startActivitiesAsPackage(
+        verify(mMockActivityTaskManagerInternal).startActivitiesAsPackage(
                 eq(packageName),
                 eq(userId),
                 intentsCaptor.capture(),
@@ -1695,7 +1699,7 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
 
     protected void assertShortcutNotLaunched(@NonNull String packageName,
             @NonNull String shortcutId, int userId) {
-        reset(mMockActivityManagerInternal);
+        reset(mMockActivityTaskManagerInternal);
         try {
             mLauncherApps.startShortcut(packageName, shortcutId, null, null,
                     UserHandle.of(userId));
@@ -1703,7 +1707,7 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
         } catch (ActivityNotFoundException expected) {
         }
         // This shouldn't have been called.
-        verify(mMockActivityManagerInternal, times(0)).startActivitiesAsPackage(
+        verify(mMockActivityTaskManagerInternal, times(0)).startActivitiesAsPackage(
                 anyString(),
                 anyInt(),
                 any(Intent[].class),

@@ -335,11 +335,18 @@ public class TelephonyManager {
      * <p>
      * The {@link #EXTRA_STATE} extra indicates the new call state.
      * If a receiving app has {@link android.Manifest.permission#READ_CALL_LOG} permission, a second
-     * extra {@link #EXTRA_INCOMING_NUMBER} provides the phone number for incoming and outoing calls
-     * as a String.  Note: If the receiving app has
+     * extra {@link #EXTRA_INCOMING_NUMBER} provides the phone number for incoming and outgoing
+     * calls as a String.
+     * <p>
+     * If the receiving app has
      * {@link android.Manifest.permission#READ_CALL_LOG} and
      * {@link android.Manifest.permission#READ_PHONE_STATE} permission, it will receive the
-     * broadcast twice; one with the phone number and another without it.
+     * broadcast twice; one with the {@link #EXTRA_INCOMING_NUMBER} populated with the phone number,
+     * and another with it blank.  Due to the nature of broadcasts, you cannot assume the order
+     * in which these broadcasts will arrive, however you are guaranteed to receive two in this
+     * case.  Apps which are interested in the {@link #EXTRA_INCOMING_NUMBER} can ignore the
+     * broadcasts where {@link #EXTRA_INCOMING_NUMBER} is not present in the extras (e.g. where
+     * {@link Intent#hasExtra(String)} returns {@code false}).
      * <p class="note">
      * This was a {@link android.content.Context#sendStickyBroadcast sticky}
      * broadcast in version 1.0, but it is no longer sticky.
@@ -488,10 +495,19 @@ public class TelephonyManager {
     public static final String EXTRA_STATE_OFFHOOK = PhoneConstants.State.OFFHOOK.toString();
 
     /**
-     * The lookup key used with the {@link #ACTION_PHONE_STATE_CHANGED} broadcast
-     * for a String containing the incoming phone number.
-     * Only valid when the new call state is RINGING.
-     *
+     * Extra key used with the {@link #ACTION_PHONE_STATE_CHANGED} broadcast
+     * for a String containing the incoming or outgoing phone number.
+     * <p>
+     * This extra is only populated for receivers of the {@link #ACTION_PHONE_STATE_CHANGED}
+     * broadcast which have been granted the {@link android.Manifest.permission#READ_CALL_LOG} and
+     * {@link android.Manifest.permission#READ_PHONE_STATE} permissions.
+     * <p>
+     * For incoming calls, the phone number is only guaranteed to be populated when the
+     * {@link #EXTRA_STATE} changes from {@link #EXTRA_STATE_IDLE} to {@link #EXTRA_STATE_RINGING}.
+     * If the incoming caller is from an unknown number, the extra will be populated with an empty
+     * string.
+     * For outgoing calls, the phone number is only guaranteed to be populated when the
+     * {@link #EXTRA_STATE} changes from {@link #EXTRA_STATE_IDLE} to {@link #EXTRA_STATE_OFFHOOK}.
      * <p class="note">
      * Retrieve with
      * {@link android.content.Intent#getStringExtra(String)}.
@@ -1297,6 +1313,33 @@ public class TelephonyManager {
     }
 
     /**
+     * Returns the Type Allocation Code from the IMEI. Return null if Type Allocation Code is not
+     * available.
+     */
+    public String getTypeAllocationCode() {
+        return getTypeAllocationCode(getSlotIndex());
+    }
+
+    /**
+     * Returns the Type Allocation Code from the IMEI. Return null if Type Allocation Code is not
+     * available.
+     *
+     * @param slotIndex of which Type Allocation Code is returned
+     */
+    public String getTypeAllocationCode(int slotIndex) {
+        ITelephony telephony = getITelephony();
+        if (telephony == null) return null;
+
+        try {
+            return telephony.getTypeAllocationCodeForSlot(slotIndex);
+        } catch (RemoteException ex) {
+            return null;
+        } catch (NullPointerException ex) {
+            return null;
+        }
+    }
+
+    /**
      * Returns the MEID (Mobile Equipment Identifier). Return null if MEID is not available.
      *
      * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
@@ -1324,6 +1367,33 @@ public class TelephonyManager {
 
         try {
             return telephony.getMeidForSlot(slotIndex, getOpPackageName());
+        } catch (RemoteException ex) {
+            return null;
+        } catch (NullPointerException ex) {
+            return null;
+        }
+    }
+
+    /**
+     * Returns the Manufacturer Code from the MEID. Return null if Manufacturer Code is not
+     * available.
+     */
+    public String getManufacturerCode() {
+        return getManufacturerCode(getSlotIndex());
+    }
+
+    /**
+     * Returns the Manufacturer Code from the MEID. Return null if Manufacturer Code is not
+     * available.
+     *
+     * @param slotIndex of which Type Allocation Code is returned
+     */
+    public String getManufacturerCode(int slotIndex) {
+        ITelephony telephony = getITelephony();
+        if (telephony == null) return null;
+
+        try {
+            return telephony.getManufacturerCodeForSlot(slotIndex);
         } catch (RemoteException ex) {
             return null;
         } catch (NullPointerException ex) {
@@ -1882,7 +1952,7 @@ public class TelephonyManager {
 
     /**
      * Returns the ISO country code equivalent of the MCC (Mobile Country Code) of the current
-     * registered operator, or nearby cell information if not registered.
+     * registered operator or the cell nearby, if available.
      * .
      * <p>
      * Note: Result may be unreliable on CDMA networks (use {@link #getPhoneType()} to determine
@@ -1894,7 +1964,7 @@ public class TelephonyManager {
 
     /**
      * Returns the ISO country code equivalent of the MCC (Mobile Country Code) of the current
-     * registered operator, or nearby cell information if not registered.
+     * registered operator or the cell nearby, if available.
      * <p>
      * Note: Result may be unreliable on CDMA networks (use {@link #getPhoneType()} to determine
      * if on a CDMA network).
@@ -2771,7 +2841,8 @@ public class TelephonyManager {
     }
 
     /**
-     * Gets all the UICC slots.
+     * Gets all the UICC slots. The objects in the array can be null if the slot info is not
+     * available, which is possible between phone process starting and getting slot info from modem.
      *
      * @return UiccSlotInfo array.
      *
@@ -3290,37 +3361,6 @@ public class TelephonyManager {
     }
 
     /**
-     * Returns the complete voice mail number. Return null if it is unavailable.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.CALL_PRIVILEGED)
-    public String getCompleteVoiceMailNumber() {
-        return getCompleteVoiceMailNumber(getSubId());
-    }
-
-    /**
-     * Returns the complete voice mail number. Return null if it is unavailable.
-     *
-     * @param subId
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.CALL_PRIVILEGED)
-    public String getCompleteVoiceMailNumber(int subId) {
-        try {
-            IPhoneSubInfo info = getSubscriberInfo();
-            if (info == null)
-                return null;
-            return info.getCompleteVoiceMailNumberForSubscriber(subId);
-        } catch (RemoteException ex) {
-            return null;
-        } catch (NullPointerException ex) {
-            // This could happen before phone restarts due to crashing
-            return null;
-        }
-    }
-
-    /**
      * Sets the voice mail number.
      *
      * <p>Requires that the calling app has carrier privileges (see {@link #hasCarrierPrivileges}).
@@ -3454,8 +3494,8 @@ public class TelephonyManager {
      *
      * @param settings The settings for the filter, or {@code null} to disable the filter.
      *
-     * @see {@link TelecomManager#getDefaultDialerPackage()}
-     * @see {@link CarrierConfigManager#KEY_CARRIER_VVM_PACKAGE_NAME_STRING_ARRAY}
+     * @see TelecomManager#getDefaultDialerPackage()
+     * @see CarrierConfigManager#KEY_CARRIER_VVM_PACKAGE_NAME_STRING_ARRAY
      */
     public void setVisualVoicemailSmsFilterSettings(VisualVoicemailSmsFilterSettings settings) {
         if (settings == null) {
@@ -4020,26 +4060,45 @@ public class TelephonyManager {
         return IPhoneSubInfo.Stub.asInterface(ServiceManager.getService("iphonesubinfo"));
     }
 
-    /** Device call state: No activity. */
+    /**
+     * Device call state: No activity.
+     */
     public static final int CALL_STATE_IDLE = 0;
-    /** Device call state: Ringing. A new call arrived and is
+    /**
+     * Device call state: Ringing. A new call arrived and is
      *  ringing or waiting. In the latter case, another call is
-     *  already active. */
+     *  already active.
+     */
     public static final int CALL_STATE_RINGING = 1;
-    /** Device call state: Off-hook. At least one call exists
-      * that is dialing, active, or on hold, and no calls are ringing
-      * or waiting. */
+    /**
+     * Device call state: Off-hook. At least one call exists
+     * that is dialing, active, or on hold, and no calls are ringing
+     * or waiting.
+     */
     public static final int CALL_STATE_OFFHOOK = 2;
 
+    /** @hide */
+    @IntDef(prefix = { "CALL_STATE_" }, value = {
+            CALL_STATE_IDLE,
+            CALL_STATE_RINGING,
+            CALL_STATE_OFFHOOK
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface CallState{}
+
     /**
-     * Returns one of the following constants that represents the current state of all
-     * phone calls.
+     * Returns the state of all calls on the device.
+     * <p>
+     * This method considers not only calls in the Telephony stack, but also calls via other
+     * {@link android.telecom.ConnectionService} implementations.
+     * <p>
+     * Note: The call state returned via this method may differ from what is reported by
+     * {@link PhoneStateListener#onCallStateChanged(int, String)}, as that callback only considers
+     * Telephony (mobile) calls.
      *
-     * {@link TelephonyManager#CALL_STATE_RINGING}
-     * {@link TelephonyManager#CALL_STATE_OFFHOOK}
-     * {@link TelephonyManager#CALL_STATE_IDLE}
+     * @return the current call state.
      */
-    public int getCallState() {
+    public @CallState int getCallState() {
         try {
             ITelecomService telecom = getTelecomService();
             if (telecom != null) {
@@ -4052,23 +4111,31 @@ public class TelephonyManager {
     }
 
     /**
-     * Returns a constant indicating the call state (cellular) on the device
-     * for a subscription.
+     * Returns the Telephony call state for calls on a specific subscription.
+     * <p>
+     * Note: This method considers ONLY telephony/mobile calls, where {@link #getCallState()}
+     * considers the state of calls from other {@link android.telecom.ConnectionService}
+     * implementations.
      *
-     * @param subId whose call state is returned
+     * @param subId the subscription to check call state for.
      * @hide
      */
-    public int getCallState(int subId) {
+    public @CallState int getCallState(int subId) {
         int phoneId = SubscriptionManager.getPhoneId(subId);
         return getCallStateForSlot(phoneId);
     }
 
     /**
-     * See getCallState.
+     * Returns the Telephony call state for calls on a specific SIM slot.
+     * <p>
+     * Note: This method considers ONLY telephony/mobile calls, where {@link #getCallState()}
+     * considers the state of calls from other {@link android.telecom.ConnectionService}
+     * implementations.
      *
+     * @param slotIndex the SIM slot index to check call state for.
      * @hide
      */
-    public int getCallStateForSlot(int slotIndex) {
+    public @CallState int getCallStateForSlot(int slotIndex) {
         try {
             ITelephony telephony = getITelephony();
             if (telephony == null)
@@ -5442,23 +5509,6 @@ public class TelephonyManager {
     }
 
     /**
-     * @return true if the IMS resolver is busy resolving a binding and should not be considered
-     * available, false if the IMS resolver is idle.
-     * @hide
-     */
-    public boolean isResolvingImsBinding() {
-        try {
-            ITelephony telephony = getITelephony();
-            if (telephony != null) {
-                return telephony.isResolvingImsBinding();
-            }
-        } catch (RemoteException e) {
-            Rlog.e(TAG, "isResolvingImsBinding, RemoteException: " + e.getMessage());
-        }
-        return false;
-    }
-
-    /**
      * Set IMS registration state
      *
      * @param Registration state
@@ -6564,7 +6614,7 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.canChangeDtmfToneLength();
+                return telephony.canChangeDtmfToneLength(mSubId, getOpPackageName());
             }
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling ITelephony#canChangeDtmfToneLength", e);
@@ -6583,7 +6633,7 @@ public class TelephonyManager {
         try {
             ITelephony telephony = getITelephony();
             if (telephony != null) {
-                return telephony.isWorldPhone();
+                return telephony.isWorldPhone(mSubId, getOpPackageName());
             }
         } catch (RemoteException e) {
             Log.e(TAG, "Error calling ITelephony#isWorldPhone", e);
@@ -7142,31 +7192,6 @@ public class TelephonyManager {
         if (SubscriptionManager.isValidPhoneId(phoneId)) {
             setTelephonyProperty(phoneId, TelephonyProperties.PROPERTY_OPERATOR_ISROAMING,
                     isRoaming ? "true" : "false");
-        }
-    }
-
-    /**
-     * Set the ISO country code equivalent of the current registered
-     * operator's MCC (Mobile Country Code).
-     * @param iso the ISO country code equivalent of the current registered
-     * @hide
-     */
-    public void setNetworkCountryIso(String iso) {
-        int phoneId = getPhoneId();
-        setNetworkCountryIsoForPhone(phoneId, iso);
-    }
-
-    /**
-     * Set the ISO country code equivalent of the current registered
-     * operator's MCC (Mobile Country Code).
-     * @param phoneId which phone you want to set
-     * @param iso the ISO country code equivalent of the current registered
-     * @hide
-     */
-    public void setNetworkCountryIsoForPhone(int phoneId, String iso) {
-        if (SubscriptionManager.isValidPhoneId(phoneId)) {
-            setTelephonyProperty(phoneId,
-                    TelephonyProperties.PROPERTY_OPERATOR_ISO_COUNTRY, iso);
         }
     }
 

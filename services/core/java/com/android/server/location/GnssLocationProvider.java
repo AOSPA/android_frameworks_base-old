@@ -68,7 +68,6 @@ import android.os.WorkSource;
 import android.os.WorkSource.WorkChain;
 import android.provider.Settings;
 import android.provider.Telephony.Carriers;
-import android.provider.Telephony.Sms.Intents;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
@@ -254,7 +253,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
     // 1 second, or 1 Hz frequency.
     private static final long LOCATION_UPDATE_MIN_TIME_INTERVAL_MILLIS = 1000;
     // Default update duration in milliseconds for REQUEST_LOCATION.
-    private static final long LOCATION_UPDATE_DURATION_MILLIS = 0;
+    private static final long LOCATION_UPDATE_DURATION_MILLIS = 10 * 1000;
 
     /** simpler wrapper for ProviderRequest + Worksource */
     private static class GpsRequest {
@@ -387,6 +386,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
     private long mLastFixTime;
 
     private int mPositionMode;
+    private GnssPositionMode mLastPositionMode;
 
     // Current request from underlying location clients.
     private ProviderRequest mProviderRequest = null;
@@ -1352,7 +1352,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
             // apply request to GPS engine
             if (mStarted && hasCapability(GPS_CAPABILITY_SCHEDULING)) {
                 // change period and/or lowPowerMode
-                if (!native_set_position_mode(mPositionMode, GPS_POSITION_RECURRENCE_PERIODIC,
+                if (!setPositionMode(mPositionMode, GPS_POSITION_RECURRENCE_PERIODIC,
                         mFixInterval, 0, 0, mLowPowerMode)) {
                     Log.e(TAG, "set_position_mode failed in updateRequirements");
                 }
@@ -1375,6 +1375,24 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
             mAlarmManager.cancel(mWakeupIntent);
             mAlarmManager.cancel(mTimeoutIntent);
         }
+    }
+
+    private boolean setPositionMode(int mode, int recurrence, int minInterval,
+            int preferredAccuracy, int preferredTime, boolean lowPowerMode) {
+        GnssPositionMode positionMode = new GnssPositionMode(mode, recurrence, minInterval,
+                preferredAccuracy, preferredTime, lowPowerMode);
+        if (mLastPositionMode != null && mLastPositionMode.equals(positionMode)) {
+            return true;
+        }
+
+        boolean result = native_set_position_mode(mode, recurrence, minInterval,
+                preferredAccuracy, preferredTime, lowPowerMode);
+        if (result) {
+            mLastPositionMode = positionMode;
+        } else {
+            mLastPositionMode = null;
+        }
+        return result;
     }
 
     private void updateClientUids(WorkSource source) {
@@ -1536,7 +1554,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
 
             int interval = (hasCapability(GPS_CAPABILITY_SCHEDULING) ? mFixInterval : 1000);
             mLowPowerMode = (boolean) mProviderRequest.lowPowerMode;
-            if (!native_set_position_mode(mPositionMode, GPS_POSITION_RECURRENCE_PERIODIC,
+            if (!setPositionMode(mPositionMode, GPS_POSITION_RECURRENCE_PERIODIC,
                     interval, 0, 0, mLowPowerMode)) {
                 mStarted = false;
                 Log.e(TAG, "set_position_mode failed in startNavigating()");
@@ -2395,28 +2413,7 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
                     .addOnSubscriptionsChangedListener(mOnSubscriptionsChangedListener);
 
             // listen for events
-            IntentFilter intentFilter;
-            if (native_is_agps_ril_supported()) {
-                intentFilter = new IntentFilter();
-                intentFilter.addAction(Intents.DATA_SMS_RECEIVED_ACTION);
-                intentFilter.addDataScheme("sms");
-                intentFilter.addDataAuthority("localhost", "7275");
-                mContext.registerReceiver(mBroadcastReceiver, intentFilter, null, this);
-
-                intentFilter = new IntentFilter();
-                intentFilter.addAction(Intents.WAP_PUSH_RECEIVED_ACTION);
-                try {
-                    intentFilter.addDataType("application/vnd.omaloc-supl-init");
-                } catch (IntentFilter.MalformedMimeTypeException e) {
-                    Log.w(TAG, "Malformed SUPL init mime type");
-                }
-                mContext.registerReceiver(mBroadcastReceiver, intentFilter, null, this);
-            } else if (DEBUG) {
-                Log.d(TAG, "Skipped registration for SMS/WAP-PUSH messages because AGPS Ril in GPS"
-                        + " HAL is not supported");
-            }
-
-            intentFilter = new IntentFilter();
+            IntentFilter intentFilter = new IntentFilter();
             intentFilter.addAction(ALARM_WAKEUP);
             intentFilter.addAction(ALARM_TIMEOUT);
             intentFilter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED);

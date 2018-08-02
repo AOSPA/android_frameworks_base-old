@@ -26,13 +26,13 @@ import static org.mockito.Mockito.when;
 
 import static java.util.stream.Collectors.toList;
 
+import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.os.RemoteException;
-import android.support.annotation.IntDef;
 
 import com.android.internal.backup.IBackupTransport;
 import com.android.server.backup.TransportManager;
@@ -42,6 +42,8 @@ import com.android.server.backup.transport.TransportNotRegisteredException;
 
 import org.robolectric.shadows.ShadowPackageManager;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -55,6 +57,9 @@ public class TransportTestUtils {
             ShadowPackageManager shadowPackageManager, TransportData... transports)
             throws Exception {
         for (TransportData transport : transports) {
+            if (transport.transportStatus == TransportStatus.UNREGISTERED) {
+                continue;
+            }
             ComponentName transportComponent = transport.getTransportComponent();
             String packageName = transportComponent.getPackageName();
             ResolveInfo resolveInfo = resolveInfo(transportComponent);
@@ -79,10 +84,21 @@ public class TransportTestUtils {
     /** {@code transportName} has to be in the {@link ComponentName} format (with '/') */
     public static TransportMock setUpCurrentTransport(
             TransportManager transportManager, TransportData transport) throws Exception {
-        TransportMock transportMock = setUpTransports(transportManager, transport).get(0);
-        if (transportMock.transportClient != null) {
+        TransportMock transportMock = setUpTransport(transportManager, transport);
+        int status = transport.transportStatus;
+        when(transportManager.getCurrentTransportName()).thenReturn(transport.transportName);
+        if (status == TransportStatus.REGISTERED_AVAILABLE
+                || status == TransportStatus.REGISTERED_UNAVAILABLE) {
+            // Transport registered
             when(transportManager.getCurrentTransportClient(any()))
                     .thenReturn(transportMock.transportClient);
+            when(transportManager.getCurrentTransportClientOrThrow(any()))
+                    .thenReturn(transportMock.transportClient);
+        } else {
+            // Transport not registered
+            when(transportManager.getCurrentTransportClient(any())).thenReturn(null);
+            when(transportManager.getCurrentTransportClientOrThrow(any()))
+                    .thenThrow(TransportNotRegisteredException.class);
         }
         return transportMock;
     }
@@ -195,6 +211,7 @@ public class TransportTestUtils {
         TransportStatus.REGISTERED_UNAVAILABLE,
         TransportStatus.UNREGISTERED
     })
+    @Retention(RetentionPolicy.SOURCE)
     public @interface TransportStatus {
         int REGISTERED_AVAILABLE = 0;
         int REGISTERED_UNAVAILABLE = 1;

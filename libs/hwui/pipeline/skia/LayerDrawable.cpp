@@ -59,7 +59,7 @@ bool LayerDrawable::DrawLayer(GrContext* context, SkCanvas* canvas, Layer* layer
         externalTexture.fFormat = GL_RGBA8;
         GrBackendTexture backendTexture(layerWidth, layerHeight, GrMipMapped::kNo, externalTexture);
         layerImage = SkImage::MakeFromTexture(context, backendTexture, kTopLeft_GrSurfaceOrigin,
-                                              kPremul_SkAlphaType, nullptr);
+                                              kRGBA_8888_SkColorType, kPremul_SkAlphaType, nullptr);
     } else {
         SkASSERT(layer->getApi() == Layer::Api::Vulkan);
         VkLayer* vkLayer = static_cast<VkLayer*>(layer);
@@ -82,7 +82,14 @@ bool LayerDrawable::DrawLayer(GrContext* context, SkCanvas* canvas, Layer* layer
             textureMatrix = textureMatrixInv;
         }
 
-        SkMatrix matrix = SkMatrix::Concat(layerTransform, textureMatrix);
+        SkMatrix matrix;
+        if (dstRect) {
+            // Destination rectangle is set only when we are trying to read back the content
+            // of the layer. In this case we don't want to apply layer transform.
+            matrix = textureMatrix;
+        } else {
+            matrix = SkMatrix::Concat(layerTransform, textureMatrix);
+        }
 
         SkPaint paint;
         paint.setAlpha(layer->getAlpha());
@@ -114,7 +121,7 @@ bool LayerDrawable::DrawLayer(GrContext* context, SkCanvas* canvas, Layer* layer
         }
     }
 
-    return layerImage;
+    return layerImage != nullptr;
 }
 
 };  // namespace skiapipeline

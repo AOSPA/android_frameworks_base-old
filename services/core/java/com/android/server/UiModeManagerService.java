@@ -19,6 +19,7 @@ package com.android.server;
 import android.annotation.Nullable;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.app.IUiModeManager;
 import android.app.Notification;
 import android.app.NotificationManager;
@@ -81,6 +82,7 @@ final class UiModeManagerService extends SystemService {
 
     private boolean mCarModeEnabled = false;
     private boolean mCharging = false;
+    private boolean mPowerSave = false;
     private int mDefaultUiModeType;
     private boolean mCarModeKeepsScreenOn;
     private boolean mDeskModeKeepsScreenOn;
@@ -159,7 +161,14 @@ final class UiModeManagerService extends SystemService {
     private final BroadcastReceiver mBatteryReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            mCharging = (intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0);
+            switch (intent.getAction()) {
+                case Intent.ACTION_BATTERY_CHANGED:
+                    mCharging = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0;
+                    break;
+                case PowerManager.ACTION_POWER_SAVE_MODE_CHANGING:
+                    mPowerSave = intent.getBooleanExtra(PowerManager.EXTRA_POWER_SAVE_MODE, false);
+                    break;
+            }
             synchronized (mLock) {
                 if (mSystemReady) {
                     updateLocked(0, 0);
@@ -202,8 +211,9 @@ final class UiModeManagerService extends SystemService {
 
         context.registerReceiver(mDockModeReceiver,
                 new IntentFilter(Intent.ACTION_DOCK_EVENT));
-        context.registerReceiver(mBatteryReceiver,
-                new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        IntentFilter batteryFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        batteryFilter.addAction(PowerManager.ACTION_POWER_SAVE_MODE_CHANGING);
+        context.registerReceiver(mBatteryReceiver, batteryFilter);
 
         mConfiguration.setToDefaults();
 
@@ -456,6 +466,11 @@ final class UiModeManagerService extends SystemService {
             uiMode |= mNightMode << 4;
         }
 
+        if (mPowerSave && !mNightModeLocked) {
+            uiMode &= ~Configuration.UI_MODE_NIGHT_NO;
+            uiMode |= Configuration.UI_MODE_NIGHT_YES;
+        }
+
         if (LOG) {
             Slog.d(TAG,
                 "updateConfigurationLocked: mDockState=" + mDockState
@@ -475,7 +490,7 @@ final class UiModeManagerService extends SystemService {
             mSetUiMode = mConfiguration.uiMode;
 
             try {
-                ActivityManager.getService().updateConfiguration(mConfiguration);
+                ActivityTaskManager.getService().updateConfiguration(mConfiguration);
             } catch (RemoteException e) {
                 Slog.w(TAG, "Failure communicating with activity manager", e);
             }
@@ -637,7 +652,7 @@ final class UiModeManagerService extends SystemService {
             Intent homeIntent = buildHomeIntent(category);
             if (Sandman.shouldStartDockApp(getContext(), homeIntent)) {
                 try {
-                    int result = ActivityManager.getService().startActivityWithConfig(
+                    int result = ActivityTaskManager.getService().startActivityWithConfig(
                             null, null, homeIntent, null, null, null, 0, 0,
                             mConfiguration, null, UserHandle.USER_CURRENT);
                     if (ActivityManager.isStartResultSuccessful(result)) {

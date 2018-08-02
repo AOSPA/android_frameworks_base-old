@@ -16,10 +16,15 @@
 
 package com.android.internal.os;
 
+import android.annotation.Nullable;
 import android.os.Binder;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.text.format.DateFormat;
 import android.util.ArrayMap;
+import android.util.Log;
+import android.util.Pair;
+import android.util.Slog;
 import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
@@ -28,166 +33,337 @@ import com.android.internal.util.Preconditions;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.ToDoubleFunction;
 
 /**
  * Collects statistics about CPU time spent per binder call across multiple dimensions, e.g.
  * per thread, uid or call description.
  */
 public class BinderCallsStats {
+    public static final boolean ENABLED_DEFAULT = true;
+    public static final boolean DETAILED_TRACKING_DEFAULT = true;
+    public static final int PERIODIC_SAMPLING_INTERVAL_DEFAULT = 10;
+
+    private static final String TAG = "BinderCallsStats";
     private static final int CALL_SESSIONS_POOL_SIZE = 100;
+    private static final int PERIODIC_SAMPLING_INTERVAL = 10;
+    private static final int MAX_EXCEPTION_COUNT_SIZE = 50;
+    private static final String EXCEPTION_COUNT_OVERFLOW_NAME = "overflow";
+    private static final CallSession NOT_ENABLED = new CallSession();
     private static final BinderCallsStats sInstance = new BinderCallsStats();
 
-    private volatile boolean mDetailedTracking = false;
+    private volatile boolean mEnabled = ENABLED_DEFAULT;
+    private volatile boolean mDetailedTracking = DETAILED_TRACKING_DEFAULT;
+    private volatile int mPeriodicSamplingInterval = PERIODIC_SAMPLING_INTERVAL_DEFAULT;
     @GuardedBy("mLock")
     private final SparseArray<UidEntry> mUidEntries = new SparseArray<>();
+    @GuardedBy("mLock")
+    private final ArrayMap<String, Integer> mExceptionCounts = new ArrayMap<>();
     private final Queue<CallSession> mCallSessionsPool = new ConcurrentLinkedQueue<>();
     private final Object mLock = new Object();
     private long mStartTime = System.currentTimeMillis();
+    @GuardedBy("mLock")
+    private UidEntry mSampledEntries = new UidEntry(-1);
 
-    private BinderCallsStats() {
-    }
-
-    @VisibleForTesting
-    public BinderCallsStats(boolean detailedTracking) {
-        mDetailedTracking = detailedTracking;
+    @VisibleForTesting  // Use getInstance() instead.
+    public BinderCallsStats() {
     }
 
     public CallSession callStarted(Binder binder, int code) {
-        return callStarted(binder.getClass().getName(), code);
+        return callStarted(binder.getClass().getName(), code, binder.getTransactionName(code));
     }
 
-    private CallSession callStarted(String className, int code) {
+    private CallSession callStarted(String className, int code, @Nullable String methodName) {
+        if (!mEnabled) {
+          return NOT_ENABLED;
+        }
+
         CallSession s = mCallSessionsPool.poll();
         if (s == null) {
             s = new CallSession();
         }
-        s.mCallStat.className = className;
-        s.mCallStat.msg = code;
 
-        s.mStarted = getThreadTimeMicro();
+        s.callStat.className = className;
+        s.callStat.msg = code;
+        s.callStat.methodName = methodName;
+        s.exceptionThrown = false;
+        s.cpuTimeStarted = -1;
+        s.timeStarted = -1;
+
+        synchronized (mLock) {
+            if (mDetailedTracking) {
+                s.cpuTimeStarted = getThreadTimeMicro();
+                s.timeStarted = getElapsedRealtimeMicro();
+            } else {
+                s.sampledCallStat = mSampledEntries.getOrCreate(s.callStat);
+                if (s.sampledCallStat.callCount % mPeriodicSamplingInterval == 0) {
+                    s.cpuTimeStarted = getThreadTimeMicro();
+                    s.timeStarted = getElapsedRealtimeMicro();
+                }
+            }
+        }
         return s;
     }
 
-    public void callEnded(CallSession s) {
+    public void callEnded(CallSession s, int parcelRequestSize, int parcelReplySize) {
         Preconditions.checkNotNull(s);
-        long duration = mDetailedTracking ? getThreadTimeMicro() - s.mStarted : 1;
-        s.mCallingUId = Binder.getCallingUid();
-
-        synchronized (mLock) {
-            UidEntry uidEntry = mUidEntries.get(s.mCallingUId);
-            if (uidEntry == null) {
-                uidEntry = new UidEntry(s.mCallingUId);
-                mUidEntries.put(s.mCallingUId, uidEntry);
-            }
-
-            if (mDetailedTracking) {
-                // Find CallDesc entry and update its total time
-                CallStat callStat = uidEntry.mCallStats.get(s.mCallStat);
-                // Only create CallStat if it's a new entry, otherwise update existing instance
-                if (callStat == null) {
-                    callStat = new CallStat(s.mCallStat.className, s.mCallStat.msg);
-                    uidEntry.mCallStats.put(callStat, callStat);
-                }
-                callStat.callCount++;
-                callStat.time += duration;
-            }
-
-            uidEntry.time += duration;
-            uidEntry.callCount++;
+        if (s == NOT_ENABLED) {
+          return;
         }
+
+        processCallEnded(s, parcelRequestSize, parcelReplySize);
+
         if (mCallSessionsPool.size() < CALL_SESSIONS_POOL_SIZE) {
             mCallSessionsPool.add(s);
         }
     }
 
-    public void dump(PrintWriter pw) {
-        Map<Integer, Long> uidTimeMap = new HashMap<>();
-        Map<Integer, Long> uidCallCountMap = new HashMap<>();
-        long totalCallsCount = 0;
-        long totalCallsTime = 0;
-        pw.print("Start time: ");
-        pw.println(DateFormat.format("yyyy-MM-dd HH:mm:ss", mStartTime));
-        int uidEntriesSize = mUidEntries.size();
-        List<UidEntry> entries = new ArrayList<>();
+    private void processCallEnded(CallSession s, int parcelRequestSize, int parcelReplySize) {
         synchronized (mLock) {
-            for (int i = 0; i < uidEntriesSize; i++) {
-                UidEntry e = mUidEntries.valueAt(i);
-                entries.add(e);
-                totalCallsTime += e.time;
-                // Update per-uid totals
-                Long totalTimePerUid = uidTimeMap.get(e.uid);
-                uidTimeMap.put(e.uid,
-                        totalTimePerUid == null ? e.time : totalTimePerUid + e.time);
-                Long totalCallsPerUid = uidCallCountMap.get(e.uid);
-                uidCallCountMap.put(e.uid, totalCallsPerUid == null ? e.callCount
-                        : totalCallsPerUid + e.callCount);
-                totalCallsCount += e.callCount;
+            if (!mEnabled) {
+              return;
+            }
+
+            long duration;
+            long latencyDuration;
+            if (mDetailedTracking) {
+                duration = getThreadTimeMicro() - s.cpuTimeStarted;
+                latencyDuration = getElapsedRealtimeMicro() - s.timeStarted;
+            } else {
+                CallStat cs = s.sampledCallStat;
+                // Non-negative time signals beginning of the new sampling interval
+                if (s.cpuTimeStarted >= 0) {
+                    duration = getThreadTimeMicro() - s.cpuTimeStarted;
+                    latencyDuration = getElapsedRealtimeMicro() - s.timeStarted;
+                } else {
+                    // callCount is always incremented, but time only once per sampling interval
+                    long samplesCount = cs.callCount / mPeriodicSamplingInterval + 1;
+                    duration = cs.cpuTimeMicros / samplesCount;
+                    latencyDuration = cs.latencyMicros / samplesCount;
+                }
+            }
+
+            int callingUid = getCallingUid();
+
+            UidEntry uidEntry = mUidEntries.get(callingUid);
+            if (uidEntry == null) {
+                uidEntry = new UidEntry(callingUid);
+                mUidEntries.put(callingUid, uidEntry);
+            }
+
+            CallStat callStat;
+            if (mDetailedTracking) {
+                // Find CallStat entry and update its total time
+                callStat = uidEntry.getOrCreate(s.callStat);
+                callStat.exceptionCount += s.exceptionThrown ? 1 : 0;
+                callStat.maxRequestSizeBytes =
+                        Math.max(callStat.maxRequestSizeBytes, parcelRequestSize);
+                callStat.maxReplySizeBytes =
+                        Math.max(callStat.maxReplySizeBytes, parcelReplySize);
+            } else {
+                // update sampled timings in the beginning of each interval
+                callStat = s.sampledCallStat;
+            }
+            callStat.callCount++;
+            callStat.methodName = s.callStat.methodName;
+            if (s.cpuTimeStarted >= 0) {
+                callStat.cpuTimeMicros += duration;
+                callStat.maxCpuTimeMicros = Math.max(callStat.maxCpuTimeMicros, duration);
+                callStat.latencyMicros += latencyDuration;
+                callStat.maxLatencyMicros = Math.max(callStat.maxLatencyMicros, latencyDuration);
+            }
+
+            uidEntry.cpuTimeMicros += duration;
+            uidEntry.callCount++;
+        }
+    }
+
+    /**
+     * Called if an exception is thrown while executing the binder transaction.
+     *
+     * <li>BinderCallsStats#callEnded will be called afterwards.
+     * <li>Do not throw an exception in this method, it will swallow the original exception thrown
+     * by the binder transaction.
+     */
+    public void callThrewException(CallSession s, Exception exception) {
+        Preconditions.checkNotNull(s);
+        if (!mEnabled) {
+          return;
+        }
+        s.exceptionThrown = true;
+        try {
+            String className = exception.getClass().getName();
+            synchronized (mLock) {
+                if (mExceptionCounts.size() >= MAX_EXCEPTION_COUNT_SIZE) {
+                  className = EXCEPTION_COUNT_OVERFLOW_NAME;
+                }
+                Integer count = mExceptionCounts.get(className);
+                mExceptionCounts.put(className, count == null ? 1 : count + 1);
+            }
+        } catch (RuntimeException e) {
+          // Do not propagate the exception. We do not want to swallow original exception.
+          Log.wtf(TAG, "Unexpected exception while updating mExceptionCounts", e);
+        }
+    }
+
+    public ArrayList<ExportedCallStat> getExportedCallStats() {
+        // We do not collect all the data if detailed tracking is off.
+        if (!mDetailedTracking) {
+          return new ArrayList<ExportedCallStat>();
+        }
+
+        ArrayList<ExportedCallStat> resultCallStats = new ArrayList<>();
+        synchronized (mLock) {
+            int uidEntriesSize = mUidEntries.size();
+            for (int entryIdx = 0; entryIdx < uidEntriesSize; entryIdx++){
+                UidEntry entry = mUidEntries.valueAt(entryIdx);
+                for (CallStat stat : entry.getCallStatsList()) {
+                    ExportedCallStat exported = new ExportedCallStat();
+                    exported.uid = entry.uid;
+                    exported.className = stat.className;
+                    exported.methodName = stat.methodName == null
+                        ? String.valueOf(stat.msg) : stat.methodName;
+                    exported.cpuTimeMicros = stat.cpuTimeMicros;
+                    exported.maxCpuTimeMicros = stat.maxCpuTimeMicros;
+                    exported.latencyMicros = stat.latencyMicros;
+                    exported.maxLatencyMicros = stat.maxLatencyMicros;
+                    exported.callCount = stat.callCount;
+                    exported.maxRequestSizeBytes = stat.maxRequestSizeBytes;
+                    exported.maxReplySizeBytes = stat.maxReplySizeBytes;
+                    exported.exceptionCount = stat.exceptionCount;
+                    resultCallStats.add(exported);
+                }
             }
         }
+
+        return resultCallStats;
+    }
+
+    public void dump(PrintWriter pw, Map<Integer,String> appIdToPkgNameMap, boolean verbose) {
+        synchronized (mLock) {
+            dumpLocked(pw, appIdToPkgNameMap, verbose);
+        }
+    }
+
+    private void dumpLocked(PrintWriter pw, Map<Integer,String> appIdToPkgNameMap, boolean verbose) {
+        if (!mEnabled) {
+          pw.println("Binder calls stats disabled.");
+          return;
+        }
+
+        long totalCallsCount = 0;
+        long totalCpuTime = 0;
+        pw.print("Start time: ");
+        pw.println(DateFormat.format("yyyy-MM-dd HH:mm:ss", mStartTime));
+        List<UidEntry> entries = new ArrayList<>();
+
+        int uidEntriesSize = mUidEntries.size();
+        for (int i = 0; i < uidEntriesSize; i++) {
+            UidEntry e = mUidEntries.valueAt(i);
+            entries.add(e);
+            totalCpuTime += e.cpuTimeMicros;
+            totalCallsCount += e.callCount;
+        }
+
+        entries.sort(Comparator.<UidEntry>comparingDouble(value -> value.cpuTimeMicros).reversed());
+        String datasetSizeDesc = verbose ? "" : "(top 90% by cpu time) ";
+        StringBuilder sb = new StringBuilder();
         if (mDetailedTracking) {
-            pw.println("Raw data (uid,call_desc,time):");
-            entries.sort((o1, o2) -> {
-                if (o1.time < o2.time) {
-                    return 1;
-                } else if (o1.time > o2.time) {
-                    return -1;
-                }
-                return 0;
-            });
-            StringBuilder sb = new StringBuilder();
-            for (UidEntry uidEntry : entries) {
-                List<CallStat> callStats = new ArrayList<>(uidEntry.mCallStats.keySet());
-                callStats.sort((o1, o2) -> {
-                    if (o1.time < o2.time) {
-                        return 1;
-                    } else if (o1.time > o2.time) {
-                        return -1;
-                    }
-                    return 0;
-                });
-                for (CallStat e : callStats) {
+            pw.println("Per-UID raw data " + datasetSizeDesc
+                    + "(package/uid, call_desc, cpu_time_micros, max_cpu_time_micros, "
+                    + "latency_time_micros, max_latency_time_micros, exception_count, "
+                    + "max_request_size_bytes, max_reply_size_bytes, call_count):");
+            List<UidEntry> topEntries = verbose ? entries
+                    : getHighestValues(entries, value -> value.cpuTimeMicros, 0.9);
+            for (UidEntry uidEntry : topEntries) {
+                for (CallStat e : uidEntry.getCallStatsList()) {
                     sb.setLength(0);
                     sb.append("    ")
-                            .append(uidEntry.uid).append(",").append(e).append(',').append(e.time);
+                            .append(uidToString(uidEntry.uid, appIdToPkgNameMap))
+                            .append(",").append(e)
+                            .append(',').append(e.cpuTimeMicros)
+                            .append(',').append(e.maxCpuTimeMicros)
+                            .append(',').append(e.latencyMicros)
+                            .append(',').append(e.maxLatencyMicros)
+                            .append(',').append(e.exceptionCount)
+                            .append(',').append(e.maxRequestSizeBytes)
+                            .append(',').append(e.maxReplySizeBytes)
+                            .append(',').append(e.callCount);
                     pw.println(sb);
                 }
             }
             pw.println();
-            pw.println("Per UID Summary(UID: time, % of total_time, calls_count):");
-            List<Map.Entry<Integer, Long>> uidTotals = new ArrayList<>(uidTimeMap.entrySet());
-            uidTotals.sort((o1, o2) -> o2.getValue().compareTo(o1.getValue()));
-            for (Map.Entry<Integer, Long> uidTotal : uidTotals) {
-                Long callCount = uidCallCountMap.get(uidTotal.getKey());
-                pw.println(String.format("  %7d: %11d %3.0f%% %8d",
-                        uidTotal.getKey(), uidTotal.getValue(),
-                        100d * uidTotal.getValue() / totalCallsTime, callCount));
+        } else {
+            pw.println("Sampled stats " + datasetSizeDesc
+                    + "(call_desc, cpu_time, call_count, exception_count):");
+            List<CallStat> sampledStatsList = mSampledEntries.getCallStatsList();
+            // Show all if verbose, otherwise 90th percentile
+            if (!verbose) {
+                sampledStatsList = getHighestValues(sampledStatsList,
+                        value -> value.cpuTimeMicros, 0.9);
+            }
+            for (CallStat e : sampledStatsList) {
+                sb.setLength(0);
+                sb.append("    ").append(e)
+                        .append(',').append(e.cpuTimeMicros * mPeriodicSamplingInterval)
+                        .append(',').append(e.callCount)
+                        .append(',').append(e.exceptionCount);
+                pw.println(sb);
             }
             pw.println();
-            pw.println(String.format("  Summary: total_time=%d, "
-                            + "calls_count=%d, avg_call_time=%.0f",
-                    totalCallsTime, totalCallsCount,
-                    (double)totalCallsTime / totalCallsCount));
-        } else {
-            pw.println("Per UID Summary(UID: calls_count, % of total calls_count):");
-            List<Map.Entry<Integer, Long>> uidTotals = new ArrayList<>(uidTimeMap.entrySet());
-            uidTotals.sort((o1, o2) -> o2.getValue().compareTo(o1.getValue()));
-            for (Map.Entry<Integer, Long> uidTotal : uidTotals) {
-                Long callCount = uidCallCountMap.get(uidTotal.getKey());
-                pw.println(String.format("    %7d: %8d %3.0f%%",
-                        uidTotal.getKey(), callCount, 100d * uidTotal.getValue() / totalCallsTime));
-            }
+        }
+        pw.println("Per-UID Summary " + datasetSizeDesc
+                + "(cpu_time, % of total cpu_time, call_count, exception_count, package/uid):");
+        List<UidEntry> summaryEntries = verbose ? entries
+                : getHighestValues(entries, value -> value.cpuTimeMicros, 0.9);
+        for (UidEntry entry : summaryEntries) {
+            String uidStr = uidToString(entry.uid, appIdToPkgNameMap);
+            pw.println(String.format("  %10d %3.0f%% %8d %3d %s",
+                    entry.cpuTimeMicros, 100d * entry.cpuTimeMicros / totalCpuTime, entry.callCount,
+                    entry.exceptionCount, uidStr));
+        }
+        pw.println();
+        pw.println(String.format("  Summary: total_cpu_time=%d, "
+                        + "calls_count=%d, avg_call_cpu_time=%.0f",
+                totalCpuTime, totalCallsCount, (double)totalCpuTime / totalCallsCount));
+        pw.println();
+
+        pw.println("Exceptions thrown (exception_count, class_name):");
+        List<Pair<String, Integer>> exceptionEntries = new ArrayList<>();
+        // We cannot use new ArrayList(Collection) constructor because MapCollections does not
+        // implement toArray method.
+        mExceptionCounts.entrySet().iterator().forEachRemaining(
+            (e) -> exceptionEntries.add(Pair.create(e.getKey(), e.getValue())));
+        exceptionEntries.sort((e1, e2) -> Integer.compare(e2.second, e1.second));
+        for (Pair<String, Integer> entry : exceptionEntries) {
+          pw.println(String.format("  %6d %s", entry.second, entry.first));
         }
     }
 
-    private long getThreadTimeMicro() {
-        // currentThreadTimeMicro is expensive, so we measure cpu time only if detailed tracking is
-        // enabled
-        return mDetailedTracking ? SystemClock.currentThreadTimeMicro() : 0;
+    private static String uidToString(int uid, Map<Integer, String> pkgNameMap) {
+        int appId = UserHandle.getAppId(uid);
+        String pkgName = pkgNameMap == null ? null : pkgNameMap.get(appId);
+        String uidStr = UserHandle.formatUid(uid);
+        return pkgName == null ? uidStr : pkgName + '/' + uidStr;
+    }
+
+    protected long getThreadTimeMicro() {
+        return SystemClock.currentThreadTimeMicro();
+    }
+
+    protected int getCallingUid() {
+        return Binder.getCallingUid();
+    }
+
+    protected long getElapsedRealtimeMicro() {
+        return SystemClock.elapsedRealtimeNanos() / 1000;
     }
 
     public static BinderCallsStats getInstance() {
@@ -195,24 +371,74 @@ public class BinderCallsStats {
     }
 
     public void setDetailedTracking(boolean enabled) {
-        if (enabled != mDetailedTracking) {
-            reset();
-            mDetailedTracking = enabled;
+        synchronized (mLock) {
+          if (enabled != mDetailedTracking) {
+              mDetailedTracking = enabled;
+              reset();
+          }
+        }
+    }
+
+    public void setEnabled(boolean enabled) {
+        synchronized (mLock) {
+            if (enabled != mEnabled) {
+                mEnabled = enabled;
+                reset();
+            }
+        }
+    }
+
+    public void setSamplingInterval(int samplingInterval) {
+        synchronized (mLock) {
+            if (samplingInterval != mPeriodicSamplingInterval) {
+                mPeriodicSamplingInterval = samplingInterval;
+                reset();
+            }
         }
     }
 
     public void reset() {
         synchronized (mLock) {
             mUidEntries.clear();
+            mExceptionCounts.clear();
+            mSampledEntries.mCallStats.clear();
             mStartTime = System.currentTimeMillis();
         }
     }
 
-    private static class CallStat {
-        String className;
-        int msg;
-        long time;
-        long callCount;
+    /**
+     * Aggregated data by uid/class/method to be sent through WestWorld.
+     */
+    public static class ExportedCallStat {
+        public int uid;
+        public String className;
+        public String methodName;
+        public long cpuTimeMicros;
+        public long maxCpuTimeMicros;
+        public long latencyMicros;
+        public long maxLatencyMicros;
+        public long callCount;
+        public long maxRequestSizeBytes;
+        public long maxReplySizeBytes;
+        public long exceptionCount;
+    }
+
+    @VisibleForTesting
+    public static class CallStat {
+        public String className;
+        public int msg;
+        // Method name might be null when we cannot resolve the transaction code. For instance, if
+        // the binder was not generated by AIDL.
+        public @Nullable String methodName;
+        public long cpuTimeMicros;
+        public long maxCpuTimeMicros;
+        public long latencyMicros;
+        public long maxLatencyMicros;
+        public long callCount;
+        // The following fields are only computed if mDetailedTracking is set.
+        public long maxRequestSizeBytes;
+        public long maxReplySizeBytes;
+        public long exceptionCount;
 
         CallStat() {
         }
@@ -242,20 +468,24 @@ public class BinderCallsStats {
 
         @Override
         public String toString() {
-            return className + "/" + msg;
+            return className + "#" + (methodName == null ? msg : methodName);
         }
     }
 
     public static class CallSession {
-        int mCallingUId;
-        long mStarted;
-        CallStat mCallStat = new CallStat();
+        long cpuTimeStarted;
+        long timeStarted;
+        boolean exceptionThrown;
+        final CallStat callStat = new CallStat();
+        CallStat sampledCallStat;
     }
 
-    private static class UidEntry {
+    @VisibleForTesting
+    public static class UidEntry {
         int uid;
-        long time;
-        long callCount;
+        public long cpuTimeMicros;
+        public long callCount;
+        public int exceptionCount;
 
         UidEntry(int uid) {
             this.uid = uid;
@@ -264,10 +494,36 @@ public class BinderCallsStats {
         // Aggregate time spent per each call name: call_desc -> cpu_time_micros
         Map<CallStat, CallStat> mCallStats = new ArrayMap<>();
 
+        CallStat getOrCreate(CallStat callStat) {
+            CallStat mapCallStat = mCallStats.get(callStat);
+            // Only create CallStat if it's a new entry, otherwise update existing instance
+            if (mapCallStat == null) {
+                mapCallStat = new CallStat(callStat.className, callStat.msg);
+                mCallStats.put(mapCallStat, mapCallStat);
+            }
+            return mapCallStat;
+        }
+
+        /**
+         * Returns list of calls sorted by CPU time
+         */
+        public List<CallStat> getCallStatsList() {
+            List<CallStat> callStats = new ArrayList<>(mCallStats.keySet());
+            callStats.sort((o1, o2) -> {
+                if (o1.cpuTimeMicros < o2.cpuTimeMicros) {
+                    return 1;
+                } else if (o1.cpuTimeMicros > o2.cpuTimeMicros) {
+                    return -1;
+                }
+                return 0;
+            });
+            return callStats;
+        }
+
         @Override
         public String toString() {
             return "UidEntry{" +
-                    "time=" + time +
+                    "cpuTimeMicros=" + cpuTimeMicros +
                     ", callCount=" + callCount +
                     ", mCallStats=" + mCallStats +
                     '}';
@@ -287,6 +543,42 @@ public class BinderCallsStats {
         public int hashCode() {
             return uid;
         }
+    }
+
+    @VisibleForTesting
+    public SparseArray<UidEntry> getUidEntries() {
+        return mUidEntries;
+    }
+
+    @VisibleForTesting
+    public UidEntry getSampledEntries() {
+        return mSampledEntries;
+    }
+
+    @VisibleForTesting
+    public ArrayMap<String, Integer> getExceptionCounts() {
+        return mExceptionCounts;
+    }
+
+    @VisibleForTesting
+    public static <T> List<T> getHighestValues(List<T> list, ToDoubleFunction<T> toDouble,
+            double percentile) {
+        List<T> sortedList = new ArrayList<>(list);
+        sortedList.sort(Comparator.comparingDouble(toDouble).reversed());
+        double total = 0;
+        for (T item : list) {
+            total += toDouble.applyAsDouble(item);
+        }
+        List<T> result = new ArrayList<>();
+        double runningSum = 0;
+        for (T item : sortedList) {
+            if (runningSum > percentile * total) {
+                break;
+            }
+            result.add(item);
+            runningSum += toDouble.applyAsDouble(item);
+        }
+        return result;
     }
 
 }

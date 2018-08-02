@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"තට්ටු කිරීම් සඳහා දෘශ්‍ය ප්‍රතිපෝෂණ පෙන්වන්න"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"පෘෂ්ඨ යාවත්කාලීන පෙන්වන්න"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"යාවත්කාලින වනවිට මුළු කවුළු තලයම දැල්වෙන්න"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU පෙනුම් යාවත්කාලීන පෙන්වන්න"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU සමග ඈඳෙන විට තිරයේ ඇතුලත Flash නරඹයි"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"නැරඹීම් යාවත්කාලීන පෙන්වන්න"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"ඇඳි විට කවුළු තුළ සැණෙළි දසුන්"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"දෘඨාංග ස්ථර යාවත්කාලීන"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"යාවත්කාලින වන විට දෘඩාංග තලය කොළ පහන් දැල්වෙන්න"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU වැඩිකොට දැක්වීම නිදොස් කරන්න"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"ක්ලිප් සීමා, මායිම්, ආදිය පෙන්වන්න."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"බල RTL පිරිසැලසුම් දිශාව"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"සියලු පෙදෙසි සඳහා RTL වෙත බල තිර පිරිසැලසුම"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPU විදහාපෑම බලකරන්න"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2d ඇඳීම් සඳහා GPU බලයෙන් භාවිතා කරන්න"</string>
     <string name="force_msaa" msgid="7920323238677284387">"4x MSAA බල කරන්න"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 යෙදුම්හි 4x MSAA සබල කරන්න"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"සෘජුකෝණාස්‍ර-නොවන ක්ලිප් මෙහෙයුම් නිදොස් කරන්න"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"GPU විදැහුම විස්තර කරන්න"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"පැතිකඩ HWUI විදහමින්"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU නිදොසීමේ ස්තර සබල කර."</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"නිදොසීමේ යෙදුම්වලට GPU නිදොසීමේ ස්තර පූරණයට ඉඩ දෙ."</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"කවුළු සජීවිකරණ පරිමාණය"</string>

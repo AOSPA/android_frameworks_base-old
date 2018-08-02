@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"ಟ್ಯಾಪ್‌ಗಳಿಗೆ ದೃಶ್ಯ ಪ್ರತಿಕ್ರಿಯೆ ತೋರಿಸು"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"ಸರ್ಫೇಸ್‌‌ ಅಪ್‌ಡೇಟ್‌"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"ಅಪ್‌ಡೇಟ್‌ ಆಗುವಾಗ ವಿಂಡೋದ ಸರ್ಫೇಸ್‌ ಫ್ಲ್ಯಾಶ್ ಆಗುತ್ತದೆ"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"GPU ವೀಕ್ಷಣೆ ಅಪ್‌ಡೇಟ್‌"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"GPU ಡ್ರಾ ಮಾಡಿದಾಗ ವಿಂಡೊದಲ್ಲಿ ವೀಕ್ಷಣೆ ಫ್ಲ್ಯಾಶ್‌"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"ಅಪ್‌ಡೇಟ್‌ಗಳನ್ನು ವೀಕ್ಷಿಸಿ ತೋರಿಸಿ"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"ಡ್ರಾ ಮಾಡಿದಾಗ ವಿಂಡೊದಲ್ಲಿ ವೀಕ್ಷಣೆ ಫ್ಲ್ಯಾಶ್‌"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"ಹಾರ್ಡ್‌ವೇರ್‌ ಲೇಯರ್‌‌ ಅಪ್‌ಡೇಟ್‌"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"ಅವುಗಳು ನವೀಕರಿಸಿದಾಗ ಹಾರ್ಡ್‌ವೇರ್‌‌ ಲೇಯರ್‌ಗಳು ಹಸಿರು ಫ್ಲ್ಯಾಶ್‌‌ ಆಗುತ್ತದೆ"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU ಓವರ್‌ಡ್ರಾ ಡೀಬಗ್"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"ಕ್ಲಿಪ್‌ನ ಗಡಿಗಳು, ಅಂಚುಗಳು, ಇತ್ಯಾದಿ ತೋರಿಸು."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"RTL ಲೇಔಟ್‌ ಪರಿಮಿತಿ ಬಲಗೊಳಿಸಿ"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"ಎಲ್ಲ ಸ್ಥಳಗಳಿಗಾಗಿ RTL ಗೆ ಸ್ಕ್ರೀನ್‌ ಲೇಔಟ್‌ ದಿಕ್ಕನ್ನು ಪ್ರಬಲಗೊಳಿಸಿ"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"GPU ನೀಡುವಿಕೆ ಬಲಗೊಳಿಸು"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"2d ಚಿತ್ರಕಲೆಗಾಗಿ GPU ಬಳಕೆ ಬಲಗೊಳಿಸಿ"</string>
     <string name="force_msaa" msgid="7920323238677284387">"4x MSAA ಪ್ರಬಲಗೊಳಿಸಿ"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"OpenGL ES 2.0 ಅಪ್ಲಿಕೇಶನ್‌ಗಳಲ್ಲಿ 4x MSAA ಸಕ್ರಿಯಗೊಳಿಸಿ"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"ಆಯತಾಕಾರವಲ್ಲದ ಕ್ಲಿಪ್ ಕಾರ್ಯಾಚರಣೆ ಡೀಬಗ್"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"GPU ಪ್ರೊಫೈಲ್‌ ಸಲ್ಲಿಕೆ"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"ಪ್ರೊಫೈಲ್ HWUI ಸಲ್ಲಿಸಲಾಗುತ್ತಿದೆ"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU ಡೀಬಗ್ ಲೇಯರ್‌ಗಳನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"ಡೀಬಗ್ ಅಪ್ಲಿಕೇಶನ್‌ಗಳಿಗಾಗಿ GPU ಡೀಬಗ್ ಲೇಯರ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡುವುದನ್ನು ಅನುಮತಿಸಿ"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Window ಅನಿಮೇಶನ್ ಸ್ಕೇಲ್‌"</string>

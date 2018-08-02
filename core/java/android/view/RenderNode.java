@@ -16,6 +16,7 @@
 
 package android.view;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.Matrix;
@@ -28,6 +29,9 @@ import dalvik.annotation.optimization.CriticalNative;
 import dalvik.annotation.optimization.FastNative;
 
 import libcore.util.NativeAllocationRegistry;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * <p>A display list records a series of graphics related operations and can replay
@@ -139,7 +143,9 @@ public class RenderNode {
                 RenderNode.class.getClassLoader(), nGetNativeFinalizer(), 1024);
     }
 
-    // Do not access directly unless you are ThreadedRenderer
+    /** Not for general use; use only if you are ThreadedRenderer or DisplayListCanvas.
+     * @hide
+     */
     final long mNativeRenderNode;
     private final View mOwningView;
 
@@ -156,15 +162,6 @@ public class RenderNode {
         mNativeRenderNode = nativePtr;
         NoImagePreloadHolder.sRegistry.registerNativeAllocation(this, mNativeRenderNode);
         mOwningView = null;
-    }
-
-    /**
-     * Immediately destroys the RenderNode
-     * Only suitable for testing/benchmarking where waiting for the GC/finalizer
-     * is not feasible.
-     */
-    public void destroy() {
-        // TODO: Removed temporarily
     }
 
     /**
@@ -219,6 +216,14 @@ public class RenderNode {
     }
 
     /**
+     * Same as {@link #start(int, int)} but with the RenderNode's width & height
+     */
+    public DisplayListCanvas start() {
+        return DisplayListCanvas.obtain(this,
+                nGetWidth(mNativeRenderNode), nGetHeight(mNativeRenderNode));
+    }
+
+    /**
      * Ends the recording for this display list. A display list cannot be
      * replayed if recording is not finished. Calling this method marks
      * the display list valid and {@link #isValid()} will return true.
@@ -249,13 +254,6 @@ public class RenderNode {
      */
     public boolean isValid() {
         return nIsValid(mNativeRenderNode);
-    }
-
-    long getNativeDisplayList() {
-        if (!isValid()) {
-            throw new IllegalStateException("The display list is not valid.");
-        }
-        return mNativeRenderNode;
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -455,6 +453,25 @@ public class RenderNode {
         return nSetHasOverlappingRendering(mNativeRenderNode, hasOverlappingRendering);
     }
 
+    /** @hide */
+    @IntDef({USAGE_BACKGROUND})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface UsageHint {}
+
+    /** The default usage hint */
+    public static final int USAGE_UNKNOWN = 0;
+
+    /** Usage is background content */
+    public static final int USAGE_BACKGROUND = 1;
+
+    /**
+     * Provides a hint on what this RenderNode's display list content contains. This hint is used
+     * for automatic content transforms to improve accessibility or similar.
+     */
+    public void setUsageHint(@UsageHint int usageHint) {
+        nSetUsageHint(mNativeRenderNode, usageHint);
+    }
+
     /**
      * Indicates whether the content of this display list overlaps.
      *
@@ -463,7 +480,6 @@ public class RenderNode {
      * @see #setHasOverlappingRendering(boolean)
      */
     public boolean hasOverlappingRendering() {
-        //noinspection SimplifiableIfStatement
         return nHasOverlappingRendering(mNativeRenderNode);
     }
 
@@ -955,6 +971,8 @@ public class RenderNode {
     private static native boolean nSetHasOverlappingRendering(long renderNode,
             boolean hasOverlappingRendering);
     @CriticalNative
+    private static native void nSetUsageHint(long renderNode, int usageHint);
+    @CriticalNative
     private static native boolean nSetElevation(long renderNode, float lift);
     @CriticalNative
     private static native boolean nSetTranslationX(long renderNode, float translationX);
@@ -1009,4 +1027,8 @@ public class RenderNode {
     private static native float nGetPivotX(long renderNode);
     @CriticalNative
     private static native float nGetPivotY(long renderNode);
+    @CriticalNative
+    private static native int nGetWidth(long renderNode);
+    @CriticalNative
+    private static native int nGetHeight(long renderNode);
 }

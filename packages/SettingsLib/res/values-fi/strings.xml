@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Anna visuaalista palautetta kosketuksesta."</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Näytä pintapäivitykset"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Väläytä koko ikkunoiden pinnat päivitettäessä"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Näytä GPU:n näytön päivitykset"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Väläytä ikkunoiden sisältö GPU:lla piirrettäessä."</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Näytä näyttöpäivitykset"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Näytä ikkunoiden sisältö piirtämisen yhteydessä"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Näytä laitteistotason päivitykset"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Näytä laitteistotasot vihreinä niiden päivittyessä."</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"GPU-objektien päällekkäisyys"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Näytä leikkeiden rajat, marginaalit jne."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Pakota RTL-ulkoasun suunta"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Pakota kaikkien kielten näytön ulkoasun suunnaksi RTL."</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Pakota GPU-hahmonnus"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Käytä GPU:ta 2d-piirtämiseen."</string>
     <string name="force_msaa" msgid="7920323238677284387">"Pakota 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Ota käyttöön 4x MSAA OpenGL ES 2.0 -sovelluksissa."</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Korjaa ei-suorakulmaisten leiketoimintojen virheet"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Profiilin GPU-hahmonnus"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"HWUI-profiilirenderöinti"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"GPU-virheenkorjaus päälle"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Salli GPU:n virheenkorjauskerrosten lataus."</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Ikkuna"</string>

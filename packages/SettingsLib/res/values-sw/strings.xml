@@ -138,7 +138,7 @@
     <string name="user_guest" msgid="8475274842845401871">"Aliyealikwa"</string>
     <string name="unknown" msgid="1592123443519355854">"Haijulikani"</string>
     <string name="running_process_item_user_label" msgid="3129887865552025943">"Mtumiaji: <xliff:g id="USER_NAME">%1$s</xliff:g>"</string>
-    <string name="launch_defaults_some" msgid="313159469856372621">"Baadhi ya chaguo msingi zimewekwa"</string>
+    <string name="launch_defaults_some" msgid="313159469856372621">"Baadhi ya chaguomsingi zimewekwa"</string>
     <string name="launch_defaults_none" msgid="4241129108140034876">"Hakuna chaguo-misingi zilizowekwa"</string>
     <string name="tts_settings" msgid="8186971894801348327">"Mipangilio ya kusoma maandishi kwa sauti"</string>
     <string name="tts_settings_title" msgid="1237820681016639683">"Kusoma maandishi kwa sauti"</string>
@@ -157,7 +157,7 @@
     <string name="tts_engine_security_warning" msgid="8786238102020223650">"Hotuba hii inawezesha injini huenda ikaweza kukusanya maandishi ambayo yatazungumziwa, ikijumlisha data ya kibinafsi ya nenosiri na namba ya kaddi ya mkopo. Inatoka kwa injini ya <xliff:g id="TTS_PLUGIN_ENGINE_NAME">%s</xliff:g> Wezesha matumizi ya hotuba hii iliyowezeshwa ya injini?"</string>
     <string name="tts_engine_network_required" msgid="1190837151485314743">"Lugha hii inahitaji muunganisho wa mtandao unaofanya kazi ili kipengele cha kusoma maandishi kwa sauti kifanye kazi."</string>
     <string name="tts_default_sample_string" msgid="4040835213373086322">"Huu ni mfano wa usanisi usemaji"</string>
-    <string name="tts_status_title" msgid="7268566550242584413">"Hali ya lugha chaguo msingi"</string>
+    <string name="tts_status_title" msgid="7268566550242584413">"Hali ya lugha chaguomsingi"</string>
     <string name="tts_status_ok" msgid="1309762510278029765">"<xliff:g id="LOCALE">%1$s</xliff:g> inaweza kutumiwa kikamilifu"</string>
     <string name="tts_status_requires_network" msgid="6042500821503226892">"<xliff:g id="LOCALE">%1$s</xliff:g> inahitaji muunganisho wa mtandao"</string>
     <string name="tts_status_not_supported" msgid="4491154212762472495">"<xliff:g id="LOCALE">%1$s</xliff:g> haiwezi kutumiwa"</string>
@@ -167,7 +167,7 @@
     <string name="tts_engine_preference_section_title" msgid="448294500990971413">"Injini inayofaa"</string>
     <string name="tts_general_section_title" msgid="4402572014604490502">"Kwa ujumla"</string>
     <string name="tts_reset_speech_pitch_title" msgid="5789394019544785915">"Weka upya mipangilio ya ubora wa matamshi"</string>
-    <string name="tts_reset_speech_pitch_summary" msgid="8700539616245004418">"Rejesha mipangilio ya ubora wa matamshi kuwa ya chaguo msingi."</string>
+    <string name="tts_reset_speech_pitch_summary" msgid="8700539616245004418">"Rejesha mipangilio ya ubora wa matamshi kuwa ya chaguomsingi."</string>
   <string-array name="tts_rate_entries">
     <item msgid="6695494874362656215">"Polepole sana"</item>
     <item msgid="4795095314303559268">"Polepole"</item>
@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Onyesha ishara za kuthibitisha unapogusa"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Onyesha masasisho ya sehemu"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Angaza dirisha lote zitakaposasisha"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Onyesha masasisho ya mtazamo wa GPU"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Kiwango cha maoni ndani ya madirisha wakati yanatolewa na GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Onyesha taarifa za kuonekana"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Angaza maoni ndani ya madirisha wakati yanatolewa"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Onyesha masasisho ya safu za maunzi"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Angaza kijani safu za maunzi zinaposasisha"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Tatua uondoaji wa GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Onyesha mipaka ya picha, kingo, nk."</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Lazimisha uelekezaji wa muundo wa RTL"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Lazimisha uelekezaji wa muundo wa skrini kwa RTL kwa lugha zote"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Lazimisha kutekeleza kwa GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Lazimisha matumizi ya GPU kwa uchoraji wa 2d"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Lazimisha 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Wezesha 4x MSAA katika programu za OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Tatua uendeshaji wa klipu usio mstatili"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Utekelezaji wa GPU ya wasifu"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Kutekeleza HWUI ya wasifu"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Ruhusu safu za utatuzi wa GPU"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Ruhusu upakiaji wa safu za utatuzi wa GPU za programu za utatuzi"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Uhuishaji kwenye dirisha"</string>
@@ -333,7 +331,7 @@
     <string name="local_backup_password_toast_confirmation_mismatch" msgid="7805892532752708288">"Nenosiri jipya na uthibitisho havioani"</string>
     <string name="local_backup_password_toast_validation_failure" msgid="5646377234895626531">"Imeshindwa kuweka nenosiri la hifadhi rudufu"</string>
   <string-array name="color_mode_names">
-    <item msgid="2425514299220523812">"Maridadi (chaguo msingi)"</item>
+    <item msgid="2425514299220523812">"Maridadi (chaguomsingi)"</item>
     <item msgid="8446070607501413455">"Asili"</item>
     <item msgid="6553408765810699025">"Muundo-msingi"</item>
   </string-array>
@@ -412,7 +410,7 @@
     <string name="charge_length_format" msgid="8978516217024434156">"<xliff:g id="ID_1">%1$s</xliff:g> zilizopita"</string>
     <string name="remaining_length_format" msgid="7886337596669190587">"Zimesalia <xliff:g id="ID_1">%1$s</xliff:g>"</string>
     <string name="screen_zoom_summary_small" msgid="5867245310241621570">"Ndogo"</string>
-    <string name="screen_zoom_summary_default" msgid="2247006805614056507">"Chaguo msingi"</string>
+    <string name="screen_zoom_summary_default" msgid="2247006805614056507">"Chaguomsingi"</string>
     <string name="screen_zoom_summary_large" msgid="4835294730065424084">"Kubwa"</string>
     <string name="screen_zoom_summary_very_large" msgid="7108563375663670067">"Kubwa kiasi"</string>
     <string name="screen_zoom_summary_extremely_large" msgid="7427320168263276227">"Kubwa zaidi"</string>

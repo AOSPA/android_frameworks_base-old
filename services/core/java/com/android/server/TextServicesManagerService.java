@@ -57,20 +57,20 @@ import android.service.textservice.SpellCheckerService;
 import android.text.TextUtils;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.view.inputmethod.InputMethodManager;
-import android.view.inputmethod.InputMethodSubtype;
 import android.view.textservice.SpellCheckerInfo;
 import android.view.textservice.SpellCheckerSubtype;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Predicate;
 
 public class TextServicesManagerService extends ITextServicesManager.Stub {
@@ -251,7 +251,6 @@ public class TextServicesManagerService extends ITextServicesManager.Stub {
                 for (int j = 0; j < numOnGoingSessionRequests; j++) {
                     final SessionRequest req = grp.mOnGoingSessionRequests.get(j);
                     pw.println("      " + "On going Request #" + j + ":");
-                    ++j;
                     pw.println("        " + "mTsListener=" + req.mTsListener);
                     pw.println("        " + "mScListener=" + req.mScListener);
                     pw.println(
@@ -510,7 +509,7 @@ public class TextServicesManagerService extends ITextServicesManager.Stub {
     // TODO: Save SpellCheckerSubtype by supported languages by looking at "locale".
     @Override
     public SpellCheckerSubtype getCurrentSpellCheckerSubtype(
-            String locale, boolean allowImplicitlySelectedSubtype) {
+            boolean allowImplicitlySelectedSubtype) {
         final int subtypeHashCode;
         final SpellCheckerInfo sci;
         final Locale systemLocale;
@@ -538,53 +537,39 @@ public class TextServicesManagerService extends ITextServicesManager.Stub {
                 && !allowImplicitlySelectedSubtype) {
             return null;
         }
-        String candidateLocale = null;
-        if (subtypeHashCode == 0) {
-            // Spell checker language settings == "auto"
-            final InputMethodManager imm = mContext.getSystemService(InputMethodManager.class);
-            if (imm != null) {
-                final InputMethodSubtype currentInputMethodSubtype =
-                        imm.getCurrentInputMethodSubtype();
-                if (currentInputMethodSubtype != null) {
-                    final String localeString = currentInputMethodSubtype.getLocale();
-                    if (!TextUtils.isEmpty(localeString)) {
-                        // 1. Use keyboard locale if available in the spell checker
-                        candidateLocale = localeString;
-                    }
+
+        final int numSubtypes = sci.getSubtypeCount();
+        if (subtypeHashCode != 0) {
+            // Use the user specified spell checker subtype
+            for (int i = 0; i < numSubtypes; ++i) {
+                final SpellCheckerSubtype scs = sci.getSubtypeAt(i);
+                if (scs.hashCode() == subtypeHashCode) {
+                    return scs;
                 }
             }
-            if (candidateLocale == null) {
-                // 2. Use System locale if available in the spell checker
-                candidateLocale = systemLocale.toString();
-            }
+            return null;
         }
-        SpellCheckerSubtype candidate = null;
+
+        // subtypeHashCode == 0 means spell checker language settings is "auto"
+
+        if (systemLocale == null) {
+            return null;
+        }
+        SpellCheckerSubtype firstLanguageMatchingSubtype = null;
         for (int i = 0; i < sci.getSubtypeCount(); ++i) {
             final SpellCheckerSubtype scs = sci.getSubtypeAt(i);
-            if (subtypeHashCode == 0) {
-                final String scsLocale = scs.getLocale();
-                if (candidateLocale.equals(scsLocale)) {
-                    return scs;
-                } else if (candidate == null) {
-                    if (candidateLocale.length() >= 2 && scsLocale.length() >= 2
-                            && candidateLocale.startsWith(scsLocale)) {
-                        // Fall back to the applicable language
-                        candidate = scs;
-                    }
-                }
-            } else if (scs.hashCode() == subtypeHashCode) {
-                if (DBG) {
-                    Slog.w(TAG, "Return subtype " + scs.hashCode() + ", input= " + locale
-                            + ", " + scs.getLocale());
-                }
-                // 3. Use the user specified spell check language
+            final Locale scsLocale = scs.getLocaleObject();
+            if (Objects.equals(scsLocale, systemLocale)) {
+                // Exact match wins.
                 return scs;
             }
+            if (firstLanguageMatchingSubtype == null && scsLocale != null
+                    && TextUtils.equals(systemLocale.getLanguage(), scsLocale.getLanguage())) {
+                // Remember as a fall back candidate
+                firstLanguageMatchingSubtype = scs;
+            }
         }
-        // 4. Fall back to the applicable language and return it if not null
-        // 5. Simply just return it even if it's null which means we could find no suitable
-        // spell check languages
-        return candidate;
+        return firstLanguageMatchingSubtype;
     }
 
     @Override
@@ -1040,19 +1025,46 @@ public class TextServicesManagerService extends ITextServicesManager.Stub {
     private static final class ISpellCheckerServiceCallbackBinder
             extends ISpellCheckerServiceCallback.Stub {
         @NonNull
-        private final SpellCheckerBindGroup mBindGroup;
-        @NonNull
-        private final SessionRequest mRequest;
+        private final Object mCallbackLock = new Object();
 
-        ISpellCheckerServiceCallbackBinder(@NonNull final SpellCheckerBindGroup bindGroup,
-                @NonNull final SessionRequest request) {
-            mBindGroup = bindGroup;
-            mRequest = request;
+        @GuardedBy("mCallbackLock")
+        @Nullable
+        private WeakReference<SpellCheckerBindGroup> mBindGroup;
+
+        /**
+         * Original {@link SessionRequest} that is associated with this callback.
+         *
+         * <p>Note that {@link SpellCheckerBindGroup#mOnGoingSessionRequests} guarantees that this
+         * {@link SessionRequest} object is kept alive until the request is canceled.</p>
+         */
+        @GuardedBy("mCallbackLock")
+        @Nullable
+        private WeakReference<SessionRequest> mRequest;
+
+        ISpellCheckerServiceCallbackBinder(@NonNull SpellCheckerBindGroup bindGroup,
+                @NonNull SessionRequest request) {
+            synchronized (mCallbackLock) {
+                mBindGroup = new WeakReference<>(bindGroup);
+                mRequest = new WeakReference<>(request);
+            }
         }
 
         @Override
         public void onSessionCreated(@Nullable ISpellCheckerSession newSession) {
-            mBindGroup.onSessionCreated(newSession, mRequest);
+            final SpellCheckerBindGroup group;
+            final SessionRequest request;
+            synchronized (mCallbackLock) {
+                if (mBindGroup == null || mRequest == null) {
+                    return;
+                }
+                group = mBindGroup.get();
+                request = mRequest.get();
+                mBindGroup = null;
+                mRequest = null;
+            }
+            if (group != null && request != null) {
+                group.onSessionCreated(newSession, request);
+            }
         }
     }
 }

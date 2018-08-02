@@ -285,8 +285,8 @@
     <string name="show_touches_summary" msgid="6101183132903926324">"Показувати візуальну реакцію на торкання"</string>
     <string name="show_screen_updates" msgid="5470814345876056420">"Показ. оновлення поверхні"</string>
     <string name="show_screen_updates_summary" msgid="2569622766672785529">"Підсвічувати вікна повністю під час оновлення"</string>
-    <string name="show_hw_screen_updates" msgid="5036904558145941590">"Показувати оновл. екрана"</string>
-    <string name="show_hw_screen_updates_summary" msgid="1115593565980196197">"Підсвічув. область у вікні під час рисування з GPU"</string>
+    <string name="show_hw_screen_updates" msgid="4117270979975470789">"Показувати оновлення областей"</string>
+    <string name="show_hw_screen_updates_summary" msgid="6506943466625875655">"Підсвічувати оновлені області у вікнах"</string>
     <string name="show_hw_layers_updates" msgid="5645728765605699821">"Показ. апаратні оновлення"</string>
     <string name="show_hw_layers_updates_summary" msgid="5296917233236661465">"Виділяти апаратні рівні зеленим під час оновлення"</string>
     <string name="debug_hw_overdraw" msgid="2968692419951565417">"Налагодити накладання GPU"</string>
@@ -300,12 +300,10 @@
     <string name="debug_layout_summary" msgid="2001775315258637682">"Показувати межі роликів, поля тощо"</string>
     <string name="force_rtl_layout_all_locales" msgid="2259906643093138978">"Макет письма справа наліво"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="9192797796616132534">"Застосовувати макет письма справа наліво для всіх мов"</string>
-    <string name="force_hw_ui" msgid="6426383462520888732">"Примусова візуалізація GPU"</string>
-    <string name="force_hw_ui_summary" msgid="5535991166074861515">"Примусово використовувати GPU для 2D-малювання"</string>
     <string name="force_msaa" msgid="7920323238677284387">"Примус. запустити 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9123553203895817537">"Увімкнути 4x MSAA в програмах OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="505954950474595172">"Налагодити операції непрямокутної обрізки"</string>
-    <string name="track_frame_time" msgid="6146354853663863443">"Запис часу роботи GPU"</string>
+    <string name="track_frame_time" msgid="6094365083096851167">"Обробка HWUI за профілем"</string>
     <string name="enable_gpu_debug_layers" msgid="3848838293793255097">"Увімкнути шари налагодження ГП"</string>
     <string name="enable_gpu_debug_layers_summary" msgid="8009136940671194940">"Дозвольте завантажувати шари налагодження ГП для додатків налагодження"</string>
     <string name="window_animation_scale_title" msgid="6162587588166114700">"Анімація вікон"</string>

@@ -208,6 +208,15 @@ class SegmentNode : public Node {
   }
 };
 
+// A chunk of text in the XML string within a CDATA tags.
+class CdataSegmentNode : public SegmentNode {
+ public:
+
+  void Build(StringBuilder* builder) const override {
+    builder->AppendText(data, /* preserve_spaces */ true);
+  }
+};
+
 // A tag that will be encoded into the final flattened string. Tags like <b> or <i>.
 class SpanNode : public Node {
  public:
@@ -244,6 +253,7 @@ bool ResourceParser::FlattenXmlSubtree(
   std::vector<Node*> node_stack;
   node_stack.push_back(&root);
 
+  bool cdata_block = false;
   bool saw_span_node = false;
   SegmentNode* first_segment = nullptr;
   SegmentNode* last_segment = nullptr;
@@ -253,11 +263,15 @@ bool ResourceParser::FlattenXmlSubtree(
     const xml::XmlPullParser::Event event = parser->event();
 
     // First take care of any SegmentNodes that should be created.
-    if (event == xml::XmlPullParser::Event::kStartElement ||
-        event == xml::XmlPullParser::Event::kEndElement) {
+    if (event == xml::XmlPullParser::Event::kStartElement
+        || event == xml::XmlPullParser::Event::kEndElement
+        || event == xml::XmlPullParser::Event::kCdataStart
+        || event == xml::XmlPullParser::Event::kCdataEnd) {
       if (!current_text.empty()) {
-        std::unique_ptr<SegmentNode> segment_node = util::make_unique<SegmentNode>();
+        std::unique_ptr<SegmentNode> segment_node = (cdata_block)
+            ? util::make_unique<CdataSegmentNode>() : util::make_unique<SegmentNode>();
         segment_node->data = std::move(current_text);
+
         last_segment = node_stack.back()->AddChild(std::move(segment_node));
         if (first_segment == nullptr) {
           first_segment = last_segment;
@@ -332,6 +346,16 @@ bool ResourceParser::FlattenXmlSubtree(
           untranslatable_start_depth = {};
         }
       } break;
+
+      case xml::XmlPullParser::Event::kCdataStart: {
+        cdata_block = true;
+        break;
+      }
+
+      case xml::XmlPullParser::Event::kCdataEnd: {
+        cdata_block = false;
+        break;
+      }
 
       default:
         // ignore.
@@ -447,6 +471,9 @@ bool ResourceParser::ParseResources(xml::XmlPullParser* parser) {
     parsed_resource.config = config_;
     parsed_resource.source = source_.WithLine(parser->line_number());
     parsed_resource.comment = std::move(comment);
+    if (options_.visibility) {
+      parsed_resource.visibility_level = options_.visibility.value();
+    }
 
     // Extract the product name if it exists.
     if (Maybe<StringPiece> maybe_product = xml::FindNonEmptyAttribute(parser, "product")) {
@@ -774,7 +801,8 @@ std::unique_ptr<Item> ResourceParser::ParseXml(xml::XmlPullParser* parser,
   if (allow_raw_value) {
     // We can't parse this so return a RawString if we are allowed.
     return util::make_unique<RawString>(
-        table_->string_pool.MakeRef(raw_value, StringPool::Context(config_)));
+        table_->string_pool.MakeRef(util::TrimWhitespace(raw_value),
+                                    StringPool::Context(config_)));
   }
   return {};
 }
@@ -836,6 +864,12 @@ bool ResourceParser::ParseString(xml::XmlPullParser* parser,
 }
 
 bool ResourceParser::ParsePublic(xml::XmlPullParser* parser, ParsedResource* out_resource) {
+  if (options_.visibility) {
+    diag_->Error(DiagMessage(out_resource->source)
+                 << "<public> tag not allowed with --visibility flag");
+    return false;
+  }
+
   if (out_resource->config != ConfigDescription::DefaultConfig()) {
     diag_->Warn(DiagMessage(out_resource->source)
                 << "ignoring configuration '" << out_resource->config << "' for <public> tag");
@@ -878,6 +912,12 @@ bool ResourceParser::ParsePublic(xml::XmlPullParser* parser, ParsedResource* out
 }
 
 bool ResourceParser::ParsePublicGroup(xml::XmlPullParser* parser, ParsedResource* out_resource) {
+  if (options_.visibility) {
+    diag_->Error(DiagMessage(out_resource->source)
+                 << "<public-group> tag not allowed with --visibility flag");
+    return false;
+  }
+
   if (out_resource->config != ConfigDescription::DefaultConfig()) {
     diag_->Warn(DiagMessage(out_resource->source)
                 << "ignoring configuration '" << out_resource->config
@@ -999,6 +1039,11 @@ bool ResourceParser::ParseSymbolImpl(xml::XmlPullParser* parser,
 }
 
 bool ResourceParser::ParseSymbol(xml::XmlPullParser* parser, ParsedResource* out_resource) {
+  if (options_.visibility) {
+    diag_->Error(DiagMessage(out_resource->source)
+                 << "<java-symbol> and <symbol> tags not allowed with --visibility flag");
+    return false;
+  }
   if (out_resource->config != ConfigDescription::DefaultConfig()) {
     diag_->Warn(DiagMessage(out_resource->source)
                 << "ignoring configuration '" << out_resource->config << "' for <"
@@ -1070,6 +1115,9 @@ bool ResourceParser::ParseOverlayable(xml::XmlPullParser* parser, ParsedResource
       child_resource.name.entry = maybe_name.value().to_string();
       child_resource.source = item_source;
       child_resource.overlayable = true;
+      if (options_.visibility) {
+        child_resource.visibility_level = options_.visibility.value();
+      }
       out_resource->child_resources.push_back(std::move(child_resource));
 
       xml::XmlPullParser::SkipCurrentElement(parser);
@@ -1212,6 +1260,9 @@ bool ResourceParser::ParseAttrImpl(xml::XmlPullParser* parser,
         child_resource.name = symbol.symbol.name.value();
         child_resource.source = item_source;
         child_resource.value = util::make_unique<Id>();
+        if (options_.visibility) {
+          child_resource.visibility_level = options_.visibility.value();
+        }
         out_resource->child_resources.push_back(std::move(child_resource));
 
         symbol.symbol.SetComment(std::move(comment));
@@ -1589,6 +1640,9 @@ bool ResourceParser::ParseDeclareStyleable(xml::XmlPullParser* parser,
       child_resource.name = child_ref.name.value();
       child_resource.source = item_source;
       child_resource.comment = std::move(comment);
+      if (options_.visibility) {
+        child_resource.visibility_level = options_.visibility.value();
+      }
 
       if (!ParseAttrImpl(parser, &child_resource, true)) {
         error = true;

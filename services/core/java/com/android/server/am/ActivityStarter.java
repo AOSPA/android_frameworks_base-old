@@ -133,7 +133,7 @@ class ActivityStarter {
     private static final String TAG_USER_LEAVING = TAG + POSTFIX_USER_LEAVING;
     private static final int INVALID_LAUNCH_MODE = -1;
 
-    private final ActivityManagerService mService;
+    private final ActivityTaskManagerService mService;
     private final ActivityStackSupervisor mSupervisor;
     private final ActivityStartInterceptor mInterceptor;
     private final ActivityStartController mController;
@@ -236,14 +236,14 @@ class ActivityStarter {
         private final int MAX_STARTER_COUNT = 3;
 
         private ActivityStartController mController;
-        private ActivityManagerService mService;
+        private ActivityTaskManagerService mService;
         private ActivityStackSupervisor mSupervisor;
         private ActivityStartInterceptor mInterceptor;
 
         private SynchronizedPool<ActivityStarter> mStarterPool =
                 new SynchronizedPool<>(MAX_STARTER_COUNT);
 
-        DefaultFactory(ActivityManagerService service,
+        DefaultFactory(ActivityTaskManagerService service,
                 ActivityStackSupervisor supervisor, ActivityStartInterceptor interceptor) {
             mService = service;
             mSupervisor = supervisor;
@@ -413,7 +413,7 @@ class ActivityStarter {
         }
     }
 
-    ActivityStarter(ActivityStartController controller, ActivityManagerService service,
+    ActivityStarter(ActivityStartController controller, ActivityTaskManagerService service,
             ActivityStackSupervisor supervisor, ActivityStartInterceptor interceptor) {
         mController = controller;
         mService = service;
@@ -587,7 +587,7 @@ class ActivityStarter {
 
         ProcessRecord callerApp = null;
         if (caller != null) {
-            callerApp = mService.getRecordForAppLocked(caller);
+            callerApp = mService.mAm.getRecordForAppLocked(caller);
             if (callerApp != null) {
                 callingPid = callerApp.pid;
                 callingUid = callerApp.info.uid;
@@ -676,7 +676,7 @@ class ActivityStarter {
                     && sourceRecord.info.applicationInfo.uid != aInfo.applicationInfo.uid) {
                 try {
                     intent.addCategory(Intent.CATEGORY_VOICE);
-                    if (!mService.getPackageManager().activitySupportsIntent(
+                    if (!mService.mAm.getPackageManager().activitySupportsIntent(
                             intent.getComponent(), intent, resolvedType)) {
                         Slog.w(TAG,
                                 "Activity being started in current voice task does not support voice: "
@@ -694,7 +694,7 @@ class ActivityStarter {
             // If the caller is starting a new voice session, just make sure the target
             // is actually allowing it to run this way.
             try {
-                if (!mService.getPackageManager().activitySupportsIntent(intent.getComponent(),
+                if (!mService.mAm.getPackageManager().activitySupportsIntent(intent.getComponent(),
                         intent, resolvedType)) {
                     Slog.w(TAG,
                             "Activity being started in new voice task does not support: "
@@ -721,13 +721,14 @@ class ActivityStarter {
         boolean abort = !mSupervisor.checkStartAnyActivityPermission(intent, aInfo, resultWho,
                 requestCode, callingPid, callingUid, callingPackage, ignoreTargetSecurity,
                 inTask != null, callerApp, resultRecord, resultStack);
-        abort |= !mService.mIntentFirewall.checkStartActivity(intent, callingUid,
+        abort |= !mService.mAm.mIntentFirewall.checkStartActivity(intent, callingUid,
                 callingPid, resolvedType, aInfo.applicationInfo);
 
+        final WindowProcessController callerWpc =
+                callerApp != null ? callerApp.getWindowProcessController() : null;
         // Merge the two options bundles, while realCallerOptions takes precedence.
         ActivityOptions checkedOptions = options != null
-                ? options.getOptions(intent, aInfo, callerApp, mSupervisor)
-                : null;
+                ? options.getOptions(intent, aInfo, callerWpc, mSupervisor) : null;
         if (allowPendingRemoteAnimationRegistryLookup) {
             checkedOptions = mService.getActivityStartController()
                     .getPendingRemoteAnimationRegistry()
@@ -774,10 +775,10 @@ class ActivityStarter {
         // If permissions need a review before any of the app components can run, we
         // launch the review activity and pass a pending intent to start the activity
         // we are to launching now after the review is completed.
-        if (mService.mPermissionReviewRequired && aInfo != null) {
-            if (mService.getPackageManagerInternalLocked().isPermissionsReviewRequired(
+        if (mService.mAm.mPermissionReviewRequired && aInfo != null) {
+            if (mService.mAm.getPackageManagerInternalLocked().isPermissionsReviewRequired(
                     aInfo.packageName, userId)) {
-                IIntentSender target = mService.getIntentSenderLocked(
+                IIntentSender target = mService.mAm.getIntentSenderLocked(
                         ActivityManager.INTENT_SENDER_ACTIVITY, callingPackage,
                         callingUid, userId, null, null, 0, new Intent[]{intent},
                         new String[]{resolvedType}, PendingIntent.FLAG_CANCEL_CURRENT
@@ -827,7 +828,8 @@ class ActivityStarter {
             aInfo = mSupervisor.resolveActivity(intent, rInfo, startFlags, null /*profilerInfo*/);
         }
 
-        ActivityRecord r = new ActivityRecord(mService, callerApp, callingPid, callingUid,
+        ActivityRecord r = new ActivityRecord(mService, callerApp, callingPid,
+                callingUid,
                 callingPackage, intent, resolvedType, aInfo, mService.getGlobalConfiguration(),
                 resultRecord, resultWho, requestCode, componentSpecified, voiceSession != null,
                 mSupervisor, checkedOptions, sourceRecord);
@@ -850,23 +852,13 @@ class ActivityStarter {
             if (!mService.checkAppSwitchAllowedLocked(callingPid, callingUid,
                     realCallingPid, realCallingUid, "Activity start")) {
                 mController.addPendingActivityLaunch(new PendingActivityLaunch(r,
-                        sourceRecord, startFlags, stack, callerApp));
+                        sourceRecord, startFlags, stack, callerWpc));
                 ActivityOptions.abort(checkedOptions);
                 return ActivityManager.START_SWITCHES_CANCELED;
             }
         }
 
-        if (mService.mDidAppSwitch) {
-            // This is the second allowed switch since we stopped switches,
-            // so now just generally allow switches.  Use case: user presses
-            // home (switches disabled, switch to home, mDidAppSwitch now true);
-            // user taps a home icon (coming from home so allowed, we hit here
-            // and now allow anyone to switch again).
-            mService.mAppSwitchesAllowedTime = 0;
-        } else {
-            mService.mDidAppSwitch = true;
-        }
-
+        mService.onStartActivitySetDidAppSwitch();
         mController.doPendingActivityLaunches(false);
 
         return startActivity(r, sourceRecord, voiceSession, voiceInteractor, startFlags,
@@ -882,7 +874,7 @@ class ActivityStarter {
             String resolvedType, int userId) {
         if (auxiliaryResponse != null && auxiliaryResponse.needsPhaseTwo) {
             // request phase two resolution
-            mService.getPackageManagerInternalLocked().requestInstantAppResolutionPhaseTwo(
+            mService.mAm.getPackageManagerInternalLocked().requestInstantAppResolutionPhaseTwo(
                     auxiliaryResponse, originalIntent, resolvedType, callingPackage,
                     verificationBundle, userId);
         }
@@ -933,7 +925,7 @@ class ActivityStarter {
             // anyone interested in this piece of information.
             switch (startedActivityStack.getWindowingMode()) {
                 case WINDOWING_MODE_PINNED:
-                    mService.mTaskChangeNotificationController.notifyPinnedActivityRestartAttempt(
+                    mService.getTaskChangeNotificationController().notifyPinnedActivityRestartAttempt(
                             clearedTask);
                     break;
                 case WINDOWING_MODE_SPLIT_SCREEN_PRIMARY:
@@ -982,7 +974,7 @@ class ActivityStarter {
                 && !(Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() == null)
                 && !Intent.ACTION_INSTALL_INSTANT_APP_PACKAGE.equals(intent.getAction())
                 && !Intent.ACTION_RESOLVE_INSTANT_APP_PACKAGE.equals(intent.getAction())
-                && mService.getPackageManagerInternalLocked()
+                && mService.mAm.getPackageManagerInternalLocked()
                         .isInstantAppInstallerComponent(intent.getComponent())) {
             // intercept intents targeted directly to the ephemeral installer the
             // ephemeral installer should never be started with a raw Intent; instead
@@ -1024,7 +1016,7 @@ class ActivityStarter {
         // Collect information about the target of the Intent.
         ActivityInfo aInfo = mSupervisor.resolveActivity(intent, rInfo, startFlags, profilerInfo);
 
-        synchronized (mService) {
+        synchronized (mService.mGlobalLock) {
             final ActivityStack stack = mSupervisor.mFocusedStack;
             stack.mConfigWillChange = globalConfig != null
                     && mService.getGlobalConfiguration().diff(globalConfig) != 0;
@@ -1036,16 +1028,16 @@ class ActivityStarter {
             if (aInfo != null &&
                     (aInfo.applicationInfo.privateFlags
                             & ApplicationInfo.PRIVATE_FLAG_CANT_SAVE_STATE) != 0 &&
-                    mService.mHasHeavyWeightFeature) {
+                    mService.mAm.mHasHeavyWeightFeature) {
                 // This may be a heavy-weight process!  Check to see if we already
                 // have another, different heavy-weight process running.
                 if (aInfo.processName.equals(aInfo.applicationInfo.packageName)) {
-                    final ProcessRecord heavy = mService.mHeavyWeightProcess;
+                    final ProcessRecord heavy = mService.mAm.mHeavyWeightProcess;
                     if (heavy != null && (heavy.info.uid != aInfo.applicationInfo.uid
                             || !heavy.processName.equals(aInfo.processName))) {
                         int appCallingUid = callingUid;
                         if (caller != null) {
-                            ProcessRecord callerApp = mService.getRecordForAppLocked(caller);
+                            ProcessRecord callerApp = mService.mAm.getRecordForAppLocked(caller);
                             if (callerApp != null) {
                                 appCallingUid = callerApp.info.uid;
                             } else {
@@ -1057,7 +1049,7 @@ class ActivityStarter {
                             }
                         }
 
-                        IIntentSender target = mService.getIntentSenderLocked(
+                        IIntentSender target = mService.mAm.getIntentSenderLocked(
                                 ActivityManager.INTENT_SENDER_ACTIVITY, "android",
                                 appCallingUid, userId, null, null, 0, new Intent[] { intent },
                                 new String[] { resolvedType }, PendingIntent.FLAG_CANCEL_CURRENT
@@ -1070,13 +1062,8 @@ class ActivityStarter {
                         }
                         newIntent.putExtra(HeavyWeightSwitcherActivity.KEY_INTENT,
                                 new IntentSender(target));
-                        if (heavy.activities.size() > 0) {
-                            ActivityRecord hist = heavy.activities.get(0);
-                            newIntent.putExtra(HeavyWeightSwitcherActivity.KEY_CUR_APP,
-                                    hist.packageName);
-                            newIntent.putExtra(HeavyWeightSwitcherActivity.KEY_CUR_TASK,
-                                    hist.getTask().taskId);
-                        }
+                        heavy.getWindowProcessController().updateIntentForHeavyWeightActivity(
+                                newIntent);
                         newIntent.putExtra(HeavyWeightSwitcherActivity.KEY_NEW_APP,
                                 aInfo.packageName);
                         newIntent.setFlags(intent.getFlags());
@@ -1093,7 +1080,7 @@ class ActivityStarter {
                                         callingUid, realCallingUid, mRequest.filterCallingUid));
                         aInfo = rInfo != null ? rInfo.activityInfo : null;
                         if (aInfo != null) {
-                            aInfo = mService.getActivityInfoForUser(aInfo, userId);
+                            aInfo = mService.mAm.getActivityInfoForUser(aInfo, userId);
                         }
                     }
                 }
@@ -1113,7 +1100,7 @@ class ActivityStarter {
                 // do so now.  This allows a clean switch, as we are waiting
                 // for the current activity to pause (so we will not destroy
                 // it), and have not yet started the next activity.
-                mService.enforceCallingPermission(android.Manifest.permission.CHANGE_CONFIGURATION,
+                mService.mAmInternal.enforceCallingPermission(android.Manifest.permission.CHANGE_CONFIGURATION,
                         "updateConfiguration()");
                 stack.mConfigWillChange = false;
                 if (DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
@@ -1131,7 +1118,7 @@ class ActivityStarter {
                         mSupervisor.mWaitingActivityLaunched.add(outResult);
                         do {
                             try {
-                                mService.wait();
+                                mService.mGlobalLock.wait();
                             } catch (InterruptedException e) {
                             }
                         } while (outResult.result != START_TASK_TO_FRONT
@@ -1162,7 +1149,7 @@ class ActivityStarter {
                             // Note: the timeout variable is not currently not ever set.
                             do {
                                 try {
-                                    mService.wait();
+                                    mService.mGlobalLock.wait();
                                 } catch (InterruptedException e) {
                                 }
                             } while (!outResult.timeout && outResult.who == null);
@@ -1377,7 +1364,7 @@ class ActivityStarter {
         final boolean dontStart = top != null && mStartActivity.resultTo == null
                 && top.realActivity.equals(mStartActivity.realActivity)
                 && top.userId == mStartActivity.userId
-                && top.app != null && top.app.thread != null
+                && top.attachedToProcess()
                 && ((mLaunchFlags & FLAG_ACTIVITY_SINGLE_TOP) != 0
                 || isLaunchModeOneOf(LAUNCH_SINGLE_TOP, LAUNCH_SINGLE_TASK));
         if (dontStart) {
@@ -1431,9 +1418,9 @@ class ActivityStarter {
             return result;
         }
 
-        mService.grantUriPermissionFromIntentLocked(mCallingUid, mStartActivity.packageName,
+        mService.mAm.grantUriPermissionFromIntentLocked(mCallingUid, mStartActivity.packageName,
                 mIntent, mStartActivity.getUriPermissionsLocked(), mStartActivity.userId);
-        mService.grantEphemeralAccessLocked(mStartActivity.userId, mIntent,
+        mService.mAm.grantEphemeralAccessLocked(mStartActivity.userId, mIntent,
                 mStartActivity.appInfo.uid, UserHandle.getAppId(mCallingUid));
         if (newTask) {
             EventLog.writeEvent(EventLogTags.AM_CREATE_TASK, mStartActivity.userId,
@@ -2124,13 +2111,13 @@ class ActivityStarter {
             // be not suitable. Let's check other displays.
             if (mTargetStack == null && targetDisplayId != sourceStack.mDisplayId) {
                 // Can't use target display, lets find a stack on the source display.
-                mTargetStack = mService.mStackSupervisor.getValidLaunchStackOnDisplay(
+                mTargetStack = mSupervisor.getValidLaunchStackOnDisplay(
                         sourceStack.mDisplayId, mStartActivity);
             }
             if (mTargetStack == null) {
                 // There are no suitable stacks on the target and source display(s). Look on all
                 // displays.
-                mTargetStack = mService.mStackSupervisor.getNextValidLaunchStackLocked(
+                mTargetStack = mSupervisor.getNextValidLaunchStackLocked(
                         mStartActivity, -1 /* currentFocus */);
             }
         }
@@ -2261,7 +2248,8 @@ class ActivityStarter {
 
         final ActivityStack stack = task.getStack();
         if (stack != null && stack.resizeStackWithLaunchBounds()) {
-            mService.resizeStack(stack.mStackId, bounds, true, !PRESERVE_WINDOWS, ANIMATE, -1);
+            mService.resizeStack(
+                    stack.mStackId, bounds, true, !PRESERVE_WINDOWS, ANIMATE, -1);
         } else {
             task.updateOverrideConfiguration(bounds);
         }

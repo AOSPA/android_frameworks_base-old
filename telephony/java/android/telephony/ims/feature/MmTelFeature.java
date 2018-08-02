@@ -22,25 +22,26 @@ import android.os.Bundle;
 import android.os.Message;
 import android.os.RemoteException;
 import android.telecom.TelecomManager;
-import android.telephony.ims.stub.ImsRegistrationImplBase;
-import android.telephony.ims.stub.ImsCallSessionImplBase;
-import android.telephony.ims.stub.ImsSmsImplBase;
+import android.telephony.ims.ImsCallProfile;
+import android.telephony.ims.ImsCallSession;
+import android.telephony.ims.ImsReasonInfo;
 import android.telephony.ims.aidl.IImsCapabilityCallback;
 import android.telephony.ims.aidl.IImsMmTelFeature;
 import android.telephony.ims.aidl.IImsMmTelListener;
 import android.telephony.ims.aidl.IImsSmsListener;
+import android.telephony.ims.stub.ImsCallSessionImplBase;
 import android.telephony.ims.stub.ImsEcbmImplBase;
 import android.telephony.ims.stub.ImsMultiEndpointImplBase;
+import android.telephony.ims.stub.ImsRegistrationImplBase;
+import android.telephony.ims.stub.ImsSmsImplBase;
 import android.telephony.ims.stub.ImsUtImplBase;
 import android.util.Log;
 
-import android.telephony.ims.ImsCallProfile;
 import android.telephony.ims.ImsReasonInfo;
 import com.android.ims.internal.IImsCallSession;
 import com.android.ims.internal.IImsEcbm;
 import com.android.ims.internal.IImsMultiEndpoint;
 import com.android.ims.internal.IImsUt;
-import android.telephony.ims.ImsCallSession;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.annotation.Retention;
@@ -61,20 +62,16 @@ public class MmTelFeature extends ImsFeature {
     private final IImsMmTelFeature mImsMMTelBinder = new IImsMmTelFeature.Stub() {
 
         @Override
-        public void setListener(IImsMmTelListener l) throws RemoteException {
-            synchronized (mLock) {
-                MmTelFeature.this.setListener(l);
-            }
+        public void setListener(IImsMmTelListener l) {
+            MmTelFeature.this.setListener(l);
         }
 
         @Override
         public int getFeatureState() throws RemoteException {
-            synchronized (mLock) {
-                try {
-                    return MmTelFeature.this.getFeatureState();
-                } catch (Exception e) {
-                    throw new RemoteException(e.getMessage());
-                }
+            try {
+                return MmTelFeature.this.getFeatureState();
+            } catch (Exception e) {
+                throw new RemoteException(e.getMessage());
             }
         }
 
@@ -138,10 +135,8 @@ public class MmTelFeature extends ImsFeature {
         }
 
         @Override
-        public int queryCapabilityStatus() throws RemoteException {
-            synchronized (mLock) {
-                return MmTelFeature.this.queryCapabilityStatus().mCapabilities;
-            }
+        public int queryCapabilityStatus() {
+            return MmTelFeature.this.queryCapabilityStatus().mCapabilities;
         }
 
         @Override
@@ -158,7 +153,7 @@ public class MmTelFeature extends ImsFeature {
 
         @Override
         public void changeCapabilitiesConfiguration(CapabilityChangeRequest request,
-                IImsCapabilityCallback c) throws RemoteException {
+                IImsCapabilityCallback c) {
             synchronized (mLock) {
                 MmTelFeature.this.requestChangeEnabledCapabilities(request, c);
             }
@@ -173,10 +168,8 @@ public class MmTelFeature extends ImsFeature {
         }
 
         @Override
-        public void setSmsListener(IImsSmsListener l) throws RemoteException {
-            synchronized (mLock) {
-                MmTelFeature.this.setSmsListener(l);
-            }
+        public void setSmsListener(IImsSmsListener l) {
+            MmTelFeature.this.setSmsListener(l);
         }
 
         @Override
@@ -364,9 +357,6 @@ public class MmTelFeature extends ImsFeature {
     @Retention(RetentionPolicy.SOURCE)
     public @interface ProcessCallResult {}
 
-
-    // Lock for feature synchronization
-    private final Object mLock = new Object();
     private IImsMmTelListener mListener;
 
     /**
@@ -376,9 +366,9 @@ public class MmTelFeature extends ImsFeature {
     private void setListener(IImsMmTelListener listener) {
         synchronized (mLock) {
             mListener = listener;
-        }
-        if (mListener != null) {
-            onFeatureReady();
+            if (mListener != null) {
+                onFeatureReady();
+            }
         }
     }
 
@@ -432,6 +422,26 @@ public class MmTelFeature extends ImsFeature {
             }
             try {
                 mListener.onIncomingCall(c.getServiceImpl(), extras);
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    /**
+     * Notify the framework that a call has been implicitly rejected by this MmTelFeature
+     * during call setup.
+     * @param callProfile The {@link ImsCallProfile} IMS call profile with details.
+     *        This can be null if no call information is available for the rejected call.
+     * @param reason The {@link ImsReasonInfo} call rejection reason.
+     */
+    public final void notifyRejectedCall(ImsCallProfile callProfile, ImsReasonInfo reason) {
+        synchronized (mLock) {
+            if (mListener == null) {
+                throw new IllegalStateException("Session is not available.");
+            }
+            try {
+                mListener.onRejectedCall(callProfile, reason);
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }

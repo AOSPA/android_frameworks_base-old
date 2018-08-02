@@ -69,11 +69,18 @@ class Field():
         self.raw = raw.strip(" {;")
         self.blame = blame
 
+        # drop generics for now; may need multiple passes
+        raw = re.sub("<[^<]+?>", "", raw)
+        raw = re.sub("<[^<]+?>", "", raw)
+
         raw = raw.split()
         self.split = list(raw)
 
         for r in ["field", "volatile", "transient", "public", "protected", "static", "final", "deprecated"]:
             while r in raw: raw.remove(r)
+
+        # ignore annotations for now
+        raw = [ r for r in raw if not r.startswith("@") ]
 
         self.typ = raw[0]
         self.name = raw[1].strip(";")
@@ -97,25 +104,39 @@ class Method():
         self.raw = raw.strip(" {;")
         self.blame = blame
 
-        # drop generics for now
-        raw = re.sub("<.+?>", "", raw)
+        # drop generics for now; may need multiple passes
+        raw = re.sub("<[^<]+?>", "", raw)
+        raw = re.sub("<[^<]+?>", "", raw)
 
-        raw = re.split("[\s(),;]+", raw)
+        # handle each clause differently
+        raw_prefix, raw_args, _, raw_throws = re.match(r"(.*?)\((.*?)\)( throws )?(.*?);$", raw).groups()
+
+        # parse prefixes
+        raw = re.split("[\s]+", raw_prefix)
         for r in ["", ";"]:
             while r in raw: raw.remove(r)
         self.split = list(raw)
 
-        for r in ["method", "public", "protected", "static", "final", "deprecated", "abstract", "default"]:
+        for r in ["method", "public", "protected", "static", "final", "deprecated", "abstract", "default", "operator"]:
             while r in raw: raw.remove(r)
 
         self.typ = raw[0]
         self.name = raw[1]
+
+        # parse args
         self.args = []
+        for arg in re.split(",\s*", raw_args):
+            arg = re.split("\s", arg)
+            # ignore annotations for now
+            arg = [ a for a in arg if not a.startswith("@") ]
+            if len(arg[0]) > 0:
+                self.args.append(arg[0])
+
+        # parse throws
         self.throws = []
-        target = self.args
-        for r in raw[2:]:
-            if r == "throws": target = self.throws
-            else: target.append(r)
+        for throw in re.split(",\s*", raw_throws):
+            self.throws.append(throw)
+
         self.ident = ident(self.raw)
 
     def __hash__(self):
@@ -135,12 +156,18 @@ class Class():
         self.fields = []
         self.methods = []
 
+        # drop generics for now; may need multiple passes
+        raw = re.sub("<[^<]+?>", "", raw)
+        raw = re.sub("<[^<]+?>", "", raw)
+
         raw = raw.split()
         self.split = list(raw)
         if "class" in raw:
             self.fullname = raw[raw.index("class")+1]
         elif "interface" in raw:
             self.fullname = raw[raw.index("interface")+1]
+        elif "@interface" in raw:
+            self.fullname = raw[raw.index("@interface")+1]
         else:
             raise ValueError("Funky class type %s" % (self.raw))
 
@@ -1334,18 +1361,25 @@ def verify_clone(clazz):
             error(clazz, m, None, "Provide an explicit copy constructor instead of implementing clone()")
 
 
+def is_interesting(clazz):
+    """Test if given class is interesting from an Android PoV."""
+
+    if clazz.pkg.name.startswith("java"): return False
+    if clazz.pkg.name.startswith("junit"): return False
+    if clazz.pkg.name.startswith("org.apache"): return False
+    if clazz.pkg.name.startswith("org.xml"): return False
+    if clazz.pkg.name.startswith("org.json"): return False
+    if clazz.pkg.name.startswith("org.w3c"): return False
+    if clazz.pkg.name.startswith("android.icu."): return False
+    return True
+
+
 def examine_clazz(clazz):
     """Find all style issues in the given class."""
 
     notice(clazz)
 
-    if clazz.pkg.name.startswith("java"): return
-    if clazz.pkg.name.startswith("junit"): return
-    if clazz.pkg.name.startswith("org.apache"): return
-    if clazz.pkg.name.startswith("org.xml"): return
-    if clazz.pkg.name.startswith("org.json"): return
-    if clazz.pkg.name.startswith("org.w3c"): return
-    if clazz.pkg.name.startswith("android.icu."): return
+    if not is_interesting(clazz): return
 
     verify_constants(clazz)
     verify_enums(clazz)
@@ -1479,6 +1513,7 @@ def show_deprecations_at_birth(cur, prev):
     # Remove all existing things so we're left with new
     for prev_clazz in prev.values():
         cur_clazz = cur[prev_clazz.fullname]
+        if not is_interesting(cur_clazz): continue
 
         sigs = { i.ident: i for i in prev_clazz.ctors }
         cur_clazz.ctors = [ i for i in cur_clazz.ctors if i.ident not in sigs ]
@@ -1506,6 +1541,38 @@ def show_deprecations_at_birth(cur, prev):
         print
 
 
+def show_stats(cur, prev):
+    """Show API stats."""
+
+    stats = collections.defaultdict(int)
+    for cur_clazz in cur.values():
+        if not is_interesting(cur_clazz): continue
+
+        if cur_clazz.fullname not in prev:
+            stats['new_classes'] += 1
+            stats['new_ctors'] += len(cur_clazz.ctors)
+            stats['new_methods'] += len(cur_clazz.methods)
+            stats['new_fields'] += len(cur_clazz.fields)
+        else:
+            prev_clazz = prev[cur_clazz.fullname]
+
+            sigs = { i.ident: i for i in prev_clazz.ctors }
+            ctors = len([ i for i in cur_clazz.ctors if i.ident not in sigs ])
+            sigs = { i.ident: i for i in prev_clazz.methods }
+            methods = len([ i for i in cur_clazz.methods if i.ident not in sigs ])
+            sigs = { i.ident: i for i in prev_clazz.fields }
+            fields = len([ i for i in cur_clazz.fields if i.ident not in sigs ])
+
+            if ctors + methods + fields > 0:
+                stats['extend_classes'] += 1
+                stats['extend_ctors'] += ctors
+                stats['extend_methods'] += methods
+                stats['extend_fields'] += fields
+
+    print "#", "".join([ k.ljust(20) for k in sorted(stats.keys()) ])
+    print " ", "".join([ str(stats[k]).ljust(20) for k in sorted(stats.keys()) ])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Enforces common Android public API design \
             patterns. It ignores lint messages from a previous API level, if provided.")
@@ -1520,6 +1587,8 @@ if __name__ == "__main__":
             help="Show API changes noticed")
     parser.add_argument("--show-deprecations-at-birth", action='store_const', const=True,
             help="Show API deprecations at birth")
+    parser.add_argument("--show-stats", action='store_const', const=True,
+            help="Show API stats")
     args = vars(parser.parse_args())
 
     if args['no_color']:
@@ -1537,6 +1606,14 @@ if __name__ == "__main__":
         with previous_file as f:
             prev = _parse_stream(f)
         show_deprecations_at_birth(cur, prev)
+        sys.exit()
+
+    if args['show_stats']:
+        with current_file as f:
+            cur = _parse_stream(f)
+        with previous_file as f:
+            prev = _parse_stream(f)
+        show_stats(cur, prev)
         sys.exit()
 
     with current_file as f:

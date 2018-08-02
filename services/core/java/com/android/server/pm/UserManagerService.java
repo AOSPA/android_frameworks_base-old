@@ -31,7 +31,6 @@ import android.app.IActivityManager;
 import android.app.IStopUserCallback;
 import android.app.KeyguardManager;
 import android.app.PendingIntent;
-import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -72,7 +71,6 @@ import android.os.UserManager.EnforcingUser;
 import android.os.UserManagerInternal;
 import android.os.UserManagerInternal.UserRestrictionsListener;
 import android.os.storage.StorageManager;
-import android.provider.Settings;
 import android.security.GateKeeper;
 import android.service.gatekeeper.IGateKeeperService;
 import android.util.AtomicFile;
@@ -82,7 +80,6 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
-import android.util.SparseLongArray;
 import android.util.TimeUtils;
 import android.util.Xml;
 
@@ -101,8 +98,7 @@ import com.android.server.LockGuard;
 import com.android.server.SystemService;
 import com.android.server.am.UserState;
 import com.android.server.storage.DeviceStorageMonitorInternal;
-
-import libcore.io.IoUtils;
+import com.android.server.wm.ActivityTaskManagerInternal;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -124,6 +120,8 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
+
+import libcore.io.IoUtils;
 
 /**
  * Service for {@link UserManager}.
@@ -2968,9 +2966,9 @@ public class UserManagerService extends IUserManager.Stub {
                             new Thread() {
                                 @Override
                                 public void run() {
-                                    // Clean up any ActivityManager state
-                                    LocalServices.getService(ActivityManagerInternal.class)
-                                            .onUserRemoved(userHandle);
+                                    // Clean up any ActivityTaskManager state
+                                    LocalServices.getService(ActivityTaskManagerInternal.class)
+                                            .onUserStopped(userHandle);
                                     removeUserState(userHandle);
                                 }
                             }.start();
@@ -3558,6 +3556,8 @@ public class UserManagerService extends IUserManager.Stub {
             switch(cmd) {
                 case "list":
                     return runList(pw);
+                default:
+                    return shell.handleDefaultCommands(cmd);
             }
         } catch (RemoteException e) {
             pw.println("Remote exception: " + e);

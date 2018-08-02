@@ -497,6 +497,24 @@ TEST_F(ResourceParserTest, ParseStyleWithPackageAliasedItems) {
   EXPECT_THAT(style->entries[0].key.name, Eq(make_value(test::ParseNameOrDie("android:attr/bar"))));
 }
 
+TEST_F(ResourceParserTest, ParseStyleWithRawStringItem) {
+  std::string input = R"(
+      <style name="foo">
+        <item name="bar">
+          com.helloworld.AppClass
+        </item>
+      </style>)";
+  ASSERT_TRUE(TestParse(input));
+
+  Style* style = test::GetValue<Style>(&table_, "style/foo");
+  ASSERT_THAT(style, NotNull());
+  EXPECT_THAT(style->entries[0].value, NotNull());
+  RawString* value = ValueCast<RawString>(style->entries[0].value.get());
+  EXPECT_THAT(value, NotNull());
+  EXPECT_THAT(*value->value, StrEq(R"(com.helloworld.AppClass)"));
+}
+
+
 TEST_F(ResourceParserTest, ParseStyleWithInferredParent) {
   ASSERT_TRUE(TestParse(R"(<style name="foo.bar"/>)"));
 
@@ -969,6 +987,42 @@ TEST_F(ResourceParserTest, ParseIdItem) {
   // Ids that reference other resource ids cannot be public
   input = R"(<public name="foo7" type="id">@id/bar7</item>)";
   ASSERT_FALSE(TestParse(input));
+}
+
+TEST_F(ResourceParserTest, ParseCData) {
+  std::string input = R"(
+      <string name="foo"><![CDATA[some text and ' apostrophe]]></string>)";
+
+  ASSERT_TRUE(TestParse(input));
+  String* output = test::GetValue<String>(&table_, "string/foo");
+  ASSERT_THAT(output, NotNull());
+  EXPECT_THAT(*output, StrValueEq("some text and ' apostrophe"));
+
+  // Double quotes should not change the state of whitespace processing
+  input = R"(<string name="foo2">Hello<![CDATA[ "</string>' ]]>      World</string>)";
+  ASSERT_TRUE(TestParse(input));
+  output = test::GetValue<String>(&table_, "string/foo2");
+  ASSERT_THAT(output, NotNull());
+  EXPECT_THAT(*output, StrValueEq(std::string("Hello \"</string>'  World").data()));
+
+  // Cdata blocks should not have their whitespace trimmed
+  input = R"(<string name="foo3">     <![CDATA[ text ]]>     </string>)";
+  ASSERT_TRUE(TestParse(input));
+  output = test::GetValue<String>(&table_, "string/foo3");
+  ASSERT_THAT(output, NotNull());
+  EXPECT_THAT(*output, StrValueEq(std::string(" text ").data()));
+
+  input = R"(<string name="foo4">     <![CDATA[]]>     </string>)";
+  ASSERT_TRUE(TestParse(input));
+  output = test::GetValue<String>(&table_, "string/foo4");
+  ASSERT_THAT(output, NotNull());
+  EXPECT_THAT(*output, StrValueEq(std::string("").data()));
+
+  input = R"(<string name="foo5">     <![CDATA[    ]]>     </string>)";
+  ASSERT_TRUE(TestParse(input));
+  output = test::GetValue<String>(&table_, "string/foo5");
+  ASSERT_THAT(output, NotNull());
+  EXPECT_THAT(*output, StrValueEq(std::string("    ").data()));
 }
 
 }  // namespace aapt

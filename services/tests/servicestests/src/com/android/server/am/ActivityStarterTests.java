@@ -88,7 +88,7 @@ import java.util.ArrayList;
 @Presubmit
 @RunWith(AndroidJUnit4.class)
 public class ActivityStarterTests extends ActivityTestsBase {
-    private ActivityManagerService mService;
+    private ActivityTaskManagerService mService;
     private ActivityStarter mStarter;
     private ActivityStartController mController;
 
@@ -107,7 +107,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        mService = createActivityManagerService();
+        mService = createActivityTaskManagerService();
         mController = mock(ActivityStartController.class);
         mStarter = new ActivityStarter(mController, mService, mService.mStackSupervisor,
                 mock(ActivityStartInterceptor.class));
@@ -189,20 +189,21 @@ public class ActivityStarterTests extends ActivityTestsBase {
      */
     private void verifyStartActivityPreconditions(int preconditions, int launchFlags,
             int expectedResult) {
-        final ActivityManagerService service = createActivityManagerService();
+        final ActivityTaskManagerService service = mService;
         final IPackageManager packageManager = mock(IPackageManager.class);
         final ActivityStartController controller = mock(ActivityStartController.class);
 
         final ActivityStarter starter = new ActivityStarter(controller, service,
                 service.mStackSupervisor, mock(ActivityStartInterceptor.class));
+        prepareStarter(launchFlags);
         final IApplicationThread caller = mock(IApplicationThread.class);
 
         // If no caller app, return {@code null} {@link ProcessRecord}.
         final ProcessRecord record = containsConditions(preconditions, PRECONDITION_NO_CALLER_APP)
-                ? null : new ProcessRecord(null, mock(BatteryStatsImpl.class),
+                ? null : new ProcessRecord(service.mAm, mock(BatteryStatsImpl.class),
                 mock(ApplicationInfo.class), null, 0);
 
-        doReturn(record).when(service).getRecordForAppLocked(anyObject());
+        doReturn(record).when(service.mAm).getRecordForAppLocked(anyObject());
 
         final Intent intent = new Intent();
         intent.setFlags(launchFlags);
@@ -236,8 +237,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
         }
 
         if (containsConditions(preconditions, PRECONDITION_DISALLOW_APP_SWITCHING)) {
-            doReturn(false).when(service).checkAppSwitchAllowedLocked(anyInt(), anyInt(), anyInt(),
-                    anyInt(), any());
+            doReturn(false).when(service).checkAppSwitchAllowedLocked(
+                    anyInt(), anyInt(), anyInt(), anyInt(), any());
         }
 
         if (containsConditions(preconditions,PRECONDITION_CANNOT_START_ANY_ACTIVITY)) {

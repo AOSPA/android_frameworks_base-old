@@ -71,7 +71,6 @@ import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
-import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -567,13 +566,6 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
          * Direction should be +1 or -1 to go to the next or previous keyboard layout.
          */
         public void switchKeyboardLayout(int deviceId, int direction);
-
-        /**
-         * Switch the input method, to be precise, input method subtype.
-         *
-         * @param forwardDirection {@code true} to rotate in a forward direction.
-         */
-        public void switchInputMethod(boolean forwardDirection);
 
         public void shutdown(boolean confirm);
         public void reboot(boolean confirm);
@@ -1187,6 +1179,7 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * @param taskBounds The bounds of the task this window is on or {@code null} if no task is
      *                   associated with the window.
      * @param displayFrames display frames.
+     * @param floatingStack Whether the window's stack is floating.
      * @param outFrame The frame of the window.
      * @param outContentInsets The areas covered by system windows, expressed as positive insets.
      * @param outStableInsets The areas covered by stable system windows irrespective of their
@@ -1197,8 +1190,8 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      *         See {@link #isNavBarForcedShownLw(WindowState)}.
      */
     default boolean getLayoutHintLw(WindowManager.LayoutParams attrs, Rect taskBounds,
-            DisplayFrames displayFrames, Rect outFrame, Rect outContentInsets,
-            Rect outStableInsets, Rect outOutsets,
+            DisplayFrames displayFrames, boolean floatingStack,
+            Rect outFrame, Rect outContentInsets, Rect outStableInsets, Rect outOutsets,
             DisplayCutout.ParcelableWrapper outDisplayCutout) {
         return false;
     }

@@ -25,6 +25,19 @@ namespace android {
 namespace uirenderer {
 namespace skiapipeline {
 
+RenderNodeDrawable::RenderNodeDrawable(RenderNode* node, SkCanvas* canvas, bool composeLayer,
+                                       bool inReorderingSection)
+        : mRenderNode(node)
+        , mRecordedTransform(canvas->getTotalMatrix())
+        , mComposeLayer(composeLayer)
+        , mInReorderingSection(inReorderingSection) {}
+
+RenderNodeDrawable::~RenderNodeDrawable() {
+    // Just here to move the destructor into the cpp file where we can access RenderNode.
+
+    // TODO: Detangle the header nightmare.
+}
+
 void RenderNodeDrawable::drawBackwardsProjectedNodes(SkCanvas* canvas,
                                                      const SkiaDisplayList& displayList,
                                                      int nestLevel) {
@@ -115,7 +128,6 @@ void RenderNodeDrawable::forceDraw(SkCanvas* canvas) {
         return;
     }
 
-    SkASSERT(renderNode->getDisplayList()->isSkiaDL());
     SkiaDisplayList* displayList = (SkiaDisplayList*)renderNode->getDisplayList();
 
     SkAutoCanvasRestore acr(canvas, true);
@@ -130,7 +142,7 @@ void RenderNodeDrawable::forceDraw(SkCanvas* canvas) {
             LOG_ALWAYS_FATAL_IF(!mProjectedDisplayList->mProjectedOutline);
             const bool shouldClip = mProjectedDisplayList->mProjectedOutline->getPath();
             SkAutoCanvasRestore acr2(canvas, shouldClip);
-            canvas->setMatrix(mProjectedDisplayList->mProjectedReceiverParentMatrix);
+            canvas->setMatrix(mProjectedDisplayList->mParentMatrix);
             if (shouldClip) {
                 clipOutline(*mProjectedDisplayList->mProjectedOutline, canvas, nullptr);
             }
@@ -144,10 +156,10 @@ static bool layerNeedsPaint(const LayerProperties& properties, float alphaMultip
                             SkPaint* paint) {
     paint->setFilterQuality(kLow_SkFilterQuality);
     if (alphaMultiplier < 1.0f || properties.alpha() < 255 ||
-        properties.xferMode() != SkBlendMode::kSrcOver || properties.colorFilter() != nullptr) {
+        properties.xferMode() != SkBlendMode::kSrcOver || properties.getColorFilter() != nullptr) {
         paint->setAlpha(properties.alpha() * alphaMultiplier);
         paint->setBlendMode(properties.xferMode());
-        paint->setColorFilter(sk_ref_sp(properties.colorFilter()));
+        paint->setColorFilter(sk_ref_sp(properties.getColorFilter()));
         return true;
     }
     return false;
@@ -188,9 +200,7 @@ void RenderNodeDrawable::drawContent(SkCanvas* canvas) const {
         setViewProperties(properties, canvas, &alphaMultiplier);
     }
     SkiaDisplayList* displayList = (SkiaDisplayList*)mRenderNode->getDisplayList();
-    if (displayList->containsProjectionReceiver()) {
-        displayList->mProjectedReceiverParentMatrix = canvas->getTotalMatrix();
-    }
+    displayList->mParentMatrix = canvas->getTotalMatrix();
 
     // TODO should we let the bound of the drawable do this for us?
     const SkRect bounds = SkRect::MakeWH(properties.getWidth(), properties.getHeight());

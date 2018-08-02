@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone;
 
 import static android.view.MotionEvent.ACTION_DOWN;
 import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_BACK;
+import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_DEAD_ZONE;
 import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_HOME;
 import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_NONE;
 
@@ -40,7 +41,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.os.SystemProperties;
-import android.support.annotation.ColorInt;
+import androidx.annotation.ColorInt;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.SparseArray;
@@ -160,6 +161,13 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     private NotificationPanelView mPanelView;
 
     private int mRotateBtnStyle = R.style.RotateButtonCCWStart90;
+
+    /**
+     * Helper that is responsible for showing the right toast when a disallowed activity operation
+     * occurred. In pinned mode, we show instructions on how to break out of this mode, whilst in
+     * fully locked mode we only show that unlocking is blocked.
+     */
+    private ScreenPinningNotify mScreenPinningNotify;
 
     private class NavTransitionListener implements TransitionListener {
         private boolean mBackTransitioning;
@@ -286,6 +294,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         mConfiguration.updateFrom(context.getResources().getConfiguration());
         reloadNavIcons();
 
+        mScreenPinningNotify = new ScreenPinningNotify(mContext);
         mBarTransitions = new NavigationBarTransitions(this);
 
         mButtonDispatchers.put(R.id.back, new ButtonDispatcher(R.id.back));
@@ -328,15 +337,15 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
-        if (shouldDeadZoneConsumeTouchEvents(event)) {
-            return true;
-        }
+        final boolean deadZoneConsumed = shouldDeadZoneConsumeTouchEvents(event);
         switch (event.getActionMasked()) {
             case ACTION_DOWN:
                 int x = (int) event.getX();
                 int y = (int) event.getY();
                 mDownHitTarget = HIT_TARGET_NONE;
-                if (getBackButton().isVisible() && mBackButtonBounds.contains(x, y)) {
+                if (deadZoneConsumed) {
+                    mDownHitTarget = HIT_TARGET_DEAD_ZONE;
+                } else if (getBackButton().isVisible() && mBackButtonBounds.contains(x, y)) {
                     mDownHitTarget = HIT_TARGET_BACK;
                 } else if (getHomeButton().isVisible() && mHomeButtonBounds.contains(x, y)) {
                     mDownHitTarget = HIT_TARGET_HOME;
@@ -353,9 +362,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (shouldDeadZoneConsumeTouchEvents(event)) {
-            return true;
-        }
+        shouldDeadZoneConsumeTouchEvents(event);
         if (mGestureHelper.onTouchEvent(event)) {
             return true;
         }
@@ -764,7 +771,7 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
                 showSwipeUpUI ? mQuickStepAccessibilityDelegate : null);
     }
 
-    private void updateSlippery() {
+    public void updateSlippery() {
         setSlippery(!isQuickStepSwipeUpEnabled() || mPanelView.isFullyExpanded());
     }
 
@@ -830,8 +837,8 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         final int dualToneLightTheme = Utils.getThemeAttr(ctx, R.attr.lightIconTheme);
         Context darkContext = new ContextThemeWrapper(ctx, dualToneDarkTheme);
         Context lightContext = new ContextThemeWrapper(ctx, dualToneLightTheme);
-        final int lightColor = Utils.getColorAttr(lightContext, R.attr.singleToneColor);
-        final int darkColor = Utils.getColorAttr(darkContext, R.attr.singleToneColor);
+        final int lightColor = Utils.getColorAttrDefaultColor(lightContext, R.attr.singleToneColor);
+        final int darkColor = Utils.getColorAttrDefaultColor(darkContext, R.attr.singleToneColor);
 
         // Use the supplied style to set the icon's rotation parameters
         Context rotateContext = new ContextThemeWrapper(ctx, style);
@@ -981,6 +988,18 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         mDockedIcon.setRotation(mDockedStackExists && mVertical ? 90 : 0);
         getRecentsButton().setImageDrawable(mDockedStackExists ? mDockedIcon : mRecentIcon);
         mBarTransitions.reapplyDarkIntensity();
+    }
+
+    public void showPinningEnterExitToast(boolean entering) {
+        if (entering) {
+            mScreenPinningNotify.showPinningStartToast();
+        } else {
+            mScreenPinningNotify.showPinningExitToast();
+        }
+    }
+
+    public void showPinningEscapeToast() {
+        mScreenPinningNotify.showEscapeToast(isRecentsButtonVisible());
     }
 
     public boolean isVertical() {

@@ -48,10 +48,10 @@
     <string name="keyguard_enter_your_pin">Enter your PIN</string>
 
     <!-- Instructions telling the user to enter their pattern to unlock the keyguard [CHAR LIMIT=30] -->
-    <string name="keyguard_enter_your_pattern">Enter your Pattern</string>
+    <string name="keyguard_enter_your_pattern">Enter your pattern</string>
 
     <!-- Instructions telling the user to enter their text password to unlock the keyguard [CHAR LIMIT=30] -->
-    <string name="keyguard_enter_your_password">Enter your Password</string>
+    <string name="keyguard_enter_your_password">Enter your password</string>
 
     <!-- Instructions telling the user that they entered the wrong pin while trying
          to unlock the keyguard.  Displayed in one line in a large font.  -->
@@ -62,7 +62,7 @@
 
     <!-- When the lock screen is showing, the phone is plugged in and the battery is fully
          charged, say that it is charged. -->
-    <string name="keyguard_charged">Charged</string>
+    <string name="keyguard_charged">Fully charged</string>
 
     <!-- When the lock screen is showing and the phone plugged in, and the battery
          is not fully charged, say that it's charging.  -->
@@ -146,9 +146,9 @@
     <!-- Message shown in pattern unlock after some number of unsuccessful attempts -->
     <string name="kg_forgot_pattern_button_text">Forgot Pattern</string>
     <!-- Message shown when user enters wrong pattern -->
-    <string name="kg_wrong_pattern">Wrong Pattern</string>
+    <string name="kg_wrong_pattern">Wrong pattern</string>
     <!-- Message shown when user enters wrong password -->
-    <string name="kg_wrong_password">Wrong Password</string>
+    <string name="kg_wrong_password">Wrong password</string>
     <!-- Message shown when user enters wrong PIN -->
     <string name="kg_wrong_pin">Wrong PIN</string>
     <!-- Countdown message shown after too many failed unlock attempts -->
@@ -385,7 +385,10 @@
     </plurals>
 
     <!-- Fingerprint hint message when finger was not recognized.-->
-    <string name="fingerprint_not_recognized">Not recognized</string>
+    <string name="kg_fingerprint_not_recognized">Not recognized</string>
+
+    <!-- Face hint message when finger was not recognized. [CHAR LIMIT=20] -->
+    <string name="kg_face_not_recognized">Not recognized</string>
 
     <!-- Instructions telling the user remaining times when enter SIM PIN view.  -->
     <plurals name="kg_password_default_pin_message">

@@ -44,7 +44,6 @@ import android.view.View;
 
 import com.android.internal.colorextraction.ColorExtractor.GradientColors;
 import com.android.internal.util.function.TriConsumer;
-import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.util.wakelock.WakeLock;
@@ -94,6 +93,7 @@ public class ScrimControllerTest extends SysuiTestCase {
                     mScrimInFrontColor = scrimInFrontColor;
                 },
                 visible -> mScrimVisibility = visible, mDozeParamenters, mAlarmManager);
+        mScrimController.setHasBackdrop(false);
     }
 
     @Test
@@ -140,14 +140,23 @@ public class ScrimControllerTest extends SysuiTestCase {
 
     @Test
     public void transitionToAod_withAodWallpaperAndLockScreenWallpaper() {
-        ScrimState.AOD.mKeyguardUpdateMonitor = new KeyguardUpdateMonitor(getContext()) {
-            @Override
-            public boolean hasLockscreenWallpaper() {
-                return true;
-            }
-        };
+        mScrimController.setHasBackdrop(true);
         mScrimController.setWallpaperSupportsAmbientMode(true);
         mScrimController.transitionTo(ScrimState.AOD);
+        mScrimController.finishAnimationsImmediately();
+        // Front scrim should be transparent
+        // Back scrim should be visible with tint
+        assertScrimVisibility(VISIBILITY_FULLY_TRANSPARENT, VISIBILITY_FULLY_OPAQUE);
+        assertScrimTint(mScrimBehind, true /* tinted */);
+        assertScrimTint(mScrimInFront, true /* tinted */);
+    }
+
+    @Test
+    public void setHasBackdrop_withAodWallpaperAndAlbumArt() {
+        mScrimController.setWallpaperSupportsAmbientMode(true);
+        mScrimController.transitionTo(ScrimState.AOD);
+        mScrimController.finishAnimationsImmediately();
+        mScrimController.setHasBackdrop(true);
         mScrimController.finishAnimationsImmediately();
         // Front scrim should be transparent
         // Back scrim should be visible with tint

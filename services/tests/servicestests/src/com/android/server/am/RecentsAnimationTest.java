@@ -16,18 +16,16 @@
 
 package com.android.server.am;
 
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
-import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static com.android.server.wm.RecentsAnimationController.REORDER_KEEP_IN_PLACE;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -51,10 +49,9 @@ import org.junit.runner.RunWith;
 @Presubmit
 @RunWith(AndroidJUnit4.class)
 public class RecentsAnimationTest extends ActivityTestsBase {
-    private static final int TEST_CALLING_PID = 3;
 
     private Context mContext = InstrumentationRegistry.getContext();
-    private ActivityManagerService mService;
+    private TestActivityTaskManagerService mService;
     private ComponentName mRecentsComponent;
 
     @Before
@@ -63,8 +60,8 @@ public class RecentsAnimationTest extends ActivityTestsBase {
         super.setUp();
 
         mRecentsComponent = new ComponentName(mContext.getPackageName(), "RecentsActivity");
-        mService = setupActivityManagerService(new MyTestActivityManagerService(mContext));
-        AttributeCache.init(mContext);
+        mService = spy(new MyTestActivityTaskManagerService(mContext));
+        setupActivityManagerService(mService);
     }
 
     @Test
@@ -99,8 +96,8 @@ public class RecentsAnimationTest extends ActivityTestsBase {
                 eq(REORDER_KEEP_IN_PLACE), any());
     }
 
-    private class MyTestActivityManagerService extends TestActivityManagerService {
-        MyTestActivityManagerService(Context context) {
+    private class MyTestActivityTaskManagerService extends TestActivityTaskManagerService {
+        MyTestActivityTaskManagerService(Context context) {
             super(context);
         }
 

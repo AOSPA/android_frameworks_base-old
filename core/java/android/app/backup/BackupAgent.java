@@ -43,7 +43,6 @@ import org.xmlpull.v1.XmlPullParserException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.util.Collection;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
@@ -334,7 +333,6 @@ public abstract class BackupAgent extends ContextWrapper {
      * @throws IOException
      *
      * @see Context#getNoBackupFilesDir()
-     * @see ApplicationInfo#fullBackupContent
      * @see #fullBackupFile(File, FullBackupDataOutput)
      * @see #onRestoreFile(ParcelFileDescriptor, long, File, int, long, long)
      */
@@ -834,7 +832,7 @@ public abstract class BackupAgent extends ContextWrapper {
         }
 
         if (excludes != null &&
-                isFileSpecifiedInPathList(destination, excludes)) {
+                BackupUtils.isFileSpecifiedInPathList(destination, excludes)) {
             if (Log.isLoggable(FullBackup.TAG_XML_PARSER, Log.VERBOSE)) {
                 Log.v(FullBackup.TAG_XML_PARSER,
                         "onRestoreFile: \"" + destinationCanonicalPath + "\": listed in"
@@ -848,7 +846,8 @@ public abstract class BackupAgent extends ContextWrapper {
             // it's a small list), we'll go through and look for it.
             boolean explicitlyIncluded = false;
             for (Set<PathWithRequiredFlags> domainIncludes : includes.values()) {
-                explicitlyIncluded |= isFileSpecifiedInPathList(destination, domainIncludes);
+                explicitlyIncluded |=
+                        BackupUtils.isFileSpecifiedInPathList(destination, domainIncludes);
                 if (explicitlyIncluded) {
                     break;
                 }
@@ -864,33 +863,6 @@ public abstract class BackupAgent extends ContextWrapper {
             }
         }
         return true;
-    }
-
-    /**
-     * @return True if the provided file is either directly in the provided list, or the provided
-     * file is within a directory in the list.
-     */
-    private boolean isFileSpecifiedInPathList(File file,
-            Collection<PathWithRequiredFlags> canonicalPathList) throws IOException {
-        for (PathWithRequiredFlags canonical : canonicalPathList) {
-            String canonicalPath = canonical.getPath();
-            File fileFromList = new File(canonicalPath);
-            if (fileFromList.isDirectory()) {
-                if (file.isDirectory()) {
-                    // If they are both directories check exact equals.
-                    return file.equals(fileFromList);
-                } else {
-                    // O/w we have to check if the file is within the directory from the list.
-                    return file.getCanonicalPath().startsWith(canonicalPath);
-                }
-            } else {
-                if (file.equals(fileFromList)) {
-                    // Need to check the explicit "equals" so we don't end up with substrings.
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /**

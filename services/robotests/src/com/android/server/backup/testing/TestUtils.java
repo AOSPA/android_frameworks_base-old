@@ -18,12 +18,10 @@ package com.android.server.backup.testing;
 
 import static com.google.common.truth.Truth.assertThat;
 
-
-import com.android.internal.util.FunctionalUtils.ThrowingRunnable;
-
 import org.robolectric.shadows.ShadowLog;
 
 import java.util.concurrent.Callable;
+import java.util.function.Predicate;
 
 public class TestUtils {
     /** Reset logcat with {@link ShadowLog#reset()} before the test case */
@@ -36,6 +34,10 @@ public class TestUtils {
     public static void assertLogcatAtLeast(String tag, int level) {
         assertThat(ShadowLog.getLogsForTag(tag).stream().anyMatch(logItem -> logItem.type >= level))
                 .isTrue();
+    }
+
+    public static void assertLogcatContains(String tag, Predicate<ShadowLog.LogItem> predicate) {
+        assertThat(ShadowLog.getLogsForTag(tag).stream().anyMatch(predicate)).isTrue();
     }
 
     /**
@@ -79,6 +81,12 @@ public class TestUtils {
             return (RuntimeException) e;
         }
         return new RuntimeException(e);
+    }
+
+    /** An equivalent of {@link Runnable} that allows throwing checked exceptions. */
+    @FunctionalInterface
+    public interface ThrowingRunnable {
+        void runOrThrow() throws Exception;
     }
 
     private TestUtils() {}

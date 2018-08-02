@@ -16,10 +16,8 @@
 
 #pragma once
 
-#include "BakedOpDispatcher.h"
-#include "BakedOpRenderer.h"
 #include "DamageAccumulator.h"
-#include "FrameBuilder.h"
+#include "Lighting.h"
 #include "FrameInfo.h"
 #include "FrameInfoVisualizer.h"
 #include "FrameMetricsReporter.h"
@@ -155,8 +153,6 @@ public:
 
     void setName(const std::string&& name);
 
-    void serializeDisplayListTree();
-
     void addRenderNode(RenderNode* node, bool placeFront);
     void removeRenderNode(RenderNode* node);
 
@@ -240,8 +236,8 @@ private:
 
     bool mOpaque;
     bool mWideColorGamut = false;
-    BakedOpRenderer::LightInfo mLightInfo;
-    FrameBuilder::LightGeometry mLightGeometry = {{0, 0, 0}, 0};
+    LightInfo mLightInfo;
+    LightGeometry mLightGeometry = {{0, 0, 0}, 0};
 
     bool mHaveNewSurface = false;
     DamageAccumulator mDamageAccumulator;

@@ -28,8 +28,8 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.Bundle;
 import android.os.UserManager;
-import android.support.annotation.Nullable;
-import android.support.annotation.VisibleForTesting;
+import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.View;
@@ -101,7 +101,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
 
     public QSFooterImpl(Context context, AttributeSet attrs) {
         super(context, attrs);
-        mColorForeground = Utils.getColorAttr(context, android.R.attr.colorForeground);
+        mColorForeground = Utils.getColorAttrDefaultColor(context, android.R.attr.colorForeground);
     }
 
     @Override
@@ -390,7 +390,7 @@ public class QSFooterImpl extends FrameLayout implements QSFooter,
                 !(picture instanceof UserIconDrawable)) {
             picture = picture.getConstantState().newDrawable(mContext.getResources()).mutate();
             picture.setColorFilter(
-                    Utils.getColorAttr(mContext, android.R.attr.colorForeground),
+                    Utils.getColorAttrDefaultColor(mContext, android.R.attr.colorForeground),
                     Mode.SRC_IN);
         }
         mMultiUserAvatar.setImageDrawable(picture);

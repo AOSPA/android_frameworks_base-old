@@ -33,9 +33,9 @@ public:
     renderthread::MakeCurrentResult makeCurrent() override;
     renderthread::Frame getFrame() override;
     bool draw(const renderthread::Frame& frame, const SkRect& screenDirty, const SkRect& dirty,
-              const FrameBuilder::LightGeometry& lightGeometry, LayerUpdateQueue* layerUpdateQueue,
+              const LightGeometry& lightGeometry, LayerUpdateQueue* layerUpdateQueue,
               const Rect& contentDrawBounds, bool opaque, bool wideColorGamut,
-              const BakedOpRenderer::LightInfo& lightInfo,
+              const LightInfo& lightInfo,
               const std::vector<sp<RenderNode> >& renderNodes,
               FrameInfoVisualizer* profiler) override;
     bool swapBuffers(const renderthread::Frame& frame, bool drew, const SkRect& screenDirty,
@@ -49,8 +49,6 @@ public:
     bool isContextReady() override;
 
     static void invokeFunctor(const renderthread::RenderThread& thread, Functor* functor);
-    static sk_sp<Bitmap> allocateHardwareBitmap(renderthread::RenderThread& thread,
-                                                SkBitmap& skBitmap);
 
 private:
     renderthread::EglManager& mEglManager;

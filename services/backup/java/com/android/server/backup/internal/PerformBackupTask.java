@@ -30,6 +30,7 @@ import static com.android.server.backup.internal.BackupHandler.MSG_BACKUP_RESTOR
 import android.annotation.Nullable;
 import android.app.ApplicationThreadConstants;
 import android.app.IBackupAgent;
+import android.app.backup.BackupAgent;
 import android.app.backup.BackupDataInput;
 import android.app.backup.BackupDataOutput;
 import android.app.backup.BackupManager;
@@ -205,10 +206,8 @@ public class PerformBackupTask implements BackupRestoreTask {
      * Put this task in the repository of running tasks.
      */
     private void registerTask() {
-        synchronized (backupManagerService.getCurrentOpLock()) {
-            backupManagerService.getCurrentOperations().put(
-                    mCurrentOpToken, new Operation(OP_PENDING, this, OP_TYPE_BACKUP));
-        }
+        backupManagerService.putOperation(
+                mCurrentOpToken, new Operation(OP_PENDING, this, OP_TYPE_BACKUP));
     }
 
     /**
@@ -269,7 +268,6 @@ public class PerformBackupTask implements BackupRestoreTask {
         if (mOriginalQueue.isEmpty() && mPendingFullBackups.isEmpty()) {
             Slog.w(TAG, "Backup begun with an empty queue - nothing to do.");
             backupManagerService.addBackupTrace("queue empty at begin");
-            BackupObserverUtils.sendBackupFinished(mObserver, BackupManager.SUCCESS);
             executeNextState(BackupState.FINAL);
             return;
         }
@@ -349,8 +347,6 @@ public class PerformBackupTask implements BackupRestoreTask {
                 // restage everything and try again later.
                 backupManagerService.resetBackupState(mStateDir);  // Just to make sure.
                 // In case of any other error, it's backup transport error.
-                BackupObserverUtils.sendBackupFinished(mObserver,
-                        BackupManager.ERROR_TRANSPORT_ABORTED);
                 executeNextState(BackupState.FINAL);
             }
         }
@@ -361,7 +357,7 @@ public class PerformBackupTask implements BackupRestoreTask {
             // The package manager doesn't have a proper <application> etc, but since it's running
             // here in the system process we can just set up its agent directly and use a synthetic
             // BackupRequest.
-            PackageManagerBackupAgent pmAgent = backupManagerService.makeMetadataAgent();
+            BackupAgent pmAgent = backupManagerService.makeMetadataAgent();
             mStatus = invokeAgentForBackup(
                     PACKAGE_MANAGER_SENTINEL,
                     IBackupAgent.Stub.asInterface(pmAgent.onBind()));
@@ -384,18 +380,8 @@ public class PerformBackupTask implements BackupRestoreTask {
                 // if things went wrong at this point, we need to
                 // restage everything and try again later.
                 backupManagerService.resetBackupState(mStateDir);  // Just to make sure.
-                BackupObserverUtils.sendBackupFinished(mObserver,
-                        invokeAgentToObserverError(mStatus));
                 executeNextState(BackupState.FINAL);
             }
-        }
-    }
-
-    private int invokeAgentToObserverError(int error) {
-        if (error == BackupTransport.AGENT_ERROR) {
-            return BackupManager.ERROR_AGENT_FAILURE;
-        } else {
-            return BackupManager.ERROR_TRANSPORT_ABORTED;
         }
     }
 
@@ -897,7 +883,12 @@ public class PerformBackupTask implements BackupRestoreTask {
                                         .sendBackupOnPackageResult(mObserver, pkgName,
                                                 BackupManager.ERROR_AGENT_FAILURE);
                                 errorCleanup();
-                                // agentErrorCleanup() implicitly executes next state properly
+                                if (MORE_DEBUG) {
+                                    Slog.i(TAG, "Agent failure for " + pkgName
+                                            + " with illegal key: " + key + "; dropped");
+                                }
+                                executeNextState(mQueue.isEmpty() ? BackupState.FINAL
+                                        : BackupState.RUNNING_QUEUE);
                                 return;
                             }
                             in.skipEntityData();

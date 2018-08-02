@@ -38,6 +38,7 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlSerializer;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Arrays;
 
 /**
@@ -644,7 +645,7 @@ public final class NotificationChannel implements Parcelable {
 
     @Nullable
     private Uri restoreSoundUri(Context context, @Nullable Uri uri) {
-        if (uri == null) {
+        if (uri == null || Uri.EMPTY.equals(uri)) {
             return null;
         }
         ContentResolver contentResolver = context.getContentResolver();
@@ -680,7 +681,7 @@ public final class NotificationChannel implements Parcelable {
 
     private Uri getSoundForBackup(Context context) {
         Uri sound = getSound();
-        if (sound == null) {
+        if (sound == null || Uri.EMPTY.equals(sound)) {
             return null;
         }
         Uri canonicalSound = context.getContentResolver().canonicalize(sound);
@@ -940,6 +941,32 @@ public final class NotificationChannel implements Parcelable {
         result = 31 * result + (getAudioAttributes() != null ? getAudioAttributes().hashCode() : 0);
         result = 31 * result + (isBlockableSystem() ? 1 : 0);
         return result;
+    }
+
+    /** @hide */
+    public void dump(PrintWriter pw, String prefix, boolean redacted) {
+        String redactedName = redacted ? TextUtils.trimToLengthWithEllipsis(mName, 3) : mName;
+        String output = "NotificationChannel{"
+                + "mId='" + mId + '\''
+                + ", mName=" + redactedName
+                + ", mDescription=" + (!TextUtils.isEmpty(mDesc) ? "hasDescription " : "")
+                + ", mImportance=" + mImportance
+                + ", mBypassDnd=" + mBypassDnd
+                + ", mLockscreenVisibility=" + mLockscreenVisibility
+                + ", mSound=" + mSound
+                + ", mLights=" + mLights
+                + ", mLightColor=" + mLightColor
+                + ", mVibration=" + Arrays.toString(mVibration)
+                + ", mUserLockedFields=" + Integer.toHexString(mUserLockedFields)
+                + ", mFgServiceShown=" + mFgServiceShown
+                + ", mVibrationEnabled=" + mVibrationEnabled
+                + ", mShowBadge=" + mShowBadge
+                + ", mDeleted=" + mDeleted
+                + ", mGroup='" + mGroup + '\''
+                + ", mAudioAttributes=" + mAudioAttributes
+                + ", mBlockableSystem=" + mBlockableSystem
+                + '}';
+        pw.println(prefix + output);
     }
 
     @Override
