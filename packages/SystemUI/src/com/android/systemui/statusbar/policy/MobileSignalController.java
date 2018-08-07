@@ -403,7 +403,7 @@ public class MobileSignalController extends SignalController<
         int typeIcon = (showDataIcon || mConfig.alwaysShowDataRatIcon || mAlwasyShowTypeIcon) ?
                 icons.mDataType : 0;
         int volteIcon = mShowVolteIcon && isEnhanced4gLteModeSettingEnabled() ? getVolteResId() : 0;
-
+        boolean fiveGAvailable = mFiveGState.connected && isDataRegisteredOnLte();
         if (DEBUG) {
             Log.d(mTag, "notifyListeners mAlwasyShowTypeIcon=" + mAlwasyShowTypeIcon
                     + "  mDataNetType:" + mDataNetType +
@@ -422,7 +422,7 @@ public class MobileSignalController extends SignalController<
                 0, volteIcon,
                 dataContentDescription, description, icons.mIsWide,
                 mSubscriptionInfo.getSubscriptionId(), mCurrentState.roaming,
-                mFiveGState.connected, getCurrentFiveGIconId(), mFiveGState.dataConnected);
+                fiveGAvailable, getCurrentFiveGIconId(), mFiveGState.dataConnected);
     }
 
     @Override
@@ -715,6 +715,16 @@ public class MobileSignalController extends SignalController<
         int phoneId = SubscriptionManager.getPhoneId(mSubscriptionInfo.getSubscriptionId());
         client.unregisterListener(phoneId);
         mFiveGState = cleanState();
+    }
+
+    private boolean isDataRegisteredOnLte() {
+        boolean registered = false;
+        int dataType = getDataNetworkType();
+        if (dataType == TelephonyManager.NETWORK_TYPE_LTE ||
+                dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+            registered = true;
+        }
+        return registered;
     }
 
     @Override
