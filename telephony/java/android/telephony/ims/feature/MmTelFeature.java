@@ -37,7 +37,6 @@ import android.telephony.ims.stub.ImsSmsImplBase;
 import android.telephony.ims.stub.ImsUtImplBase;
 import android.util.Log;
 
-import android.telephony.ims.ImsReasonInfo;
 import com.android.ims.internal.IImsCallSession;
 import com.android.ims.internal.IImsEcbm;
 import com.android.ims.internal.IImsMultiEndpoint;
@@ -459,27 +458,6 @@ public class MmTelFeature extends ImsFeature {
             }
             try {
                 mListener.onIncomingCall(c, extras);
-            } catch (RemoteException e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    /**
-     * Notify the framework that a call has been implicitly rejected by this MmTelFeature
-     * during call setup.
-     * @param callProfile The {@link ImsCallProfile} IMS call profile with details.
-     *        This can be null if no call information is available for the rejected call.
-     * @param reason The {@link ImsReasonInfo} call rejection reason.
-     * @hide
-     */
-    public final void notifyRejectedCall(ImsCallProfile callProfile, ImsReasonInfo reason) {
-        synchronized (mLock) {
-            if (mListener == null) {
-                throw new IllegalStateException("Session is not available.");
-            }
-            try {
-                mListener.onRejectedCall(callProfile, reason);
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }
