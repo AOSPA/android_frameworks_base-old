@@ -221,7 +221,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
     public static boolean mPerfSendTapHint = false;
     public BoostFramework mPerfBoost = null;
-    public BoostFramework mUxPerf = null;
+    public BoostFramework mPerfPack = null;
+
     static final int HANDLE_DISPLAY_ADDED = FIRST_SUPERVISOR_STACK_MSG + 5;
     static final int HANDLE_DISPLAY_CHANGED = FIRST_SUPERVISOR_STACK_MSG + 6;
     static final int HANDLE_DISPLAY_REMOVED = FIRST_SUPERVISOR_STACK_MSG + 7;
@@ -3440,18 +3441,13 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
        if (mPerfBoost != null) {
            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
            mPerfSendTapHint = true;
-           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
-           // Start IOP
-           mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-                   r.appInfo.sourceDir.substring(0, r.appInfo.sourceDir.lastIndexOf('/')));
        }
-    }
-
-    void acquireUxPerfLock(int opcode, String packageName) {
-        mUxPerf = new BoostFramework();
-        if (mUxPerf != null) {
-            mUxPerf.perfUXEngine_events(opcode, 0, packageName, 0);
-        }
+       if (mPerfPack == null) {
+           mPerfPack = new BoostFramework();
+       }
+       if (mPerfPack != null) {
+           mPerfPack.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName, -1, BoostFramework.Launch.BOOST_V2);
+       }
     }
 
     ActivityRecord findTaskLocked(ActivityRecord r, int displayId) {
@@ -3479,10 +3475,6 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                         if(mTmpFindTaskResult.r.getState() == ActivityState.DESTROYED ) {
                             /*It's a new app launch */
                             acquireAppLaunchPerfLock(r);
-                        }
-                        if(mTmpFindTaskResult.r.getState() == ActivityState.STOPPED) {
-                            /*Warm launch */
-                            acquireUxPerfLock(BoostFramework.UXE_EVENT_SUB_LAUNCH, r.packageName);
                         }
                         return mTmpFindTaskResult.r;
                     } else if (mTmpFindTaskResult.r.getDisplayId() == displayId) {
