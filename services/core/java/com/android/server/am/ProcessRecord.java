@@ -540,9 +540,9 @@ final class ProcessRecord implements WindowProcessListener {
                             + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
                             + ",cached=" + (cached ? 1 : 0)
                             + ",fA=" + (foregroundActivities ? 1 : 0)
-                            + ",fS=" + (foregroundServices ? 1 : 0)
+                            + ",fS=" + (mHasForegroundServices ? 1 : 0)
                             + ",systemNoUi=" + (systemNoUi ? 1 : 0)
-                            + ",curSchedGroup=" + curSchedGroup
+                            + ",curSchedGroup=" + mCurSchedGroup
                             + ",curProcState=" + curProcState + ",setProcState=" + setProcState
                             + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
                             + ",debugging=" + (debugging ? 1 : 0);
@@ -579,9 +579,9 @@ final class ProcessRecord implements WindowProcessListener {
                             + ",setAdj=" + setAdj + ",hasShownUi=" + (hasShownUi ? 1 : 0)
                             + ",cached=" + (cached ? 1 : 0)
                             + ",fA=" + (foregroundActivities ? 1 : 0)
-                            + ",fS=" + (foregroundServices ? 1 : 0)
+                            + ",fS=" + (mHasForegroundServices ? 1 : 0)
                             + ",systemNoUi=" + (systemNoUi ? 1 : 0)
-                            + ",curSchedGroup=" + curSchedGroup
+                            + ",curSchedGroup=" + mCurSchedGroup
                             + ",curProcState=" + curProcState + ",setProcState=" + setProcState
                             + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
                             + ",debugging=" + (debugging ? 1 : 0);

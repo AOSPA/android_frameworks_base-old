@@ -4733,9 +4733,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 + ProcessList.makeOomAdjString(app.setAdj)
                                 + ProcessList.makeProcStateString(app.setProcState), app.info.uid);
                 mAllowLowerMemLevel = true;
-                if (mEnableNetOpts) {
-                    networkOptsCheck(1, app.processName);
-                }
             } else {
                 // Note that we always want to do oom adj to update our state with the
                 // new number of procs.
@@ -6460,43 +6457,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
         }, dumpheapFilter);
-
-        if (mEnableNetOpts) {
-            IntentFilter netInfoFilter = new IntentFilter();
-            netInfoFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
-            netInfoFilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
-            mContext.registerReceiver(new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context context, Intent intent) {
-                    if (mConnectivityManager != null) {
-                        NetworkInfo netInfo = mConnectivityManager.getActiveNetworkInfo();
-                        synchronized(mNetLock) {
-                            mActiveNetType = (netInfo != null) ? netInfo.getType() : -1;
-                        }
-                    }
-                    ActivityStack stack = mStackSupervisor.getLastStack();
-                    if (stack != null) {
-                        ActivityRecord r = stack.topRunningActivityLocked();
-                        if (r != null) {
-                            PowerManager powerManager =
-                                (PowerManager)mContext.getSystemService(Context.POWER_SERVICE);
-                            if (powerManager != null && powerManager.isInteractive())
-                                    networkOptsCheck(0, r.processName);
-                        }
-                    }
-                }
-            }, netInfoFilter);
-            mConnectivityManager =
-                        (ConnectivityManager)mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (mConnectivityManager != null) {
-                NetworkInfo netInfo = mConnectivityManager.getActiveNetworkInfo();
-                if (netInfo != null) {
-                    synchronized (mNetLock) {
-                        mActiveNetType = netInfo.getType();
-                    }
-                }
-            }
-        }
 
         // Let system services know.
         mSystemServiceManager.startBootPhase(SystemService.PHASE_BOOT_COMPLETED);
@@ -20272,9 +20232,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 + ",setAdj=" + app.setAdj + ",hasShownUi=" + (app.hasShownUi ? 1 : 0)
                 + ",cached=" + (app.cached ? 1 : 0)
                 + ",fA=" + (app.foregroundActivities ? 1 : 0)
-                + ",fS=" + (app.foregroundServices ? 1 : 0)
+                + ",fS=" + (app.hasForegroundServices() ? 1 : 0)
                 + ",systemNoUi=" + (app.systemNoUi ? 1 : 0)
-                + ",curSchedGroup=" + app.curSchedGroup
+                + ",curSchedGroup=" + app.getCurrentSchedulingGroup()
                 + ",curProcState=" + app.curProcState + ",setProcState=" + app.setProcState
                 + ",killed=" + (app.killed ? 1 : 0) + ",killedByAm=" + (app.killedByAm ? 1 : 0)
                 + ",debugging=" + (app.debugging ? 1 : 0);
@@ -20327,11 +20287,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 long oldId = Binder.clearCallingIdentity();
                 try {
-                    if (mEnableProcessGroupCgroupFollow) {
-                        setCgroupProcsProcessGroup(app.info.uid, app.pid, processGroup);
-                    } else {
-                        setProcessGroup(app.pid, processGroup);
-                    }
+                    setProcessGroup(app.pid, processGroup);
                     if (curSchedGroup == ProcessList.SCHED_GROUP_TOP_APP) {
                         // do nothing if we already switched to RT
                         if (oldSchedGroup != ProcessList.SCHED_GROUP_TOP_APP) {
