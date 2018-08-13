@@ -144,7 +144,7 @@ public final class DunServerProfile implements LocalBluetoothProfile {
             case BluetoothProfile.STATE_CONNECTED:
                 return R.string.bluetooth_dun_profile_summary_connected;
             default:
-                return Utils.getConnectionStateSummary(state);
+                return BluetoothUtils.getConnectionStateSummary(state);
         }
     }
 
