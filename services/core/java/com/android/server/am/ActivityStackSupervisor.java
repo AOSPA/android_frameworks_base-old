@@ -2305,7 +2305,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         //top_activity = task.stack.topRunningActivityLocked();
         /* App is launching from recent apps and it's a new process */
         if(top_activity != null && top_activity.getState() == ActivityState.DESTROYED) {
-            acquireAppLaunchPerfLock(top_activity);
+            acquireAppLaunchPerfLock(top_activity.packageName);
         }
 
         if (currentStack == null) {
@@ -3433,20 +3433,20 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         return true;
     }
 
-    void acquireAppLaunchPerfLock(ActivityRecord r) {
+    void acquireAppLaunchPerfLock(String packageName) {
        /* Acquire perf lock during new app launch */
        if (mPerfBoost == null) {
            mPerfBoost = new BoostFramework();
        }
        if (mPerfBoost != null) {
-           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
+           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName, -1, BoostFramework.Launch.BOOST_V1);
            mPerfSendTapHint = true;
        }
        if (mPerfPack == null) {
            mPerfPack = new BoostFramework();
        }
        if (mPerfPack != null) {
-           mPerfPack.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
+           mPerfPack.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName, -1, BoostFramework.Launch.BOOST_V2);
        }
     }
 
@@ -3474,7 +3474,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
                     if (!mTmpFindTaskResult.matchedByRootAffinity) {
                         if(mTmpFindTaskResult.r.getState() == ActivityState.DESTROYED ) {
                             /*It's a new app launch */
-                            acquireAppLaunchPerfLock(r);
+                            acquireAppLaunchPerfLock(r.packageName);
                         }
                         return mTmpFindTaskResult.r;
                     } else if (mTmpFindTaskResult.r.getDisplayId() == displayId) {
@@ -3492,7 +3492,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
         /* Acquire perf lock *only* during new app launch */
         if (mTmpFindTaskResult.r == null || mTmpFindTaskResult.r.getState() == ActivityState.DESTROYED) {
-            acquireAppLaunchPerfLock(r);
+            acquireAppLaunchPerfLock(r.packageName);
         }
 
         if (DEBUG_TASKS && affinityMatch == null) Slog.d(TAG_TASKS, "No task found");
