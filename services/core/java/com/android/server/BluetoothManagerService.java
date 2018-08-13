@@ -1798,6 +1798,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                             == BluetoothAdapter.STATE_OFF)) {
                         if (mEnable) {
                             Slog.d(TAG, "Entering STATE_OFF but mEnabled is true; restarting.");
+                            mHandler.removeMessages(MESSAGE_RESTART_BLUETOOTH_SERVICE);
                             waitForMonitoredOnOff(false, true);
                             Message restartMsg =
                                     mHandler.obtainMessage(MESSAGE_RESTART_BLUETOOTH_SERVICE);
