@@ -229,12 +229,12 @@ public class MediaFile {
         addFileType("OTA", FILE_TYPE_MID, "audio/midi");
         addFileType("MXMF", FILE_TYPE_MID, "audio/midi");
 
+        addFileType("MP4", FILE_TYPE_MHAS, "audio/mhas", MtpConstants.FORMAT_MPEG, false);
         addFileType("MPEG", FILE_TYPE_MP4, "video/mpeg", MtpConstants.FORMAT_MPEG, true);
         addFileType("MPG", FILE_TYPE_MP4, "video/mpeg", MtpConstants.FORMAT_MPEG, false);
         addFileType("MP4", FILE_TYPE_MP4, "video/mp4", MtpConstants.FORMAT_MPEG, false);
         addFileType("M4V", FILE_TYPE_M4V, "video/mp4", MtpConstants.FORMAT_MPEG, false);
         addFileType("MOV", FILE_TYPE_QT, "video/quicktime", MtpConstants.FORMAT_MPEG, false);
-        addFileType("MP4", FILE_TYPE_MP4, "audio/mhas", MtpConstants.FORMAT_MPEG, false);
 
         addFileType("3GP", FILE_TYPE_3GPP, "video/3gpp",  MtpConstants.FORMAT_3GP_CONTAINER, true);
         addFileType("3GPP", FILE_TYPE_3GPP, "video/3gpp", MtpConstants.FORMAT_3GP_CONTAINER, false);
