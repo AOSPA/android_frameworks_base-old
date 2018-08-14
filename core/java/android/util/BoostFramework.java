@@ -89,7 +89,7 @@ public class BoostFramework {
     public static final int UXE_EVENT_BINDAPP = 2;
     public static final int UXE_EVENT_DISPLAYED_ACT = 3;
     public static final int UXE_EVENT_KILL = 4;
-    public static final int UXE_EVENT_WAKELOCK  = 5;
+    public static final int UXE_EVENT_GAME  = 5;
     public static final int UXE_EVENT_SUB_LAUNCH = 6;
     public static final int UXE_EVENT_PKG_UNINSTALL = 7;
     public static final int UXE_EVENT_PKG_INSTALL = 8;
@@ -306,15 +306,11 @@ public class BoostFramework {
 /** @hide */
     public int perfUXEngine_events(int opcode, int pid, String pkgName, int lat) {
         int ret = -1;
-        boolean bindApp_check = (opcode == UXE_EVENT_BINDAPP) ? true : false;
-        if (sIopv2 == -1 && !bindApp_check) {
+        if (sIopv2 == -1) {
             sIopv2 = SystemProperties.getInt("vendor.iop.enable_uxe", 0);
         }
         try {
-            if (sUXEngineEvents == null) {
-                return ret;
-            }
-            if (!bindApp_check && sIopv2 == 0) {
+            if (sIopv2 == 0 || sUXEngineEvents == null) {
                 return ret;
             }
             Object retVal = sUXEngineEvents.invoke(mPerf, opcode, pid, pkgName, lat);
