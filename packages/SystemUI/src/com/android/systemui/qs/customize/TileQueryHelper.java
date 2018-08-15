@@ -82,6 +82,7 @@ public class TileQueryHelper {
 
     private void addCurrentAndStockTiles(QSTileHost host) {
         String stock = mContext.getString(R.string.quick_settings_tiles_stock);
+        String extra = mContext.getString(R.string.quick_settings_tiles_extra);
         String current = Settings.Secure.getString(mContext.getContentResolver(),
                 Settings.Secure.QS_TILES);
         final ArrayList<String> possibleTiles = new ArrayList<>();
@@ -91,8 +92,8 @@ public class TileQueryHelper {
         } else {
             current = "";
         }
-        String[] stockSplit =  stock.split(",");
-        for (String spec : stockSplit) {
+        String[] tilesSplit = (stock + "," + extra).split(",");
+        for (String spec : tilesSplit) {
             if (!current.contains(spec)) {
                 possibleTiles.add(spec);
             }

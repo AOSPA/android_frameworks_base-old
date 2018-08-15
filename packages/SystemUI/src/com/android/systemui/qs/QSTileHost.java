@@ -358,7 +358,8 @@ public class QSTileHost implements QSHost, Tunable, PluginListener<QSFactory>, D
 
     protected static List<String> loadTileSpecs(Context context, String tileList) {
         final Resources res = context.getResources();
-        final String defaultTileList = res.getString(R.string.quick_settings_tiles_default);
+        final String defaultTileList = res.getString(R.string.quick_settings_tiles_default) + ","
+                + res.getString(R.string.quick_settings_tiles_extra_default);
         if (TextUtils.isEmpty(tileList)) {
             tileList = res.getString(R.string.quick_settings_tiles);
             if (DEBUG) Log.d(TAG, "Loaded tile specs from config: " + tileList);
