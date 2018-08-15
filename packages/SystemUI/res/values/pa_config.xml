@@ -29,4 +29,11 @@
     <!-- Allow devices to use unordinary cutout overlays -->
     <bool name="config_customCutout">false</bool>
 
+    <!-- Additional default tiles to display in QuickSettings -->
+    <string name="quick_settings_tiles_extra_default" translatable="false">
+    </string>
+
+    <!-- Additional QS Tiles. Order should match "quick_settings_tiles_extra_default" -->
+    <string name="quick_settings_tiles_extra" translatable="false">
+    </string>
 </resources>
