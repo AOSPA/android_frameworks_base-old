@@ -55,6 +55,7 @@ public class NtpTrustedTime implements TrustedTime {
     private static String mBackupServer = "";
     private static int mNtpRetries = 0;
     private static int mNtpRetriesMax = 0;
+    private static final String BACKUP_SERVER = "persist.backup.ntpServer";
 
     private NtpTrustedTime(String server, long timeout) {
         if (LOGD) Log.d(TAG, "creating NtpTrustedTime using " + server);
@@ -81,7 +82,14 @@ public class NtpTrustedTime implements TrustedTime {
             sSingleton = new NtpTrustedTime(server, timeout);
             sContext = context;
 
-            final String backupServer = SystemProperties.get("persist.backup.ntpServer");
+            final String sserver_prop = Settings.Global.getString(
+                    resolver, Settings.Global.NTP_SERVER_2);
+
+            final String secondServer_prop = ((null != sserver_prop)
+                                               && (0 < sserver_prop.length()))
+                                               ? sserver_prop : BACKUP_SERVER;
+
+            final String backupServer = SystemProperties.get(secondServer_prop);
 
             if ((null != backupServer) && (0 < backupServer.length())) {
                 int retryMax = res.getInteger(com.android.internal.R.integer.config_ntpRetry);
