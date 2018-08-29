@@ -791,6 +791,12 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 Slog.e(TAG, "onBluetoothServiceUp: mBluetooth is null!");
                 return;
             }
+            int st = mBluetooth.getState();
+            if (st != BluetoothAdapter.STATE_BLE_ON) {
+                if (DBG) Slog.v(TAG, "onBluetoothServiceUp: state isn't BLE_ON: " +
+                         BluetoothAdapter.nameForState(st));
+                return;
+            }
             if (isBluetoothPersistedStateOnBluetooth() || !isBleAppPresent()) {
                 // This triggers transition to STATE_ON
                 mBluetooth.onLeServiceUp();
