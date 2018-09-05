@@ -3852,6 +3852,12 @@ public class AudioService extends IAudioService.Stub
             address = "";
         }
         String btDeviceName =  btDevice.getName();
+        if (btDeviceName == null) {
+            Slog.i(TAG, "handleBtScoActiveDeviceChange: btDeviceName is null," +
+                       " sending empty string");
+            btDeviceName = "";
+        }
+
         boolean result = false;
         if (isActive) {
             result |= handleDeviceConnection(isActive, outDeviceTypes[0], address, btDeviceName);
