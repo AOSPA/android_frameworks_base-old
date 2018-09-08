@@ -17,6 +17,7 @@
 package android.telephony;
 
 import android.annotation.Nullable;
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.text.TextUtils;
 
@@ -34,15 +35,18 @@ public final class CellIdentityGsm extends CellIdentity {
     // 16-bit GSM Cell Identity described in TS 27.007, 0..65535
     private final int mCid;
     // 16-bit GSM Absolute RF Channel Number
+    @UnsupportedAppUsage
     private final int mArfcn;
     // 6-bit Base Station Identity Code
+    @UnsupportedAppUsage
     private final int mBsic;
 
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public CellIdentityGsm() {
-        super(TAG, TYPE_GSM, null, null, null, null);
+        super(TAG, CellInfo.TYPE_GSM, null, null, null, null);
         mLac = Integer.MAX_VALUE;
         mCid = Integer.MAX_VALUE;
         mArfcn = Integer.MAX_VALUE;
@@ -92,7 +96,7 @@ public final class CellIdentityGsm extends CellIdentity {
      */
     public CellIdentityGsm(int lac, int cid, int arfcn, int bsic, String mccStr,
                             String mncStr, String alphal, String alphas) {
-        super(TAG, TYPE_GSM, mccStr, mncStr, alphal, alphas);
+        super(TAG, CellInfo.TYPE_GSM, mccStr, mncStr, alphal, alphas);
         mLac = lac;
         mCid = cid;
         mArfcn = arfcn;
@@ -237,7 +241,7 @@ public final class CellIdentityGsm extends CellIdentity {
     @Override
     public void writeToParcel(Parcel dest, int flags) {
         if (DBG) log("writeToParcel(Parcel, int): " + toString());
-        super.writeToParcel(dest, TYPE_GSM);
+        super.writeToParcel(dest, CellInfo.TYPE_GSM);
         dest.writeInt(mLac);
         dest.writeInt(mCid);
         dest.writeInt(mArfcn);
@@ -246,7 +250,7 @@ public final class CellIdentityGsm extends CellIdentity {
 
     /** Construct from Parcel, type has already been processed */
     private CellIdentityGsm(Parcel in) {
-        super(TAG, TYPE_GSM, in);
+        super(TAG, CellInfo.TYPE_GSM, in);
         mLac = in.readInt();
         mCid = in.readInt();
         mArfcn = in.readInt();

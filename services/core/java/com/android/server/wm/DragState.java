@@ -143,7 +143,7 @@ class DragState {
             mDragDropController.sendHandlerMessage(
                     MSG_TEAR_DOWN_DRAG_AND_DROP_INPUT, mInputInterceptor);
             mInputInterceptor = null;
-            mService.mInputMonitor.updateInputWindowsLw(true /*force*/);
+            mDisplayContent.getInputMonitor().updateInputWindowsLw(true /*force*/);
         }
 
         // Send drag end broadcast if drag start has been sent.
@@ -255,7 +255,7 @@ class DragState {
             if (DEBUG_ORIENTATION) {
                 Slog.d(TAG_WM, "Pausing rotation during drag");
             }
-            mService.pauseRotationLocked();
+            mDisplayContent.pauseRotationLocked();
         }
 
         void tearDown() {
@@ -274,7 +274,7 @@ class DragState {
             if (DEBUG_ORIENTATION) {
                 Slog.d(TAG_WM, "Resuming rotation after drag");
             }
-            mService.resumeRotationLocked();
+            mDisplayContent.resumeRotationLocked();
         }
     }
 
@@ -296,7 +296,7 @@ class DragState {
             Slog.e(TAG_WM, "Duplicate register of drag input channel");
         } else {
             mInputInterceptor = new InputInterceptor(display);
-            mService.mInputMonitor.updateInputWindowsLw(true /*force*/);
+            mDisplayContent.getInputMonitor().updateInputWindowsLw(true /*force*/);
         }
     }
 

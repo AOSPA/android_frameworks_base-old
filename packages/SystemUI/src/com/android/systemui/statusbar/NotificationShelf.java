@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar;
 
+import static com.android.systemui.Interpolators.FAST_OUT_SLOW_IN_REVERSE;
 import static com.android.systemui.statusbar.phone.NotificationIconContainer.IconState.NO_VALUE;
 
 import android.content.Context;
@@ -26,21 +27,28 @@ import android.os.SystemProperties;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.MathUtils;
+import android.view.DisplayCutout;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
+import android.view.WindowInsets;
 import android.view.accessibility.AccessibilityNodeInfo;
 
+import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.statusbar.StatusBarStateController.StateListener;
 import com.android.systemui.statusbar.notification.NotificationUtils;
+import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.ExpandableView;
 import com.android.systemui.statusbar.phone.NotificationIconContainer;
-import com.android.systemui.statusbar.stack.AmbientState;
-import com.android.systemui.statusbar.stack.AnimationProperties;
-import com.android.systemui.statusbar.stack.ExpandableViewState;
-import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
-import com.android.systemui.statusbar.stack.StackScrollState;
-import com.android.systemui.statusbar.stack.ViewState;
+import com.android.systemui.statusbar.notification.stack.AmbientState;
+import com.android.systemui.statusbar.notification.stack.AnimationProperties;
+import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
+import com.android.systemui.statusbar.notification.stack.StackScrollState;
+import com.android.systemui.statusbar.notification.stack.ViewState;
 
 /**
  * A notification shelf view that is placed inside the notification scroller. It manages the
@@ -86,6 +94,9 @@ public class NotificationShelf extends ActivatableNotificationView implements
     private boolean mShowNotificationShelf;
     private float mFirstElementRoundness;
     private Rect mClipRect = new Rect();
+    private int mCutoutHeight;
+
+    private final StateListener mStateListener = this::setStatusBarState;
 
     public NotificationShelf(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -105,6 +116,18 @@ public class NotificationShelf extends ActivatableNotificationView implements
         mShelfState = new ShelfState();
         setBottomRoundness(1.0f, false /* animate */);
         initDimens();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        Dependency.get(StatusBarStateController.class).addListener(mStateListener);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        Dependency.get(StatusBarStateController.class).removeListener(mStateListener);
     }
 
     public void bind(AmbientState ambientState, NotificationStackScrollLayout hostLayout) {
@@ -151,12 +174,11 @@ public class NotificationShelf extends ActivatableNotificationView implements
     }
 
     public void fadeInTranslating() {
-        float translation = mShelfIcons.getTranslationY();
-        mShelfIcons.setTranslationY(translation - mShelfAppearTranslation);
+        mShelfIcons.setTranslationY(-mShelfAppearTranslation);
         mShelfIcons.setAlpha(0);
         mShelfIcons.animate()
                 .setInterpolator(Interpolators.DECELERATE_QUINT)
-                .translationY(translation)
+                .translationY(0)
                 .setDuration(SHELF_IN_TRANSLATION_DURATION)
                 .start();
         mShelfIcons.animate()
@@ -198,8 +220,12 @@ public class NotificationShelf extends ActivatableNotificationView implements
                     0 : mAmbientState.getDarkAmount();
             mShelfState.yTranslation = MathUtils.lerp(awakenTranslation, darkTranslation, yRatio);
             mShelfState.zTranslation = ambientState.getBaseZHeight();
+            // For the small display size, it's not enough to make the icon not covered by
+            // the top cutout so the denominator add the height of cutout.
+            // Totally, (getIntrinsicHeight() * 2 + mCutoutHeight) should be smaller then
+            // mAmbientState.getTopPadding().
             float openedAmount = (mShelfState.yTranslation - getFullyClosedTranslation())
-                    / (getIntrinsicHeight() * 2);
+                    / (getIntrinsicHeight() * 2 + mCutoutHeight);
             openedAmount = Math.min(1.0f, openedAmount);
             mShelfState.openedAmount = openedAmount;
             mShelfState.clipTopAmount = 0;
@@ -743,6 +769,22 @@ public class NotificationShelf extends ActivatableNotificationView implements
         mRelativeOffset -= mTmp[0];
     }
 
+    @Override
+    public WindowInsets onApplyWindowInsets(WindowInsets insets) {
+        WindowInsets ret = super.onApplyWindowInsets(insets);
+
+        // NotificationShelf drag from the status bar and the status bar dock on the top
+        // of the display for current design so just focus on the top of ScreenDecorations.
+        // In landscape or multiple window split mode, the NotificationShelf still drag from
+        // the top and the physical notch/cutout goes to the right, left, or both side of the
+        // display so it doesn't matter for the NotificationSelf in landscape.
+        DisplayCutout displayCutout = insets.getDisplayCutout();
+        mCutoutHeight = displayCutout == null || displayCutout.getSafeInsetTop() < 0
+                ? 0 : displayCutout.getSafeInsetTop();
+
+        return ret;
+    }
+
     private void setOpenedAmount(float openedAmount) {
         mNoAnimationsInThisFrame = openedAmount == 1.0f && mOpenedAmount == 0.0f;
         mOpenedAmount = openedAmount;
@@ -757,7 +799,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
         int width = (int) NotificationUtils.interpolate(
                 start + mCollapsedIcons.getFinalTranslationX(),
                 mShelfIcons.getWidth(),
-                openedAmount);
+                FAST_OUT_SLOW_IN_REVERSE.getInterpolation(openedAmount));
         mShelfIcons.setActualLayoutWidth(width);
         boolean hasOverflow = mCollapsedIcons.hasOverflow();
         int collapsedPadding = mCollapsedIcons.getPaddingEnd();
@@ -810,11 +852,9 @@ public class NotificationShelf extends ActivatableNotificationView implements
         mCollapsedIcons.addOnLayoutChangeListener(this);
     }
 
-    public void setStatusBarState(int statusBarState) {
-        if (mStatusBarState != statusBarState) {
-            mStatusBarState = statusBarState;
-            updateInteractiveness();
-        }
+    private void setStatusBarState(int statusBarState) {
+        mStatusBarState = statusBarState;
+        updateInteractiveness();
     }
 
     private void updateInteractiveness() {

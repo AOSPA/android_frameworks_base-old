@@ -28,11 +28,12 @@ import static org.mockito.Mockito.verify;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
 import android.view.SurfaceControl;
 import android.view.animation.Animation;
 import android.view.animation.ClipRectAnimation;
+
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -70,8 +71,6 @@ public class WindowAnimationSpecTest {
                 true /* isAppAnimation */);
         windowAnimationSpec.apply(mTransaction, mSurfaceControl, 0);
         verify(mTransaction).setWindowCrop(eq(mSurfaceControl), argThat(Rect::isEmpty));
-        verify(mTransaction).setFinalCrop(eq(mSurfaceControl),
-                argThat(rect -> rect.equals(mStackBounds)));
     }
 
     @Test
@@ -83,9 +82,6 @@ public class WindowAnimationSpecTest {
                 true /* isAppAnimation */);
         windowAnimationSpec.apply(mTransaction, mSurfaceControl, 0);
         verify(mTransaction).setWindowCrop(eq(mSurfaceControl), argThat(Rect::isEmpty));
-        verify(mTransaction).setFinalCrop(eq(mSurfaceControl),
-                argThat(rect -> rect.left == 20 && rect.top == 40 && rect.right == 30
-                        && rect.bottom == 50));
     }
 
     @Test

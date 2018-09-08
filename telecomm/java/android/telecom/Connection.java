@@ -23,6 +23,7 @@ import com.android.internal.telecom.IVideoProvider;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.annotation.UnsupportedAppUsage;
 import android.app.Notification;
 import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
@@ -883,7 +884,7 @@ public abstract class Connection extends Conferenceable {
         public void onRemoteRttRequest(Connection c) {}
         /** @hide */
         public void onPhoneAccountChanged(Connection c, PhoneAccountHandle pHandle) {}
-        public void onCdmaConnectionTimeReset(Connection c) {}
+        public void onConnectionTimeReset(Connection c) {}
     }
 
     /**
@@ -1320,6 +1321,7 @@ public abstract class Connection extends Conferenceable {
          * @param looper The looper.
          * @hide
          */
+        @UnsupportedAppUsage
         public VideoProvider(Looper looper) {
             mBinder = new VideoProvider.VideoProviderBinder();
             mMessageHandler = new VideoProvider.VideoProviderHandler(looper);
@@ -2413,12 +2415,12 @@ public abstract class Connection extends Conferenceable {
     }
 
     /**
-       *@hide
-       * Resets the cdma connection time.
-       */
-    public final void resetCdmaConnectionTime() {
+     * @hide
+     * Resets the cdma connection time.
+     */
+    public final void resetConnectionTime() {
         for (Listener l : mListeners) {
-            l.onCdmaConnectionTimeReset(this);
+            l.onConnectionTimeReset(this);
         }
     }
 

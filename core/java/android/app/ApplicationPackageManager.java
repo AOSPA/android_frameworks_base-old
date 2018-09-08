@@ -20,6 +20,7 @@ import android.annotation.DrawableRes;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringRes;
+import android.annotation.UnsupportedAppUsage;
 import android.annotation.UserIdInt;
 import android.annotation.XmlRes;
 import android.content.ComponentName;
@@ -342,9 +343,15 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
-    public boolean isPermissionReviewModeEnabled() {
+    public boolean arePermissionsIndividuallyControlled() {
         return mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_permissionReviewRequired);
+                com.android.internal.R.bool.config_permissionsIndividuallyControlled);
+    }
+
+    @Override
+    public boolean isWirelessConsentModeEnabled() {
+        return mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_wirelessConsentRequired);
     }
 
     @Override
@@ -693,6 +700,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    @UnsupportedAppUsage
     public boolean shouldShowRequestPermissionRationale(String permission) {
         try {
             return mPM.shouldShowRequestPermissionRationale(permission,
@@ -1525,6 +1533,7 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
+    @UnsupportedAppUsage
     static void configurationChanged() {
         synchronized (sSync) {
             sIconCache.clear();
@@ -1532,6 +1541,7 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
+    @UnsupportedAppUsage
     protected ApplicationPackageManager(ContextImpl context,
                               IPackageManager pm) {
         mContext = context;
@@ -2023,6 +2033,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    @UnsupportedAppUsage
     public @Nullable VolumeInfo getPackageCurrentVolume(ApplicationInfo app) {
         final StorageManager storage = mContext.getSystemService(StorageManager.class);
         return getPackageCurrentVolume(app, storage);
@@ -2176,6 +2187,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    @UnsupportedAppUsage
     public void deletePackage(String packageName, IPackageDeleteObserver observer, int flags) {
         deletePackageAsUser(packageName, observer, flags, getUserId());
     }
@@ -2300,6 +2312,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    @UnsupportedAppUsage
     public void getPackageSizeInfoAsUser(String packageName, int userHandle,
             IPackageStatsObserver observer) {
         final String msg = "Shame on you for calling the hidden API "
@@ -2743,6 +2756,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     private final ContextImpl mContext;
+    @UnsupportedAppUsage
     private final IPackageManager mPM;
 
     /** Assume locked until we hear otherwise */

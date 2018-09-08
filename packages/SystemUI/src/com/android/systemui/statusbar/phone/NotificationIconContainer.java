@@ -35,9 +35,9 @@ import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.AlphaOptimizedFrameLayout;
 import com.android.systemui.statusbar.StatusBarIconView;
-import com.android.systemui.statusbar.stack.AnimationFilter;
-import com.android.systemui.statusbar.stack.AnimationProperties;
-import com.android.systemui.statusbar.stack.ViewState;
+import com.android.systemui.statusbar.notification.stack.AnimationFilter;
+import com.android.systemui.statusbar.notification.stack.AnimationProperties;
+import com.android.systemui.statusbar.notification.stack.ViewState;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -536,7 +536,8 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
             return 0;
         }
 
-        int translation = (int) (mLastVisibleIconState.xTranslation + mIconSize);
+        int translation = (int) (isLayoutRtl() ? getWidth() - mLastVisibleIconState.xTranslation
+                : mLastVisibleIconState.xTranslation + mIconSize);
         // There's a chance that last translation goes beyond the edge maybe
         return Math.min(getWidth(), translation);
     }

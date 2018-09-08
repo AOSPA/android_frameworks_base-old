@@ -64,7 +64,6 @@ struct LinkOptions {
 
   // Static lib options.
   bool no_static_lib_packages = false;
-  bool auto_namespace_static_lib = false;
 
   // AndroidManifest.xml massaging options.
   ManifestFixerOptions manifest_fixer_options;
@@ -160,8 +159,10 @@ class LinkCommand : public Command {
         &options_.manifest_fixer_options.target_sdk_version_default);
     AddOptionalFlag("--version-code",
         "Version code (integer) to inject into the AndroidManifest.xml if none is\n"
-            "present.",
-        &options_.manifest_fixer_options.version_code_default);
+            "present.", &options_.manifest_fixer_options.version_code_default);
+    AddOptionalFlag("--version-code-major",
+        "Version code major (integer) to inject into the AndroidManifest.xml if none is\n"
+            "present.", &options_.manifest_fixer_options.version_code_major_default);
     AddOptionalFlag("--version-name",
         "Version name to inject into the AndroidManifest.xml if none is present.",
         &options_.manifest_fixer_options.version_name_default);
@@ -188,10 +189,6 @@ class LinkCommand : public Command {
     AddOptionalSwitch("--no-static-lib-packages",
         "Merge all library resources under the app's package.",
         &options_.no_static_lib_packages);
-    AddOptionalSwitch("--auto-namespace-static-lib",
-        "Automatically namespace resource references when building a static\n"
-            "library.",
-        &options_.auto_namespace_static_lib);
     AddOptionalSwitch("--non-final-ids",
         "Generates R.java without the final modifier. This is implied when\n"
             "--static-lib is specified.",

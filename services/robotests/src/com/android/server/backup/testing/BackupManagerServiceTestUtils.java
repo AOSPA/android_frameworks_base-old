@@ -16,6 +16,8 @@
 
 package com.android.server.backup.testing;
 
+import static com.android.server.backup.testing.TestUtils.runToEndOfTasks;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -33,6 +35,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.Process;
 import android.util.SparseArray;
 
 import com.android.server.backup.BackupAgentTimeoutParameters;
@@ -42,9 +45,9 @@ import com.android.server.backup.TransportManager;
 import com.android.server.backup.internal.Operation;
 
 import org.mockito.stubbing.Answer;
+import org.robolectric.shadows.ShadowApplication;
+import org.robolectric.shadows.ShadowBinder;
 import org.robolectric.shadows.ShadowLog;
-import org.robolectric.shadows.ShadowLooper;
-import org.robolectric.shadows.ShadowSystemClock;
 
 import java.io.File;
 import java.lang.Thread.UncaughtExceptionHandler;
@@ -52,14 +55,14 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /** Test utils for {@link BackupManagerService} and friends. */
 public class BackupManagerServiceTestUtils {
+    /**
+     * If the class-under-test is going to execute methods as the system, it's a good idea to also
+     * call {@link #setUpBinderCallerAndApplicationAsSystem(Application)} before this method.
+     */
     public static BackupManagerService createInitializedBackupManagerService(
             Context context, File baseStateDir, File dataDir, TransportManager transportManager) {
         return createInitializedBackupManagerService(
-                context,
-                startBackupThread(null),
-                baseStateDir,
-                dataDir,
-                transportManager);
+                context, startBackupThread(null), baseStateDir, dataDir, transportManager);
     }
 
     public static BackupManagerService createInitializedBackupManagerService(
@@ -76,36 +79,33 @@ public class BackupManagerServiceTestUtils {
                         baseStateDir,
                         dataDir,
                         transportManager);
-        ShadowLooper shadowBackupLooper = shadowOf(backupThread.getLooper());
-        shadowBackupLooper.runToEndOfTasks();
-        // Handler instances have their own clock, so advancing looper (with runToEndOfTasks())
-        // above does NOT advance the handlers' clock, hence whenever a handler post messages with
-        // specific time to the looper the time of those messages will be before the looper's time.
-        // To fix this we advance SystemClock as well since that is from where the handlers read
-        // time.
-        ShadowSystemClock.setCurrentTimeMillis(shadowBackupLooper.getScheduler().getCurrentTime());
+        runToEndOfTasks(backupThread.getLooper());
         return backupManagerService;
     }
 
-    /** Sets up basic mocks for {@link BackupManagerService} mock. */
+    /**
+     * Sets up basic mocks for {@link BackupManagerService} mock. If {@code backupManagerService} is
+     * a spy, make sure you provide in the arguments the same objects that the original object uses.
+     *
+     * <p>If the class-under-test is going to execute methods as the system, it's a good idea to
+     * also call {@link #setUpBinderCallerAndApplicationAsSystem(Application)}.
+     */
     @SuppressWarnings("ResultOfMethodCallIgnored")
     public static void setUpBackupManagerServiceBasics(
             BackupManagerService backupManagerService,
-            Context context,
+            Application application,
             TransportManager transportManager,
             PackageManager packageManager,
             Handler backupHandler,
             PowerManager.WakeLock wakeLock,
             BackupAgentTimeoutParameters agentTimeoutParameters) {
-        SparseArray<Operation> operations = new SparseArray<>();
 
-        when(backupManagerService.getContext()).thenReturn(context);
+        when(backupManagerService.getContext()).thenReturn(application);
         when(backupManagerService.getTransportManager()).thenReturn(transportManager);
         when(backupManagerService.getPackageManager()).thenReturn(packageManager);
         when(backupManagerService.getBackupHandler()).thenReturn(backupHandler);
         when(backupManagerService.getCurrentOpLock()).thenReturn(new Object());
         when(backupManagerService.getQueueLock()).thenReturn(new Object());
-        when(backupManagerService.getCurrentOperations()).thenReturn(operations);
         when(backupManagerService.getActivityManager()).thenReturn(mock(IActivityManager.class));
         when(backupManagerService.getWakelock()).thenReturn(wakeLock);
         when(backupManagerService.getAgentTimeoutParameters()).thenReturn(agentTimeoutParameters);
@@ -117,22 +117,14 @@ public class BackupManagerServiceTestUtils {
         AccessorMock backupRunning = mockAccessor(false);
         doAnswer(backupEnabled.getter).when(backupManagerService).isBackupRunning();
         doAnswer(backupRunning.setter).when(backupManagerService).setBackupRunning(anyBoolean());
+    }
 
-        doAnswer(
-                        invocation -> {
-                            operations.put(invocation.getArgument(0), invocation.getArgument(1));
-                            return null;
-                        })
-                .when(backupManagerService)
-                .putOperation(anyInt(), any());
-        doAnswer(
-                        invocation -> {
-                            int token = invocation.getArgument(0);
-                            operations.remove(token);
-                            return null;
-                        })
-                .when(backupManagerService)
-                .removeOperation(anyInt());
+    public static void setUpBinderCallerAndApplicationAsSystem(Application application) {
+        ShadowBinder.setCallingUid(Process.SYSTEM_UID);
+        ShadowBinder.setCallingPid(1211);
+        ShadowApplication shadowApplication = shadowOf(application);
+        shadowApplication.grantPermissions("android.permission.BACKUP");
+        shadowApplication.grantPermissions("android.permission.CONFIRM_FULL_BACKUP");
     }
 
     /**

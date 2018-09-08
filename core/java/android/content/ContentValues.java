@@ -16,14 +16,18 @@
 
 package android.content;
 
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.ArrayMap;
 import android.util.Log;
 
+import com.android.internal.util.Preconditions;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -38,6 +42,7 @@ public final class ContentValues implements Parcelable {
      * @deprecated kept around for lame people doing reflection
      */
     @Deprecated
+    @UnsupportedAppUsage
     private HashMap<String, Object> mValues;
 
     private final ArrayMap<String, Object> mMap;
@@ -55,6 +60,7 @@ public final class ContentValues implements Parcelable {
      * @param size the initial size of the set of values
      */
     public ContentValues(int size) {
+        Preconditions.checkArgumentNonnegative(size);
         mMap = new ArrayMap<>(size);
     }
 
@@ -64,6 +70,7 @@ public final class ContentValues implements Parcelable {
      * @param from the values to copy
      */
     public ContentValues(ContentValues from) {
+        Objects.requireNonNull(from);
         mMap = new ArrayMap<>(from.mMap);
     }
 
@@ -72,6 +79,7 @@ public final class ContentValues implements Parcelable {
      * @deprecated kept around for lame people doing reflection
      */
     @Deprecated
+    @UnsupportedAppUsage
     private ContentValues(HashMap<String, Object> from) {
         mMap = new ArrayMap<>();
         mMap.putAll(from);
@@ -518,6 +526,7 @@ public final class ContentValues implements Parcelable {
      * {@hide}
      */
     @Deprecated
+    @UnsupportedAppUsage
     public void putStringArrayList(String key, ArrayList<String> value) {
         mMap.put(key, value);
     }
@@ -528,6 +537,7 @@ public final class ContentValues implements Parcelable {
      */
     @SuppressWarnings("unchecked")
     @Deprecated
+    @UnsupportedAppUsage
     public ArrayList<String> getStringArrayList(String key) {
         return (ArrayList<String>) mMap.get(key);
     }

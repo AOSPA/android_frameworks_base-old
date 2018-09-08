@@ -44,7 +44,9 @@ import com.android.systemui.SystemUIFactory;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.RemoteInputController;
+import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.KeyguardBouncer.BouncerExpansionCallback;
+import com.android.systemui.statusbar.policy.KeyguardMonitor;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -74,7 +76,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private static String TAG = "StatusBarKeyguardViewManager";
 
     protected final Context mContext;
-    private final StatusBarWindowManager mStatusBarWindowManager;
+    private final StatusBarWindowController mStatusBarWindowController;
     private final BouncerExpansionCallback mExpansionCallback = new BouncerExpansionCallback() {
         @Override
         public void onFullyShown() {
@@ -116,6 +118,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
     // Dismiss action to be launched when we stop dozing or the keyguard is gone.
     private DismissWithActionRequest mPendingWakeupAction;
+    private final KeyguardMonitor mKeyguardMonitor = Dependency.get(KeyguardMonitor.class);
 
     private final KeyguardUpdateMonitorCallback mUpdateMonitorCallback =
             new KeyguardUpdateMonitorCallback() {
@@ -135,7 +138,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         mContext = context;
         mViewMediatorCallback = callback;
         mLockPatternUtils = lockPatternUtils;
-        mStatusBarWindowManager = Dependency.get(StatusBarWindowManager.class);
+        mStatusBarWindowController = Dependency.get(StatusBarWindowController.class);
         KeyguardUpdateMonitor.getInstance(context).registerCallback(mUpdateMonitorCallback);
     }
 
@@ -190,7 +193,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
      */
     public void show(Bundle options) {
         mShowing = true;
-        mStatusBarWindowManager.setKeyguardShowing(true);
+        mStatusBarWindowController.setKeyguardShowing(true);
         reset(true /* hideBouncerWhenShowing */);
         StatsLog.write(StatsLog.KEYGUARD_STATE_CHANGED,
             StatsLog.KEYGUARD_STATE_CHANGED__STATE__SHOWN);
@@ -342,11 +345,11 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     }
 
     public void setNeedsInput(boolean needsInput) {
-        mStatusBarWindowManager.setKeyguardNeedsInput(needsInput);
+        mStatusBarWindowController.setKeyguardNeedsInput(needsInput);
     }
 
     public boolean isUnlockWithWallpaper() {
-        return mStatusBarWindowManager.isShowingWallpaper();
+        return mStatusBarWindowController.isShowingWallpaper();
     }
 
     public void setOccluded(boolean occluded, boolean animate) {
@@ -360,7 +363,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                         new Runnable() {
                             @Override
                             public void run() {
-                                mStatusBarWindowManager.setKeyguardOccluded(mOccluded);
+                                mStatusBarWindowController.setKeyguardOccluded(mOccluded);
                                 reset(true /* hideBouncerWhenShowing */);
                             }
                         });
@@ -375,7 +378,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         if (mShowing) {
             mStatusBar.updateMediaMetaData(false, animate && !occluded);
         }
-        mStatusBarWindowManager.setKeyguardOccluded(occluded);
+        mStatusBarWindowController.setKeyguardOccluded(occluded);
 
         // setDozing(false) will call reset once we stop dozing.
         if (!mDozing) {
@@ -425,8 +428,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             mStatusBar.fadeKeyguardAfterLaunchTransition(new Runnable() {
                 @Override
                 public void run() {
-                    mStatusBarWindowManager.setKeyguardShowing(false);
-                    mStatusBarWindowManager.setKeyguardFadingAway(true);
+                    mStatusBarWindowController.setKeyguardShowing(false);
+                    mStatusBarWindowController.setKeyguardFadingAway(true);
                     hideBouncer(true /* destroyView */);
                     updateStates();
                 }
@@ -434,7 +437,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 @Override
                 public void run() {
                     mStatusBar.hideKeyguard();
-                    mStatusBarWindowManager.setKeyguardFadingAway(false);
+                    mStatusBarWindowController.setKeyguardFadingAway(false);
                     mViewMediatorCallback.keyguardGone();
                     executeAfterKeyguardGoneAction();
                 }
@@ -456,7 +459,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             } else {
                 boolean staying = mStatusBar.hideKeyguard();
                 if (!staying) {
-                    mStatusBarWindowManager.setKeyguardFadingAway(true);
+                    mStatusBarWindowController.setKeyguardFadingAway(true);
                     wakeAndUnlockDejank();
                 } else {
                     mStatusBar.finishKeyguardFadingAway();
@@ -464,7 +467,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 }
             }
             updateStates();
-            mStatusBarWindowManager.setKeyguardShowing(false);
+            mStatusBarWindowController.setKeyguardShowing(false);
             mViewMediatorCallback.keyguardGone();
         }
         StatsLog.write(StatsLog.KEYGUARD_STATE_CHANGED,
@@ -481,7 +484,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     }
 
     public void onKeyguardFadedAway() {
-        mContainer.postDelayed(() -> mStatusBarWindowManager.setKeyguardFadingAway(false),
+        mContainer.postDelayed(() -> mStatusBarWindowController.setKeyguardFadingAway(false),
                 100);
         mStatusBar.finishKeyguardFadingAway();
         mBiometricUnlockController.finishKeyguardFadingAway();
@@ -557,8 +560,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     }
 
     private long getNavBarShowDelay() {
-        if (mStatusBar.isKeyguardFadingAway()) {
-            return mStatusBar.getKeyguardFadingAwayDelay();
+        if (mKeyguardMonitor.isKeyguardFadingAway()) {
+            return mKeyguardMonitor.getKeyguardFadingAwayDelay();
         } else if (mBouncer.isShowing()) {
             return NAV_BAR_SHOW_DELAY_BOUNCER;
         } else {
@@ -599,7 +602,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         }
 
         if (bouncerShowing != mLastBouncerShowing || mFirstUpdate) {
-            mStatusBarWindowManager.setBouncerShowing(bouncerShowing);
+            mStatusBarWindowController.setBouncerShowing(bouncerShowing);
             mStatusBar.setBouncerShowing(bouncerShowing);
         }
 
@@ -677,7 +680,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     }
 
     public boolean isGoingToNotificationShade() {
-        return mStatusBar.isGoingToNotificationShade();
+        return Dependency.get(StatusBarStateController.class).leaveOpenOnKeyguardHide();
     }
 
     public boolean isSecure(int userId) {
@@ -691,6 +694,14 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     public void animateCollapsePanels(float speedUpFactor) {
         mStatusBar.animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE, true /* force */,
                 false /* delayed */, speedUpFactor);
+    }
+
+
+    /**
+     * Called when cancel button in bouncer is pressed.
+     */
+    public void onCancelClicked() {
+        // No-op
     }
 
     /**

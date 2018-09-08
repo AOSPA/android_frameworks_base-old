@@ -16,6 +16,7 @@
 
 package com.android.ims.internal.uce.common;
 
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Log;
@@ -75,12 +76,14 @@ public class StatusCode implements Parcelable {
      * Constructor for the StatusCode class.
      * @hide
      */
+    @UnsupportedAppUsage
     public StatusCode() {}
 
     /**
      *  Gets the status code.
      *  @hide
      */
+    @UnsupportedAppUsage
     public int getStatusCode() {
         return mStatusCode;
     }
@@ -89,6 +92,7 @@ public class StatusCode implements Parcelable {
      *  Sets the status code.
      *  @hide
      */
+    @UnsupportedAppUsage
     public void setStatusCode(int nStatusCode) {
         this.mStatusCode = nStatusCode;
     }

@@ -20,6 +20,7 @@ import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.net.Uri;
@@ -711,6 +712,12 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
     public abstract void setNextDataSources(@NonNull List<DataSourceDesc> dsds);
 
     /**
+     * Removes all data sources pending to be played.
+     */
+    // This is an asynchronous call.
+    public abstract void clearNextDataSources();
+
+    /**
      * Gets the current data source as described by a DataSourceDesc.
      *
      * @return the current DataSourceDesc
@@ -787,7 +794,7 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
      * {@code EventCallback.onCommandLabelReached} will be fired with the
      * given {@code label}.
      *
-     * @see android.media.MediaPlayer2.EventCallback#onCommandLabelReached
+     * @see EventCallback#onCommandLabelReached
      *
      * @param label An application specific Object used to help to identify the completeness
      * of a batch of commands.
@@ -1378,13 +1385,14 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
     /**
      * Class for MediaPlayer2 to return each audio/video/subtitle track's metadata.
      *
-     * @see android.media.MediaPlayer2#getTrackInfo
+     * @see MediaPlayer2#getTrackInfo
      */
     public abstract static class TrackInfo {
         /**
          * Gets the track type.
          * @return TrackType which indicates if the track is video, audio, timed text.
          */
+        @UnsupportedAppUsage
         public abstract int getTrackType();
 
         /**
@@ -1393,6 +1401,7 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
          * When the language is unknown or could not be determined,
          * ISO-639-2 language code, "und", is returned.
          */
+        @UnsupportedAppUsage
         public abstract String getLanguage();
 
         /**
@@ -1585,7 +1594,7 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
      * each individual track can be found by calling {@link #getTrackInfo()} method.
      * @throws IllegalStateException if called in an invalid state.
      *
-     * @see android.media.MediaPlayer2#getTrackInfo
+     * @see MediaPlayer2#getTrackInfo
      */
     // This is an asynchronous call.
     public abstract void selectTrack(int index);
@@ -1602,7 +1611,7 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
      * each individual track can be found by calling {@link #getTrackInfo()} method.
      * @throws IllegalStateException if called in an invalid state.
      *
-     * @see android.media.MediaPlayer2#getTrackInfo
+     * @see MediaPlayer2#getTrackInfo
      */
     // This is an asynchronous call.
     public abstract void deselectTrack(int index);
@@ -1750,14 +1759,14 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
      * in include/media/mediaplayer2.h!
      */
     /** Unspecified media player error.
-     * @see android.media.MediaPlayer2.EventCallback#onError
+     * @see EventCallback#onError
      */
     public static final int MEDIA_ERROR_UNKNOWN = 1;
 
     /** The video is streamed and its container is not valid for progressive
      * playback i.e the video's index (e.g moov atom) is not at the start of the
      * file.
-     * @see android.media.MediaPlayer2.EventCallback#onError
+     * @see EventCallback#onError
      */
     public static final int MEDIA_ERROR_NOT_VALID_FOR_PROGRESSIVE_PLAYBACK = 200;
 
@@ -1773,7 +1782,7 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
 
     /** Unspecified low-level system error. This value originated from UNKNOWN_ERROR in
      * system/core/include/utils/Errors.h
-     * @see android.media.MediaPlayer2.EventCallback#onError
+     * @see EventCallback#onError
      * @hide
      */
     public static final int MEDIA_ERROR_SYSTEM = -2147483648;
@@ -1794,65 +1803,71 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
     public @interface MediaError {}
 
     /* Do not change these values without updating their counterparts
-     * in include/media/mediaplayer2.h!
+     * in include/media/MediaPlayer2Types.h!
      */
     /** Unspecified media player info.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_UNKNOWN = 1;
 
-    /** The player switched to this datas source because it is the
-     * next-to-be-played in the playlist.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+    /** The player just started the playback of this datas source.
+     * @see EventCallback#onInfo
      */
-    public static final int MEDIA_INFO_STARTED_AS_NEXT = 2;
+    public static final int MEDIA_INFO_DATA_SOURCE_START = 2;
 
     /** The player just pushed the very first video frame for rendering.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_VIDEO_RENDERING_START = 3;
 
     /** The player just rendered the very first audio sample.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_AUDIO_RENDERING_START = 4;
 
     /** The player just completed the playback of this data source.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
-    public static final int MEDIA_INFO_PLAYBACK_COMPLETE = 5;
+    public static final int MEDIA_INFO_DATA_SOURCE_END = 5;
 
-    /** The player just completed the playback of the full playlist.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+    /** The player just completed the playback of all data sources set by {@link #setDataSource},
+     * {@link #setNextDataSource} and {@link #setNextDataSources}.
+     * @see EventCallback#onInfo
      */
-    public static final int MEDIA_INFO_PLAYLIST_END = 6;
+    public static final int MEDIA_INFO_DATA_SOURCE_LIST_END = 6;
+
+    /** The player just completed an iteration of playback loop. This event is sent only when
+     *  looping is enabled by {@link #loopCurrent}.
+     * @see EventCallback#onInfo
+     */
+    public static final int MEDIA_INFO_DATA_SOURCE_REPEAT = 7;
 
     /** The player just prepared a data source.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_PREPARED = 100;
 
     /** The video is too complex for the decoder: it can't decode frames fast
      *  enough. Possibly only the audio plays fine at this stage.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_VIDEO_TRACK_LAGGING = 700;
 
     /** MediaPlayer2 is temporarily pausing playback internally in order to
      * buffer more data.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_BUFFERING_START = 701;
 
     /** MediaPlayer2 is resuming playback after filling buffers.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_BUFFERING_END = 702;
 
     /** Estimated network bandwidth information (kbps) is available; currently this event fires
      * simultaneously as {@link #MEDIA_INFO_BUFFERING_START} and {@link #MEDIA_INFO_BUFFERING_END}
      * when playing network files.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      * @hide
      */
     public static final int MEDIA_INFO_NETWORK_BANDWIDTH = 703;
@@ -1866,24 +1881,24 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
      *
      * The {@code extra} parameter in {@code EventCallback.onInfo} is the
      * percentage (0-100) of the content that has been buffered or played thus far.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_BUFFERING_UPDATE = 704;
 
     /** Bad interleaving means that a media has been improperly interleaved or
      * not interleaved at all, e.g has all the video samples first then all the
      * audio ones. Video is playing but a lot of disk seeks may be happening.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_BAD_INTERLEAVING = 800;
 
     /** The media cannot be seeked (e.g live stream)
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_NOT_SEEKABLE = 801;
 
     /** A new set of metadata is available.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_METADATA_UPDATE = 802;
 
@@ -1895,30 +1910,30 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
 
     /** Informs that audio is not playing. Note that playback of the video
      * is not interrupted.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_AUDIO_NOT_PLAYING = 804;
 
     /** Informs that video is not playing. Note that playback of the audio
      * is not interrupted.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_VIDEO_NOT_PLAYING = 805;
 
     /** Failed to handle timed text track properly.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      *
      * {@hide}
      */
     public static final int MEDIA_INFO_TIMED_TEXT_ERROR = 900;
 
     /** Subtitle track was not supported by the media framework.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_UNSUPPORTED_SUBTITLE = 901;
 
     /** Reading the subtitle track takes too long.
-     * @see android.media.MediaPlayer2.EventCallback#onInfo
+     * @see EventCallback#onInfo
      */
     public static final int MEDIA_INFO_SUBTITLE_TIMED_OUT = 902;
 
@@ -1927,11 +1942,11 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
      */
     @IntDef(flag = false, prefix = "MEDIA_INFO", value = {
             MEDIA_INFO_UNKNOWN,
-            MEDIA_INFO_STARTED_AS_NEXT,
+            MEDIA_INFO_DATA_SOURCE_START,
             MEDIA_INFO_VIDEO_RENDERING_START,
             MEDIA_INFO_AUDIO_RENDERING_START,
-            MEDIA_INFO_PLAYBACK_COMPLETE,
-            MEDIA_INFO_PLAYLIST_END,
+            MEDIA_INFO_DATA_SOURCE_END,
+            MEDIA_INFO_DATA_SOURCE_LIST_END,
             MEDIA_INFO_PREPARED,
             MEDIA_INFO_VIDEO_TRACK_LAGGING,
             MEDIA_INFO_BUFFERING_START,
@@ -1953,124 +1968,129 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
 
     //--------------------------------------------------------------------------
     /** The player just completed a call {@link #attachAuxEffect}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_ATTACH_AUX_EFFECT = 1;
 
     /** The player just completed a call {@link #deselectTrack}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_DESELECT_TRACK = 2;
 
     /** The player just completed a call {@link #loopCurrent}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_LOOP_CURRENT = 3;
 
     /** The player just completed a call {@link #pause}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_PAUSE = 4;
 
     /** The player just completed a call {@link #play}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_PLAY = 5;
 
     /** The player just completed a call {@link #prepare}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_PREPARE = 6;
 
     /** The player just completed a call {@link #releaseDrm}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_RELEASE_DRM = 12;
 
     /** The player just completed a call {@link #restoreDrmKeys}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_RESTORE_DRM_KEYS = 13;
 
     /** The player just completed a call {@link #seekTo}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SEEK_TO = 14;
 
     /** The player just completed a call {@link #selectTrack}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SELECT_TRACK = 15;
 
     /** The player just completed a call {@link #setAudioAttributes}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_AUDIO_ATTRIBUTES = 16;
 
     /** The player just completed a call {@link #setAudioSessionId}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_AUDIO_SESSION_ID = 17;
 
     /** The player just completed a call {@link #setAuxEffectSendLevel}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_AUX_EFFECT_SEND_LEVEL = 18;
 
     /** The player just completed a call {@link #setDataSource}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_DATA_SOURCE = 19;
 
     /** The player just completed a call {@link #setNextDataSource}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_NEXT_DATA_SOURCE = 22;
 
     /** The player just completed a call {@link #setNextDataSources}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_NEXT_DATA_SOURCES = 23;
 
     /** The player just completed a call {@link #setPlaybackParams}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_PLAYBACK_PARAMS = 24;
 
     /** The player just completed a call {@link #setPlayerVolume}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_PLAYER_VOLUME = 26;
 
     /** The player just completed a call {@link #setSurface}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_SURFACE = 27;
 
     /** The player just completed a call {@link #setSyncParams}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SET_SYNC_PARAMS = 28;
 
     /** The player just completed a call {@link #skipToNext}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_COMPLETED_SKIP_TO_NEXT = 29;
 
+    /** The player just completed a call {@link #clearNextDataSources}.
+     * @see EventCallback#onCallCompleted
+     */
+    public static final int CALL_COMPLETED_CLEAR_NEXT_DATA_SOURCES = 30;
+
     /** The player just completed a call {@link #setBufferingParams}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      * @hide
      */
     public static final int CALL_COMPLETED_SET_BUFFERING_PARAMS = 1001;
 
     /** The player just completed a call {@code setVideoScalingMode}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      * @hide
      */
     public static final int CALL_COMPLETED_SET_VIDEO_SCALING_MODE = 1002;
 
     /** The player just completed a call {@code notifyWhenCommandLabelReached}.
-     * @see android.media.MediaPlayer2.EventCallback#onCommandLabelReached
+     * @see EventCallback#onCommandLabelReached
      * @hide
      */
     public static final int CALL_COMPLETED_NOTIFY_WHEN_COMMAND_LABEL_REACHED = 1003;
@@ -2100,6 +2120,7 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
             CALL_COMPLETED_SET_SURFACE,
             CALL_COMPLETED_SET_SYNC_PARAMS,
             CALL_COMPLETED_SKIP_TO_NEXT,
+            CALL_COMPLETED_CLEAR_NEXT_DATA_SOURCES,
             CALL_COMPLETED_SET_BUFFERING_PARAMS,
             CALL_COMPLETED_SET_VIDEO_SCALING_MODE,
             CALL_COMPLETED_NOTIFY_WHEN_COMMAND_LABEL_REACHED
@@ -2108,32 +2129,32 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
     public @interface CallCompleted {}
 
     /** Status code represents that call is completed without an error.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_STATUS_NO_ERROR = 0;
 
     /** Status code represents that call is ended with an unknown error.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_STATUS_ERROR_UNKNOWN = Integer.MIN_VALUE;
 
     /** Status code represents that the player is not in valid state for the operation.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_STATUS_INVALID_OPERATION = 1;
 
     /** Status code represents that the argument is illegal.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_STATUS_BAD_VALUE = 2;
 
     /** Status code represents that the operation is not allowed.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_STATUS_PERMISSION_DENIED = 3;
 
     /** Status code represents a file or network related operation error.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_STATUS_ERROR_IO = 4;
 
@@ -2145,7 +2166,7 @@ public abstract class MediaPlayer2 implements SubtitleController.Listener
 
     /** Status code represents that DRM operation is called before preparing a DRM scheme through
      *  {@link #prepareDrm}.
-     * @see android.media.MediaPlayer2.EventCallback#onCallCompleted
+     * @see EventCallback#onCallCompleted
      */
     public static final int CALL_STATUS_NO_DRM_SCHEME = 6;
 

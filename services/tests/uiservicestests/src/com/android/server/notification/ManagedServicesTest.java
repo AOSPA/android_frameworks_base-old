@@ -25,6 +25,7 @@ import static junit.framework.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -474,6 +475,59 @@ public class ManagedServicesTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testIsPackageAllowed() {
+        for (int approvalLevel : new int[] {APPROVAL_BY_COMPONENT, APPROVAL_BY_PACKAGE}) {
+            ManagedServices service = new TestManagedServices(getContext(), mLock, mUserProfiles,
+                    mIpm, approvalLevel);
+            writeExpectedValuesToSettings(approvalLevel);
+            service.migrateToXml();
+
+            verifyExpectedApprovedPackages(service);
+        }
+    }
+
+    @Test
+    public void testUpgradeAppBindsNewServices() throws Exception {
+        // If the primary and secondary lists contain component names, only those components within
+        // the package should be matched
+        ManagedServices service = new TestManagedServices(getContext(), mLock, mUserProfiles,
+                mIpm,
+                ManagedServices.APPROVAL_BY_PACKAGE);
+
+        List<String> packages = new ArrayList<>();
+        packages.add("package");
+        addExpectedServices(service, packages, 0);
+
+        // only 2 components are approved per package
+        mExpectedPrimaryComponentNames.clear();
+        mExpectedPrimaryPackages.clear();
+        mExpectedPrimaryComponentNames.put(0, "package/C1:package/C2");
+        mExpectedSecondaryComponentNames.clear();
+        mExpectedSecondaryPackages.clear();
+
+        loadXml(service);
+
+        // new component expected
+        mExpectedPrimaryComponentNames.put(0, "package/C1:package/C2:package/C3");
+
+        service.onPackagesChanged(false, new String[]{"package"}, new int[]{0});
+
+        // verify the 3 components per package are enabled (bound)
+        verifyExpectedBoundEntries(service, true);
+
+        // verify the last component per package is not enabled/we don't try to bind to it
+        for (String pkg : packages) {
+            ComponentName unapprovedAdditionalComponent =
+                    ComponentName.unflattenFromString(pkg + "/C3");
+            assertFalse(
+                    service.isComponentEnabledForCurrentProfiles(
+                            unapprovedAdditionalComponent));
+            verify(mIpm, never()).getServiceInfo(
+                    eq(unapprovedAdditionalComponent), anyInt(), anyInt());
+        }
+    }
+
+    @Test
     public void testSetPackageOrComponentEnabled() throws Exception {
         for (int approvalLevel : new int[] {APPROVAL_BY_COMPONENT, APPROVAL_BY_PACKAGE}) {
             ManagedServices service = new TestManagedServices(getContext(), mLock, mUserProfiles,
@@ -640,6 +694,20 @@ public class ManagedServicesTest extends UiServiceTestCase {
         }
     }
 
+    @Test
+    public void testIsSameUser() {
+        IInterface service = mock(IInterface.class);
+        when(service.asBinder()).thenReturn(mock(IBinder.class));
+        ManagedServices services = new TestManagedServices(getContext(), mLock, mUserProfiles,
+                mIpm, APPROVAL_BY_PACKAGE);
+        services.registerService(service, null, 10);
+        ManagedServices.ManagedServiceInfo info = services.checkServiceTokenLocked(service);
+        info.isSystem = true;
+
+        assertFalse(services.isSameUser(service, 0));
+        assertTrue(services.isSameUser(service, 10));
+    }
+
     private void loadXml(ManagedServices service) throws Exception {
         final StringBuffer xml = new StringBuffer();
         xml.append("<" + service.getConfig().xmlTag + ">\n");
@@ -729,7 +797,7 @@ public class ManagedServicesTest extends UiServiceTestCase {
                     if (service.mApprovalLevel == APPROVAL_BY_PACKAGE) {
                         assertTrue(packageOrComponent,
                                 service.isComponentEnabledForPackage(packageOrComponent));
-                        for (int i = 1; i <= 3; i ++) {
+                        for (int i = 1; i <= 3; i++) {
                             ComponentName componentName = ComponentName.unflattenFromString(
                                     packageOrComponent +"/C" + i);
                             assertTrue(service.isComponentEnabledForCurrentProfiles(
@@ -769,6 +837,39 @@ public class ManagedServicesTest extends UiServiceTestCase {
                     assertTrue("service type " + service.mApprovalLevel + ":"
                                     + verifyValue + " is not allowed for user " + userId,
                             service.isPackageOrComponentAllowed(verifyValue, userId));
+                }
+            }
+        }
+    }
+
+
+    private void verifyExpectedApprovedPackages(ManagedServices service) {
+        verifyExpectedApprovedPackages(service, true);
+        verifyExpectedApprovedPackages(service, false);
+    }
+
+    private void verifyExpectedApprovedPackages(ManagedServices service, boolean primary) {
+        ArrayMap<Integer, String> verifyMap = primary
+                ? mExpectedPrimary.get(service.mApprovalLevel)
+                : mExpectedSecondary.get(service.mApprovalLevel);
+        verifyExpectedApprovedPackages(service, verifyMap);
+    }
+
+    private void verifyExpectedApprovedPackages(ManagedServices service,
+            ArrayMap<Integer, String> verifyMap) {
+        for (int userId : verifyMap.keySet()) {
+            for (String verifyValue : verifyMap.get(userId).split(":")) {
+                if (!TextUtils.isEmpty(verifyValue)) {
+                    ComponentName component = ComponentName.unflattenFromString(verifyValue);
+                    if (component != null ) {
+                        assertTrue("service type " + service.mApprovalLevel + ":"
+                                        + verifyValue + " is not allowed for user " + userId,
+                                service.isPackageAllowed(component.getPackageName(), userId));
+                    } else {
+                        assertTrue("service type " + service.mApprovalLevel + ":"
+                                        + verifyValue + " is not allowed for user " + userId,
+                                service.isPackageAllowed(verifyValue, userId));
+                    }
                 }
             }
         }

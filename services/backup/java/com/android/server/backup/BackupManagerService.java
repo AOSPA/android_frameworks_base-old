@@ -80,6 +80,7 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
+import android.os.WorkSource;
 import android.os.storage.IStorageManager;
 import android.os.storage.StorageManager;
 import android.provider.Settings;
@@ -103,7 +104,7 @@ import com.android.server.SystemService;
 import com.android.server.backup.fullbackup.FullBackupEntry;
 import com.android.server.backup.fullbackup.PerformFullTransportBackupTask;
 import com.android.server.backup.internal.BackupHandler;
-import com.android.server.backup.internal.BackupRequest;
+import com.android.server.backup.keyvalue.BackupRequest;
 import com.android.server.backup.internal.ClearDataObserver;
 import com.android.server.backup.internal.OnTaskFinishedListener;
 import com.android.server.backup.internal.Operation;
@@ -387,6 +388,16 @@ public class BackupManagerService implements BackupManagerServiceInterface {
         return mWakelock;
     }
 
+    /**
+     * Sets the {@link WorkSource} of the {@link PowerManager.WakeLock} returned by {@link
+     * #getWakelock()}.
+     */
+    @VisibleForTesting
+    public void setWorkSource(@Nullable WorkSource workSource) {
+        // TODO: This is for testing, unfortunately WakeLock is final and WorkSource is not exposed
+        mWakelock.setWorkSource(workSource);
+    }
+
     public void setWakelock(PowerManager.WakeLock wakelock) {
         mWakelock = wakelock;
     }
@@ -497,6 +508,7 @@ public class BackupManagerService implements BackupManagerServiceInterface {
         mDataDir = dataDir;
     }
 
+    @Nullable
     public DataChangedJournal getJournal() {
         return mJournal;
     }
@@ -1479,8 +1491,8 @@ public class BackupManagerService implements BackupManagerServiceInterface {
         }
     }
 
-    // fire off a backup agent, blocking until it attaches or times out
-    @Override
+    /** Fires off a backup agent, blocking until it attaches or times out. */
+    @Nullable
     public IBackupAgent bindToAgentSynchronous(ApplicationInfo app, int mode) {
         IBackupAgent agent = null;
         synchronized (mAgentConnectLock) {
@@ -1526,6 +1538,14 @@ public class BackupManagerService implements BackupManagerServiceInterface {
             }
         }
         return agent;
+    }
+
+    public void unbindAgent(ApplicationInfo app) {
+        try {
+            mActivityManager.unbindBackupAgent(app);
+        } catch (RemoteException e) {
+            // Can't happen - activity manager is local
+        }
     }
 
     // clear an application's data, blocking until the operation completes or times out

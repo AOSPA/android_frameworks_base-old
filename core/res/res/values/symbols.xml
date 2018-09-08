@@ -309,6 +309,7 @@
   <java-symbol type="bool" name="config_allowAnimationsInLowPowerMode" />
   <java-symbol type="bool" name="config_useDevInputEventForAudioJack" />
   <java-symbol type="bool" name="config_safe_media_volume_enabled" />
+  <java-symbol type="bool" name="config_safe_media_disable_on_volume_up" />
   <java-symbol type="bool" name="config_camera_sound_forced" />
   <java-symbol type="bool" name="config_dontPreferApn" />
   <java-symbol type="bool" name="config_restartRadioAfterProvisioning" />
@@ -337,6 +338,7 @@
   <java-symbol type="bool" name="config_wifi_framework_use_single_radio_chain_scan_results_network_selection" />
   <java-symbol type="bool" name="config_wifi_only_link_same_credential_configurations" />
   <java-symbol type="bool" name="config_wifi_framework_enable_sar_tx_power_limit" />
+  <java-symbol type="bool" name="config_wifi_framework_enable_soft_ap_sar_tx_power_limit" />
   <java-symbol type="bool" name="config_wifi_framework_enable_body_proximity_sar_tx_power_limit" />
   <java-symbol type="string" name="config_wifi_sar_sensor_type" />
   <java-symbol type="integer" name="config_wifi_framework_sar_free_space_event_id" />
@@ -345,7 +347,6 @@
   <java-symbol type="integer" name="config_wifi_framework_sar_near_body_event_id" />
   <java-symbol type="bool" name="config_wifi_enable_disconnection_debounce" />
   <java-symbol type="bool" name="config_wifi_revert_country_code_on_cellular_loss" />
-  <java-symbol type="bool" name="config_wifi_enable_wifi_firmware_debugging" />
   <java-symbol type="integer" name="config_wifi_logger_ring_buffer_default_size_limit_kb" />
   <java-symbol type="integer" name="config_wifi_logger_ring_buffer_verbose_size_limit_kb" />
   <java-symbol type="bool" name="config_wifi_turn_off_during_emergency_call" />
@@ -393,10 +394,6 @@
   <java-symbol type="integer" name="config_wifi_framework_wifi_score_entry_rssi_threshold_5GHz" />
   <java-symbol type="integer" name="config_wifi_framework_wifi_score_low_rssi_threshold_5GHz" />
   <java-symbol type="integer" name="config_wifi_framework_wifi_score_good_rssi_threshold_5GHz" />
-  <java-symbol type="integer" name="config_wifi_framework_wifi_score_bad_link_speed_24" />
-  <java-symbol type="integer" name="config_wifi_framework_wifi_score_bad_link_speed_5" />
-  <java-symbol type="integer" name="config_wifi_framework_wifi_score_good_link_speed_24" />
-  <java-symbol type="integer" name="config_wifi_framework_wifi_score_good_link_speed_5" />
   <java-symbol type="integer" name="config_wifi_framework_scan_result_rssi_level_patchup_value" />
   <java-symbol type="integer" name="config_wifi_framework_current_network_boost" />
   <java-symbol type="string"  name="config_wifi_random_mac_oui" />
@@ -2241,6 +2238,7 @@
   <java-symbol type="drawable" name="decor_maximize_button_light" />
   <java-symbol type="color" name="decor_button_dark_color" />
   <java-symbol type="color" name="decor_button_light_color" />
+  <java-symbol type="array" name="unloggable_phone_numbers" />
 
   <!-- From TelephonyProvider -->
   <java-symbol type="xml" name="apns" />
@@ -3007,12 +3005,13 @@
   <!-- Default first user restrictions -->
   <java-symbol type="array" name="config_defaultFirstUserRestrictions" />
 
-  <java-symbol type="bool" name="config_permissionReviewRequired" />
+  <java-symbol type="bool" name="config_permissionsIndividuallyControlled" />
+  <java-symbol type="bool" name="config_wirelessConsentRequired" />
 
   <!-- Global actions icons -->
   <java-symbol type="drawable" name="ic_restart" />
   <java-symbol type="drawable" name="ic_screenshot" />
-
+  <java-symbol type="drawable" name="ic_faster_emergency" />
   <java-symbol type="drawable" name="emergency_icon" />
 
   <java-symbol type="array" name="config_convert_to_emergency_number_map" />
@@ -3112,6 +3111,11 @@
   <java-symbol type="plurals" name="autofill_picker_some_suggestions" />
   <java-symbol type="string" name="autofill" />
   <java-symbol type="string" name="autofill_picker_accessibility_title " />
+  <java-symbol type="string" name="autofill_update_title" />
+  <java-symbol type="string" name="autofill_update_title_with_type" />
+  <java-symbol type="string" name="autofill_update_title_with_2types" />
+  <java-symbol type="string" name="autofill_update_title_with_3types" />
+  <java-symbol type="string" name="autofill_update_yes" />
   <java-symbol type="string" name="autofill_save_accessibility_title " />
   <java-symbol type="string" name="autofill_save_title" />
   <java-symbol type="string" name="autofill_save_title_with_type" />
@@ -3260,6 +3264,7 @@
   <java-symbol type="array" name="config_hideWhenDisabled_packageNames" />
 
   <java-symbol type="string" name="config_dozeLongPressSensorType" />
+  <java-symbol type="string" name="config_dozeReachSensorType" />
 
   <java-symbol type="array" name="config_allowedGlobalInstantAppSettings" />
   <java-symbol type="array" name="config_allowedSystemInstantAppSettings" />
@@ -3446,6 +3451,8 @@
 
   <java-symbol type="integer" name="config_defaultHapticFeedbackIntensity" />
   <java-symbol type="integer" name="config_defaultNotificationVibrationIntensity" />
+
+  <java-symbol type="bool" name="config_maskMainBuiltInDisplayCutout" />
 
   <java-symbol type="array" name="config_disableApksUnlessMatchedSku_apk_list" />
   <java-symbol type="array" name="config_disableApkUnlessMatchedSku_skus_list" />

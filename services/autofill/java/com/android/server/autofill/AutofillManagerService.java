@@ -29,6 +29,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.ActivityManagerInternal;
 import android.app.ActivityThread;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -42,7 +43,6 @@ import android.database.ContentObserver;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -166,9 +166,9 @@ public final class AutofillManagerService extends SystemService {
         mContext = context;
         mUi = new AutoFillUI(ActivityThread.currentActivityThread().getSystemUiContext());
 
-        final boolean debug = Build.IS_DEBUGGABLE;
-        Slog.i(TAG, "Setting debug to " + debug);
-        setDebugLocked(debug);
+        setLogLevelFromSettings();
+        setMaxPartitionsFromSettings();
+        setMaxVisibleDatasetsFromSettings();
 
         final IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
@@ -438,12 +438,33 @@ public final class AutofillManagerService extends SystemService {
         Slog.i(TAG, "setLogLevel(): " + level);
         mContext.enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
 
+        final long token = Binder.clearCallingIdentity();
+        try {
+            Settings.Global.putInt(mContext.getContentResolver(),
+                    Settings.Global.AUTOFILL_LOGGING_LEVEL, level);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    private void setLogLevelFromSettings() {
+        final int level = Settings.Global.getInt(
+                mContext.getContentResolver(),
+                Settings.Global.AUTOFILL_LOGGING_LEVEL, AutofillManager.DEFAULT_LOGGING_LEVEL);
         boolean debug = false;
         boolean verbose = false;
-        if (level == AutofillManager.FLAG_ADD_CLIENT_VERBOSE) {
-            debug = verbose = true;
-        } else if (level == AutofillManager.FLAG_ADD_CLIENT_DEBUG) {
-            debug = true;
+        if (level != AutofillManager.NO_LOGGING) {
+            if (level == AutofillManager.FLAG_ADD_CLIENT_VERBOSE) {
+                debug = verbose = true;
+            } else if (level == AutofillManager.FLAG_ADD_CLIENT_DEBUG) {
+                debug = true;
+            } else {
+                Slog.w(TAG,  "setLogLevelFromSettings(): invalid level: " + level);
+            }
+        }
+        if (debug || sDebug) {
+            Slog.d(TAG, "setLogLevelFromSettings(): level=" + level + ", debug=" + debug
+                    + ", verbose=" + verbose);
         }
         synchronized (mLock) {
             setDebugLocked(debug);
@@ -475,6 +496,22 @@ public final class AutofillManagerService extends SystemService {
     void setMaxPartitions(int max) {
         mContext.enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
         Slog.i(TAG, "setMaxPartitions(): " + max);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            Settings.Global.putInt(mContext.getContentResolver(),
+                    Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE, max);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    private void setMaxPartitionsFromSettings() {
+        final int max = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE,
+                AutofillManager.DEFAULT_MAX_PARTITIONS_SIZE);
+        if (sDebug) Slog.d(TAG, "setMaxPartitionsFromSettings(): " + max);
+
         synchronized (mLock) {
             sPartitionMaxCount = max;
         }
@@ -493,6 +530,21 @@ public final class AutofillManagerService extends SystemService {
     void setMaxVisibleDatasets(int max) {
         mContext.enforceCallingPermission(MANAGE_AUTO_FILL, TAG);
         Slog.i(TAG, "setMaxVisibleDatasets(): " + max);
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            Settings.Global.putInt(mContext.getContentResolver(),
+                    Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS, max);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    private void setMaxVisibleDatasetsFromSettings() {
+        final int max = Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS, 0);
+
+        if (sDebug) Slog.d(TAG, "setMaxVisibleDatasetsFromSettings(): " + max);
         synchronized (mLock) {
             sVisibleDatasetsMaxCount = max;
         }
@@ -926,12 +978,20 @@ public final class AutofillManagerService extends SystemService {
                 throw new IllegalArgumentException(packageName + " is not a valid package", e);
             }
 
+            // TODO(b/112051762): rather than always call AM here, call it on demand on
+            // getPreviousSessionsLocked()? That way we save space / time here, and don't set
+            // a callback on AM unnecessarily (see TODO below :-)
+            final ActivityManagerInternal am = LocalServices
+                    .getService(ActivityManagerInternal.class);
+            // TODO(b/112051762): add a callback method on AM to be notified when a task is finished
+            // so we can clean up sessions kept alive
+            final int taskId = am.getTaskIdForActivity(activityToken, false);
             final int sessionId;
             synchronized (mLock) {
                 final AutofillManagerServiceImpl service = getServiceForUserLocked(userId);
-                sessionId = service.startSessionLocked(activityToken, getCallingUid(), appCallback,
-                        autofillId, bounds, value, hasCallback, componentName, compatMode,
-                        mAllowInstantService, flags);
+                sessionId = service.startSessionLocked(activityToken, taskId, getCallingUid(),
+                        appCallback, autofillId, bounds, value, hasCallback, componentName,
+                        compatMode, mAllowInstantService, flags);
             }
             send(receiver, sessionId);
         }
@@ -1289,13 +1349,34 @@ public final class AutofillManagerService extends SystemService {
             resolver.registerContentObserver(Settings.Global.getUriFor(
                     Settings.Global.AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES), false, this,
                     UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.AUTOFILL_LOGGING_LEVEL), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS), false, this,
+                    UserHandle.USER_ALL);
         }
 
         @Override
         public void onChange(boolean selfChange, Uri uri, int userId) {
             if (sVerbose) Slog.v(TAG, "onChange(): uri=" + uri + ", userId=" + userId);
-            synchronized (mLock) {
-                updateCachedServiceLocked(userId);
+            switch (uri.getLastPathSegment()) {
+                case Settings.Global.AUTOFILL_LOGGING_LEVEL:
+                    setLogLevelFromSettings();
+                    break;
+                case Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE:
+                    setMaxPartitionsFromSettings();
+                    break;
+                case Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS:
+                    setMaxVisibleDatasetsFromSettings();
+                    break;
+                default:
+                synchronized (mLock) {
+                    updateCachedServiceLocked(userId);
+                }
             }
         }
     }

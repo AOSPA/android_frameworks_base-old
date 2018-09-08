@@ -16,6 +16,7 @@
 
 package android.net;
 
+import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.net.ConnectivityManager.PacketKeepalive;
 import android.os.Bundle;
@@ -351,6 +352,7 @@ public abstract class NetworkAgent extends Handler {
     /**
      * Called by the bearer code when it has new NetworkInfo data.
      */
+    @UnsupportedAppUsage
     public void sendNetworkInfo(NetworkInfo networkInfo) {
         queueOrSendMessage(EVENT_NETWORK_INFO_CHANGED, new NetworkInfo(networkInfo));
     }
@@ -372,7 +374,7 @@ public abstract class NetworkAgent extends Handler {
         if (score < 0) {
             throw new IllegalArgumentException("Score must be >= 0");
         }
-        queueOrSendMessage(EVENT_NETWORK_SCORE_CHANGED, score, 0);
+        queueOrSendMessage(EVENT_NETWORK_SCORE_CHANGED,  score, 0);
     }
 
     /**
@@ -387,7 +389,7 @@ public abstract class NetworkAgent extends Handler {
      * {@link #saveAcceptUnvalidated} to respect the user's choice.
      */
     public void explicitlySelected(boolean acceptUnvalidated) {
-        queueOrSendMessage(EVENT_SET_EXPLICITLY_SELECTED, acceptUnvalidated);
+        queueOrSendMessage(EVENT_SET_EXPLICITLY_SELECTED, acceptUnvalidated ? 1 : 0, 0);
     }
 
     /**

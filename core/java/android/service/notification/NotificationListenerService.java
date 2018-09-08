@@ -21,6 +21,7 @@ import android.annotation.NonNull;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
 import android.app.INotificationManager;
 import android.app.Notification;
@@ -93,6 +94,7 @@ import java.util.List;
  */
 public abstract class NotificationListenerService extends Service {
 
+    @UnsupportedAppUsage
     private final String TAG = getClass().getSimpleName();
 
     /**
@@ -274,9 +276,11 @@ public abstract class NotificationListenerService extends Service {
 
     private final Object mLock = new Object();
 
+    @UnsupportedAppUsage
     private Handler mHandler;
 
     /** @hide */
+    @UnsupportedAppUsage
     protected NotificationListenerWrapper mWrapper = null;
     private boolean isConnected = false;
 
@@ -286,6 +290,7 @@ public abstract class NotificationListenerService extends Service {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     protected INotificationManager mNoMan;
 
     /**
@@ -507,6 +512,7 @@ public abstract class NotificationListenerService extends Service {
     }
 
     /** @hide */
+    @UnsupportedAppUsage
     protected final INotificationManager getNotificationInterface() {
         if (mNoMan == null) {
             mNoMan = INotificationManager.Stub.asInterface(
@@ -1065,6 +1071,7 @@ public abstract class NotificationListenerService extends Service {
     }
 
     /** @hide */
+    @UnsupportedAppUsage
     protected boolean isBound() {
         if (mWrapper == null) {
             Log.w(TAG, "Notification listener service not yet bound.");
@@ -1318,7 +1325,14 @@ public abstract class NotificationListenerService extends Service {
         }
 
         @Override
-        public void onNotificationEnqueued(IStatusBarNotificationHolder notificationHolder)
+        public void onNotificationEnqueuedWithChannel(
+                IStatusBarNotificationHolder notificationHolder, NotificationChannel channel)
+                throws RemoteException {
+            // no-op in the listener
+        }
+
+        @Override
+        public void onNotificationsSeen(List<String> keys)
                 throws RemoteException {
             // no-op in the listener
         }
@@ -1427,6 +1441,7 @@ public abstract class NotificationListenerService extends Service {
         private @UserSentiment int mUserSentiment = USER_SENTIMENT_NEUTRAL;
         private boolean mHidden;
         private ArrayList<Notification.Action> mSmartActions;
+        private ArrayList<CharSequence> mSmartReplies;
 
         public Ranking() {}
 
@@ -1462,6 +1477,7 @@ public abstract class NotificationListenerService extends Service {
          * no such preference has been expressed.
          * @hide
          */
+        @UnsupportedAppUsage
         public int getVisibilityOverride() {
             return mVisibilityOverride;
         }
@@ -1564,6 +1580,13 @@ public abstract class NotificationListenerService extends Service {
         }
 
         /**
+         * @hide
+         */
+        public List<CharSequence> getSmartReplies() {
+            return mSmartReplies;
+        }
+
+        /**
          * Returns whether this notification can be displayed as a badge.
          *
          * @return true if the notification can be displayed as a badge, false otherwise.
@@ -1591,7 +1614,8 @@ public abstract class NotificationListenerService extends Service {
                 CharSequence explanation, String overrideGroupKey,
                 NotificationChannel channel, ArrayList<String> overridePeople,
                 ArrayList<SnoozeCriterion> snoozeCriteria, boolean showBadge,
-                int userSentiment, boolean hidden, ArrayList<Notification.Action> smartActions) {
+                int userSentiment, boolean hidden, ArrayList<Notification.Action> smartActions,
+                ArrayList<CharSequence> smartReplies) {
             mKey = key;
             mRank = rank;
             mIsAmbient = importance < NotificationManager.IMPORTANCE_LOW;
@@ -1608,6 +1632,7 @@ public abstract class NotificationListenerService extends Service {
             mUserSentiment = userSentiment;
             mHidden = hidden;
             mSmartActions = smartActions;
+            mSmartReplies = smartReplies;
         }
 
         /**
@@ -1658,6 +1683,7 @@ public abstract class NotificationListenerService extends Service {
         private ArrayMap<String, Integer> mUserSentiment;
         private ArrayMap<String, Boolean> mHidden;
         private ArrayMap<String, ArrayList<Notification.Action>> mSmartActions;
+        private ArrayMap<String, ArrayList<CharSequence>> mSmartReplies;
 
         private RankingMap(NotificationRankingUpdate rankingUpdate) {
             mRankingUpdate = rankingUpdate;
@@ -1686,7 +1712,8 @@ public abstract class NotificationListenerService extends Service {
                     getVisibilityOverride(key), getSuppressedVisualEffects(key),
                     getImportance(key), getImportanceExplanation(key), getOverrideGroupKey(key),
                     getChannel(key), getOverridePeople(key), getSnoozeCriteria(key),
-                    getShowBadge(key), getUserSentiment(key), getHidden(key), getSmartActions(key));
+                    getShowBadge(key), getUserSentiment(key), getHidden(key), getSmartActions(key),
+                    getSmartReplies(key));
             return rank >= 0;
         }
 
@@ -1833,6 +1860,15 @@ public abstract class NotificationListenerService extends Service {
             return mSmartActions.get(key);
         }
 
+        private ArrayList<CharSequence> getSmartReplies(String key) {
+            synchronized (this) {
+                if (mSmartReplies == null) {
+                    buildSmartReplies();
+                }
+            }
+            return mSmartReplies.get(key);
+        }
+
         // Locked by 'this'
         private void buildRanksLocked() {
             String[] orderedKeys = mRankingUpdate.getOrderedKeys();
@@ -1850,23 +1886,41 @@ public abstract class NotificationListenerService extends Service {
             Collections.addAll(mIntercepted, dndInterceptedKeys);
         }
 
+        private ArrayMap<String, Integer> buildIntMapFromBundle(Bundle bundle) {
+            ArrayMap<String, Integer> newMap = new ArrayMap<>(bundle.size());
+            for (String key : bundle.keySet()) {
+                newMap.put(key, bundle.getInt(key));
+            }
+            return newMap;
+        }
+
+        private ArrayMap<String, String> buildStringMapFromBundle(Bundle bundle) {
+            ArrayMap<String, String> newMap = new ArrayMap<>(bundle.size());
+            for (String key : bundle.keySet()) {
+                newMap.put(key, bundle.getString(key));
+            }
+            return newMap;
+        }
+
+        private ArrayMap<String, Boolean> buildBooleanMapFromBundle(Bundle bundle) {
+            ArrayMap<String, Boolean> newMap = new ArrayMap<>(bundle.size());
+            for (String key : bundle.keySet()) {
+                newMap.put(key, bundle.getBoolean(key));
+            }
+            return newMap;
+        }
+
         // Locked by 'this'
         private void buildVisibilityOverridesLocked() {
-            Bundle visibilityBundle = mRankingUpdate.getVisibilityOverrides();
-            mVisibilityOverrides = new ArrayMap<>(visibilityBundle.size());
-            for (String key: visibilityBundle.keySet()) {
-               mVisibilityOverrides.put(key, visibilityBundle.getInt(key));
-            }
+            mVisibilityOverrides = buildIntMapFromBundle(mRankingUpdate.getVisibilityOverrides());
         }
 
         // Locked by 'this'
         private void buildSuppressedVisualEffectsLocked() {
-            Bundle suppressedBundle = mRankingUpdate.getSuppressedVisualEffects();
-            mSuppressedVisualEffects = new ArrayMap<>(suppressedBundle.size());
-            for (String key: suppressedBundle.keySet()) {
-                mSuppressedVisualEffects.put(key, suppressedBundle.getInt(key));
-            }
+            mSuppressedVisualEffects =
+                buildIntMapFromBundle(mRankingUpdate.getSuppressedVisualEffects());
         }
+
         // Locked by 'this'
         private void buildImportanceLocked() {
             String[] orderedKeys = mRankingUpdate.getOrderedKeys();
@@ -1880,20 +1934,13 @@ public abstract class NotificationListenerService extends Service {
 
         // Locked by 'this'
         private void buildImportanceExplanationLocked() {
-            Bundle explanationBundle = mRankingUpdate.getImportanceExplanation();
-            mImportanceExplanation = new ArrayMap<>(explanationBundle.size());
-            for (String key: explanationBundle.keySet()) {
-                mImportanceExplanation.put(key, explanationBundle.getString(key));
-            }
+            mImportanceExplanation =
+                buildStringMapFromBundle(mRankingUpdate.getImportanceExplanation());
         }
 
         // Locked by 'this'
         private void buildOverrideGroupKeys() {
-            Bundle overrideGroupKeys = mRankingUpdate.getOverrideGroupKeys();
-            mOverrideGroupKeys = new ArrayMap<>(overrideGroupKeys.size());
-            for (String key: overrideGroupKeys.keySet()) {
-                mOverrideGroupKeys.put(key, overrideGroupKeys.getString(key));
-            }
+            mOverrideGroupKeys = buildStringMapFromBundle(mRankingUpdate.getOverrideGroupKeys());
         }
 
         // Locked by 'this'
@@ -1925,29 +1972,17 @@ public abstract class NotificationListenerService extends Service {
 
         // Locked by 'this'
         private void buildShowBadgeLocked() {
-            Bundle showBadge = mRankingUpdate.getShowBadge();
-            mShowBadge = new ArrayMap<>(showBadge.size());
-            for (String key : showBadge.keySet()) {
-                mShowBadge.put(key, showBadge.getBoolean(key));
-            }
+            mShowBadge = buildBooleanMapFromBundle(mRankingUpdate.getShowBadge());
         }
 
         // Locked by 'this'
         private void buildUserSentimentLocked() {
-            Bundle userSentiment = mRankingUpdate.getUserSentiment();
-            mUserSentiment = new ArrayMap<>(userSentiment.size());
-            for (String key : userSentiment.keySet()) {
-                mUserSentiment.put(key, userSentiment.getInt(key));
-            }
+            mUserSentiment = buildIntMapFromBundle(mRankingUpdate.getUserSentiment());
         }
 
         // Locked by 'this'
         private void buildHiddenLocked() {
-            Bundle hidden = mRankingUpdate.getHidden();
-            mHidden = new ArrayMap<>(hidden.size());
-            for (String key : hidden.keySet()) {
-                mHidden.put(key, hidden.getBoolean(key));
-            }
+            mHidden = buildBooleanMapFromBundle(mRankingUpdate.getHidden());
         }
 
         // Locked by 'this'
@@ -1956,6 +1991,15 @@ public abstract class NotificationListenerService extends Service {
             mSmartActions = new ArrayMap<>(smartActions.size());
             for (String key : smartActions.keySet()) {
                 mSmartActions.put(key, smartActions.getParcelableArrayList(key));
+            }
+        }
+
+        // Locked by 'this'
+        private void buildSmartReplies() {
+            Bundle smartReplies = mRankingUpdate.getSmartReplies();
+            mSmartReplies = new ArrayMap<>(smartReplies.size());
+            for (String key : smartReplies.keySet()) {
+                mSmartReplies.put(key, smartReplies.getCharSequenceArrayList(key));
             }
         }
 

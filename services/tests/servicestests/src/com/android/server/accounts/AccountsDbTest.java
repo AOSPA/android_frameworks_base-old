@@ -17,13 +17,20 @@
 
 package com.android.server.accounts;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
 import android.accounts.Account;
 import android.content.Context;
 import android.database.Cursor;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.runner.AndroidJUnit4;
+import android.os.Build;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Pair;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.After;
 import org.junit.Before;
@@ -35,11 +42,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-
 /**
  * Tests for {@link AccountsDb}.
  * <p>Run with:<pre>
@@ -47,7 +49,7 @@ import static org.junit.Assert.assertTrue;
  * adb install \
  * -r out/target/product/marlin/data/app/FrameworksServicesTests/FrameworksServicesTests.apk &&
  * adb shell am instrument -e class com.android.server.accounts.AccountsDbTest \
- * -w com.android.frameworks.servicestests/android.support.test.runner.AndroidJUnitRunner
+ * -w com.android.frameworks.servicestests/androidx.test.runner.AndroidJUnitRunner
  * </pre>
  */
 @RunWith(AndroidJUnit4.class)
@@ -85,6 +87,12 @@ public class AccountsDbTest {
 
     @Test
     public void testCeNotAvailableInitially() {
+        // If the CE database is not attached to the DE database then any calls that modify the CE
+        // database will result in a Log.wtf call that will crash this process on eng builds. To
+        // allow the test to run through to completion skip this test on eng builds.
+        if (Build.IS_ENG) {
+            return;
+        }
         Account account = new Account("name", "example.com");
         long id = mAccountsDb.insertCeAccount(account, "");
         assertEquals("Insert into CE should fail until CE database is attached", -1, id);

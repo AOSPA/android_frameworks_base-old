@@ -16,16 +16,17 @@
 
 package android.telephony;
 
-import android.os.Parcel;
-import android.os.Parcelable;
-import static android.telephony.TelephonyManager.NETWORK_TYPE_UNKNOWN;
 import static android.telephony.TelephonyManager.NETWORK_TYPE_EDGE;
 import static android.telephony.TelephonyManager.NETWORK_TYPE_GPRS;
-import static android.telephony.TelephonyManager.NETWORK_TYPE_UMTS;
 import static android.telephony.TelephonyManager.NETWORK_TYPE_HSDPA;
-import static android.telephony.TelephonyManager.NETWORK_TYPE_HSUPA;
 import static android.telephony.TelephonyManager.NETWORK_TYPE_HSPA;
+import static android.telephony.TelephonyManager.NETWORK_TYPE_HSUPA;
+import static android.telephony.TelephonyManager.NETWORK_TYPE_UMTS;
+import static android.telephony.TelephonyManager.NETWORK_TYPE_UNKNOWN;
 
+import android.annotation.UnsupportedAppUsage;
+import android.os.Parcel;
+import android.os.Parcelable;
 
 
 /**
@@ -47,24 +48,29 @@ public class NeighboringCellInfo implements Parcelable
      * In GSM, mRssi is the Received RSSI;
      * In UMTS, mRssi is the Level index of CPICH Received Signal Code Power
      */
+    @UnsupportedAppUsage
     private int mRssi;
     /**
      * CID in 16 bits format in GSM. Return UNKNOWN_CID in UMTS and CMDA.
      */
+    @UnsupportedAppUsage
     private int mCid;
     /**
      * LAC in 16 bits format in GSM. Return UNKNOWN_CID in UMTS and CMDA.
      */
+    @UnsupportedAppUsage
     private int mLac;
     /**
      * Primary Scrambling Code in 9 bits format in UMTS
      * Return UNKNOWN_CID in GSM and CMDA.
      */
+    @UnsupportedAppUsage
     private int mPsc;
     /**
      * Radio network type, value is one of following
      * TelephonyManager.NETWORK_TYPE_XXXXXX.
      */
+    @UnsupportedAppUsage
     private int mNetworkType;
 
     /**
@@ -98,6 +104,39 @@ public class NeighboringCellInfo implements Parcelable
     public NeighboringCellInfo(int rssi, int cid) {
         mRssi = rssi;
         mCid = cid;
+    }
+
+    /** @hide */
+    public NeighboringCellInfo(final CellInfoGsm info) {
+        mNetworkType = TelephonyManager.NETWORK_TYPE_GPRS;
+
+        mRssi = info.getCellSignalStrength().getAsuLevel();
+        if (mRssi == Integer.MAX_VALUE) mRssi = UNKNOWN_RSSI;
+
+        mLac = info.getCellIdentity().getLac();
+        if (mLac == Integer.MAX_VALUE) mLac = UNKNOWN_CID;
+
+        mCid = info.getCellIdentity().getCid();
+        if (mCid == Integer.MAX_VALUE) mCid = UNKNOWN_CID;
+
+        mPsc = UNKNOWN_CID;
+    }
+
+    /** @hide */
+    public NeighboringCellInfo(final CellInfoWcdma info) {
+        mNetworkType = TelephonyManager.NETWORK_TYPE_UMTS;
+
+        mRssi = info.getCellSignalStrength().getAsuLevel();
+        if (mRssi == Integer.MAX_VALUE) mRssi = UNKNOWN_RSSI;
+
+        mLac = info.getCellIdentity().getLac();
+        if (mLac == Integer.MAX_VALUE) mLac = UNKNOWN_CID;
+
+        mCid = info.getCellIdentity().getCid();
+        if (mCid == Integer.MAX_VALUE) mCid = UNKNOWN_CID;
+
+        mPsc = info.getCellIdentity().getPsc();
+        if (mPsc == Integer.MAX_VALUE) mPsc = UNKNOWN_CID;
     }
 
     /**

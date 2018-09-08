@@ -97,6 +97,7 @@ public class SettingsBackupTest {
     private static final Set<String> BACKUP_BLACKLISTED_GLOBAL_SETTINGS =
             newHashSet(
                     Settings.Global.ACTIVITY_MANAGER_CONSTANTS,
+                    Settings.Global.ACTIVITY_STARTS_LOGGING_ENABLED,
                     Settings.Global.ADAPTIVE_BATTERY_MANAGEMENT_ENABLED,
                     Settings.Global.ADB_ENABLED,
                     Settings.Global.ADD_USERS_WHEN_LOCKED,
@@ -119,6 +120,9 @@ public class SettingsBackupTest {
                     Settings.Global.ASSISTED_GPS_ENABLED,
                     Settings.Global.AUDIO_SAFE_VOLUME_STATE,
                     Settings.Global.AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES,
+                    Settings.Global.AUTOFILL_LOGGING_LEVEL,
+                    Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE,
+                    Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS,
                     Settings.Global.BATTERY_DISCHARGE_DURATION_THRESHOLD,
                     Settings.Global.BATTERY_DISCHARGE_THRESHOLD,
                     Settings.Global.BATTERY_SAVER_DEVICE_SPECIFIC_CONSTANTS,
@@ -380,16 +384,14 @@ public class SettingsBackupTest {
                     Settings.Global.SETUP_PREPAID_DATA_SERVICE_URL,
                     Settings.Global.SETUP_PREPAID_DETECTION_REDIR_HOST,
                     Settings.Global.SETUP_PREPAID_DETECTION_TARGET_URL,
+                    Settings.Global.SETTINGS_USE_EXTERNAL_PROVIDER_API,
+                    Settings.Global.SETTINGS_USE_PSD_API,
                     Settings.Global.SHORTCUT_MANAGER_CONSTANTS,
                     Settings.Global.SHOW_FIRST_CRASH_DIALOG,
                     Settings.Global.SHOW_MUTE_IN_CRASH_DIALOG,
                     Settings.Global.SHOW_NOTIFICATION_CHANNEL_WARNINGS,
                     Settings.Global.SHOW_RESTART_IN_CRASH_DIALOG,
                     Settings.Global.SHOW_TEMPERATURE_WARNING,
-                    Settings.Global.SHOW_ZEN_UPGRADE_NOTIFICATION,
-                    Settings.Global.SHOW_ZEN_SETTINGS_SUGGESTION,
-                    Settings.Global.ZEN_SETTINGS_UPDATED,
-                    Settings.Global.ZEN_SETTINGS_SUGGESTION_VIEWED,
                     Settings.Global.SMART_SELECTION_UPDATE_CONTENT_URL,
                     Settings.Global.SMART_SELECTION_UPDATE_METADATA_URL,
                     Settings.Global.SMS_OUTGOING_CHECK_INTERVAL_MS,
@@ -485,6 +487,7 @@ public class SettingsBackupTest {
                     Settings.Global.WIFI_SAVED_STATE,
                     Settings.Global.WIFI_SCAN_ALWAYS_AVAILABLE,
                     Settings.Global.WIFI_SCAN_INTERVAL_WHEN_P2P_CONNECTED_MS,
+                    Settings.Global.WIFI_SCAN_THROTTLE_ENABLED,
                     Settings.Global.WIFI_SCORE_PARAMS,
                     Settings.Global.WIFI_SLEEP_POLICY,
                     Settings.Global.WIFI_SUPPLICANT_SCAN_INTERVAL_MS,
@@ -492,8 +495,8 @@ public class SettingsBackupTest {
                     Settings.Global.WIFI_VERBOSE_LOGGING_ENABLED,
                     Settings.Global.WIFI_WATCHDOG_ON,
                     Settings.Global.WIMAX_NETWORKS_AVAILABLE_NOTIFICATION_ON,
-                    Settings.Global.WINDOW_ANIMATION_SCALE,
                     Settings.Global.CHARGING_STARTED_SOUND,
+                    Settings.Global.WINDOW_ANIMATION_SCALE,
                     Settings.Global.WTF_IS_FATAL,
                     Settings.Global.ZEN_MODE,
                     Settings.Global.ZEN_MODE_CONFIG_ETAG,
@@ -705,3 +708,4 @@ public class SettingsBackupTest {
     }
 
 }
+

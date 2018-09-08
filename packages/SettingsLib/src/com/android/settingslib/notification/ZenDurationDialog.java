@@ -17,14 +17,12 @@
 package com.android.settingslib.notification;
 
 import android.app.ActivityManager;
-import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.provider.Settings;
 import android.service.notification.Condition;
 import android.service.notification.ZenModeConfig;
-import androidx.annotation.VisibleForTesting;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.CompoundButton;
@@ -41,6 +39,9 @@ import com.android.internal.policy.PhoneWindow;
 import com.android.settingslib.R;
 
 import java.util.Arrays;
+
+import androidx.annotation.VisibleForTesting;
+import androidx.appcompat.app.AlertDialog;
 
 public class ZenDurationDialog {
     private static final int[] MINUTE_BUCKETS = ZenModeConfig.MINUTE_BUCKETS;
@@ -66,12 +67,17 @@ public class ZenDurationDialog {
     }
 
     public Dialog createDialog() {
-        int zenDuration = Settings.Global.getInt(
-                mContext.getContentResolver(), Settings.Global.ZEN_DURATION,
-                Settings.Global.ZEN_DURATION_FOREVER);
+        final AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        setupDialog(builder);
+        return builder.create();
+    }
 
-        final AlertDialog.Builder builder = new AlertDialog.Builder(mContext)
-                .setTitle(R.string.zen_mode_duration_settings_title)
+    public void setupDialog(AlertDialog.Builder builder) {
+        int zenDuration = Settings.Secure.getInt(
+                mContext.getContentResolver(), Settings.Secure.ZEN_DURATION,
+                Settings.Secure.ZEN_DURATION_FOREVER);
+
+        builder.setTitle(R.string.zen_mode_duration_settings_title)
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton(R.string.okay,
                         new DialogInterface.OnClickListener() {
@@ -84,19 +90,18 @@ public class ZenDurationDialog {
         View contentView = getContentView();
         setupRadioButtons(zenDuration);
         builder.setView(contentView);
-        return builder.create();
     }
 
     @VisibleForTesting
     protected void updateZenDuration(int currZenDuration) {
         final int checkedRadioButtonId = mZenRadioGroup.getCheckedRadioButtonId();
 
-        int newZenDuration = Settings.Global.getInt(
-                mContext.getContentResolver(), Settings.Global.ZEN_DURATION,
-                Settings.Global.ZEN_DURATION_FOREVER);
+        int newZenDuration = Settings.Secure.getInt(
+                mContext.getContentResolver(), Settings.Secure.ZEN_DURATION,
+                Settings.Secure.ZEN_DURATION_FOREVER);
         switch (checkedRadioButtonId) {
             case FOREVER_CONDITION_INDEX:
-                newZenDuration = Settings.Global.ZEN_DURATION_FOREVER;
+                newZenDuration = Settings.Secure.ZEN_DURATION_FOREVER;
                 MetricsLogger.action(mContext,
                         MetricsProto.MetricsEvent.
                                 NOTIFICATION_ZEN_MODE_DURATION_FOREVER);
@@ -110,7 +115,7 @@ public class ZenDurationDialog {
                         newZenDuration);
                 break;
             case ALWAYS_ASK_CONDITION_INDEX:
-                newZenDuration = Settings.Global.ZEN_DURATION_PROMPT;
+                newZenDuration = Settings.Secure.ZEN_DURATION_PROMPT;
                 MetricsLogger.action(mContext,
                         MetricsProto.MetricsEvent.
                                 NOTIFICATION_ZEN_MODE_DURATION_PROMPT);
@@ -118,8 +123,8 @@ public class ZenDurationDialog {
         }
 
         if (currZenDuration != newZenDuration) {
-            Settings.Global.putInt(mContext.getContentResolver(),
-                    Settings.Global.ZEN_DURATION, newZenDuration);
+            Settings.Secure.putInt(mContext.getContentResolver(),
+                    Settings.Secure.ZEN_DURATION, newZenDuration);
         }
     }
 
@@ -269,8 +274,7 @@ public class ZenDurationDialog {
         String radioContentText = "";
         switch (rowIndex) {
             case FOREVER_CONDITION_INDEX:
-                radioContentText = mContext.getString(
-                        com.android.internal.R.string.zen_mode_forever);
+                radioContentText = mContext.getString(R.string.zen_mode_forever);
                 break;
             case COUNTDOWN_CONDITION_INDEX:
                 Condition condition = ZenModeConfig.toTimeCondition(mContext,

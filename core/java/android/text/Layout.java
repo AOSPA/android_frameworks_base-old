@@ -18,6 +18,7 @@ package android.text;
 
 import android.annotation.IntDef;
 import android.annotation.IntRange;
+import android.annotation.UnsupportedAppUsage;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -49,9 +50,9 @@ import java.util.Arrays;
 public abstract class Layout {
     /** @hide */
     @IntDef(prefix = { "BREAK_STRATEGY_" }, value = {
-            BREAK_STRATEGY_SIMPLE,
-            BREAK_STRATEGY_HIGH_QUALITY,
-            BREAK_STRATEGY_BALANCED
+            NativeLineBreaker.BREAK_STRATEGY_SIMPLE,
+            NativeLineBreaker.BREAK_STRATEGY_HIGH_QUALITY,
+            NativeLineBreaker.BREAK_STRATEGY_BALANCED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface BreakStrategy {}
@@ -62,19 +63,20 @@ public abstract class Layout {
      * before it (which yields a more consistent user experience when editing), but layout may not
      * be the highest quality.
      */
-    public static final int BREAK_STRATEGY_SIMPLE = 0;
+    public static final int BREAK_STRATEGY_SIMPLE = NativeLineBreaker.BREAK_STRATEGY_SIMPLE;
 
     /**
      * Value for break strategy indicating high quality line breaking, including automatic
      * hyphenation and doing whole-paragraph optimization of line breaks.
      */
-    public static final int BREAK_STRATEGY_HIGH_QUALITY = 1;
+    public static final int BREAK_STRATEGY_HIGH_QUALITY =
+            NativeLineBreaker.BREAK_STRATEGY_HIGH_QUALITY;
 
     /**
      * Value for break strategy indicating balanced line breaking. The breaks are chosen to
      * make all lines as close to the same length as possible, including automatic hyphenation.
      */
-    public static final int BREAK_STRATEGY_BALANCED = 2;
+    public static final int BREAK_STRATEGY_BALANCED = NativeLineBreaker.BREAK_STRATEGY_BALANCED;
 
     /** @hide */
     @IntDef(prefix = { "HYPHENATION_FREQUENCY_" }, value = {
@@ -92,29 +94,32 @@ public abstract class Layout {
      * layout and there is otherwise no valid break. Soft hyphens are ignored and will not be used
      * as suggestions for potential line breaks.
      */
-    public static final int HYPHENATION_FREQUENCY_NONE = 0;
+    public static final int HYPHENATION_FREQUENCY_NONE =
+            NativeLineBreaker.HYPHENATION_FREQUENCY_NONE;
 
     /**
      * Value for hyphenation frequency indicating a light amount of automatic hyphenation, which
      * is a conservative default. Useful for informal cases, such as short sentences or chat
      * messages.
      */
-    public static final int HYPHENATION_FREQUENCY_NORMAL = 1;
+    public static final int HYPHENATION_FREQUENCY_NORMAL =
+            NativeLineBreaker.HYPHENATION_FREQUENCY_NORMAL;
 
     /**
      * Value for hyphenation frequency indicating the full amount of automatic hyphenation, typical
      * in typography. Useful for running text and where it's important to put the maximum amount of
      * text in a screen with limited space.
      */
-    public static final int HYPHENATION_FREQUENCY_FULL = 2;
+    public static final int HYPHENATION_FREQUENCY_FULL =
+            NativeLineBreaker.HYPHENATION_FREQUENCY_FULL;
 
     private static final ParagraphStyle[] NO_PARA_SPANS =
         ArrayUtils.emptyArray(ParagraphStyle.class);
 
     /** @hide */
     @IntDef(prefix = { "JUSTIFICATION_MODE_" }, value = {
-            JUSTIFICATION_MODE_NONE,
-            JUSTIFICATION_MODE_INTER_WORD
+            NativeLineBreaker.JUSTIFICATION_MODE_NONE,
+            NativeLineBreaker.JUSTIFICATION_MODE_INTER_WORD
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface JustificationMode {}
@@ -122,12 +127,13 @@ public abstract class Layout {
     /**
      * Value for justification mode indicating no justification.
      */
-    public static final int JUSTIFICATION_MODE_NONE = 0;
+    public static final int JUSTIFICATION_MODE_NONE = NativeLineBreaker.JUSTIFICATION_MODE_NONE;
 
     /**
      * Value for justification mode indicating the text is justified by stretching word spacing.
      */
-    public static final int JUSTIFICATION_MODE_INTER_WORD = 1;
+    public static final int JUSTIFICATION_MODE_INTER_WORD =
+            NativeLineBreaker.JUSTIFICATION_MODE_INTER_WORD;
 
     /*
      * Line spacing multiplier for default line spacing.
@@ -411,6 +417,7 @@ public abstract class Layout {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public void drawText(Canvas canvas, int firstLine, int lastLine) {
         int previousLineBottom = getLineTop(firstLine);
         int previousLineEnd = getLineStart(firstLine);
@@ -578,6 +585,7 @@ public abstract class Layout {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public void drawBackground(Canvas canvas, Path highlight, Paint highlightPaint,
             int cursorOffsetVertical, int firstLine, int lastLine) {
         // First, draw LineBackgroundSpans.
@@ -658,6 +666,7 @@ public abstract class Layout {
      * @return The range of lines that need to be drawn, possibly empty.
      * @hide
      */
+    @UnsupportedAppUsage
     public long getLineRangeForDraw(Canvas canvas) {
         int dtop, dbottom;
 
@@ -928,6 +937,7 @@ public abstract class Layout {
      * @return true if at a level boundary
      * @hide
      */
+    @UnsupportedAppUsage
     public boolean isLevelBoundary(int offset) {
         int line = getLineForOffset(offset);
         Directions dirs = getLineDirections(line);
@@ -1134,6 +1144,7 @@ public abstract class Layout {
      * optionally clamp it so that it doesn't exceed the width of the layout.
      * @hide
      */
+    @UnsupportedAppUsage
     public float getPrimaryHorizontal(int offset, boolean clamped) {
         boolean trailing = primaryIsTrailingPrevious(offset);
         return getHorizontal(offset, trailing, clamped);
@@ -1153,6 +1164,7 @@ public abstract class Layout {
      * optionally clamp it so that it doesn't exceed the width of the layout.
      * @hide
      */
+    @UnsupportedAppUsage
     public float getSecondaryHorizontal(int offset, boolean clamped) {
         boolean trailing = primaryIsTrailingPrevious(offset);
         return getHorizontal(offset, !trailing, clamped);
@@ -1594,10 +1606,11 @@ public abstract class Layout {
         }
 
         float get(final int offset) {
-            if (mHorizontals == null) {
+            final int index = offset - mLineStartOffset;
+            if (mHorizontals == null || index < 0 || index >= mHorizontals.length) {
                 return getHorizontal(offset, mPrimary);
             } else {
-                return mHorizontals[offset - mLineStartOffset];
+                return mHorizontals[index];
             }
         }
     }
@@ -1783,6 +1796,7 @@ public abstract class Layout {
      * only robust for left-aligned displays.
      * @hide
      */
+    @UnsupportedAppUsage
     public boolean shouldClampCursor(int line) {
         // Only clamp cursor position in left-aligned displays.
         switch (getParagraphAlignment(line)) {
@@ -2435,6 +2449,7 @@ public abstract class Layout {
     }
 
     private CharSequence mText;
+    @UnsupportedAppUsage
     private TextPaint mPaint;
     private TextPaint mWorkPaint = new TextPaint();
     private int mWidth;
@@ -2460,6 +2475,7 @@ public abstract class Layout {
 
     /* package */ static final int DIR_REQUEST_LTR = 1;
     /* package */ static final int DIR_REQUEST_RTL = -1;
+    @UnsupportedAppUsage
     /* package */ static final int DIR_REQUEST_DEFAULT_LTR = 2;
     /* package */ static final int DIR_REQUEST_DEFAULT_RTL = -2;
 
@@ -2473,8 +2489,10 @@ public abstract class Layout {
         ALIGN_OPPOSITE,
         ALIGN_CENTER,
         /** @hide */
+        @UnsupportedAppUsage
         ALIGN_LEFT,
         /** @hide */
+        @UnsupportedAppUsage
         ALIGN_RIGHT,
     }
 
@@ -2482,11 +2500,13 @@ public abstract class Layout {
 
     /** @hide */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    @UnsupportedAppUsage
     public static final Directions DIRS_ALL_LEFT_TO_RIGHT =
         new Directions(new int[] { 0, RUN_LENGTH_MASK });
 
     /** @hide */
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    @UnsupportedAppUsage
     public static final Directions DIRS_ALL_RIGHT_TO_LEFT =
         new Directions(new int[] { 0, RUN_LENGTH_MASK | RUN_RTL_FLAG });
 

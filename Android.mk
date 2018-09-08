@@ -171,15 +171,17 @@ framework_docs_LOCAL_DROIDDOC_OPTIONS := \
     -hidePackage com.android.server
 
 # Convert an sdk level to a "since" argument.
-since-arg = -since $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/$(1)/public/api/android.*) $(1)
+since-arg = -since $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/$(1)/public/api/android.$(2)) $(1)
 
-finalized_sdks := $(patsubst $(HISTORICAL_SDK_VERSIONS_ROOT)/%/public/api/android.xml,%,\
-    $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/*/public/api/android.xml))
-finalized_sdks += $(patsubst $(HISTORICAL_SDK_VERSIONS_ROOT)/%/public/api/android.txt,%,\
-    $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/*/public/api/android.txt))
-finalized_sdks := $(call numerically_sort,$(finalized_sdks))
+finalized_xml_sdks := $(call numerically_sort,\
+    $(patsubst $(HISTORICAL_SDK_VERSIONS_ROOT)/%/public/api/android.xml,%,\
+    $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/*/public/api/android.xml)))
+finalized_txt_sdks := $(call numerically_sort,\
+     $(patsubst $(HISTORICAL_SDK_VERSIONS_ROOT)/%/public/api/android.txt,%,\
+    $(wildcard $(HISTORICAL_SDK_VERSIONS_ROOT)/*/public/api/android.txt)))
 
-framework_docs_LOCAL_DROIDDOC_OPTIONS += $(foreach sdk,$(finalized_sdks),$(call since-arg,$(sdk)))
+framework_docs_LOCAL_DROIDDOC_OPTIONS += $(foreach sdk,$(finalized_xml_sdks),$(call since-arg,$(sdk),xml))
+framework_docs_LOCAL_DROIDDOC_OPTIONS += $(foreach sdk,$(finalized_txt_sdks),$(call since-arg,$(sdk),txt))
 ifneq ($(PLATFORM_VERSION_CODENAME),REL)
   framework_docs_LOCAL_DROIDDOC_OPTIONS += \
       -since ./frameworks/base/api/current.txt $(PLATFORM_VERSION_CODENAME)
@@ -311,394 +313,13 @@ $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_API_FILE))
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_SYSTEM_API_FILE))
 $(call dist-for-goals,sdk,$(INTERNAL_PLATFORM_TEST_API_FILE))
 
-# ====  check javadoc comments but don't generate docs ========
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := doc-comment-check
-
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-referenceonly \
-		-parsecomments
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-LOCAL_UNINSTALLABLE_MODULE := true
-
-include $(BUILD_DROIDDOC)
-
-# Run this for checkbuild
-checkbuild: doc-comment-check-docs
-# Check comment when you are updating the API
-update-api: doc-comment-check-docs
-
-# ====  static html in the sdk ==================================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := offline-sdk
-
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-offlinemode \
-		-title "Android SDK" \
-		-proofread $(OUT_DOCS)/$(LOCAL_MODULE)-proofread.txt \
-		-sdkvalues $(OUT_DOCS) \
-		-hdf android.whichdoc offline
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-include $(BUILD_DROIDDOC)
-
-static_doc_index_redirect := $(out_dir)/index.html
-$(static_doc_index_redirect): \
-	$(LOCAL_PATH)/docs/docs-preview-index.html | $(ACP)
-	$(hide) mkdir -p $(dir $@)
-	$(hide) $(ACP) $< $@
-
-$(full_target): $(static_doc_index_redirect)
-
-
-# ==== Public API static reference docs ==================================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := offline-sdk-referenceonly
-
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-offlinemode \
-		-title "Android SDK" \
-		-proofread $(OUT_DOCS)/$(LOCAL_MODULE)-proofread.txt \
-		-sdkvalues $(OUT_DOCS) \
-		-hdf android.whichdoc offline \
-		-referenceonly
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-include $(BUILD_DROIDDOC)
-
-static_doc_index_redirect := $(out_dir)/index.html
-$(static_doc_index_redirect): $(LOCAL_PATH)/docs/docs-documentation-redirect.html
-	$(copy-file-to-target)
-
-static_doc_properties := $(out_dir)/source.properties
-$(static_doc_properties): \
-	$(LOCAL_PATH)/docs/source.properties | $(ACP)
-	$(hide) mkdir -p $(dir $@)
-	$(hide) $(ACP) $< $@
-
-$(full_target): $(static_doc_index_redirect)
-$(full_target): $(static_doc_properties)
-
-
-# ==== System API static reference docs ==================================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := offline-system-sdk-referenceonly
-
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-hide 101 -hide 104 -hide 108 \
-		-showAnnotation android.annotation.SystemApi \
-		-offlinemode \
-		-title "Android System SDK" \
-		-proofread $(OUT_DOCS)/$(LOCAL_MODULE)-proofread.txt \
-		-sdkvalues $(OUT_DOCS) \
-		-hdf android.whichdoc offline \
-		-referenceonly
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-include $(BUILD_DROIDDOC)
-
-static_doc_index_redirect := $(out_dir)/index.html
-$(static_doc_index_redirect): $(LOCAL_PATH)/docs/docs-documentation-redirect.html
-	$(copy-file-to-target)
-
-static_doc_properties := $(out_dir)/source.properties
-$(static_doc_properties): \
-	$(LOCAL_PATH)/docs/source.properties | $(ACP)
-	$(hide) mkdir -p $(dir $@)
-	$(hide) $(ACP) $< $@
-
-$(full_target): $(static_doc_index_redirect)
-$(full_target): $(static_doc_properties)
-$(full_target): $(framework_built)
-
-
-# ==== docs for the web (on the androiddevdocs app engine server) =======================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_STATIC_JAVA_LIBRARIES:=$(framework_docs_LOCAL_STATIC_JAVA_LIBRARIES)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-LOCAL_ADDITIONAL_HTML_DIR:=docs/html-intl /
-
-LOCAL_MODULE := online-sdk
-
-LOCAL_DROIDDOC_OPTIONS:= \
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-toroot / \
-		-hdf android.whichdoc online \
-		$(sample_groups) \
-		-hdf android.hasSamples true \
-		-samplesdir $(samples_dir)
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-include $(BUILD_DROIDDOC)
-
-# ==== docs for the web (on the androiddevdocs app engine server) =======================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_STATIC_JAVA_LIBRARIES:=$(framework_docs_LOCAL_STATIC_JAVA_LIBRARIES)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-LOCAL_ADDITIONAL_HTML_DIR:=docs/html-intl /
-
-LOCAL_MODULE := online-system-api-sdk
-
-LOCAL_DROIDDOC_OPTIONS:= \
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-referenceonly \
-		-showAnnotation android.annotation.SystemApi \
-		-title "Android SDK - Including system APIs." \
-		-toroot / \
-		-hide 101 \
-		-hide 104 \
-		-hide 108 \
-		-hdf android.whichdoc online \
-		$(sample_groups) \
-		-hdf android.hasSamples true \
-		-samplesdir $(samples_dir)
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-LOCAL_UNINSTALLABLE_MODULE := true
-
-include $(BUILD_DROIDDOC)
-
-# ==== docs for the web (on the devsite app engine server) =======================
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_STATIC_JAVA_LIBRARIES:=$(framework_docs_LOCAL_STATIC_JAVA_LIBRARIES)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-# specify a second html input dir and an output path relative to OUT_DIR)
-LOCAL_ADDITIONAL_HTML_DIR:=docs/html-intl /
-
-LOCAL_MODULE := ds
-
-LOCAL_DROIDDOC_OPTIONS:= \
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-toroot / \
-		-hdf android.whichdoc online \
-		-devsite \
-		-yamlV2 \
-		$(sample_groups) \
-		-hdf android.hasSamples true \
-		-samplesdir $(samples_dir)
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-include $(BUILD_DROIDDOC)
-
-# ==== docs for the web (on the devsite app engine server) =======================
-include $(CLEAR_VARS)
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_STATIC_JAVA_LIBRARIES:=$(framework_docs_LOCAL_STATIC_JAVA_LIBRARIES)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-# specify a second html input dir and an output path relative to OUT_DIR)
-LOCAL_ADDITIONAL_HTML_DIR:=docs/html-intl /
-
-LOCAL_MODULE := ds-static
-
-LOCAL_DROIDDOC_OPTIONS:= \
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-hdf android.whichdoc online \
-		-staticonly \
-		-toroot / \
-		-devsite \
-		-ignoreJdLinks
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-include $(BUILD_DROIDDOC)
-
-# ==== generates full navtree for resolving @links in ds postprocessing ====
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_STATIC_JAVA_LIBRARIES:=$(framework_docs_LOCAL_STATIC_JAVA_LIBRARIES)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := ds-ref-navtree
-
-LOCAL_DROIDDOC_OPTIONS:= \
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-hdf android.whichdoc online \
-		-toroot / \
-		-atLinksNavtree \
-		-navtreeonly
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-include $(BUILD_DROIDDOC)
-
-# ==== site updates for docs (on the androiddevdocs app engine server) =======================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_STATIC_JAVA_LIBRARIES:=$(framework_docs_LOCAL_STATIC_JAVA_LIBRARIES)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-LOCAL_ADDITIONAL_HTML_DIR:=docs/html-intl /
-
-LOCAL_MODULE := online-sdk-dev
-
-LOCAL_DROIDDOC_OPTIONS:= \
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-toroot / \
-		-hdf android.whichdoc online \
-		$(sample_groups) \
-		-hdf android.hasSamples true \
-		-samplesdir $(samples_dir)
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-include $(BUILD_DROIDDOC)
-
-# ==== docs that have all of the stuff that's @hidden =======================
-include $(CLEAR_VARS)
-
-LOCAL_SRC_FILES:=$(framework_docs_LOCAL_SRC_FILES)
-LOCAL_GENERATED_SOURCES:=$(framework_docs_LOCAL_GENERATED_SOURCES)
-LOCAL_SRCJARS:=$(framework_docs_LOCAL_SRCJARS)
-LOCAL_JAVA_LIBRARIES:=$(framework_docs_LOCAL_JAVA_LIBRARIES)
-LOCAL_MODULE_CLASS:=$(framework_docs_LOCAL_MODULE_CLASS)
-LOCAL_DROIDDOC_SOURCE_PATH:=$(framework_docs_LOCAL_DROIDDOC_SOURCE_PATH)
-LOCAL_DROIDDOC_HTML_DIR:=$(framework_docs_LOCAL_DROIDDOC_HTML_DIR)
-LOCAL_ADDITIONAL_JAVA_DIR:=$(framework_docs_LOCAL_ADDITIONAL_JAVA_DIR)
-LOCAL_ADDITIONAL_DEPENDENCIES:=$(framework_docs_LOCAL_ADDITIONAL_DEPENDENCIES)
-
-LOCAL_MODULE := hidden
-LOCAL_DROIDDOC_OPTIONS:=\
-		$(framework_docs_LOCAL_DROIDDOC_OPTIONS) \
-		-referenceonly \
-		-title "Android SDK - Including hidden APIs."
-#		-hidden
-
-LOCAL_DROIDDOC_CUSTOM_TEMPLATE_DIR:=external/doclava/res/assets/templates-sdk
-
-include $(BUILD_DROIDDOC)
-
-# ====  java proto device library (for test only)  ==============================
-include $(CLEAR_VARS)
-LOCAL_MODULE := platformprotosnano
-LOCAL_MODULE_TAGS := tests
-LOCAL_PROTOC_OPTIMIZE_TYPE := nano
-LOCAL_PROTOC_FLAGS := \
-    -Iexternal/protobuf/src
-LOCAL_PROTO_JAVA_OUTPUT_PARAMS := \
-    store_unknown_fields = true
-LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := \
-    $(call all-proto-files-under, core/proto) \
-    $(call all-proto-files-under, libs/incident/proto/android/os)
-include $(BUILD_STATIC_JAVA_LIBRARY)
-
-
-# ====  java proto device library (for test only)  ==============================
-include $(CLEAR_VARS)
-LOCAL_MODULE := platformprotoslite
-LOCAL_MODULE_TAGS := tests
-LOCAL_PROTOC_OPTIMIZE_TYPE := lite
-LOCAL_PROTOC_FLAGS := \
-    -Iexternal/protobuf/src
-LOCAL_SRC_FILES := \
-    $(call all-proto-files-under, core/proto) \
-    $(call all-proto-files-under, libs/incident/proto/android/os)
-# Protos have lots of MissingOverride and similar.
-LOCAL_ERROR_PRONE_FLAGS := -XepDisableAllChecks
-include $(BUILD_STATIC_JAVA_LIBRARY)
+# sdk.atree needs to copy the whole dir: $(OUT_DOCS)/offline-sdk to the final zip.
+# So keep offline-sdk-timestamp target here, and unzip offline-sdk-docs.zip to
+# $(OUT_DOCS)/offline-sdk.
+$(OUT_DOCS)/offline-sdk-timestamp: $(OUT_DOCS)/offline-sdk-docs-docs.zip
+	$(hide) rm -rf $(OUT_DOCS)/offline-sdk
+	$(hide) mkdir -p $(OUT_DOCS)/offline-sdk
+	( unzip -qo $< -d $(OUT_DOCS)/offline-sdk && touch -f $@ ) || exit 1
 
 # ==== hiddenapi lists =======================================
 include $(CLEAR_VARS)
@@ -715,7 +336,6 @@ LOCAL_SRC_FORCE_BLACKLIST := frameworks/base/config/hiddenapi-force-blacklist.tx
 LOCAL_SRC_PUBLIC_API := frameworks/base/config/hiddenapi-public-dex.txt
 LOCAL_SRC_PRIVATE_API := frameworks/base/config/hiddenapi-private-dex.txt
 LOCAL_SRC_REMOVED_API := frameworks/base/config/hiddenapi-removed-dex.txt
-
 LOCAL_SRC_ALL := \
 	$(LOCAL_SRC_GREYLIST) \
 	$(LOCAL_SRC_VENDOR_LIST) \
@@ -772,7 +392,7 @@ $(LOCAL_LIGHT_GREYLIST): REGEX_SERIALIZATION := \
     "writeObject\(Ljava/io/ObjectOutputStream;\)V" \
     "writeReplace\(\)Ljava/lang/Object;"
 $(LOCAL_LIGHT_GREYLIST): $(LOCAL_SRC_ALL)
-	sort $(LOCAL_SRC_GREYLIST) $(LOCAL_SRC_VENDOR_LIST) \
+	sort $(LOCAL_SRC_GREYLIST) $(LOCAL_SRC_VENDOR_LIST) $(PRIVATE_GREYLIST_INPUTS) \
 	     <(grep -E "\->("$(subst $(space),"|",$(REGEX_SERIALIZATION))")$$" \
 	               $(LOCAL_SRC_PRIVATE_API)) \
 	     <(comm -12 <(sort $(LOCAL_SRC_REMOVED_API)) <(sort $(LOCAL_SRC_PRIVATE_API))) \

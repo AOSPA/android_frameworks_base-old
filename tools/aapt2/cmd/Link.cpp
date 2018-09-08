@@ -137,14 +137,6 @@ class LinkContext : public IAaptContext {
     min_sdk_version_ = minSdk;
   }
 
-  bool IsAutoNamespace() override {
-    return auto_namespace_;
-  }
-
-  void SetAutoNamespace(bool val) {
-    auto_namespace_ = val;
-  }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(LinkContext);
 
@@ -156,7 +148,6 @@ class LinkContext : public IAaptContext {
   SymbolTable symbols_;
   bool verbose_ = false;
   int min_sdk_version_ = 0;
-  bool auto_namespace_ = false;
 };
 
 // A custom delegate that generates compatible pre-O IDs for use with feature splits.
@@ -479,6 +470,10 @@ ResourceFile::Type XmlFileTypeForOutputFormat(OutputFormat format) {
   return ResourceFile::Type::kUnknown;
 }
 
+static auto kDrawableVersions = std::map<std::string, ApiVersion>{
+    { "adaptive-icon" , SDK_O },
+};
+
 bool ResourceFileFlattener::Flatten(ResourceTable* table, IArchiveWriter* archive_writer) {
   bool error = false;
   std::map<std::pair<ConfigDescription, StringPiece>, FileOperation> config_sorted_files;
@@ -576,6 +571,20 @@ bool ResourceFileFlattener::Flatten(ResourceTable* table, IArchiveWriter* archiv
         FileOperation& file_op = map_entry.second;
 
         if (file_op.xml_to_flatten) {
+          // Check minimum sdk versions supported for drawables
+          auto drawable_entry = kDrawableVersions.find(file_op.xml_to_flatten->root->name);
+          if (drawable_entry != kDrawableVersions.end()) {
+            if (drawable_entry->second > context_->GetMinSdkVersion()
+                && drawable_entry->second > config.sdkVersion) {
+              context_->GetDiagnostics()->Error(DiagMessage(file_op.xml_to_flatten->file.source)
+                                                    << "<" << drawable_entry->first << "> elements "
+                                                    << "require a sdk version of at least "
+                                                    << (int16_t) drawable_entry->second);
+              error = true;
+              continue;
+            }
+          }
+
           std::vector<std::unique_ptr<xml::XmlResource>> versioned_docs =
               LinkAndVersionXmlFile(table, &file_op);
           if (versioned_docs.empty()) {
@@ -2040,15 +2049,6 @@ int LinkCommand::Action(const std::vector<std::string>& args) {
     options_.output_format = OutputFormat::kProto;
   } else if (proto_format_) {
     options_.output_format = OutputFormat::kProto;
-  }
-
-  if (options_.auto_namespace_static_lib) {
-    if (!static_lib_) {
-      context.GetDiagnostics()->Error(
-          DiagMessage() << "--auto-namespace-static-lib can only be used with --static-lib");
-      return 1;
-    }
-    context.SetAutoNamespace(true);
   }
 
   if (package_id_) {

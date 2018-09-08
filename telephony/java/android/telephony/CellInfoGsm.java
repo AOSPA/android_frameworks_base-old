@@ -16,6 +16,7 @@
 
 package android.telephony;
 
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.telephony.Rlog;
@@ -32,6 +33,7 @@ public final class CellInfoGsm extends CellInfo implements Parcelable {
     private CellSignalStrengthGsm mCellSignalStrengthGsm;
 
     /** @hide */
+    @UnsupportedAppUsage
     public CellInfoGsm() {
         super();
         mCellIdentityGsm = new CellIdentityGsm();
@@ -45,6 +47,7 @@ public final class CellInfoGsm extends CellInfo implements Parcelable {
         this.mCellSignalStrengthGsm = ci.mCellSignalStrengthGsm.copy();
     }
 
+    @Override
     public CellIdentityGsm getCellIdentity() {
         return mCellIdentityGsm;
     }
@@ -53,6 +56,7 @@ public final class CellInfoGsm extends CellInfo implements Parcelable {
         mCellIdentityGsm = cid;
     }
 
+    @Override
     public CellSignalStrengthGsm getCellSignalStrength() {
         return mCellSignalStrengthGsm;
     }

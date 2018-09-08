@@ -161,7 +161,7 @@ public class PermissionManagerService {
         mLock = externalLock;
         mPackageManagerInt = LocalServices.getService(PackageManagerInternal.class);
         mUserManagerInt = LocalServices.getService(UserManagerInternal.class);
-        mSettings = new PermissionSettings(context, mLock);
+        mSettings = new PermissionSettings(mLock);
 
         mHandlerThread = new ServiceThread(TAG,
                 Process.THREAD_PRIORITY_BACKGROUND, true /*allowIo*/);
@@ -845,10 +845,7 @@ public class PermissionManagerService {
                     // their permissions as always granted runtime ones since we need
                     // to keep the review required permission flag per user while an
                     // install permission's state is shared across all users.
-                    if (!appSupportsRuntimePermissions && !mSettings.mPermissionReviewRequired) {
-                        // For legacy apps dangerous permissions are install time ones.
-                        grant = GRANT_INSTALL;
-                    } else if (origPermissions.hasInstallPermission(bp.getName())) {
+                    if (origPermissions.hasInstallPermission(bp.getName())) {
                         // For legacy apps that became modern, install becomes runtime.
                         grant = GRANT_UPGRADE;
                     } else if (isLegacySystemApp) {
@@ -934,7 +931,7 @@ public class PermissionManagerService {
                                         updatedUserIds = ArrayUtils.appendInt(
                                                 updatedUserIds, userId);
                                     }
-                                    if (!mSettings.mPermissionReviewRequired || !revokeOnUpgrade) {
+                                    if (!revokeOnUpgrade) {
                                         if (permissionsState.grantRuntimePermission(bp, userId) ==
                                                 PermissionsState.PERMISSION_OPERATION_FAILURE) {
                                             // If we cannot put the permission as it was,
@@ -945,8 +942,7 @@ public class PermissionManagerService {
                                     }
 
                                     // If the app supports runtime permissions no need for a review.
-                                    if (mSettings.mPermissionReviewRequired
-                                            && appSupportsRuntimePermissions
+                                    if (appSupportsRuntimePermissions
                                             && (flags & PackageManager
                                                     .FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
                                         flags &= ~PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
@@ -954,8 +950,7 @@ public class PermissionManagerService {
                                         updatedUserIds = ArrayUtils.appendInt(
                                                 updatedUserIds, userId);
                                     }
-                                } else if (mSettings.mPermissionReviewRequired
-                                        && !appSupportsRuntimePermissions) {
+                                } else if (!appSupportsRuntimePermissions) {
                                     // For legacy apps that need a permission review, every new
                                     // runtime permission is granted but it is pending a review.
                                     // We also need to review only platform defined runtime
@@ -1102,6 +1097,10 @@ public class PermissionManagerService {
         } else if (pkg.isProduct()) {
             wlPermissions =
                     SystemConfig.getInstance().getProductPrivAppPermissions(pkg.packageName);
+        } else if (pkg.isProductServices()) {
+            wlPermissions =
+                    SystemConfig.getInstance().getProductServicesPrivAppPermissions(
+                            pkg.packageName);
         } else {
             wlPermissions = SystemConfig.getInstance().getPrivAppPermissions(pkg.packageName);
         }
@@ -1134,6 +1133,9 @@ public class PermissionManagerService {
                     } else if (pkg.isProduct()) {
                         deniedPermissions = SystemConfig.getInstance()
                                 .getProductPrivAppDenyPermissions(pkg.packageName);
+                    } else if (pkg.isProductServices()) {
+                        deniedPermissions = SystemConfig.getInstance()
+                                .getProductServicesPrivAppDenyPermissions(pkg.packageName);
                     } else {
                         deniedPermissions = SystemConfig.getInstance()
                                 .getPrivAppDenyPermissions(pkg.packageName);
@@ -1272,9 +1274,15 @@ public class PermissionManagerService {
                 // we still want to blindly grant it to old apps.
                 allowed = true;
             }
+            // TODO (moltmann): The installer now shares the platforms signature. Hence it does not
+            //                  need a separate flag anymore. Hence we need to check which
+            //                  permissions are needed by the permission controller
             if (!allowed && bp.isInstaller()
-                    && pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
-                            PackageManagerInternal.PACKAGE_INSTALLER, UserHandle.USER_SYSTEM))) {
+                    && (pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
+                            PackageManagerInternal.PACKAGE_INSTALLER, UserHandle.USER_SYSTEM))
+                    || pkg.packageName.equals(mPackageManagerInt.getKnownPackageName(
+                            PackageManagerInternal.PACKAGE_PERMISSION_CONTROLLER,
+                            UserHandle.USER_SYSTEM)))) {
                 // If this permission is to be granted to the system installer and
                 // this app is an installer, then it gets the permission.
                 allowed = true;
@@ -1329,10 +1337,6 @@ public class PermissionManagerService {
     }
 
     private boolean isPermissionsReviewRequired(PackageParser.Package pkg, int userId) {
-        if (!mSettings.mPermissionReviewRequired) {
-            return false;
-        }
-
         // Permission review applies only to apps not supporting the new permission model.
         if (pkg.applicationInfo.targetSdkVersion >= Build.VERSION_CODES.M) {
             return false;
@@ -1434,7 +1438,7 @@ public class PermissionManagerService {
                         grantRuntimePermission(permission, pkg.packageName, false, callingUid,
                                 userId, callback);
                     }
-                } else if (mSettings.mPermissionReviewRequired) {
+                } else {
                     // In permission review mode we clear the review flag when we
                     // are asked to install the app with all permissions granted.
                     if ((flags & PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED) != 0) {
@@ -1485,8 +1489,7 @@ public class PermissionManagerService {
         // their permissions as always granted runtime ones since we need
         // to keep the review required permission flag per user while an
         // install permission's state is shared across all users.
-        if (mSettings.mPermissionReviewRequired
-                && pkg.applicationInfo.targetSdkVersion < Build.VERSION_CODES.M
+        if (pkg.applicationInfo.targetSdkVersion < Build.VERSION_CODES.M
                 && bp.isRuntime()) {
             return;
         }
@@ -1607,8 +1610,7 @@ public class PermissionManagerService {
         // their permissions as always granted runtime ones since we need
         // to keep the review required permission flag per user while an
         // install permission's state is shared across all users.
-        if (mSettings.mPermissionReviewRequired
-                && pkg.applicationInfo.targetSdkVersion < Build.VERSION_CODES.M
+        if (pkg.applicationInfo.targetSdkVersion < Build.VERSION_CODES.M
                 && bp.isRuntime()) {
             return;
         }
@@ -2059,6 +2061,7 @@ public class PermissionManagerService {
         }
     }
 
+    @GuardedBy({"mSettings.mLock", "mLock"})
     private int calculateCurrentPermissionFootprintLocked(BasePermission tree) {
         int size = 0;
         for (BasePermission perm : mSettings.mPermissions.values()) {
@@ -2067,6 +2070,7 @@ public class PermissionManagerService {
         return size;
     }
 
+    @GuardedBy({"mSettings.mLock", "mLock"})
     private void enforcePermissionCapLocked(PermissionInfo info, BasePermission tree) {
         // We calculate the max size of permissions defined by this uid and throw
         // if that plus the size of 'info' would exceed our stated maximum.

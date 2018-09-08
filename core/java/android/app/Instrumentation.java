@@ -19,6 +19,7 @@ package android.app;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UnsupportedAppUsage;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
@@ -1375,6 +1376,7 @@ public class Instrumentation {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public void callActivityOnNewIntent(Activity activity, ReferrerIntent intent) {
         final String oldReferrer = activity.mReferrer;
         try {
@@ -1639,6 +1641,7 @@ public class Instrumentation {
      *
      * {@hide}
      */
+    @UnsupportedAppUsage
     public ActivityResult execStartActivity(
             Context who, IBinder contextThread, IBinder token, Activity target,
             Intent intent, int requestCode, Bundle options) {
@@ -1693,6 +1696,7 @@ public class Instrumentation {
      *
      * {@hide}
      */
+    @UnsupportedAppUsage
     public void execStartActivities(Context who, IBinder contextThread,
             IBinder token, Activity target, Intent[] intents, Bundle options) {
         execStartActivitiesAsUser(who, contextThread, token, target, intents, options,
@@ -1711,6 +1715,7 @@ public class Instrumentation {
      *
      * {@hide}
      */
+    @UnsupportedAppUsage
     public int execStartActivitiesAsUser(Context who, IBinder contextThread,
             IBinder token, Activity target, Intent[] intents, Bundle options,
             int userId) {
@@ -1783,6 +1788,7 @@ public class Instrumentation {
      * 
      * {@hide}
      */
+    @UnsupportedAppUsage
     public ActivityResult execStartActivity(
         Context who, IBinder contextThread, IBinder token, String target,
         Intent intent, int requestCode, Bundle options) {
@@ -1851,6 +1857,7 @@ public class Instrumentation {
      *
      * {@hide}
      */
+    @UnsupportedAppUsage
     public ActivityResult execStartActivity(
             Context who, IBinder contextThread, IBinder token, String resultWho,
             Intent intent, int requestCode, Bundle options, UserHandle user) {
@@ -1897,6 +1904,7 @@ public class Instrumentation {
      * Special version!
      * @hide
      */
+    @UnsupportedAppUsage
     public ActivityResult execStartActivityAsCaller(
             Context who, IBinder contextThread, IBinder token, Activity target,
             Intent intent, int requestCode, Bundle options, boolean ignoreTargetSecurity,
@@ -1944,6 +1952,7 @@ public class Instrumentation {
      * Special version!
      * @hide
      */
+    @UnsupportedAppUsage
     public void execStartActivityFromAppTask(
             Context who, IBinder contextThread, IAppTask appTask,
             Intent intent, Bundle options) {
@@ -2004,6 +2013,7 @@ public class Instrumentation {
     }
 
     /** @hide */
+    @UnsupportedAppUsage
     public static void checkStartActivityResult(int res, Object intent) {
         if (!ActivityManager.isStartResultFatalError(res)) {
             return;

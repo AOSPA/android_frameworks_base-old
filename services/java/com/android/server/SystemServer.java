@@ -28,6 +28,8 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources.Theme;
 import android.database.sqlite.SQLiteCompatibilityWalFlags;
+import android.database.sqlite.SQLiteGlobal;
+import android.hardware.display.DisplayManagerInternal;
 import android.os.BaseBundle;
 import android.os.Binder;
 import android.os.Build;
@@ -121,6 +123,7 @@ import com.android.server.trust.TrustManagerService;
 import com.android.server.tv.TvInputManagerService;
 import com.android.server.tv.TvRemoteService;
 import com.android.server.twilight.TwilightService;
+import com.android.server.uri.UriGrantsManagerService;
 import com.android.server.usage.UsageStatsService;
 import com.android.server.vr.VrManagerService;
 import com.android.server.webkit.WebViewUpdateService;
@@ -241,6 +244,8 @@ public final class SystemServer {
             "com.android.server.timedetector.TimeDetectorService$Lifecycle";
     private static final String TIME_ZONE_DETECTOR_SERVICE_CLASS =
             "com.android.server.timezonedetector.TimeZoneDetectorService$Lifecycle";
+    private static final String ACCESSIBILITY_MANAGER_SERVICE_CLASS =
+            "com.android.server.accessibility.AccessibilityManagerService$Lifecycle";
 
     private static final String PERSISTENT_DATA_BLOCK_PROP = "ro.frp.pst";
 
@@ -358,6 +363,10 @@ public final class SystemServer {
             Binder.setWarnOnBlocking(true);
             // The system server should always load safe labels
             PackageItemInfo.setForceSafeLabels(true);
+
+            // Default to FULL within the system server.
+            SQLiteGlobal.sDefaultSyncMode = SQLiteGlobal.SYNC_MODE_FULL;
+
             // Deactivate SQLiteCompatibilityWalFlags until settings provider is initialized
             SQLiteCompatibilityWalFlags.init(null);
 
@@ -566,6 +575,11 @@ public final class SystemServer {
         mSystemServiceManager.startService(DeviceIdentifiersPolicyService.class);
         traceEnd();
 
+        // Uri Grants Manager.
+        traceBeginAndSlog("UriGrantsManagerService");
+        mSystemServiceManager.startService(UriGrantsManagerService.Lifecycle.class);
+        traceEnd();
+
         // Activity manager runs the show.
         traceBeginAndSlog("StartActivityManager");
         // TODO: Might need to move after migration to WM.
@@ -694,8 +708,16 @@ public final class SystemServer {
 
         // Manages Overlay packages
         traceBeginAndSlog("StartOverlayManagerService");
-        mSystemServiceManager.startService(new OverlayManagerService(mSystemContext, installer));
+        OverlayManagerService overlayManagerService = new OverlayManagerService(
+                mSystemContext, installer);
+        mSystemServiceManager.startService(overlayManagerService);
         traceEnd();
+
+        if (SystemProperties.getInt("persist.sys.displayinset.top", 0) > 0) {
+            // DisplayManager needs the overlay immediately.
+            overlayManagerService.updateSystemUiContext();
+            LocalServices.getService(DisplayManagerInternal.class).onOverlayChanged();
+        }
 
         // The sensor service needs access to package manager service, app ops
         // service, and permissions service, therefore we start it after them.
@@ -917,7 +939,7 @@ public final class SystemServer {
             }
 
             traceBeginAndSlog("StartInputManager");
-            inputManager.setWindowManagerCallbacks(wm.getInputMonitor());
+            inputManager.setWindowManagerCallbacks(wm.getInputManagerCallback());
             inputManager.start();
             traceEnd();
 
@@ -973,8 +995,7 @@ public final class SystemServer {
 
             traceBeginAndSlog("StartAccessibilityManagerService");
             try {
-                ServiceManager.addService(Context.ACCESSIBILITY_SERVICE,
-                        new AccessibilityManagerService(context));
+                mSystemServiceManager.startService(ACCESSIBILITY_MANAGER_SERVICE_CLASS);
             } catch (Throwable e) {
                 reportWtf("starting Accessibility Manager", e);
             }
@@ -1594,13 +1615,15 @@ public final class SystemServer {
             }
             traceEnd();
 
-            traceBeginAndSlog("StartPruneInstantAppsJobService");
-            try {
-                PruneInstantAppsJobService.schedule(context);
-            } catch (Throwable e) {
-                reportWtf("StartPruneInstantAppsJobService", e);
+            if (!isWatch) {
+                traceBeginAndSlog("StartPruneInstantAppsJobService");
+                try {
+                    PruneInstantAppsJobService.schedule(context);
+                } catch (Throwable e) {
+                    reportWtf("StartPruneInstantAppsJobService", e);
+                }
+                traceEnd();
             }
-            traceEnd();
 
             // LauncherAppsService uses ShortcutService.
             traceBeginAndSlog("StartShortcutServiceLifecycle");

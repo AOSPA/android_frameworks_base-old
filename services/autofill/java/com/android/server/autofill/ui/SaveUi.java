@@ -35,6 +35,7 @@ import android.os.IBinder;
 import android.os.RemoteException;
 import android.service.autofill.BatchUpdates;
 import android.service.autofill.CustomDescription;
+import android.service.autofill.InternalOnClickAction;
 import android.service.autofill.InternalTransformation;
 import android.service.autofill.InternalValidator;
 import android.service.autofill.SaveInfo;
@@ -43,6 +44,7 @@ import android.text.Html;
 import android.util.ArraySet;
 import android.util.Pair;
 import android.util.Slog;
+import android.util.SparseArray;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -81,12 +83,20 @@ final class SaveUi {
         void onDestroy();
     }
 
-    private class OneTimeListener implements OnSaveListener {
+    /**
+     * Wrapper that guarantees that only one callback action (either {@link #onSave()} or
+     * {@link #onCancel(IntentSender)}) is triggered by ignoring further calls after
+     * it's destroyed.
+     *
+     * <p>It's needed becase {@link #onCancel(IntentSender)} is always called when the Save UI
+     * dialog is dismissed.
+     */
+    private class OneActionThenDestroyListener implements OnSaveListener {
 
         private final OnSaveListener mRealListener;
         private boolean mDone;
 
-        OneTimeListener(OnSaveListener realListener) {
+        OneActionThenDestroyListener(OnSaveListener realListener) {
             mRealListener = realListener;
         }
 
@@ -96,7 +106,6 @@ final class SaveUi {
             if (mDone) {
                 return;
             }
-            mDone = true;
             mRealListener.onSave();
         }
 
@@ -106,7 +115,6 @@ final class SaveUi {
             if (mDone) {
                 return;
             }
-            mDone = true;
             mRealListener.onCancel(listener);
         }
 
@@ -126,7 +134,7 @@ final class SaveUi {
 
     private final @NonNull Dialog mDialog;
 
-    private final @NonNull OneTimeListener mListener;
+    private final @NonNull OneActionThenDestroyListener mListener;
 
     private final @NonNull OverlayControl mOverlayControl;
 
@@ -144,9 +152,9 @@ final class SaveUi {
            @Nullable String servicePackageName, @NonNull ComponentName componentName,
            @NonNull SaveInfo info, @NonNull ValueFinder valueFinder,
            @NonNull OverlayControl overlayControl, @NonNull OnSaveListener listener,
-           boolean compatMode) {
+           boolean isUpdate, boolean compatMode) {
         mPendingUi= pendingUi;
-        mListener = new OneTimeListener(listener);
+        mListener = new OneActionThenDestroyListener(listener);
         mOverlayControl = overlayControl;
         mServicePackageName = servicePackageName;
         mComponentName = componentName;
@@ -179,21 +187,29 @@ final class SaveUi {
 
         switch (types.size()) {
             case 1:
-                mTitle = Html.fromHtml(context.getString(R.string.autofill_save_title_with_type,
+                mTitle = Html.fromHtml(context.getString(
+                        isUpdate ? R.string.autofill_update_title_with_type
+                                : R.string.autofill_save_title_with_type,
                         types.valueAt(0), serviceLabel), 0);
                 break;
             case 2:
-                mTitle = Html.fromHtml(context.getString(R.string.autofill_save_title_with_2types,
+                mTitle = Html.fromHtml(context.getString(
+                        isUpdate ? R.string.autofill_update_title_with_2types
+                                : R.string.autofill_save_title_with_2types,
                         types.valueAt(0), types.valueAt(1), serviceLabel), 0);
                 break;
             case 3:
-                mTitle = Html.fromHtml(context.getString(R.string.autofill_save_title_with_3types,
+                mTitle = Html.fromHtml(context.getString(
+                        isUpdate ? R.string.autofill_update_title_with_3types
+                                : R.string.autofill_save_title_with_3types,
                         types.valueAt(0), types.valueAt(1), types.valueAt(2), serviceLabel), 0);
                 break;
             default:
                 // Use generic if more than 3 or invalid type (size 0).
                 mTitle = Html.fromHtml(
-                        context.getString(R.string.autofill_save_title, serviceLabel), 0);
+                        context.getString(isUpdate ? R.string.autofill_update_title
+                                : R.string.autofill_save_title, serviceLabel),
+                        0);
         }
         titleView.setText(mTitle);
 
@@ -228,7 +244,10 @@ final class SaveUi {
         }
         noButton.setOnClickListener((v) -> mListener.onCancel(info.getNegativeActionListener()));
 
-        final View yesButton = view.findViewById(R.id.autofill_save_yes);
+        final TextView yesButton = view.findViewById(R.id.autofill_save_yes);
+        if (isUpdate) {
+            yesButton.setText(R.string.autofill_update_yes);
+        }
         yesButton.setOnClickListener((v) -> mListener.onSave());
 
         mDialog = new Dialog(context, THEME_ID);
@@ -321,7 +340,7 @@ final class SaveUi {
             template.setApplyTheme(THEME_ID);
             final View customSubtitleView = template.apply(context, null, handler);
 
-            // And apply batch updates (if any).
+            // Apply batch updates (if any).
             final ArrayList<Pair<InternalValidator, BatchUpdates>> updates =
                     customDescription.getUpdates();
             if (updates != null) {
@@ -356,6 +375,35 @@ final class SaveUi {
                             return false;
                         }
                         template.reapply(context, customSubtitleView);
+                    }
+                }
+            }
+
+            // Apply click actions (if any).
+            final SparseArray<InternalOnClickAction> actions = customDescription.getActions();
+            if (actions != null) {
+                final int size = actions.size();
+                if (sDebug) Slog.d(TAG, "custom description has " + size + " actions");
+                if (!(customSubtitleView instanceof ViewGroup)) {
+                    Slog.w(TAG, "cannot apply actions because custom description root is not a "
+                            + "ViewGroup: " + customSubtitleView);
+                } else {
+                    final ViewGroup rootView = (ViewGroup) customSubtitleView;
+                    for (int i = 0; i < size; i++) {
+                        final int id = actions.keyAt(i);
+                        final InternalOnClickAction action = actions.valueAt(i);
+                        final View child = rootView.findViewById(id);
+                        if (child == null) {
+                            Slog.w(TAG, "Ignoring action " + action + " for view " + id
+                                    + " because it's not on " + rootView);
+                            continue;
+                        }
+                        child.setOnClickListener((v) -> {
+                            if (sVerbose) {
+                                Slog.v(TAG, "Applying " + action + " after " + v + " was clicked");
+                            }
+                            action.onClick(rootView);
+                        });
                     }
                 }
             }

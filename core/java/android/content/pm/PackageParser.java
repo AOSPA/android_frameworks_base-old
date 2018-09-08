@@ -46,6 +46,7 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityTaskManager;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -244,7 +245,9 @@ public class PackageParser {
 
     /** @hide */
     public static class NewPermissionInfo {
+        @UnsupportedAppUsage
         public final String name;
+        @UnsupportedAppUsage
         public final int sdkVersion;
         public final int fileVersion;
 
@@ -277,6 +280,7 @@ public class PackageParser {
      * granted during a platform update.
      * @hide
      */
+    @UnsupportedAppUsage
     public static final PackageParser.NewPermissionInfo NEW_PERMISSIONS[] =
         new PackageParser.NewPermissionInfo[] {
             new PackageParser.NewPermissionInfo(android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
@@ -322,6 +326,7 @@ public class PackageParser {
     private String[] mSeparateProcesses;
     private boolean mOnlyCoreApps;
     private DisplayMetrics mMetrics;
+    @UnsupportedAppUsage
     private Callback mCallback;
     private File mCacheDir;
 
@@ -389,9 +394,11 @@ public class PackageParser {
      * Lightweight parsed details about a single package.
      */
     public static class PackageLite {
+        @UnsupportedAppUsage
         public final String packageName;
         public final int versionCode;
         public final int versionCodeMajor;
+        @UnsupportedAppUsage
         public final int installLocation;
         public final VerifierInfo[] verifiers;
 
@@ -547,11 +554,13 @@ public class PackageParser {
 
     private static final String TAG = "PackageParser";
 
+    @UnsupportedAppUsage
     public PackageParser() {
         mMetrics = new DisplayMetrics();
         mMetrics.setToDefaults();
     }
 
+    @UnsupportedAppUsage
     public void setSeparateProcesses(String[] procs) {
         mSeparateProcesses = procs;
     }
@@ -631,6 +640,7 @@ public class PackageParser {
      * @param p the parsed package.
      * @param flags indicating which optional information is included.
      */
+    @UnsupportedAppUsage
     public static PackageInfo generatePackageInfo(PackageParser.Package p,
             int gids[], int flags, long firstInstallTime, long lastUpdateTime,
             Set<String> grantedPermissions, PackageUserState state) {
@@ -665,6 +675,7 @@ public class PackageParser {
         return checkUseInstalledOrHidden(0, state, null);
     }
 
+    @UnsupportedAppUsage
     public static PackageInfo generatePackageInfo(PackageParser.Package p,
             int gids[], int flags, long firstInstallTime, long lastUpdateTime,
             Set<String> grantedPermissions, PackageUserState state, int userId) {
@@ -891,6 +902,7 @@ public class PackageParser {
      *
      * @see PackageParser#parsePackage(File, int)
      */
+    @UnsupportedAppUsage
     public static PackageLite parsePackageLite(File packageFile, int flags)
             throws PackageParserException {
         if (packageFile.isDirectory()) {
@@ -1015,6 +1027,7 @@ public class PackageParser {
      *
      * @see #parsePackageLite(File, int)
      */
+    @UnsupportedAppUsage
     public Package parsePackage(File packageFile, int flags, boolean useCaches)
             throws PackageParserException {
         Package parsed = useCaches ? getCachedResult(packageFile, flags) : null;
@@ -1045,6 +1058,7 @@ public class PackageParser {
     /**
      * Equivalent to {@link #parsePackage(File, int, boolean)} with {@code useCaches == false}.
      */
+    @UnsupportedAppUsage
     public Package parsePackage(File packageFile, int flags) throws PackageParserException {
         return parsePackage(packageFile, flags, false /* useCaches */);
     }
@@ -1292,6 +1306,7 @@ public class PackageParser {
      *             be marked private.
      */
     @Deprecated
+    @UnsupportedAppUsage
     public Package parseMonolithicPackage(File apkFile, int flags) throws PackageParserException {
         final PackageLite lite = parseMonolithicPackageLite(apkFile, flags);
         if (mOnlyCoreApps) {
@@ -1488,6 +1503,7 @@ public class PackageParser {
      * populating {@link Package#mSigningDetails}. Also asserts that all APK
      * contents are signed correctly and consistently.
      */
+    @UnsupportedAppUsage
     public static void collectCertificates(Package pkg, boolean skipVerify)
             throws PackageParserException {
         collectCertificatesInternal(pkg, skipVerify);
@@ -1516,6 +1532,7 @@ public class PackageParser {
         }
     }
 
+    @UnsupportedAppUsage
     private static void collectCertificates(Package pkg, File apkFile, boolean skipVerify)
             throws PackageParserException {
         final String apkPath = apkFile.getAbsolutePath();
@@ -1885,6 +1902,7 @@ public class PackageParser {
      * @throws XmlPullParserException
      * @throws IOException
      */
+    @UnsupportedAppUsage
     private Package parseBaseApk(String apkPath, Resources res, XmlResourceParser parser, int flags,
             String[] outError) throws XmlPullParserException, IOException {
         final String splitName;
@@ -1982,7 +2000,7 @@ public class PackageParser {
         String str = sa.getNonConfigurationString(
                 com.android.internal.R.styleable.AndroidManifest_sharedUserId, 0);
         if (str != null && str.length() > 0) {
-            String nameError = validateName(str, true, false);
+            String nameError = validateName(str, true, true);
             if (nameError != null && !"android".equals(pkg.packageName)) {
                 outError[0] = "<manifest> specifies bad sharedUserId name \""
                     + str + "\": " + nameError;
@@ -2507,6 +2525,49 @@ public class PackageParser {
         if (pkg.applicationInfo.usesCompatibilityMode()) {
             adjustPackageToBeUnresizeableAndUnpipable(pkg);
         }
+
+        // If the storage model feature flag is disabled, we need to fiddle
+        // around with permission definitions to return us to pre-Q behavior.
+        // STOPSHIP(b/112545973): remove once feature enabled by default
+        if (!SystemProperties.getBoolean(StorageManager.PROP_ISOLATED_STORAGE, false)) {
+            if ("android".equals(pkg.packageName)) {
+                final ArraySet<String> newGroups = new ArraySet<>();
+                newGroups.add(android.Manifest.permission_group.MEDIA_AURAL);
+                newGroups.add(android.Manifest.permission_group.MEDIA_VISUAL);
+
+                for (int i = pkg.permissionGroups.size() - 1; i >= 0; i--) {
+                    final PermissionGroup pg = pkg.permissionGroups.get(i);
+                    if (newGroups.contains(pg.info.name)) {
+                        pkg.permissionGroups.remove(i);
+                    }
+                }
+
+                final ArraySet<String> newPermissions = new ArraySet<>();
+                newPermissions.add(android.Manifest.permission.READ_MEDIA_AUDIO);
+                newPermissions.add(android.Manifest.permission.WRITE_MEDIA_AUDIO);
+                newPermissions.add(android.Manifest.permission.READ_MEDIA_VIDEO);
+                newPermissions.add(android.Manifest.permission.WRITE_MEDIA_VIDEO);
+                newPermissions.add(android.Manifest.permission.READ_MEDIA_IMAGES);
+                newPermissions.add(android.Manifest.permission.WRITE_MEDIA_IMAGES);
+                newPermissions.add(android.Manifest.permission.ACCESS_MEDIA_LOCATION);
+                newPermissions.add(android.Manifest.permission.WRITE_OBB);
+
+                final ArraySet<String> dangerousPermissions = new ArraySet<>();
+                dangerousPermissions.add(android.Manifest.permission.READ_EXTERNAL_STORAGE);
+                dangerousPermissions.add(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
+
+                for (int i = pkg.permissions.size() - 1; i >= 0; i--) {
+                    final Permission p = pkg.permissions.get(i);
+                    if (newPermissions.contains(p.info.name)) {
+                        pkg.permissions.remove(i);
+                    } else if (dangerousPermissions.contains(p.info.name)) {
+                        p.info.protectionLevel &= ~PermissionInfo.PROTECTION_MASK_BASE;
+                        p.info.protectionLevel |= PermissionInfo.PROTECTION_DANGEROUS;
+                    }
+                }
+            }
+        }
+
         return pkg;
     }
 
@@ -3344,6 +3405,7 @@ public class PackageParser {
      * When adding new features, carefully consider if they should also be
      * supported by split APKs.
      */
+    @UnsupportedAppUsage
     private boolean parseBaseApplication(Package owner, Resources res,
             XmlResourceParser parser, int flags, String[] outError)
         throws XmlPullParserException, IOException {
@@ -5701,6 +5763,7 @@ public class PackageParser {
         }
 
         @Nullable
+        @UnsupportedAppUsage
         public final Signature[] signatures;
         @SignatureSchemeVersion
         public final int signatureSchemeVersion;
@@ -6166,28 +6229,33 @@ public class PackageParser {
             private Signature[] mPastSigningCertificates;
             private int[] mPastSigningCertificatesFlags;
 
+            @UnsupportedAppUsage
             public Builder() {
             }
 
             /** get signing certificates used to sign the current APK */
+            @UnsupportedAppUsage
             public Builder setSignatures(Signature[] signatures) {
                 mSignatures = signatures;
                 return this;
             }
 
             /** set the signature scheme version used to sign the APK */
+            @UnsupportedAppUsage
             public Builder setSignatureSchemeVersion(int signatureSchemeVersion) {
                 mSignatureSchemeVersion = signatureSchemeVersion;
                 return this;
             }
 
             /** set the signing certificates by which the APK proved it can be authenticated */
+            @UnsupportedAppUsage
             public Builder setPastSigningCertificates(Signature[] pastSigningCertificates) {
                 mPastSigningCertificates = pastSigningCertificates;
                 return this;
             }
 
             /** set the flags for the {@code pastSigningCertificates} */
+            @UnsupportedAppUsage
             public Builder setPastSigningCertificatesFlags(int[] pastSigningCertificatesFlags) {
                 mPastSigningCertificatesFlags = pastSigningCertificatesFlags;
                 return this;
@@ -6216,6 +6284,7 @@ public class PackageParser {
                 }
             }
             /** build a {@code SigningDetails} object */
+            @UnsupportedAppUsage
             public SigningDetails build()
                     throws CertificateException {
                 checkInvariants();
@@ -6231,6 +6300,7 @@ public class PackageParser {
      */
     public final static class Package implements Parcelable {
 
+        @UnsupportedAppUsage
         public String packageName;
 
         // The package name declared in the manifest as the package can be
@@ -6274,18 +6344,28 @@ public class PackageParser {
         public boolean baseHardwareAccelerated;
 
         // For now we only support one application per package.
+        @UnsupportedAppUsage
         public ApplicationInfo applicationInfo = new ApplicationInfo();
 
+        @UnsupportedAppUsage
         public final ArrayList<Permission> permissions = new ArrayList<Permission>(0);
+        @UnsupportedAppUsage
         public final ArrayList<PermissionGroup> permissionGroups = new ArrayList<PermissionGroup>(0);
+        @UnsupportedAppUsage
         public final ArrayList<Activity> activities = new ArrayList<Activity>(0);
+        @UnsupportedAppUsage
         public final ArrayList<Activity> receivers = new ArrayList<Activity>(0);
+        @UnsupportedAppUsage
         public final ArrayList<Provider> providers = new ArrayList<Provider>(0);
+        @UnsupportedAppUsage
         public final ArrayList<Service> services = new ArrayList<Service>(0);
+        @UnsupportedAppUsage
         public final ArrayList<Instrumentation> instrumentation = new ArrayList<Instrumentation>(0);
 
+        @UnsupportedAppUsage
         public final ArrayList<String> requestedPermissions = new ArrayList<String>();
 
+        @UnsupportedAppUsage
         public ArrayList<String> protectedBroadcasts;
 
         public Package parentPackage;
@@ -6294,11 +6374,14 @@ public class PackageParser {
         public String staticSharedLibName = null;
         public long staticSharedLibVersion = 0;
         public ArrayList<String> libraryNames = null;
+        @UnsupportedAppUsage
         public ArrayList<String> usesLibraries = null;
         public ArrayList<String> usesStaticLibraries = null;
         public long[] usesStaticLibrariesVersions = null;
         public String[][] usesStaticLibrariesCertDigests = null;
+        @UnsupportedAppUsage
         public ArrayList<String> usesOptionalLibraries = null;
+        @UnsupportedAppUsage
         public String[] usesLibraryFiles = null;
 
         public ArrayList<ActivityIntentInfo> preferredActivityFilters = null;
@@ -6308,9 +6391,11 @@ public class PackageParser {
         public ArrayList<String> mAdoptPermissions = null;
 
         // We store the application meta-data independently to avoid multiple unwanted references
+        @UnsupportedAppUsage
         public Bundle mAppMetaData = null;
 
         // The version code declared for this package.
+        @UnsupportedAppUsage
         public int mVersionCode;
 
         // The major version code declared for this package.
@@ -6322,19 +6407,24 @@ public class PackageParser {
         }
 
         // The version name declared for this package.
+        @UnsupportedAppUsage
         public String mVersionName;
 
         // The shared user id that this package wants to use.
+        @UnsupportedAppUsage
         public String mSharedUserId;
 
         // The shared user label that this package wants to use.
+        @UnsupportedAppUsage
         public int mSharedUserLabel;
 
         // Signatures that were read from the package.
+        @UnsupportedAppUsage
         @NonNull public SigningDetails mSigningDetails = SigningDetails.UNKNOWN;
 
         // For use by package manager service for quick lookup of
         // preferred up order.
+        @UnsupportedAppUsage
         public int mPreferredOrder = 0;
 
         // For use by package manager to keep track of when a package was last used.
@@ -6348,17 +6438,21 @@ public class PackageParser {
         // public boolean mSetStopped = false;
 
         // Additional data supplied by callers.
+        @UnsupportedAppUsage
         public Object mExtras;
 
         // Applications hardware preferences
+        @UnsupportedAppUsage
         public ArrayList<ConfigurationInfo> configPreferences = null;
 
         // Applications requested features
+        @UnsupportedAppUsage
         public ArrayList<FeatureInfo> reqFeatures = null;
 
         // Applications requested feature groups
         public ArrayList<FeatureGroupInfo> featureGroups = null;
 
+        @UnsupportedAppUsage
         public int installLocation;
 
         public boolean coreApp;
@@ -6383,7 +6477,9 @@ public class PackageParser {
         /**
          * Data used to feed the KeySetManagerService
          */
+        @UnsupportedAppUsage
         public ArraySet<String> mUpgradeKeySets;
+        @UnsupportedAppUsage
         public ArrayMap<String, ArraySet<PublicKey>> mKeySetMapping;
 
         /**
@@ -6409,6 +6505,7 @@ public class PackageParser {
         /** Whether or not the package is a stub and must be replaced by the full version. */
         public boolean isStub;
 
+        @UnsupportedAppUsage
         public Package(String packageName) {
             this.packageName = packageName;
             this.manifestPackageName = packageName;
@@ -6606,6 +6703,7 @@ public class PackageParser {
             return paths;
         }
 
+        @UnsupportedAppUsage
         public void setPackageName(String newName) {
             packageName = newName;
             applicationInfo.packageName = newName;
@@ -6684,6 +6782,11 @@ public class PackageParser {
         /** @hide */
         public boolean isProduct() {
             return applicationInfo.isProduct();
+        }
+
+        /** @hide */
+        public boolean isProductServices() {
+            return applicationInfo.isProductServices();
         }
 
         /** @hide */
@@ -7094,10 +7197,14 @@ public class PackageParser {
     }
 
     public static abstract class Component<II extends IntentInfo> {
+        @UnsupportedAppUsage
         public final ArrayList<II> intents;
+        @UnsupportedAppUsage
         public final String className;
 
+        @UnsupportedAppUsage
         public Bundle metaData;
+        @UnsupportedAppUsage
         public Package owner;
         /** The order of this component in relation to its peers */
         public int order;
@@ -7160,6 +7267,7 @@ public class PackageParser {
             componentShortName = clone.componentShortName;
         }
 
+        @UnsupportedAppUsage
         public ComponentName getComponentName() {
             if (componentName != null) {
                 return componentName;
@@ -7263,8 +7371,11 @@ public class PackageParser {
     }
 
     public final static class Permission extends Component<IntentInfo> implements Parcelable {
+        @UnsupportedAppUsage
         public final PermissionInfo info;
+        @UnsupportedAppUsage
         public boolean tree;
+        @UnsupportedAppUsage
         public PermissionGroup group;
 
         public Permission(Package _owner) {
@@ -7272,6 +7383,7 @@ public class PackageParser {
             info = new PermissionInfo();
         }
 
+        @UnsupportedAppUsage
         public Permission(Package _owner, PermissionInfo _info) {
             super(_owner);
             info = _info;
@@ -7330,6 +7442,7 @@ public class PackageParser {
     }
 
     public final static class PermissionGroup extends Component<IntentInfo> implements Parcelable {
+        @UnsupportedAppUsage
         public final PermissionGroupInfo info;
 
         public PermissionGroup(Package _owner) {
@@ -7420,6 +7533,7 @@ public class PackageParser {
         return false;
     }
 
+    @UnsupportedAppUsage
     public static ApplicationInfo generateApplicationInfo(Package p, int flags,
             PackageUserState state) {
         return generateApplicationInfo(p, flags, state, UserHandle.getCallingUserId());
@@ -7475,6 +7589,7 @@ public class PackageParser {
         ai.resourceDirs = state.overlayPaths;
     }
 
+    @UnsupportedAppUsage
     public static ApplicationInfo generateApplicationInfo(Package p, int flags,
             PackageUserState state, int userId) {
         if (p == null) return null;
@@ -7532,6 +7647,7 @@ public class PackageParser {
         return ai;
     }
 
+    @UnsupportedAppUsage
     public static final PermissionInfo generatePermissionInfo(
             Permission p, int flags) {
         if (p == null) return null;
@@ -7543,6 +7659,7 @@ public class PackageParser {
         return pi;
     }
 
+    @UnsupportedAppUsage
     public static final PermissionGroupInfo generatePermissionGroupInfo(
             PermissionGroup pg, int flags) {
         if (pg == null) return null;
@@ -7555,6 +7672,7 @@ public class PackageParser {
     }
 
     public final static class Activity extends Component<ActivityIntentInfo> implements Parcelable {
+        @UnsupportedAppUsage
         public final ActivityInfo info;
         private boolean mHasMaxAspectRatio;
 
@@ -7638,6 +7756,7 @@ public class PackageParser {
         };
     }
 
+    @UnsupportedAppUsage
     public static final ActivityInfo generateActivityInfo(Activity a, int flags,
             PackageUserState state, int userId) {
         if (a == null) return null;
@@ -7669,6 +7788,7 @@ public class PackageParser {
     }
 
     public final static class Service extends Component<ServiceIntentInfo> implements Parcelable {
+        @UnsupportedAppUsage
         public final ServiceInfo info;
 
         public Service(final ParseComponentArgs args, final ServiceInfo _info) {
@@ -7728,6 +7848,7 @@ public class PackageParser {
         };
     }
 
+    @UnsupportedAppUsage
     public static final ServiceInfo generateServiceInfo(Service s, int flags,
             PackageUserState state, int userId) {
         if (s == null) return null;
@@ -7746,7 +7867,9 @@ public class PackageParser {
     }
 
     public final static class Provider extends Component<ProviderIntentInfo> implements Parcelable {
+        @UnsupportedAppUsage
         public final ProviderInfo info;
+        @UnsupportedAppUsage
         public boolean syncable;
 
         public Provider(final ParseComponentArgs args, final ProviderInfo _info) {
@@ -7756,6 +7879,7 @@ public class PackageParser {
             syncable = false;
         }
 
+        @UnsupportedAppUsage
         public Provider(Provider existingProvider) {
             super(existingProvider);
             this.info = existingProvider.info;
@@ -7822,6 +7946,7 @@ public class PackageParser {
         };
     }
 
+    @UnsupportedAppUsage
     public static final ProviderInfo generateProviderInfo(Provider p, int flags,
             PackageUserState state, int userId) {
         if (p == null) return null;
@@ -7846,6 +7971,7 @@ public class PackageParser {
 
     public final static class Instrumentation extends Component<IntentInfo> implements
             Parcelable {
+        @UnsupportedAppUsage
         public final InstrumentationInfo info;
 
         public Instrumentation(final ParsePackageItemArgs args, final InstrumentationInfo _info) {
@@ -7903,6 +8029,7 @@ public class PackageParser {
         };
     }
 
+    @UnsupportedAppUsage
     public static final InstrumentationInfo generateInstrumentationInfo(
             Instrumentation i, int flags) {
         if (i == null) return null;
@@ -7915,14 +8042,21 @@ public class PackageParser {
     }
 
     public static abstract class IntentInfo extends IntentFilter {
+        @UnsupportedAppUsage
         public boolean hasDefault;
+        @UnsupportedAppUsage
         public int labelRes;
+        @UnsupportedAppUsage
         public CharSequence nonLocalizedLabel;
+        @UnsupportedAppUsage
         public int icon;
+        @UnsupportedAppUsage
         public int logo;
+        @UnsupportedAppUsage
         public int banner;
         public int preferred;
 
+        @UnsupportedAppUsage
         protected IntentInfo() {
         }
 
@@ -7951,6 +8085,7 @@ public class PackageParser {
     }
 
     public final static class ActivityIntentInfo extends IntentInfo {
+        @UnsupportedAppUsage
         public Activity activity;
 
         public ActivityIntentInfo(Activity _activity) {
@@ -7973,6 +8108,7 @@ public class PackageParser {
     }
 
     public final static class ServiceIntentInfo extends IntentInfo {
+        @UnsupportedAppUsage
         public Service service;
 
         public ServiceIntentInfo(Service _service) {
@@ -7995,6 +8131,7 @@ public class PackageParser {
     }
 
     public static final class ProviderIntentInfo extends IntentInfo {
+        @UnsupportedAppUsage
         public Provider provider;
 
         public ProviderIntentInfo(Provider provider) {
@@ -8019,6 +8156,7 @@ public class PackageParser {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public static void setCompatibilityModeEnabled(boolean compatibilityModeEnabled) {
         sCompatibilityModeEnabled = compatibilityModeEnabled;
     }

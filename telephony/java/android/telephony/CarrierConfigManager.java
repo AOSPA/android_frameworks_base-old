@@ -22,6 +22,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
@@ -230,6 +231,13 @@ public class CarrierConfigManager {
      */
     public static final String
             KEY_ALLOW_EMERGENCY_NUMBERS_IN_CALL_LOG_BOOL = "allow_emergency_numbers_in_call_log_bool";
+
+    /**
+     * A string array containing numbers that shouldn't be included in the call log.
+     * @hide
+     */
+    public static final String KEY_UNLOGGABLE_NUMBERS_STRING_ARRAY =
+            "unloggable_numbers_string_array";
 
     /** If true, removes the Voice Privacy option from Call Settings */
     public static final String KEY_VOICE_PRIVACY_DISABLE_UI_BOOL = "voice_privacy_disable_ui_bool";
@@ -1226,6 +1234,7 @@ public class CarrierConfigManager {
      * disable_metered_apns}
      * @hide
      */
+    @UnsupportedAppUsage
     public static final String KEY_CARRIER_DEFAULT_ACTIONS_ON_REDIRECTION_STRING_ARRAY =
             "carrier_default_actions_on_redirection_string_array";
 
@@ -1512,6 +1521,15 @@ public class CarrierConfigManager {
      */
     public static final String KEY_ALWAYS_PLAY_REMOTE_HOLD_TONE_BOOL =
             "always_play_remote_hold_tone_bool";
+
+    /**
+     * When true, the Telephony stack will automatically turn off airplane mode and retry a wifi
+     * emergency call over the cell network if the initial attempt at dialing was met with a SIP 308
+     * error.
+     * @hide
+     */
+    public static final String KEY_AUTO_RETRY_FAILED_WIFI_EMERGENCY_CALL =
+            "auto_retry_failed_wifi_emergency_call";
 
     /**
      * When true, indicates that adding a call is disabled when there is an ongoing video call
@@ -1836,6 +1854,7 @@ public class CarrierConfigManager {
      * Key identifying if voice call barring notification is required to be shown to the user.
      * @hide
      */
+    @UnsupportedAppUsage
     public static final String KEY_DISABLE_VOICE_BARRING_NOTIFICATION_BOOL =
             "disable_voice_barring_notification_bool";
 
@@ -2040,6 +2059,15 @@ public class CarrierConfigManager {
     public static final String KEY_UNDELIVERED_SMS_MESSAGE_EXPIRATION_TIME =
             "undelivered_sms_message_expiration_time";
 
+    /**
+     * Specifies a carrier-defined {@link CallRedirectionService} which Telecom will bind
+     * to for outgoing calls.  An empty string indicates that no carrier-defined
+     * {@link CallRedirectionService} is specified.
+     * @hide
+     */
+    public static final String KEY_CALL_REDIRECTION_SERVICE_COMPONENT_NAME_STRING =
+            "call_redirection_service_component_name_string";
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
@@ -2048,8 +2076,10 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_ALLOW_HOLD_IN_IMS_CALL_BOOL, true);
         sDefaults.putBoolean(KEY_CARRIER_ALLOW_DEFLECT_IMS_CALL_BOOL, false);
         sDefaults.putBoolean(KEY_ALWAYS_PLAY_REMOTE_HOLD_TONE_BOOL, false);
+        sDefaults.putBoolean(KEY_AUTO_RETRY_FAILED_WIFI_EMERGENCY_CALL, false);
         sDefaults.putBoolean(KEY_ADDITIONAL_CALL_SETTING_BOOL, true);
         sDefaults.putBoolean(KEY_ALLOW_EMERGENCY_NUMBERS_IN_CALL_LOG_BOOL, false);
+        sDefaults.putStringArray(KEY_UNLOGGABLE_NUMBERS_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_ALLOW_LOCAL_DTMF_TONES_BOOL, true);
         sDefaults.putBoolean(KEY_PLAY_CALL_RECORDING_TONE_BOOL, false);
         sDefaults.putBoolean(KEY_APN_EXPAND_BOOL, true);

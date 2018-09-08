@@ -25,7 +25,6 @@ import static android.content.pm.PackageManager.INTENT_FILTER_DOMAIN_VERIFICATIO
 import android.accounts.IAccountManager;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
-import android.app.Application;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.IIntentReceiver;
@@ -67,7 +66,6 @@ import android.os.IBinder;
 import android.os.IUserManager;
 import android.os.ParcelFileDescriptor;
 import android.os.ParcelFileDescriptor.AutoCloseInputStream;
-import android.os.ParcelFileDescriptor.AutoCloseOutputStream;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteException;
@@ -84,11 +82,17 @@ import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.util.ArraySet;
 import android.util.PrintWriterPrinter;
+
 import com.android.internal.content.PackageHelper;
 import com.android.internal.util.ArrayUtils;
 import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
+
 import dalvik.system.DexFile;
+
+import libcore.io.IoUtils;
+import libcore.io.Streams;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -96,10 +100,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.FileAttribute;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -110,10 +110,7 @@ import java.util.Objects;
 import java.util.WeakHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
-import libcore.io.IoUtils;
-import libcore.io.Streams;
 
 class PackageManagerShellCommand extends ShellCommand {
     /** Path for streaming APK content */
@@ -546,6 +543,10 @@ class PackageManagerShellCommand extends ShellCommand {
                         break;
                     case "-e":
                         listEnabled = true;
+                        break;
+                    case "-a":
+                        getFlags |= PackageManager.MATCH_KNOWN_PACKAGES;
+                        getFlags |= PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS;
                         break;
                     case "-f":
                         showSourceDir = true;
@@ -1773,6 +1774,15 @@ class PackageManagerShellCommand extends ShellCommand {
         }
     }
 
+    private boolean isProductServicesApp(String pkg) {
+        try {
+            final PackageInfo info = mInterface.getPackageInfo(pkg, 0, UserHandle.USER_SYSTEM);
+            return info != null && info.applicationInfo.isProductServices();
+        } catch (RemoteException e) {
+            return false;
+        }
+    }
+
     private int runGetPrivappPermissions() {
         final String pkg = getNextArg();
         if (pkg == null) {
@@ -1785,6 +1795,9 @@ class PackageManagerShellCommand extends ShellCommand {
             privAppPermissions = SystemConfig.getInstance().getVendorPrivAppPermissions(pkg);
         } else if (isProductApp(pkg)) {
             privAppPermissions = SystemConfig.getInstance().getProductPrivAppPermissions(pkg);
+        } else if (isProductServicesApp(pkg)) {
+            privAppPermissions = SystemConfig.getInstance()
+                    .getProductServicesPrivAppPermissions(pkg);
         } else {
             privAppPermissions = SystemConfig.getInstance().getPrivAppPermissions(pkg);
         }
@@ -1806,6 +1819,9 @@ class PackageManagerShellCommand extends ShellCommand {
             privAppPermissions = SystemConfig.getInstance().getVendorPrivAppDenyPermissions(pkg);
         } else if (isProductApp(pkg)) {
             privAppPermissions = SystemConfig.getInstance().getProductPrivAppDenyPermissions(pkg);
+        } else if (isProductServicesApp(pkg)) {
+            privAppPermissions = SystemConfig.getInstance()
+                    .getProductServicesPrivAppDenyPermissions(pkg);
         } else {
             privAppPermissions = SystemConfig.getInstance().getPrivAppDenyPermissions(pkg);
         }
@@ -2419,30 +2435,30 @@ class PackageManagerShellCommand extends ShellCommand {
 
     private int doWriteSplit(int sessionId, String inPath, long sizeBytes, String splitName,
             boolean logSuccess) throws RemoteException {
-        final PrintWriter pw = getOutPrintWriter();
-        final ParcelFileDescriptor fd;
-        if (STDIN_PATH.equals(inPath)) {
-            fd = new ParcelFileDescriptor(getInFileDescriptor());
-        } else if (inPath != null) {
-            fd = openFileForSystem(inPath, "r");
-            if (fd == null) {
-                return -1;
-            }
-            sizeBytes = fd.getStatSize();
-            if (sizeBytes < 0) {
-                getErrPrintWriter().println("Unable to get size of: " + inPath);
-                return -1;
-            }
-        } else {
-            fd = new ParcelFileDescriptor(getInFileDescriptor());
-        }
-        if (sizeBytes <= 0) {
-            getErrPrintWriter().println("Error: must specify a APK size");
-            return 1;
-        }
-
         PackageInstaller.Session session = null;
         try {
+            final PrintWriter pw = getOutPrintWriter();
+            final ParcelFileDescriptor fd;
+            if (STDIN_PATH.equals(inPath)) {
+                fd = ParcelFileDescriptor.dup(getInFileDescriptor());
+            } else if (inPath != null) {
+                fd = openFileForSystem(inPath, "r");
+                if (fd == null) {
+                    return -1;
+                }
+                sizeBytes = fd.getStatSize();
+                if (sizeBytes < 0) {
+                    getErrPrintWriter().println("Unable to get size of: " + inPath);
+                    return -1;
+                }
+            } else {
+                fd = ParcelFileDescriptor.dup(getInFileDescriptor());
+            }
+            if (sizeBytes <= 0) {
+                getErrPrintWriter().println("Error: must specify a APK size");
+                return 1;
+            }
+
             session = new PackageInstaller.Session(
                     mInterface.getPackageInstaller().openSession(sessionId));
             session.write(splitName, 0, sizeBytes, fd);
@@ -2688,6 +2704,7 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("    Prints all packages; optionally only those whose name contains");
         pw.println("    the text in FILTER.  Options are:");
         pw.println("      -f: see their associated file");
+        pw.println("      -a: all known packages");
         pw.println("      -d: filter to only show disabled packages");
         pw.println("      -e: filter to only show enabled packages");
         pw.println("      -s: filter to only show system packages");

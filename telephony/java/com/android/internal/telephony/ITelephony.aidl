@@ -390,7 +390,7 @@ interface ITelephony {
     /**
      * Returns the neighboring cell information of the device.
      */
-    List<NeighboringCellInfo> getNeighboringCellInfo(String callingPkg);
+    List<NeighboringCellInfo> getNeighboringCellInfo(String callingPkg, int targetSdk);
 
      int getCallState();
 
@@ -1531,4 +1531,10 @@ interface ITelephony {
      * @hide
      */
     void refreshUiccProfile(int subId);
+
+    /**
+     * How many modems can have simultaneous data connections.
+     * @hide
+     */
+    int getNumberOfModemsWithSimultaneousDataConnections(int subId, String callingPackage);
 }

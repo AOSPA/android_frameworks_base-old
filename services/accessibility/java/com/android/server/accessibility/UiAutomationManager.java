@@ -262,6 +262,11 @@ class UiAutomationManager {
         }
 
         @Override
+        public int getSoftKeyboardShowMode() {
+            return 0;
+        }
+
+        @Override
         public boolean isAccessibilityButtonAvailable() {
             return false;
         }

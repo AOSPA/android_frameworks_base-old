@@ -410,6 +410,10 @@ class AppErrors {
             RescueParty.notePersistentAppCrash(mContext, r.uid);
         }
 
+        final int relaunchReason = r != null
+                ? r.getWindowProcessController().computeRelaunchReason()
+                : ActivityRecord.RELAUNCH_REASON_NONE;
+
         AppErrorResult result = new AppErrorResult();
         TaskRecord task;
         synchronized (mService) {
@@ -422,11 +426,17 @@ class AppErrors {
                 return;
             }
 
+            // Suppress crash dialog if the process is being relaunched due to a crash during a free
+            // resize.
+            if (relaunchReason == ActivityRecord.RELAUNCH_REASON_FREE_RESIZE) {
+                return;
+            }
+
             /**
              * If this process was running instrumentation, finish now - it will be handled in
              * {@link ActivityManagerService#handleAppDiedLocked}.
              */
-            if (r != null && r.instr != null) {
+            if (r != null && r.getActiveInstrumentation() != null) {
                 return;
             }
 
@@ -481,7 +491,8 @@ class AppErrors {
                                     task.intent, null, null, null, 0, 0,
                                     new SafeActivityOptions(ActivityOptions.makeBasic()),
                                     task.userId, null,
-                                    "AppErrors", false /*validateIncomingUser*/);
+                                    "AppErrors", false /*validateIncomingUser*/,
+                                    null /* originatingPendingIntent */);
                         }
                     }
                 }
@@ -493,7 +504,7 @@ class AppErrors {
                     mService.mStackSupervisor.handleAppCrashLocked(r.getWindowProcessController());
                     if (!r.isPersistent()) {
                         mService.removeProcessLocked(r, false, false, "crash");
-                        mService.mStackSupervisor.resumeFocusedStackTopActivityLocked();
+                        mService.mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
                     }
                 } finally {
                     Binder.restoreCallingIdentity(orig);
@@ -733,12 +744,12 @@ class AppErrors {
                 // annoy the user repeatedly.  Unless it is persistent, since those
                 // processes run critical code.
                 mService.removeProcessLocked(app, false, tryAgain, "crash");
-                mService.mStackSupervisor.resumeFocusedStackTopActivityLocked();
+                mService.mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
                 if (!showBackground) {
                     return false;
                 }
             }
-            mService.mStackSupervisor.resumeFocusedStackTopActivityLocked();
+            mService.mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
         } else {
             final TaskRecord affectedTask =
                     mService.mStackSupervisor.finishTopCrashedActivitiesLocked(app.getWindowProcessController(), reason);

@@ -16,6 +16,14 @@
 
 package com.android.server.am;
 
+import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM;
+import static android.app.ActivityTaskManager.RESIZE_MODE_USER;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
+import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.view.Display.INVALID_DISPLAY;
+
+import static com.android.server.am.TaskRecord.INVALID_TASK_ID;
+
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
@@ -101,15 +109,6 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.egl.EGLContext;
 import javax.microedition.khronos.egl.EGLDisplay;
 import javax.microedition.khronos.egl.EGLSurface;
-
-import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM;
-import static android.app.ActivityTaskManager.RESIZE_MODE_USER;
-import static android.app.ActivityTaskManager.INVALID_STACK_ID;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
-import static android.view.Display.INVALID_DISPLAY;
-
-import static com.android.server.am.TaskRecord.INVALID_TASK_ID;
 
 final class ActivityManagerShellCommand extends ShellCommand {
     public static final String NO_CLASS_ERROR_CODE = "Error type 3";
@@ -2393,8 +2392,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
     int runStack(PrintWriter pw) throws RemoteException {
         String op = getNextArgRequired();
         switch (op) {
-            case "start":
-                return runStackStart(pw);
             case "move-task":
                 return runStackMoveTask(pw);
             case "resize":
@@ -2454,31 +2451,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
         String displayIdStr = getNextArgRequired();
         int displayId = Integer.parseInt(displayIdStr);
         mTaskInterface.moveStackToDisplay(stackId, displayId);
-        return 0;
-    }
-
-    int runStackStart(PrintWriter pw) throws RemoteException {
-        String displayIdStr = getNextArgRequired();
-        int displayId = Integer.parseInt(displayIdStr);
-        Intent intent;
-        try {
-            intent = makeIntent(UserHandle.USER_CURRENT);
-        } catch (URISyntaxException e) {
-            throw new RuntimeException(e.getMessage(), e);
-        }
-
-        final int stackId = mTaskInterface.createStackOnDisplay(displayId);
-        if (stackId != INVALID_STACK_ID) {
-            // TODO: Need proper support if this is used by test...
-//            container.startActivity(intent);
-//            ActivityOptions options = ActivityOptions.makeBasic();
-//            options.setLaunchDisplayId(displayId);
-//            options.setLaunchStackId(stackId);
-//            mInterface.startAct
-//            mInterface.startActivityAsUser(null, null, intent, mimeType,
-//                    null, null, 0, mStartFlags, profilerInfo,
-//                    options != null ? options.toBundle() : null, mUserId);
-        }
         return 0;
     }
 
@@ -2877,6 +2849,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("  --checkin: output checkin format, resetting data.");
             pw.println("  --C: output checkin format, not resetting data.");
             pw.println("  --proto: output dump in protocol buffer format.");
+            pw.println("  --autofill: dump just the autofill-related state of an activity");
         } else {
             pw.println("Activity manager (activity) commands:");
             pw.println("  help");
@@ -2904,6 +2877,7 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("          specified then run as the current user.");
             pw.println("      --windowingMode <WINDOWING_MODE>: The windowing mode to launch the activity into.");
             pw.println("      --activityType <ACTIVITY_TYPE>: The activity type to launch the activity as.");
+            pw.println("      --display <DISPLAY_ID>: The display to launch the activity into.");
             pw.println("  start-service [--user <USER_ID> | current] <INTENT>");
             pw.println("      Start a Service.  Options are:");
             pw.println("      --user <USER_ID> | current: Specify which user to run as; if not");
@@ -3068,8 +3042,6 @@ final class ActivityManagerShellCommand extends ShellCommand {
             pw.println("       move-stack <STACK_ID> <DISPLAY_ID>");
             pw.println("           Move <STACK_ID> from its current display to <DISPLAY_ID>.");
             pw.println("  stack [COMMAND] [...]: sub-commands for operating on activity stacks.");
-            pw.println("       start <DISPLAY_ID> <INTENT>");
-            pw.println("           Start a new activity on <DISPLAY_ID> using <INTENT>");
             pw.println("       move-task <TASK_ID> <STACK_ID> [true|false]");
             pw.println("           Move <TASK_ID> from its current stack to the top (true) or");
             pw.println("           bottom (false) of <STACK_ID>.");

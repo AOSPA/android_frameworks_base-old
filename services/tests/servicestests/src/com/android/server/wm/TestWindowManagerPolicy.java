@@ -19,6 +19,7 @@ package com.android.server.wm;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
 import android.annotation.Nullable;
@@ -30,7 +31,6 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.proto.ProtoOutputStream;
-import android.view.Display;
 import android.view.DisplayCutout;
 import android.view.IWindow;
 import android.view.IWindowManager;
@@ -72,14 +72,7 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
 
     }
 
-    @Override
-    public boolean isDefaultOrientationForced() {
-        return false;
-    }
-
-    @Override
-    public void setInitialDisplaySize(Display display, int width, int height, int density) {
-
+    public void setDefaultDisplay(DisplayContentInfo displayContentInfo) {
     }
 
     @Override
@@ -159,9 +152,11 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
         final WindowManagerService wm = mWmSupplier.get();
         synchronized (wm.mWindowMap) {
             atoken = wm.mRoot.getAppWindowToken(appToken);
+            IWindow iWindow = mock(IWindow.class);
+            doReturn(mock(IBinder.class)).when(iWindow).asBinder();
             window = WindowTestsBase.createWindow(null, TYPE_APPLICATION_STARTING, atoken,
                     "Starting window", 0 /* ownerId */, false /* internalWindows */, wm,
-                    mock(Session.class), mock(IWindow.class));
+                    mock(Session.class), iWindow);
             atoken.startingWindow = window;
         }
         if (mRunnableWhenAddingSplashScreen != null) {
@@ -386,22 +381,6 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     public void onKeyguardOccludedChangedLw(boolean occluded) {
     }
 
-    @Override
-    public int rotationForOrientationLw(int orientation, int lastRotation, boolean defaultDisplay) {
-        return rotationToReport;
-    }
-
-    @Override
-    public boolean rotationHasCompatibleMetricsLw(int orientation, int rotation) {
-        return true;
-    }
-
-    @Override
-    public void setRotationLw(int rotation) {
-
-    }
-
-    @Override
     public void setSafeMode(boolean safeMode) {
 
     }
@@ -437,13 +416,8 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public void setCurrentOrientationLw(int newOrientation) {
-
-    }
-
-    @Override
     public boolean performHapticFeedbackLw(WindowState win, int effectId,
-            boolean always) {
+            boolean always, String reason) {
         return false;
     }
 
@@ -559,12 +533,13 @@ class TestWindowManagerPolicy implements WindowManagerPolicy {
     }
 
     @Override
-    public void onConfigurationChanged() {
+    public void onConfigurationChanged(DisplayContentInfo displayContentInfo) {
 
     }
 
     @Override
-    public boolean shouldRotateSeamlessly(int oldRotation, int newRotation) {
+    public boolean shouldRotateSeamlessly(DisplayRotation displayRotation, int oldRotation,
+            int newRotation) {
         return false;
     }
 

@@ -22,7 +22,6 @@ import android.util.ArrayMap;
 import android.util.Log;
 import android.view.ViewGroup;
 
-import com.android.internal.logging.MetricsLogger;
 import com.android.internal.util.function.TriConsumer;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.colorextraction.ColorExtractor.GradientColors;
@@ -32,12 +31,13 @@ import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.qs.QSTileHost;
 import com.android.systemui.statusbar.KeyguardIndicationController;
-import com.android.systemui.statusbar.NotificationBlockingHelperManager;
-import com.android.systemui.statusbar.NotificationEntryManager;
-import com.android.systemui.statusbar.NotificationGutsManager;
+import com.android.systemui.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.notification.row.NotificationBlockingHelperManager;
+import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
-import com.android.systemui.statusbar.NotificationLogger;
+import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationViewHierarchyManager;
@@ -130,6 +130,7 @@ public class SystemUIFactory {
 
     public void injectDependencies(ArrayMap<Object, DependencyProvider> providers,
             Context context) {
+        providers.put(StatusBarStateController.class, StatusBarStateController::new);
         providers.put(NotificationLockscreenUserManager.class,
                 () -> new NotificationLockscreenUserManager(context));
         providers.put(VisualStabilityManager.class, VisualStabilityManager::new);

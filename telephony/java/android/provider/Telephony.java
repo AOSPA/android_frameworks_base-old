@@ -19,6 +19,7 @@ package android.provider;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.app.job.JobService;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -381,6 +382,7 @@ public final class Telephony {
          * Return cursor for table query.
          * @hide
          */
+        @UnsupportedAppUsage
         public static Cursor query(ContentResolver cr, String[] projection,
                 String where, String orderBy) {
             android.util.SeempLog.record(10);
@@ -412,6 +414,7 @@ public final class Telephony {
          * @return the URI for the new message
          * @hide
          */
+        @UnsupportedAppUsage
         public static Uri addMessageToUri(ContentResolver resolver,
                 Uri uri, String address, String body, String subject,
                 Long date, boolean read, boolean deliveryReport) {
@@ -434,6 +437,7 @@ public final class Telephony {
          * @return the URI for the new message
          * @hide
          */
+        @UnsupportedAppUsage
         public static Uri addMessageToUri(int subId, ContentResolver resolver,
                 Uri uri, String address, String body, String subject,
                 Long date, boolean read, boolean deliveryReport) {
@@ -456,6 +460,7 @@ public final class Telephony {
          * @return the URI for the new message
          * @hide
          */
+        @UnsupportedAppUsage
         public static Uri addMessageToUri(ContentResolver resolver,
                 Uri uri, String address, String body, String subject,
                 Long date, boolean read, boolean deliveryReport, long threadId) {
@@ -480,6 +485,7 @@ public final class Telephony {
          * @return the URI for the new message
          * @hide
          */
+        @UnsupportedAppUsage
         public static Uri addMessageToUri(int subId, ContentResolver resolver,
                 Uri uri, String address, String body, String subject,
                 Long date, boolean read, boolean deliveryReport, long threadId) {
@@ -538,6 +544,7 @@ public final class Telephony {
          * @return true if the operation succeeded
          * @hide
          */
+        @UnsupportedAppUsage
         public static boolean moveMessageToFolder(Context context,
                 Uri uri, int folder, int error) {
             if (uri == null) {
@@ -581,6 +588,7 @@ public final class Telephony {
          * outgoing message.
          * @hide
          */
+        @UnsupportedAppUsage
         public static boolean isOutgoingFolder(int messageType) {
             return  (messageType == MESSAGE_TYPE_FAILED)
                     || (messageType == MESSAGE_TYPE_OUTBOX)
@@ -622,6 +630,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
+            @UnsupportedAppUsage
             public static Uri addMessage(ContentResolver resolver,
                     String address, String body, String subject, Long date,
                     boolean read) {
@@ -642,6 +651,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
+            @UnsupportedAppUsage
             public static Uri addMessage(int subId, ContentResolver resolver,
                     String address, String body, String subject, Long date, boolean read) {
                 return addMessageToUri(subId, resolver, CONTENT_URI, address, body,
@@ -682,6 +692,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
+            @UnsupportedAppUsage
             public static Uri addMessage(ContentResolver resolver,
                     String address, String body, String subject, Long date) {
                 return addMessageToUri(SubscriptionManager.getDefaultSmsSubscriptionId(),
@@ -700,6 +711,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
+            @UnsupportedAppUsage
             public static Uri addMessage(int subId, ContentResolver resolver,
                     String address, String body, String subject, Long date) {
                 return addMessageToUri(subId, resolver, CONTENT_URI, address, body,
@@ -727,6 +739,7 @@ public final class Telephony {
            /**
             * @hide
             */
+            @UnsupportedAppUsage
             public static Uri addMessage(ContentResolver resolver,
                     String address, String body, String subject, Long date) {
                 return addMessageToUri(SubscriptionManager.getDefaultSmsSubscriptionId(),
@@ -745,6 +758,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
+            @UnsupportedAppUsage
             public static Uri addMessage(int subId, ContentResolver resolver,
                     String address, String body, String subject, Long date) {
                 return addMessageToUri(subId, resolver, CONTENT_URI, address, body,
@@ -791,6 +805,7 @@ public final class Telephony {
              * @return the URI for the new message
              * @hide
              */
+            @UnsupportedAppUsage
             public static Uri addMessage(ContentResolver resolver,
                     String address, String body, String subject, Long date,
                     boolean deliveryReport, long threadId) {
@@ -1984,12 +1999,14 @@ public final class Telephony {
      */
     public static final class Threads implements ThreadsColumns {
 
+        @UnsupportedAppUsage
         private static final String[] ID_PROJECTION = { BaseColumns._ID };
 
         /**
          * Private {@code content://} style URL for this table. Used by
          * {@link #getOrCreateThreadId(android.content.Context, java.util.Set)}.
          */
+        @UnsupportedAppUsage
         private static final Uri THREAD_ID_CONTENT_URI = Uri.parse(
                 "content://mms-sms/threadID");
 
@@ -2118,6 +2135,7 @@ public final class Telephony {
          * </ul>
          * @hide
          */
+        @UnsupportedAppUsage
         public static final Pattern NAME_ADDR_EMAIL_PATTERN =
                 Pattern.compile("\\s*(\"[^\"]*\"|[^<>\"]+)\\s*<([^<>]+)>\\s*");
 
@@ -2147,6 +2165,7 @@ public final class Telephony {
          * Helper method to extract email address from address string.
          * @hide
          */
+        @UnsupportedAppUsage
         public static String extractAddrSpec(String address) {
             Matcher match = NAME_ADDR_EMAIL_PATTERN.matcher(address);
 
@@ -2163,6 +2182,7 @@ public final class Telephony {
          * @return true if address is an email address; false otherwise.
          * @hide
          */
+        @UnsupportedAppUsage
         public static boolean isEmailAddress(String address) {
             if (TextUtils.isEmpty(address)) {
                 return false;
@@ -2180,6 +2200,7 @@ public final class Telephony {
          * @return true if number is a phone number; false otherwise.
          * @hide
          */
+        @UnsupportedAppUsage
         public static boolean isPhoneNumber(String number) {
             if (TextUtils.isEmpty(number)) {
                 return false;

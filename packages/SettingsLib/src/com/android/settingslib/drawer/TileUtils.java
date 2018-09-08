@@ -20,11 +20,8 @@ import android.content.Context;
 import android.content.IContentProvider;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.content.res.Resources;
-import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.RemoteException;
@@ -36,19 +33,19 @@ import android.util.Log;
 import android.util.Pair;
 
 import androidx.annotation.VisibleForTesting;
+
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class TileUtils {
 
-    private static final boolean DEBUG = false;
     private static final boolean DEBUG_TIMING = false;
 
     private static final String LOG_TAG = "TileUtils";
+    @VisibleForTesting
+    static final String SETTING_PKG = "com.android.settings";
 
     /**
      * Settings will search for system activities of this action and add them as a top level
@@ -65,21 +62,17 @@ public class TileUtils {
      *
      * <p>A summary my be defined by meta-data named {@link #META_DATA_PREFERENCE_SUMMARY}
      */
-    public static final String EXTRA_SETTINGS_ACTION =
-            "com.android.settings.action.EXTRA_SETTINGS";
+    public static final String EXTRA_SETTINGS_ACTION = "com.android.settings.action.EXTRA_SETTINGS";
 
     /**
      * @See {@link #EXTRA_SETTINGS_ACTION}.
      */
-    private static final String IA_SETTINGS_ACTION =
-            "com.android.settings.action.IA_SETTINGS";
-
+    public static final String IA_SETTINGS_ACTION = "com.android.settings.action.IA_SETTINGS";
 
     /**
      * Same as #EXTRA_SETTINGS_ACTION but used for the platform Settings activities.
      */
-    private static final String SETTINGS_ACTION =
-            "com.android.settings.action.SETTINGS";
+    private static final String SETTINGS_ACTION = "com.android.settings.action.SETTINGS";
 
     private static final String OPERATOR_SETTINGS =
             "com.android.settings.OPERATOR_APPLICATION_SETTING";
@@ -104,13 +97,19 @@ public class TileUtils {
      * The key used to get the package name of the icon resource for the preference.
      */
     private static final String EXTRA_PREFERENCE_ICON_PACKAGE =
-        "com.android.settings.icon_package";
+            "com.android.settings.icon_package";
 
     /**
      * Name of the meta-data item that should be set in the AndroidManifest.xml
      * to specify the key that should be used for the preference.
      */
     public static final String META_DATA_PREFERENCE_KEYHINT = "com.android.settings.keyhint";
+
+    /**
+     * Order of the item that should be displayed on screen. Bigger value items displays closer on
+     * top.
+     */
+    public static final String META_DATA_KEY_ORDER = "com.android.settings.order";
 
     /**
      * Name of the meta-data item that should be set in the AndroidManifest.xml
@@ -124,6 +123,12 @@ public class TileUtils {
      */
     public static final String META_DATA_PREFERENCE_ICON_BACKGROUND_HINT =
             "com.android.settings.bg.hint";
+    /**
+     * Name of the meta-data item that should be set in the AndroidManifest.xml
+     * to specify the icon background color as raw ARGB.
+     */
+    public static final String META_DATA_PREFERENCE_ICON_BACKGROUND_ARGB =
+            "com.android.settings.bg.argb";
 
     /**
      * Name of the meta-data item that should be set in the AndroidManifest.xml
@@ -167,8 +172,6 @@ public class TileUtils {
     public static final String META_DATA_PREFERENCE_SUMMARY_URI =
             "com.android.settings.summary_uri";
 
-    public static final String SETTING_PKG = "com.android.settings";
-
     /**
      * Value for {@link #META_DATA_KEY_PROFILE}. When the device has a managed profile,
      * the app will always be run in the primary profile.
@@ -198,36 +201,10 @@ public class TileUtils {
     public static final String META_DATA_KEY_PROFILE = "com.android.settings.profile";
 
     /**
-     * Build a list of DashboardCategory. Each category must be defined in manifest.
-     * eg: .Settings$DeviceSettings
-     * @deprecated
+     * Build a list of DashboardCategory.
      */
-    @Deprecated
     public static List<DashboardCategory> getCategories(Context context,
             Map<Pair<String, String>, Tile> cache) {
-        return getCategories(context, cache, true /*categoryDefinedInManifest*/);
-    }
-
-    /**
-     * Build a list of DashboardCategory.
-     * @param categoryDefinedInManifest If true, an dummy activity must exists in manifest to
-     * represent this category (eg: .Settings$DeviceSettings)
-     */
-    public static List<DashboardCategory> getCategories(Context context,
-            Map<Pair<String, String>, Tile> cache, boolean categoryDefinedInManifest) {
-        return getCategories(context, cache, categoryDefinedInManifest, null, SETTING_PKG);
-    }
-
-    /**
-     * Build a list of DashboardCategory.
-     * @param categoryDefinedInManifest If true, an dummy activity must exists in manifest to
-     * represent this category (eg: .Settings$DeviceSettings)
-     * @param extraAction additional intent filter action to be usetileutild to build the dashboard
-     * categories
-     */
-    public static List<DashboardCategory> getCategories(Context context,
-            Map<Pair<String, String>, Tile> cache, boolean categoryDefinedInManifest,
-            String extraAction, String settingPkg) {
         final long startTime = System.currentTimeMillis();
         boolean setup = Global.getInt(context.getContentResolver(), Global.DEVICE_PROVISIONED, 0)
                 != 0;
@@ -237,37 +214,30 @@ public class TileUtils {
             // TODO: Needs much optimization, too many PM queries going on here.
             if (user.getIdentifier() == ActivityManager.getCurrentUser()) {
                 // Only add Settings for this user.
-                getTilesForAction(context, user, SETTINGS_ACTION, cache, null, tiles, true,
-                        settingPkg);
+                getTilesForAction(context, user, SETTINGS_ACTION, cache, null, tiles, true);
                 getTilesForAction(context, user, OPERATOR_SETTINGS, cache,
-                        OPERATOR_DEFAULT_CATEGORY, tiles, false, true, settingPkg);
+                        OPERATOR_DEFAULT_CATEGORY, tiles, false);
                 getTilesForAction(context, user, MANUFACTURER_SETTINGS, cache,
-                        MANUFACTURER_DEFAULT_CATEGORY, tiles, false, true, settingPkg);
+                        MANUFACTURER_DEFAULT_CATEGORY, tiles, false);
             }
             if (setup) {
-                getTilesForAction(context, user, EXTRA_SETTINGS_ACTION, cache, null, tiles, false,
-                        settingPkg);
-                if (!categoryDefinedInManifest) {
-                    getTilesForAction(context, user, IA_SETTINGS_ACTION, cache, null, tiles, false,
-                            settingPkg);
-                    if (extraAction != null) {
-                        getTilesForAction(context, user, extraAction, cache, null, tiles, false,
-                                settingPkg);
-                    }
-                }
+                getTilesForAction(context, user, EXTRA_SETTINGS_ACTION, cache, null, tiles, false);
+                getTilesForAction(context, user, IA_SETTINGS_ACTION, cache, null, tiles, false);
             }
         }
 
         HashMap<String, DashboardCategory> categoryMap = new HashMap<>();
         for (Tile tile : tiles) {
-            DashboardCategory category = categoryMap.get(tile.category);
+            final String categoryKey = tile.getCategory();
+            DashboardCategory category = categoryMap.get(categoryKey);
             if (category == null) {
-                category = createCategory(context, tile.category, categoryDefinedInManifest);
+                category = new DashboardCategory(categoryKey);
+
                 if (category == null) {
-                    Log.w(LOG_TAG, "Couldn't find category " + tile.category);
+                    Log.w(LOG_TAG, "Couldn't find category " + categoryKey);
                     continue;
                 }
-                categoryMap.put(category.key, category);
+                categoryMap.put(categoryKey, category);
             }
             category.addTile(tile);
         }
@@ -275,83 +245,25 @@ public class TileUtils {
         for (DashboardCategory category : categories) {
             category.sortTiles();
         }
-        Collections.sort(categories, CATEGORY_COMPARATOR);
-        if (DEBUG_TIMING) Log.d(LOG_TAG, "getCategories took "
-                + (System.currentTimeMillis() - startTime) + " ms");
+
+        if (DEBUG_TIMING) {
+            Log.d(LOG_TAG, "getCategories took "
+                    + (System.currentTimeMillis() - startTime) + " ms");
+        }
         return categories;
     }
 
-    /**
-     * Create a new DashboardCategory from key.
-     *
-     * @param context Context to query intent
-     * @param categoryKey The category key
-     * @param categoryDefinedInManifest If true, an dummy activity must exists in manifest to
-     * represent this category (eg: .Settings$DeviceSettings)
-     */
-    private static DashboardCategory createCategory(Context context, String categoryKey,
-            boolean categoryDefinedInManifest) {
-        DashboardCategory category = new DashboardCategory();
-        category.key = categoryKey;
-        if (!categoryDefinedInManifest) {
-            return category;
-        }
-        PackageManager pm = context.getPackageManager();
-        List<ResolveInfo> results = pm.queryIntentActivities(new Intent(categoryKey), 0);
-        if (results.size() == 0) {
-            return null;
-        }
-        for (ResolveInfo resolved : results) {
-            if (!resolved.system) {
-                // Do not allow any app to add to settings, only system ones.
-                continue;
-            }
-            category.title = resolved.activityInfo.loadLabel(pm);
-            category.priority = SETTING_PKG.equals(
-                    resolved.activityInfo.applicationInfo.packageName) ? resolved.priority : 0;
-            if (DEBUG) Log.d(LOG_TAG, "Adding category " + category.title);
-        }
-
-        return category;
-    }
-
-    private static void getTilesForAction(Context context,
+    @VisibleForTesting
+    static void getTilesForAction(Context context,
             UserHandle user, String action, Map<Pair<String, String>, Tile> addedCache,
-            String defaultCategory, ArrayList<Tile> outTiles, boolean requireSettings,
-            String settingPkg) {
-        getTilesForAction(context, user, action, addedCache, defaultCategory, outTiles,
-                requireSettings, requireSettings, settingPkg);
-    }
-
-    private static void getTilesForAction(Context context,
-            UserHandle user, String action, Map<Pair<String, String>, Tile> addedCache,
-            String defaultCategory, ArrayList<Tile> outTiles, boolean requireSettings,
-            boolean usePriority, String settingPkg) {
-        Intent intent = new Intent(action);
+            String defaultCategory, List<Tile> outTiles, boolean requireSettings) {
+        final Intent intent = new Intent(action);
         if (requireSettings) {
-            intent.setPackage(settingPkg);
+            intent.setPackage(SETTING_PKG);
         }
-        getTilesForIntent(context, user, intent, addedCache, defaultCategory, outTiles,
-                usePriority, true, true);
-    }
-
-    public static void getTilesForIntent(
-            Context context, UserHandle user, Intent intent,
-            Map<Pair<String, String>, Tile> addedCache, String defaultCategory, List<Tile> outTiles,
-            boolean usePriority, boolean checkCategory, boolean forceTintExternalIcon) {
-        getTilesForIntent(context, user, intent, addedCache, defaultCategory, outTiles,
-                usePriority, checkCategory, forceTintExternalIcon, false /* shouldUpdateTiles */);
-    }
-
-    public static void getTilesForIntent(
-            Context context, UserHandle user, Intent intent,
-            Map<Pair<String, String>, Tile> addedCache, String defaultCategory, List<Tile> outTiles,
-            boolean usePriority, boolean checkCategory, boolean forceTintExternalIcon,
-            boolean shouldUpdateTiles) {
-        PackageManager pm = context.getPackageManager();
+        final PackageManager pm = context.getPackageManager();
         List<ResolveInfo> results = pm.queryIntentActivitiesAsUser(intent,
                 PackageManager.GET_META_DATA, user.getIdentifier());
-        Map<String, IContentProvider> providerMap = new HashMap<>();
         for (ResolveInfo resolved : results) {
             if (!resolved.system) {
                 // Do not allow any app to add to settings, only system ones.
@@ -362,7 +274,7 @@ public class TileUtils {
             String categoryKey = defaultCategory;
 
             // Load category
-            if (checkCategory && ((metaData == null) || !metaData.containsKey(EXTRA_CATEGORY_KEY))
+            if ((metaData == null || !metaData.containsKey(EXTRA_CATEGORY_KEY))
                     && categoryKey == null) {
                 Log.w(LOG_TAG, "Found " + resolved.activityInfo.name + " for intent "
                         + intent + " missing metadata "
@@ -372,22 +284,13 @@ public class TileUtils {
                 categoryKey = metaData.getString(EXTRA_CATEGORY_KEY);
             }
 
-            Pair<String, String> key = new Pair<String, String>(activityInfo.packageName,
-                    activityInfo.name);
+            Pair<String, String> key = new Pair<>(activityInfo.packageName, activityInfo.name);
             Tile tile = addedCache.get(key);
             if (tile == null) {
-                tile = new Tile();
-                tile.intent = new Intent().setClassName(
-                        activityInfo.packageName, activityInfo.name);
-                tile.category = categoryKey;
-                tile.priority = usePriority ? resolved.priority : 0;
-                tile.metaData = activityInfo.metaData;
-                updateTileData(context, tile, activityInfo, activityInfo.applicationInfo,
-                        pm, providerMap, forceTintExternalIcon);
-                if (DEBUG) Log.d(LOG_TAG, "Adding tile " + tile.title);
+                tile = new Tile(activityInfo, categoryKey);
                 addedCache.put(key, tile);
-            } else if (shouldUpdateTiles) {
-                updateSummaryAndTitle(context, providerMap, tile);
+            } else {
+                tile.setMetaData(metaData);
             }
 
             if (!tile.userHandle.contains(user)) {
@@ -399,126 +302,12 @@ public class TileUtils {
         }
     }
 
-    private static boolean updateTileData(Context context, Tile tile,
-            ActivityInfo activityInfo, ApplicationInfo applicationInfo, PackageManager pm,
-            Map<String, IContentProvider> providerMap, boolean forceTintExternalIcon) {
-        if (applicationInfo.isSystemApp()) {
-            boolean forceTintIcon = false;
-            int icon = 0;
-            Pair<String, Integer> iconFromUri = null;
-            CharSequence title = null;
-            String summary = null;
-            String keyHint = null;
-            boolean isIconTintable = false;
-
-            // Get the activity's meta-data
-            try {
-                Resources res = pm.getResourcesForApplication(applicationInfo.packageName);
-                Bundle metaData = activityInfo.metaData;
-
-                if (forceTintExternalIcon
-                        && !context.getPackageName().equals(applicationInfo.packageName)) {
-                    isIconTintable = true;
-                    forceTintIcon = true;
-                }
-
-                if (res != null && metaData != null) {
-                    if (metaData.containsKey(META_DATA_PREFERENCE_ICON)) {
-                        icon = metaData.getInt(META_DATA_PREFERENCE_ICON);
-                    }
-                    if (metaData.containsKey(META_DATA_PREFERENCE_ICON_TINTABLE)) {
-                        if (forceTintIcon) {
-                            Log.w(LOG_TAG, "Ignoring icon tintable for " + activityInfo);
-                        } else {
-                            isIconTintable =
-                                    metaData.getBoolean(META_DATA_PREFERENCE_ICON_TINTABLE);
-                        }
-                    }
-                    if (metaData.containsKey(META_DATA_PREFERENCE_TITLE)) {
-                        if (metaData.get(META_DATA_PREFERENCE_TITLE) instanceof Integer) {
-                            title = res.getString(metaData.getInt(META_DATA_PREFERENCE_TITLE));
-                        } else {
-                            title = metaData.getString(META_DATA_PREFERENCE_TITLE);
-                        }
-                    }
-                    if (metaData.containsKey(META_DATA_PREFERENCE_SUMMARY)) {
-                        if (metaData.get(META_DATA_PREFERENCE_SUMMARY) instanceof Integer) {
-                            summary = res.getString(metaData.getInt(META_DATA_PREFERENCE_SUMMARY));
-                        } else {
-                            summary = metaData.getString(META_DATA_PREFERENCE_SUMMARY);
-                        }
-                    }
-                    if (metaData.containsKey(META_DATA_PREFERENCE_KEYHINT)) {
-                        if (metaData.get(META_DATA_PREFERENCE_KEYHINT) instanceof Integer) {
-                            keyHint = res.getString(metaData.getInt(META_DATA_PREFERENCE_KEYHINT));
-                        } else {
-                            keyHint = metaData.getString(META_DATA_PREFERENCE_KEYHINT);
-                        }
-                    }
-                }
-            } catch (PackageManager.NameNotFoundException | Resources.NotFoundException e) {
-                if (DEBUG) Log.d(LOG_TAG, "Couldn't find info", e);
-            }
-
-            // Set the preference title to the activity's label if no
-            // meta-data is found
-            if (TextUtils.isEmpty(title)) {
-                title = activityInfo.loadLabel(pm).toString();
-            }
-
-            // Set the icon
-            if (icon == 0) {
-                // Only fallback to activityinfo.icon if metadata does not contain ICON_URI.
-                // ICON_URI should be loaded in app UI when need the icon object.
-                if (!tile.metaData.containsKey(META_DATA_PREFERENCE_ICON_URI)) {
-                    icon = activityInfo.icon;
-                }
-            }
-            if (icon != 0) {
-                tile.icon = Icon.createWithResource(activityInfo.packageName, icon);
-            }
-
-            // Set title and summary for the preference
-            tile.title = title;
-            tile.summary = summary;
-            // Replace the intent with this specific activity
-            tile.intent = new Intent().setClassName(activityInfo.packageName,
-                    activityInfo.name);
-            // Suggest a key for this tile
-            tile.key = keyHint;
-            tile.isIconTintable = isIconTintable;
-
-            return true;
-        }
-
-        return false;
-    }
-
-    private static void updateSummaryAndTitle(
-            Context context, Map<String, IContentProvider> providerMap, Tile tile) {
-        if (tile == null || tile.metaData == null
-                || !tile.metaData.containsKey(META_DATA_PREFERENCE_SUMMARY_URI)) {
-            return;
-        }
-
-        String uriString = tile.metaData.getString(META_DATA_PREFERENCE_SUMMARY_URI);
-        Bundle bundle = getBundleFromUri(context, uriString, providerMap);
-        String overrideSummary = getString(bundle, META_DATA_PREFERENCE_SUMMARY);
-        String overrideTitle = getString(bundle, META_DATA_PREFERENCE_TITLE);
-        if (overrideSummary != null) {
-            tile.remoteViews.setTextViewText(android.R.id.summary, overrideSummary);
-        }
-
-        if (overrideTitle != null) {
-            tile.remoteViews.setTextViewText(android.R.id.title, overrideTitle);
-        }
-    }
-
     /**
      * Gets the icon package name and resource id from content provider.
-     * @param context context
+     *
+     * @param context     context
      * @param packageName package name of the target activity
-     * @param uriString URI for the content provider
+     * @param uriString   URI for the content provider
      * @param providerMap Maps URI authorities to providers
      * @return package name and resource id of the icon specified
      */
@@ -546,10 +335,11 @@ public class TileUtils {
 
     /**
      * Gets text associated with the input key from the content provider.
-     * @param context context
-     * @param uriString URI for the content provider
+     *
+     * @param context     context
+     * @param uriString   URI for the content provider
      * @param providerMap Maps URI authorities to providers
-     * @param key Key mapping to the text in bundle returned by the content provider
+     * @param key         Key mapping to the text in bundle returned by the content provider
      * @return Text associated with the key, if returned by the content provider
      */
     public static String getTextFromUri(Context context, String uriString,
@@ -579,10 +369,6 @@ public class TileUtils {
         }
     }
 
-    private static String getString(Bundle bundle, String key) {
-        return bundle == null ? null : bundle.getString(key);
-    }
-
     private static IContentProvider getProviderFromUri(Context context, Uri uri,
             Map<String, IContentProvider> providerMap) {
         if (uri == null) {
@@ -609,12 +395,4 @@ public class TileUtils {
         }
         return pathSegments.get(0);
     }
-
-    private static final Comparator<DashboardCategory> CATEGORY_COMPARATOR =
-            new Comparator<DashboardCategory>() {
-        @Override
-        public int compare(DashboardCategory lhs, DashboardCategory rhs) {
-            return rhs.priority - lhs.priority;
-        }
-    };
 }

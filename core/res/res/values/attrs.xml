@@ -3113,6 +3113,9 @@
              the alpha channel of the outlineAmbientShadowColor (typically opaque), and the
              {@link android.R.attr#ambientShadowAlpha} theme attribute. -->
         <attr name="outlineAmbientShadowColor" format="color" />
+
+        <!-- Whether to allow the rendering system to force this View to render as light-on-dark. -->
+        <attr name="allowForceDark" format="boolean" />
     </declare-styleable>
 
     <!-- Attributes that can be assigned to a tag for a particular View. -->
@@ -7863,8 +7866,7 @@
              wallpaper. -->
         <attr name="showMetadataInPreview" format="boolean" />
 
-        <!-- Wallpapers optimized and capable of drawing in ambient mode will return true.
-            @hide -->
+        <!-- Wallpapers optimized and capable of drawing in ambient mode will return true. -->
         <attr name="supportsAmbientMode" format="boolean" />
 
     </declare-styleable>

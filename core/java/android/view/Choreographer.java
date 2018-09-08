@@ -20,6 +20,7 @@ import static android.view.DisplayEventReceiver.VSYNC_SOURCE_APP;
 import static android.view.DisplayEventReceiver.VSYNC_SOURCE_SURFACE_FLINGER;
 
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.hardware.display.DisplayManagerGlobal;
 import android.os.Handler;
 import android.os.Looper;
@@ -131,6 +132,7 @@ public final class Choreographer {
             };
 
     // Enable/disable vsync for animations and drawing.
+    @UnsupportedAppUsage
     private static final boolean USE_VSYNC = SystemProperties.getBoolean(
             "debug.choreographer.vsync", true);
 
@@ -157,6 +159,7 @@ public final class Choreographer {
         public String toString() { return "FRAME_CALLBACK_TOKEN"; }
     };
 
+    @UnsupportedAppUsage
     private final Object mLock = new Object();
 
     private final Looper mLooper;
@@ -165,15 +168,19 @@ public final class Choreographer {
     // The display event receiver can only be accessed by the looper thread to which
     // it is attached.  We take care to ensure that we post message to the looper
     // if appropriate when interacting with the display event receiver.
+    @UnsupportedAppUsage
     private final FrameDisplayEventReceiver mDisplayEventReceiver;
 
     private CallbackRecord mCallbackPool;
 
+    @UnsupportedAppUsage
     private final CallbackQueue[] mCallbackQueues;
 
     private boolean mFrameScheduled;
     private boolean mCallbacksRunning;
+    @UnsupportedAppUsage
     private long mLastFrameTimeNanos;
+    @UnsupportedAppUsage
     private long mFrameIntervalNanos;
     private boolean mDebugPrintNextFrameTimeDelta;
     private int mFPSDivisor = 1;
@@ -274,6 +281,7 @@ public final class Choreographer {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public static Choreographer getSfInstance() {
         return sSfThreadInstance.get();
     }
@@ -575,6 +583,7 @@ public final class Choreographer {
      * @throws IllegalStateException if no frame is in progress.
      * @hide
      */
+    @UnsupportedAppUsage
     public long getFrameTime() {
         return getFrameTimeNanos() / TimeUtils.NANOS_PER_MS;
     }
@@ -587,6 +596,7 @@ public final class Choreographer {
      * @throws IllegalStateException if no frame is in progress.
      * @hide
      */
+    @UnsupportedAppUsage
     public long getFrameTimeNanos() {
         synchronized (mLock) {
             if (!mCallbacksRunning) {
@@ -682,6 +692,7 @@ public final class Choreographer {
         ThreadedRenderer.setFPSDivisor(divisor);
     }
 
+    @UnsupportedAppUsage
     void doFrame(long frameTimeNanos, int frame) {
         final long startNanos;
         synchronized (mLock) {
@@ -847,6 +858,7 @@ public final class Choreographer {
         }
     }
 
+    @UnsupportedAppUsage
     private void scheduleVsyncLocked() {
         mDisplayEventReceiver.scheduleVsync();
     }
@@ -997,6 +1009,7 @@ public final class Choreographer {
         public Object action; // Runnable or FrameCallback
         public Object token;
 
+        @UnsupportedAppUsage
         public void run(long frameTimeNanos) {
             if (token == FRAME_CALLBACK_TOKEN) {
                 ((FrameCallback)action).doFrame(frameTimeNanos);
@@ -1033,6 +1046,7 @@ public final class Choreographer {
             return callbacks;
         }
 
+        @UnsupportedAppUsage
         public void addCallbackLocked(long dueTime, Object action, Object token) {
             CallbackRecord callback = obtainCallbackLocked(dueTime, action, token);
             CallbackRecord entry = mHead;

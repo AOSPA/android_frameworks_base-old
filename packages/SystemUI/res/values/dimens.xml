@@ -236,6 +236,9 @@
     <!-- Height of search panel including navigation bar height -->
     <dimen name="navbar_search_panel_height">230dip</dimen>
 
+    <!-- Move the back button drawable for 3 button layout upwards in ime mode and in portrait -->
+    <dimen name="navbar_back_button_ime_offset">2dp</dimen>
+
     <!-- Height of the draggable handle at the bottom of the phone notification panel -->
     <dimen name="close_handle_height">36dp</dimen>
 
@@ -942,9 +945,9 @@
     <dimen name="bottom_padding">48dp</dimen>
     <dimen name="edge_margin">8dp</dimen>
 
-    <dimen name="rounded_corner_radius">0dp</dimen>
-    <dimen name="rounded_corner_radius_top">0dp</dimen>
-    <dimen name="rounded_corner_radius_bottom">0dp</dimen>
+    <dimen name="rounded_corner_radius">@*android:dimen/rounded_corner_radius</dimen>
+    <dimen name="rounded_corner_radius_top">@*android:dimen/rounded_corner_radius_top</dimen>
+    <dimen name="rounded_corner_radius_bottom">@*android:dimen/rounded_corner_radius_bottom</dimen>
     <dimen name="rounded_corner_content_padding">0dp</dimen>
     <dimen name="nav_content_padding">0dp</dimen>
     <dimen name="nav_quick_scrub_track_edge_padding">24dp</dimen>

@@ -300,6 +300,12 @@
     <string name="permgrouplab_sensors" msgid="416037179223226722">"Մարմնի սենսորներ"</string>
     <string name="permgroupdesc_sensors" msgid="7147968539346634043">"օգտագործել սենսորների տվյալները ձեր օրգանիզմի վիճակի մասին"</string>
     <string name="permgrouprequest_sensors" msgid="6349806962814556786">"Թույլ տա՞լ &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; հավելվածին սենսորից ստանալ ձեր կենսագործունեության հիմնական տվյալները:"</string>
+    <string name="permgrouplab_aural" msgid="965607064083134896">"Երաժշտություն"</string>
+    <string name="permgroupdesc_aural" msgid="4870189506255958055">"երաժշտության հասանելիություն"</string>
+    <string name="permgrouprequest_aural" msgid="6787926123071735620">"Հասանելի դարձնե՞լ &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; հավելվածին ձեր երաժշտությունը:"</string>
+    <string name="permgrouplab_visual" msgid="8030190588123857921">"Լուսանկարներ և տեսանյութեր"</string>
+    <string name="permgroupdesc_visual" msgid="3415827902566663546">"լուսանկարների և տեսանյութերի հասանելիություն"</string>
+    <string name="permgrouprequest_visual" msgid="6907523945030290376">"Հասանելի դարձնե՞լ &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; հավելվածին ձեր լուսանկարներն ու տեսանյութերը։"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="3901717936930170320">"Առբերել պատուհանի բովանդակությունը"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="3772225008605310672">"Վերլուծել գործող պատուհանի բովանդակությունը"</string>
     <string name="capability_title_canRequestTouchExploration" msgid="3108723364676667320">"Միացնել Հպման միջոցով հետազոտումը"</string>
@@ -494,6 +500,20 @@
     <string name="permdesc_manageFingerprint" msgid="178208705828055464">"Հավելվածին թույլ է տալիս կատարել այնպիսի գործառույթներ, որոնց միջոցով կարելի է օգտագործման համար ավելացնել և հեռացնել մատնահետքերի նմուշներ:"</string>
     <string name="permlab_useFingerprint" msgid="3150478619915124905">"օգտագործել մատնահետքերի գրանցման սարքը"</string>
     <string name="permdesc_useFingerprint" msgid="9165097460730684114">"Հավելվածին թույլ է տալիս նույնականացման համար օգտագործել մատնահետքերի գրանցման սարքը"</string>
+    <string name="permlab_audioRead" msgid="6617225220728465565">"ճանաչել երաժշտական հավաքածուն"</string>
+    <string name="permdesc_audioRead" msgid="5034032570243484805">"Թույլ է տալիս հավելվածին ճանաչել ձեր երաժշտական հավաքածուն:"</string>
+    <string name="permlab_audioWrite" msgid="2661772059799779292">"փոփոխել երաժշտական հավաքածուն"</string>
+    <string name="permdesc_audioWrite" msgid="8888544708166230494">"Թույլ է տալիս հավելվածին փոփոխել ձեր երաժշտական հավաքածուն:"</string>
+    <string name="permlab_videoRead" msgid="9182618678674737229">"ճանաչել տեսանյութերի հավաքածուն"</string>
+    <string name="permdesc_videoRead" msgid="7045676429859396194">"Թույլ է տալիս հավելվածին ճանաչել ձեր տեսանյութերի հավաքածուն:"</string>
+    <string name="permlab_videoWrite" msgid="128769316366746446">"փոփոխել տեսանյութերի հավաքածուն"</string>
+    <string name="permdesc_videoWrite" msgid="5448565757490640841">"Թույլ է տալիս հավելվածին փոփոխել ձեր տեսանյութերի հավաքածուն:"</string>
+    <string name="permlab_imagesRead" msgid="3015078545742665304">"ճանաչել լուսանկարների հավաքածուն"</string>
+    <string name="permdesc_imagesRead" msgid="3144263806038695580">"Թույլ է տալիս հավելվածին ճանաչել ձեր լուսանկարների հավաքածուն:"</string>
+    <string name="permlab_imagesWrite" msgid="3391306186247235510">"փոփոխել լուսանկարների հավաքածուն"</string>
+    <string name="permdesc_imagesWrite" msgid="7073662756617474375">"Թույլ է տալիս հավելվածին փոփոխել ձեր լուսանկարների հավաքածուն:"</string>
+    <string name="permlab_mediaLocation" msgid="8675148183726247864">"ճանաչել տեղադրության մասին տվյալները մեդիա բովանդակության հավաքածուից"</string>
+    <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Թույլ է տալիս հավելվածին ճանաչել տեղադրության մասին տվյալները ձեր մեդիա բովանդակության հավաքածուից:"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Մատնահետքը հայտնաբերվել է մասամբ: Փորձեք նորից:"</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"Չհաջողվեց մշակել մատնահետքը: Նորից փորձեք:"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"Մատնահետքերի սենսորն աղտոտված է: Մաքրեք այն և փորձեք նորից:"</string>
@@ -1097,7 +1117,7 @@
     <string name="whichImageCaptureApplication" msgid="3680261417470652882">"Լուսանկարել այս հավելվածի օգնությամբ"</string>
     <string name="whichImageCaptureApplicationNamed" msgid="8619384150737825003">"Լուսանկարել %1$s հավելվածի օգնությամբ"</string>
     <string name="whichImageCaptureApplicationLabel" msgid="6390303445371527066">"Լուսանկարել"</string>
-    <string name="alwaysUse" msgid="4583018368000610438">"Օգտագործել լռելյայն այս գործողության համար:"</string>
+    <string name="alwaysUse" msgid="4583018368000610438">"Օգտագործել ըստ կանխադրման այս գործողության համար:"</string>
     <string name="use_a_different_app" msgid="8134926230585710243">"Օգտագործել այլ հավելված"</string>
     <string name="clearDefaultHintMsg" msgid="3252584689512077257">"Մաքրել լռելյայնը Համակարգի կարգավորումներ &gt; Ծրագրեր &gt;Ներբեռնված էջից:"</string>
     <string name="chooseActivity" msgid="7486876147751803333">"Ընտրել գործողություն"</string>
@@ -1850,7 +1870,7 @@
     <string name="app_category_social" msgid="5842783057834965912">"Սոցցանցեր և հաղորդակցություն"</string>
     <string name="app_category_news" msgid="7496506240743986873">"Նորություններ և ամսագրեր"</string>
     <string name="app_category_maps" msgid="5878491404538024367">"Քարտեզներ և նավարկում"</string>
-    <string name="app_category_productivity" msgid="3742083261781538852">"Աշխատանք"</string>
+    <string name="app_category_productivity" msgid="3742083261781538852">"Արդյունավետություն"</string>
     <string name="device_storage_monitor_notification_channel" msgid="3295871267414816228">"Սարքի հիշողություն"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="5537766997350092316">"USB վրիպազերծում"</string>
     <string name="time_picker_hour_label" msgid="2979075098868106450">"ժամ"</string>
@@ -1872,8 +1892,13 @@
     <string name="autofill_save_title_with_type" msgid="8637809388029313305">"Պահե՞լ <xliff:g id="TYPE">%1$s</xliff:g>ը &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt; ծառայությունում"</string>
     <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"Պահե՞լ <xliff:g id="TYPE_0">%1$s</xliff:g>ն ու <xliff:g id="TYPE_1">%2$s</xliff:g>ը &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt; ծառայությունում"</string>
     <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"Պահե՞լ <xliff:g id="TYPE_0">%1$s</xliff:g>ը, <xliff:g id="TYPE_1">%2$s</xliff:g>ն ու <xliff:g id="TYPE_2">%3$s</xliff:g>ը &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt; ծառայությունում"</string>
+    <string name="autofill_update_title" msgid="4879673117448810818">"Թարմացնե՞լ &lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt; ծառայության տվյալները"</string>
+    <string name="autofill_update_title_with_type" msgid="339733442087186755">"Թարմացնե՞լ &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt; ծառայության տվյալները (<xliff:g id="TYPE">%1$s</xliff:g>)"</string>
+    <string name="autofill_update_title_with_2types" msgid="6321714204167424745">"Թարմացնե՞լ &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt; ծառայության տվյալները (<xliff:g id="TYPE_0">%1$s</xliff:g> և <xliff:g id="TYPE_1">%2$s</xliff:g>)"</string>
+    <string name="autofill_update_title_with_3types" msgid="5866735124066629287">"Թարմացնե՞լ &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt; ծառայության տվյալները (<xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> և <xliff:g id="TYPE_2">%3$s</xliff:g>)"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"Պահել"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"Ոչ"</string>
+    <string name="autofill_update_yes" msgid="310358413273276958">"Թարմացնել"</string>
     <string name="autofill_save_type_password" msgid="5288448918465971568">"գաղտնաբառ"</string>
     <string name="autofill_save_type_address" msgid="4936707762193009542">"հասցե"</string>
     <string name="autofill_save_type_credit_card" msgid="7127694776265563071">"վարկային քարտ"</string>

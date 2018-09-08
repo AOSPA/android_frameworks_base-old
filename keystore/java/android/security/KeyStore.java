@@ -16,6 +16,7 @@
 
 package android.security;
 
+import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.Application;
@@ -57,6 +58,7 @@ public class KeyStore {
     private static final String TAG = "KeyStore";
 
     // ResponseCodes - see system/security/keystore/include/keystore/keystore.h
+    @UnsupportedAppUsage
     public static final int NO_ERROR = 1;
     public static final int LOCKED = 2;
     public static final int UNINITIALIZED = 3;
@@ -128,7 +130,13 @@ public class KeyStore {
     public static final int FLAG_STRONGBOX = 1 << 4;
 
     // States
-    public enum State { UNLOCKED, LOCKED, UNINITIALIZED };
+    public enum State {
+        @UnsupportedAppUsage
+        UNLOCKED,
+        @UnsupportedAppUsage
+        LOCKED,
+        UNINITIALIZED
+    };
 
     private int mError = NO_ERROR;
 
@@ -142,6 +150,7 @@ public class KeyStore {
         mContext = getApplicationContext();
     }
 
+    @UnsupportedAppUsage
     public static Context getApplicationContext() {
         Application application = ActivityThread.currentApplication();
         if (application == null) {
@@ -151,6 +160,7 @@ public class KeyStore {
         return application;
     }
 
+    @UnsupportedAppUsage
     public static KeyStore getInstance() {
         IKeystoreService keystore = IKeystoreService.Stub.asInterface(ServiceManager
                 .getService("android.security.keystore"));
@@ -164,6 +174,7 @@ public class KeyStore {
         return mToken;
     }
 
+    @UnsupportedAppUsage
     public State state(int userId) {
         final int ret;
         try {
@@ -181,6 +192,7 @@ public class KeyStore {
         }
     }
 
+    @UnsupportedAppUsage
     public State state() {
         return state(UserHandle.myUserId());
     }
@@ -193,6 +205,7 @@ public class KeyStore {
         return get(key, uid, false);
     }
 
+    @UnsupportedAppUsage
     public byte[] get(String key) {
         return get(key, UID_SELF);
     }
@@ -243,6 +256,7 @@ public class KeyStore {
         }
     }
 
+    @UnsupportedAppUsage
     public boolean delete(String key) {
         return delete(key, UID_SELF);
     }
@@ -279,6 +293,7 @@ public class KeyStore {
         return list(prefix, UID_SELF);
     }
 
+    @UnsupportedAppUsage
     public boolean reset() {
         try {
             return mBinder.reset() == NO_ERROR;
@@ -329,6 +344,7 @@ public class KeyStore {
         }
     }
 
+    @UnsupportedAppUsage
     public boolean unlock(String password) {
         return unlock(UserHandle.getUserId(Process.myUid()), password);
     }
@@ -345,6 +361,7 @@ public class KeyStore {
         }
     }
 
+    @UnsupportedAppUsage
     public boolean isEmpty() {
         return isEmpty(UserHandle.myUserId());
     }
@@ -814,6 +831,7 @@ public class KeyStore {
      * Returns a {@link KeyStoreException} corresponding to the provided keystore/keymaster error
      * code.
      */
+    @UnsupportedAppUsage
     public static KeyStoreException getKeyStoreException(int errorCode) {
         if (errorCode > 0) {
             // KeyStore layer error

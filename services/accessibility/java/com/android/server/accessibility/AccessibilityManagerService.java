@@ -16,12 +16,18 @@
 
 package com.android.server.accessibility;
 
+import static android.accessibilityservice.AccessibilityService.SHOW_MODE_MASK;
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.accessibility.AccessibilityEvent.WINDOWS_CHANGE_ACCESSIBILITY_FOCUSED;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_ACCESSIBILITY_FOCUS;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLEAR_ACCESSIBILITY_FOCUS;
 import static com.android.internal.util.FunctionalUtils.ignoreRemoteException;
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
+import static android.accessibilityservice.AccessibilityService.SHOW_MODE_AUTO;
+import static android.accessibilityservice.AccessibilityService.SHOW_MODE_HIDDEN;
+import static android.accessibilityservice.AccessibilityService.SHOW_MODE_WITH_HARD_KEYBOARD;
+import static android.accessibilityservice.AccessibilityService.SHOW_MODE_HARD_KEYBOARD_ORIGINAL_VALUE;
+import static android.accessibilityservice.AccessibilityService.SHOW_MODE_HARD_KEYBOARD_OVERRIDDEN;
 
 import android.Manifest;
 import android.accessibilityservice.AccessibilityService;
@@ -109,6 +115,7 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IntPair;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
+import com.android.server.SystemService;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -260,6 +267,25 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         return getUserStateLocked(mCurrentUserId);
     }
 
+    public static final class Lifecycle extends SystemService {
+        private final AccessibilityManagerService mService;
+
+        public Lifecycle(Context context) {
+            super(context);
+            mService = new AccessibilityManagerService(context);
+        }
+
+        @Override
+        public void onStart() {
+            publishBinderService(Context.ACCESSIBILITY_SERVICE, mService);
+        }
+
+        @Override
+        public void onBootPhase(int phase) {
+            mService.onBootPhase(phase);
+        }
+    }
+
     /**
      * Creates a new instance.
      *
@@ -294,6 +320,14 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     @Nullable
     public FingerprintGestureDispatcher getFingerprintGestureDispatcher() {
         return mFingerprintGestureDispatcher;
+    }
+
+    private void onBootPhase(int phase) {
+        if (phase == SystemService.PHASE_SYSTEM_SERVICES_READY) {
+            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_APP_WIDGETS)) {
+                mAppWidgetService = LocalServices.getService(AppWidgetManagerInternal.class);
+            }
+        }
     }
 
     private UserState getUserState(int userId) {
@@ -667,6 +701,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     public int addAccessibilityInteractionConnection(IWindow windowToken,
             IAccessibilityInteractionConnection connection, String packageName,
             int userId) throws RemoteException {
+        final int windowId;
         synchronized (mLock) {
             // We treat calls from a profile as if made by its parent as profiles
             // share the accessibility state of the parent. The call below
@@ -679,7 +714,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             packageName = mSecurityPolicy.resolveValidReportedPackageLocked(
                     packageName, UserHandle.getCallingAppId(), resolvedUserId);
 
-            final int windowId = sNextWindowId++;
+            windowId = sNextWindowId++;
             // If the window is from a process that runs across users such as
             // the system UI or the system we add it to the global state that
             // is shared across users.
@@ -707,8 +742,10 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                             + " and  token: " + windowToken.asBinder());
                 }
             }
-            return windowId;
         }
+        WindowManagerInternal wm = LocalServices.getService(WindowManagerInternal.class);
+        wm.computeWindowsForAccessibility();
+        return windowId;
     }
 
     @Override
@@ -1530,8 +1567,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         }
         final long identity = Binder.clearCallingIdentity();
         try {
+            final String settingValue = builder.toString();
             Settings.Secure.putStringForUser(mContext.getContentResolver(),
-                    settingName, builder.toString(), userId);
+                    settingName, TextUtils.isEmpty(settingValue) ? null : settingValue, userId);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -1779,7 +1817,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         updateDisplayDaltonizerLocked(userState);
         updateDisplayInversionLocked(userState);
         updateMagnificationLocked(userState);
-        updateSoftKeyboardShowModeLocked(userState);
         scheduleUpdateFingerprintGestureHandling(userState);
         scheduleUpdateInputFilter(userState);
         scheduleUpdateClientsIfNeededLocked(userState);
@@ -1968,18 +2005,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 userState.mUserId) == 1;
         if (highTextContrastEnabled != userState.mIsTextHighContrastEnabled) {
             userState.mIsTextHighContrastEnabled = highTextContrastEnabled;
-            return true;
-        }
-        return false;
-    }
-
-    private boolean readSoftKeyboardShowModeChangedLocked(UserState userState) {
-        final int softKeyboardShowMode = Settings.Secure.getIntForUser(
-                mContext.getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE, 0,
-                userState.mUserId);
-        if (softKeyboardShowMode != userState.mSoftKeyboardShowMode) {
-            userState.mSoftKeyboardShowMode = softKeyboardShowMode;
             return true;
         }
         return false;
@@ -2181,34 +2206,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             }
         }
         return false;
-    }
-
-    private void updateSoftKeyboardShowModeLocked(UserState userState) {
-        final int userId = userState.mUserId;
-        // Only check whether we need to reset the soft keyboard mode if it is not set to the
-        // default.
-        if ((userId == mCurrentUserId) && (userState.mSoftKeyboardShowMode != 0)) {
-            // Check whether the last AccessibilityService that changed the soft keyboard mode to
-            // something other than the default is still enabled and, if not, remove flag and
-            // reset to the default soft keyboard behavior.
-            boolean serviceChangingSoftKeyboardModeIsEnabled =
-                    userState.mEnabledServices.contains(userState.mServiceChangingSoftKeyboardMode);
-
-            if (!serviceChangingSoftKeyboardModeIsEnabled) {
-                final long identity = Binder.clearCallingIdentity();
-                try {
-                    Settings.Secure.putIntForUser(mContext.getContentResolver(),
-                            Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
-                            0,
-                            userState.mUserId);
-                } finally {
-                    Binder.restoreCallingIdentity(identity);
-                }
-                userState.mSoftKeyboardShowMode = 0;
-                userState.mServiceChangingSoftKeyboardMode = null;
-                notifySoftKeyboardShowModeChangedLocked(userState.mSoftKeyboardShowMode);
-            }
-        }
     }
 
     private void updateFingerprintGestureHandling(UserState userState) {
@@ -2442,6 +2439,15 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     pw.append(']');
                 }
             }
+        }
+    }
+
+    private void putSecureIntForUser(String key, int value, int userid) {
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            Settings.Secure.putIntForUser(mContext.getContentResolver(), key, value, userid);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
     }
 
@@ -2681,16 +2687,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         onUserStateChangedLocked(userState);
         if (serviceInfoChanged) {
             scheduleNotifyClientsOfServicesStateChange(userState);
-        }
-    }
-
-    private AppWidgetManagerInternal getAppWidgetManager() {
-        synchronized (mLock) {
-            if (mAppWidgetService == null
-                    && mPackageManager.hasSystemFeature(PackageManager.FEATURE_APP_WIDGETS)) {
-                mAppWidgetService = LocalServices.getService(AppWidgetManagerInternal.class);
-            }
-            return mAppWidgetService;
         }
     }
 
@@ -3022,8 +3018,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                 return packageName.toString();
             }
             // Appwidget hosts get to pass packages for widgets they host
-            final AppWidgetManagerInternal appWidgetManager = getAppWidgetManager();
-            if (appWidgetManager != null && ArrayUtils.contains(appWidgetManager
+            if (mAppWidgetService != null && ArrayUtils.contains(mAppWidgetService
                             .getHostedWidgetPackages(resolvedUid), packageNameStr)) {
                 return packageName.toString();
             }
@@ -3051,9 +3046,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             // IMPORTANT: The target package is already vetted to be in the target UID
             String[] uidPackages = new String[]{targetPackage};
             // Appwidget hosts get to pass packages for widgets they host
-            final AppWidgetManagerInternal appWidgetManager = getAppWidgetManager();
-            if (appWidgetManager != null) {
-                final ArraySet<String> widgetPackages = appWidgetManager
+            if (mAppWidgetService != null) {
+                final ArraySet<String> widgetPackages = mAppWidgetService
                         .getHostedWidgetPackages(targetUid);
                 if (widgetPackages != null && !widgetPackages.isEmpty()) {
                     final String[] validPackages = new String[uidPackages.length
@@ -3667,7 +3661,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
         public int mLastSentClientState = -1;
 
-        public int mSoftKeyboardShowMode = 0;
+        private int mSoftKeyboardShowMode = 0;
 
         public boolean mIsNavBarMagnificationAssignedToAccessibilityButton;
         public ComponentName mServiceAssignedToAccessibilityButton;
@@ -3728,7 +3722,6 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             mServiceAssignedToAccessibilityButton = null;
             mIsNavBarMagnificationAssignedToAccessibilityButton = false;
             mIsAutoclickEnabled = false;
-            mSoftKeyboardShowMode = 0;
         }
 
         public void addServiceLocked(AccessibilityServiceConnection serviceConnection) {
@@ -3750,6 +3743,11 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         public void removeServiceLocked(AccessibilityServiceConnection serviceConnection) {
             mBoundServices.remove(serviceConnection);
             serviceConnection.onRemoved();
+            if ((mServiceChangingSoftKeyboardMode != null)
+                    && (mServiceChangingSoftKeyboardMode.equals(
+                            serviceConnection.getServiceInfo().getComponentName()))) {
+                setSoftKeyboardModeLocked(SHOW_MODE_AUTO, null);
+            }
             // It may be possible to bind a service twice, which confuses the map. Rebuild the map
             // to make sure we can still reach a service
             mComponentNameToServiceMap.clear();
@@ -3775,6 +3773,134 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
         public Set<ComponentName> getBindingServicesLocked() {
             return mBindingServices;
+        }
+
+        public int getSoftKeyboardShowMode() {
+            return mSoftKeyboardShowMode;
+        }
+
+        /**
+         * Set the soft keyboard mode. This mode is a bit odd, as it spans multiple settings.
+         * The ACCESSIBILITY_SOFT_KEYBOARD_MODE setting can be checked by the rest of the system
+         * to see if it should suppress showing the IME. The SHOW_IME_WITH_HARD_KEYBOARD setting
+         * setting can be changed by the user, and prevents the system from suppressing the soft
+         * keyboard when the hard keyboard is connected. The hard keyboard setting needs to defer
+         * to the user's preference, if they have supplied one.
+         *
+         * @param newMode The new mode
+         * @param requester The service requesting the change, so we can undo it when the
+         *                  service stops. Set to null if something other than a service is forcing
+         *                  the change.
+         *
+         * @return Whether or not the soft keyboard mode equals the new mode after the call
+         */
+        public boolean setSoftKeyboardModeLocked(int newMode, @Nullable ComponentName requester) {
+            if ((newMode != SHOW_MODE_AUTO) && (newMode != SHOW_MODE_HIDDEN)
+                    && (newMode != SHOW_MODE_WITH_HARD_KEYBOARD))
+            {
+                Slog.w(LOG_TAG, "Invalid soft keyboard mode");
+                return false;
+            }
+            if (mSoftKeyboardShowMode == newMode) return true;
+
+            if (newMode == SHOW_MODE_WITH_HARD_KEYBOARD) {
+                if (hasUserOverriddenHardKeyboardSettingLocked()) {
+                    // The user has specified a default for this setting
+                    return false;
+                }
+                // Save the original value. But don't do this if the value in settings is already
+                // the new mode. That happens when we start up after a reboot, and we don't want
+                // to overwrite the value we had from when we first started controlling the setting.
+                if (getSoftKeyboardValueFromSettings() != SHOW_MODE_WITH_HARD_KEYBOARD) {
+                    setOriginalHardKeyboardValue(
+                            Settings.Secure.getInt(mContext.getContentResolver(),
+                                    Settings.Secure.SHOW_IME_WITH_HARD_KEYBOARD, 0) != 0);
+                }
+                putSecureIntForUser(Settings.Secure.SHOW_IME_WITH_HARD_KEYBOARD, 1, mUserId);
+            } else if (mSoftKeyboardShowMode == SHOW_MODE_WITH_HARD_KEYBOARD) {
+                putSecureIntForUser(Settings.Secure.SHOW_IME_WITH_HARD_KEYBOARD,
+                        getOriginalHardKeyboardValue() ? 1 : 0, mUserId);
+            }
+
+            saveSoftKeyboardValueToSettings(newMode);
+            mSoftKeyboardShowMode = newMode;
+            mServiceChangingSoftKeyboardMode = requester;
+            notifySoftKeyboardShowModeChangedLocked(mSoftKeyboardShowMode);
+            return true;
+        }
+
+        /**
+         * If the settings are inconsistent with the internal state, make the internal state
+         * match the settings.
+         */
+        public void reconcileSoftKeyboardModeWithSettingsLocked() {
+            final ContentResolver cr = mContext.getContentResolver();
+            final boolean showWithHardKeyboardSettings =
+                    Settings.Secure.getInt(cr, Settings.Secure.SHOW_IME_WITH_HARD_KEYBOARD, 0) != 0;
+            if (mSoftKeyboardShowMode == SHOW_MODE_WITH_HARD_KEYBOARD) {
+                if (!showWithHardKeyboardSettings) {
+                    // The user has overridden the setting. Respect that and prevent further changes
+                    // to this behavior.
+                    setSoftKeyboardModeLocked(SHOW_MODE_AUTO, null);
+                    setUserOverridesHardKeyboardSettingLocked();
+                }
+            }
+
+            // If the setting and the internal state are out of sync, set both to default
+            if (getSoftKeyboardValueFromSettings() != mSoftKeyboardShowMode)
+            {
+                Slog.e(LOG_TAG,
+                        "Show IME setting inconsistent with internal state. Overwriting");
+                setSoftKeyboardModeLocked(SHOW_MODE_AUTO, null);
+                putSecureIntForUser(Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
+                        SHOW_MODE_AUTO, mUserId);
+            }
+        }
+
+        private void setUserOverridesHardKeyboardSettingLocked() {
+            final int softKeyboardSetting = Settings.Secure.getInt(mContext.getContentResolver(),
+                    Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE, 0);
+            putSecureIntForUser(Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
+                    softKeyboardSetting | SHOW_MODE_HARD_KEYBOARD_OVERRIDDEN,
+                    mUserId);
+        }
+
+        private boolean hasUserOverriddenHardKeyboardSettingLocked() {
+            final int softKeyboardSetting = Settings.Secure.getInt(mContext.getContentResolver(),
+                    Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE, 0);
+            return (softKeyboardSetting & SHOW_MODE_HARD_KEYBOARD_OVERRIDDEN)
+                    != 0;
+        }
+
+        private void setOriginalHardKeyboardValue(boolean originalHardKeyboardValue) {
+            final int oldSoftKeyboardSetting = Settings.Secure.getInt(mContext.getContentResolver(),
+                    Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE, 0);
+            final int newSoftKeyboardSetting = oldSoftKeyboardSetting
+                    & (~SHOW_MODE_HARD_KEYBOARD_ORIGINAL_VALUE)
+                    | ((originalHardKeyboardValue) ? SHOW_MODE_HARD_KEYBOARD_ORIGINAL_VALUE : 0);
+            putSecureIntForUser(Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
+                    newSoftKeyboardSetting, mUserId);
+        }
+
+        private void saveSoftKeyboardValueToSettings(int softKeyboardShowMode) {
+            final int oldSoftKeyboardSetting = Settings.Secure.getInt(mContext.getContentResolver(),
+                    Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE, 0);
+            final int newSoftKeyboardSetting = oldSoftKeyboardSetting & (~SHOW_MODE_MASK)
+                    | softKeyboardShowMode;
+            putSecureIntForUser(Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
+                    newSoftKeyboardSetting, mUserId);
+        }
+
+        private int getSoftKeyboardValueFromSettings() {
+            return Settings.Secure.getInt(mContext.getContentResolver(),
+                    Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
+                    SHOW_MODE_AUTO) & SHOW_MODE_MASK;
+        }
+
+        private boolean getOriginalHardKeyboardValue() {
+            return (Settings.Secure.getInt(mContext.getContentResolver(),
+                    Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE, 0)
+                    & SHOW_MODE_HARD_KEYBOARD_ORIGINAL_VALUE) != 0;
         }
     }
 
@@ -3813,6 +3939,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         private final Uri mAccessibilitySoftKeyboardModeUri = Settings.Secure.getUriFor(
                 Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE);
 
+        private final Uri mShowImeWithHardKeyboardUri = Settings.Secure.getUriFor(
+                Settings.Secure.SHOW_IME_WITH_HARD_KEYBOARD);
+
         private final Uri mAccessibilityShortcutServiceIdUri = Settings.Secure.getUriFor(
                 Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_SERVICE);
 
@@ -3847,6 +3976,8 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     mHighTextContrastUri, false, this, UserHandle.USER_ALL);
             contentResolver.registerContentObserver(
                     mAccessibilitySoftKeyboardModeUri, false, this, UserHandle.USER_ALL);
+            contentResolver.registerContentObserver(
+                    mShowImeWithHardKeyboardUri, false, this, UserHandle.USER_ALL);
             contentResolver.registerContentObserver(
                     mAccessibilityShortcutServiceIdUri, false, this, UserHandle.USER_ALL);
             contentResolver.registerContentObserver(
@@ -3890,11 +4021,9 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
                     if (readHighTextContrastEnabledSettingLocked(userState)) {
                         onUserStateChangedLocked(userState);
                     }
-                } else if (mAccessibilitySoftKeyboardModeUri.equals(uri)) {
-                    if (readSoftKeyboardShowModeChangedLocked(userState)) {
-                        notifySoftKeyboardShowModeChangedLocked(userState.mSoftKeyboardShowMode);
-                        onUserStateChangedLocked(userState);
-                    }
+                } else if (mAccessibilitySoftKeyboardModeUri.equals(uri)
+                        || mShowImeWithHardKeyboardUri.equals(uri)) {
+                    userState.reconcileSoftKeyboardModeWithSettingsLocked();
                 } else if (mAccessibilityShortcutServiceIdUri.equals(uri)) {
                     if (readAccessibilityShortcutSettingLocked(userState)) {
                         onUserStateChangedLocked(userState);

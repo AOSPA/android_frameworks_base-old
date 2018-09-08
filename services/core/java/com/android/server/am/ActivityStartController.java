@@ -40,6 +40,7 @@ import android.os.Message;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Slog;
+import android.util.proto.ProtoOutputStream;
 import android.view.RemoteAnimationAdapter;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -248,7 +249,8 @@ public class ActivityStartController {
     final int startActivityInPackage(int uid, int realCallingPid, int realCallingUid,
             String callingPackage, Intent intent, String resolvedType, IBinder resultTo,
             String resultWho, int requestCode, int startFlags, SafeActivityOptions options,
-            int userId, TaskRecord inTask, String reason, boolean validateIncomingUser) {
+            int userId, TaskRecord inTask, String reason, boolean validateIncomingUser,
+            PendingIntentRecord originatingPendingIntent) {
 
         userId = checkTargetUser(userId, validateIncomingUser, realCallingPid, realCallingUid,
                 reason);
@@ -267,6 +269,7 @@ public class ActivityStartController {
                 .setActivityOptions(options)
                 .setMayWait(userId)
                 .setInTask(inTask)
+                .setOriginatingPendingIntent(originatingPendingIntent)
                 .execute();
     }
 
@@ -278,10 +281,12 @@ public class ActivityStartController {
      * @param intents Intents to start.
      * @param userId Start the intents on this user.
      * @param validateIncomingUser Set true to skip checking {@code userId} with the calling UID.
+     * @param originatingPendingIntent PendingIntentRecord that originated this activity start or
+     *        null if not originated by PendingIntent
      */
     final int startActivitiesInPackage(int uid, String callingPackage, Intent[] intents,
             String[] resolvedTypes, IBinder resultTo, SafeActivityOptions options, int userId,
-            boolean validateIncomingUser) {
+            boolean validateIncomingUser, PendingIntentRecord originatingPendingIntent) {
 
         final String reason = "startActivityInPackage";
 
@@ -290,12 +295,12 @@ public class ActivityStartController {
 
         // TODO: Switch to user app stacks here.
         return startActivities(null, uid, callingPackage, intents, resolvedTypes, resultTo, options,
-                userId, reason);
+                userId, reason, originatingPendingIntent);
     }
 
     int startActivities(IApplicationThread caller, int callingUid, String callingPackage,
             Intent[] intents, String[] resolvedTypes, IBinder resultTo, SafeActivityOptions options,
-            int userId, String reason) {
+            int userId, String reason, PendingIntentRecord originatingPendingIntent) {
         if (intents == null) {
             throw new NullPointerException("intents is null");
         }
@@ -374,6 +379,7 @@ public class ActivityStartController {
                             // Top activity decides on animation being run, so we allow only for the
                             // top one as otherwise an activity below might consume it.
                             .setAllowPendingRemoteAnimationRegistryLookup(top /* allowLookup*/)
+                            .setOriginatingPendingIntent(originatingPendingIntent)
                             .execute();
 
                     if (res < 0) {
@@ -404,7 +410,7 @@ public class ActivityStartController {
                     "pendingActivityLaunch");
             try {
                 starter.startResolvedActivity(pal.r, pal.sourceRecord, null, null, pal.startFlags,
-                        resume, null, null, null /* outRecords */);
+                        resume, pal.r.pendingOptions, null, null /* outRecords */);
             } catch (Exception e) {
                 Slog.e(TAG, "Exception during pending activity launch pal=" + pal, e);
                 pal.sendErrorResult(e.getMessage());
@@ -470,6 +476,12 @@ public class ActivityStartController {
         if (dumpPackagePresent) {
             pw.print(prefix);
             pw.println("(nothing)");
+        }
+    }
+
+    public void writeToProto(ProtoOutputStream proto, long fieldId) {
+        for (PendingActivityLaunch activity: mPendingActivityLaunches) {
+            activity.r.writeIdentifierToProto(proto, fieldId);
         }
     }
 }

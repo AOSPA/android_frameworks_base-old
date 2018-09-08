@@ -18,15 +18,13 @@ package com.android.systemui.statusbar.car;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.car.user.CarUserManagerHelper;
 import android.content.Context;
-import android.content.pm.UserInfo;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewStub;
 
 import androidx.recyclerview.widget.GridLayoutManager;
 
-import com.android.settingslib.users.UserManagerHelper;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.phone.StatusBar;
 
@@ -39,8 +37,7 @@ public class FullscreenUserSwitcher {
     private final UserGridRecyclerView mUserGridView;
     private final int mShortAnimDuration;
     private final StatusBar mStatusBar;
-    private final UserManagerHelper mUserManagerHelper;
-    private int mCurrentForegroundUserId;
+    private final CarUserManagerHelper mCarUserManagerHelper;
     private boolean mShowing;
 
     public FullscreenUserSwitcher(StatusBar statusBar, ViewStub containerStub, Context context) {
@@ -54,18 +51,15 @@ public class FullscreenUserSwitcher {
         mUserGridView.buildAdapter();
         mUserGridView.setUserSelectionListener(this::onUserSelected);
 
-        mUserManagerHelper = new UserManagerHelper(context);
-        updateCurrentForegroundUser();
+        mCarUserManagerHelper = new CarUserManagerHelper(context);
 
         mShortAnimDuration = mContainer.getResources()
             .getInteger(android.R.integer.config_shortAnimTime);
     }
 
     public void show() {
-        // On a switch from the system user, don't show the user switcher
-        if (mUserManagerHelper.isHeadlessSystemUser() && mUserManagerHelper
-            .userIsSystemUser(mUserManagerHelper.getForegroundUserInfo())) {
-            return;
+        if (mCarUserManagerHelper.isHeadlessSystemUser()) {
+            showUserGrid();
         }
         if (mShowing) {
             return;
@@ -80,30 +74,29 @@ public class FullscreenUserSwitcher {
     }
 
     public void onUserSwitched(int newUserId) {
-        // The logic for foreground user change is needed here to exclude the reboot case. On
-        // reboot, system fires ACTION_USER_SWITCHED change from -1 to 0 user. This is not an actual
-        // user switch. We only want to trigger keyguard dismissal when foreground user changes.
-        if (foregroundUserChanged()) {
-            toggleSwitchInProgress(false);
-            updateCurrentForegroundUser();
-            mParent.post(this::dismissKeyguard);
-        }
-    }
-
-    private boolean foregroundUserChanged() {
-        return mCurrentForegroundUserId != mUserManagerHelper.getForegroundUserId();
-    }
-
-    private void updateCurrentForegroundUser() {
-        mCurrentForegroundUserId = mUserManagerHelper.getForegroundUserId();
+        toggleSwitchInProgress(false);
+        mParent.post(this::dismissKeyguard);
     }
 
     private void onUserSelected(UserGridRecyclerView.UserRecord record) {
-        if (record.mIsForeground) {
+        if (mCarUserManagerHelper.isHeadlessSystemUser()) {
+            hideUserGrid();
+        }
+
+        if (record.mIsForeground || (record.mIsStartGuestSession
+                && mCarUserManagerHelper.isForegroundUserGuest())) {
             dismissKeyguard();
             return;
         }
         toggleSwitchInProgress(true);
+    }
+
+    private void showUserGrid() {
+        mUserGridView.setVisibility(View.VISIBLE);
+    }
+
+    private void hideUserGrid() {
+        mUserGridView.setVisibility(View.INVISIBLE);
     }
 
     // Dismisses the keyguard and shows bouncer if authentication is necessary.

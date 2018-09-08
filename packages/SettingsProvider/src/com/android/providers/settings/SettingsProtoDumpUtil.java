@@ -186,9 +186,21 @@ class SettingsProtoDumpUtil {
                 GlobalSettingsProto.Auto.TIME_ZONE);
         p.end(autoToken);
 
+        final long autofillToken = p.start(GlobalSettingsProto.AUTOFILL);
         dumpSetting(s, p,
                 Settings.Global.AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES,
-                GlobalSettingsProto.AUTOFILL_COMPAT_MODE_ALLOWED_PACKAGES);
+                GlobalSettingsProto.Autofill.COMPAT_MODE_ALLOWED_PACKAGES);
+        dumpSetting(s, p,
+                Settings.Global.AUTOFILL_LOGGING_LEVEL,
+                GlobalSettingsProto.Autofill.LOGGING_LEVEL);
+        dumpSetting(s, p,
+                Settings.Global.AUTOFILL_MAX_PARTITIONS_SIZE,
+                GlobalSettingsProto.Autofill.MAX_PARTITIONS_SIZE);
+        dumpSetting(s, p,
+                Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS,
+                GlobalSettingsProto.Autofill.MAX_VISIBLE_DATASETS);
+        p.end(autofillToken);
+
         dumpSetting(s, p,
                 Settings.Global.BACKUP_AGENT_TIMEOUT_PARAMETERS,
                 GlobalSettingsProto.BACKUP_AGENT_TIMEOUT_PARAMETERS);
@@ -1170,9 +1182,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.CHARGING_STARTED_SOUND,
                 GlobalSettingsProto.Sounds.CHARGING_STARTED);
-        dumpSetting(s, p,
-                Settings.Global.CHARGING_SOUNDS_ENABLED,
-                GlobalSettingsProto.Sounds.CHARGING_SOUNDS_ENABLED);
         p.end(soundsToken);
 
         final long soundTriggerToken = p.start(GlobalSettingsProto.SOUND_TRIGGER);
@@ -1466,12 +1475,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.ZEN_MODE_CONFIG_ETAG,
                 GlobalSettingsProto.Zen.MODE_CONFIG_ETAG);
-        dumpSetting(s, p,
-                Settings.Global.ZEN_DURATION,
-                GlobalSettingsProto.Zen.DURATION);
-        dumpSetting(s, p,
-                Settings.Global.SHOW_ZEN_UPGRADE_NOTIFICATION,
-                GlobalSettingsProto.Zen.SHOW_ZEN_UPGRADE_NOTIFICATION);
         p.end(zenToken);
 
         dumpSetting(s, p,
@@ -1788,13 +1791,13 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.DOZE_ALWAYS_ON,
                 SecureSettingsProto.Doze.ALWAYS_ON);
         dumpSetting(s, p,
-                Settings.Secure.DOZE_PULSE_ON_PICK_UP,
+                Settings.Secure.DOZE_PICK_UP_GESTURE,
                 SecureSettingsProto.Doze.PULSE_ON_PICK_UP);
         dumpSetting(s, p,
                 Settings.Secure.DOZE_PULSE_ON_LONG_PRESS,
                 SecureSettingsProto.Doze.PULSE_ON_LONG_PRESS);
         dumpSetting(s, p,
-                Settings.Secure.DOZE_PULSE_ON_DOUBLE_TAP,
+                Settings.Secure.DOZE_DOUBLE_TAP_GESTURE,
                 SecureSettingsProto.Doze.PULSE_ON_DOUBLE_TAP);
         p.end(dozeToken);
 
@@ -1972,6 +1975,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING,
                 SecureSettingsProto.Notification.SHOW_NOTE_ABOUT_NOTIFICATION_HIDING);
+        dumpSetting(s, p,
+                Settings.Secure.IN_CALL_NOTIFICATION_ENABLED,
+                SecureSettingsProto.Notification.IN_CALL_NOTIFICATION_ENABLED);
         p.end(notificationToken);
 
         final long packageVerifierToken = p.start(SecureSettingsProto.PACKAGE_VERIFIER);
@@ -2134,6 +2140,16 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.SMS_DEFAULT_APPLICATION,
                 SecureSettingsProto.SMS_DEFAULT_APPLICATION);
+
+        final long soundsToken = p.start(SecureSettingsProto.SOUNDS);
+        dumpSetting(s, p,
+                Settings.Secure.CHARGING_SOUNDS_ENABLED,
+                SecureSettingsProto.Sounds.CHARGING_SOUNDS_ENABLED);
+        dumpSetting(s, p,
+                Settings.Secure.CHARGING_VIBRATION_ENABLED,
+                SecureSettingsProto.Sounds.CHARGING_VIBRATION_ENABLED);
+        p.end(soundsToken);
+
         dumpSetting(s, p,
                 Settings.Secure.SYNC_PARENT_SOUNDS,
                 SecureSettingsProto.SYNC_PARENT_SOUNDS);
@@ -2239,6 +2255,24 @@ class SettingsProtoDumpUtil {
                 Settings.Secure.SWIPE_UP_TO_SWITCH_APPS_ENABLED,
                 SecureSettingsProto.Launcher.SWIPE_UP_TO_SWITCH_APPS_ENABLED);
         p.end(launcherToken);
+
+        final long zenToken = p.start(SecureSettingsProto.ZEN);
+        dumpSetting(s, p,
+                Settings.Secure.ZEN_DURATION,
+                SecureSettingsProto.Zen.DURATION);
+        dumpSetting(s, p,
+                Settings.Secure.SHOW_ZEN_UPGRADE_NOTIFICATION,
+                SecureSettingsProto.Zen.SHOW_ZEN_UPGRADE_NOTIFICATION);
+        dumpSetting(s, p,
+                Settings.Secure.SHOW_ZEN_SETTINGS_SUGGESTION,
+                SecureSettingsProto.Zen.SHOW_ZEN_SETTINGS_SUGGESTION);
+        dumpSetting(s, p,
+                Settings.Secure.ZEN_SETTINGS_UPDATED,
+                SecureSettingsProto.Zen.SETTINGS_UPDATED);
+        dumpSetting(s, p,
+                Settings.Secure.ZEN_SETTINGS_SUGGESTION_VIEWED,
+                SecureSettingsProto.Zen.SETTINGS_SUGGESTION_VIEWED);
+        p.end(zenToken);
 
         // Please insert new settings using the same order as in SecureSettingsProto.
         p.end(token);

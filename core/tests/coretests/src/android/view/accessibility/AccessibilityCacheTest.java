@@ -300,6 +300,26 @@ public class AccessibilityCacheTest {
     }
 
     @Test
+    public void subTreeChangeEventFromUncachedNode_clearsNodeInCache() {
+        AccessibilityNodeInfo nodeInfo = getNodeWithA11yAndWindowId(CHILD_VIEW_ID, WINDOW_ID_1);
+        long id = nodeInfo.getSourceNodeId();
+        mAccessibilityCache.add(nodeInfo);
+        nodeInfo.recycle();
+
+        AccessibilityEvent event = AccessibilityEvent
+                .obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+        event.setContentChangeTypes(AccessibilityEvent.CONTENT_CHANGE_TYPE_SUBTREE);
+        event.setSource(getMockViewWithA11yAndWindowIds(PARENT_VIEW_ID, WINDOW_ID_1));
+
+        mAccessibilityCache.onAccessibilityEvent(event);
+        AccessibilityNodeInfo shouldBeNull = mAccessibilityCache.getNode(WINDOW_ID_1, id);
+        if (shouldBeNull != null) {
+            shouldBeNull.recycle();
+        }
+        assertNull(shouldBeNull);
+    }
+
+    @Test
     public void scrollEvent_clearsNodeAndChild() {
         AccessibilityEvent event = AccessibilityEvent
                 .obtain(AccessibilityEvent.TYPE_VIEW_SCROLLED);
@@ -481,11 +501,34 @@ public class AccessibilityCacheTest {
     }
 
     @Test
-    public void addNode_whenNodeBeingReplacedIsOwnGrandparent_doesntCrash() {
+    public void addNode_whenNodeBeingReplacedIsOwnGrandparentWithTwoChildren_doesntCrash() {
         AccessibilityNodeInfo parentNodeInfo =
                 getNodeWithA11yAndWindowId(PARENT_VIEW_ID, WINDOW_ID_1);
         parentNodeInfo.addChild(getMockViewWithA11yAndWindowIds(CHILD_VIEW_ID, WINDOW_ID_1));
         parentNodeInfo.addChild(getMockViewWithA11yAndWindowIds(OTHER_CHILD_VIEW_ID, WINDOW_ID_1));
+        AccessibilityNodeInfo childNodeInfo =
+                getNodeWithA11yAndWindowId(CHILD_VIEW_ID, WINDOW_ID_1);
+        childNodeInfo.setParent(getMockViewWithA11yAndWindowIds(PARENT_VIEW_ID, WINDOW_ID_1));
+        childNodeInfo.addChild(getMockViewWithA11yAndWindowIds(PARENT_VIEW_ID, WINDOW_ID_1));
+
+        AccessibilityNodeInfo replacementParentNodeInfo =
+                getNodeWithA11yAndWindowId(PARENT_VIEW_ID, WINDOW_ID_1);
+        try {
+            mAccessibilityCache.add(parentNodeInfo);
+            mAccessibilityCache.add(childNodeInfo);
+            mAccessibilityCache.add(replacementParentNodeInfo);
+        } finally {
+            parentNodeInfo.recycle();
+            childNodeInfo.recycle();
+            replacementParentNodeInfo.recycle();
+        }
+    }
+
+    @Test
+    public void addNode_whenNodeBeingReplacedIsOwnGrandparentWithOneChild_doesntCrash() {
+        AccessibilityNodeInfo parentNodeInfo =
+                getNodeWithA11yAndWindowId(PARENT_VIEW_ID, WINDOW_ID_1);
+        parentNodeInfo.addChild(getMockViewWithA11yAndWindowIds(CHILD_VIEW_ID, WINDOW_ID_1));
         AccessibilityNodeInfo childNodeInfo =
                 getNodeWithA11yAndWindowId(CHILD_VIEW_ID, WINDOW_ID_1);
         childNodeInfo.setParent(getMockViewWithA11yAndWindowIds(PARENT_VIEW_ID, WINDOW_ID_1));
@@ -520,6 +563,27 @@ public class AccessibilityCacheTest {
                             e);
                 }
             }
+        }
+    }
+
+    @Test
+    public void addA11yFocusNodeBeforeFocusClearedEvent_previousA11yFocusNodeGetsRefreshed() {
+        AccessibilityNodeInfo nodeInfo1 = getNodeWithA11yAndWindowId(SINGLE_VIEW_ID, WINDOW_ID_1);
+        nodeInfo1.setAccessibilityFocused(true);
+        mAccessibilityCache.add(nodeInfo1);
+        AccessibilityNodeInfo nodeInfo2 = getNodeWithA11yAndWindowId(OTHER_VIEW_ID, WINDOW_ID_1);
+        nodeInfo2.setAccessibilityFocused(true);
+        mAccessibilityCache.add(nodeInfo2);
+        AccessibilityEvent event = AccessibilityEvent.obtain(
+                AccessibilityEvent.TYPE_VIEW_ACCESSIBILITY_FOCUS_CLEARED);
+        event.setSource(getMockViewWithA11yAndWindowIds(SINGLE_VIEW_ID, WINDOW_ID_1));
+        mAccessibilityCache.onAccessibilityEvent(event);
+        event.recycle();
+        try {
+            verify(mAccessibilityNodeRefresher).refreshNode(nodeInfo1, true);
+        } finally {
+            nodeInfo1.recycle();
+            nodeInfo2.recycle();
         }
     }
 

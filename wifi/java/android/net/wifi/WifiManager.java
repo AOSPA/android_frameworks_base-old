@@ -21,10 +21,10 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
-import android.annotation.SuppressLint;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.pm.ParceledListSlice;
 import android.net.ConnectivityManager;
@@ -32,9 +32,9 @@ import android.net.DhcpInfo;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
+import android.net.wifi.hotspot2.IProvisioningCallback;
 import android.net.wifi.hotspot2.OsuProvider;
 import android.net.wifi.hotspot2.PasspointConfiguration;
-import android.net.wifi.hotspot2.IProvisioningCallback;
 import android.net.wifi.hotspot2.ProvisioningCallback;
 import android.os.Binder;
 import android.os.Build;
@@ -329,6 +329,31 @@ public class WifiManager {
      */
     public static final String EXTRA_SUBSCRIPTION_REMEDIATION_METHOD =
             "android.net.wifi.extra.SUBSCRIPTION_REMEDIATION_METHOD";
+
+    /**
+     * Activity Action: lunch OSU (Online Sign Up) view.
+     * Included extras:
+     *
+     * {@link #EXTRA_OSU_NETWORK}: {@link Network} instance associated with OSU AP.
+     * {@link #EXTRA_URL}: String representation of a server URL used for OSU process.
+     *
+     * <p>Note: The broadcast is only delivered to registered receivers - no manifest registered
+     * components will be launched.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_PASSPOINT_LAUNCH_OSU_VIEW =
+            "android.net.wifi.action.PASSPOINT_LAUNCH_OSU_VIEW";
+
+    /**
+     * The lookup key for a {@link android.net.Network} associated with OSU server.
+     *
+     * Retrieve with {@link android.content.Intent#getParcelableExtra(String)}.
+     *
+     * @hide
+     */
+    public static final String EXTRA_OSU_NETWORK = "android.net.wifi.extra.OSU_NETWORK";
 
     /**
      * Broadcast intent action indicating that Wi-Fi has been enabled, disabled,
@@ -771,9 +796,12 @@ public class WifiManager {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String BATCHED_SCAN_RESULTS_AVAILABLE_ACTION =
             "android.net.wifi.BATCHED_RESULTS";
+
     /**
      * The RSSI (signal strength) has changed.
-     * @see #EXTRA_NEW_RSSI
+     *
+     * Receiver Required Permission: android.Manifest.permission.ACCESS_WIFI_STATE
+     * @see {@link #EXTRA_NEW_RSSI}
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String RSSI_CHANGED_ACTION = "android.net.wifi.RSSI_CHANGED";
@@ -787,6 +815,7 @@ public class WifiManager {
      * changed on wifi.
      * @hide
      */
+    @UnsupportedAppUsage
     public static final String LINK_CONFIGURATION_CHANGED_ACTION =
         "android.net.wifi.LINK_CONFIGURATION_CHANGED";
 
@@ -950,9 +979,11 @@ public class WifiManager {
     public static final int WIFI_MODE_FULL_HIGH_PERF = 3;
 
     /** Anything worse than or equal to this will show 0 bars. */
+    @UnsupportedAppUsage
     private static final int MIN_RSSI = -100;
 
     /** Anything better than or equal to this will show the max bars. */
+    @UnsupportedAppUsage
     private static final int MAX_RSSI = -55;
 
     /**
@@ -960,6 +991,7 @@ public class WifiManager {
      * {@link #RSSI_CHANGED_ACTION} broadcast
      * @hide
      */
+    @UnsupportedAppUsage
     public static final int RSSI_LEVELS = 5;
 
     /**
@@ -967,35 +999,22 @@ public class WifiManager {
      * 2.4 GHz and 5 GHz or make a dynamic decision on selecting the band.
      * @hide
      */
+    @UnsupportedAppUsage
     public static final int WIFI_FREQUENCY_BAND_AUTO = 0;
 
     /**
      * Operation on 5 GHz alone
      * @hide
      */
+    @UnsupportedAppUsage
     public static final int WIFI_FREQUENCY_BAND_5GHZ = 1;
 
     /**
      * Operation on 2.4 GHz alone
      * @hide
      */
+    @UnsupportedAppUsage
     public static final int WIFI_FREQUENCY_BAND_2GHZ = 2;
-
-    /** List of asyncronous notifications
-     * @hide
-     */
-    public static final int DATA_ACTIVITY_NOTIFICATION = 1;
-
-    //Lowest bit indicates data reception and the second lowest
-    //bit indicates data transmitted
-    /** @hide */
-    public static final int DATA_ACTIVITY_NONE         = 0x00;
-    /** @hide */
-    public static final int DATA_ACTIVITY_IN           = 0x01;
-    /** @hide */
-    public static final int DATA_ACTIVITY_OUT          = 0x02;
-    /** @hide */
-    public static final int DATA_ACTIVITY_INOUT        = 0x03;
 
     /** @hide */
     public static final boolean DEFAULT_POOR_NETWORK_AVOIDANCE_ENABLED = false;
@@ -1007,9 +1026,11 @@ public class WifiManager {
     private static final int MAX_ACTIVE_LOCKS = 50;
 
     /* Number of currently active WifiLocks and MulticastLocks */
+    @UnsupportedAppUsage
     private int mActiveLockCount;
 
     private Context mContext;
+    @UnsupportedAppUsage
     IWifiManager mService;
     private final int mTargetSdkVersion;
 
@@ -1111,6 +1132,7 @@ public class WifiManager {
      * @throws UnsupportedOperationException if Passpoint is not enabled on the device.
      * @hide
      */
+    @UnsupportedAppUsage
     public WifiConfiguration getMatchingWifiConfig(ScanResult scanResult) {
         try {
             return mService.getMatchingWifiConfig(scanResult);
@@ -1692,13 +1714,12 @@ public class WifiManager {
      * Return the record of {@link WifiActivityEnergyInfo} object that
      * has the activity and energy info. This can be used to ascertain what
      * the controller has been up to, since the last sample.
-     * @param updateType Type of info, cached vs refreshed.
      *
      * @return a record with {@link WifiActivityEnergyInfo} or null if
      * report is unavailable or unsupported
      * @hide
      */
-    public WifiActivityEnergyInfo getControllerActivityEnergyInfo(int updateType) {
+    public WifiActivityEnergyInfo getControllerActivityEnergyInfo() {
         if (mService == null) return null;
         try {
             synchronized(this) {
@@ -1848,6 +1869,7 @@ public class WifiManager {
     *
     * @hide
     */
+    @UnsupportedAppUsage
     public String getCountryCode() {
        try {
            String country = mService.getCountryCode();
@@ -1862,6 +1884,7 @@ public class WifiManager {
      * @return {@code true} if supported, {@code false} otherwise.
      * @hide
      */
+    @UnsupportedAppUsage
     public boolean isDualBandSupported() {
         try {
             return mService.isDualBandSupported();
@@ -2127,6 +2150,7 @@ public class WifiManager {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public void cancelLocalOnlyHotspotRequest() {
         synchronized (mLock) {
             stopLocalOnlyHotspot();
@@ -2585,7 +2609,7 @@ public class WifiManager {
         }
 
         @Override
-        public void onStateChanged(int state, int failureReason) throws RemoteException {
+        public void onStateChanged(int state, int failureReason) {
             Log.v(TAG, "SoftApCallbackProxy: onStateChanged: state=" + state + ", failureReason=" +
                     failureReason);
             mHandler.post(() -> {
@@ -2594,7 +2618,7 @@ public class WifiManager {
         }
 
         @Override
-        public void onNumClientsChanged(int numClients) throws RemoteException {
+        public void onNumClientsChanged(int numClients) {
             Log.v(TAG, "SoftApCallbackProxy: onNumClientsChanged: numClients=" + numClients);
             mHandler.post(() -> {
                 mCallback.onNumClientsChanged(numClients);
@@ -3132,6 +3156,7 @@ public class WifiManager {
      * initialized again
      * @hide
      */
+    @UnsupportedAppUsage
     public void connect(int networkId, ActionListener listener) {
         if (networkId < 0) throw new IllegalArgumentException("Network id cannot be negative");
         getChannel().sendMessage(CONNECT_NETWORK, networkId, putListener(listener));
@@ -3157,6 +3182,7 @@ public class WifiManager {
      * initialized again
      * @hide
      */
+    @UnsupportedAppUsage
     public void save(WifiConfiguration config, ActionListener listener) {
         if (config == null) throw new IllegalArgumentException("config cannot be null");
         getChannel().sendMessage(SAVE_NETWORK, 0, putListener(listener), config);
@@ -3175,6 +3201,7 @@ public class WifiManager {
      * initialized again
      * @hide
      */
+    @UnsupportedAppUsage
     public void forget(int netId, ActionListener listener) {
         if (netId < 0) throw new IllegalArgumentException("Network id cannot be negative");
         getChannel().sendMessage(FORGET_NETWORK, netId, putListener(listener));
@@ -3189,6 +3216,7 @@ public class WifiManager {
      * initialized again
      * @hide
      */
+    @UnsupportedAppUsage
     public void disable(int netId, ActionListener listener) {
         if (netId < 0) throw new IllegalArgumentException("Network id cannot be negative");
         getChannel().sendMessage(DISABLE_NETWORK, netId, putListener(listener));
@@ -3243,9 +3271,9 @@ public class WifiManager {
      * an AsyncChannel communication with WifiService
      *
      * @return Messenger pointing to the WifiService handler
-     * @hide
      */
-    public Messenger getWifiServiceMessenger() {
+    @UnsupportedAppUsage
+    private Messenger getWifiServiceMessenger() {
         try {
             return mService.getWifiServiceMessenger(mContext.getOpPackageName());
         } catch (RemoteException e) {
@@ -3546,7 +3574,7 @@ public class WifiManager {
                         mService.acquireMulticastLock(mBinder, mTag);
                         synchronized (WifiManager.this) {
                             if (mActiveLockCount >= MAX_ACTIVE_LOCKS) {
-                                mService.releaseMulticastLock();
+                                mService.releaseMulticastLock(mTag);
                                 throw new UnsupportedOperationException(
                                         "Exceeded maximum number of wifi locks");
                             }
@@ -3588,7 +3616,7 @@ public class WifiManager {
             synchronized (mBinder) {
                 if (mRefCounted ? (--mRefCount == 0) : (mHeld)) {
                     try {
-                        mService.releaseMulticastLock();
+                        mService.releaseMulticastLock(mTag);
                         synchronized (WifiManager.this) {
                             mActiveLockCount--;
                         }
@@ -3675,6 +3703,7 @@ public class WifiManager {
      * Initialize the multicast filtering to 'on'
      * @hide no intent to publish
      */
+    @UnsupportedAppUsage
     public boolean initializeMulticastFiltering() {
         try {
             mService.initializeMulticastFiltering();
@@ -3699,6 +3728,7 @@ public class WifiManager {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    @UnsupportedAppUsage
     public void enableVerboseLogging (int verbose) {
         try {
             mService.enableVerboseLogging(verbose);
@@ -3713,6 +3743,7 @@ public class WifiManager {
      * to decide what to show within the picker.
      * @hide
      */
+    @UnsupportedAppUsage
     public int getVerboseLoggingLevel() {
         try {
             return mService.getVerboseLoggingLevel();
@@ -3739,6 +3770,7 @@ public class WifiManager {
      * @return Get Network object of current wifi network
      * @hide
      */
+    @UnsupportedAppUsage
     public Network getCurrentNetwork() {
         try {
             return mService.getCurrentNetwork();
@@ -3856,6 +3888,109 @@ public class WifiManager {
             mHandler.post(() -> {
                 mCallback.onProvisioningFailure(status);
             });
+        }
+    }
+
+    /**
+     * Base class for Traffic state callback. Should be extended by applications and set when
+     * calling {@link WifiManager#registerTrafficStateCallback(TrafficStateCallback, Handler)}.
+     * @hide
+     */
+    public interface TrafficStateCallback {
+        /**
+         * Lowest bit indicates data reception and the second lowest
+         * bit indicates data transmitted
+         */
+        /** @hide */
+        int DATA_ACTIVITY_NONE         = 0x00;
+        /** @hide */
+        int DATA_ACTIVITY_IN           = 0x01;
+        /** @hide */
+        int DATA_ACTIVITY_OUT          = 0x02;
+        /** @hide */
+        int DATA_ACTIVITY_INOUT        = 0x03;
+
+        /**
+         * Callback invoked to inform clients about the current traffic state.
+         *
+         * @param state One of the values: {@link #DATA_ACTIVITY_NONE}, {@link #DATA_ACTIVITY_IN},
+         * {@link #DATA_ACTIVITY_OUT} & {@link #DATA_ACTIVITY_INOUT}.
+         * @hide
+         */
+        void onStateChanged(int state);
+    }
+
+    /**
+     * Callback proxy for TrafficStateCallback objects.
+     *
+     * @hide
+     */
+    private static class TrafficStateCallbackProxy extends ITrafficStateCallback.Stub {
+        private final Handler mHandler;
+        private final TrafficStateCallback mCallback;
+
+        TrafficStateCallbackProxy(Looper looper, TrafficStateCallback callback) {
+            mHandler = new Handler(looper);
+            mCallback = callback;
+        }
+
+        @Override
+        public void onStateChanged(int state) {
+            Log.v(TAG, "TrafficStateCallbackProxy: onStateChanged state=" + state);
+            mHandler.post(() -> {
+                mCallback.onStateChanged(state);
+            });
+        }
+    }
+
+    /**
+     * Registers a callback for monitoring traffic state. See {@link TrafficStateCallback}. These
+     * callbacks will be invoked periodically by platform to inform clients about the current
+     * traffic state. Caller can unregister a previously registered callback using
+     * {@link #unregisterTrafficStateCallback(TrafficStateCallback)}
+     * <p>
+     * Applications should have the
+     * {@link android.Manifest.permission#NETWORK_SETTINGS NETWORK_SETTINGS} permission. Callers
+     * without the permission will trigger a {@link java.lang.SecurityException}.
+     * <p>
+     *
+     * @param callback Callback for traffic state events
+     * @param handler  The Handler on whose thread to execute the callbacks of the {@code callback}
+     *                 object. If null, then the application's main thread will be used.
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void registerTrafficStateCallback(@NonNull TrafficStateCallback callback,
+                                             @Nullable Handler handler) {
+        if (callback == null) throw new IllegalArgumentException("callback cannot be null");
+        Log.v(TAG, "registerTrafficStateCallback: callback=" + callback + ", handler=" + handler);
+
+        Looper looper = (handler == null) ? mContext.getMainLooper() : handler.getLooper();
+        Binder binder = new Binder();
+        try {
+            mService.registerTrafficStateCallback(
+                    binder, new TrafficStateCallbackProxy(looper, callback), callback.hashCode());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Allow callers to unregister a previously registered callback. After calling this method,
+     * applications will no longer receive traffic state notifications.
+     *
+     * @param callback Callback to unregister for traffic state events
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.NETWORK_SETTINGS)
+    public void unregisterTrafficStateCallback(@NonNull TrafficStateCallback callback) {
+        if (callback == null) throw new IllegalArgumentException("callback cannot be null");
+        Log.v(TAG, "unregisterTrafficStateCallback: callback=" + callback);
+
+        try {
+            mService.unregisterTrafficStateCallback(callback.hashCode());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -4043,5 +4178,4 @@ public class WifiManager {
             throw e.rethrowFromSystemServer();
         }
     }
-
 }

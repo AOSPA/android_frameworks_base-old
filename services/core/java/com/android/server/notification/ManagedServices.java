@@ -517,6 +517,30 @@ abstract public class ManagedServices {
         return false;
     }
 
+    protected boolean isPackageAllowed(String pkg, int userId) {
+        if (pkg == null) {
+            return false;
+        }
+        ArrayMap<Boolean, ArraySet<String>> allowedByType =
+                mApproved.getOrDefault(userId, new ArrayMap<>());
+        for (int i = 0; i < allowedByType.size(); i++) {
+            ArraySet<String> allowed = allowedByType.valueAt(i);
+            for (String allowedEntry : allowed) {
+                ComponentName component = ComponentName.unflattenFromString(allowedEntry);
+                if (component != null) {
+                    if (pkg.equals(component.getPackageName())) {
+                        return true;
+                    }
+                } else {
+                    if (pkg.equals(allowedEntry)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     public void onPackagesChanged(boolean removingPackage, String[] pkgList, int[] uidList) {
         if (DEBUG) Slog.d(TAG, "onPackagesChanged removingPackage=" + removingPackage
                 + " pkgList=" + (pkgList == null ? null : Arrays.asList(pkgList))
@@ -536,6 +560,11 @@ abstract public class ManagedServices {
             for (String pkgName : pkgList) {
                 if (mEnabledServicesPackageNames.contains(pkgName)) {
                     anyServicesInvolved = true;
+                }
+                for (int uid : uidList) {
+                    if (isPackageAllowed(pkgName, UserHandle.getUserId(uid))) {
+                        anyServicesInvolved = true;
+                    }
                 }
             }
 
@@ -600,6 +629,15 @@ abstract public class ManagedServices {
                 + service + " " + service.getClass());
     }
 
+    public boolean isSameUser(IInterface service, int userId) {
+        checkNotNull(service);
+        ManagedServiceInfo info = getServiceFromTokenLocked(service);
+        if (info != null) {
+            return info.isSameUser(userId);
+        }
+        return false;
+    }
+
     public void unregisterService(IInterface service, int userid) {
         checkNotNull(service);
         // no need to check permissions; if your service binder is in the list,
@@ -650,7 +688,11 @@ abstract public class ManagedServices {
 
             for (int userId : userIds) {
                 if (enabled) {
-                    registerServiceLocked(component, userId);
+                    if (isPackageOrComponentAllowed(component.toString(), userId)) {
+                        registerServiceLocked(component, userId);
+                    } else {
+                        Slog.d(TAG, component + " no longer has permission to be bound");
+                    }
                 } else {
                     unregisterServiceLocked(component, userId);
                 }
@@ -1170,6 +1212,13 @@ abstract public class ManagedServices {
             proto.write(ManagedServiceInfoProto.IS_SYSTEM, isSystem);
             proto.write(ManagedServiceInfoProto.IS_GUEST, isGuest(host));
             proto.end(token);
+        }
+
+        public boolean isSameUser(int userId) {
+            if (!isEnabledForCurrentProfiles()) {
+                return false;
+            }
+            return this.userid == userId;
         }
 
         public boolean enabledAndUserMatches(int nid) {

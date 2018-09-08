@@ -268,10 +268,7 @@ class TouchExplorer extends BaseEventStreamTransformation
 
         mReceivedPointerTracker.onMotionEvent(rawEvent);
 
-        // The motion detector is interested in the movements in physical space,
-        // so it uses the rawEvent to ignore magnification and other
-        // transformations.
-        if (mGestureDetector.onMotionEvent(rawEvent, policyFlags)) {
+        if (mGestureDetector.onMotionEvent(event, rawEvent, policyFlags)) {
             // Event was handled by the gesture detector.
             return;
         }
@@ -378,6 +375,7 @@ class TouchExplorer extends BaseEventStreamTransformation
             return false;
         }
 
+        mAms.onTouchInteractionEnd();
         // Remove pending event deliveries.
         mSendHoverEnterAndMoveDelayed.cancel();
         mSendHoverExitDelayed.cancel();
@@ -385,9 +383,9 @@ class TouchExplorer extends BaseEventStreamTransformation
         if (mSendTouchExplorationEndDelayed.isPending()) {
             mSendTouchExplorationEndDelayed.forceSendAndRemove();
         }
-        if (mSendTouchInteractionEndDelayed.isPending()) {
-            mSendTouchInteractionEndDelayed.forceSendAndRemove();
-        }
+
+        // Announce the end of a new touch interaction.
+        sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_END);
 
         // Try to use the standard accessibility API to click
         if (mAms.performActionOnAccessibilityFocusedItem(
@@ -490,20 +488,25 @@ class TouchExplorer extends BaseEventStreamTransformation
             case MotionEvent.ACTION_DOWN: {
                 mAms.onTouchInteractionStart();
 
-                sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_START);
-
                 // If we still have not notified the user for the last
                 // touch, we figure out what to do. If were waiting
                 // we resent the delayed callback and wait again.
                 mSendHoverEnterAndMoveDelayed.cancel();
                 mSendHoverExitDelayed.cancel();
 
-                if (mSendTouchExplorationEndDelayed.isPending()) {
-                    mSendTouchExplorationEndDelayed.forceSendAndRemove();
+                // If a touch exploration gesture is in progress send events for its end.
+                if(mTouchExplorationInProgress) {
+                    sendHoverExitAndTouchExplorationGestureEndIfNeeded(policyFlags);
                 }
 
-                if (mSendTouchInteractionEndDelayed.isPending()) {
+                // Avoid duplicated TYPE_TOUCH_INTERACTION_START event when 2nd tap of double tap.
+                if (!mGestureDetector.firstTapDetected()) {
+                    mSendTouchExplorationEndDelayed.forceSendAndRemove();
                     mSendTouchInteractionEndDelayed.forceSendAndRemove();
+                    sendAccessibilityEvent(AccessibilityEvent.TYPE_TOUCH_INTERACTION_START);
+                } else {
+                    // Let gesture to handle to avoid duplicated TYPE_TOUCH_INTERACTION_END event.
+                    mSendTouchInteractionEndDelayed.cancel();
                 }
 
                 if (!mGestureDetector.firstTapDetected() && !mTouchExplorationInProgress) {
@@ -575,6 +578,8 @@ class TouchExplorer extends BaseEventStreamTransformation
                             }
                         }
 
+                        // Remove move history before send injected non-move events
+                        event = MotionEvent.obtainNoHistory(event);
                         if (isDraggingGesture(event)) {
                             // Two pointers moving in the same direction within
                             // a given distance perform a drag.
@@ -605,6 +610,7 @@ class TouchExplorer extends BaseEventStreamTransformation
 
                         // More than two pointers are delegated to the view hierarchy.
                         mCurrentState = STATE_DELEGATING;
+                        event = MotionEvent.obtainNoHistory(event);
                         sendDownForAllNotInjectedPointers(event, policyFlags);
                     }
                 }
@@ -693,6 +699,8 @@ class TouchExplorer extends BaseEventStreamTransformation
                             // The two pointers are moving either in different directions or
                             // no close enough => delegate the gesture to the view hierarchy.
                             mCurrentState = STATE_DELEGATING;
+                            // Remove move history before send injected non-move events
+                            event = MotionEvent.obtainNoHistory(event);
                             // Send an event to the end of the drag gesture.
                             sendMotionEvent(event, MotionEvent.ACTION_UP, pointerIdBits,
                                     policyFlags);
@@ -702,6 +710,7 @@ class TouchExplorer extends BaseEventStreamTransformation
                     } break;
                     default: {
                         mCurrentState = STATE_DELEGATING;
+                        event = MotionEvent.obtainNoHistory(event);
                         // Send an event to the end of the drag gesture.
                         sendMotionEvent(event, MotionEvent.ACTION_UP, pointerIdBits,
                                 policyFlags);

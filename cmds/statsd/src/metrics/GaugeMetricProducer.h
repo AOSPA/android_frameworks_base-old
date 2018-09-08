@@ -58,7 +58,8 @@ class GaugeMetricProducer : public virtual MetricProducer, public virtual PullDa
 public:
     GaugeMetricProducer(const ConfigKey& key, const GaugeMetric& gaugeMetric,
                         const int conditionIndex, const sp<ConditionWizard>& wizard,
-                        const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs,
+                        const int pullTagId, const int triggerAtomId, const int atomId,
+                        const int64_t timeBaseNs, const int64_t startTimeNs,
                         const sp<StatsPullerManager>& pullerManager);
 
     virtual ~GaugeMetricProducer();
@@ -77,7 +78,7 @@ public:
         }
         flushCurrentBucketLocked(eventTimeNs);
         mCurrentBucketStartTimeNs = eventTimeNs;
-        if (mPullTagId != -1) {
+        if (mIsPulled) {
             pullLocked(eventTimeNs);
         }
     };
@@ -115,11 +116,18 @@ private:
 
     void pullLocked(const int64_t timestampNs);
 
-    int mTagId;
-
     sp<StatsPullerManager> mPullerManager;
     // tagId for pulled data. -1 if this is not pulled
     const int mPullTagId;
+
+    // tagId for atoms that trigger the pulling, if any
+    const int mTriggerAtomId;
+
+    // tagId for output atom
+    const int mAtomId;
+
+    // if this is pulled metric
+    const bool mIsPulled;
 
     // Save the past buckets and we can clear when the StatsLogReport is dumped.
     std::unordered_map<MetricDimensionKey, std::vector<GaugeBucket>> mPastBuckets;
@@ -159,12 +167,14 @@ private:
 
     const size_t mGaugeAtomsPerDimensionLimit;
 
-    FRIEND_TEST(GaugeMetricProducerTest, TestWithCondition);
-    FRIEND_TEST(GaugeMetricProducerTest, TestWithSlicedCondition);
-    FRIEND_TEST(GaugeMetricProducerTest, TestNoCondition);
+    FRIEND_TEST(GaugeMetricProducerTest, TestPulledEventsWithCondition);
+    FRIEND_TEST(GaugeMetricProducerTest, TestPulledEventsWithSlicedCondition);
+    FRIEND_TEST(GaugeMetricProducerTest, TestPulledEventsNoCondition);
     FRIEND_TEST(GaugeMetricProducerTest, TestPushedEventsWithUpgrade);
     FRIEND_TEST(GaugeMetricProducerTest, TestPulledWithUpgrade);
-    FRIEND_TEST(GaugeMetricProducerTest, TestAnomalyDetection);
+    FRIEND_TEST(GaugeMetricProducerTest, TestPulledEventsAnomalyDetection);
+    FRIEND_TEST(GaugeMetricProducerTest, TestFirstBucket);
+    FRIEND_TEST(GaugeMetricProducerTest, TestPullOnTrigger);
 };
 
 }  // namespace statsd

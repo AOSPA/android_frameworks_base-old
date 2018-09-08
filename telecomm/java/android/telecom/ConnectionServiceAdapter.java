@@ -257,10 +257,10 @@ final class ConnectionServiceAdapter implements DeathRecipient {
     /**
         * Resets the cdma connection time.
         */
-    void resetCdmaConnectionTime(String callId) {
+    void resetConnectionTime(String callId) {
         for (IConnectionServiceAdapter adapter : mAdapters) {
             try {
-                adapter.resetCdmaConnectionTime(callId, Log.getExternalSession());
+                adapter.resetConnectionTime(callId, Log.getExternalSession());
             } catch (RemoteException e) {
             }
         }

@@ -18,20 +18,12 @@ package android.app;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.content.ComponentName;
 import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.UserInfo;
-import android.content.res.Configuration;
-import android.os.Bundle;
 import android.os.IBinder;
-import android.os.SystemClock;
-import android.service.voice.IVoiceInteractionSession;
-import android.util.SparseIntArray;
 import android.view.RemoteAnimationAdapter;
-
-import com.android.internal.app.IVoiceInteractor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,13 +40,6 @@ public abstract class ActivityManagerInternal {
     public static final int ALLOW_NON_FULL = 0;
     public static final int ALLOW_NON_FULL_IN_PROFILE = 1;
     public static final int ALLOW_FULL_ONLY = 2;
-
-    /**
-     * Grant Uri permissions from one app to another. This method only extends
-     * permission grants if {@code callingUid} has permission to them.
-     */
-    public abstract void grantUriPermissionFromIntent(int callingUid, String targetPkg,
-            Intent intent, int targetUserId);
 
     /**
      * Verify that calling app has access to the given provider.
@@ -235,4 +220,10 @@ public abstract class ActivityManagerInternal {
     public abstract boolean isCurrentProfile(int userId);
     public abstract boolean hasStartedUserState(int userId);
     public abstract void finishUserSwitch(Object uss);
+
+    /** Schedule the execution of all pending app GCs. */
+    public abstract void scheduleAppGcs();
+
+    /** Gets the task id for a given activity. */
+    public abstract int getTaskIdForActivity(@NonNull IBinder token, boolean onlyRoot);
 }

@@ -21,6 +21,7 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringDef;
+import android.annotation.UnsupportedAppUsage;
 import android.annotation.WorkerThread;
 import android.os.LocaleList;
 import android.os.Looper;
@@ -34,6 +35,7 @@ import android.text.util.Linkify.LinkifyMask;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 
 import java.lang.annotation.Retention;
@@ -212,6 +214,7 @@ public interface TextClassifier {
 
     // TODO: Remove once apps can build against the latest sdk.
     /** @hide */
+    @UnsupportedAppUsage
     default TextSelection suggestSelection(
             @NonNull CharSequence text,
             @IntRange(from = 0) int selectionStartIndex,
@@ -291,6 +294,7 @@ public interface TextClassifier {
 
     // TODO: Remove once apps can build against the latest sdk.
     /** @hide */
+    @UnsupportedAppUsage
     default TextClassification classifyText(
             @NonNull CharSequence text,
             @IntRange(from = 0) int startIndex,
@@ -332,6 +336,7 @@ public interface TextClassifier {
 
     // TODO: Remove once apps can build against the latest sdk.
     /** @hide */
+    @UnsupportedAppUsage
     default TextLinks generateLinks(
             @NonNull CharSequence text, @Nullable TextLinks.Options options) {
         if (options == null) {
@@ -388,6 +393,11 @@ public interface TextClassifier {
      */
     default boolean isDestroyed() {
         return false;
+    }
+
+    /** @hide **/
+    default void dump(@NonNull IndentingPrintWriter printWriter) {
+
     }
 
     /**

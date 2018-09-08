@@ -43,6 +43,7 @@ import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.util.ArrayMap;
+import android.util.StatsLog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 
@@ -58,7 +59,6 @@ final class ProcessRecord implements WindowProcessListener {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ProcessRecord" : TAG_AM;
 
     private final ActivityManagerService mService; // where we came from
-    private final BatteryStatsImpl mBatteryStats; // where to collect runtime statistics
     final ApplicationInfo info; // all about the first app in the process
     final boolean isolated;     // true if this is a special isolated process
     final int uid;              // uid of process; may be different from 'info' if isolated
@@ -187,8 +187,9 @@ final class ProcessRecord implements WindowProcessListener {
     int lruSeq;                 // Sequence id for identifying LRU update cycles
     CompatibilityInfo compat;   // last used compatibility mode
     IBinder.DeathRecipient deathRecipient; // Who is watching for the death.
-    ActiveInstrumentation instr;// Set to currently active instrumentation running in process
-    boolean usingWrapper;       // Set to true when process was launched with a wrapper attached
+    private ActiveInstrumentation mInstr; // Set to currently active instrumentation running in
+                                          // process.
+    private boolean mUsingWrapper; // Set to true when process was launched with a wrapper attached
     final ArraySet<BroadcastRecord> curReceivers = new ArraySet<BroadcastRecord>();// receivers currently running in the app
     long whenUnimportant;       // When (uptime) the process last became unimportant
     long lastCpuTime;           // How long proc has run CPU at last check
@@ -232,7 +233,7 @@ final class ProcessRecord implements WindowProcessListener {
     private boolean mNotResponding; // does the app have a not responding dialog?
     Dialog anrDialog;           // dialog being displayed due to app not resp.
     boolean removed;            // has app package been removed from device?
-    boolean debugging;          // was app launched for debugging?
+    private boolean mDebugging; // was app launched for debugging?
     boolean waitedForDebugger;  // has process show wait for debugger dialog?
     Dialog waitDialog;          // current wait for debugger dialog
 
@@ -317,8 +318,8 @@ final class ProcessRecord implements WindowProcessListener {
             pw.println("}");
         }
         pw.print(prefix); pw.print("compat="); pw.println(compat);
-        if (instr != null) {
-            pw.print(prefix); pw.print("instr="); pw.println(instr);
+        if (mInstr != null) {
+            pw.print(prefix); pw.print("mInstr="); pw.println(mInstr);
         }
         pw.print(prefix); pw.print("thread="); pw.println(thread);
         pw.print(prefix); pw.print("pid="); pw.print(pid); pw.print(" starting=");
@@ -435,9 +436,9 @@ final class ProcessRecord implements WindowProcessListener {
                     pw.print(" killedByAm="); pw.print(killedByAm);
                     pw.print(" waitingToKill="); pw.println(waitingToKill);
         }
-        if (debugging || mCrashing || crashDialog != null || mNotResponding
+        if (mDebugging || mCrashing || crashDialog != null || mNotResponding
                 || anrDialog != null || bad) {
-            pw.print(prefix); pw.print("debugging="); pw.print(debugging);
+            pw.print(prefix); pw.print("mDebugging="); pw.print(mDebugging);
                     pw.print(" mCrashing="); pw.print(mCrashing);
                     pw.print(" "); pw.print(crashDialog);
                     pw.print(" mNotResponding="); pw.print(mNotResponding);
@@ -506,10 +507,9 @@ final class ProcessRecord implements WindowProcessListener {
         }
     }
 
-    ProcessRecord(ActivityManagerService _service, BatteryStatsImpl _batteryStats,
-            ApplicationInfo _info, String _processName, int _uid) {
+    ProcessRecord(ActivityManagerService _service, ApplicationInfo _info, String _processName,
+            int _uid) {
         mService = _service;
-        mBatteryStats = _batteryStats;
         info = _info;
         isolated = _info.uid != _uid;
         uid = _uid;
@@ -545,13 +545,19 @@ final class ProcessRecord implements WindowProcessListener {
                             + ",curSchedGroup=" + mCurSchedGroup
                             + ",curProcState=" + curProcState + ",setProcState=" + setProcState
                             + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
-                            + ",debugging=" + (debugging ? 1 : 0);
+                            + ",isDebugging=" + (isDebugging() ? 1 : 0);
         android.util.SeempLog.record_str(386, seempStr);
         if (thread == null) {
             final ProcessState origBase = baseProcessTracker;
             if (origBase != null) {
                 origBase.setState(ProcessStats.STATE_NOTHING,
                         tracker.getMemFactorLocked(), SystemClock.uptimeMillis(), pkgList.mPkgList);
+                for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
+                    StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+                            uid, processName, pkgList.keyAt(ipkg),
+                            ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
+                            pkgList.valueAt(ipkg).appVersion);
+                }
                 origBase.makeInactive();
             }
             baseProcessTracker = tracker.getProcessStateLocked(info.packageName, uid,
@@ -584,7 +590,7 @@ final class ProcessRecord implements WindowProcessListener {
                             + ",curSchedGroup=" + mCurSchedGroup
                             + ",curProcState=" + curProcState + ",setProcState=" + setProcState
                             + ",killed=" + (killed ? 1 : 0) + ",killedByAm=" + (killedByAm ? 1 : 0)
-                            + ",debugging=" + (debugging ? 1 : 0);
+                            + ",isDebugging=" + (isDebugging() ? 1 : 0);
         android.util.SeempLog.record_str(387, seempStr);
         thread = null;
         mWindowProcessController.setThread(null);
@@ -593,6 +599,12 @@ final class ProcessRecord implements WindowProcessListener {
             if (origBase != null) {
                 origBase.setState(ProcessStats.STATE_NOTHING,
                         tracker.getMemFactorLocked(), SystemClock.uptimeMillis(), pkgList.mPkgList);
+                for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
+                    StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+                            uid, processName, pkgList.keyAt(ipkg),
+                            ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
+                            pkgList.valueAt(ipkg).appVersion);
+                }
                 origBase.makeInactive();
             }
             baseProcessTracker = null;
@@ -855,6 +867,12 @@ final class ProcessRecord implements WindowProcessListener {
     public void forceProcessStateUpTo(int newState) {
         if (mRepProcState > newState) {
             curProcState = mRepProcState = newState;
+            for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
+                StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+                        uid, processName, pkgList.keyAt(ipkg),
+                        ActivityManager.processStateAmToProto(mRepProcState),
+                        pkgList.valueAt(ipkg).appVersion);
+            }
         }
     }
 
@@ -867,6 +885,12 @@ final class ProcessRecord implements WindowProcessListener {
             long now = SystemClock.uptimeMillis();
             baseProcessTracker.setState(ProcessStats.STATE_NOTHING,
                     tracker.getMemFactorLocked(), now, pkgList.mPkgList);
+            for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
+                StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+                        uid, processName, pkgList.keyAt(ipkg),
+                        ActivityManager.processStateAmToProto(ProcessStats.STATE_NOTHING),
+                        pkgList.valueAt(ipkg).appVersion);
+            }
             if (N != 1) {
                 for (int i=0; i<N; i++) {
                     ProcessStats.ProcessStateHolder holder = pkgList.valueAt(i);
@@ -918,6 +942,12 @@ final class ProcessRecord implements WindowProcessListener {
 
     void setReportedProcState(int repProcState) {
         mRepProcState = repProcState;
+        for (int ipkg = pkgList.size() - 1; ipkg >= 0; ipkg--) {
+            StatsLog.write(StatsLog.PROCESS_STATE_CHANGED,
+                    uid, processName, pkgList.keyAt(ipkg),
+                    ActivityManager.processStateAmToProto(mRepProcState),
+                    pkgList.valueAt(ipkg).appVersion);
+        }
         mWindowProcessController.setReportedProcState(repProcState);
     }
 
@@ -968,6 +998,33 @@ final class ProcessRecord implements WindowProcessListener {
 
     boolean hasForegroundServices() {
         return mHasForegroundServices;
+    }
+
+    void setDebugging(boolean debugging) {
+        mDebugging = debugging;
+        mWindowProcessController.setDebugging(debugging);
+    }
+
+    boolean isDebugging() {
+        return mDebugging;
+    }
+
+    void setUsingWrapper(boolean usingWrapper) {
+        mUsingWrapper = usingWrapper;
+        mWindowProcessController.setUsingWrapper(usingWrapper);
+    }
+
+    boolean isUsingWrapper() {
+        return mUsingWrapper;
+    }
+
+    void setActiveInstrumentation(ActiveInstrumentation instr) {
+        mInstr = instr;
+        mWindowProcessController.setInstrumenting(instr != null);
+    }
+
+    ActiveInstrumentation getActiveInstrumentation() {
+        return mInstr;
     }
 
     @Override

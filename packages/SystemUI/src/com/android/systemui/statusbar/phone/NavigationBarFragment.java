@@ -22,7 +22,9 @@ import static android.app.StatusBarManager.windowStateToString;
 import static com.android.internal.view.RotationPolicy.NATURAL_ROTATION;
 
 import static com.android.systemui.shared.system.NavigationBarCompat.InteractionType;
+import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_SEMI_TRANSPARENT;
+import static com.android.systemui.statusbar.phone.BarTransitions.MODE_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.StatusBar.DEBUG_WINDOW_STATE;
 import static com.android.systemui.statusbar.phone.StatusBar.dumpBarTransitions;
 import static com.android.systemui.OverviewProxyService.OverviewProxyListener;
@@ -33,8 +35,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.annotation.IdRes;
 import android.annotation.Nullable;
-import android.app.ActivityManager;
-import android.app.ActivityManagerNative;
 import android.app.ActivityTaskManager;
 import android.app.Fragment;
 import android.app.IActivityManager;
@@ -98,7 +98,7 @@ import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
 import com.android.systemui.statusbar.policy.KeyButtonDrawable;
 import com.android.systemui.statusbar.policy.KeyButtonView;
 import com.android.systemui.statusbar.policy.RotationLockController;
-import com.android.systemui.statusbar.stack.StackStateAnimator;
+import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -181,6 +181,9 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
         public void onQuickStepStarted() {
             // Use navbar dragging as a signal to hide the rotate button
             setRotateSuggestionButtonState(false);
+
+            // Hide the notifications panel when quick step starts
+            mStatusBar.collapsePanel(true /* animate */);
         }
 
         @Override
@@ -665,6 +668,10 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
             nbModeChanged = nbMode != -1;
             if (nbModeChanged) {
                 if (mNavigationBarMode != nbMode) {
+                    if (mNavigationBarMode == MODE_TRANSPARENT
+                            || mNavigationBarMode == MODE_LIGHTS_OUT_TRANSPARENT) {
+                        mNavigationBarView.hideRecentsOnboarding();
+                    }
                     mNavigationBarMode = nbMode;
                     checkNavBarModes();
                 }

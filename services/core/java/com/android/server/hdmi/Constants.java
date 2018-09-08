@@ -18,11 +18,12 @@ package com.android.server.hdmi;
 
 import android.annotation.IntDef;
 import android.hardware.hdmi.HdmiDeviceInfo;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
- * Defines constants related to HDMI-CEC protocol internal implementation.
- * If a constant will be used in the public api, it should be located in
- * {@link android.hardware.hdmi.HdmiControlManager}.
+ * Defines constants related to HDMI-CEC protocol internal implementation. If a constant will be
+ * used in the public api, it should be located in {@link android.hardware.hdmi.HdmiControlManager}.
  */
 final class Constants {
 
@@ -180,6 +181,46 @@ final class Constants {
     static final int MENU_STATE_ACTIVATED = 0;
     static final int MENU_STATE_DEACTIVATED = 1;
 
+    // Audio Format Codes
+    // Refer to CEA Standard (CEA-861-D), Table 37 Audio Format Codes.
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({
+        AUDIO_CODEC_NONE,
+        AUDIO_CODEC_LPCM,
+        AUDIO_CODEC_DD,
+        AUDIO_CODEC_MPEG1,
+        AUDIO_CODEC_MP3,
+        AUDIO_CODEC_MPEG2,
+        AUDIO_CODEC_AAC,
+        AUDIO_CODEC_DTS,
+        AUDIO_CODEC_ATRAC,
+        AUDIO_CODEC_ONEBITAUDIO,
+        AUDIO_CODEC_DDP,
+        AUDIO_CODEC_DTSHD,
+        AUDIO_CODEC_TRUEHD,
+        AUDIO_CODEC_DST,
+        AUDIO_CODEC_WMAPRO,
+        AUDIO_CODEC_MAX,
+    })
+    public @interface AudioCodec {}
+
+    static final int AUDIO_CODEC_NONE = 0x0;
+    static final int AUDIO_CODEC_LPCM = 0x1; // Support LPCMs
+    static final int AUDIO_CODEC_DD = 0x2; // Support DD
+    static final int AUDIO_CODEC_MPEG1 = 0x3; // Support MPEG1
+    static final int AUDIO_CODEC_MP3 = 0x4; // Support MP3
+    static final int AUDIO_CODEC_MPEG2 = 0x5; // Support MPEG2
+    static final int AUDIO_CODEC_AAC = 0x6; // Support AAC
+    static final int AUDIO_CODEC_DTS = 0x7; // Support DTS
+    static final int AUDIO_CODEC_ATRAC = 0x8; // Support ATRAC
+    static final int AUDIO_CODEC_ONEBITAUDIO = 0x9; // Support One-Bit Audio
+    static final int AUDIO_CODEC_DDP = 0xA; // Support DDP
+    static final int AUDIO_CODEC_DTSHD = 0xB; // Support DTSHD
+    static final int AUDIO_CODEC_TRUEHD = 0xC; // Support MLP/TRUE-HD
+    static final int AUDIO_CODEC_DST = 0xD; // Support DST
+    static final int AUDIO_CODEC_WMAPRO = 0xE; // Support WMA-Pro
+    static final int AUDIO_CODEC_MAX = 0xF;
+
     // Bit mask used to get the routing path of the top level device.
     // When &'d with the path 1.2.2.0 (0x1220), for instance, gives 1.0.0.0.
     static final int ROUTING_PATH_TOP_MASK = 0xF000;
@@ -191,11 +232,11 @@ final class Constants {
 
     // Strategy for device polling.
     // Should use "OR(|) operation of POLL_STRATEGY_XXX and POLL_ITERATION_XXX.
-    static final int POLL_STRATEGY_MASK = 0x3;  // first and second bit.
+    static final int POLL_STRATEGY_MASK = 0x3; // first and second bit.
     static final int POLL_STRATEGY_REMOTES_DEVICES = 0x1;
     static final int POLL_STRATEGY_SYSTEM_AUDIO = 0x2;
 
-    static final int POLL_ITERATION_STRATEGY_MASK = 0x30000;  // first and second bit.
+    static final int POLL_ITERATION_STRATEGY_MASK = 0x30000; // first and second bit.
     static final int POLL_ITERATION_IN_ORDER = 0x10000;
     static final int POLL_ITERATION_REVERSE_ORDER = 0x20000;
 
@@ -209,10 +250,10 @@ final class Constants {
         NEVER_SYSTEM_AUDIO_CONTROL_ON_POWER_ON
     })
     @interface SystemAudioControlOnPowerOn {}
+
     static final int ALWAYS_SYSTEM_AUDIO_CONTROL_ON_POWER_ON = 0;
     static final int USE_LAST_STATE_SYSTEM_AUDIO_CONTROL_ON_POWER_ON = 1;
     static final int NEVER_SYSTEM_AUDIO_CONTROL_ON_POWER_ON = 2;
-
 
     static final String PROPERTY_PREFERRED_ADDRESS_AUDIO_SYSTEM =
             "persist.sys.hdmi.addr.audiosystem";
@@ -236,12 +277,57 @@ final class Constants {
     static final String PROPERTY_KEEP_AWAKE = "persist.sys.hdmi.keep_awake";
 
     // TODO(UI): Set this from UI to decide if turn on System Audio Mode when power on the device
-    /** Property to decide if turn on the system audio control when power on the device
-     * Default is always turn on.
-     * State must be a valid {@link SystemAudioControlOnPowerOn} int.
+    /**
+     * Property to decide if turn on the system audio control when power on the device.
+     *
+     * <p>Default is always turn on. State must be a valid {@link SystemAudioControlOnPowerOn} int.
      */
     static final String PROPERTY_SYSTEM_AUDIO_CONTROL_ON_POWER_ON =
-        "persist.sys.hdmi.system_audio_control_on_power_on";
+            "persist.sys.hdmi.system_audio_control_on_power_on";
+
+    /**
+     * Property to record last state of system audio control before device powered off.
+     * <p>When {@link #PROPERTY_SYSTEM_AUDIO_CONTROL_ON_POWER_ON} is set to
+     * {@link #USE_LAST_STATE_SYSTEM_AUDIO_CONTROL_ON_POWER_ON}, restoring this state on power on.
+     * <p>State must be true or false. Default true.
+     */
+    static final String PROPERTY_LAST_SYSTEM_AUDIO_CONTROL =
+            "persist.sys.hdmi.last_system_audio_control";
+
+    /**
+     * Property to indicate if device supports ARC or not
+     * <p>Default is true.
+     */
+    static final String PROPERTY_ARC_SUPPORT =
+        "persist.sys.hdmi.property_arc_support";
+
+    /**
+     * Property to save the audio port to switch to when system audio control is on.
+     * <P>Audio system should switch to this port when cec active source is not its child in the tree
+     * or is not itself.
+     *
+     * <p>Default is ARC port.
+     */
+    static final String PROPERTY_SYSTEM_AUDIO_MODE_AUDIO_PORT =
+        "persist.sys.hdmi.property_sytem_audio_mode_audio_port";
+
+    /**
+     * Property to save the ARC port id on system audio device.
+     * <p>When ARC is initiated, this port will be used to turn on ARC.
+     */
+    static final String PROPERTY_SYSTEM_AUDIO_DEVICE_ARC_PORT =
+        "persist.sys.hdmi.property_sytem_audio_device_arc_port";
+
+    /**
+     * Property to strip local audio of amplifier and use local speaker
+     * when TV does not support system audio mode.
+     *
+     * <p>This property applies to device with both audio system/playback types.
+     * <p>True means using local speaker when TV does not support system audio.
+     * <p>False means passing audio to TV. Default is true.
+     */
+    static final String PROPERTY_STRIP_AUDIO_TV_NO_SYSTEM_AUDIO =
+        "persist.sys.hdmi.property_strip_audio_tv_no_system_audio";
 
     static final int RECORDING_TYPE_DIGITAL_RF = 1;
     static final int RECORDING_TYPE_ANALOGUE_RF = 2;
@@ -267,5 +353,7 @@ final class Constants {
     static final int DISABLED = 0;
     static final int ENABLED = 1;
 
-    private Constants() { /* cannot be instantiated */ }
+    private Constants() {
+        /* cannot be instantiated */
+    }
 }

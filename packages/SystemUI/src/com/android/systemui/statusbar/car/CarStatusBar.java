@@ -16,11 +16,10 @@
 
 package com.android.systemui.statusbar.car;
 
-import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
+import android.car.user.CarUserManagerHelper;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.Drawable;
-import android.os.SystemProperties;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
@@ -41,6 +40,7 @@ import com.android.systemui.recents.misc.SysUiTaskStackChangeListener;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.car.hvac.HvacController;
+import com.android.systemui.statusbar.car.hvac.TemperatureView;
 import com.android.systemui.statusbar.phone.CollapsedStatusBarFragment;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.BatteryController;
@@ -50,14 +50,13 @@ import com.android.systemui.statusbar.policy.UserSwitcherController;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.Map;
+
 /**
  * A status bar (and navigation bar) tailored for the automotive use case.
  */
 public class CarStatusBar extends StatusBar implements
         CarBatteryController.BatteryViewHandler {
     private static final String TAG = "CarStatusBar";
-    public static final boolean ENABLE_HVAC_CONNECTION
-            = !SystemProperties.getBoolean("android.car.hvac.demo", true);
 
     private TaskStackListenerImpl mTaskStackListener;
 
@@ -83,6 +82,7 @@ public class CarStatusBar extends StatusBar implements
     private ActivityManagerWrapper mActivityManagerWrapper;
     private DeviceProvisionedController mDeviceProvisionedController;
     private boolean mDeviceIsProvisioned = true;
+    private HvacController mHvacController;
 
     @Override
     public void start() {
@@ -96,10 +96,8 @@ public class CarStatusBar extends StatusBar implements
         createBatteryController();
         mCarBatteryController.startListening();
 
-        if (ENABLE_HVAC_CONNECTION) {
-            Log.d(TAG, "Connecting to HVAC service");
-            Dependency.get(HvacController.class).connectToCarService();
-        }
+        mHvacController.connectToCarService();
+
         mCarFacetButtonController = Dependency.get(CarFacetButtonController.class);
         mDeviceProvisionedController = Dependency.get(DeviceProvisionedController.class);
         mDeviceIsProvisioned = mDeviceProvisionedController.isDeviceProvisioned();
@@ -121,10 +119,11 @@ public class CarStatusBar extends StatusBar implements
      * before and after the device is provisioned
      */
     private void restartNavBars() {
+        // remove and reattach all hvac components such that we don't keep a reference to unused
+        // ui elements
+        mHvacController.removeAllComponents();
+        addTemperatureViewToController(mStatusBarWindow);
         mCarFacetButtonController.removeAll();
-        if (ENABLE_HVAC_CONNECTION) {
-            Dependency.get(HvacController.class).removeAllComponents();
-        }
         if (mNavigationBarWindow != null) {
             mNavigationBarWindow.removeAllViews();
             mNavigationBarView = null;
@@ -139,14 +138,27 @@ public class CarStatusBar extends StatusBar implements
             mRightNavigationBarWindow.removeAllViews();
             mRightNavigationBarView = null;
         }
+
         buildNavBarContent();
+    }
+
+    private void addTemperatureViewToController(View v) {
+        if (v instanceof TemperatureView) {
+            Log.d(TAG, "addTemperatureViewToController: found ");
+            mHvacController.addHvacTextView((TemperatureView) v);
+        } else if (v instanceof ViewGroup) {
+            ViewGroup viewGroup = (ViewGroup) v;
+            for (int i = 0; i < viewGroup.getChildCount(); i++) {
+                addTemperatureViewToController(viewGroup.getChildAt(i));
+            }
+        }
     }
 
     /**
      * Allows for showing or hiding just the navigation bars. This is indented to be used when
      * the full screen user selector is shown.
      */
-     void setNavBarVisibility(@View.Visibility int visibility) {
+    void setNavBarVisibility(@View.Visibility int visibility) {
         if (mNavigationBarWindow != null) {
             mNavigationBarWindow.setVisibility(visibility);
         }
@@ -216,6 +228,7 @@ public class CarStatusBar extends StatusBar implements
     @Override
     protected void makeStatusBarView() {
         super.makeStatusBarView();
+        mHvacController = Dependency.get(HvacController.class);
 
         mNotificationPanelBackground = getDefaultWallpaper();
         mScrimController.setScrimBehindDrawable(mNotificationPanelBackground);
@@ -228,6 +241,7 @@ public class CarStatusBar extends StatusBar implements
             // when a device has connected by bluetooth.
             mBatteryMeterView.setVisibility(View.GONE);
         });
+        addTemperatureViewToController(mStatusBarWindow);
     }
 
     private BatteryController createBatteryController() {
@@ -266,13 +280,12 @@ public class CarStatusBar extends StatusBar implements
 
     private void buildNavBarWindows() {
         if (mShowBottom) {
-
-             mNavigationBarWindow = (ViewGroup) View.inflate(mContext,
+            mNavigationBarWindow = (ViewGroup) View.inflate(mContext,
                     R.layout.navigation_bar_window, null);
         }
         if (mShowLeft) {
             mLeftNavigationBarWindow = (ViewGroup) View.inflate(mContext,
-                R.layout.navigation_bar_window, null);
+                    R.layout.navigation_bar_window, null);
         }
         if (mShowRight) {
             mRightNavigationBarWindow = (ViewGroup) View.inflate(mContext,
@@ -344,6 +357,7 @@ public class CarStatusBar extends StatusBar implements
             throw new RuntimeException("Unable to build botom nav bar due to missing layout");
         }
         mNavigationBarView.setStatusBar(this);
+        addTemperatureViewToController(mNavigationBarView);
     }
 
     private void buildLeft(int layout) {
@@ -354,6 +368,7 @@ public class CarStatusBar extends StatusBar implements
             throw new RuntimeException("Unable to build left nav bar due to missing layout");
         }
         mLeftNavigationBarView.setStatusBar(this);
+        addTemperatureViewToController(mLeftNavigationBarView);
     }
 
 
@@ -364,6 +379,8 @@ public class CarStatusBar extends StatusBar implements
             Log.e(TAG, "CarStatusBar failed inflate for R.layout.car_navigation_bar");
             throw new RuntimeException("Unable to build right nav bar due to missing layout");
         }
+        mRightNavigationBarView.setStatusBar(this);
+        addTemperatureViewToController(mRightNavigationBarView);
     }
 
     @Override
@@ -377,10 +394,12 @@ public class CarStatusBar extends StatusBar implements
                     + "," + mStackScroller.getScrollY());
         }
 
-        pw.print("  mTaskStackListener="); pw.println(mTaskStackListener);
+        pw.print("  mTaskStackListener=");
+        pw.println(mTaskStackListener);
         pw.print("  mCarFacetButtonController=");
         pw.println(mCarFacetButtonController);
-        pw.print("  mFullscreenUserSwitcher="); pw.println(mFullscreenUserSwitcher);
+        pw.print("  mFullscreenUserSwitcher=");
+        pw.println(mFullscreenUserSwitcher);
         pw.print("  mCarBatteryController=");
         pw.println(mCarBatteryController);
         pw.print("  mBatteryMeterView=");
@@ -399,7 +418,10 @@ public class CarStatusBar extends StatusBar implements
 
         pw.println("SharedPreferences:");
         for (Map.Entry<String, ?> entry : Prefs.getAll(mContext).entrySet()) {
-            pw.print("  "); pw.print(entry.getKey()); pw.print("="); pw.println(entry.getValue());
+            pw.print("  ");
+            pw.print(entry.getKey());
+            pw.print("=");
+            pw.println(entry.getValue());
         }
     }
 
@@ -445,8 +467,8 @@ public class CarStatusBar extends StatusBar implements
     }
 
     /**
-     * An implementation of SysUiTaskStackChangeListener, that listens for changes in the system task
-     * stack and notifies the navigation bar.
+     * An implementation of SysUiTaskStackChangeListener, that listens for changes in the system
+     * task stack and notifies the navigation bar.
      */
     private class TaskStackListenerImpl extends SysUiTaskStackChangeListener {
         @Override
@@ -481,8 +503,15 @@ public class CarStatusBar extends StatusBar implements
     }
 
     @Override
-    public void updateKeyguardState(boolean goingToFullShade, boolean fromShadeLocked) {
-        super.updateKeyguardState(goingToFullShade, fromShadeLocked);
+    public void onStateChanged(int newState) {
+        super.onStateChanged(newState);
+        CarUserManagerHelper helper = new CarUserManagerHelper(mContext);
+        if (!helper.isHeadlessSystemUser()) {
+            showUserSwitcher();
+        }
+    }
+
+    public void showUserSwitcher() {
         if (mFullscreenUserSwitcher != null) {
             if (mState == StatusBarState.FULLSCREEN_USER_SWITCHER) {
                 mFullscreenUserSwitcher.show();

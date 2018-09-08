@@ -19,6 +19,7 @@ package android.media;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -714,6 +715,7 @@ public final class AudioFormat implements Parcelable {
      */
     // Update sound trigger JNI in core/jni/android_hardware_SoundTrigger.cpp when modifying this
     // constructor
+    @UnsupportedAppUsage
     private AudioFormat(int encoding, int sampleRate, int channelMask, int channelIndexMask) {
         mEncoding = encoding;
         mSampleRate = sampleRate;
@@ -736,8 +738,11 @@ public final class AudioFormat implements Parcelable {
     /** @hide */
     public final static int AUDIO_FORMAT_HAS_PROPERTY_CHANNEL_INDEX_MASK = 0x1 << 3;
 
+    @UnsupportedAppUsage
     private int mEncoding;
+    @UnsupportedAppUsage
     private int mSampleRate;
+    @UnsupportedAppUsage
     private int mChannelMask;
     private int mChannelIndexMask;
     private int mPropertySetMask;
@@ -1146,6 +1151,7 @@ public final class AudioFormat implements Parcelable {
             ENCODING_AAC_LC,
             ENCODING_DOLBY_TRUEHD,
             ENCODING_E_AC3_JOC,
+            ENCODING_AC4,
     };
 
     /** @hide */
@@ -1156,7 +1162,8 @@ public final class AudioFormat implements Parcelable {
             ENCODING_DTS_HD,
             ENCODING_AAC_LC,
             ENCODING_DOLBY_TRUEHD,
-            ENCODING_E_AC3_JOC }
+            ENCODING_E_AC3_JOC,
+            ENCODING_AC4 }
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface SurroundSoundEncoding {}
@@ -1168,14 +1175,14 @@ public final class AudioFormat implements Parcelable {
      * It is just a default to use if an international name is not available.
      *
      * @param audioFormat a surround format
-     * @return short default name for the format, eg. “AC3” for ENCODING_AC3.
+     * @return short default name for the format.
      */
     public static String toDisplayName(@SurroundSoundEncoding int audioFormat) {
         switch (audioFormat) {
             case ENCODING_AC3:
-                return "Dolby Digital (AC3)";
+                return "Dolby Digital";
             case ENCODING_E_AC3:
-                return "Dolby Digital Plus (E_AC3)";
+                return "Dolby Digital Plus";
             case ENCODING_DTS:
                 return "DTS";
             case ENCODING_DTS_HD:
@@ -1185,7 +1192,9 @@ public final class AudioFormat implements Parcelable {
             case ENCODING_DOLBY_TRUEHD:
                 return "Dolby TrueHD";
             case ENCODING_E_AC3_JOC:
-                return "Dolby Atmos";
+                return "Dolby Atmos in Dolby Digital Plus";
+            case ENCODING_AC4:
+                return "Dolby AC-4";
             default:
                 return "Unknown surround sound format";
         }

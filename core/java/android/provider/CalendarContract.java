@@ -19,6 +19,7 @@ package android.provider;
 
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.UnsupportedAppUsage;
 import android.app.Activity;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
@@ -1665,6 +1666,7 @@ public final class CalendarContract {
          *
          * @hide
          */
+        @UnsupportedAppUsage
         public static String[] PROVIDER_WRITABLE_COLUMNS = new String[] {
                 ACCOUNT_NAME,
                 ACCOUNT_TYPE,
@@ -2294,6 +2296,7 @@ public final class CalendarContract {
          *         if no such alarm exists.
          * @hide
          */
+        @UnsupportedAppUsage
         public static final long findNextAlarmTime(ContentResolver cr, long millis) {
             android.util.SeempLog.record(53);
             String selection = ALARM_TIME + ">=" + millis;
@@ -2328,6 +2331,7 @@ public final class CalendarContract {
          * @param manager the AlarmManager
          * @hide
          */
+        @UnsupportedAppUsage
         public static final void rescheduleMissedAlarms(ContentResolver cr,
                 Context context, AlarmManager manager) {
             // Get all the alerts that have been scheduled but have not fired
@@ -2384,6 +2388,7 @@ public final class CalendarContract {
          *            epoch
          * @hide
          */
+        @UnsupportedAppUsage
         public static void scheduleAlarm(Context context, AlarmManager manager, long alarmTime) {
             if (DEBUG) {
                 Time time = new Time();

@@ -25,6 +25,7 @@ import static android.view.Display.INVALID_DISPLAY;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -357,6 +358,7 @@ public class ActivityOptions {
      * supply these options as the options Bundle when starting an activity.
      * @hide
      */
+    @UnsupportedAppUsage
     public static ActivityOptions makeCustomAnimation(Context context,
             int enterResId, int exitResId, Handler handler, OnAnimationStartedListener listener) {
         ActivityOptions opts = new ActivityOptions();
@@ -582,6 +584,7 @@ public class ActivityOptions {
      * thumbnails are aspect scaled to/from a new location.
      * @hide
      */
+    @UnsupportedAppUsage
     public static ActivityOptions makeMultiThumbFutureAspectScaleAnimation(Context context,
             Handler handler, IAppTransitionAnimationSpecsFuture specsFuture,
             OnAnimationStartedListener listener, boolean scaleUp) {
@@ -847,6 +850,7 @@ public class ActivityOptions {
      * @hide
      */
     @RequiresPermission(CONTROL_REMOTE_APP_TRANSITION_ANIMATIONS)
+    @UnsupportedAppUsage
     public static ActivityOptions makeRemoteAnimation(
             RemoteAnimationAdapter remoteAnimationAdapter) {
         final ActivityOptions opts = new ActivityOptions();
@@ -956,14 +960,15 @@ public class ActivityOptions {
     }
 
     /**
-     * Sets the bounds (window size) that the activity should be launched in.
+     * Sets the bounds (window size and position) that the activity should be launched in.
      * Rect position should be provided in pixels and in screen coordinates.
-     * Set to null explicitly for fullscreen.
+     * Set to {@code null} to explicitly launch fullscreen.
      * <p>
-     * <strong>NOTE:<strong/> This value is ignored on devices that don't have
+     * <strong>NOTE:</strong> This value is ignored on devices that don't have
      * {@link android.content.pm.PackageManager#FEATURE_FREEFORM_WINDOW_MANAGEMENT} or
      * {@link android.content.pm.PackageManager#FEATURE_PICTURE_IN_PICTURE} enabled.
-     * @param screenSpacePixelRect Launch bounds to use for the activity or null for fullscreen.
+     * @param screenSpacePixelRect launch bounds or {@code null} for fullscreen
+     * @return {@code this} {@link ActivityOptions} instance
      */
     public ActivityOptions setLaunchBounds(@Nullable Rect screenSpacePixelRect) {
         mLaunchBounds = screenSpacePixelRect != null ? new Rect(screenSpacePixelRect) : null;
@@ -1278,6 +1283,7 @@ public class ActivityOptions {
     }
 
     /** @hide */
+    @UnsupportedAppUsage
     public void setSplitScreenCreateMode(int splitScreenCreateMode) {
         mSplitScreenCreateMode = splitScreenCreateMode;
     }

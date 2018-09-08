@@ -128,8 +128,11 @@ public class DozeTriggers implements DozeMachine.Part {
         boolean isDoubleTap = pulseReason == DozeLog.PULSE_REASON_SENSOR_DOUBLE_TAP;
         boolean isPickup = pulseReason == DozeLog.PULSE_REASON_SENSOR_PICKUP;
         boolean isLongPress = pulseReason == DozeLog.PULSE_REASON_SENSOR_LONG_PRESS;
+        boolean isReach = pulseReason == DozeLog.PULSE_REASON_SENSOR_REACH;
 
-        if (mConfig.alwaysOnEnabled(UserHandle.USER_CURRENT) && !isLongPress) {
+        if (isLongPress) {
+            requestPulse(pulseReason, sensorPerformedProxCheck);
+        } else {
             proximityCheckThenCall((result) -> {
                 if (result == ProximityCheck.RESULT_NEAR) {
                     // In pocket, drop event.
@@ -138,13 +141,13 @@ public class DozeTriggers implements DozeMachine.Part {
                 if (isDoubleTap) {
                     mDozeHost.onDoubleTap(screenX, screenY);
                     mMachine.wakeUp();
+                } else if (isPickup || isReach) {
+                    mMachine.wakeUp();
                 } else {
                     mDozeHost.extendPulse();
                 }
             }, sensorPerformedProxCheck, pulseReason);
             return;
-        } else {
-            requestPulse(pulseReason, sensorPerformedProxCheck);
         }
 
         if (isPickup) {
@@ -152,7 +155,9 @@ public class DozeTriggers implements DozeMachine.Part {
                     SystemClock.elapsedRealtime() - mNotificationPulseTime;
             final boolean withinVibrationThreshold =
                     timeSinceNotification < mDozeParameters.getPickupVibrationThreshold();
-            DozeLog.tracePickupPulse(mContext, withinVibrationThreshold);
+            DozeLog.tracePickupWakeUp(mContext, withinVibrationThreshold);
+        } else if (isReach) {
+            DozeLog.traceReachWakeUp();
         }
     }
 

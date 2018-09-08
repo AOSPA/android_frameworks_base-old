@@ -165,7 +165,7 @@
     <string name="tts_engine_settings_title" msgid="3499112142425680334">"<xliff:g id="TTS_ENGINE_NAME">%s</xliff:g> motorraren ezarpenak"</string>
     <string name="tts_engine_settings_button" msgid="1030512042040722285">"Abiarazi motorraren ezarpenak"</string>
     <string name="tts_engine_preference_section_title" msgid="448294500990971413">"Motor hobetsia"</string>
-    <string name="tts_general_section_title" msgid="4402572014604490502">"Orokorra"</string>
+    <string name="tts_general_section_title" msgid="4402572014604490502">"Orokorrak"</string>
     <string name="tts_reset_speech_pitch_title" msgid="5789394019544785915">"Berrezarri ahots-tonua"</string>
     <string name="tts_reset_speech_pitch_summary" msgid="8700539616245004418">"Berrezarri testua esateko ahots-tonu lehenetsia."</string>
   <string-array name="tts_rate_entries">
@@ -449,5 +449,6 @@
     <string name="alarm_template_far" msgid="3779172822607461675">"data: <xliff:g id="WHEN">%1$s</xliff:g>"</string>
     <string name="zen_mode_duration_settings_title" msgid="229547412251222757">"Iraupena"</string>
     <string name="zen_mode_duration_always_prompt_title" msgid="6478923750878945501">"Galdetu beti"</string>
+    <string name="zen_mode_forever" msgid="2704305038191592967">"Desaktibatu arte"</string>
     <string name="time_unit_just_now" msgid="6363336622778342422">"Oraintxe"</string>
 </resources>

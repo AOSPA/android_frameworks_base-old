@@ -35,7 +35,10 @@ import java.util.Set;
  * <p>Connection and bonding state changes affecting specific devices
  * are handled by {@link CachedBluetoothDeviceManager},
  * {@link BluetoothEventManager}, and {@link LocalBluetoothProfileManager}.
+ *
+ * @deprecated use {@link BluetoothAdapter} instead.
  */
+@Deprecated
 public class LocalBluetoothAdapter {
     private static final String TAG = "LocalBluetoothAdapter";
 
@@ -244,10 +247,6 @@ public class LocalBluetoothAdapter {
 
     public BluetoothDevice getRemoteDevice(String address) {
         return mAdapter.getRemoteDevice(address);
-    }
-
-    public int getMaxConnectedAudioDevices() {
-        return mAdapter.getMaxConnectedAudioDevices();
     }
 
     public List<Integer> getSupportedProfiles() {

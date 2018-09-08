@@ -51,6 +51,7 @@ import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
 
 import android.Manifest;
+import android.accessibilityservice.AccessibilityService;
 import android.annotation.AnyThread;
 import android.annotation.BinderThread;
 import android.annotation.ColorInt;
@@ -888,10 +889,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 if (showImeUri.equals(uri)) {
                     updateKeyboardFromSettingsLocked();
                 } else if (accessibilityRequestingNoImeUri.equals(uri)) {
-                    mAccessibilityRequestingNoSoftKeyboard = Settings.Secure.getIntForUser(
+                    final int accessibilitySoftKeyboardSetting = Settings.Secure.getIntForUser(
                             mContext.getContentResolver(),
-                            Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE,
-                            0, mUserId) == 1;
+                            Settings.Secure.ACCESSIBILITY_SOFT_KEYBOARD_MODE, 0, mUserId);
+                    mAccessibilityRequestingNoSoftKeyboard =
+                            (accessibilitySoftKeyboardSetting & AccessibilityService.SHOW_MODE_MASK)
+                                    == AccessibilityService.SHOW_MODE_HIDDEN;
                     if (mAccessibilityRequestingNoSoftKeyboard) {
                         final boolean showRequested = mShowRequested;
                         hideCurrentInputLocked(0, null);
@@ -1711,10 +1714,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public void addClient(IInputMethodClient client,
-            IInputContext inputContext, int uid, int pid) {
-        if (!calledFromValidUser()) {
-            return;
+    public void addClient(IInputMethodClient client, IInputContext inputContext, int uid, int pid) {
+        if (Binder.getCallingUid() != Process.SYSTEM_UID) {
+            throw new SecurityException("Only system process can call this method.");
         }
         synchronized (mMethodMap) {
             mClients.put(client.asBinder(), new ClientState(client,
@@ -1724,8 +1726,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     @Override
     public void removeClient(IInputMethodClient client) {
-        if (!calledFromValidUser()) {
-            return;
+        if (Binder.getCallingUid() != Process.SYSTEM_UID) {
+            throw new SecurityException("Only system process can call this method.");
         }
         synchronized (mMethodMap) {
             ClientState cs = mClients.remove(client.asBinder());
@@ -1913,6 +1915,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         return startInputInnerLocked();
     }
 
+    @GuardedBy("mMethodMap")
     InputBindResult startInputInnerLocked() {
         if (mCurMethodId == null) {
             return InputBindResult.NO_IME;
@@ -2549,6 +2552,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
+    @GuardedBy("mMethodMap")
     boolean showCurrentInputLocked(int flags, ResultReceiver resultReceiver) {
         mShowRequested = true;
         if (mAccessibilityRequestingNoSoftKeyboard) {

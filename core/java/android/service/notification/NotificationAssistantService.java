@@ -19,6 +19,9 @@ package android.service.notification;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
+import android.app.NotificationChannel;
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Handler;
@@ -34,6 +37,22 @@ import java.util.List;
 
 /**
  * A service that helps the user manage notifications.
+ * <p>
+ * Only one notification assistant can be active at a time. Unlike notification listener services,
+ * assistant services can additionally modify certain aspects about notifications
+ * (see {@link Adjustment}) before they are posted.
+ *<p>
+ * A note about managed profiles: Unlike {@link NotificationListenerService listener services},
+ * NotificationAssistantServices are allowed to run in managed profiles
+ * (see {@link DevicePolicyManager#isManagedProfile(ComponentName)}), so they can access the
+ * information they need to create good {@link Adjustment adjustments}. To maintain the contract
+ * with {@link NotificationListenerService}, an assistant service will receive all of the
+ * callbacks from {@link NotificationListenerService} for the current user, managed profiles of
+ * that user, and ones that affect all users. However,
+ * {@link #onNotificationEnqueued(StatusBarNotification)} will only be called for notifications
+ * sent to the current user, and {@link Adjustment adjuments} will only be accepted for the
+ * current user.
+ *
  * @hide
  */
 @SystemApi
@@ -84,7 +103,22 @@ public abstract class NotificationAssistantService extends NotificationListenerS
      * @param sbn the new notification
      * @return an adjustment or null to take no action, within 100ms.
      */
-    abstract public Adjustment onNotificationEnqueued(StatusBarNotification sbn);
+    public Adjustment onNotificationEnqueued(StatusBarNotification sbn) {
+        return null;
+    }
+
+    /**
+     * A notification was posted by an app. Called before post.
+     *
+     * @param sbn the new notification
+     * @param channel the channel the notification was posted to
+     * @return an adjustment or null to take no action, within 100ms.
+     */
+    public Adjustment onNotificationEnqueued(StatusBarNotification sbn,
+            NotificationChannel channel) {
+        return onNotificationEnqueued(sbn);
+    }
+
 
     /**
      * Implement this method to learn when notifications are removed, how they were interacted with
@@ -112,6 +146,14 @@ public abstract class NotificationAssistantService extends NotificationListenerS
     public void onNotificationRemoved(StatusBarNotification sbn, RankingMap rankingMap,
             NotificationStats stats, int reason) {
         onNotificationRemoved(sbn, rankingMap, reason);
+    }
+
+    /**
+     * Implement this to know when a user has seen notifications, as triggered by
+     * {@link #setNotificationsShown(String[])}.
+     */
+    public void onNotificationsSeen(List<String> keys) {
+
     }
 
     /**
@@ -168,7 +210,8 @@ public abstract class NotificationAssistantService extends NotificationListenerS
 
     private class NotificationAssistantServiceWrapper extends NotificationListenerWrapper {
         @Override
-        public void onNotificationEnqueued(IStatusBarNotificationHolder sbnHolder) {
+        public void onNotificationEnqueuedWithChannel(IStatusBarNotificationHolder sbnHolder,
+                NotificationChannel channel) {
             StatusBarNotification sbn;
             try {
                 sbn = sbnHolder.get();
@@ -179,14 +222,14 @@ public abstract class NotificationAssistantService extends NotificationListenerS
 
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = sbn;
+            args.arg2 = channel;
             mHandler.obtainMessage(MyHandler.MSG_ON_NOTIFICATION_ENQUEUED,
                     args).sendToTarget();
         }
 
         @Override
         public void onNotificationSnoozedUntilContext(
-                IStatusBarNotificationHolder sbnHolder, String snoozeCriterionId)
-                throws RemoteException {
+                IStatusBarNotificationHolder sbnHolder, String snoozeCriterionId) {
             StatusBarNotification sbn;
             try {
                 sbn = sbnHolder.get();
@@ -201,11 +244,20 @@ public abstract class NotificationAssistantService extends NotificationListenerS
             mHandler.obtainMessage(MyHandler.MSG_ON_NOTIFICATION_SNOOZED,
                     args).sendToTarget();
         }
+
+        @Override
+        public void onNotificationsSeen(List<String> keys) {
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = keys;
+            mHandler.obtainMessage(MyHandler.MSG_ON_NOTIFICATIONS_SEEN,
+                    args).sendToTarget();
+        }
     }
 
     private final class MyHandler extends Handler {
         public static final int MSG_ON_NOTIFICATION_ENQUEUED = 1;
         public static final int MSG_ON_NOTIFICATION_SNOOZED = 2;
+        public static final int MSG_ON_NOTIFICATIONS_SEEN = 3;
 
         public MyHandler(Looper looper) {
             super(looper, null, false);
@@ -217,8 +269,9 @@ public abstract class NotificationAssistantService extends NotificationListenerS
                 case MSG_ON_NOTIFICATION_ENQUEUED: {
                     SomeArgs args = (SomeArgs) msg.obj;
                     StatusBarNotification sbn = (StatusBarNotification) args.arg1;
+                    NotificationChannel channel = (NotificationChannel) args.arg2;
                     args.recycle();
-                    Adjustment adjustment = onNotificationEnqueued(sbn);
+                    Adjustment adjustment = onNotificationEnqueued(sbn, channel);
                     if (adjustment != null) {
                         if (!isBound()) return;
                         try {
@@ -237,6 +290,13 @@ public abstract class NotificationAssistantService extends NotificationListenerS
                     String snoozeCriterionId = (String) args.arg2;
                     args.recycle();
                     onNotificationSnoozedUntilContext(sbn, snoozeCriterionId);
+                    break;
+                }
+                case MSG_ON_NOTIFICATIONS_SEEN: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    List<String> keys = (List<String>) args.arg1;
+                    args.recycle();
+                    onNotificationsSeen(keys);
                     break;
                 }
             }

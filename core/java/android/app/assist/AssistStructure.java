@@ -41,18 +41,23 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Assist data automatically created by the platform's implementation of assist and autofill.
+ * <p>This API automatically creates assist data from the platform's
+ * implementation of assist and autofill.
  *
  * <p>The structure is used for assist purposes when created by
  * {@link android.app.Activity#onProvideAssistData}, {@link View#onProvideStructure(ViewStructure)},
  * or {@link View#onProvideVirtualStructure(ViewStructure)}.
  *
- * <p>The structure is used for autofill purposes when created by
+ * <p>The structure is also used for autofill purposes when created by
  * {@link View#onProvideAutofillStructure(ViewStructure, int)},
  * or {@link View#onProvideAutofillVirtualStructure(ViewStructure, int)}.
  *
- * <p>For performance reasons, some properties of the assist data might be available just for assist
- * or autofill purposes; in those case, the property availability will be document in its javadoc.
+ * <p>For performance reasons, some properties of the assist data might only be available for
+ * assist or autofill purposes. In those cases, a property's availability will be documented
+ * in its javadoc.
+ *
+ * <p>To learn about using Autofill in your app, read the
+ * <a href="/guide/topics/text/autofill">Autofill Framework</a> guides.
  */
 public class AssistStructure implements Parcelable {
     static final String TAG = "AssistStructure";
@@ -620,7 +625,7 @@ public class AssistStructure implements Parcelable {
         String mIdType;
         String mIdEntry;
 
-        // TODO: once we have more flags, it might be better to store the individual
+        // TODO(b/37567426): once we have more flags, it might be better to store the individual
         // fields (viewId and childId) of the field.
         AutofillId mAutofillId;
         @View.AutofillType int mAutofillType = View.AUTOFILL_TYPE_NONE;
@@ -664,7 +669,7 @@ public class AssistStructure implements Parcelable {
         static final int FLAGS_CONTEXT_CLICKABLE = 0x00004000;
         static final int FLAGS_OPAQUE = 0x00008000;
 
-        // TODO: autofill data is made of many fields and ideally we should verify
+        // TODO(b/37567426): autofill data is made of many fields and ideally we should verify
         // one-by-one to optimize what's sent over, but there isn't enough flag bits for that, we'd
         // need to create a 'flags2' or 'autoFillFlags' field and add these flags there.
         // So, to keep thinkg simpler for now, let's just use on flag for all of them...
@@ -2167,13 +2172,13 @@ public class AssistStructure implements Parcelable {
         if (autofillId == null) {
             Log.i(TAG, prefix + " NO autofill ID");
         } else {
-            Log.i(TAG, prefix + "Autofill info: id= " + autofillId
+            Log.i(TAG, prefix + "  Autofill info: id= " + autofillId
                     + ", type=" + node.getAutofillType()
                     + ", options=" + Arrays.toString(node.getAutofillOptions())
                     + ", hints=" + Arrays.toString(node.getAutofillHints())
                     + ", value=" + node.getAutofillValue()
                     + ", sanitized=" + node.isSanitized()
-                    + ", importantFor=" + node.getImportantForAutofill());
+                    + ", important=" + node.getImportantForAutofill());
         }
 
         final int NCHILDREN = node.getChildCount();
@@ -2235,6 +2240,22 @@ public class AssistStructure implements Parcelable {
     public WindowNode getWindowNodeAt(int index) {
         ensureData();
         return mWindowNodes.get(index);
+    }
+
+    // TODO(b/35708678): temporary method that disable one-way warning flag on binder.
+    /** @hide */
+    public void ensureDataForAutofill() {
+        if (mHaveData) {
+            return;
+        }
+        mHaveData = true;
+        Binder.allowBlocking(mReceiveChannel);
+        try {
+            ParcelTransferReader reader = new ParcelTransferReader(mReceiveChannel);
+            reader.go();
+        } finally {
+            Binder.defaultBlocking(mReceiveChannel);
+        }
     }
 
     /** @hide */

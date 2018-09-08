@@ -20,8 +20,9 @@ import static android.app.NotificationManager.IMPORTANCE_DEFAULT;
 import static android.app.NotificationManager.IMPORTANCE_LOW;
 import static android.app.NotificationManager.IMPORTANCE_MIN;
 
-import static junit.framework.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -33,8 +34,10 @@ import android.app.INotificationManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.content.ContentResolver;
-import android.content.IContentProvider;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.IPackageManager;
+import android.os.Build;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.notification.Adjustment;
@@ -47,7 +50,6 @@ import android.support.test.InstrumentationRegistry;
 import android.test.ServiceTestCase;
 import android.testing.TestableContext;
 import android.util.AtomicFile;
-import android.util.Xml;
 
 import com.android.internal.util.FastXmlSerializer;
 
@@ -57,7 +59,6 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlSerializer;
 
 import java.io.BufferedInputStream;
@@ -84,6 +85,8 @@ public class AssistantTest extends ServiceTestCase<Assistant> {
 
     @Mock INotificationManager mNoMan;
     @Mock AtomicFile mFile;
+    @Mock
+    IPackageManager mPackageManager;
 
     Assistant mAssistant;
     Application mApplication;
@@ -117,6 +120,11 @@ public class AssistantTest extends ServiceTestCase<Assistant> {
         mAssistant = getService();
         mAssistant.setNoMan(mNoMan);
         mAssistant.setFile(mFile);
+        mAssistant.setPackageManager(mPackageManager);
+        ApplicationInfo info = mock(ApplicationInfo.class);
+        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), anyInt()))
+                .thenReturn(info);
+        info.targetSdkVersion = Build.VERSION_CODES.P;
         when(mFile.startWrite()).thenReturn(mock(FileOutputStream.class));
     }
 
@@ -435,14 +443,27 @@ public class AssistantTest extends ServiceTestCase<Assistant> {
                 Settings.Global.BLOCKING_HELPER_STREAK_LIMIT, newStreakLimit);
 
         // Notify for the settings values we updated.
-        resolver.notifyChange(
-                Settings.Global.getUriFor(Settings.Global.BLOCKING_HELPER_STREAK_LIMIT), null);
-        resolver.notifyChange(
-                Settings.Global.getUriFor(
-                        Settings.Global.BLOCKING_HELPER_DISMISS_TO_VIEW_RATIO_LIMIT),
-                null);
+        mAssistant.mSettingsObserver.onChange(false, Settings.Global.getUriFor(
+                Settings.Global.BLOCKING_HELPER_STREAK_LIMIT));
+        mAssistant.mSettingsObserver.onChange(false, Settings.Global.getUriFor(
+                Settings.Global.BLOCKING_HELPER_DISMISS_TO_VIEW_RATIO_LIMIT));
 
         // With the new threshold, the blocking helper should be triggered.
         assertEquals(true, ci.shouldTriggerBlock());
+    }
+
+    @Test
+    public void testTrimLiveNotifications() {
+        StatusBarNotification sbn = generateSbn(PKG1, UID1, P1C1, "no", null);
+        mAssistant.setFakeRanking(generateRanking(sbn, P1C1));
+
+        mAssistant.onNotificationPosted(sbn, mock(RankingMap.class));
+
+        assertTrue(mAssistant.mLiveNotifications.containsKey(sbn.getKey()));
+
+        mAssistant.onNotificationRemoved(
+                sbn, mock(RankingMap.class), new NotificationStats(), 0);
+
+        assertFalse(mAssistant.mLiveNotifications.containsKey(sbn.getKey()));
     }
 }

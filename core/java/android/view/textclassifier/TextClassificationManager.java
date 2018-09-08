@@ -19,6 +19,7 @@ package android.view.textclassifier;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemService;
+import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.database.ContentObserver;
 import android.os.ServiceManager;
@@ -27,6 +28,7 @@ import android.service.textclassifier.TextClassifierService;
 import android.view.textclassifier.TextClassifier.TextClassifierType;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 
 import java.lang.ref.WeakReference;
@@ -107,6 +109,7 @@ public final class TextClassificationManager {
      * @see TextClassifier#SYSTEM
      * @hide
      */
+    @UnsupportedAppUsage
     public TextClassifier getTextClassifier(@TextClassifierType int type) {
         switch (type) {
             case TextClassifier.LOCAL:
@@ -244,6 +247,13 @@ public final class TextClassificationManager {
         return mContext.getApplicationContext() != null
                 ? mContext.getApplicationContext()
                 : mContext;
+    }
+
+    /** @hide **/
+    public void dump(IndentingPrintWriter pw) {
+        getLocalTextClassifier().dump(pw);
+        getSystemTextClassifier().dump(pw);
+        getSettings().dump(pw);
     }
 
     /** @hide */

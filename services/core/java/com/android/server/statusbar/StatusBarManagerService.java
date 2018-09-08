@@ -80,6 +80,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
     private int mDisabled2 = 0;
 
     private final Object mLock = new Object();
+    private final DeathRecipient mDeathRecipient = new DeathRecipient();
     // encompasses lights-out mode and other flags defined on View
     private int mSystemUiVisibility = 0;
     private int mFullscreenStackSysUiVisibility;
@@ -92,6 +93,23 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
     private boolean mShowImeSwitcher;
     private IBinder mImeToken = null;
     private int mCurrentUserId;
+
+    private class DeathRecipient implements IBinder.DeathRecipient {
+        public void binderDied() {
+            mBar.asBinder().unlinkToDeath(this,0);
+            mBar = null;
+            notifyBarAttachChanged();
+        }
+
+        public void linkToDeath() {
+            try {
+                mBar.asBinder().linkToDeath(mDeathRecipient,0);
+            } catch (RemoteException e) {
+                Slog.e(TAG,"Unable to register Death Recipient for status bar", e);
+            }
+        }
+
+    }
 
     private class DisableRecord implements IBinder.DeathRecipient {
         int userId;
@@ -547,50 +565,50 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
     }
 
     @Override
-    public void showFingerprintDialog(Bundle bundle, IBiometricPromptReceiver receiver) {
+    public void showBiometricDialog(Bundle bundle, IBiometricPromptReceiver receiver) {
         if (mBar != null) {
             try {
-                mBar.showFingerprintDialog(bundle, receiver);
+                mBar.showBiometricDialog(bundle, receiver);
             } catch (RemoteException ex) {
             }
         }
     }
 
     @Override
-    public void onFingerprintAuthenticated() {
+    public void onBiometricAuthenticated() {
         if (mBar != null) {
             try {
-                mBar.onFingerprintAuthenticated();
+                mBar.onBiometricAuthenticated();
             } catch (RemoteException ex) {
             }
         }
     }
 
     @Override
-    public void onFingerprintHelp(String message) {
+    public void onBiometricHelp(String message) {
         if (mBar != null) {
             try {
-                mBar.onFingerprintHelp(message);
+                mBar.onBiometricHelp(message);
             } catch (RemoteException ex) {
             }
         }
     }
 
     @Override
-    public void onFingerprintError(String error) {
+    public void onBiometricError(String error) {
         if (mBar != null) {
             try {
-                mBar.onFingerprintError(error);
+                mBar.onBiometricError(error);
             } catch (RemoteException ex) {
             }
         }
     }
 
     @Override
-    public void hideFingerprintDialog() {
+    public void hideBiometricDialog() {
         if (mBar != null) {
             try {
-                mBar.hideFingerprintDialog();
+                mBar.hideBiometricDialog();
             } catch (RemoteException ex) {
             }
         }
@@ -859,16 +877,7 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
 
         Slog.i(TAG, "registerStatusBar bar=" + bar);
         mBar = bar;
-        try {
-            mBar.asBinder().linkToDeath(new DeathRecipient() {
-                @Override
-                public void binderDied() {
-                    mBar = null;
-                    notifyBarAttachChanged();
-                }
-            }, 0);
-        } catch (RemoteException e) {
-        }
+        mDeathRecipient.linkToDeath();
         notifyBarAttachChanged();
         synchronized (mIcons) {
             for (String slot : mIcons.keySet()) {
@@ -1044,14 +1053,16 @@ public class StatusBarManagerService extends IStatusBarService.Stub {
 
     @Override
     public void onNotificationClear(String pkg, String tag, int id, int userId, String key,
-            @NotificationStats.DismissalSurface int dismissalSurface, NotificationVisibility nv) {
+            @NotificationStats.DismissalSurface int dismissalSurface,
+            @NotificationStats.DismissalSentiment int dismissalSentiment,
+            NotificationVisibility nv) {
         enforceStatusBarService();
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
         long identity = Binder.clearCallingIdentity();
         try {
             mNotificationDelegate.onNotificationClear(callingUid, callingPid, pkg, tag, id, userId,
-                    key, dismissalSurface, nv);
+                    key, dismissalSurface, dismissalSentiment, nv);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }

@@ -19,6 +19,7 @@ package android.telephony;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressAutoDoc;
 import android.annotation.SystemApi;
+import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityThread;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
@@ -88,6 +89,7 @@ public final class SmsManager {
             new ArrayMap<Integer, SmsManager>();
 
     /** A concrete subscription id, or the pseudo DEFAULT_SUBSCRIPTION_ID */
+    @UnsupportedAppUsage
     private int mSubId;
 
     /*
@@ -272,6 +274,17 @@ public final class SmsManager {
     private static final int SMS_PICK = 2;
 
     /**
+     * 3gpp2 SMS priority is not specified
+     * @hide
+     */
+    public static final int SMS_MESSAGE_PRIORITY_NOT_SPECIFIED = -1;
+    /**
+     * 3gpp SMS period is not specified
+     * @hide
+     */
+    public static final int SMS_MESSAGE_PERIOD_NOT_SPECIFIED = -1;
+
+    /**
      * Send a text based SMS.
      *
      * <p class="note"><strong>Note:</strong> Using this method requires that your app has the
@@ -442,6 +455,7 @@ public final class SmsManager {
      * @throws IllegalArgumentException if destinationAddress or text are empty
      * {@hide}
      */
+    @UnsupportedAppUsage
     public void sendTextMessage(
             String destinationAddress, String scAddress, String text,
             PendingIntent sentIntent, PendingIntent deliveryIntent,
@@ -463,11 +477,11 @@ public final class SmsManager {
         }
 
         if (priority < 0x00 || priority > 0x03) {
-            throw new IllegalArgumentException("Invalid priority");
+            priority = SMS_MESSAGE_PRIORITY_NOT_SPECIFIED;
         }
 
         if (validityPeriod < 0x05 || validityPeriod > 0x09b0a0) {
-            throw new IllegalArgumentException("Invalid validity period");
+            validityPeriod = SMS_MESSAGE_PERIOD_NOT_SPECIFIED;
         }
 
         try {
@@ -495,6 +509,7 @@ public final class SmsManager {
      * PendingIntent, int, boolean, int)
      * @hide
      */
+    @UnsupportedAppUsage
     public void sendTextMessageWithoutPersisting(
             String destinationAddress, String scAddress, String text,
             PendingIntent sentIntent, PendingIntent deliveryIntent, int priority,
@@ -720,12 +735,14 @@ public final class SmsManager {
      * @throws IllegalArgumentException if destinationAddress or data are empty
      * {@hide}
      */
+    @UnsupportedAppUsage
     public void sendMultipartTextMessage(
             String destinationAddress, String scAddress, ArrayList<String> parts,
             ArrayList<PendingIntent> sentIntents, ArrayList<PendingIntent> deliveryIntents,
             int priority, boolean expectMore, int validityPeriod) {
         sendMultipartTextMessageInternal(destinationAddress, scAddress, parts, sentIntents,
-                deliveryIntents, true /* persistMessage*/);
+                deliveryIntents, true /* persistMessage*/, priority, expectMore,
+                validityPeriod);
     }
 
     private void sendMultipartTextMessageInternal(
@@ -740,11 +757,11 @@ public final class SmsManager {
         }
 
         if (priority < 0x00 || priority > 0x03) {
-            throw new IllegalArgumentException("Invalid priority");
+           priority = SMS_MESSAGE_PRIORITY_NOT_SPECIFIED;
         }
 
         if (validityPeriod < 0x05 || validityPeriod > 0x09b0a0) {
-            throw new IllegalArgumentException("Invalid validity period");
+           validityPeriod = SMS_MESSAGE_PERIOD_NOT_SPECIFIED;
         }
 
         if (parts.size() > 1) {
@@ -989,6 +1006,7 @@ public final class SmsManager {
      * @throws IllegalArgumentException if pdu is NULL
      * {@hide}
      */
+    @UnsupportedAppUsage
     public boolean copyMessageToIcc(byte[] smsc, byte[] pdu,int status) {
         android.util.SeempLog.record(79);
         boolean success = false;
@@ -1020,6 +1038,7 @@ public final class SmsManager {
      *
      * {@hide}
      */
+    @UnsupportedAppUsage
     public boolean
     deleteMessageFromIcc(int messageIndex) {
         android.util.SeempLog.record(80);
@@ -1055,6 +1074,7 @@ public final class SmsManager {
      *
      * {@hide}
      */
+    @UnsupportedAppUsage
     public boolean updateMessageOnIcc(int messageIndex, int newStatus, byte[] pdu) {
         android.util.SeempLog.record(81);
         boolean success = false;
@@ -1082,6 +1102,7 @@ public final class SmsManager {
      *
      * {@hide}
      */
+    @UnsupportedAppUsage
     public ArrayList<SmsMessage> getAllMessagesFromIcc() {
         List<SmsRawData> records = null;
 
@@ -1194,6 +1215,7 @@ public final class SmsManager {
      * @throws IllegalArgumentException if endMessageId < startMessageId
      * {@hide}
      */
+    @UnsupportedAppUsage
     public boolean enableCellBroadcastRange(int startMessageId, int endMessageId, int ranType) {
         boolean success = false;
 
@@ -1236,6 +1258,7 @@ public final class SmsManager {
      * @throws IllegalArgumentException if endMessageId < startMessageId
      * {@hide}
      */
+    @UnsupportedAppUsage
     public boolean disableCellBroadcastRange(int startMessageId, int endMessageId, int ranType) {
         boolean success = false;
 
@@ -1353,6 +1376,7 @@ public final class SmsManager {
      * @return true if enabled, false otherwise
      * @hide
      */
+    @UnsupportedAppUsage
     public boolean isSMSPromptEnabled() {
         ISms iccISms = null;
         try {

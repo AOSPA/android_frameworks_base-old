@@ -23,6 +23,7 @@ import android.os.Parcelable;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
+import android.service.procstats.ProcessStatsPackageProto;
 import android.service.procstats.ProcessStatsSectionProto;
 import android.text.format.DateFormat;
 import android.util.ArrayMap;
@@ -47,8 +48,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Objects;
-import java.util.regex.Pattern;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class ProcessStats implements Parcelable {
     public static final String TAG = "ProcessStats";
@@ -158,7 +159,7 @@ public final class ProcessStats implements Parcelable {
     };
 
     // Current version of the parcel format.
-    private static final int PARCEL_VERSION = 32;
+    private static final int PARCEL_VERSION = 34;
     // In-memory Parcel magic number, used to detect attempts to unmarshall bad data
     private static final int MAGIC = 0x50535454;
 
@@ -1380,9 +1381,13 @@ public final class ProcessStats implements Parcelable {
         final int NUM = mTrackingAssociations.size();
         for (int i = NUM - 1; i >= 0; i--) {
             final AssociationState.SourceState act = mTrackingAssociations.get(i);
-            if (act.mProcStateSeq != curSeq) {
+            if (act.mProcStateSeq != curSeq || act.mProcState >= ProcessStats.STATE_HOME) {
+                // If this association did not get touched the last time we computed
+                // process states, or its state ended up down in cached, then we no
+                // longer have a reason to track it at all.
+                act.stopActive(now);
                 act.mInTrackingList = false;
-                act.mProcState = STATE_NOTHING;
+                act.mProcState = ProcessStats.STATE_NOTHING;
                 mTrackingAssociations.remove(i);
             } else {
                 final ProcessState proc = act.getAssociationState().getProcess();
@@ -1407,7 +1412,7 @@ public final class ProcessStats implements Parcelable {
     }
 
     public void dumpLocked(PrintWriter pw, String reqPackage, long now, boolean dumpSummary,
-            boolean dumpAll, boolean activeOnly) {
+            boolean dumpDetails, boolean dumpAll, boolean activeOnly) {
         long totalTime = DumpUtils.dumpSingleTime(null, null, mMemFactorDurations, mMemFactor,
                 mStartTime, now);
         boolean sepNeeded = false;
@@ -1479,7 +1484,7 @@ public final class ProcessStats implements Parcelable {
                             proc.dumpProcessState(pw, "        ", ALL_SCREEN_ADJ, ALL_MEM_ADJ,
                                     ALL_PROC_STATES, now);
                             proc.dumpPss(pw, "        ", ALL_SCREEN_ADJ, ALL_MEM_ADJ,
-                                    ALL_PROC_STATES);
+                                    ALL_PROC_STATES, now);
                             proc.dumpInternalLocked(pw, "        ", dumpAll);
                         }
                     } else {
@@ -1538,7 +1543,7 @@ public final class ProcessStats implements Parcelable {
                         pw.println(":");
                         pw.print("        Process: "); pw.println(asc.getProcessName());
                         asc.dumpStats(pw, "        ", "          ", "    ",
-                                now, totalTime, dumpSummary, dumpAll);
+                                now, totalTime, dumpDetails, dumpAll);
                     }
                 }
             }
@@ -1554,7 +1559,7 @@ public final class ProcessStats implements Parcelable {
                 int uid = uids.keyAt(iu);
                 numTotalProcs++;
                 final ProcessState proc = uids.valueAt(iu);
-                if (proc.hasAnyData()) {
+                if (!proc.hasAnyData()) {
                     continue;
                 }
                 if (!proc.isMultiPackage()) {
@@ -1583,7 +1588,7 @@ public final class ProcessStats implements Parcelable {
                         pw.print(" entries)"); pw.println(":");
                 proc.dumpProcessState(pw, "        ", ALL_SCREEN_ADJ, ALL_MEM_ADJ,
                         ALL_PROC_STATES, now);
-                proc.dumpPss(pw, "        ", ALL_SCREEN_ADJ, ALL_MEM_ADJ, ALL_PROC_STATES);
+                proc.dumpPss(pw, "        ", ALL_SCREEN_ADJ, ALL_MEM_ADJ, ALL_PROC_STATES, now);
                 proc.dumpInternalLocked(pw, "        ", dumpAll);
             }
         }
@@ -1632,21 +1637,8 @@ public final class ProcessStats implements Parcelable {
                     if (src.mActiveCount > 0) {
                         pw.print("    Active count ");
                         pw.print(src.mActiveCount);
-                        long duration = src.mActiveDuration;
-                        if (src.mActiveStartUptime > 0) {
-                            duration += now - src.mActiveStartUptime;
-                        }
-                        if (dumpAll) {
-                            pw.print(" / Duration ");
-                            TimeUtils.formatDuration(duration, pw);
-                            pw.print(" / ");
-                        } else {
-                            pw.print(" / time ");
-                        }
-                        DumpUtils.printPercent(pw, (double)duration/(double)totalTime);
-                        if (src.mActiveStartUptime > 0) {
-                            pw.print(" (running)");
-                        }
+                        pw.print(": ");
+                        asc.dumpActiveDurationSummary(pw, src, totalTime, now, dumpAll);
                         pw.println();
                     }
                 }
@@ -2022,10 +2014,8 @@ public final class ProcessStats implements Parcelable {
     }
 
     public void writeToProto(ProtoOutputStream proto, long fieldId, long now) {
-        final ArrayMap<String, SparseArray<LongSparseArray<PackageState>>> pkgMap =
-                mPackages.getMap();
-
         final long token = proto.start(fieldId);
+
         proto.write(ProcessStatsSectionProto.START_REALTIME_MS, mTimePeriodStartRealtime);
         proto.write(ProcessStatsSectionProto.END_REALTIME_MS,
                 mRunning ? SystemClock.elapsedRealtime() : mTimePeriodEndRealtime);
@@ -2050,16 +2040,31 @@ public final class ProcessStats implements Parcelable {
             proto.write(ProcessStatsSectionProto.STATUS, ProcessStatsSectionProto.STATUS_PARTIAL);
         }
 
-        ArrayMap<String, SparseArray<ProcessState>> procMap = mProcesses.getMap();
+        final ArrayMap<String, SparseArray<ProcessState>> procMap = mProcesses.getMap();
         for (int ip=0; ip<procMap.size(); ip++) {
-            String procName = procMap.keyAt(ip);
-            SparseArray<ProcessState> uids = procMap.valueAt(ip);
+            final String procName = procMap.keyAt(ip);
+            final SparseArray<ProcessState> uids = procMap.valueAt(ip);
             for (int iu=0; iu<uids.size(); iu++) {
                 final int uid = uids.keyAt(iu);
                 final ProcessState procState = uids.valueAt(iu);
-                procState.writeToProto(proto, ProcessStatsSectionProto.PROCESS_STATS, procName, uid, now);
+                procState.writeToProto(proto, ProcessStatsSectionProto.PROCESS_STATS, procName,
+                        uid, now);
             }
         }
+
+        final ArrayMap<String, SparseArray<LongSparseArray<PackageState>>> pkgMap =
+                mPackages.getMap();
+        for (int ip = 0; ip < pkgMap.size(); ip++) {
+            final SparseArray<LongSparseArray<PackageState>> uids = pkgMap.valueAt(ip);
+            for (int iu = 0; iu < uids.size(); iu++) {
+                final LongSparseArray<PackageState> vers = uids.valueAt(iu);
+                for (int iv = 0; iv < vers.size(); iv++) {
+                    final PackageState pkgState = vers.valueAt(iv);
+                    pkgState.writeToProto(proto, ProcessStatsSectionProto.PACKAGE_STATS, now);
+                }
+            }
+        }
+
         proto.end(token);
     }
 
@@ -2103,6 +2108,33 @@ public final class ProcessStats implements Parcelable {
             mAssociations.put(className, as);
             if (DEBUG) Slog.d(TAG, "GETASC: creating " + as + " in " + proc.getName());
             return as;
+        }
+
+        public void writeToProto(ProtoOutputStream proto, long fieldId, long now) {
+            final long token = proto.start(fieldId);
+
+            proto.write(ProcessStatsPackageProto.PACKAGE, mPackageName);
+            proto.write(ProcessStatsPackageProto.UID, mUid);
+            proto.write(ProcessStatsPackageProto.VERSION, mVersionCode);
+
+            for (int ip = 0; ip < mProcesses.size(); ip++) {
+                final String procName = mProcesses.keyAt(ip);
+                final ProcessState procState = mProcesses.valueAt(ip);
+                procState.writeToProto(proto, ProcessStatsPackageProto.PROCESS_STATS, procName,
+                        mUid, now);
+            }
+
+            for (int is = 0; is < mServices.size(); is++) {
+                final ServiceState serviceState = mServices.valueAt(is);
+                serviceState.writeToProto(proto, ProcessStatsPackageProto.PROCESS_STATS, now);
+            }
+
+            for (int ia=0; ia<mAssociations.size(); ia++) {
+                final AssociationState ascState = mAssociations.valueAt(ia);
+                ascState.writeToProto(proto, ProcessStatsPackageProto.ASSOCIATION_STATS, now);
+            }
+
+            proto.end(token);
         }
     }
 

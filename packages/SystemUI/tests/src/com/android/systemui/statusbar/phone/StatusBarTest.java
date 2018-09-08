@@ -41,12 +41,10 @@ import android.app.Notification;
 import android.app.StatusBarManager;
 import android.app.trust.TrustManager;
 import android.content.Context;
-import android.content.pm.UserInfo;
 import android.hardware.fingerprint.FingerprintManager;
 import android.metrics.LogMaker;
 import android.os.Binder;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.IPowerManager;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -59,8 +57,6 @@ import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.testing.TestableLooper.RunWithLooper;
 import android.util.SparseArray;
-import android.view.Gravity;
-import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 
 import com.android.internal.logging.MetricsLogger;
@@ -76,35 +72,35 @@ import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.recents.misc.SystemServicesProxy;
-import com.android.systemui.statusbar.ActivatableNotificationView;
-import com.android.systemui.statusbar.AppOpsListener;
+import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
+import com.android.systemui.statusbar.notification.AppOpsListener;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.ExpandableNotificationRow;
-import com.android.systemui.statusbar.FooterView;
-import com.android.systemui.statusbar.FooterViewButton;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.FooterView;
 import com.android.systemui.statusbar.KeyguardIndicationController;
-import com.android.systemui.statusbar.NotificationData;
-import com.android.systemui.statusbar.NotificationData.Entry;
-import com.android.systemui.statusbar.NotificationEntryManager;
-import com.android.systemui.statusbar.NotificationGutsManager;
-import com.android.systemui.statusbar.NotificationListContainer;
+import com.android.systemui.statusbar.notification.NotificationData;
+import com.android.systemui.statusbar.notification.NotificationData.Entry;
+import com.android.systemui.statusbar.notification.NotificationEntryManager;
+import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
+import com.android.systemui.statusbar.notification.stack.NotificationListContainer;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
-import com.android.systemui.statusbar.NotificationLogger;
+import com.android.systemui.statusbar.notification.logging.NotificationLogger;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.NotificationViewHierarchyManager;
 import com.android.systemui.statusbar.RemoteInputController;
-import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
 import com.android.systemui.statusbar.policy.KeyguardMonitorImpl;
 import com.android.systemui.statusbar.policy.UserSwitcherController;
-import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -116,7 +112,6 @@ import org.mockito.MockitoAnnotations;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.function.Predicate;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -143,6 +138,7 @@ public class StatusBarTest extends SysuiTestCase {
     @Mock private NotificationLockscreenUserManager mLockscreenUserManager;
     @Mock private NotificationRemoteInputManager mRemoteInputManager;
     @Mock private RemoteInputController mRemoteInputController;
+    @Mock private StatusBarStateController mStatusBarStateController;
 
     private TestableStatusBar mStatusBar;
     private FakeMetricsLogger mMetricsLogger;
@@ -164,6 +160,7 @@ public class StatusBarTest extends SysuiTestCase {
         mDependency.injectTestDependency(NotificationListener.class, mNotificationListener);
         mDependency.injectTestDependency(KeyguardMonitor.class, mock(KeyguardMonitorImpl.class));
         mDependency.injectTestDependency(AppOpsListener.class, mock(AppOpsListener.class));
+        mDependency.injectTestDependency(StatusBarStateController.class, mStatusBarStateController);
 
         mContext.addMockSystemService(TrustManager.class, mock(TrustManager.class));
         mContext.addMockSystemService(FingerprintManager.class, mock(FingerprintManager.class));
@@ -210,7 +207,7 @@ public class StatusBarTest extends SysuiTestCase {
                 mEntryManager, mScrimController, mBiometricUnlockController,
                 mock(ActivityLaunchAnimator.class), mKeyguardViewMediator,
                 mRemoteInputManager, mock(NotificationGroupManager.class),
-                mock(FalsingManager.class), mock(StatusBarWindowManager.class),
+                mock(FalsingManager.class), mock(StatusBarWindowController.class),
                 mock(NotificationIconAreaController.class), mock(DozeScrimController.class),
                 mock(NotificationShelf.class), mLockscreenUserManager,
                 mock(CommandQueue.class));
@@ -567,7 +564,7 @@ public class StatusBarTest extends SysuiTestCase {
         mStatusBar.mState = StatusBarState.KEYGUARD;
         when(mStatusBar.mLockscreenUserManager.getCurrentProfiles()).thenReturn(
                 new SparseArray<>());
-        mStatusBar.updateKeyguardState(false, false);
+        mStatusBar.onStateChanged(StatusBarState.SHADE);
     }
 
     @Test
@@ -691,13 +688,13 @@ public class StatusBarTest extends SysuiTestCase {
 
         // By default, showKeyguardImpl sets state to KEYGUARD.
         mStatusBar.showKeyguardImpl();
-        assertTrue(mStatusBar.mState == StatusBarState.KEYGUARD);
+        verify(mStatusBarStateController).setState(eq(StatusBarState.KEYGUARD));
 
         // If useFullscreenUserSwitcher is true, state is set to FULLSCREEN_USER_SWITCHER.
         mStatusBar.mUserSwitcherController = mock(UserSwitcherController.class);
         when(mStatusBar.mUserSwitcherController.useFullscreenUserSwitcher()).thenReturn(true);
         mStatusBar.showKeyguardImpl();
-        assertTrue(mStatusBar.mState == StatusBarState.FULLSCREEN_USER_SWITCHER);
+        verify(mStatusBarStateController).setState(eq(StatusBarState.FULLSCREEN_USER_SWITCHER));
     }
 
     @Test
@@ -722,7 +719,7 @@ public class StatusBarTest extends SysuiTestCase {
                 NotificationRemoteInputManager notificationRemoteInputManager,
                 NotificationGroupManager notificationGroupManager,
                 FalsingManager falsingManager,
-                StatusBarWindowManager statusBarWindowManager,
+                StatusBarWindowController statusBarWindowController,
                 NotificationIconAreaController notificationIconAreaController,
                 DozeScrimController dozeScrimController,
                 NotificationShelf notificationShelf,
@@ -750,7 +747,7 @@ public class StatusBarTest extends SysuiTestCase {
             mRemoteInputManager = notificationRemoteInputManager;
             mGroupManager = notificationGroupManager;
             mFalsingManager = falsingManager;
-            mStatusBarWindowManager = statusBarWindowManager;
+            mStatusBarWindowController = statusBarWindowController;
             mNotificationIconAreaController = notificationIconAreaController;
             mDozeScrimController = dozeScrimController;
             mNotificationShelf = notificationShelf;

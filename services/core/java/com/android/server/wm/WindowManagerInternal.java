@@ -410,7 +410,7 @@ public abstract class WindowManagerInternal {
     public abstract boolean isDockedDividerResizing();
 
     /**
-     * Requests the window manager to recompute the windows for accessibility.
+     * Requests the window manager to resend the windows for accessibility.
      */
     public abstract void computeWindowsForAccessibility();
 
@@ -436,4 +436,9 @@ public abstract class WindowManagerInternal {
      * the window token is not found.
      */
     public abstract int getWindowOwnerUserId(IBinder windowToken);
+
+    /**
+     * Returns {@code true} if a Window owned by {@code uid} has focus.
+     */
+    public abstract boolean isUidFocused(int uid);
 }

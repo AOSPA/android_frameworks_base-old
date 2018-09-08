@@ -213,7 +213,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     // bluetooth profile services
     private final Map<Integer, ProfileServiceConnections> mProfileServices = new HashMap<>();
 
-    private final boolean mPermissionReviewRequired;
+    private final boolean mWirelessConsentRequired;
 
     private final IBluetoothCallback mBluetoothCallback = new IBluetoothCallback.Stub() {
         @Override
@@ -370,8 +370,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
         mContext = context;
 
-        mPermissionReviewRequired = context.getResources()
-                .getBoolean(com.android.internal.R.bool.config_permissionReviewRequired);
+        mWirelessConsentRequired = context.getResources()
+                .getBoolean(com.android.internal.R.bool.config_wirelessConsentRequired);
 
         mCrashes = 0;
         mBluetooth = null;
@@ -902,7 +902,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             mContext.enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM,
                     "Need BLUETOOTH ADMIN permission");
 
-            if (!isEnabled() && mPermissionReviewRequired && startConsentUiIfNeeded(packageName,
+            if (!isEnabled() && mWirelessConsentRequired && startConsentUiIfNeeded(packageName,
                     callingUid, BluetoothAdapter.ACTION_REQUEST_ENABLE)) {
                 return false;
             }
@@ -939,7 +939,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             mContext.enforceCallingOrSelfPermission(BLUETOOTH_ADMIN_PERM,
                     "Need BLUETOOTH ADMIN permission");
 
-            if (isEnabled() && mPermissionReviewRequired && startConsentUiIfNeeded(packageName,
+            if (isEnabled() && mWirelessConsentRequired && startConsentUiIfNeeded(packageName,
                     callingUid, BluetoothAdapter.ACTION_REQUEST_DISABLE)) {
                 return false;
             }
@@ -985,7 +985,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
     private boolean startConsentUiIfNeeded(String packageName,
             int callingUid, String intentAction) throws RemoteException {
-        if (checkBluetoothPermissionWhenPermissionReviewRequired()) {
+        if (checkBluetoothPermissionWhenWirelessConsentRequired()) {
             return false;
         }
         try {
@@ -1018,21 +1018,18 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
     /**
      * Check if the caller must still pass permission check or if the caller is exempted
-     * from the consent UI via the MANAGE_BLUETOOTH_WHEN_PERMISSION_REVIEW_REQUIRED check.
+     * from the consent UI via the MANAGE_BLUETOOTH_WHEN_WIRELESS_CONSENT_REQUIRED check.
      *
      * Commands from some callers may be exempted from triggering the consent UI when
      * enabling bluetooth. This exemption is checked via the
-     * MANAGE_BLUETOOTH_WHEN_PERMISSION_REVIEW_REQUIRED and allows calls to skip
+     * MANAGE_BLUETOOTH_WHEN_WIRELESS_CONSENT_REQUIRED and allows calls to skip
      * the consent UI where it may otherwise be required.
      *
      * @hide
      */
-    private boolean checkBluetoothPermissionWhenPermissionReviewRequired() {
-        if (!mPermissionReviewRequired) {
-            return false;
-        }
+    private boolean checkBluetoothPermissionWhenWirelessConsentRequired() {
         int result = mContext.checkCallingPermission(
-                android.Manifest.permission.MANAGE_BLUETOOTH_WHEN_PERMISSION_REVIEW_REQUIRED);
+                android.Manifest.permission.MANAGE_BLUETOOTH_WHEN_WIRELESS_CONSENT_REQUIRED);
         return result == PackageManager.PERMISSION_GRANTED;
     }
 
@@ -1214,6 +1211,26 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         }
 
         private boolean bindService() {
+            int state = BluetoothAdapter.STATE_OFF;
+            try {
+                mBluetoothLock.readLock().lock();
+                if (mBluetooth != null) {
+                    state = mBluetooth.getState();
+                }
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Unable to call getState", e);
+                return false;
+            } finally {
+                mBluetoothLock.readLock().unlock();
+            }
+
+            if (!mEnable || state != BluetoothAdapter.STATE_ON) {
+                if (DBG) {
+                    Slog.d(TAG, "Unable to bindService while Bluetooth is disabled");
+                }
+                return false;
+            }
+
             if (mIntent != null && mService == null && doBind(mIntent, this, 0,
                     UserHandle.CURRENT_OR_SELF)) {
                 Message msg = mHandler.obtainMessage(MESSAGE_BIND_PROFILE_SERVICE);

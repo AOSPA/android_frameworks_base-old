@@ -19,9 +19,11 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
+
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
@@ -33,25 +35,29 @@ import android.os.Looper;
 import android.os.UserHandle;
 import android.os.UserManagerInternal;
 import android.platform.test.annotations.Presubmit;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
 import android.view.InputChannel;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
 import android.view.View;
+
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
+
 import com.android.internal.annotations.GuardedBy;
 import com.android.server.LocalServices;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 /**
  * Tests for the {@link DragDropController} class.
  *
- * atest com.android.server.wm.DragDropControllerTests
+ * atest FrameworksServicesTests:com.android.server.wm.DragDropControllerTests
  */
 @SmallTest
 @RunWith(AndroidJUnit4.class)
@@ -113,7 +119,7 @@ public class DragDropControllerTests extends WindowTestsBase {
         mTarget = new TestDragDropController(sWm, sWm.mH.getLooper());
         mDisplayContent = spy(mDisplayContent);
         mWindow = createDropTargetWindow("Drag test window", 0);
-        when(mDisplayContent.getTouchableWinAtPointLocked(0, 0)).thenReturn(mWindow);
+        doReturn(mWindow).when(mDisplayContent).getTouchableWinAtPointLocked(0, 0);
         when(sWm.mInputManager.transferTouchFocus(any(), any())).thenReturn(true);
 
         synchronized (sWm.mWindowMap) {
@@ -154,8 +160,7 @@ public class DragDropControllerTests extends WindowTestsBase {
     public void testPerformDrag_NullDataToOtherUser() throws Exception {
         final WindowState otherUsersWindow =
                 createDropTargetWindow("Other user's window", 1 * UserHandle.PER_USER_RANGE);
-        when(mDisplayContent.getTouchableWinAtPointLocked(10, 10))
-                .thenReturn(otherUsersWindow);
+        doReturn(otherUsersWindow).when(mDisplayContent).getTouchableWinAtPointLocked(10, 10);
 
         dragFlow(0, null, 10, 10);
     }

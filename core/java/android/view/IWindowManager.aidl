@@ -223,10 +223,12 @@ interface IWindowManager
 
     /**
      * Determine the preferred edge of the screen to pin the compact options menu against.
-     * @return a Gravity value for the options menu panel
+     *
+     * @param displayId Id of the display where the menu window currently resides.
+     * @return a Gravity value for the options menu panel.
      * @hide
      */
-    int getPreferredOptionsPanelGravity();
+    int getPreferredOptionsPanelGravity(int displayId);
 
     /**
      * Lock the device orientation to the specified rotation, or to the
@@ -421,8 +423,8 @@ interface IWindowManager
     boolean isWindowTraceEnabled();
 
     /**
-     * Requests that the WindowManager sends WindowManagerPolicy#ACTION_USER_ACTIVITY_NOTIFICATION
-     * on the next user activity.
+     * Requests that the WindowManager sends
+     * WindowManagerPolicyConstants#ACTION_USER_ACTIVITY_NOTIFICATION on the next user activity.
      */
     void requestUserActivityNotification();
 

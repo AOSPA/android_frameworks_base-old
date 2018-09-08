@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "android_media_AudioEffect.h"
+
 #include <stdio.h>
 
 //#define LOG_NDEBUG 0
@@ -71,7 +73,7 @@ class AudioEffectJniStorage {
 };
 
 
-static jint translateError(int code) {
+jint AudioEffectJni::translateNativeErrorToJava(int code) {
     switch(code) {
     case NO_ERROR:
         return AUDIOEFFECT_SUCCESS;
@@ -80,6 +82,10 @@ static jint translateError(int code) {
     case NO_INIT:
         return AUDIOEFFECT_ERROR_NO_INIT;
     case BAD_VALUE:
+        return AUDIOEFFECT_ERROR_BAD_VALUE;
+    case NAME_NOT_FOUND:
+        // Name not found means the client tried to create an effect not found on the system,
+        // which is a form of bad value.
         return AUDIOEFFECT_ERROR_BAD_VALUE;
     case INVALID_OPERATION:
         return AUDIOEFFECT_ERROR_INVALID_OPERATION;
@@ -359,7 +365,7 @@ android_media_AudioEffect_native_setup(JNIEnv *env, jobject thiz, jobject weak_t
         goto setup_failure;
     }
 
-    lStatus = translateError(lpAudioEffect->initCheck());
+    lStatus = AudioEffectJni::translateNativeErrorToJava(lpAudioEffect->initCheck());
     if (lStatus != AUDIOEFFECT_SUCCESS && lStatus != AUDIOEFFECT_ERROR_ALREADY_EXISTS) {
         ALOGE("AudioEffect initCheck failed %d", lStatus);
         goto setup_failure;
@@ -495,7 +501,7 @@ android_media_AudioEffect_native_setEnabled(JNIEnv *env, jobject thiz, jboolean 
         return AUDIOEFFECT_ERROR_NO_INIT;
     }
 
-    return (jint) translateError(lpAudioEffect->setEnabled(enabled));
+    return AudioEffectJni::translateNativeErrorToJava(lpAudioEffect->setEnabled(enabled));
 }
 
 static jboolean
@@ -590,7 +596,7 @@ setParameter_Exit:
     if (lpValue != NULL) {
         env->ReleasePrimitiveArrayCritical(pJavaValue, lpValue, 0);
     }
-    return (jint) translateError(lStatus);
+    return AudioEffectJni::translateNativeErrorToJava(lStatus);
 }
 
 static jint
@@ -658,7 +664,7 @@ getParameter_Exit:
     if (lStatus == NO_ERROR) {
         return vsize;
     }
-    return (jint) translateError(lStatus);
+    return AudioEffectJni::translateNativeErrorToJava(lStatus);
 }
 
 static jint android_media_AudioEffect_native_command(JNIEnv *env, jobject thiz,
@@ -697,11 +703,12 @@ static jint android_media_AudioEffect_native_command(JNIEnv *env, jobject thiz,
         }
     }
 
-    lStatus = translateError(lpAudioEffect->command((uint32_t)cmdCode,
-                                                    (uint32_t)cmdSize,
-                                                    pCmdData,
-                                                    (uint32_t *)&replySize,
-                                                    pReplyData));
+    lStatus = AudioEffectJni::translateNativeErrorToJava(
+            lpAudioEffect->command((uint32_t)cmdCode,
+                                   (uint32_t)cmdSize,
+                                   pCmdData,
+                                   (uint32_t *)&replySize,
+                                   pReplyData));
 
 command_Exit:
 
@@ -817,21 +824,19 @@ static jobjectArray
 android_media_AudioEffect_native_queryPreProcessings(JNIEnv *env, jclass clazz __unused,
                                                      jint audioSession)
 {
-    effect_descriptor_t *descriptors = new effect_descriptor_t[AudioEffect::kMaxPreProcessing];
+    auto descriptors = std::make_unique<effect_descriptor_t[]>(AudioEffect::kMaxPreProcessing);
     uint32_t numEffects = AudioEffect::kMaxPreProcessing;
 
     status_t status = AudioEffect::queryDefaultPreProcessing((audio_session_t) audioSession,
-                                           descriptors,
+                                           descriptors.get(),
                                            &numEffects);
     if (status != NO_ERROR || numEffects == 0) {
-        delete[] descriptors;
         return NULL;
     }
     ALOGV("queryDefaultPreProcessing() got %d effects", numEffects);
 
     jobjectArray ret = env->NewObjectArray(numEffects, fields.clazzDesc, NULL);
     if (ret == NULL) {
-        delete[] descriptors;
         return ret;
     }
 
@@ -868,7 +873,7 @@ android_media_AudioEffect_native_queryPreProcessings(JNIEnv *env, jclass clazz _
         if (jdesc == NULL) {
             ALOGE("env->NewObject(fields.clazzDesc, fields.midDescCstor)");
             env->DeleteLocalRef(ret);
-            return NULL;;
+            return NULL;
         }
 
         env->SetObjectArrayElement(ret, i, jdesc);
@@ -900,6 +905,8 @@ static const JNINativeMethod gMethods[] = {
 
 // ----------------------------------------------------------------------------
 
+extern int register_android_media_SourceDefaultEffect(JNIEnv *env);
+extern int register_android_media_StreamDefaultEffect(JNIEnv *env);
 extern int register_android_media_visualizer(JNIEnv *env);
 
 int register_android_media_AudioEffect(JNIEnv *env)
@@ -924,6 +931,16 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved __unused)
         goto bail;
     }
 
+    if (register_android_media_SourceDefaultEffect(env) < 0) {
+        ALOGE("ERROR: SourceDefaultEffect native registration failed\n");
+        goto bail;
+    }
+
+    if (register_android_media_StreamDefaultEffect(env) < 0) {
+        ALOGE("ERROR: StreamDefaultEffect native registration failed\n");
+        goto bail;
+    }
+
     if (register_android_media_visualizer(env) < 0) {
         ALOGE("ERROR: Visualizer native registration failed\n");
         goto bail;
@@ -935,4 +952,3 @@ jint JNI_OnLoad(JavaVM* vm, void* reserved __unused)
 bail:
     return result;
 }
-

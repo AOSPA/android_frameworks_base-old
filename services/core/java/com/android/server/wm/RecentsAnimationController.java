@@ -53,6 +53,7 @@ import com.google.android.collect.Sets;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.LocalServices;
+import com.android.server.input.InputWindowHandle;
 import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 import com.android.server.wm.utils.InsetUtils;
 
@@ -201,7 +202,9 @@ public class RecentsAnimationController implements DeathRecipient {
                     }
 
                     mInputConsumerEnabled = enabled;
-                    mService.mInputMonitor.updateInputWindowsLw(true /*force*/);
+                    final InputMonitor inputMonitor =
+                            mService.mRoot.getDisplayContent(mDisplayId).getInputMonitor();
+                    inputMonitor.updateInputWindowsLw(true /*force*/);
                     mService.scheduleAnimationLocked();
                 }
             } finally {
@@ -312,12 +315,9 @@ public class RecentsAnimationController implements DeathRecipient {
     @VisibleForTesting
     AnimationAdapter addAnimation(Task task, boolean isRecentTaskInvisible) {
         if (DEBUG_RECENTS_ANIMATIONS) Slog.d(TAG, "addAnimation(" + task.getName() + ")");
-        // TODO: Refactor this to use the task's animator
-        final SurfaceAnimator anim = new SurfaceAnimator(task, null /* animationFinishedCallback */,
-                mService);
         final TaskAnimationAdapter taskAdapter = new TaskAnimationAdapter(task,
                 isRecentTaskInvisible);
-        anim.startAnimation(task.getPendingTransaction(), taskAdapter, false /* hidden */);
+        task.startAnimation(task.getPendingTransaction(), taskAdapter, false /* hidden */);
         task.commitPendingTransaction();
         mPendingAnimations.add(taskAdapter);
         return taskAdapter;
@@ -361,6 +361,11 @@ public class RecentsAnimationController implements DeathRecipient {
                     new RemoteAnimationTarget[appAnimations.size()]);
             mPendingStart = false;
 
+            // Perform layout if it was scheduled before to make sure that we get correct content
+            // insets for the target app window after a rotation
+            final DisplayContent displayContent = mService.mRoot.getDisplayContent(mDisplayId);
+            displayContent.performLayout(false /* initial */, false /* updateInputWindows */);
+
             final Rect minimizedHomeBounds = mTargetAppToken != null
                     && mTargetAppToken.inSplitScreenSecondaryWindowingMode()
                             ? mMinimizedHomeBounds
@@ -369,8 +374,7 @@ public class RecentsAnimationController implements DeathRecipient {
                     && mTargetAppToken.findMainWindow() != null
                             ? mTargetAppToken.findMainWindow().mContentInsets
                             : null;
-            mRunner.onAnimationStart(mController, appTargets, contentInsets,
-                    minimizedHomeBounds);
+            mRunner.onAnimationStart(mController, appTargets, contentInsets, minimizedHomeBounds);
             if (DEBUG_RECENTS_ANIMATIONS) {
                 Slog.d(TAG, "startAnimation(): Notify animation start:");
                 for (int i = 0; i < mPendingAnimations.size(); i++) {
@@ -438,8 +442,10 @@ public class RecentsAnimationController implements DeathRecipient {
         mCanceled = true;
 
         // Clear associated input consumers
-        mService.mInputMonitor.updateInputWindowsLw(true /*force*/);
-        mService.destroyInputConsumer(INPUT_CONSUMER_RECENTS_ANIMATION);
+        final InputMonitor inputMonitor =
+                mService.mRoot.getDisplayContent(mDisplayId).getInputMonitor();
+        inputMonitor.destroyInputConsumer(INPUT_CONSUMER_RECENTS_ANIMATION);
+        inputMonitor.updateInputWindowsLw(true /*force*/);
 
         // We have deferred all notifications to the target app as a part of the recents animation,
         // so if we are actually transitioning there, notify again here
@@ -497,7 +503,7 @@ public class RecentsAnimationController implements DeathRecipient {
         return mInputConsumerEnabled && isAnimatingApp(appToken);
     }
 
-    boolean updateInputConsumerForApp(InputConsumerImpl recentsAnimationInputConsumer,
+    boolean updateInputConsumerForApp(InputWindowHandle inputWindowHandle,
             boolean hasFocus) {
         // Update the input consumer touchable region to match the target app main window
         final WindowState targetAppMainWindow = mTargetAppToken != null
@@ -505,8 +511,8 @@ public class RecentsAnimationController implements DeathRecipient {
                 : null;
         if (targetAppMainWindow != null) {
             targetAppMainWindow.getBounds(mTmpRect);
-            recentsAnimationInputConsumer.mWindowHandle.hasFocus = hasFocus;
-            recentsAnimationInputConsumer.mWindowHandle.touchableRegion.set(mTmpRect);
+            inputWindowHandle.hasFocus = hasFocus;
+            inputWindowHandle.touchableRegion.set(mTmpRect);
             return true;
         }
         return false;
