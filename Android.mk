@@ -333,9 +333,10 @@ LOCAL_BLACKLIST := $(INTERNAL_PLATFORM_HIDDENAPI_BLACKLIST)
 LOCAL_SRC_GREYLIST := frameworks/base/config/hiddenapi-light-greylist.txt
 LOCAL_SRC_VENDOR_LIST := frameworks/base/config/hiddenapi-vendor-list.txt
 LOCAL_SRC_FORCE_BLACKLIST := frameworks/base/config/hiddenapi-force-blacklist.txt
-LOCAL_SRC_PUBLIC_API := frameworks/base/config/hiddenapi-public-dex.txt
-LOCAL_SRC_PRIVATE_API := frameworks/base/config/hiddenapi-private-dex.txt
-LOCAL_SRC_REMOVED_API := frameworks/base/config/hiddenapi-removed-dex.txt
+LOCAL_SRC_PUBLIC_API := $(INTERNAL_PLATFORM_HIDDENAPI_PUBLIC_LIST)
+LOCAL_SRC_PRIVATE_API := $(INTERNAL_PLATFORM_HIDDENAPI_PRIVATE_LIST)
+LOCAL_SRC_REMOVED_API := $(INTERNAL_PLATFORM_REMOVED_DEX_API_FILE)
+
 LOCAL_SRC_ALL := \
 	$(LOCAL_SRC_GREYLIST) \
 	$(LOCAL_SRC_VENDOR_LIST) \
