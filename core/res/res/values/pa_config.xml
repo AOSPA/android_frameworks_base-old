@@ -170,4 +170,7 @@
     <integer name="config_proximityCheckTimeout">250</integer>
     <bool name="config_proximityCheckOnWakeEnabledByDefault">false</bool>
 
+    <!-- Whether device can force navbar disabling -->
+    <bool name="config_canForceDisableNavigationBar">false</bool>
+
 </resources>
