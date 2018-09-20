@@ -961,6 +961,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.NTP_TIMEOUT,
                 GlobalSettingsProto.Ntp.TIMEOUT_MS);
+        dumpSetting(s, p,
+                Settings.Global.NTP_SERVER_2,
+                GlobalSettingsProto.Ntp.SERVER_2);
         p.end(ntpToken);
 
         final long uaroToken = p.start(GlobalSettingsProto.USER_ABSENT_RADIOS_OFF);

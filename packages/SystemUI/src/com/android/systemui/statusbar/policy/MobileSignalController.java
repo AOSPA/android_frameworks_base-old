@@ -42,6 +42,8 @@ import com.android.ims.ImsManager;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.cdma.EriInfo;
+import com.android.internal.telephony.PhoneConstants;
+import com.android.internal.telephony.PhoneConstants.DataState;
 import com.android.settingslib.graph.SignalDrawable;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
@@ -77,6 +79,7 @@ public class MobileSignalController extends SignalController<
     // of code.
     private int mDataNetType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
     private int mDataState = TelephonyManager.DATA_DISCONNECTED;
+    private DataState mMMSDataState = DataState.DISCONNECTED;
     private ServiceState mServiceState;
     private SignalStrength mSignalStrength;
     private MobileIconGroup mDefaultIcons;
@@ -139,6 +142,7 @@ public class MobileSignalController extends SignalController<
 
         int phoneId = SubscriptionManager.getPhoneId(mSubscriptionInfo.getSubscriptionId());
         mImsManager = ImsManager.getInstance(mContext, phoneId);
+        updateImsRegistrationState();
 
         mObserver = new ContentObserver(new Handler(receiverLooper)) {
             @Override
@@ -213,6 +217,11 @@ public class MobileSignalController extends SignalController<
     public void unregisterListener() {
         mPhone.listen(mPhoneStateListener, 0);
         mContext.getContentResolver().unregisterContentObserver(mObserver);
+        try {
+            mImsManager.removeRegistrationListener(mImsRegistrationCallback);
+        }catch(ImsException e){
+            Log.d(mTag, "exception:" + e);
+        }
         mContext.unregisterReceiver(mVolteSwitchObserver);
     }
 
@@ -366,6 +375,11 @@ public class MobileSignalController extends SignalController<
         return resId;
     }
 
+    private void updateImsRegistrationState() {
+        mImsResitered = mPhone.isImsRegistered(mSubscriptionInfo.getSubscriptionId());
+        Log.d(mTag, "updateImsRegistrationState mImsResitered=" + mImsResitered);
+    }
+
     @Override
     public void notifyListeners(SignalCallback callback) {
         MobileIconGroup icons = getIcons();
@@ -403,7 +417,7 @@ public class MobileSignalController extends SignalController<
         int typeIcon = (showDataIcon || mConfig.alwaysShowDataRatIcon || mAlwasyShowTypeIcon) ?
                 icons.mDataType : 0;
         int volteIcon = mShowVolteIcon && isEnhanced4gLteModeSettingEnabled() ? getVolteResId() : 0;
-
+        boolean fiveGAvailable = mFiveGState.connected && isDataRegisteredOnLte();
         if (DEBUG) {
             Log.d(mTag, "notifyListeners mAlwasyShowTypeIcon=" + mAlwasyShowTypeIcon
                     + "  mDataNetType:" + mDataNetType +
@@ -422,7 +436,7 @@ public class MobileSignalController extends SignalController<
                 0, volteIcon,
                 dataContentDescription, description, icons.mIsWide,
                 mSubscriptionInfo.getSubscriptionId(), mCurrentState.roaming,
-                mFiveGState.connected, getCurrentFiveGIconId(), mFiveGState.dataConnected);
+                fiveGAvailable, getCurrentFiveGIconId(), mFiveGState.dataConnected);
     }
 
     @Override
@@ -491,6 +505,16 @@ public class MobileSignalController extends SignalController<
         } else if (action.equals(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED)) {
             updateDataSim();
             notifyListenersIfNecessary();
+        }else if (action.equals(TelephonyIntents.ACTION_ANY_DATA_CONNECTION_STATE_CHANGED)) {
+            String apnType = intent.getStringExtra(PhoneConstants.DATA_APN_TYPE_KEY);
+            String state = intent.getStringExtra(PhoneConstants.STATE_KEY);
+            if ("mms".equals(apnType)) {
+                if (DEBUG) {
+                    Log.d(mTag, "handleBroadcast MMS connection state=" + state);
+                }
+                mMMSDataState = DataState.valueOf(state);
+                updateTelephony();
+            }
         }
     }
 
@@ -611,7 +635,8 @@ public class MobileSignalController extends SignalController<
             }
         }
         mCurrentState.dataConnected = mCurrentState.connected
-                && mDataState == TelephonyManager.DATA_CONNECTED;
+                && (mDataState == TelephonyManager.DATA_CONNECTED
+                    || mMMSDataState == DataState.CONNECTED);
 
         mCurrentState.roaming = isRoaming();
         if (isCarrierNetworkChangeActive()) {
@@ -717,6 +742,16 @@ public class MobileSignalController extends SignalController<
         mFiveGState = cleanState();
     }
 
+    private boolean isDataRegisteredOnLte() {
+        boolean registered = false;
+        int dataType = getDataNetworkType();
+        if (dataType == TelephonyManager.NETWORK_TYPE_LTE ||
+                dataType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+            registered = true;
+        }
+        return registered;
+    }
+
     @Override
     public void dump(PrintWriter pw) {
         super.dump(pw);
@@ -795,7 +830,7 @@ public class MobileSignalController extends SignalController<
         @Override
         public void onCallStateChanged(int state, String phoneNumber) {
             if (DEBUG) {
-                Log.d(mTag, "onCarrierNetworkChange: state=" + state);
+                Log.d(mTag, "onCallStateChanged: state=" + state);
             }
             mCallState = state;
             updateTelephony();
@@ -825,7 +860,7 @@ public class MobileSignalController extends SignalController<
                 public void onRegistered(
                         @ImsRegistrationImplBase.ImsRegistrationTech int imsRadioTech) {
                     Log.d(mTag, "onRegistered imsRadioTech=" + imsRadioTech);
-                    mImsResitered = true;
+                    updateImsRegistrationState();
                     notifyListeners();
                 }
 
@@ -833,14 +868,14 @@ public class MobileSignalController extends SignalController<
                 public void onRegistering(
                         @ImsRegistrationImplBase.ImsRegistrationTech int imsRadioTech) {
                     Log.d(mTag, "onRegistering imsRadioTech=" + imsRadioTech);
-                    mImsResitered = false;
+                    updateImsRegistrationState();
                     notifyListeners();
                 }
 
                 @Override
                 public void onDeregistered(ImsReasonInfo imsReasonInfo) {
                     Log.d(mTag, "onDeregistered imsReasonInfo=" + imsReasonInfo);
-                    mImsResitered = false;
+                    updateImsRegistrationState();
                     notifyListeners();
                 }
             };

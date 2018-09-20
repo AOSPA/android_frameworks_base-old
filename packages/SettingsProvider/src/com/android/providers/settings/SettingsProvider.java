@@ -2935,7 +2935,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 169;
+            private static final int SETTINGS_VERSION = 170;
 
             private final int mUserId;
 
@@ -3818,6 +3818,21 @@ public class SettingsProvider extends ContentProvider {
                                 null, true, SettingsState.SYSTEM_PACKAGE_NAME);
                     }
                     currentVersion = 169;
+                }
+
+                if (currentVersion == 169) {
+                    // Version 169: Update the settings for NTP_SERVER_2
+                    final SettingsState globalSettings = getGlobalSettingsLocked();
+                    final Setting currentSetting = globalSettings.getSettingLocked(
+                            Global.NTP_SERVER_2);
+                    if (currentSetting.isNull()) {
+                        globalSettings.insertSettingLocked(
+                                Global.NTP_SERVER_2,
+                                getContext().getResources().getString(
+                                        R.string.def_ntp_server_2),
+                                null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+                    currentVersion = 170;
                 }
 
                 // vXXX: Add new settings above this point.
