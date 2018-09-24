@@ -236,7 +236,6 @@ import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.LatencyTracker;
 import com.android.internal.view.IInputContext;
 import com.android.internal.view.IInputMethodClient;
-import com.android.internal.view.IInputMethodManager;
 import com.android.internal.view.WindowManagerPolicyThread;
 import com.android.server.AnimationThread;
 import com.android.server.DisplayThread;
@@ -427,8 +426,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     final Context mContext;
 
-    final boolean mHaveInputMethods;
-
     final boolean mHasPermanentDpad;
     final long mDrawLockTimeoutMillis;
     final boolean mAllowAnimationsInLowPowerMode;
@@ -530,8 +527,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
     /** List of window currently causing non-system overlay windows to be hidden. */
     private ArrayList<WindowState> mHidingNonSystemOverlayWindows = new ArrayList<>();
-
-    IInputMethodManager mInputMethodManager;
 
     AccessibilityController mAccessibilityController;
     private RecentsAnimationController mRecentsAnimationController;
@@ -665,8 +660,6 @@ public class WindowManagerService extends IWindowManager.Stub
     /** If true hold off on modifying the animation layer of mInputMethodTarget */
     boolean mInputMethodTargetWaitingAnim;
 
-    WindowState mInputMethodWindow = null;
-
     boolean mHardKeyboardAvailable;
     WindowManagerInternal.OnHardKeyboardStatusChangeListener mHardKeyboardStatusChangeListener;
     SettingsObserver mSettingsObserver;
@@ -749,8 +742,9 @@ public class WindowManagerService extends IWindowManager.Stub
     final DisplayManagerInternal mDisplayManagerInternal;
     final DisplayManager mDisplayManager;
 
-    // Indicates whether this device supports wide color gamut rendering
+    // Indicates whether this device supports wide color gamut / HDR rendering
     private boolean mHasWideColorGamutSupport;
+    private boolean mHasHdrSupport;
 
     // Who is holding the screen on.
     private Session mHoldingScreenOn;
@@ -915,11 +909,10 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     public static WindowManagerService main(final Context context, final InputManagerService im,
-            final boolean haveInputMethods, final boolean showBootMsgs, final boolean onlyCore,
-            WindowManagerPolicy policy) {
+            final boolean showBootMsgs, final boolean onlyCore, WindowManagerPolicy policy) {
         DisplayThread.getHandler().runWithScissors(() ->
-                sInstance = new WindowManagerService(context, im, haveInputMethods, showBootMsgs,
-                        onlyCore, policy), 0);
+                sInstance = new WindowManagerService(context, im, showBootMsgs, onlyCore, policy),
+                0);
         return sInstance;
     }
 
@@ -940,11 +933,9 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     private WindowManagerService(Context context, InputManagerService inputManager,
-            boolean haveInputMethods, boolean showBootMsgs, boolean onlyCore,
-            WindowManagerPolicy policy) {
+            boolean showBootMsgs, boolean onlyCore, WindowManagerPolicy policy) {
         installLock(this, INDEX_WINDOW);
         mContext = context;
-        mHaveInputMethods = haveInputMethods;
         mAllowBootMessages = showBootMsgs;
         mOnlyCore = onlyCore;
         mLimitedAlphaCompositing = context.getResources().getBoolean(
@@ -1433,7 +1424,7 @@ public class WindowManagerService extends IWindowManager.Stub
             win.mToken.addWindow(win);
             if (type == TYPE_INPUT_METHOD) {
                 win.mGivenInsetsPending = true;
-                setInputMethodWindowLocked(win);
+                displayContent.setInputMethodWindowLocked(win);
                 imMayMove = false;
             } else if (type == TYPE_INPUT_METHOD_DIALOG) {
                 displayContent.computeImeTarget(true /* updateImeTarget */);
@@ -1706,8 +1697,9 @@ public class WindowManagerService extends IWindowManager.Stub
         mWindowsChanged = true;
         if (DEBUG_WINDOW_MOVEMENT) Slog.v(TAG_WM, "Final remove of window: " + win);
 
-        if (mInputMethodWindow == win) {
-            setInputMethodWindowLocked(null);
+        final DisplayContent displayContent = win.getDisplayContent();
+        if (displayContent.mInputMethodWindow == win) {
+            displayContent.setInputMethodWindowLocked(null);
         }
 
         final WindowToken token = win.mToken;
@@ -1750,13 +1742,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         dc.getInputMonitor().updateInputWindowsLw(true /*force*/);
-    }
-
-    void setInputMethodWindowLocked(WindowState win) {
-        mInputMethodWindow = win;
-        final DisplayContent dc = win != null
-                ? win.getDisplayContent() : getDefaultDisplayContentLocked();
-        dc.computeImeTarget(true /* updateImeTarget */);
     }
 
     private void updateHiddenWhileSuspendedState(ArraySet<String> packages, boolean suspended) {
@@ -1919,11 +1904,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
             win.setFrameNumber(frameNumber);
 
-            // TODO(b/111504081): Consolidate seamless rotation logic.
-            if (win.mPendingForcedSeamlessRotate != null && !mWaitingForConfig) {
-                win.mPendingForcedSeamlessRotate.finish(win.mToken, win);
-                win.mFinishForcedSeamlessRotateFrameNumber = win.getFrameNumber();
-                win.mPendingForcedSeamlessRotate = null;
+            if (!mWaitingForConfig) {
+                win.finishSeamlessRotation();
             }
 
             int attrChanges = 0;
@@ -2080,8 +2062,10 @@ public class WindowManagerService extends IWindowManager.Stub
                 if ((result & WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME) != 0) {
                     focusMayChange = isDefaultDisplay;
                 }
-                if (win.mAttrs.type == TYPE_INPUT_METHOD && mInputMethodWindow == null) {
-                    setInputMethodWindowLocked(win);
+                final DisplayContent displayContent = win.getDisplayContent();
+                if (win.mAttrs.type == TYPE_INPUT_METHOD
+                        && displayContent.mInputMethodWindow == null) {
+                    displayContent.setInputMethodWindowLocked(win);
                     imMayMove = true;
                 }
                 win.adjustStartingWindowFlags();
@@ -2190,14 +2174,10 @@ public class WindowManagerService extends IWindowManager.Stub
             // The last inset values represent the last client state.
             win.updateLastInsetValues();
 
-            outFrame.set(win.mCompatFrame);
-            outOverscanInsets.set(win.mOverscanInsets);
-            outContentInsets.set(win.mContentInsets);
-            win.mLastRelayoutContentInsets.set(win.mContentInsets);
-            outVisibleInsets.set(win.mVisibleInsets);
-            outStableInsets.set(win.mStableInsets);
+            win.getCompatFrame(outFrame);
+            win.getInsetsForRelayout(outOverscanInsets, outContentInsets, outVisibleInsets,
+                    outStableInsets, outOutsets);
             outCutout.set(win.getWmDisplayCutout().getDisplayCutout());
-            outOutsets.set(win.mOutsets);
             outBackdropFrame.set(win.getBackdropFrame(win.getFrameLw()));
             if (localLOGV) Slog.v(
                 TAG_WM, "Relayout given client " + client.asBinder()
@@ -2248,8 +2228,9 @@ public class WindowManagerService extends IWindowManager.Stub
             // of a transaction to avoid artifacts.
             win.mAnimatingExit = true;
         } else {
-            if (mInputMethodWindow == win) {
-                setInputMethodWindowLocked(null);
+            final DisplayContent displayContent = win.getDisplayContent();
+            if (displayContent.mInputMethodWindow == win) {
+                displayContent.setInputMethodWindowLocked(null);
             }
             boolean stopped = win.mAppToken != null ? win.mAppToken.mAppStopped : true;
             // We set mDestroying=true so AppWindowToken#notifyAppStopped in-to destroy surfaces
@@ -2854,7 +2835,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public WindowManagerPolicy.WindowState getInputMethodWindowLw() {
-        return mInputMethodWindow;
+        return mRoot.getCurrentInputMethodWindow();
     }
 
     @Override
@@ -4553,6 +4534,7 @@ public class WindowManagerService extends IWindowManager.Stub
         mPolicy.systemReady();
         mTaskSnapshotController.systemReady();
         mHasWideColorGamutSupport = queryWideColorGamutSupport();
+        mHasHdrSupport = queryHdrSupport();
     }
 
     private static boolean queryWideColorGamutSupport() {
@@ -4561,6 +4543,19 @@ public class WindowManagerService extends IWindowManager.Stub
             OptionalBool hasWideColor = surfaceFlinger.hasWideColorDisplay();
             if (hasWideColor != null) {
                 return hasWideColor.value;
+            }
+        } catch (RemoteException e) {
+            // Ignore, we're in big trouble if we can't talk to SurfaceFlinger's config store
+        }
+        return false;
+    }
+
+    private static boolean queryHdrSupport() {
+        try {
+            ISurfaceFlingerConfigs surfaceFlinger = ISurfaceFlingerConfigs.getService();
+            OptionalBool hasHdr = surfaceFlinger.hasHDRDisplay();
+            if (hasHdr != null) {
+                return hasHdr.value;
             }
         } catch (RemoteException e) {
             // Ignore, we're in big trouble if we can't talk to SurfaceFlinger's config store
@@ -5089,30 +5084,6 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public boolean inputMethodClientHasFocus(IInputMethodClient client) {
-        synchronized (mWindowMap) {
-            // TODO: multi-display
-            if (getDefaultDisplayContentLocked().inputMethodClientHasFocus(client)) {
-                return true;
-            }
-
-            // Okay, how about this...  what is the current focus?
-            // It seems in some cases we may not have moved the IM
-            // target window, such as when it was in a pop-up window,
-            // so let's also look at the current focus.  (An example:
-            // go to Gmail, start searching so the keyboard goes up,
-            // press home.  Sometimes the IME won't go down.)
-            // Would be nice to fix this more correctly, but it's
-            // way at the end of a release, and this should be good enough.
-            if (mCurrentFocus != null && mCurrentFocus.mSession.mClient != null
-                    && mCurrentFocus.mSession.mClient.asBinder() == client.asBinder()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
     public void getInitialDisplaySize(int displayId, Point size) {
         synchronized (mWindowMap) {
             final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
@@ -5418,17 +5389,6 @@ public class WindowManagerService extends IWindowManager.Stub
         mWindowPlacerLocked.performSurfacePlacement();
     }
 
-    /**
-     * Get an array with display ids ordered by focus priority - last items should be given
-     * focus first. Sparse array just maps position to displayId.
-     */
-    // TODO: Maintain display list in focus order in ActivityManager and remove this call.
-    public void getDisplaysInFocusOrder(SparseIntArray displaysInFocusOrder) {
-        synchronized(mWindowMap) {
-            mRoot.getDisplaysInFocusOrder(displaysInFocusOrder);
-        }
-    }
-
     @Override
     public void setOverscan(int displayId, int left, int top, int right, int bottom) {
         if (mContext.checkCallingOrSelfPermission(
@@ -5648,10 +5608,10 @@ public class WindowManagerService extends IWindowManager.Stub
             // change message pending.
             mH.removeMessages(H.REPORT_FOCUS_CHANGE);
             mH.sendEmptyMessage(H.REPORT_FOCUS_CHANGE);
-            // TODO(multidisplay): Focused windows on default display only.
-            final DisplayContent displayContent = getDefaultDisplayContentLocked();
+            final DisplayContent displayContent = (newFocus != null) ? newFocus.getDisplayContent()
+                    : getDefaultDisplayContentLocked();
             boolean imWindowChanged = false;
-            if (mInputMethodWindow != null) {
+            if (displayContent.mInputMethodWindow != null) {
                 final WindowState prevTarget = mInputMethodTarget;
 
                 final WindowState newTarget =
@@ -5660,10 +5620,11 @@ public class WindowManagerService extends IWindowManager.Stub
 
                 if (mode != UPDATE_FOCUS_WILL_ASSIGN_LAYERS
                         && mode != UPDATE_FOCUS_WILL_PLACE_SURFACES) {
-                    final int prevImeAnimLayer = mInputMethodWindow.mWinAnimator.mAnimLayer;
+                    final int prevImeAnimLayer =
+                            displayContent.mInputMethodWindow.mWinAnimator.mAnimLayer;
                     displayContent.assignWindowLayers(false /* setLayoutNeeded */);
-                    imWindowChanged |=
-                            prevImeAnimLayer != mInputMethodWindow.mWinAnimator.mAnimLayer;
+                    imWindowChanged |= prevImeAnimLayer
+                            != displayContent.mInputMethodWindow.mWinAnimator.mAnimLayer;
                 }
             }
 
@@ -5686,7 +5647,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
             int focusChanged = mPolicy.focusChangedLw(oldFocus, newFocus);
 
-            if (imWindowChanged && oldFocus != mInputMethodWindow) {
+            if (imWindowChanged && oldFocus != displayContent.mInputMethodWindow) {
                 // Focus of the input method window changed. Perform layout if needed.
                 if (mode == UPDATE_FOCUS_PLACING_SURFACES) {
                     displayContent.performLayout(true /*initial*/,  updateInputWindows);
@@ -6086,11 +6047,10 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void createInputConsumer(IBinder token, String name, InputChannel inputChannel) {
+    public void createInputConsumer(IBinder token, String name, int displayId,
+            InputChannel inputChannel) {
         synchronized (mWindowMap) {
-            // TODO(b/112049699): Fix this for multiple displays. There is only one inputChannel
-            // here to accept the return value.
-            DisplayContent display = mRoot.getDisplayContent(Display.DEFAULT_DISPLAY);
+            DisplayContent display = mRoot.getDisplayContent(displayId);
             if (display != null) {
                 display.getInputMonitor().createInputConsumer(token, name, inputChannel,
                         Binder.getCallingPid(), Binder.getCallingUserHandle());
@@ -6099,11 +6059,9 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public boolean destroyInputConsumer(String name) {
+    public boolean destroyInputConsumer(String name, int displayId) {
         synchronized (mWindowMap) {
-            // TODO(b/112049699): Fix this for multiple displays. For consistency with
-            // createInputConsumer above.
-            DisplayContent display = mRoot.getDisplayContent(Display.DEFAULT_DISPLAY);
+            DisplayContent display = mRoot.getDisplayContent(displayId);
             if (display != null) {
                 return display.getInputMonitor().destroyInputConsumer(name);
             }
@@ -6118,8 +6076,15 @@ public class WindowManagerService extends IWindowManager.Stub
         }
         synchronized (mWindowMap) {
             final Region r = new Region();
-            if (mInputMethodWindow != null) {
-                mInputMethodWindow.getTouchableRegion(r);
+            // TODO(b/111080190): this method is only return the recent focused IME touch region,
+            // For Multi-Session IME, will need to add API for given display Id to
+            // get the right IME touch region.
+            for (int i = mRoot.mChildren.size() - 1; i >= 0; --i) {
+                final DisplayContent displayContent = mRoot.mChildren.get(i);
+                if (displayContent.mInputMethodWindow != null) {
+                    displayContent.mInputMethodWindow.getTouchableRegion(r);
+                    return r;
+                }
             }
             return r;
         }
@@ -6302,8 +6267,9 @@ public class WindowManagerService extends IWindowManager.Stub
         if (mFocusedApp != null) {
             mFocusedApp.writeNameToProto(proto, FOCUSED_APP);
         }
-        if (mInputMethodWindow != null) {
-            mInputMethodWindow.writeIdentifierToProto(proto, INPUT_METHOD_WINDOW);
+        final WindowState imeWindow = mRoot.getCurrentInputMethodWindow();
+        if (imeWindow != null) {
+            imeWindow.writeIdentifierToProto(proto, INPUT_METHOD_WINDOW);
         }
         proto.write(DISPLAY_FROZEN, mDisplayFrozen);
         final DisplayContent defaultDisplayContent = getDefaultDisplayContentLocked();
@@ -6473,8 +6439,9 @@ public class WindowManagerService extends IWindowManager.Stub
                 pw.print("  mLastStatusBarVisibility=0x");
                         pw.println(Integer.toHexString(mLastStatusBarVisibility));
             }
-            if (mInputMethodWindow != null) {
-                pw.print("  mInputMethodWindow="); pw.println(mInputMethodWindow);
+            final WindowState imeWindow = mRoot.getCurrentInputMethodWindow();
+            if (imeWindow != null) {
+                pw.print("  mInputMethodWindow="); pw.println(imeWindow);
             }
             mWindowPlacerLocked.dump(pw, "  ");
             mRoot.mWallpaperController.dump(pw, "  ");
@@ -7163,7 +7130,7 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     void markForSeamlessRotation(WindowState w, boolean seamlesslyRotated) {
-        if (seamlesslyRotated == w.mSeamlesslyRotated) {
+        if (seamlesslyRotated == w.mSeamlesslyRotated || w.mForceSeamlesslyRotate) {
             return;
         }
         w.mSeamlesslyRotated = seamlesslyRotated;
@@ -7372,10 +7339,9 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public int getInputMethodWindowVisibleHeight() {
+        public int getInputMethodWindowVisibleHeight(int displayId) {
             synchronized (mWindowMap) {
-                // TODO(multi-display): Have caller pass in the display they are interested in.
-                final DisplayContent dc = getDefaultDisplayContentLocked();
+                final DisplayContent dc = mRoot.getDisplayContent(displayId);
                 return dc.mDisplayFrames.getInputMethodWindowVisibleHeight();
             }
         }
@@ -7383,8 +7349,9 @@ public class WindowManagerService extends IWindowManager.Stub
         @Override
         public void saveLastInputMethodWindowForTransition() {
             synchronized (mWindowMap) {
-                if (mInputMethodWindow != null) {
-                    mPolicy.setLastInputMethodWindowLw(mInputMethodWindow, mInputMethodTarget);
+                final WindowState imeWindow = mRoot.getCurrentInputMethodWindow();
+                if (imeWindow != null) {
+                    mPolicy.setLastInputMethodWindowLw(imeWindow, mInputMethodTarget);
                 }
             }
         }
@@ -7490,6 +7457,44 @@ public class WindowManagerService extends IWindowManager.Stub
                 return mCurrentFocus != null ? uid == mCurrentFocus.getOwningUid() : false;
             }
         }
+
+    public boolean inputMethodClientHasFocus(IInputMethodClient client) {
+        boolean hasFocus;
+        synchronized (mWindowMap) {
+            // Check all displays if any input method window has focus.
+            for (int i = mRoot.mChildren.size() - 1; i >= 0; --i) {
+                final DisplayContent displayContent = mRoot.mChildren.get(i);
+                if (displayContent.inputMethodClientHasFocus(client)) {
+                    return true;
+                }
+            }
+
+            // Okay, how about this...  what is the current focus?
+            // It seems in some cases we may not have moved the IM
+            // target window, such as when it was in a pop-up window,
+            // so let's also look at the current focus.  (An example:
+            // go to Gmail, start searching so the keyboard goes up,
+            // press home.  Sometimes the IME won't go down.)
+            // Would be nice to fix this more correctly, but it's
+            // way at the end of a release, and this should be good enough.
+            if (mCurrentFocus != null && mCurrentFocus.mSession.mClient != null
+                    && mCurrentFocus.mSession.mClient.asBinder() == client.asBinder()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+        @Override
+        public int getDisplayIdForWindow(IBinder windowToken) {
+            synchronized (mWindowMap) {
+                final WindowState window = mWindowMap.get(windowToken);
+                if (window != null) {
+                    return window.getDisplayContent().getDisplayId();
+                }
+                return Display.INVALID_DISPLAY;
+            }
+        }
     }
 
     void registerAppFreezeListener(AppFreezeListener listener) {
@@ -7566,6 +7571,10 @@ public class WindowManagerService extends IWindowManager.Stub
     boolean hasWideColorGamutSupport() {
         return mHasWideColorGamutSupport &&
                 SystemProperties.getInt("persist.sys.sf.native_mode", 0) != 1;
+    }
+
+    boolean hasHdrSupport() {
+        return mHasHdrSupport && hasWideColorGamutSupport();
     }
 
     void updateNonSystemOverlayWindowsVisibilityIfNeeded(WindowState win, boolean surfaceShown) {

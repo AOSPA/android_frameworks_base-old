@@ -33,7 +33,7 @@ import android.util.Slog;
 
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.BinderCallsStats;
-import com.android.internal.os.BinderInternal;
+import com.android.internal.os.CachedDeviceState;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -41,7 +41,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 public class BinderCallsStatsService extends Binder {
 
@@ -119,10 +118,22 @@ public class BinderCallsStatsService extends Binder {
             this.mBinderCallsStats = binderCallsStats;
         }
 
+        /** @see BinderCallsStats#reset */
+        public void reset() {
+            mBinderCallsStats.reset();
+        }
+
+        /**
+         * @see BinderCallsStats#getExportedCallStats.
+         *
+         * Note that binder calls stats will be reset by statsd every time
+         * the data is exported.
+         */
         public ArrayList<BinderCallsStats.ExportedCallStat> getExportedCallStats() {
             return mBinderCallsStats.getExportedCallStats();
         }
 
+        /** @see BinderCallsStats#getExportedExceptionStats */
         public ArrayMap<String, Integer> getExportedExceptionStats() {
             return mBinderCallsStats.getExportedExceptionStats();
         }
@@ -156,8 +167,10 @@ public class BinderCallsStatsService extends Binder {
         @Override
         public void onBootPhase(int phase) {
             if (SystemService.PHASE_SYSTEM_SERVICES_READY == phase) {
+                CachedDeviceState.Readonly deviceState = getLocalService(
+                        CachedDeviceState.Readonly.class);
                 mService.systemReady(getContext());
-                mBinderCallsStats.systemReady(getContext());
+                mBinderCallsStats.setDeviceState(deviceState);
             }
         }
     }

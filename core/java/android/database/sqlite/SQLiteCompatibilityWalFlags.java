@@ -16,6 +16,7 @@
 
 package android.database.sqlite;
 
+import android.annotation.TestApi;
 import android.app.ActivityThread;
 import android.app.Application;
 import android.provider.Settings;
@@ -33,6 +34,7 @@ import com.android.internal.annotations.VisibleForTesting;
  * for consistent behavior across all connections opened in the process.
  * @hide
  */
+@TestApi
 public class SQLiteCompatibilityWalFlags {
 
     private static final String TAG = "SQLiteCompatibilityWalFlags";
@@ -41,8 +43,12 @@ public class SQLiteCompatibilityWalFlags {
     private static volatile boolean sFlagsSet;
     private static volatile boolean sCompatibilityWalSupported;
     private static volatile String sWALSyncMode;
+    private static volatile long sTruncateSize = -1;
     // This flag is used to avoid recursive initialization due to circular dependency on Settings
     private static volatile boolean sCallingGlobalSettings;
+
+    private SQLiteCompatibilityWalFlags() {
+    }
 
     /**
      * @hide
@@ -69,6 +75,19 @@ public class SQLiteCompatibilityWalFlags {
     public static String getWALSyncMode() {
         initIfNeeded();
         return sWALSyncMode;
+    }
+
+    /**
+     * Override {@link com.android.internal.R.integer#db_wal_truncate_size}.
+     *
+     * @return the value set in the global setting, or -1 if a value is not set.
+     *
+     * @hide
+     */
+    @VisibleForTesting
+    public static long getTruncateSize() {
+        initIfNeeded();
+        return sTruncateSize;
     }
 
     private static void initIfNeeded() {
@@ -115,6 +134,7 @@ public class SQLiteCompatibilityWalFlags {
         sCompatibilityWalSupported = parser.getBoolean("compatibility_wal_supported",
                 SQLiteGlobal.isCompatibilityWalSupported());
         sWALSyncMode = parser.getString("wal_syncmode", SQLiteGlobal.getWALSyncMode());
+        sTruncateSize = parser.getInt("truncate_size", -1);
         Log.i(TAG, "Read compatibility WAL flags: compatibility_wal_supported="
                 + sCompatibilityWalSupported + ", wal_syncmode=" + sWALSyncMode);
         sFlagsSet = true;
@@ -125,6 +145,7 @@ public class SQLiteCompatibilityWalFlags {
      * @hide
      */
     @VisibleForTesting
+    @TestApi
     public static void reset() {
         sInitialized = false;
         sFlagsSet = false;

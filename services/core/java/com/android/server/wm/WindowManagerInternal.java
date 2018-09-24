@@ -30,6 +30,7 @@ import android.view.InputChannel;
 import android.view.MagnificationSpec;
 import android.view.WindowInfo;
 
+import com.android.internal.view.IInputMethodClient;
 import com.android.server.input.InputManagerService;
 import com.android.server.policy.WindowManagerPolicy;
 
@@ -334,9 +335,9 @@ public abstract class WindowManagerInternal {
     public abstract void registerAppTransitionListener(AppTransitionListener listener);
 
     /**
-     * Retrieves a height of input method window.
+     * Retrieves a height of input method window for given display.
      */
-    public abstract int getInputMethodWindowVisibleHeight();
+    public abstract int getInputMethodWindowVisibleHeight(int displayId);
 
     /**
       * Saves last input method window for transition.
@@ -355,8 +356,8 @@ public abstract class WindowManagerInternal {
     /**
      * Notifies WindowManagerService that the current IME window status is being changed.
      *
-     * <p>Only {@link com.android.server.InputMethodManagerService} is the expected and tested
-     * caller of this method.</p>
+     * <p>Only {@link com.android.server.inputmethod.InputMethodManagerService} is the expected and
+     * tested caller of this method.</p>
      *
      * @param imeToken token to track the active input method. Corresponding IME windows can be
      *                 identified by checking {@link android.view.WindowManager.LayoutParams#token}.
@@ -375,8 +376,8 @@ public abstract class WindowManagerInternal {
     /**
      * Notifies WindowManagerService that the current IME window status is being changed.
      *
-     * <p>Only {@link com.android.server.InputMethodManagerService} is the expected and tested
-     * caller of this method.</p>
+     * <p>Only {@link com.android.server.inputmethod.InputMethodManagerService} is the expected and
+     * tested caller of this method.</p>
      *
      * @param imeToken token to track the active input method. Corresponding IME windows can be
      *                 identified by checking {@link android.view.WindowManager.LayoutParams#token}.
@@ -441,4 +442,14 @@ public abstract class WindowManagerInternal {
      * Returns {@code true} if a Window owned by {@code uid} has focus.
      */
     public abstract boolean isUidFocused(int uid);
+
+    /**
+     * Returns {@code true} if a process that is identified by {@code client} has IME focus.
+     */
+    public abstract boolean inputMethodClientHasFocus(IInputMethodClient client);
+
+    /**
+     * Return the display Id for given window.
+     */
+    public abstract int getDisplayIdForWindow(IBinder windowToken);
 }

@@ -21,6 +21,7 @@ import android.annotation.DrawableRes;
 import android.annotation.IdRes;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
+import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -33,6 +34,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.PorterDuff;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
 import android.os.Parcel;
@@ -100,7 +102,7 @@ public final class Icon implements Parcelable {
 
     private static final int VERSION_STREAM_SERIALIZER = 1;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private final int mType;
 
     private ColorStateList mTintList;
@@ -117,7 +119,7 @@ public final class Icon implements Parcelable {
 
     // TYPE_RESOURCE: package name
     // TYPE_URI: uri string
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private String          mString1;
 
     // TYPE_RESOURCE: resId
@@ -173,7 +175,7 @@ public final class Icon implements Parcelable {
      * valid compressed bitmap data is found.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public int getDataOffset() {
         if (mType != TYPE_DATA) {
             throw new IllegalStateException("called getDataOffset() on " + this);
@@ -188,7 +190,7 @@ public final class Icon implements Parcelable {
      * bitmap data.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public byte[] getDataBytes() {
         if (mType != TYPE_DATA) {
             throw new IllegalStateException("called getDataBytes() on " + this);
@@ -202,7 +204,7 @@ public final class Icon implements Parcelable {
      * @return The {@link android.content.res.Resources} for this {@link #TYPE_RESOURCE} Icon.
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public Resources getResources() {
         if (mType != TYPE_RESOURCE) {
             throw new IllegalStateException("called getResources() on " + this);
@@ -568,7 +570,7 @@ public final class Icon implements Parcelable {
      * Version of createWithResource that takes Resources. Do not use.
      * @hide
      */
-    @UnsupportedAppUsage
+    @SystemApi
     public static Icon createWithResource(Resources res, @DrawableRes int resId) {
         if (res == null) {
             throw new IllegalArgumentException("Resource must not be null.");

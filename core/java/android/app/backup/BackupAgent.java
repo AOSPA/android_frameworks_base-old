@@ -126,6 +126,11 @@ public abstract class BackupAgent extends ContextWrapper {
     private static final boolean DEBUG = false;
 
     /** @hide */
+    public static final int RESULT_SUCCESS = 0;
+    /** @hide */
+    public static final int RESULT_ERROR = -1;
+
+    /** @hide */
     public static final int TYPE_EOF = 0;
 
     /**
@@ -955,8 +960,10 @@ public abstract class BackupAgent extends ContextWrapper {
             BackupDataOutput output = new BackupDataOutput(
                     data.getFileDescriptor(), quotaBytes, transportFlags);
 
+            long result = RESULT_ERROR;
             try {
                 BackupAgent.this.onBackup(oldState, output, newState);
+                result = RESULT_SUCCESS;
             } catch (IOException ex) {
                 Log.d(TAG, "onBackup (" + BackupAgent.this.getClass().getName() + ") threw", ex);
                 throw new RuntimeException(ex);
@@ -971,9 +978,9 @@ public abstract class BackupAgent extends ContextWrapper {
 
                 Binder.restoreCallingIdentity(ident);
                 try {
-                    callbackBinder.operationComplete(0);
+                    callbackBinder.operationComplete(result);
                 } catch (RemoteException e) {
-                    // we'll time out anyway, so we're safe
+                    // We will time out anyway.
                 }
 
                 // Don't close the fd out from under the system service if this was local
@@ -1155,10 +1162,16 @@ public abstract class BackupAgent extends ContextWrapper {
         }
 
         @Override
-        public void doQuotaExceeded(long backupDataBytes, long quotaBytes) {
+        public void doQuotaExceeded(
+                long backupDataBytes,
+                long quotaBytes,
+                IBackupCallback callbackBinder) {
             long ident = Binder.clearCallingIdentity();
+
+            long result = RESULT_ERROR;
             try {
                 BackupAgent.this.onQuotaExceeded(backupDataBytes, quotaBytes);
+                result = RESULT_SUCCESS;
             } catch (Exception e) {
                 Log.d(TAG, "onQuotaExceeded(" + BackupAgent.this.getClass().getName() + ") threw",
                         e);
@@ -1166,6 +1179,12 @@ public abstract class BackupAgent extends ContextWrapper {
             } finally {
                 waitForSharedPrefs();
                 Binder.restoreCallingIdentity(ident);
+
+                try {
+                    callbackBinder.operationComplete(result);
+                } catch (RemoteException e) {
+                    // We will time out anyway.
+                }
             }
         }
     }

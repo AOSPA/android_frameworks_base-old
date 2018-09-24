@@ -2911,6 +2911,12 @@
         <public name="supportsAmbientMode" />
     </public-group>
 
+    <public-group type="attr" first-id="0x0101058d">
+        <!-- @hide For use by platform and tools only. Developers should not specify this value. -->
+        <public name="usesNonSdkApi" />
+        <public name="minimumUiTimeout" />
+    </public-group>
+
     <public-group type="style" first-id="0x010302e2">
     </public-group>
 
@@ -2918,6 +2924,23 @@
     </public-group>
 
     <public-group type="string" first-id="0x0104001b">
+        <!-- @hide @SystemApi -->
+        <public name="config_help_package_name_key" />
+        <!-- @hide @SystemApi -->
+        <public name="config_help_package_name_value" />
+        <!-- @hide @SystemApi -->
+        <public name="config_help_intent_extra_key" />
+        <!-- @hide @SystemApi -->
+        <public name="config_help_intent_name_key" />
+        <!-- @hide @SystemApi -->
+        <public name="config_feedback_intent_extra_key" />
+        <!-- @hide @SystemApi -->
+        <public name="config_feedback_intent_name_key" />
+    </public-group>
+
+    <public-group type="bool" first-id="0x01110000">
+        <!-- @hide @SystemApi -->
+        <public name="config_sendPackageName" />
     </public-group>
 
   <!-- ===============================================================

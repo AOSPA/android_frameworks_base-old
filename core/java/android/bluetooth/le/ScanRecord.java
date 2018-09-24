@@ -95,9 +95,9 @@ public final class ScanRecord {
 
     /**
      * Returns a list of service solicitation UUIDs within the advertisement that are used to
-     * identify the bluetooth GATT services.
-     * @hide
+     * identify the Bluetooth GATT services.
      */
+    @Nullable
     public List<ParcelUuid> getServiceSolicitationUuids() {
         return mServiceSolicitationUuids;
     }
@@ -332,7 +332,6 @@ public final class ScanRecord {
 
     /**
      * Parse service Solicitation UUIDs.
-     * @hide
      */
     private static int parseServiceSolicitationUuid(byte[] scanRecord, int currentPos,
             int dataLength, int uuidLength, List<ParcelUuid> serviceSolicitationUuids) {

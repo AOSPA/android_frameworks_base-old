@@ -1282,6 +1282,10 @@
          that can be set by the user. -->
     <integer name="config_screenBrightnessDoze">1</integer>
 
+    <!-- Delay that allows some content to arrive at the display before switching
+         from DOZE to ON. -->
+    <integer name="config_wakeUpDelayDoze">0</integer>
+
     <!-- Whether or not to skip the initial brightness ramps when the display transitions to
          STATE_ON. Setting this to true will skip the brightness ramp to the last stored active
          brightness value and will repeat for the following ramp if autobrightness is enabled. -->
@@ -1871,6 +1875,10 @@
          truncate it after committing the transaction. -->
     <integer name="db_journal_size_limit">524288</integer>
 
+    <!-- When opening a database with WAL enabled and if the wal file already exists and larger
+         than this size in bytes, we'll truncate it. -->
+    <integer name="db_wal_truncate_size">1048576</integer>
+
     <!-- The database synchronization mode when using the default journal mode.
          FULL is safest and preserves durability at the cost of extra fsyncs.
          NORMAL also preserves durability in non-WAL modes and uses checksums to ensure
@@ -2110,6 +2118,9 @@
 
     <!-- Type of the reach sensor. Empty if reach is not supported. -->
     <string name="config_dozeReachSensorType" translatable="false"></string>
+
+    <!-- Type of the wake up sensor. Empty if not supported. -->
+    <string name="config_dozeWakeScreenSensorType" translatable="false"></string>
 
     <!-- Control whether the always on display mode is available. This should only be enabled on
          devices where the display has been tuned to be power efficient in DOZE and/or DOZE_SUSPEND
@@ -2791,7 +2802,7 @@
         <item>SUPL_PORT=7275</item>
         <item>SUPL_VER=0x20000</item>
         <item>SUPL_MODE=1</item>
-        <item>SUPL_ES=0</item>
+        <item>SUPL_ES=1</item>
         <item>LPP_PROFILE=0</item>
         <item>USE_EMERGENCY_PDN_FOR_EMERGENCY_SUPL=1</item>
         <item>A_GLONASS_POS_PROTOCOL_SELECT=0</item>
@@ -3350,9 +3361,6 @@
          to occur. The expand button will have increased touch boundaries to accomodate this. -->
     <bool name="config_notificationHeaderClickableForExpand">false</bool>
 
-    <!-- Configuration for automotive -->
-    <bool name="enable_pbap_pce_profile">false</bool>
-
     <!-- Default data warning level in mb -->
     <integer name="default_data_warning_level_mb">2048</integer>
 
@@ -3365,22 +3373,22 @@
     <bool name="config_sendPackageName">false</bool>
 
     <!-- Name for the set of keys associating package names -->
-    <string name="config_helpPackageNameKey" translatable="false"></string>
+    <string name="config_help_package_name_key" translatable="false"></string>
 
     <!-- Name for the set of values of package names -->
-    <string name="config_helpPackageNameValue" translatable="false"></string>
+    <string name="config_help_package_name_value" translatable="false"></string>
 
     <!-- Intent key for the package name keys -->
-    <string name="config_helpIntentExtraKey" translatable="false"></string>
+    <string name="config_help_intent_extra_key" translatable="false"></string>
 
     <!-- Intent key for package name values -->
-    <string name="config_helpIntentNameKey" translatable="false"></string>
+    <string name="config_help_intent_name_key" translatable="false"></string>
 
     <!-- Intent key for the package name keys -->
-    <string name="config_feedbackIntentExtraKey" translatable="false"></string>
+    <string name="config_feedback_intent_extra_key" translatable="false"></string>
 
     <!-- Intent key for package name values -->
-    <string name="config_feedbackIntentNameKey" translatable="false"></string>
+    <string name="config_feedback_intent_name_key" translatable="false"></string>
 
     <!-- The apps that need to be hidden when they are disabled -->
     <string-array name="config_hideWhenDisabled_packageNames"></string-array>
@@ -3500,10 +3508,16 @@
          empty string is passed in -->
     <string name="config_wlan_network_service_package" translatable="false"></string>
 
+    <!-- Telephony qualified networks service package name to bind to by default. -->
+    <string name="config_qualified_networks_service_package" translatable="false"></string>
+
     <!-- Wear devices: Controls the radios affected by Activity Mode. -->
     <string-array name="config_wearActivityModeRadios">
         <item>"wifi"</item>
     </string-array>
+
+    <!-- Default hyphenation frequency setting (0=NONE, 1=NORMAL, 2=FULL). -->
+    <item name="config_preferredHyphenationFrequency" format="integer" type="dimen">0</item>
 
     <!-- Package name for ManagedProvisioning which is responsible for provisioning work profiles. -->
     <string name="config_managed_provisioning_package" translatable="false">com.android.managedprovisioning</string>
@@ -3532,6 +3546,13 @@
 
     <!-- Whether or not battery saver should be "sticky" when manually enabled. -->
     <bool name="config_batterySaverStickyBehaviourDisabled">false</bool>
+
+    <!-- Model of potentially misprovisioned devices. If none is specified in an overlay, an
+         empty string is passed in. -->
+    <string name="config_misprovisionedDeviceModel" translatable="false"></string>
+
+    <!-- Brand value for attestation of misprovisioned device. -->
+    <string name="config_misprovisionedBrandValue" translatable="false"></string>
     
     <!-- List of names that represent dual SoftAp interfaces. -->
     <string-array translatable="false" name="config_wifi_dual_sap_interfaces">

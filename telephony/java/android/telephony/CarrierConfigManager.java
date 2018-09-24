@@ -107,11 +107,32 @@ public class CarrierConfigManager {
 
    /**
     * Boolean indicating if the "Call barring" item is visible in the Call Settings menu.
-    * true means visible. false means gone.
-    * @hide
+    * If true, the "Call Barring" menu will be visible. If false, the menu will be gone.
+    *
+    * Disabled by default.
     */
     public static final String KEY_CALL_BARRING_VISIBILITY_BOOL =
             "call_barring_visibility_bool";
+
+    /**
+     * Flag indicating whether or not changing the call barring password via the "Call Barring"
+     * settings menu is supported. If true, the option will be visible in the "Call
+     * Barring" settings menu. If false, the option will not be visible.
+     *
+     * Enabled by default.
+     */
+    public static final String KEY_CALL_BARRING_SUPPORTS_PASSWORD_CHANGE_BOOL =
+            "call_barring_supports_password_change_bool";
+
+    /**
+     * Flag indicating whether or not deactivating all call barring features via the "Call Barring"
+     * settings menu is supported. If true, the option will be visible in the "Call
+     * Barring" settings menu. If false, the option will not be visible.
+     *
+     * Enabled by default.
+     */
+    public static final String KEY_CALL_BARRING_SUPPORTS_DEACTIVATE_ALL_BOOL =
+            "call_barring_supports_deactivate_all_bool";
 
     /**
      * Flag indicating whether the Phone app should ignore EVENT_SIM_NETWORK_LOCKED
@@ -170,10 +191,20 @@ public class CarrierConfigManager {
     /**
      * Flag indicating whether radio is to be restarted on error PDP_FAIL_REGULAR_DEACTIVATION
      * This is false by default.
+     *
+     * @deprecated Use {@link #KEY_RADIO_RESTART_FAILURE_CAUSES_INT_ARRAY} instead
      */
-    public static final String
-            KEY_RESTART_RADIO_ON_PDP_FAIL_REGULAR_DEACTIVATION_BOOL =
-                    "restart_radio_on_pdp_fail_regular_deactivation_bool";
+    @Deprecated
+    public static final String KEY_RESTART_RADIO_ON_PDP_FAIL_REGULAR_DEACTIVATION_BOOL =
+            "restart_radio_on_pdp_fail_regular_deactivation_bool";
+
+    /**
+     * A list of failure cause codes that will trigger a modem restart when telephony receiving
+     * one of those during data setup. The cause codes are defined in 3GPP TS 24.008 Annex I and
+     * TS 24.301 Annex B.
+     */
+    public static final String KEY_RADIO_RESTART_FAILURE_CAUSES_INT_ARRAY =
+            "radio_restart_failure_causes_int_array";
 
     /**
      * If true, enable vibration (haptic feedback) for key presses in the EmergencyDialer activity.
@@ -525,19 +556,19 @@ public class CarrierConfigManager {
             "carrier_wfc_supports_wifi_only_bool";
 
     /**
-     * Default WFC_IMS_MODE for home network   0: WIFI_ONLY
-     *                                         1: CELLULAR_PREFERRED
-     *                                         2: WIFI_PREFERRED
-     * @hide
+     * Default mode for WFC over IMS on home network:
+     * <ul>
+     *   <li>0: Wi-Fi only
+     *   <li>1: prefer mobile network
+     *   <li>2: prefer Wi-Fi
+     * </ul>
      */
     public static final String KEY_CARRIER_DEFAULT_WFC_IMS_MODE_INT =
             "carrier_default_wfc_ims_mode_int";
 
     /**
-     * Default WFC_IMS_MODE for roaming
-     * See {@link KEY_CARRIER_DEFAULT_WFC_IMS_MODE_INT} for valid values.
-     *
-     * @hide
+     * Default mode for WFC over IMS on roaming network.
+     * See {@link #KEY_CARRIER_DEFAULT_WFC_IMS_MODE_INT} for meaning of values.
      */
     public static final String KEY_CARRIER_DEFAULT_WFC_IMS_ROAMING_MODE_INT =
             "carrier_default_wfc_ims_roaming_mode_int";
@@ -1054,6 +1085,16 @@ public class CarrierConfigManager {
 
     /**
      * Indexes of SPN format strings in wfcSpnFormats and wfcDataSpnFormats.
+     *
+     * <p>Available options are:
+     * <ul>
+     * <li> 0: %s</li>
+     * <li> 1: %s Wi-Fi Calling</li>
+     * <li> 2: WLAN Call</li>
+     * <li> 3: %s WLAN Call</li>
+     * <li> 4: %s Wi-Fi</li>
+     * <li> 5: WiFi Calling | %s</li>
+     * <li> 6: %s VoWifi</li>
      * @hide
      */
     public static final String KEY_WFC_SPN_FORMAT_IDX_INT = "wfc_spn_format_idx_int";
@@ -2012,17 +2053,24 @@ public class CarrierConfigManager {
      * the binding intent go to.
      * @hide
      */
-    public static final String KEY_CARRIER_NETWORK_SERVICE_WLAN_PACKAGE_OVERRIDE_STRING
-             = "carrier_network_service_wlan_package_override_string";
+    public static final String KEY_CARRIER_NETWORK_SERVICE_WLAN_PACKAGE_OVERRIDE_STRING =
+            "carrier_network_service_wlan_package_override_string";
 
     /**
      * Decides when clients try to bind to wwan (cellular) network service, which package name will
      * the binding intent go to.
      * @hide
      */
-    public static final String KEY_CARRIER_NETWORK_SERVICE_WWAN_PACKAGE_OVERRIDE_STRING
-            = "carrier_network_service_wwan_package_override_string";
+    public static final String KEY_CARRIER_NETWORK_SERVICE_WWAN_PACKAGE_OVERRIDE_STRING =
+            "carrier_network_service_wwan_package_override_string";
 
+    /**
+     * The package name of qualified networks service that telephony binds to.
+     *
+     * @hide
+     */
+    public static final String KEY_CARRIER_QUALIFIED_NETWORKS_SERVICE_PACKAGE_OVERRIDE_STRING =
+            "carrier_qualified_networks_service_package_override_string";
     /**
      * A list of 4 LTE RSCP thresholds above which a signal level is considered POOR,
      * MODERATE, GOOD, or EXCELLENT, to be used in SignalStrength reporting.
@@ -2067,6 +2115,13 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CALL_REDIRECTION_SERVICE_COMPONENT_NAME_STRING =
             "call_redirection_service_component_name_string";
+    /**
+     * Support for the original string display of CDMA MO call.
+     * By default, it is disabled.
+     * @hide
+     */
+    public static final String KEY_CONFIG_SHOW_ORIG_DIAL_STRING_FOR_CDMA_BOOL =
+            "config_show_orig_dial_string_for_cdma";
 
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
@@ -2113,6 +2168,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_CARRIER_USE_IMS_FIRST_FOR_EMERGENCY_BOOL, true);
         sDefaults.putString(KEY_CARRIER_NETWORK_SERVICE_WWAN_PACKAGE_OVERRIDE_STRING, "");
         sDefaults.putString(KEY_CARRIER_NETWORK_SERVICE_WLAN_PACKAGE_OVERRIDE_STRING, "");
+        sDefaults.putString(KEY_CARRIER_QUALIFIED_NETWORKS_SERVICE_PACKAGE_OVERRIDE_STRING, "");
         sDefaults.putString(KEY_CARRIER_DATA_SERVICE_WWAN_PACKAGE_OVERRIDE_STRING, "");
         sDefaults.putString(KEY_CARRIER_DATA_SERVICE_WLAN_PACKAGE_OVERRIDE_STRING, "");
         sDefaults.putString(KEY_CARRIER_INSTANT_LETTERING_INVALID_CHARS_STRING, "");
@@ -2129,6 +2185,8 @@ public class CarrierConfigManager {
 
         sDefaults.putBoolean(KEY_CARRIER_VOLTE_PROVISIONED_BOOL, false);
         sDefaults.putBoolean(KEY_CALL_BARRING_VISIBILITY_BOOL, true);
+        sDefaults.putBoolean(KEY_CALL_BARRING_SUPPORTS_PASSWORD_CHANGE_BOOL, true);
+        sDefaults.putBoolean(KEY_CALL_BARRING_SUPPORTS_DEACTIVATE_ALL_BOOL, true);
         sDefaults.putBoolean(KEY_CALL_FORWARDING_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_ADDITIONAL_SETTINGS_CALLER_ID_VISIBILITY_BOOL, true);
         sDefaults.putBoolean(KEY_ADDITIONAL_SETTINGS_CALL_WAITING_VISIBILITY_BOOL, true);
@@ -2153,6 +2211,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_WORLD_PHONE_BOOL, false);
         sDefaults.putBoolean(KEY_REQUIRE_ENTITLEMENT_CHECKS_BOOL, true);
         sDefaults.putBoolean(KEY_RESTART_RADIO_ON_PDP_FAIL_REGULAR_DEACTIVATION_BOOL, false);
+        sDefaults.putIntArray(KEY_RADIO_RESTART_FAILURE_CAUSES_INT_ARRAY, new int[]{});
         sDefaults.putInt(KEY_VOLTE_REPLACEMENT_RAT_INT, 0);
         sDefaults.putString(KEY_DEFAULT_SIM_CALL_MANAGER_STRING, "");
         sDefaults.putString(KEY_VVM_DESTINATION_NUMBER_STRING, "");
@@ -2253,7 +2312,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SUPPORT_DIRECT_FDN_DIALING_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_DEFAULT_DATA_ROAMING_ENABLED_BOOL, false);
         sDefaults.putBoolean(KEY_SKIP_CF_FAIL_TO_DISABLE_DIALOG_BOOL, false);
-        sDefaults.putBoolean(KEY_SUPPORT_ENHANCED_CALL_BLOCKING_BOOL, false);
+        sDefaults.putBoolean(KEY_SUPPORT_ENHANCED_CALL_BLOCKING_BOOL, true);
 
         // MMS defaults
         sDefaults.putBoolean(KEY_MMS_ALIAS_ENABLED_BOOL, false);
@@ -2402,6 +2461,7 @@ public class CarrierConfigManager {
                         -85  /* SIGNAL_STRENGTH_GREAT */
                 });
         sDefaults.putString(KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING, "");
+        sDefaults.putBoolean(KEY_CONFIG_SHOW_ORIG_DIAL_STRING_FOR_CDMA_BOOL, false);
     }
 
     /**

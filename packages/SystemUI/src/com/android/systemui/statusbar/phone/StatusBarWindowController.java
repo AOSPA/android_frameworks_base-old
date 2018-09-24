@@ -22,6 +22,7 @@ import static com.android.systemui.statusbar.NotificationRemoteInputManager.ENAB
 
 import android.app.ActivityManager;
 import android.app.IActivityManager;
+import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Resources;
@@ -40,11 +41,14 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.keyguard.R;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
+import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.keyguard.KeyguardViewMediator;
-import com.android.systemui.statusbar.RemoteInputController;
+import com.android.systemui.statusbar.RemoteInputController.Callback;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarStateController.StateListener;
+import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -53,7 +57,7 @@ import java.lang.reflect.Field;
 /**
  * Encapsulates all logic for the status bar window state management.
  */
-public class StatusBarWindowController implements RemoteInputController.Callback, Dumpable {
+public class StatusBarWindowController implements Callback, Dumpable, ConfigurationListener {
 
     private static final String TAG = "StatusBarWindowController";
 
@@ -73,6 +77,7 @@ public class StatusBarWindowController implements RemoteInputController.Callback
     private OtherwisedCollapsedListener mListener;
 
     private final StateListener mStateListener = this::setStatusBarState;
+    private final SysuiColorExtractor mColorExtractor = Dependency.get(SysuiColorExtractor.class);
 
     public StatusBarWindowController(Context context) {
         this(context, context.getSystemService(WindowManager.class), ActivityManager.getService(),
@@ -89,6 +94,7 @@ public class StatusBarWindowController implements RemoteInputController.Callback
         mDozeParameters = dozeParameters;
         mScreenBrightnessDoze = mDozeParameters.getScreenBrightnessDoze();
         Dependency.get(StatusBarStateController.class).addListener(mStateListener);
+        Dependency.get(ConfigurationController.class).addCallback(this);
     }
 
     private boolean shouldEnableKeyguardScreenRotation() {
@@ -135,7 +141,7 @@ public class StatusBarWindowController implements RemoteInputController.Callback
         mScreenBrightnessDoze = value / 255f;
     }
 
-    public void setKeyguardDark(boolean dark) {
+    private void setKeyguardDark(boolean dark) {
         int vis = mStatusBarView.getSystemUiVisibility();
         if (dark) {
             vis = vis | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
@@ -273,6 +279,7 @@ public class StatusBarWindowController implements RemoteInputController.Callback
         applyBrightness(state);
         applyHasTopUi(state);
         applySleepToken(state);
+        applyNotTouchable(state);
         if (mLp.copyFrom(mLpChanged) != 0) {
             mWindowManager.updateViewLayout(mStatusBarView, mLp);
         }
@@ -321,6 +328,14 @@ public class StatusBarWindowController implements RemoteInputController.Callback
             mLpChanged.privateFlags |= LayoutParams.PRIVATE_FLAG_ACQUIRES_SLEEP_TOKEN;
         } else {
             mLpChanged.privateFlags &= ~LayoutParams.PRIVATE_FLAG_ACQUIRES_SLEEP_TOKEN;
+        }
+    }
+
+    private void applyNotTouchable(State state) {
+        if (state.notTouchable) {
+            mLpChanged.flags |= LayoutParams.FLAG_NOT_TOUCHABLE;
+        } else {
+            mLpChanged.flags &= ~LayoutParams.FLAG_NOT_TOUCHABLE;
         }
     }
 
@@ -448,6 +463,11 @@ public class StatusBarWindowController implements RemoteInputController.Callback
         apply(mCurrentState);
     }
 
+    public void setNotTouchable(boolean notTouchable) {
+        mCurrentState.notTouchable = notTouchable;
+        apply(mCurrentState);
+    }
+
     public void setStateListener(OtherwisedCollapsedListener listener) {
         mListener = listener;
     }
@@ -459,6 +479,23 @@ public class StatusBarWindowController implements RemoteInputController.Callback
 
     public boolean isShowingWallpaper() {
         return !mCurrentState.backdropShowing;
+    }
+
+    @Override
+    public void onThemeChanged() {
+        StatusBarStateController state = Dependency.get(StatusBarStateController.class);
+        int which;
+        if (state.getState() == StatusBarState.KEYGUARD
+                || state.getState() == StatusBarState.SHADE_LOCKED) {
+            which = WallpaperManager.FLAG_LOCK;
+        } else {
+            which = WallpaperManager.FLAG_SYSTEM;
+        }
+        final boolean useDarkText = mColorExtractor.getColors(which,
+                true /* ignoreVisibility */).supportsDarkText();
+
+        // Make sure we have the correct navbar/statusbar colors.
+        setKeyguardDark(useDarkText);
     }
 
     private static class State {
@@ -478,6 +515,7 @@ public class StatusBarWindowController implements RemoteInputController.Callback
         boolean forceUserActivity;
         boolean backdropShowing;
         boolean wallpaperSupportsAmbientMode;
+        boolean notTouchable;
 
         /**
          * The {@link StatusBar} state from the status bar.

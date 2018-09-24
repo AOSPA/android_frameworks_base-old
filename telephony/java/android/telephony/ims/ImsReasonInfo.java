@@ -185,8 +185,11 @@ public final class ImsReasonInfo implements Parcelable {
     public static final int CODE_EMERGENCY_PERM_FAILURE = 364;
 
     /**
-     * @hide
-     * User marked the call as unwanted.
+     * Call failure code during hangup/reject if user marked the call as unwanted.
+     *
+     * Android Telephony will receive information whether ROBO call feature is supported by the
+     * network from modem and propagate the same to AOSP as new ImsCallProfile members. OEMs can
+     * check this information and provide an option to the user to mark the call as unwanted.
      */
     public static final int CODE_SIP_USER_MARKED_UNWANTED = 365;
 
@@ -409,8 +412,8 @@ public final class ImsReasonInfo implements Parcelable {
     public static final int CODE_UNOBTAINABLE_NUMBER = 1515;
 
     /**
-     * @hide
-     * Call failed because WIFI to CS silent redial not allowed in CS Roaming.
+     * Call failed because WiFi call could not complete and circuit switch silent redial
+     * is not allowed while roaming on another network.
      */
     public static final int CODE_NO_CSFB_IN_CS_ROAM = 1516;
 

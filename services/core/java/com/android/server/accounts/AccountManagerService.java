@@ -1185,8 +1185,8 @@ public class AccountManagerService
                         final long accountId = accountEntry.getKey();
                         final Account account = accountEntry.getValue();
                         if (obsoleteAuthType.contains(account.type)) {
-                            Slog.w(TAG, "deleting account " + account.name + " because type "
-                                    + account.type
+                            Slog.w(TAG, "deleting account " + account.toSafeString()
+                                    + " because type " + account.type
                                     + "'s registered authenticator no longer exist.");
                             Map<String, Integer> packagesToVisibility =
                                     getRequestingPackages(account, accounts);
@@ -1326,7 +1326,8 @@ public class AccountManagerService
         Preconditions.checkState(Thread.holdsLock(mUsers), "mUsers lock must be held");
         List<Account> accountsToRemove = accounts.accountsDb.findCeAccountsNotInDe();
         if (!accountsToRemove.isEmpty()) {
-            Slog.i(TAG, "Accounts " + accountsToRemove + " were previously deleted while user "
+            Slog.i(TAG, accountsToRemove.size()
+                    + " accounts were previously deleted while user "
                     + accounts.userId + " was locked. Removing accounts from CE tables");
             logRecord(accounts, AccountsDb.DEBUG_ACTION_SYNC_DE_CE_ACCOUNTS,
                     AccountsDb.TABLE_ACCOUNTS);
@@ -1643,7 +1644,7 @@ public class AccountManagerService
             return;
         }
 
-        Slog.d(TAG, "Copying account " + account.name
+        Slog.d(TAG, "Copying account " + account.toSafeString()
                 + " from user " + userFrom + " to user " + userTo);
         long identityToken = clearCallingIdentity();
         try {
@@ -1779,8 +1780,8 @@ public class AccountManagerService
             return false;
         }
         if (!isLocalUnlockedUser(accounts.userId)) {
-            Log.w(TAG, "Account " + account + " cannot be added - user " + accounts.userId
-                    + " is locked. callingUid=" + callingUid);
+            Log.w(TAG, "Account " + account.toSafeString() + " cannot be added - user "
+                    + accounts.userId + " is locked. callingUid=" + callingUid);
             return false;
         }
         synchronized (accounts.dbLock) {
@@ -1788,19 +1789,19 @@ public class AccountManagerService
                 accounts.accountsDb.beginTransaction();
                 try {
                     if (accounts.accountsDb.findCeAccountId(account) >= 0) {
-                        Log.w(TAG, "insertAccountIntoDatabase: " + account
+                        Log.w(TAG, "insertAccountIntoDatabase: " + account.toSafeString()
                                 + ", skipping since the account already exists");
                         return false;
                     }
                     long accountId = accounts.accountsDb.insertCeAccount(account, password);
                     if (accountId < 0) {
-                        Log.w(TAG, "insertAccountIntoDatabase: " + account
+                        Log.w(TAG, "insertAccountIntoDatabase: " + account.toSafeString()
                                 + ", skipping the DB insert failed");
                         return false;
                     }
                     // Insert into DE table
                     if (accounts.accountsDb.insertDeAccount(account, accountId) < 0) {
-                        Log.w(TAG, "insertAccountIntoDatabase: " + account
+                        Log.w(TAG, "insertAccountIntoDatabase: " + account.toSafeString()
                                 + ", skipping the DB insert failed");
                         return false;
                     }
@@ -1808,7 +1809,8 @@ public class AccountManagerService
                         for (String key : extras.keySet()) {
                             final String value = extras.getString(key);
                             if (accounts.accountsDb.insertExtra(accountId, key, value) < 0) {
-                                Log.w(TAG, "insertAccountIntoDatabase: " + account
+                                Log.w(TAG, "insertAccountIntoDatabase: "
+                                        + account.toSafeString()
                                         + ", skipping since insertExtra failed for key " + key);
                                 return false;
                             }
@@ -2285,7 +2287,8 @@ public class AccountManagerService
         boolean isChanged = false;
         boolean userUnlocked = isLocalUnlockedUser(accounts.userId);
         if (!userUnlocked) {
-            Slog.i(TAG, "Removing account " + account + " while user "+ accounts.userId
+            Slog.i(TAG, "Removing account " + account.toSafeString()
+                    + " while user " + accounts.userId
                     + " is still locked. CE data will be removed later");
         }
         synchronized (accounts.dbLock) {
@@ -2913,7 +2916,7 @@ public class AccountManagerService
                 protected String toDebugString(long now) {
                     if (loginOptions != null) loginOptions.keySet();
                     return super.toDebugString(now) + ", getAuthToken"
-                            + ", " + account
+                            + ", " + account.toSafeString()
                             + ", authTokenType " + authTokenType
                             + ", loginOptions " + loginOptions
                             + ", notifyOnAuthFailure " + notifyOnAuthFailure;
@@ -3676,7 +3679,7 @@ public class AccountManagerService
                 @Override
                 protected String toDebugString(long now) {
                     return super.toDebugString(now) + ", confirmCredentials"
-                            + ", " + account;
+                            + ", " + account.toSafeString();
                 }
             }.bind();
         } finally {
@@ -3714,7 +3717,7 @@ public class AccountManagerService
                 protected String toDebugString(long now) {
                     if (loginOptions != null) loginOptions.keySet();
                     return super.toDebugString(now) + ", updateCredentials"
-                            + ", " + account
+                            + ", " + account.toSafeString()
                             + ", authTokenType " + authTokenType
                             + ", loginOptions " + loginOptions;
                 }
@@ -3778,7 +3781,7 @@ public class AccountManagerService
                         loginOptions.keySet();
                     return super.toDebugString(now)
                             + ", startUpdateCredentialsSession"
-                            + ", " + account
+                            + ", " + account.toSafeString()
                             + ", authTokenType " + authTokenType
                             + ", loginOptions " + loginOptions;
                 }
@@ -3819,7 +3822,7 @@ public class AccountManagerService
                 @Override
                 protected String toDebugString(long now) {
                     return super.toDebugString(now) + ", isCredentialsUpdateSuggested"
-                            + ", " + account;
+                            + ", " + account.toSafeString();
                 }
 
                 @Override
@@ -4377,7 +4380,7 @@ public class AccountManagerService
         accounts.accountsDb.deleteSharedAccount(account);
         long accountId = accounts.accountsDb.insertSharedAccount(account);
         if (accountId < 0) {
-            Log.w(TAG, "insertAccountIntoDatabase: " + account
+            Log.w(TAG, "insertAccountIntoDatabase: " + account.toSafeString()
                     + ", skipping the DB insert failed");
             return false;
         }
@@ -5216,7 +5219,7 @@ public class AccountManagerService
                     Process.SYSTEM_UID, null /* packageName */, false);
             fout.println("Accounts: " + accounts.length);
             for (Account account : accounts) {
-                fout.println("  " + account);
+                fout.println("  " + account.toSafeString());
             }
 
             // Add debug information.
@@ -5304,7 +5307,9 @@ public class AccountManagerService
         try {
             INotificationManager notificationManager = mInjector.getNotificationManager();
             try {
-                notificationManager.enqueueNotificationWithTag(packageName, packageName,
+                // The calling uid must match either the package or op package, so use an op
+                // package that matches the cleared calling identity.
+                notificationManager.enqueueNotificationWithTag(packageName, "android",
                         id.mTag, id.mId, notification, userId);
             } catch (RemoteException e) {
                 /* ignore - local call */
@@ -5619,7 +5624,8 @@ public class AccountManagerService
                 if (!permissionGranted && ActivityManager.isRunningInTestHarness()) {
                     // TODO: Skip this check when running automated tests. Replace this
                     // with a more general solution.
-                    Log.d(TAG, "no credentials permission for usage of " + account + ", "
+                    Log.d(TAG, "no credentials permission for usage of "
+                            + account.toSafeString() + ", "
                             + authTokenType + " by uid " + callerUid
                             + " but ignoring since device is in test harness.");
                     return true;

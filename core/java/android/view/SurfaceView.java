@@ -545,7 +545,8 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                 mScreenRect.offset(surfaceInsets.left, surfaceInsets.top);
 
                 if (creating) {
-                    mSurfaceSession = new SurfaceSession(viewRoot.mSurface);
+                    viewRoot.createBoundsSurface(mSubLayer);
+                    mSurfaceSession = new SurfaceSession(viewRoot.mBoundsSurface);
                     mDeferredDestroySurfaceControl = mSurfaceControl;
 
                     updateOpaqueFlag();
@@ -1165,12 +1166,6 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
         public void setWindowCrop(Rect crop) {
             super.setWindowCrop(crop);
             mBackgroundControl.setWindowCrop(crop);
-        }
-
-        @Override
-        public void setFinalCrop(Rect crop) {
-            super.setFinalCrop(crop);
-            mBackgroundControl.setFinalCrop(crop);
         }
 
         @Override

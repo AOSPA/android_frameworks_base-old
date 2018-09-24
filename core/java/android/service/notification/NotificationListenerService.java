@@ -91,6 +91,10 @@ import java.util.List;
  * notification listeners running in a work profile. A
  * {@link android.app.admin.DevicePolicyManager} might block notifications originating from a work
  * profile.</p>
+ * <p>
+ *     From {@link Build.VERSION_CODES#N} onward all callbacks are called on the main thread. Prior
+ *     to N, there is no guarantee on what thread the callback will happen.
+ * </p>
  */
 public abstract class NotificationListenerService extends Service {
 
@@ -276,7 +280,7 @@ public abstract class NotificationListenerService extends Service {
 
     private final Object mLock = new Object();
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private Handler mHandler;
 
     /** @hide */
@@ -981,6 +985,21 @@ public abstract class NotificationListenerService extends Service {
         } catch (android.os.RemoteException ex) {
             Log.v(TAG, "Unable to contact notification manager", ex);
             return INTERRUPTION_FILTER_UNKNOWN;
+        }
+    }
+
+    /**
+     * Clears listener hints set via {@link #getCurrentListenerHints()}.
+     *
+     * <p>The service should wait for the {@link #onListenerConnected()} event
+     * before performing this operation.
+     */
+    public final void clearRequestedListenerHints() {
+        if (!isBound()) return;
+        try {
+            getNotificationInterface().clearRequestedListenerHints(mWrapper);
+        } catch (android.os.RemoteException ex) {
+            Log.v(TAG, "Unable to contact notification manager", ex);
         }
     }
 

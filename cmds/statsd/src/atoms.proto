@@ -29,6 +29,8 @@ import "frameworks/base/core/proto/android/server/enums.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
+import "frameworks/base/proto/src/stats_enums.proto";
+import "frameworks/base/core/proto/android/service/procstats.proto";
 
 /**
  * The master atom class. This message defines all of the available
@@ -89,7 +91,7 @@ message Atom {
         ActivityForegroundStateChanged activity_foreground_state_changed = 42;
         IsolatedUidChanged isolated_uid_changed = 43;
         PacketWakeupOccurred packet_wakeup_occurred = 44;
-        // 45 is available
+        WallClockTimeShifted wall_clock_time_shifted = 45;
         AnomalyDetected anomaly_detected = 46;
         AppBreadcrumbReported app_breadcrumb_reported = 47;
         AppStartOccurred app_start_occurred = 48;
@@ -128,10 +130,13 @@ message Atom {
         LowMemReported low_mem_reported = 81;
         GenericAtom generic_atom = 82;
         KeyValuePairsAtom key_value_pairs_atom = 83;
+        VibratorStateChanged vibrator_state_changed = 84;
+        DeferredJobStatsReported deferred_job_stats_reported = 85;
+        ThermalThrottlingStateChanged thermal_throttling = 86;
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10024
+    // Next: 10025
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -151,12 +156,19 @@ message Atom {
         SystemUptime system_uptime = 10015;
         CpuActiveTime cpu_active_time = 10016;
         CpuClusterTime cpu_cluster_time = 10017;
-        DiskSpace disk_space = 10018;
+        DiskSpace disk_space = 10018 [deprecated=true];
         RemainingBatteryCapacity remaining_battery_capacity = 10019;
         FullBatteryCapacity full_battery_capacity = 10020;
         Temperature temperature = 10021;
         BinderCalls binder_calls = 10022;
         BinderCallsExceptions binder_calls_exceptions = 10023;
+        LooperStats looper_stats = 10024;
+        DiskStats disk_stats = 10025;
+        DirectoryUsage directory_usage = 10026;
+        AppSize app_size = 10027;
+        CategorySize category_size = 10028;
+        android.service.procstats.ProcessStatsSectionProto proc_stats = 10029;
+        BatteryVoltage battery_voltage = 10030;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP. Field numbers above
@@ -217,6 +229,26 @@ message KeyValuePairsAtom {
  *   - If there is a UID, it goes first. Think in an object-oriented fashion.
  * *****************************************************************************
  */
+
+/**
+ * Logs when the Thermal service HAL notifies the throttling start/stop events.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/stats/StatsCompanionService.java
+ */
+message ThermalThrottlingStateChanged {
+    optional android.os.TemperatureTypeEnum sensor_type = 1;
+
+    enum State {
+        UNKNOWN = 0;
+        START = 1;
+        STOP = 2;
+    }
+
+    optional State state = 2;
+
+    optional float temperature = 3;
+}
 
 /**
  * Logs when the screen state changes.
@@ -400,9 +432,9 @@ message BleScanStateChanged {
  * Logs reporting of a ble scan finding results.
  *
  * Logged from:
- *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
+ *   packages/apps/Bluetooth/src/com/android/bluetooth/gatt/AppScanStats.java
  */
-// TODO: Consider changing to tracking per-scanner-id (log from AppScanStats).
+// TODO: Consider also tracking per-scanner-id.
 message BleScanResultReceived {
     repeated AttributionNode attribution_node = 1;
 
@@ -464,6 +496,22 @@ message SyncStateChanged {
         ON = 1;
     }
     optional State state = 3;
+}
+
+/*
+ * Deferred job stats.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/job/JobSchedulerService.java
+*/
+message DeferredJobStatsReported {
+    repeated AttributionNode attribution_node = 1;
+
+    // Number of jobs deferred.
+    optional int32 num_jobs_deferred = 2;
+
+    // Time since the last job runs.
+    optional int64 time_since_last_job_millis = 3;
 }
 
 /**
@@ -734,7 +782,7 @@ message WifiRadioPowerStateChanged {
  * Logs kernel wakeup reasons and aborts.
  *
  * Logged from:
- *   frameworks/base/services/core/java/com/android/server/am/BatteryStatsService.java
+ *   frameworks/base/core/java/com/android/internal/os/BatteryStatsImpl.java
  */
 message KernelWakeupReported {
     // Name of the kernel wakeup reason (or abort).
@@ -1410,6 +1458,25 @@ message ANROccurred {
     optional ForegroundState foreground_state = 6;
 }
 
+/**
+ * Logs when the vibrator state changes.
+ * Logged from:
+ *      frameworks/base/services/core/java/com/android/server/VibratorService.java
+ */
+message VibratorStateChanged {
+    repeated AttributionNode attribution_node = 1;
+
+    enum State {
+        OFF = 0;
+        ON = 1;
+    }
+    optional State state = 2;
+
+    // Duration (in milliseconds) requested to keep the vibrator on.
+    // Only applicable for State == ON.
+    optional int64 duration_millis = 3;
+}
+
 /*
  * Allows other apps to push events into statsd.
  * Logged from:
@@ -1431,6 +1498,18 @@ message AppBreadcrumbReported {
         START = 3;
     }
     optional State state = 3;
+}
+
+/**
+ * Logs the wall-clock time when a significant wall-clock time shift occurs.
+ * For example, this could be due to the user manually changing the time.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/AlarmManagerService.java
+ */
+message WallClockTimeShifted {
+    // New wall-clock time in milliseconds, according to System.currentTimeMillis().
+    optional int64 wall_clock_timestamp_millis = 1;
 }
 
 /**
@@ -1750,7 +1829,7 @@ message GenericAtom {
     optional int32 uid = 1 [(is_uid) = true];
 
     // An event_id indicates the type of event.
-    optional int32 event_id = 2;
+    optional android.os.statsd.EventType event_id = 2;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -2098,6 +2177,16 @@ message FullBatteryCapacity {
 }
 
 /**
+ * Pulls battery voltage.
+ * Pulled from:
+ *   frameworks/base/cmds/statsd/src/external/ResourceHealthManagerPuller.cpp
+ */
+message BatteryVoltage {
+    // The voltage of the battery, in millivolts.
+    optional int32 voltage_mV = 1;
+}
+
+/**
  * Pulls the temperature of various parts of the device.
  * The units are tenths of a degree Celsius. Eg: 30.3C is reported as 303.
  *
@@ -2118,8 +2207,8 @@ message Temperature {
 /**
  * Pulls the statistics of calls to Binder.
  *
- * Binder stats are cumulative from boot unless somebody reset the data using
- * > adb shell dumpsys binder_calls_stats --reset
+ * Binder stats will be reset every time the data is pulled. It means it can only be pulled by one
+ * config on the device.
  *
  * Next tag: 14
  */
@@ -2181,4 +2270,141 @@ message BinderCallsExceptions {
     optional string exception_class_name = 1;
     // Total number of exceptions.
     optional int64 exception_count = 2;
+}
+
+/**
+ * Pulls the statistics of message dispatching on HandlerThreads.
+ *
+ * Looper stats will be reset every time the data is pulled. It means it can only be pulled by one
+ * config on the device.
+ *
+ * Next tag: 11
+ */
+message LooperStats {
+    // Currently not collected and always set to 0.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Fully qualified class name of the handler target class.
+    //
+    // This field does not contain PII. This is a system server class name.
+    optional string handler_class_name = 2;
+
+    // The name of the thread that runs the Looper.
+    //
+    // This field does not contain PII. This is a system server thread name.
+    optional string looper_thread_name = 3;
+
+    // The name of the dispatched message.
+    //
+    // This field does not contain PII. This is a system server constant or class
+    // name.
+    optional string message_name = 4;
+
+    // Total number of successfully dispatched messages.
+    optional int64 message_count = 5;
+
+    // Total number of messages that failed dispatching.
+    optional int64 exception_count = 6;
+
+    // Total number of processed messages we have data recorded for. If we
+    // collected data for all the messages, message_count will be equal to
+    // recorded_message_count.
+    //
+    // If recorded_message_count is different than message_count, it means data
+    // collection has been sampled. All the fields below will be sampled in this
+    // case.
+    optional int64 recorded_message_count = 7;
+
+    // Total latency of all processed messages.
+    // Average can be computed using recorded_total_latency_micros /
+    // recorded_message_count.
+    optional int64 recorded_total_latency_micros = 8;
+
+    // Total CPU usage of all processed message.
+    // Average can be computed using recorded_total_cpu_micros /
+    // recorded_message_count. Total can be computed using
+    // recorded_total_cpu_micros / recorded_message_count * message_count.
+    optional int64 recorded_total_cpu_micros = 9;
+
+    // True if the screen was interactive PowerManager#isInteractive at the end of the call.
+    optional bool screen_interactive = 10;
+}
+
+/**
+ * Pulls disk information, such as write speed and latency.
+ */
+message DiskStats {
+    // Time taken to open, write 512B to, and close a file.
+    // -1 if error performing the check.
+    optional int64 data_write_latency_millis = 1;
+
+    optional bool file_based_encryption = 2;
+
+    // Recent disk write speed in kB/s.
+    // -1 if error querying storageed.
+    // 0 if data is unavailable.
+    optional int32 recent_disk_write_speed = 3;
+}
+
+
+/**
+ * Free and total bytes of the Data, Cache, and System partition.
+ */
+message DirectoryUsage {
+    enum Directory {
+        UNKNOWN = 0;
+        DATA = 1;
+        CACHE = 2;
+        SYSTEM = 3;
+    }
+    optional Directory directory = 1;
+    optional int64 free_bytes = 2;
+    optional int64 total_bytes = 3;
+}
+
+
+/**
+ * Size of an application: apk size, data size, and cache size.
+ * Reads from a cached file produced daily by DiskStatsLoggingService.java.
+ * Information is only reported for apps with the primary user (user 0).
+ * Sizes are aggregated by package name.
+ */
+message AppSize {
+    // Including uids will involve modifying diskstats logic.
+    optional string package_name = 1;
+    // App size in bytes. -1 if unavailable.
+    optional int64 app_size_bytes = 2;
+    // App data size in bytes. -1 if unavailable.
+    optional int64 app_data_size_bytes = 3;
+    // App cache size in bytes. -1 if unavailable.
+    optional int64 app_cache_size_bytes = 4;
+    // Time that the cache file was produced.
+    // Uses System.currentTimeMillis(), which is wall clock time.
+    optional int64 cache_time_millis = 5;
+}
+
+
+/**
+ * Size of a particular category. Eg: photos, videos.
+ * Reads from a cached file produced daily by DiskStatsLoggingService.java.
+ */
+message CategorySize {
+    enum Category {
+        UNKNOWN = 0;
+        APP_SIZE = 1;
+        APP_DATA_SIZE = 2;
+        APP_CACHE_SIZE = 3;
+        PHOTOS = 4;
+        VIDEOS = 5;
+        AUDIO = 6;
+        DOWNLOADS = 7;
+        SYSTEM = 8;
+        OTHER = 9;
+    }
+    optional Category category = 1;
+    // Category size in bytes.
+    optional int64 size_bytes = 2;
+    // Time that the cache file was produced.
+    // Uses System.currentTimeMillis(), which is wall clock time.
+    optional int64 cache_time_millis = 3;
 }

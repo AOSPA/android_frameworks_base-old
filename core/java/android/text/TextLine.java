@@ -22,6 +22,7 @@ import android.annotation.UnsupportedAppUsage;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Paint.FontMetricsInt;
+import android.os.Build;
 import android.text.Layout.Directions;
 import android.text.Layout.TabStops;
 import android.text.style.CharacterStyle;
@@ -61,7 +62,7 @@ public class TextLine {
     private TabStops mTabs;
     private char[] mChars;
     private boolean mCharsValid;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private Spanned mSpanned;
     private PrecomputedText mComputed;
 
@@ -1053,13 +1054,16 @@ public class TextLine {
         return runIsRtl ? -ret : ret;
     }
 
-    private int adjustHyphenEdit(int start, int limit, int hyphenEdit) {
-        int result = hyphenEdit;
+    private int adjustHyphenEdit(int start, int limit, int packedHyphenEdit) {
+        int result = packedHyphenEdit;
         // Only draw hyphens on first or last run in line. Disable them otherwise.
         if (start > 0) { // not the first run
-            result &= ~Paint.HYPHENEDIT_MASK_START_OF_LINE;
+            result = Hyphenator.packHyphenEdit(Hyphenator.START_HYPHEN_EDIT_NO_EDIT,
+                    Hyphenator.unpackEndHyphenEdit(packedHyphenEdit));
         }
         if (limit < mLen) { // not the last run
+            result = Hyphenator.packHyphenEdit(Hyphenator.unpackStartHyphenEdit(packedHyphenEdit),
+                    Hyphenator.END_HYPHEN_EDIT_NO_EDIT);
             result &= ~Paint.HYPHENEDIT_MASK_END_OF_LINE;
         }
         return result;

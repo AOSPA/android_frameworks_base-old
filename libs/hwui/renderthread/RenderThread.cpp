@@ -19,13 +19,12 @@
 #include "CanvasContext.h"
 #include "DeviceInfo.h"
 #include "EglManager.h"
+#include "Readback.h"
 #include "RenderProxy.h"
 #include "VulkanManager.h"
 #include "hwui/Bitmap.h"
 #include "pipeline/skia/SkiaOpenGLPipeline.h"
-#include "pipeline/skia/SkiaOpenGLReadback.h"
 #include "pipeline/skia/SkiaVulkanPipeline.h"
-#include "pipeline/skia/SkiaVulkanReadback.h"
 #include "renderstate/RenderState.h"
 #include "utils/FatVector.h"
 #include "utils/TimeUtils.h"
@@ -178,7 +177,7 @@ void RenderThread::requireGlContext() {
         return;
     }
     mEglManager->initialize();
-    renderState().onGLContextCreated();
+    renderState().onContextCreated();
 
 #ifdef HWUI_GLES_WRAP_ENABLED
     debug::GlesDriver* driver = debug::GlesDriver::get();
@@ -191,7 +190,9 @@ void RenderThread::requireGlContext() {
     GrContextOptions options;
     options.fPreferExternalImagesOverES3 = true;
     options.fDisableDistanceFieldPaths = true;
-    cacheManager().configureContext(&options);
+    auto glesVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    auto size = glesVersion ? strlen(glesVersion) : -1;
+    cacheManager().configureContext(&options, glesVersion, size);
     sk_sp<GrContext> grContext(GrContext::MakeGL(std::move(glInterface), options));
     LOG_ALWAYS_FATAL_IF(!grContext.get());
     setGrContext(grContext);
@@ -200,7 +201,7 @@ void RenderThread::requireGlContext() {
 void RenderThread::destroyGlContext() {
     if (mEglManager->hasEglContext()) {
         setGrContext(nullptr);
-        renderState().onGLContextDestroyed();
+        renderState().onContextDestroyed();
         mEglManager->destroy();
     }
 }
@@ -233,18 +234,7 @@ void RenderThread::dumpGraphicsMemory(int fd) {
 
 Readback& RenderThread::readback() {
     if (!mReadback) {
-        auto renderType = Properties::getRenderPipelineType();
-        switch (renderType) {
-            case RenderPipelineType::SkiaGL:
-                mReadback = new skiapipeline::SkiaOpenGLReadback(*this);
-                break;
-            case RenderPipelineType::SkiaVulkan:
-                mReadback = new skiapipeline::SkiaVulkanReadback(*this);
-                break;
-            default:
-                LOG_ALWAYS_FATAL("canvas context type %d not supported", (int32_t)renderType);
-                break;
-        }
+        mReadback = new Readback(*this);
     }
 
     return *mReadback;

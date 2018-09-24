@@ -71,12 +71,20 @@ import static android.view.WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_DOCKED
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_FREEFORM;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_FIRST_TIME;
 import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
+
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.policy.WindowManagerPolicy.TRANSIT_ENTER;
 import static com.android.server.policy.WindowManagerPolicy.TRANSIT_EXIT;
 import static com.android.server.policy.WindowManagerPolicy.TRANSIT_PREVIEW_DONE;
+import static com.android.server.wm.AnimationSpecProto.MOVE;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_DOCKED_DIVIDER;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
+import static com.android.server.wm.IdentifierProto.HASH_CODE;
+import static com.android.server.wm.IdentifierProto.TITLE;
+import static com.android.server.wm.IdentifierProto.USER_ID;
+import static com.android.server.wm.MoveAnimationSpecProto.DURATION_MS;
+import static com.android.server.wm.MoveAnimationSpecProto.FROM;
+import static com.android.server.wm.MoveAnimationSpecProto.TO;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_APP_TRANSITIONS;
@@ -108,45 +116,32 @@ import static com.android.server.wm.WindowStateAnimator.COMMIT_DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.DRAW_PENDING;
 import static com.android.server.wm.WindowStateAnimator.HAS_DRAWN;
 import static com.android.server.wm.WindowStateAnimator.READY_TO_SHOW;
-import static com.android.server.wm.IdentifierProto.HASH_CODE;
-import static com.android.server.wm.IdentifierProto.TITLE;
-import static com.android.server.wm.IdentifierProto.USER_ID;
-import static com.android.server.wm.AnimationSpecProto.MOVE;
-import static com.android.server.wm.MoveAnimationSpecProto.DURATION_MS;
-import static com.android.server.wm.MoveAnimationSpecProto.FROM;
-import static com.android.server.wm.MoveAnimationSpecProto.TO;
 import static com.android.server.wm.WindowStateProto.ANIMATING_EXIT;
 import static com.android.server.wm.WindowStateProto.ANIMATOR;
 import static com.android.server.wm.WindowStateProto.ATTRIBUTES;
 import static com.android.server.wm.WindowStateProto.CHILD_WINDOWS;
-import static com.android.server.wm.WindowStateProto.CONTENT_INSETS;
 import static com.android.server.wm.WindowStateProto.DESTROYING;
 import static com.android.server.wm.WindowStateProto.DISPLAY_ID;
-import static com.android.server.wm.WindowStateProto.FINISHED_FORCED_SEAMLESS_ROTATION_FRAME;
+import static com.android.server.wm.WindowStateProto.FINISHED_SEAMLESS_ROTATION_FRAME;
+import static com.android.server.wm.WindowStateProto.FORCE_SEAMLESS_ROTATION;
 import static com.android.server.wm.WindowStateProto.GIVEN_CONTENT_INSETS;
 import static com.android.server.wm.WindowStateProto.HAS_SURFACE;
 import static com.android.server.wm.WindowStateProto.IDENTIFIER;
 import static com.android.server.wm.WindowStateProto.IS_ON_SCREEN;
 import static com.android.server.wm.WindowStateProto.IS_READY_FOR_DISPLAY;
 import static com.android.server.wm.WindowStateProto.IS_VISIBLE;
-import static com.android.server.wm.WindowStateProto.OUTSETS;
-import static com.android.server.wm.WindowStateProto.OVERSCAN_INSETS;
-import static com.android.server.wm.WindowStateProto.PENDING_FORCED_SEAMLESS_ROTATION;
+import static com.android.server.wm.WindowStateProto.PENDING_SEAMLESS_ROTATION;
 import static com.android.server.wm.WindowStateProto.REMOVED;
 import static com.android.server.wm.WindowStateProto.REMOVE_ON_EXIT;
 import static com.android.server.wm.WindowStateProto.REQUESTED_HEIGHT;
 import static com.android.server.wm.WindowStateProto.REQUESTED_WIDTH;
-import static com.android.server.wm.WindowStateProto.STABLE_INSETS;
 import static com.android.server.wm.WindowStateProto.STACK_ID;
 import static com.android.server.wm.WindowStateProto.SURFACE_INSETS;
 import static com.android.server.wm.WindowStateProto.SURFACE_POSITION;
 import static com.android.server.wm.WindowStateProto.SYSTEM_UI_VISIBILITY;
 import static com.android.server.wm.WindowStateProto.VIEW_VISIBILITY;
-import static com.android.server.wm.WindowStateProto.VISIBLE_INSETS;
 import static com.android.server.wm.WindowStateProto.WINDOW_CONTAINER;
 import static com.android.server.wm.WindowStateProto.WINDOW_FRAMES;
-import static com.android.server.wm.utils.CoordinateTransforms.transformRect;
-import static com.android.server.wm.utils.CoordinateTransforms.transformToRotation;
 
 import android.annotation.CallSuper;
 import android.app.AppOpsManager;
@@ -200,6 +195,7 @@ import com.android.internal.util.ToBooleanFunction;
 import com.android.server.input.InputWindowHandle;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.LocalAnimationAdapter.AnimationSpec;
+import com.android.server.wm.utils.InsetUtils;
 import com.android.server.wm.utils.WmDisplayCutout;
 
 import java.io.PrintWriter;
@@ -279,11 +275,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * Special mode that is intended only for the rounded corner overlay: during rotation
      * transition, we un-rotate the window token such that the window appears as it did before the
      * rotation.
-     * TODO(b/111504081): Consolidate seamless rotation logic.
      */
     final boolean mForceSeamlesslyRotate;
-    ForcedSeamlessRotator mPendingForcedSeamlessRotate;
-    long mFinishForcedSeamlessRotateFrameNumber;
+    SeamlessRotator mPendingSeamlessRotate;
+    long mFinishSeamlessRotateFrameNumber;
 
     private RemoteCallbackList<IWindowFocusObserver> mFocusCallbacks;
 
@@ -310,22 +305,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private final MergedConfiguration mLastReportedConfiguration = new MergedConfiguration();
 
     /**
-     * Insets that determine the actually visible area.  These are in the application's
-     * coordinate space (without compatibility scale applied).
-     */
-    final Rect mVisibleInsets = new Rect();
-    private final Rect mLastVisibleInsets = new Rect();
-    private boolean mVisibleInsetsChanged;
-
-    /**
-     * Insets that are covered by system windows (such as the status bar) and
-     * transient docking windows (such as the IME).  These are in the application's
-     * coordinate space (without compatibility scale applied).
-     */
-    final Rect mContentInsets = new Rect();
-    final Rect mLastContentInsets = new Rect();
-
-    /**
      * The last content insets returned to the client in relayout. We use
      * these in the bounds animation to ensure we only observe inset changes
      * at the same time that a client resizes it's surface so that we may use
@@ -333,34 +312,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * the contents in place.
      */
     final Rect mLastRelayoutContentInsets = new Rect();
-
-    private boolean mContentInsetsChanged;
-
-    /**
-     * Insets that determine the area covered by the display overscan region.  These are in the
-     * application's coordinate space (without compatibility scale applied).
-     */
-    final Rect mOverscanInsets = new Rect();
-    private final Rect mLastOverscanInsets = new Rect();
-    private boolean mOverscanInsetsChanged;
-
-    /**
-     * Insets that determine the area covered by the stable system windows.  These are in the
-     * application's coordinate space (without compatibility scale applied).
-     */
-    final Rect mStableInsets = new Rect();
-    private final Rect mLastStableInsets = new Rect();
-    private boolean mStableInsetsChanged;
-
-    /**
-     * Outsets determine the area outside of the surface where we want to pretend that it's possible
-     * to draw anyway.
-     */
-    final Rect mOutsets = new Rect();
-    private final Rect mLastOutsets = new Rect();
-    private boolean mOutsetsChanged = false;
-
-    private boolean mDisplayCutoutChanged;
 
     /**
      * Set to true if we are waiting for this window to receive its
@@ -399,11 +350,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     float mHScale=1, mVScale=1;
     float mLastHScale=1, mLastVScale=1;
     final Matrix mTmpMatrix = new Matrix();
-
-    private boolean mFrameSizeChanged = false;
-    // Frame that is scaled to the application's coordinate space when in
-    // screen size compatibility mode.
-    final Rect mCompatFrame = new Rect();
 
     private final WindowFrames mWindowFrames = new WindowFrames();
 
@@ -603,6 +549,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     private long mFrameNumber = -1;
 
+    private static final StringBuilder sTmpSB = new StringBuilder();
+
     /**
      * Compares two window sub-layers and returns -1 if the first is lesser than the second in terms
      * of z-order and 1 otherwise.
@@ -632,15 +580,30 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     private static final float DEFAULT_DIM_AMOUNT_DEAD_WINDOW = 0.5f;
 
-    void forceSeamlesslyRotateIfAllowed(int oldRotation, int rotation) {
-        if (mForceSeamlesslyRotate) {
-            if (mPendingForcedSeamlessRotate != null) {
-                oldRotation = mPendingForcedSeamlessRotate.getOldRotation();
-            }
+    void seamlesslyRotateIfAllowed(Transaction transaction, int oldRotation, int rotation,
+            boolean requested) {
+        // Invisible windows and the wallpaper do not participate in the seamless rotation animation
+        if (!isVisibleNow() || mIsWallpaper) {
+            return;
+        }
 
-            mPendingForcedSeamlessRotate = new ForcedSeamlessRotator(
-                    oldRotation, rotation, getDisplayInfo());
-            mPendingForcedSeamlessRotate.unrotate(this.mToken);
+        if (mPendingSeamlessRotate != null) {
+            oldRotation = mPendingSeamlessRotate.getOldRotation();
+        }
+
+        if (mForceSeamlesslyRotate || requested) {
+            mPendingSeamlessRotate = new SeamlessRotator(oldRotation, rotation, getDisplayInfo());
+            mPendingSeamlessRotate.unrotate(transaction, this.mToken);
+            mService.markForSeamlessRotation(this, true);
+        }
+    }
+
+    void finishSeamlessRotation() {
+        if (mPendingSeamlessRotate != null) {
+            mPendingSeamlessRotate.finish(this.mToken, this);
+            mFinishSeamlessRotateFrameNumber = getFrameNumber();
+            mPendingSeamlessRotate = null;
+            mService.markForSeamlessRotation(this, false);
         }
     }
 
@@ -882,7 +845,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 mWindowFrames.mContainingFrame.bottom =
                         mWindowFrames.mContainingFrame.top + frozen.height();
             }
-            final WindowState imeWin = mService.mInputMethodWindow;
+            final WindowState imeWin = mService.mRoot.getCurrentInputMethodWindow();
             // IME is up and obscuring this window. Adjust the window position so it is visible.
             if (imeWin != null && imeWin.isVisibleNow() && isInputMethodTarget()) {
                 if (inFreeformWindowingMode() && mWindowFrames.mContainingFrame.bottom
@@ -972,17 +935,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         applyGravityAndUpdateFrame(layoutContainingFrame, layoutDisplayFrame);
 
         // Calculate the outsets before the content frame gets shrinked to the window frame.
-        if (hasOutsets) {
-            mOutsets.set(
-                    Math.max(mWindowFrames.mContentFrame.left - mWindowFrames.mOutsetFrame.left, 0),
-                    Math.max(mWindowFrames.mContentFrame.top - mWindowFrames.mOutsetFrame.top, 0),
-                    Math.max(mWindowFrames.mOutsetFrame.right - mWindowFrames.mContentFrame.right,
-                            0),
-                    Math.max(mWindowFrames.mOutsetFrame.bottom - mWindowFrames.mContentFrame.bottom,
-                            0));
-        } else {
-            mOutsets.set(0, 0, 0, 0);
-        }
+        mWindowFrames.calculateOutsets(hasOutsets);
 
         // Make sure the content and visible frames are inside of the
         // final window frame.
@@ -1039,91 +992,35 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (inFullscreenContainer && !windowsAreFloating) {
             // Windows that are not fullscreen can be positioned outside of the display frame,
             // but that is not a reason to provide them with overscan insets.
-            mOverscanInsets.set(
-                    Math.max(mWindowFrames.mOverscanFrame.left - layoutContainingFrame.left, 0),
-                    Math.max(mWindowFrames.mOverscanFrame.top - layoutContainingFrame.top, 0),
-                    Math.max(layoutContainingFrame.right - mWindowFrames.mOverscanFrame.right, 0),
-                    Math.max(layoutContainingFrame.bottom - mWindowFrames.mOverscanFrame.bottom,
-                            0));
+            InsetUtils.insetsBetweenFrames(layoutContainingFrame, mWindowFrames.mOverscanFrame,
+                    mWindowFrames.mOverscanInsets);
         }
 
         if (mAttrs.type == TYPE_DOCK_DIVIDER) {
-            // For the docked divider, we calculate the stable insets like a full-screen window
-            // so it can use it to calculate the snap positions.
             final WmDisplayCutout c = windowFrames.mDisplayCutout.calculateRelativeTo(
                     mWindowFrames.mDisplayFrame);
-            mTmpRect.set(mWindowFrames.mDisplayFrame);
-            mTmpRect.inset(c.getDisplayCutout().getSafeInsets());
-            mTmpRect.intersectUnchecked(mWindowFrames.mStableFrame);
-
-            mStableInsets.set(Math.max(mTmpRect.left - mWindowFrames.mDisplayFrame.left, 0),
-                    Math.max(mTmpRect.top - mWindowFrames.mDisplayFrame.top, 0),
-                    Math.max(mWindowFrames.mDisplayFrame.right - mTmpRect.right, 0),
-                    Math.max(mWindowFrames.mDisplayFrame.bottom - mTmpRect.bottom, 0));
-
-            // The divider doesn't care about insets in any case, so set it to empty so we don't
-            // trigger a relayout when moving it.
-            mContentInsets.setEmpty();
-            mVisibleInsets.setEmpty();
-            windowFrames.setDisplayCutout(WmDisplayCutout.NO_CUTOUT);
+            mWindowFrames.calculateDockedDividerInsets(c.getDisplayCutout().getSafeInsets());
         } else {
             getDisplayContent().getBounds(mTmpRect);
-            // Override right and/or bottom insets in case if the frame doesn't fit the screen in
-            // non-fullscreen mode.
-            boolean overrideRightInset = !windowsAreFloating && !inFullscreenContainer
-                    && mWindowFrames.mFrame.right > mTmpRect.right;
-            boolean overrideBottomInset = !windowsAreFloating && !inFullscreenContainer
-                    && mWindowFrames.mFrame.bottom > mTmpRect.bottom;
-            mContentInsets.set(mWindowFrames.mContentFrame.left - mWindowFrames.mFrame.left,
-                    mWindowFrames.mContentFrame.top - mWindowFrames.mFrame.top,
-                    overrideRightInset ? mTmpRect.right - mWindowFrames.mContentFrame.right
-                            : mWindowFrames.mFrame.right - mWindowFrames.mContentFrame.right,
-                    overrideBottomInset ? mTmpRect.bottom - mWindowFrames.mContentFrame.bottom
-                            : mWindowFrames.mFrame.bottom - mWindowFrames.mContentFrame.bottom);
-
-            mVisibleInsets.set(mWindowFrames.mVisibleFrame.left - mWindowFrames.mFrame.left,
-                    mWindowFrames.mVisibleFrame.top - mWindowFrames.mFrame.top,
-                    overrideRightInset ? mTmpRect.right - mWindowFrames.mVisibleFrame.right
-                            : mWindowFrames.mFrame.right - mWindowFrames.mVisibleFrame.right,
-                    overrideBottomInset ? mTmpRect.bottom - mWindowFrames.mVisibleFrame.bottom
-                            : mWindowFrames.mFrame.bottom - mWindowFrames.mVisibleFrame.bottom);
-
-            mStableInsets.set(
-                    Math.max(mWindowFrames.mStableFrame.left - mWindowFrames.mFrame.left, 0),
-                    Math.max(mWindowFrames.mStableFrame.top - mWindowFrames.mFrame.top, 0),
-                    overrideRightInset ? Math.max(mTmpRect.right - mWindowFrames.mStableFrame.right,
-                            0) : Math.max(
-                            mWindowFrames.mFrame.right - mWindowFrames.mStableFrame.right, 0),
-                    overrideBottomInset ? Math.max(
-                            mTmpRect.bottom - mWindowFrames.mStableFrame.bottom, 0) : Math.max(
-                            mWindowFrames.mFrame.bottom - mWindowFrames.mStableFrame.bottom, 0));
+            mWindowFrames.calculateInsets(windowsAreFloating, inFullscreenContainer, mTmpRect);
         }
 
-
         mWindowFrames.setDisplayCutout(
-                windowFrames.mDisplayCutout.calculateRelativeTo(windowFrames.mFrame));
+                windowFrames.mDisplayCutout.calculateRelativeTo(mWindowFrames.mFrame));
 
         // Offset the actual frame by the amount layout frame is off.
-        mWindowFrames.mFrame.offset(-layoutXDiff, -layoutYDiff);
-        mCompatFrame.offset(-layoutXDiff, -layoutYDiff);
-        mWindowFrames.mContentFrame.offset(-layoutXDiff, -layoutYDiff);
-        mWindowFrames.mVisibleFrame.offset(-layoutXDiff, -layoutYDiff);
-        mWindowFrames.mStableFrame.offset(-layoutXDiff, -layoutYDiff);
+        mWindowFrames.offsetFrames(-layoutXDiff, -layoutYDiff);
 
-        mCompatFrame.set(mWindowFrames.mFrame);
+        mWindowFrames.mCompatFrame.set(mWindowFrames.mFrame);
         if (mEnforceSizeCompat) {
             // If there is a size compatibility scale being applied to the
             // window, we need to apply this to its insets so that they are
             // reported to the app in its coordinate space.
-            mOverscanInsets.scale(mInvGlobalScale);
-            mContentInsets.scale(mInvGlobalScale);
-            mVisibleInsets.scale(mInvGlobalScale);
-            mStableInsets.scale(mInvGlobalScale);
-            mOutsets.scale(mInvGlobalScale);
+            mWindowFrames.scaleInsets(mInvGlobalScale);
 
             // Also the scaled frame that we report to the app needs to be
             // adjusted to be in its coordinate space.
-            mCompatFrame.scale(mInvGlobalScale);
+            mWindowFrames.mCompatFrame.scale(mInvGlobalScale);
         }
 
         if (mIsWallpaper && (fw != mWindowFrames.mFrame.width()
@@ -1141,10 +1038,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 + mRequestedWidth + ", mRequestedheight="
                 + mRequestedHeight + ") to" + " (pw=" + pw + ", ph=" + ph
                 + "): frame=" + mWindowFrames.mFrame.toShortString()
-                + " ci=" + mContentInsets.toShortString()
-                + " vi=" + mVisibleInsets.toShortString()
-                + " si=" + mStableInsets.toShortString()
-                + " of=" + mOutsets.toShortString());
+                + " " + mWindowFrames.getInsetsInfo());
     }
 
     // TODO: Look into whether this override is still necessary.
@@ -1204,6 +1098,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mWindowFrames.mDisplayCutout;
     }
 
+    void getCompatFrame(Rect outFrame) {
+        outFrame.set(mWindowFrames.mCompatFrame);
+    }
+
+    void getCompatFrameSize(Rect outFrame) {
+        outFrame.set(0, 0, mWindowFrames.mCompatFrame.width(), mWindowFrames.mCompatFrame.height());
+    }
+
     @Override
     public boolean getGivenInsetsPendingLw() {
         return mGivenInsetsPending;
@@ -1255,15 +1157,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     boolean setReportResizeHints() {
-        mOverscanInsetsChanged |= !mLastOverscanInsets.equals(mOverscanInsets);
-        mContentInsetsChanged |= !mLastContentInsets.equals(mContentInsets);
-        mVisibleInsetsChanged |= !mLastVisibleInsets.equals(mVisibleInsets);
-        mStableInsetsChanged |= !mLastStableInsets.equals(mStableInsets);
-        mOutsetsChanged |= !mLastOutsets.equals(mOutsets);
-        mFrameSizeChanged |= mWindowFrames.didFrameSizeChange();
-        mDisplayCutoutChanged |= mWindowFrames.didDisplayCutoutChange();
-        return mOverscanInsetsChanged || mContentInsetsChanged || mVisibleInsetsChanged
-                || mOutsetsChanged || mFrameSizeChanged || mDisplayCutoutChanged;
+        return mWindowFrames.setReportResizeHints();
     }
 
     /**
@@ -1286,7 +1180,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return;
         }
 
-        setReportResizeHints();
+        boolean didFrameInsetsChange = setReportResizeHints();
         boolean configChanged = isConfigChanged();
         if (DEBUG_CONFIGURATION && configChanged) {
             Slog.v(TAG_WM, "Win " + this + " config changed: " + getConfiguration());
@@ -1303,31 +1197,18 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // variables, because mFrameSizeChanged only tracks the width and height changing.
         mWindowFrames.mLastFrame.set(mWindowFrames.mFrame);
 
-        if (mContentInsetsChanged
-                || mVisibleInsetsChanged
-                || mStableInsetsChanged
+        if (didFrameInsetsChange
                 || winAnimator.mSurfaceResized
-                || mOutsetsChanged
-                || mFrameSizeChanged
-                || mDisplayCutoutChanged
                 || configChanged
                 || dragResizingChanged
                 || mReportOrientationChanged) {
             if (DEBUG_RESIZE || DEBUG_ORIENTATION) {
                 Slog.v(TAG_WM, "Resize reasons for w=" + this + ": "
-                        + " contentInsetsChanged=" + mContentInsetsChanged
-                        + " " + mContentInsets.toShortString()
-                        + " visibleInsetsChanged=" + mVisibleInsetsChanged
-                        + " " + mVisibleInsets.toShortString()
-                        + " stableInsetsChanged=" + mStableInsetsChanged
-                        + " " + mStableInsets.toShortString()
-                        + " outsetsChanged=" + mOutsetsChanged
-                        + " " + mOutsets.toShortString()
+                        + " " + mWindowFrames.getInsetsChangedInfo()
                         + " surfaceResized=" + winAnimator.mSurfaceResized
                         + " configChanged=" + configChanged
                         + " dragResizingChanged=" + dragResizingChanged
-                        + " reportOrientationChanged=" + mReportOrientationChanged
-                        + " displayCutoutChanged=" + mDisplayCutoutChanged);
+                        + " reportOrientationChanged=" + mReportOrientationChanged);
             }
 
             // If it's a dead window left on screen, and the configuration changed, there is nothing
@@ -3000,7 +2881,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "wm.reportResized_" + getWindowTag());
         try {
             if (DEBUG_RESIZE || DEBUG_ORIENTATION) Slog.v(TAG, "Reporting new frame to " + this
-                    + ": " + mCompatFrame);
+                    + ": " + mWindowFrames.mCompatFrame);
             final MergedConfiguration mergedConfiguration =
                     new MergedConfiguration(mService.mRoot.getConfiguration(),
                     getMergedOverrideConfiguration());
@@ -3011,11 +2892,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 Slog.i(TAG, "Resizing " + this + " WITH DRAW PENDING");
 
             final Rect frame = mWindowFrames.mFrame;
-            final Rect overscanInsets = mLastOverscanInsets;
-            final Rect contentInsets = mLastContentInsets;
-            final Rect visibleInsets = mLastVisibleInsets;
-            final Rect stableInsets = mLastStableInsets;
-            final Rect outsets = mLastOutsets;
+            final Rect overscanInsets = mWindowFrames.mLastOverscanInsets;
+            final Rect contentInsets = mWindowFrames.mLastContentInsets;
+            final Rect visibleInsets = mWindowFrames.mLastVisibleInsets;
+            final Rect stableInsets = mWindowFrames.mLastStableInsets;
+            final Rect outsets = mWindowFrames.mLastOutsets;
             final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING;
             final boolean reportOrientation = mReportOrientationChanged;
             final int displayId = getDisplayId();
@@ -3046,13 +2927,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 mService.mAccessibilityController.onSomeWindowResizedOrMovedLocked();
             }
 
-            mOverscanInsetsChanged = false;
-            mContentInsetsChanged = false;
-            mVisibleInsetsChanged = false;
-            mStableInsetsChanged = false;
-            mOutsetsChanged = false;
-            mFrameSizeChanged = false;
-            mDisplayCutoutChanged = false;
+            mWindowFrames.resetInsetsChanged();
             mWinAnimator.mSurfaceResized = false;
             mReportOrientationChanged = false;
         } catch (RemoteException e) {
@@ -3278,7 +3153,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mAttrs.writeToProto(proto, ATTRIBUTES);
         mGivenContentInsets.writeToProto(proto, GIVEN_CONTENT_INSETS);
         mWindowFrames.writeToProto(proto, WINDOW_FRAMES);
-        mContentInsets.writeToProto(proto, CONTENT_INSETS);
         mAttrs.surfaceInsets.writeToProto(proto, SURFACE_INSETS);
         mSurfacePosition.writeToProto(proto, SURFACE_POSITION);
         mWinAnimator.writeToProto(proto, ANIMATOR);
@@ -3292,20 +3166,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         proto.write(SYSTEM_UI_VISIBILITY, mSystemUiVisibility);
         proto.write(HAS_SURFACE, mHasSurface);
         proto.write(IS_READY_FOR_DISPLAY, isReadyForDisplay());
-        mOverscanInsets.writeToProto(proto, OVERSCAN_INSETS);
-        mVisibleInsets.writeToProto(proto, VISIBLE_INSETS);
-        mStableInsets.writeToProto(proto, STABLE_INSETS);
-        mOutsets.writeToProto(proto, OUTSETS);
         proto.write(REMOVE_ON_EXIT, mRemoveOnExit);
         proto.write(DESTROYING, mDestroying);
         proto.write(REMOVED, mRemoved);
         proto.write(IS_ON_SCREEN, isOnScreen());
         proto.write(IS_VISIBLE, isVisible());
-        if (mForceSeamlesslyRotate) {
-            proto.write(PENDING_FORCED_SEAMLESS_ROTATION, mPendingForcedSeamlessRotate != null);
-            proto.write(FINISHED_FORCED_SEAMLESS_ROTATION_FRAME,
-                    mFinishForcedSeamlessRotateFrameNumber);
-        }
+        proto.write(PENDING_SEAMLESS_ROTATION, mPendingSeamlessRotate != null);
+        proto.write(FINISHED_SEAMLESS_ROTATION_FRAME, mFinishSeamlessRotateFrameNumber);
+        proto.write(FORCE_SEAMLESS_ROTATION, mForceSeamlesslyRotate);
         proto.end(token);
     }
 
@@ -3324,183 +3192,150 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     @Override
     void dump(PrintWriter pw, String prefix, boolean dumpAll) {
         final TaskStack stack = getStack();
-        pw.print(prefix); pw.print("mDisplayId="); pw.print(getDisplayId());
-                if (stack != null) {
-                    pw.print(" stackId="); pw.print(stack.mStackId);
-                }
-                pw.print(" mSession="); pw.print(mSession);
-                pw.print(" mClient="); pw.println(mClient.asBinder());
-        pw.print(prefix); pw.print("mOwnerUid="); pw.print(mOwnerUid);
-                pw.print(" mShowToOwnerOnly="); pw.print(mShowToOwnerOnly);
-                pw.print(" package="); pw.print(mAttrs.packageName);
-                pw.print(" appop="); pw.println(AppOpsManager.opToName(mAppOp));
-        pw.print(prefix); pw.print("mAttrs="); pw.println(mAttrs.toString(prefix));
-        pw.print(prefix); pw.print("Requested w="); pw.print(mRequestedWidth);
-                pw.print(" h="); pw.print(mRequestedHeight);
-                pw.print(" mLayoutSeq="); pw.println(mLayoutSeq);
+        pw.print(prefix + "mDisplayId=" + getDisplayId());
+        if (stack != null) {
+            pw.print(" stackId=" + stack.mStackId);
+        }
+        pw.println(" mSession=" + mSession
+                + " mClient=" + mClient.asBinder());
+        pw.println(prefix + "mOwnerUid=" + mOwnerUid
+                + " mShowToOwnerOnly=" + mShowToOwnerOnly
+                + " package=" + mAttrs.packageName
+                + " appop=" + AppOpsManager.opToName(mAppOp));
+        pw.println(prefix + "mAttrs=" + mAttrs.toString(prefix));
+        pw.println(prefix + "Requested w=" + mRequestedWidth
+                + " h=" + mRequestedHeight
+                + " mLayoutSeq=" + mLayoutSeq);
         if (mRequestedWidth != mLastRequestedWidth || mRequestedHeight != mLastRequestedHeight) {
-            pw.print(prefix); pw.print("LastRequested w="); pw.print(mLastRequestedWidth);
-                    pw.print(" h="); pw.println(mLastRequestedHeight);
+            pw.println(prefix + "LastRequested w=" + mLastRequestedWidth
+                    + " h=" + mLastRequestedHeight);
         }
         if (mIsChildWindow || mLayoutAttached) {
-            pw.print(prefix); pw.print("mParentWindow="); pw.print(getParentWindow());
-                    pw.print(" mLayoutAttached="); pw.println(mLayoutAttached);
+            pw.println(prefix + "mParentWindow=" + getParentWindow()
+                    + " mLayoutAttached=" + mLayoutAttached);
         }
         if (mIsImWindow || mIsWallpaper || mIsFloatingLayer) {
-            pw.print(prefix); pw.print("mIsImWindow="); pw.print(mIsImWindow);
-                    pw.print(" mIsWallpaper="); pw.print(mIsWallpaper);
-                    pw.print(" mIsFloatingLayer="); pw.print(mIsFloatingLayer);
-                    pw.print(" mWallpaperVisible="); pw.println(mWallpaperVisible);
+            pw.println(prefix + "mIsImWindow=" + mIsImWindow
+                    + " mIsWallpaper=" + mIsWallpaper
+                    + " mIsFloatingLayer=" + mIsFloatingLayer
+                    + " mWallpaperVisible=" + mWallpaperVisible);
         }
         if (dumpAll) {
-            pw.print(prefix); pw.print("mBaseLayer="); pw.print(mBaseLayer);
-                    pw.print(" mSubLayer="); pw.print(mSubLayer);
-                    pw.print(" mAnimLayer="); pw.print(mLayer); pw.print("+");
-                    pw.print("="); pw.print(mWinAnimator.mAnimLayer);
-                    pw.print(" mLastLayer="); pw.println(mWinAnimator.mLastLayer);
+            pw.println(prefix + "mBaseLayer=" + mBaseLayer
+                    + " mSubLayer=" + mSubLayer
+                    + " mAnimLayer=" + mLayer + "=" + mWinAnimator.mAnimLayer
+                    + " mLastLayer=" + mWinAnimator.mLastLayer);
         }
         if (dumpAll) {
-            pw.print(prefix); pw.print("mToken="); pw.println(mToken);
+            pw.println(prefix + "mToken=" + mToken);
             if (mAppToken != null) {
-                pw.print(prefix); pw.print("mAppToken="); pw.println(mAppToken);
-                pw.print(prefix); pw.print(" isAnimatingWithSavedSurface()=");
-                pw.print(" mAppDied=");pw.print(mAppDied);
-                pw.print(prefix); pw.print("drawnStateEvaluated=");
-                        pw.print(getDrawnStateEvaluated());
-                pw.print(prefix); pw.print("mightAffectAllDrawn=");
-                        pw.println(mightAffectAllDrawn());
+                pw.println(prefix + "mAppToken=" + mAppToken);
+                pw.print(prefix + "mAppDied=" + mAppDied);
+                pw.print(prefix + "drawnStateEvaluated=" + getDrawnStateEvaluated());
+                pw.println(prefix + "mightAffectAllDrawn=" + mightAffectAllDrawn());
             }
-            pw.print(prefix); pw.print("mViewVisibility=0x");
-            pw.print(Integer.toHexString(mViewVisibility));
-            pw.print(" mHaveFrame="); pw.print(mHaveFrame);
-            pw.print(" mObscured="); pw.println(mObscured);
-            pw.print(prefix); pw.print("mSeq="); pw.print(mSeq);
-            pw.print(" mSystemUiVisibility=0x");
-            pw.println(Integer.toHexString(mSystemUiVisibility));
+            pw.println(prefix + "mViewVisibility=0x" + Integer.toHexString(mViewVisibility)
+                    + " mHaveFrame=" + mHaveFrame
+                    + " mObscured=" + mObscured);
+            pw.println(prefix + "mSeq=" + mSeq
+                    + " mSystemUiVisibility=0x" + Integer.toHexString(mSystemUiVisibility));
         }
         if (!mPolicyVisibility || !mPolicyVisibilityAfterAnim || !mAppOpVisibility
-                || isParentWindowHidden()|| mPermanentlyHidden || mForceHideNonSystemOverlayWindow
+                || isParentWindowHidden() || mPermanentlyHidden || mForceHideNonSystemOverlayWindow
                 || mHiddenWhileSuspended) {
-            pw.print(prefix); pw.print("mPolicyVisibility=");
-                    pw.print(mPolicyVisibility);
-                    pw.print(" mPolicyVisibilityAfterAnim=");
-                    pw.print(mPolicyVisibilityAfterAnim);
-                    pw.print(" mAppOpVisibility=");
-                    pw.print(mAppOpVisibility);
-                    pw.print(" parentHidden="); pw.print(isParentWindowHidden());
-                    pw.print(" mPermanentlyHidden="); pw.print(mPermanentlyHidden);
-                    pw.print(" mHiddenWhileSuspended="); pw.print(mHiddenWhileSuspended);
-                    pw.print(" mForceHideNonSystemOverlayWindow="); pw.println(
-                    mForceHideNonSystemOverlayWindow);
+            pw.println(prefix + "mPolicyVisibility=" + mPolicyVisibility
+                    + " mPolicyVisibilityAfterAnim=" + mPolicyVisibilityAfterAnim
+                    + " mAppOpVisibility=" + mAppOpVisibility
+                    + " parentHidden=" + isParentWindowHidden()
+                    + " mPermanentlyHidden=" + mPermanentlyHidden
+                    + " mHiddenWhileSuspended=" + mHiddenWhileSuspended
+                    + " mForceHideNonSystemOverlayWindow=" + mForceHideNonSystemOverlayWindow);
         }
         if (!mRelayoutCalled || mLayoutNeeded) {
-            pw.print(prefix); pw.print("mRelayoutCalled="); pw.print(mRelayoutCalled);
-                    pw.print(" mLayoutNeeded="); pw.println(mLayoutNeeded);
+            pw.println(prefix + "mRelayoutCalled=" + mRelayoutCalled
+                    + " mLayoutNeeded=" + mLayoutNeeded);
         }
         if (dumpAll) {
-            pw.print(prefix); pw.print("mGivenContentInsets=");
-                    mGivenContentInsets.printShortString(pw);
-                    pw.print(" mGivenVisibleInsets=");
-                    mGivenVisibleInsets.printShortString(pw);
-                    pw.println();
+            pw.println(prefix + "mGivenContentInsets=" + mGivenContentInsets.toShortString(sTmpSB)
+                    + " mGivenVisibleInsets=" + mGivenVisibleInsets.toShortString(sTmpSB));
             if (mTouchableInsets != 0 || mGivenInsetsPending) {
-                pw.print(prefix); pw.print("mTouchableInsets="); pw.print(mTouchableInsets);
-                        pw.print(" mGivenInsetsPending="); pw.println(mGivenInsetsPending);
+                pw.println(prefix + "mTouchableInsets=" + mTouchableInsets
+                        + " mGivenInsetsPending=" + mGivenInsetsPending);
                 Region region = new Region();
                 getTouchableRegion(region);
-                pw.print(prefix); pw.print("touchable region="); pw.println(region);
+                pw.println(prefix + "touchable region=" + region);
             }
-            pw.print(prefix); pw.print("mFullConfiguration="); pw.println(getConfiguration());
-            pw.print(prefix); pw.print("mLastReportedConfiguration=");
-                    pw.println(getLastReportedConfiguration());
+            pw.println(prefix + "mFullConfiguration=" + getConfiguration());
+            pw.println(prefix + "mLastReportedConfiguration=" + getLastReportedConfiguration());
         }
-        pw.print(prefix); pw.print("mHasSurface="); pw.print(mHasSurface);
-                pw.print(" isReadyForDisplay()="); pw.print(isReadyForDisplay());
-                pw.print(" mWindowRemovalAllowed="); pw.println(mWindowRemovalAllowed);
+        pw.println(prefix + "mHasSurface=" + mHasSurface
+                + " isReadyForDisplay()=" + isReadyForDisplay()
+                + " mWindowRemovalAllowed=" + mWindowRemovalAllowed);
         if (mEnforceSizeCompat) {
-            pw.print(prefix); pw.print("mCompatFrame="); mCompatFrame.printShortString(pw);
-                    pw.println();
+            pw.println(prefix + "mCompatFrame=" + mWindowFrames.mCompatFrame.toShortString(sTmpSB));
         }
         if (dumpAll) {
             mWindowFrames.dump(pw, prefix);
-            pw.print(prefix); pw.print("Cur insets: overscan=");
-                    mOverscanInsets.printShortString(pw);
-                    pw.print(" content="); mContentInsets.printShortString(pw);
-                    pw.print(" visible="); mVisibleInsets.printShortString(pw);
-                    pw.print(" stable="); mStableInsets.printShortString(pw);
-                    pw.print(" surface="); mAttrs.surfaceInsets.printShortString(pw);
-                    pw.print(" outsets="); mOutsets.printShortString(pw);
-            pw.print(prefix); pw.print("Lst insets: overscan=");
-                    mLastOverscanInsets.printShortString(pw);
-                    pw.print(" content="); mLastContentInsets.printShortString(pw);
-                    pw.print(" visible="); mLastVisibleInsets.printShortString(pw);
-                    pw.print(" stable="); mLastStableInsets.printShortString(pw);
-                    pw.print(" physical="); mLastOutsets.printShortString(pw);
-                    pw.print(" outset="); mLastOutsets.printShortString(pw);
-                    pw.println();
+            pw.println(prefix + " surface=" + mAttrs.surfaceInsets.toShortString(sTmpSB));
         }
         super.dump(pw, prefix, dumpAll);
-        pw.print(prefix); pw.print(mWinAnimator); pw.println(":");
+        pw.println(prefix + mWinAnimator + ":");
         mWinAnimator.dump(pw, prefix + "  ", dumpAll);
         if (mAnimatingExit || mRemoveOnExit || mDestroying || mRemoved) {
-            pw.print(prefix); pw.print("mAnimatingExit="); pw.print(mAnimatingExit);
-                    pw.print(" mRemoveOnExit="); pw.print(mRemoveOnExit);
-                    pw.print(" mDestroying="); pw.print(mDestroying);
-                    pw.print(" mRemoved="); pw.println(mRemoved);
+            pw.println(prefix + "mAnimatingExit=" + mAnimatingExit
+                    + " mRemoveOnExit=" + mRemoveOnExit
+                    + " mDestroying=" + mDestroying
+                    + " mRemoved=" + mRemoved);
         }
         if (getOrientationChanging() || mAppFreezing || mReportOrientationChanged) {
-            pw.print(prefix); pw.print("mOrientationChanging=");
-                    pw.print(mOrientationChanging);
-                    pw.print(" configOrientationChanging=");
-                    pw.print(getLastReportedConfiguration().orientation
-                            != getConfiguration().orientation);
-                    pw.print(" mAppFreezing="); pw.print(mAppFreezing);
-                    pw.print(" mReportOrientationChanged="); pw.println(mReportOrientationChanged);
+            pw.println(prefix + "mOrientationChanging=" + mOrientationChanging
+                    + " configOrientationChanging="
+                    + (getLastReportedConfiguration().orientation != getConfiguration().orientation)
+                    + " mAppFreezing=" + mAppFreezing
+                    + " mReportOrientationChanged=" + mReportOrientationChanged);
         }
         if (mLastFreezeDuration != 0) {
-            pw.print(prefix); pw.print("mLastFreezeDuration=");
-                    TimeUtils.formatDuration(mLastFreezeDuration, pw); pw.println();
-        }
-        if (mForceSeamlesslyRotate) {
-            pw.print(prefix); pw.print("forceSeamlesslyRotate: pending=");
-            if (mPendingForcedSeamlessRotate != null) {
-                mPendingForcedSeamlessRotate.dump(pw);
-            } else {
-                pw.print("null");
-            }
-            pw.print(" finishedFrameNumber="); pw.print(mFinishForcedSeamlessRotateFrameNumber);
+            pw.print(prefix + "mLastFreezeDuration=");
+            TimeUtils.formatDuration(mLastFreezeDuration, pw);
             pw.println();
         }
+        pw.print(prefix + "mForceSeamlesslyRotate=" + mForceSeamlesslyRotate
+                + " seamlesslyRotate: pending=");
+        if (mPendingSeamlessRotate != null) {
+            mPendingSeamlessRotate.dump(pw);
+        } else {
+            pw.print("null");
+        }
+        pw.println(" finishedFrameNumber=" + mFinishSeamlessRotateFrameNumber);
+
         if (mHScale != 1 || mVScale != 1) {
-            pw.print(prefix); pw.print("mHScale="); pw.print(mHScale);
-                    pw.print(" mVScale="); pw.println(mVScale);
+            pw.println(prefix + "mHScale=" + mHScale
+                    + " mVScale=" + mVScale);
         }
         if (mWallpaperX != -1 || mWallpaperY != -1) {
-            pw.print(prefix); pw.print("mWallpaperX="); pw.print(mWallpaperX);
-                    pw.print(" mWallpaperY="); pw.println(mWallpaperY);
+            pw.println(prefix + "mWallpaperX=" + mWallpaperX
+                    + " mWallpaperY=" + mWallpaperY);
         }
         if (mWallpaperXStep != -1 || mWallpaperYStep != -1) {
-            pw.print(prefix); pw.print("mWallpaperXStep="); pw.print(mWallpaperXStep);
-                    pw.print(" mWallpaperYStep="); pw.println(mWallpaperYStep);
+            pw.println(prefix + "mWallpaperXStep=" + mWallpaperXStep
+                    + " mWallpaperYStep=" + mWallpaperYStep);
         }
         if (mWallpaperDisplayOffsetX != Integer.MIN_VALUE
                 || mWallpaperDisplayOffsetY != Integer.MIN_VALUE) {
-            pw.print(prefix); pw.print("mWallpaperDisplayOffsetX=");
-                    pw.print(mWallpaperDisplayOffsetX);
-                    pw.print(" mWallpaperDisplayOffsetY=");
-                    pw.println(mWallpaperDisplayOffsetY);
+            pw.println(prefix + "mWallpaperDisplayOffsetX=" + mWallpaperDisplayOffsetX
+                    + " mWallpaperDisplayOffsetY=" + mWallpaperDisplayOffsetY);
         }
         if (mDrawLock != null) {
-            pw.print(prefix); pw.println("mDrawLock=" + mDrawLock);
+            pw.println(prefix + "mDrawLock=" + mDrawLock);
         }
         if (isDragResizing()) {
-            pw.print(prefix); pw.println("isDragResizing=" + isDragResizing());
+            pw.println(prefix + "isDragResizing=" + isDragResizing());
         }
         if (computeDragResizing()) {
-            pw.print(prefix); pw.println("computeDragResizing=" + computeDragResizing());
+            pw.println(prefix + "computeDragResizing=" + computeDragResizing());
         }
-        pw.print(prefix); pw.println("isOnScreen=" + isOnScreen());
-        pw.print(prefix); pw.println("isVisible=" + isVisible());
+        pw.println(prefix + "isOnScreen=" + isOnScreen());
+        pw.println(prefix + "isVisible=" + isVisible());
     }
 
     @Override
@@ -3541,7 +3376,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
-    void applyGravityAndUpdateFrame(Rect containingFrame, Rect displayFrame) {
+    private void applyGravityAndUpdateFrame(Rect containingFrame, Rect displayFrame) {
         final int pw = containingFrame.width();
         final int ph = containingFrame.height();
         final Task task = getTask();
@@ -3619,10 +3454,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         // We need to make sure we update the CompatFrame as it is used for
         // cropping decisions, etc, on systems where we lack a decor layer.
-        mCompatFrame.set(mWindowFrames.mFrame);
+        mWindowFrames.mCompatFrame.set(mWindowFrames.mFrame);
         if (mEnforceSizeCompat) {
             // See comparable block in computeFrameLw.
-            mCompatFrame.scale(mInvGlobalScale);
+            mWindowFrames.mCompatFrame.scale(mInvGlobalScale);
         }
     }
 
@@ -3899,6 +3734,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         windowInfo.focused = isFocused();
         Task task = getTask();
         windowInfo.inPictureInPicture = (task != null) && task.inPinnedWindowingMode();
+        windowInfo.hasFlagWatchOutsideTouch =
+                (mAttrs.flags & WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH) != 0;
 
         if (mIsChildWindow) {
             windowInfo.parentToken = getParentWindow().mClient.asBinder();
@@ -4332,13 +4169,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // On a different display there is no system decor. Crop the window
             // by the screen boundaries.
             // TODO(multi-display)
-            policyCrop.set(0, 0, mCompatFrame.width(), mCompatFrame.height());
-            policyCrop.intersect(-mCompatFrame.left, -mCompatFrame.top,
-                    displayInfo.logicalWidth - mCompatFrame.left,
-                    displayInfo.logicalHeight - mCompatFrame.top);
+            policyCrop.set(0, 0, mWindowFrames.mCompatFrame.width(),
+                    mWindowFrames.mCompatFrame.height());
+            policyCrop.intersect(-mWindowFrames.mCompatFrame.left, -mWindowFrames.mCompatFrame.top,
+                    displayInfo.logicalWidth - mWindowFrames.mCompatFrame.left,
+                    displayInfo.logicalHeight - mWindowFrames.mCompatFrame.top);
         } else if (skipDecorCrop()) {
             // Windows without policy decor aren't cropped.
-            policyCrop.set(0, 0, mCompatFrame.width(), mCompatFrame.height());
+            policyCrop.set(0, 0, mWindowFrames.mCompatFrame.width(),
+                    mWindowFrames.mCompatFrame.height());
         } else {
             // Crop to the system decor specified by policy.
             calculateSystemDecorRect(policyCrop);
@@ -4496,12 +4335,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * Updates the last inset values to the current ones.
      */
     void updateLastInsetValues() {
-        mLastOverscanInsets.set(mOverscanInsets);
-        mLastContentInsets.set(mContentInsets);
-        mLastVisibleInsets.set(mVisibleInsets);
-        mLastStableInsets.set(mStableInsets);
-        mLastOutsets.set(mOutsets);
-        mWindowFrames.mLastDisplayCutout = mWindowFrames.mDisplayCutout;
+        mWindowFrames.updateLastInsetValues();
     }
 
     void startAnimation(Animation anim) {
@@ -4716,8 +4550,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         // Freeze position while we're unrotated, so the surface remains at the position it was
         // prior to the rotation.
-        if (!mSurfaceAnimator.hasLeash() && mPendingForcedSeamlessRotate == null &&
-                !mLastSurfacePosition.equals(mSurfacePosition)) {
+        if (!mSurfaceAnimator.hasLeash() && mPendingSeamlessRotate == null
+                && !mLastSurfacePosition.equals(mSurfacePosition)) {
             t.setPosition(mSurfaceControl, mSurfacePosition.x, mSurfacePosition.y);
             mLastSurfacePosition.set(mSurfacePosition.x, mSurfacePosition.y);
             if (surfaceInsetsChanging() && mWinAnimator.hasSurface()) {
@@ -4870,31 +4704,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mFrameNumber = frameNumber;
     }
 
-    @Override
-    void seamlesslyRotate(Transaction t, int oldRotation, int newRotation) {
-        // Invisible windows, the wallpaper, and force seamlessly rotated windows do not participate
-        // in the regular seamless rotation animation.
-        if (!isVisibleNow() || mIsWallpaper || mForceSeamlesslyRotate) {
-            return;
-        }
-        final Matrix transform = mTmpMatrix;
-
-        mService.markForSeamlessRotation(this, true);
-
-        // We rotated the screen, but have not performed a new layout pass yet. In the mean time,
-        // we recompute the coordinates of mFrame in the new orientation, so the surface can be
-        // properly placed.
-        transformToRotation(oldRotation, newRotation, getDisplayInfo(), transform);
-        transformRect(transform, mWindowFrames.mFrame, null /* tmpRectF */);
-
-        updateSurfacePosition(t);
-        mWinAnimator.seamlesslyRotate(t, oldRotation, newRotation);
-
-        // Dispatch to children only after mFrame has been updated, as it's needed in the
-        // child's updateSurfacePosition.
-        super.seamlesslyRotate(t, oldRotation, newRotation);
-    }
-
     public void getMaxVisibleBounds(Rect out) {
         if (out.isEmpty()) {
             out.set(mWindowFrames.mVisibleFrame);
@@ -4913,6 +4722,44 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mWindowFrames.mVisibleFrame.bottom > out.bottom) {
             out.bottom = mWindowFrames.mVisibleFrame.bottom;
         }
+    }
+
+    /**
+     * Copy the inset values over so they can be sent back to the client when a relayout occurs.
+     */
+    void getInsetsForRelayout(Rect outOverscanInsets, Rect outContentInsets, Rect outVisibleInsets,
+            Rect outStableInsets, Rect outOutsets) {
+        outOverscanInsets.set(mWindowFrames.mOverscanInsets);
+        outContentInsets.set(mWindowFrames.mContentInsets);
+        outVisibleInsets.set(mWindowFrames.mVisibleInsets);
+        outStableInsets.set(mWindowFrames.mStableInsets);
+        outOutsets.set(mWindowFrames.mOutsets);
+
+        mLastRelayoutContentInsets.set(mWindowFrames.mContentInsets);
+    }
+
+    void getContentInsets(Rect outContentInsets) {
+        outContentInsets.set(mWindowFrames.mContentInsets);
+    }
+
+    Rect getContentInsets() {
+        return mWindowFrames.mContentInsets;
+    }
+
+    void getStableInsets(Rect outStableInsets) {
+        outStableInsets.set(mWindowFrames.mStableInsets);
+    }
+
+    Rect getStableInsets() {
+        return mWindowFrames.mStableInsets;
+    }
+
+    void resetLastContentInsets() {
+        mWindowFrames.resetLastContentInsets();
+    }
+
+    Rect getVisibleInsets() {
+        return mWindowFrames.mVisibleInsets;
     }
 
     private final class MoveAnimationSpec implements AnimationSpec {
@@ -4947,9 +4794,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         @Override
         public void dump(PrintWriter pw, String prefix) {
-            pw.print(prefix); pw.print("from="); pw.print(mFrom);
-            pw.print(" to="); pw.print(mTo);
-            pw.print(" duration="); pw.println(mDuration);
+            pw.println(prefix + "from=" + mFrom
+                    + " to=" + mTo
+                    + " duration=" + mDuration);
         }
 
         @Override

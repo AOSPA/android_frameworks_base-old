@@ -722,6 +722,7 @@ public class SettingsProvider extends ContentProvider {
         }
     }
 
+    @GuardedBy("mLock")
     private void dumpForUserLocked(int userId, PrintWriter pw) {
         if (userId == UserHandle.USER_SYSTEM) {
             pw.println("GLOBAL SETTINGS (user " + userId + ")");
@@ -1179,6 +1180,7 @@ public class SettingsProvider extends ContentProvider {
                 && UserHandle.getAppId(Binder.getCallingUid()) >= Process.FIRST_APPLICATION_UID;
     }
 
+    @GuardedBy("mLock")
     private Setting getSsaidSettingLocked(PackageInfo callingPkg, int owningUserId) {
         // Get uid of caller (key) used to store ssaid value
         String name = Integer.toString(
@@ -1709,6 +1711,7 @@ public class SettingsProvider extends ContentProvider {
         }
     }
 
+    @GuardedBy("mLock")
     private List<String> getSettingsNamesLocked(int settingsType, int userId) {
         // Don't enforce the instant app whitelist for now -- its too prone to unintended breakage
         // in the current form.
@@ -1801,6 +1804,7 @@ public class SettingsProvider extends ContentProvider {
      *
      * @returns whether the enabled location providers changed.
      */
+    @GuardedBy("mLock")
     private boolean updateLocationProvidersAllowedLocked(String value, String tag,
             int owningUserId, boolean makeDefault, boolean forceNotify) {
         if (TextUtils.isEmpty(value)) {
@@ -2718,6 +2722,7 @@ public class SettingsProvider extends ContentProvider {
             }
         }
 
+        @GuardedBy("secureSettings.mLock")
         private void ensureSecureSettingAndroidIdSetLocked(SettingsState secureSettings) {
             Setting value = secureSettings.getSettingLocked(Settings.Secure.ANDROID_ID);
 
@@ -2943,7 +2948,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 171;
+            private static final int SETTINGS_VERSION = 172;
 
             private final int mUserId;
 
@@ -3893,6 +3898,37 @@ public class SettingsProvider extends ContentProvider {
                     }
 
                     currentVersion = 171;
+                }
+
+                if (currentVersion == 171) {
+                    // Version 171: by default, add STREAM_VOICE_CALL to list of streams that can
+                    // be muted.
+                    final SettingsState systemSettings = getSystemSettingsLocked(userId);
+                    final Setting currentSetting = systemSettings.getSettingLocked(
+                              Settings.System.MUTE_STREAMS_AFFECTED);
+                    if (!currentSetting.isNull()) {
+                        try {
+                            int currentSettingIntegerValue = Integer.parseInt(
+                                    currentSetting.getValue());
+                            if ((currentSettingIntegerValue
+                                 & (1 << AudioManager.STREAM_VOICE_CALL)) == 0) {
+                                systemSettings.insertSettingLocked(
+                                    Settings.System.MUTE_STREAMS_AFFECTED,
+                                    Integer.toString(
+                                        currentSettingIntegerValue
+                                        | (1 << AudioManager.STREAM_VOICE_CALL)),
+                                    null, true, SettingsState.SYSTEM_PACKAGE_NAME);
+                            }
+                        } catch (NumberFormatException e) {
+                            // remove the setting in case it is not a valid integer
+                            Slog.w("Failed to parse integer value of MUTE_STREAMS_AFFECTED"
+                                   + "setting, removing setting", e);
+                            systemSettings.deleteSettingLocked(
+                                Settings.System.MUTE_STREAMS_AFFECTED);
+                        }
+
+                    }
+                    currentVersion = 172;
                 }
 
                 // vXXX: Add new settings above this point.

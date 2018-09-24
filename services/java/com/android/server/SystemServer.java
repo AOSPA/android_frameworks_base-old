@@ -69,6 +69,7 @@ import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.ActivityTaskManagerService;
 import com.android.server.audio.AudioService;
+import com.android.server.biometrics.BiometricPromptService;
 import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
@@ -83,6 +84,7 @@ import com.android.server.biometrics.face.FaceService;
 import com.android.server.biometrics.fingerprint.FingerprintService;
 import com.android.server.hdmi.HdmiControlService;
 import com.android.server.input.InputManagerService;
+import com.android.server.inputmethod.InputMethodManagerService;
 import com.android.server.job.JobSchedulerService;
 import com.android.server.lights.LightsService;
 import com.android.server.media.MediaResourceMonitorService;
@@ -119,6 +121,7 @@ import com.android.server.statusbar.StatusBarManagerService;
 import com.android.server.storage.DeviceStorageMonitorService;
 import com.android.server.telecom.TelecomLoaderService;
 import com.android.server.textclassifier.TextClassificationManagerService;
+import com.android.server.textservices.TextServicesManagerService;
 import com.android.server.trust.TrustManagerService;
 import com.android.server.tv.TvInputManagerService;
 import com.android.server.tv.TvRemoteService;
@@ -755,9 +758,19 @@ public final class SystemServer {
             traceEnd();
         }
 
+        // Tracks and caches the device state.
+        traceBeginAndSlog("StartCachedDeviceStateService");
+        mSystemServiceManager.startService(CachedDeviceStateService.class);
+        traceEnd();
+
         // Tracks cpu time spent in binder calls
         traceBeginAndSlog("StartBinderCallsStatsService");
         mSystemServiceManager.startService(BinderCallsStatsService.LifeCycle.class);
+        traceEnd();
+
+        // Tracks time spent in handling messages in handlers.
+        traceBeginAndSlog("StartLooperStatsService");
+        mSystemServiceManager.startService(LooperStatsService.Lifecycle.class);
         traceEnd();
     }
 
@@ -788,6 +801,8 @@ public final class SystemServer {
 
         boolean disableSystemTextClassifier = SystemProperties.getBoolean(
                 "config.disable_systemtextclassifier", false);
+        boolean disableNetworkTime = SystemProperties.getBoolean("config.disable_networktime",
+                false);
         boolean disableCameraService = SystemProperties.getBoolean("config.disable_cameraservice",
                 false);
         boolean disableSlices = SystemProperties.getBoolean("config.disable_slices", false);
@@ -798,6 +813,9 @@ public final class SystemServer {
 
         boolean isWatch = context.getPackageManager().hasSystemFeature(
                 PackageManager.FEATURE_WATCH);
+
+        boolean enableVrService = context.getPackageManager().hasSystemFeature(
+                PackageManager.FEATURE_VR_MODE_HIGH_PERFORMANCE);
 
         // For debugging RescueParty
         if (Build.IS_DEBUGGABLE && SystemProperties.getBoolean("debug.crash_system", false)) {
@@ -888,7 +906,8 @@ public final class SystemServer {
             }
 
             traceBeginAndSlog("StartAlarmManagerService");
-            mSystemServiceManager.startService(AlarmManagerService.class);
+            mSystemServiceManager.startService(new AlarmManagerService(context));
+
             traceEnd();
 
             traceBeginAndSlog("InitWatchdog");
@@ -904,9 +923,8 @@ public final class SystemServer {
             // WMS needs sensor service ready
             ConcurrentUtils.waitForFutureNoInterrupt(mSensorServiceStart, START_SENSOR_SERVICE);
             mSensorServiceStart = null;
-            wm = WindowManagerService.main(context, inputManager,
-                    mFactoryTestMode != FactoryTest.FACTORY_TEST_LOW_LEVEL,
-                    !mFirstBoot, mOnlyCore, new PhoneWindowManager());
+            wm = WindowManagerService.main(context, inputManager, !mFirstBoot, mOnlyCore,
+                    new PhoneWindowManager());
             ServiceManager.addService(Context.WINDOW_SERVICE, wm, /* allowIsolated= */ false,
                     DUMP_FLAG_PRIORITY_CRITICAL | DUMP_FLAG_PROTO);
             ServiceManager.addService(Context.INPUT_SERVICE, inputManager,
@@ -932,7 +950,7 @@ public final class SystemServer {
                 traceLog.traceEnd();
             }, START_HIDL_SERVICES);
 
-            if (!isWatch) {
+            if (!isWatch && enableVrService) {
                 traceBeginAndSlog("StartVrManagerService");
                 mSystemServiceManager.startService(VrManagerService.class);
                 traceEnd();
@@ -1490,7 +1508,7 @@ public final class SystemServer {
                 traceEnd();
             }
 
-            if (!isWatch) {
+            if (!isWatch && !disableNetworkTime) {
                 traceBeginAndSlog("StartNetworkTimeUpdateService");
                 try {
                     if (useNewTimeServices) {
@@ -1595,15 +1613,27 @@ public final class SystemServer {
             }
             traceEnd();
 
-            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_FACE)) {
+            final boolean hasFeatureFace
+                    = mPackageManager.hasSystemFeature(PackageManager.FEATURE_FACE);
+            final boolean hasFeatureFingerprint
+                    = mPackageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT);
+
+            if (hasFeatureFace) {
                 traceBeginAndSlog("StartFaceSensor");
                 mSystemServiceManager.startService(FaceService.class);
                 traceEnd();
             }
 
-            if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
+            if (hasFeatureFingerprint) {
                 traceBeginAndSlog("StartFingerprintSensor");
                 mSystemServiceManager.startService(FingerprintService.class);
+                traceEnd();
+            }
+
+            if (hasFeatureFace || hasFeatureFingerprint) {
+                // Start this service after all biometric services.
+                traceBeginAndSlog("StartBiometricPromptService");
+                mSystemServiceManager.startService(BiometricPromptService.class);
                 traceEnd();
             }
 

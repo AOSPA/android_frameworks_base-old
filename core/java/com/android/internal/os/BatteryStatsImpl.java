@@ -5758,8 +5758,6 @@ public class BatteryStatsImpl extends BatteryStats {
         for (int i = 0; i < N; i++) {
             int uid = mapUid(ws.get(i));
             getUidStatsLocked(uid).noteBluetoothScanResultsLocked(numNewResults);
-            StatsLog.write_non_chained(StatsLog.BLE_SCAN_RESULT_RECEIVED, ws.get(i), ws.getName(i),
-                    numNewResults);
         }
 
         final List<WorkChain> workChains = ws.getWorkChains();
@@ -5768,8 +5766,6 @@ public class BatteryStatsImpl extends BatteryStats {
                 final WorkChain wc = workChains.get(i);
                 int uid = mapUid(wc.getAttributionUid());
                 getUidStatsLocked(uid).noteBluetoothScanResultsLocked(numNewResults);
-                StatsLog.write(StatsLog.BLE_SCAN_RESULT_RECEIVED,
-                        wc.getUids(), wc.getTags(), numNewResults);
             }
         }
     }
@@ -6724,7 +6720,7 @@ public class BatteryStatsImpl extends BatteryStats {
         int mWifiBatchedScanBinStarted = NO_BATCHED_SCAN_STARTED;
         StopwatchTimer[] mWifiBatchedScanTimer;
 
-        boolean mWifiMulticastEnabled;
+        int mWifiMulticastWakelockCount;
         StopwatchTimer mWifiMulticastTimer;
 
         StopwatchTimer mAudioTurnedOnTimer;
@@ -7183,8 +7179,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
         @Override
         public void noteWifiMulticastEnabledLocked(long elapsedRealtimeMs) {
-            if (!mWifiMulticastEnabled) {
-                mWifiMulticastEnabled = true;
+            if (mWifiMulticastWakelockCount == 0) {
                 if (mWifiMulticastTimer == null) {
                     mWifiMulticastTimer = new StopwatchTimer(mBsi.mClocks, Uid.this,
                             WIFI_MULTICAST_ENABLED, mBsi.mWifiMulticastTimers, mBsi.mOnBatteryTimeBase);
@@ -7194,12 +7189,17 @@ public class BatteryStatsImpl extends BatteryStats {
                         StatsLog.WIFI_MULTICAST_LOCK_STATE_CHANGED, getUid(), null,
                         StatsLog.WIFI_MULTICAST_LOCK_STATE_CHANGED__STATE__ON);
             }
+            mWifiMulticastWakelockCount++;
         }
 
         @Override
         public void noteWifiMulticastDisabledLocked(long elapsedRealtimeMs) {
-            if (mWifiMulticastEnabled) {
-                mWifiMulticastEnabled = false;
+            if (mWifiMulticastWakelockCount == 0) {
+                return;
+            }
+
+            mWifiMulticastWakelockCount--;
+            if (mWifiMulticastWakelockCount == 0) {
                 mWifiMulticastTimer.stopRunningLocked(elapsedRealtimeMs);
                 StatsLog.write_non_chained(
                         StatsLog.WIFI_MULTICAST_LOCK_STATE_CHANGED, getUid(), null,
@@ -7932,7 +7932,7 @@ public class BatteryStatsImpl extends BatteryStats {
             }
             if (mWifiMulticastTimer != null) {
                 active |= !mWifiMulticastTimer.reset(false);
-                active |= mWifiMulticastEnabled;
+                active |= (mWifiMulticastWakelockCount > 0);
             }
 
             active |= !resetIfNotNull(mAudioTurnedOnTimer, false);
@@ -8590,7 +8590,7 @@ public class BatteryStatsImpl extends BatteryStats {
                     mWifiBatchedScanTimer[i] = null;
                 }
             }
-            mWifiMulticastEnabled = false;
+            mWifiMulticastWakelockCount = 0;
             if (in.readInt() != 0) {
                 mWifiMulticastTimer = new StopwatchTimer(mBsi.mClocks, Uid.this, WIFI_MULTICAST_ENABLED,
                         mBsi.mWifiMulticastTimers, mBsi.mOnBatteryTimeBase, in);
@@ -11721,7 +11721,6 @@ public class BatteryStatsImpl extends BatteryStats {
                         Slog.d(TAG, "UID=" + uid + " rx_bytes=" + rxBytes + " rx_time=" + timeRxMs);
                     }
                     counter.getRxTimeCounter().addCountLocked(timeRxMs);
-                    leftOverRxTimeMs -= timeRxMs;
                 }
 
                 if (totalTxBytes > 0 && txBytes > 0) {
@@ -11730,7 +11729,6 @@ public class BatteryStatsImpl extends BatteryStats {
                         Slog.d(TAG, "UID=" + uid + " tx_bytes=" + txBytes + " tx_time=" + timeTxMs);
                     }
                     counter.getTxTimeCounters()[0].addCountLocked(timeTxMs);
-                    leftOverTxTimeMs -= timeTxMs;
                 }
             }
         }
@@ -14031,7 +14029,7 @@ public class BatteryStatsImpl extends BatteryStats {
                     u.mWifiBatchedScanTimer[i].readSummaryFromParcelLocked(in);
                 }
             }
-            u.mWifiMulticastEnabled = false;
+            u.mWifiMulticastWakelockCount = 0;
             if (in.readInt() != 0) {
                 u.mWifiMulticastTimer.readSummaryFromParcelLocked(in);
             }

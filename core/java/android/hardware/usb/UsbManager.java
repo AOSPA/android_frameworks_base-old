@@ -32,6 +32,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.hardware.usb.gadget.V1_0.GadgetFunction;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
@@ -300,6 +301,23 @@ public class UsbManager {
     public static final String EXTRA_PERMISSION_GRANTED = "permission";
 
     /**
+     * Name of extra added to start systemui.usb.UsbPermissionActivity
+     * containing package name of the app which requests USB permission.
+     *
+     * @hide
+     */
+    public static final String EXTRA_PACKAGE = "android.hardware.usb.extra.PACKAGE";
+
+    /**
+     * Name of extra added to start systemui.usb.UsbPermissionActivity
+     * containing the whether the app which requests USB permission can be set as default handler
+     * for USB device attach event or USB accessory attach event or not.
+     *
+     * @hide
+     */
+    public static final String EXTRA_CAN_BE_DEFAULT = "android.hardware.usb.extra.CAN_BE_DEFAULT";
+
+    /**
      * Code for the charging usb function. Passed into {@link #setCurrentFunctions(long)}
      * {@hide}
      */
@@ -368,7 +386,7 @@ public class UsbManager {
     /**
      * {@hide}
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public UsbManager(Context context, IUsbManager service) {
         mContext = context;
         mService = service;

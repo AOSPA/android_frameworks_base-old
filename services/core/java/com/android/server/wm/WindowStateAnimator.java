@@ -24,6 +24,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 import static android.view.WindowManager.TRANSIT_NONE;
+
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_ANIM;
 import static com.android.server.policy.WindowManagerPolicy.FINISH_LAYOUT_REDO_WALLPAPER;
 import static com.android.server.wm.DragResizeMode.DRAG_RESIZE_MODE_FREEFORM;
@@ -46,7 +47,6 @@ import static com.android.server.wm.WindowStateAnimatorProto.LAST_CLIP_RECT;
 import static com.android.server.wm.WindowStateAnimatorProto.SURFACE;
 import static com.android.server.wm.WindowStateAnimatorProto.SYSTEM_DECOR_RECT;
 import static com.android.server.wm.WindowSurfacePlacer.SET_ORIENTATION_CHANGE_COMPLETE;
-import static com.android.server.wm.utils.CoordinateTransforms.transformToRotation;
 
 import android.content.Context;
 import android.graphics.Matrix;
@@ -476,8 +476,7 @@ class WindowStateAnimator {
             flags |= SurfaceControl.SECURE;
         }
 
-        mTmpSize.set(0, 0, 0, 0);
-        calculateSurfaceBounds(w, attrs);
+        calculateSurfaceBounds(w, attrs, mTmpSize);
         final int width = mTmpSize.width();
         final int height = mTmpSize.height();
 
@@ -556,44 +555,38 @@ class WindowStateAnimator {
         return mSurfaceController;
     }
 
-    private void calculateSurfaceBounds(WindowState w, LayoutParams attrs) {
+    private void calculateSurfaceBounds(WindowState w, LayoutParams attrs, Rect outSize) {
+        outSize.setEmpty();
         if ((attrs.flags & FLAG_SCALED) != 0) {
             // For a scaled surface, we always want the requested size.
-            mTmpSize.right = mTmpSize.left + w.mRequestedWidth;
-            mTmpSize.bottom = mTmpSize.top + w.mRequestedHeight;
+            outSize.right = w.mRequestedWidth;
+            outSize.bottom = w.mRequestedHeight;
         } else {
             // When we're doing a drag-resizing, request a surface that's fullscreen size,
             // so that we don't need to reallocate during the process. This also prevents
             // buffer drops due to size mismatch.
             if (w.isDragResizing()) {
-                if (w.getResizeMode() == DRAG_RESIZE_MODE_FREEFORM) {
-                    mTmpSize.left = 0;
-                    mTmpSize.top = 0;
-                }
                 final DisplayInfo displayInfo = w.getDisplayInfo();
-                mTmpSize.right = mTmpSize.left + displayInfo.logicalWidth;
-                mTmpSize.bottom = mTmpSize.top + displayInfo.logicalHeight;
+                outSize.right = displayInfo.logicalWidth;
+                outSize.bottom = displayInfo.logicalHeight;
             } else {
-                mTmpSize.right = mTmpSize.left + w.mCompatFrame.width();
-                mTmpSize.bottom = mTmpSize.top + w.mCompatFrame.height();
+                w.getCompatFrameSize(outSize);
             }
         }
 
         // Something is wrong and SurfaceFlinger will not like this, try to revert to sane values.
         // This doesn't necessarily mean that there is an error in the system. The sizes might be
         // incorrect, because it is before the first layout or draw.
-        if (mTmpSize.width() < 1) {
-            mTmpSize.right = mTmpSize.left + 1;
+        if (outSize.width() < 1) {
+            outSize.right = 1;
         }
-        if (mTmpSize.height() < 1) {
-            mTmpSize.bottom = mTmpSize.top + 1;
+        if (outSize.height() < 1) {
+            outSize.bottom = 1;
         }
 
         // Adjust for surface insets.
-        mTmpSize.left -= attrs.surfaceInsets.left;
-        mTmpSize.top -= attrs.surfaceInsets.top;
-        mTmpSize.right += attrs.surfaceInsets.right;
-        mTmpSize.bottom += attrs.surfaceInsets.bottom;
+        outSize.inset(-attrs.surfaceInsets.left, -attrs.surfaceInsets.top,
+                -attrs.surfaceInsets.right, -attrs.surfaceInsets.bottom);
     }
 
     boolean hasSurface() {
@@ -686,7 +679,6 @@ class WindowStateAnimator {
         final int displayId = mWin.getDisplayId();
         final ScreenRotationAnimation screenRotationAnimation =
                 mAnimator.getScreenRotationAnimationLocked(displayId);
-        // TODO(b/111504081): Consolidate seamless rotation logic.
         final boolean windowParticipatesInScreenRotationAnimation =
                 !mWin.mForceSeamlesslyRotate;
         final boolean screenAnimation = screenRotationAnimation != null
@@ -871,14 +863,12 @@ class WindowStateAnimator {
         final LayoutParams attrs = mWin.getAttrs();
         final Task task = w.getTask();
 
-        mTmpSize.set(0, 0, 0, 0);
-        calculateSurfaceBounds(w, attrs);
+        calculateSurfaceBounds(w, attrs, mTmpSize);
 
         mExtraHScale = (float) 1.0;
         mExtraVScale = (float) 1.0;
 
         boolean wasForceScaled = mForceScaleUntilResize;
-        boolean wasSeamlesslyRotated = w.mSeamlesslyRotated;
 
         // Once relayout has been called at least once, we need to make sure
         // we only resize the client surface during calls to relayout. For
@@ -898,7 +888,6 @@ class WindowStateAnimator {
         // If we are undergoing seamless rotation, the surface has already
         // been set up to persist at it's old location. We need to freeze
         // updates until a resize occurs.
-        mService.markForSeamlessRotation(w, w.mSeamlesslyRotated && !mSurfaceResized);
 
         Rect clipRect = null;
         if (calculateCrop(mTmpClipRect)) {
@@ -1069,14 +1058,15 @@ class WindowStateAnimator {
 
         // If we are ending the scaling mode. We switch to SCALING_MODE_FREEZE
         // to prevent further updates until buffer latch.
-        // When ending both force scaling, and seamless rotation, we need to freeze
-        // the Surface geometry until a buffer comes in at the new size (normally position and crop
-        // are unfrozen). setGeometryAppliesWithResizeInTransaction accomplishes this for us.
-        if ((wasForceScaled && !mForceScaleUntilResize) ||
-                (wasSeamlesslyRotated && !w.mSeamlesslyRotated)) {
-            mSurfaceController.setGeometryAppliesWithResizeInTransaction(true);
+        // We also need to freeze the Surface geometry until a buffer
+        // comes in at the new size (normally position and crop are unfrozen).
+        // setGeometryAppliesWithResizeInTransaction accomplishes this for us.
+        if (wasForceScaled && !mForceScaleUntilResize) {
+            mSurfaceController.deferTransactionUntil(mSurfaceController.getHandle(),
+                    mWin.getFrameNumber());
             mSurfaceController.forceScaleableInTransaction(false);
         }
+
 
         if (!w.mSeamlesslyRotated) {
             applyCrop(clipRect, recoveringMemory);
@@ -1507,29 +1497,6 @@ class WindowStateAnimator {
             mSurfaceController = null;
             mDrawState = NO_SURFACE;
         }
-    }
-
-    // TODO(b/111504081): Consolidate seamless rotation logic.
-    @Deprecated
-    void seamlesslyRotate(SurfaceControl.Transaction t, int oldRotation, int newRotation) {
-        final WindowState w = mWin;
-
-        // We rotated the screen, but have not received a new buffer with the correct size yet. In
-        // the mean time, we rotate the buffer we have to the new orientation.
-        final Matrix transform = mService.mTmpTransform;
-        transformToRotation(oldRotation, newRotation, w.getFrameLw().width(),
-                w.getFrameLw().height(), transform);
-        transform.getValues(mService.mTmpFloats);
-
-        float DsDx = mService.mTmpFloats[Matrix.MSCALE_X];
-        float DtDx = mService.mTmpFloats[Matrix.MSKEW_Y];
-        float DtDy = mService.mTmpFloats[Matrix.MSKEW_X];
-        float DsDy = mService.mTmpFloats[Matrix.MSCALE_Y];
-        float nx = mService.mTmpFloats[Matrix.MTRANS_X];
-        float ny = mService.mTmpFloats[Matrix.MTRANS_Y];
-        mSurfaceController.setPosition(t, nx, ny, false);
-        mSurfaceController.setMatrix(t, DsDx * w.mHScale, DtDx * w.mVScale, DtDy
-                * w.mHScale, DsDy * w.mVScale, false);
     }
 
     /** The force-scaled state for a given window can persist past

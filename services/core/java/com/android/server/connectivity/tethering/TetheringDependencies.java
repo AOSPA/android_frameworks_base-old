@@ -19,11 +19,15 @@ package com.android.server.connectivity.tethering;
 import android.content.Context;
 import android.net.INetd;
 import android.net.NetworkRequest;
+import android.net.dhcp.DhcpServer;
+import android.net.dhcp.DhcpServingParams;
+import android.net.ip.IpServer;
 import android.net.ip.RouterAdvertisementDaemon;
 import android.net.util.InterfaceParams;
 import android.net.util.NetdService;
 import android.os.Handler;
 import android.net.util.SharedLog;
+import android.os.Looper;
 
 import com.android.internal.util.StateMachine;
 
@@ -46,20 +50,12 @@ public class TetheringDependencies {
     }
 
     public IPv6TetheringCoordinator getIPv6TetheringCoordinator(
-            ArrayList<TetherInterfaceStateMachine> notifyList, SharedLog log) {
+            ArrayList<IpServer> notifyList, SharedLog log) {
         return new IPv6TetheringCoordinator(notifyList, log);
     }
 
-    public RouterAdvertisementDaemon getRouterAdvertisementDaemon(InterfaceParams ifParams) {
-        return new RouterAdvertisementDaemon(ifParams);
-    }
-
-    public InterfaceParams getInterfaceParams(String ifName) {
-        return InterfaceParams.getByName(ifName);
-    }
-
-    public INetd getNetdService() {
-        return NetdService.getInstance();
+    public IpServer.Dependencies getIpServerDependencies() {
+        return new IpServer.Dependencies();
     }
 
     public boolean isTetheringSupported() {

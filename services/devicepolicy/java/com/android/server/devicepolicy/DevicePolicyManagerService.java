@@ -114,7 +114,6 @@ import android.app.admin.SecurityLog.SecurityEvent;
 import android.app.admin.SystemUpdateInfo;
 import android.app.admin.SystemUpdatePolicy;
 import android.app.backup.IBackupManager;
-import android.app.backup.ISelectBackupTransportCallback;
 import android.app.trust.TrustManager;
 import android.app.usage.UsageStatsManagerInternal;
 import android.content.BroadcastReceiver;
@@ -262,7 +261,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
@@ -377,6 +375,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     private static final Set<String> GLOBAL_SETTINGS_WHITELIST;
     private static final Set<String> GLOBAL_SETTINGS_DEPRECATED;
     private static final Set<String> SYSTEM_SETTINGS_WHITELIST;
+    private static final Set<Integer> DA_DISALLOWED_POLICIES;
     static {
         SECURE_SETTINGS_WHITELIST = new ArraySet<>();
         SECURE_SETTINGS_WHITELIST.add(Settings.Secure.DEFAULT_INPUT_METHOD);
@@ -408,6 +407,12 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         SYSTEM_SETTINGS_WHITELIST.add(Settings.System.SCREEN_BRIGHTNESS);
         SYSTEM_SETTINGS_WHITELIST.add(Settings.System.SCREEN_BRIGHTNESS_MODE);
         SYSTEM_SETTINGS_WHITELIST.add(Settings.System.SCREEN_OFF_TIMEOUT);
+
+        DA_DISALLOWED_POLICIES = new ArraySet<>();
+        DA_DISALLOWED_POLICIES.add(DeviceAdminInfo.USES_POLICY_DISABLE_CAMERA);
+        DA_DISALLOWED_POLICIES.add(DeviceAdminInfo.USES_POLICY_DISABLE_KEYGUARD_FEATURES);
+        DA_DISALLOWED_POLICIES.add(DeviceAdminInfo.USES_POLICY_EXPIRE_PASSWORD);
+        DA_DISALLOWED_POLICIES.add(DeviceAdminInfo.USES_POLICY_LIMIT_PASSWORD);
     }
 
     /**
@@ -888,7 +893,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         private static final String ATTR_LAST_NETWORK_LOGGING_NOTIFICATION = "last-notification";
         private static final String ATTR_NUM_NETWORK_LOGGING_NOTIFICATIONS = "num-notifications";
         private static final String TAG_IS_LOGOUT_ENABLED = "is_logout_enabled";
-        private static final String TAG_MANDATORY_BACKUP_TRANSPORT = "mandatory_backup_transport";
         private static final String TAG_START_USER_SESSION_MESSAGE = "start_user_session_message";
         private static final String TAG_END_USER_SESSION_MESSAGE = "end_user_session_message";
         private static final String TAG_METERED_DATA_DISABLED_PACKAGES
@@ -1008,10 +1012,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         // Default title of confirm credentials screen
         String organizationName = null;
-
-        // The component name of the backup transport which has to be used if backups are mandatory
-        // or null if backups are not mandatory.
-        ComponentName mandatoryBackupTransport = null;
 
         // Message for user switcher
         String startUserSessionMessage = null;
@@ -1276,11 +1276,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 out.attribute(null, ATTR_VALUE, Boolean.toString(isLogoutEnabled));
                 out.endTag(null, TAG_IS_LOGOUT_ENABLED);
             }
-            if (mandatoryBackupTransport != null) {
-                out.startTag(null, TAG_MANDATORY_BACKUP_TRANSPORT);
-                out.attribute(null, ATTR_VALUE, mandatoryBackupTransport.flattenToString());
-                out.endTag(null, TAG_MANDATORY_BACKUP_TRANSPORT);
-            }
             if (startUserSessionMessage != null) {
                 out.startTag(null, TAG_START_USER_SESSION_MESSAGE);
                 out.text(startUserSessionMessage);
@@ -1468,9 +1463,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     }
                 } else if (TAG_IS_LOGOUT_ENABLED.equals(tag)) {
                     isLogoutEnabled = Boolean.parseBoolean(
-                            parser.getAttributeValue(null, ATTR_VALUE));
-                } else if (TAG_MANDATORY_BACKUP_TRANSPORT.equals(tag)) {
-                    mandatoryBackupTransport = ComponentName.unflattenFromString(
                             parser.getAttributeValue(null, ATTR_VALUE));
                 } else if (TAG_START_USER_SESSION_MESSAGE.equals(tag)) {
                     type = parser.next();
@@ -2203,6 +2195,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      * @return the user password metrics, or {@code null} if none have been associated with
      * the user yet (for example, if the device has booted but not been unlocked).
      */
+    @GuardedBy("getLockObject()")
     PasswordMetrics getUserPasswordMetricsLocked(int userHandle) {
         return mUserPasswordMetrics.get(userHandle);
     }
@@ -2595,45 +2588,92 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     ActiveAdmin getActiveAdminForCallerLocked(ComponentName who, int reqPolicy)
             throws SecurityException {
+        return getActiveAdminOrCheckPermissionForCallerLocked(who,
+                reqPolicy, /* permission= */ null);
+    }
+
+    /**
+     * Finds an active admin for the caller then checks {@code permission} if admin check failed.
+     *
+     * @return an active admin or {@code null} if there is no active admin but
+     * {@code permission} is granted
+     * @throws SecurityException if caller neither has an active admin nor {@code permission}
+     */
+    @Nullable
+    ActiveAdmin getActiveAdminOrCheckPermissionForCallerLocked(
+            ComponentName who,
+            int reqPolicy,
+            @Nullable String permission) throws SecurityException {
         ensureLocked();
         final int callingUid = mInjector.binderGetCallingUid();
 
         ActiveAdmin result = getActiveAdminWithPolicyForUidLocked(who, reqPolicy, callingUid);
         if (result != null) {
             return result;
+        } else if (permission != null
+                && (mContext.checkCallingPermission(permission)
+                        == PackageManager.PERMISSION_GRANTED)) {
+            return null;
         }
 
         if (who != null) {
             final int userId = UserHandle.getUserId(callingUid);
             final DevicePolicyData policy = getUserData(userId);
             ActiveAdmin admin = policy.mAdminMap.get(who);
+            final boolean isDeviceOwner = isDeviceOwner(admin.info.getComponent(), userId);
+            final boolean isProfileOwner = isProfileOwner(admin.info.getComponent(), userId);
+
             if (reqPolicy == DeviceAdminInfo.USES_POLICY_DEVICE_OWNER) {
                 throw new SecurityException("Admin " + admin.info.getComponent()
-                         + " does not own the device");
+                        + " does not own the device");
             }
             if (reqPolicy == DeviceAdminInfo.USES_POLICY_PROFILE_OWNER) {
                 throw new SecurityException("Admin " + admin.info.getComponent()
                         + " does not own the profile");
+            }
+            if (DA_DISALLOWED_POLICIES.contains(reqPolicy) && !isDeviceOwner && !isProfileOwner) {
+                throw new SecurityException("Admin " + admin.info.getComponent()
+                        + " is not a device owner or profile owner, so may not use policy: "
+                        + admin.info.getTagForPolicy(reqPolicy));
             }
             throw new SecurityException("Admin " + admin.info.getComponent()
                     + " did not specify uses-policy for: "
                     + admin.info.getTagForPolicy(reqPolicy));
         } else {
             throw new SecurityException("No active admin owned by uid "
-                    + mInjector.binderGetCallingUid() + " for policy #" + reqPolicy);
+                    + callingUid + " for policy #" + reqPolicy);
         }
     }
 
     ActiveAdmin getActiveAdminForCallerLocked(ComponentName who, int reqPolicy, boolean parent)
             throws SecurityException {
+        return getActiveAdminOrCheckPermissionForCallerLocked(
+                who, reqPolicy, parent, /* permission= */ null);
+    }
+
+    /**
+     * Finds an active admin for the caller then checks {@code permission} if admin check failed.
+     *
+     * @return an active admin or {@code null} if there is no active admin but
+     * {@code permission} is granted
+     * @throws SecurityException if caller neither has an active admin nor {@code permission}
+     */
+    @Nullable
+    ActiveAdmin getActiveAdminOrCheckPermissionForCallerLocked(
+            ComponentName who,
+            int reqPolicy,
+            boolean parent,
+            @Nullable String permission) throws SecurityException {
         ensureLocked();
         if (parent) {
             enforceManagedProfile(mInjector.userHandleGetCallingUserId(),
                     "call APIs on the parent profile");
         }
-        ActiveAdmin admin = getActiveAdminForCallerLocked(who, reqPolicy);
+        ActiveAdmin admin = getActiveAdminOrCheckPermissionForCallerLocked(
+                who, reqPolicy, permission);
         return parent ? admin.getParentActiveAdmin() : admin;
     }
+
     /**
      * Find the admin for the component and userId bit of the uid, then check
      * the admin's uid matches the uid.
@@ -2694,7 +2734,10 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             // DO always has the PO power.
             return ownsDevice || ownsProfile;
         } else {
-            return admin.info.usesPolicy(reqPolicy);
+            boolean allowedToUsePolicy = ownsDevice || ownsProfile
+                    || !DA_DISALLOWED_POLICIES.contains(reqPolicy)
+                    || getTargetSdk(admin.info.getPackageName(), userId) < Build.VERSION_CODES.Q;
+            return allowedToUsePolicy && admin.info.usesPolicy(reqPolicy);
         }
     }
 
@@ -3972,6 +4015,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
      * be the correct one upon boot.
      * This should be called whenever the password or the admin policies have changed.
      */
+    @GuardedBy("getLockObject()")
     private void updatePasswordValidityCheckpointLocked(int userHandle, boolean parent) {
         final int credentialOwner = getCredentialOwner(userHandle, parent);
         DevicePolicyData policy = getUserData(credentialOwner);
@@ -4739,10 +4783,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 preN = getTargetSdk(admin.info.getPackageName(),
                         userHandle) <= android.os.Build.VERSION_CODES.M;
             } else {
-                // Otherwise, make sure the caller has any active admin with the right policy.
-                admin = getActiveAdminForCallerLocked(null,
-                        DeviceAdminInfo.USES_POLICY_RESET_PASSWORD);
-                preN = getTargetSdk(admin.info.getPackageName(),
+                // Otherwise, make sure the caller has any active admin with the right policy or
+                // the required permission.
+                admin = getActiveAdminOrCheckPermissionForCallerLocked(
+                        null,
+                        DeviceAdminInfo.USES_POLICY_RESET_PASSWORD,
+                        android.Manifest.permission.RESET_PASSWORD);
+                // Cannot be preN if admin is null because an exception would have been
+                // thrown before getting here
+                preN = admin == null ? false : getTargetSdk(admin.info.getPackageName(),
                         userHandle) <= android.os.Build.VERSION_CODES.M;
 
                 // As of N, password resetting to empty/null is not allowed anymore.
@@ -4758,9 +4807,9 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                 // As of N, password cannot be changed by the admin if it is already set.
                 if (isLockScreenSecureUnchecked(userHandle)) {
                     if (!preN) {
-                        throw new SecurityException("Admin cannot change current password");
+                        throw new SecurityException("Cannot change current password");
                     } else {
-                        Slog.e(LOG_TAG, "Admin cannot change current password");
+                        Slog.e(LOG_TAG, "Cannot change current password");
                         return false;
                     }
                 }
@@ -5131,31 +5180,37 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
         final int callingUserId = mInjector.userHandleGetCallingUserId();
         synchronized (getLockObject()) {
-            // This API can only be called by an active device admin,
-            // so try to retrieve it to check that the caller is one.
-            final ActiveAdmin admin = getActiveAdminForCallerLocked(
-                    null, DeviceAdminInfo.USES_POLICY_FORCE_LOCK, parent);
-
+            // Make sure the caller has any active admin with the right policy or
+            // the required permission.
+            final ActiveAdmin admin = getActiveAdminOrCheckPermissionForCallerLocked(
+                    null,
+                    DeviceAdminInfo.USES_POLICY_FORCE_LOCK,
+                    parent,
+                    android.Manifest.permission.LOCK_DEVICE);
             final long ident = mInjector.binderClearCallingIdentity();
             try {
-                final ComponentName adminComponent = admin.info.getComponent();
-                // Evict key
-                if ((flags & DevicePolicyManager.FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY) != 0) {
-                    enforceManagedProfile(
-                            callingUserId, "set FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY");
-                    if (!isProfileOwner(adminComponent, callingUserId)) {
-                        throw new SecurityException("Only profile owner admins can set "
-                                + "FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY");
+                final ComponentName adminComponent = admin == null ?
+                        null : admin.info.getComponent();
+                if (adminComponent != null) {
+                    // For Profile Owners only, callers with only permission not allowed.
+                    if ((flags & DevicePolicyManager.FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY) != 0) {
+                        // Evict key
+                        enforceManagedProfile(
+                                callingUserId, "set FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY");
+                        if (!isProfileOwner(adminComponent, callingUserId)) {
+                            throw new SecurityException("Only profile owner admins can set "
+                                    + "FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY");
+                        }
+                        if (parent) {
+                            throw new IllegalArgumentException(
+                                    "Cannot set FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY for the parent");
+                        }
+                        if (!mInjector.storageManagerIsFileBasedEncryptionEnabled()) {
+                            throw new UnsupportedOperationException(
+                                    "FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY only applies to FBE devices");
+                        }
+                        mUserManager.evictCredentialEncryptionKey(callingUserId);
                     }
-                    if (parent) {
-                        throw new IllegalArgumentException(
-                                "Cannot set FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY for the parent");
-                    }
-                    if (!mInjector.storageManagerIsFileBasedEncryptionEnabled()) {
-                        throw new UnsupportedOperationException(
-                                "FLAG_EVICT_CREDENTIAL_ENCRYPTION_KEY only applies to FBE devices");
-                    }
-                    mUserManager.evictCredentialEncryptionKey(callingUserId);
                 }
 
                 // Lock all users unless this is a managed profile with a separate challenge
@@ -5174,7 +5229,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     mInjector.getTrustManager().setDeviceLockedForUser(userToLock, true);
                 }
 
-                if (SecurityLog.isLoggingEnabled()) {
+                if (SecurityLog.isLoggingEnabled() && adminComponent != null) {
                     final int affectedUserId =
                             parent ? getProfileParentId(callingUserId) : callingUserId;
                     SecurityLog.writeEvent(SecurityLog.TAG_REMOTE_LOCK,
@@ -7755,6 +7810,13 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         } finally {
             mInjector.binderRestoreCallingIdentity(id);
         }
+    }
+
+    @Override
+    public ComponentName getProfileOwnerAsUser(int userHandle) {
+        enforceCrossUsersPermission(userHandle);
+
+        return getProfileOwner(userHandle);
     }
 
     @Override
@@ -10511,8 +10573,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         final int userId = UserHandle.getUserId(uid);
         Intent intent = null;
         if (DevicePolicyManager.POLICY_DISABLE_CAMERA.equals(restriction) ||
-                DevicePolicyManager.POLICY_DISABLE_SCREEN_CAPTURE.equals(restriction) ||
-                DevicePolicyManager.POLICY_MANDATORY_BACKUPS.equals(restriction)) {
+                DevicePolicyManager.POLICY_DISABLE_SCREEN_CAPTURE.equals(restriction)) {
             synchronized (getLockObject()) {
                 final DevicePolicyData policy = getUserData(userId);
                 final int N = policy.mAdminList.size();
@@ -10521,9 +10582,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
                     if ((admin.disableCamera &&
                                 DevicePolicyManager.POLICY_DISABLE_CAMERA.equals(restriction)) ||
                         (admin.disableScreenCapture && DevicePolicyManager
-                                .POLICY_DISABLE_SCREEN_CAPTURE.equals(restriction)) ||
-                        (admin.mandatoryBackupTransport != null && DevicePolicyManager
-                                .POLICY_MANDATORY_BACKUPS.equals(restriction))) {
+                                .POLICY_DISABLE_SCREEN_CAPTURE.equals(restriction))) {
                         intent = createShowAdminSupportIntent(admin.info.getComponent(), userId);
                         break;
                     }
@@ -11933,12 +11992,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         }
         Preconditions.checkNotNull(admin);
         synchronized (getLockObject()) {
-            ActiveAdmin activeAdmin = getActiveAdminForCallerLocked(
-                    admin, DeviceAdminInfo.USES_POLICY_DEVICE_OWNER);
-            if (!enabled) {
-                activeAdmin.mandatoryBackupTransport = null;
-                saveSettingsLocked(UserHandle.USER_SYSTEM);
-            }
+            getActiveAdminForCallerLocked(admin, DeviceAdminInfo.USES_POLICY_DEVICE_OWNER);
         }
 
         final long ident = mInjector.binderClearCallingIdentity();
@@ -11971,87 +12025,6 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
             }
         }
     }
-
-    @Override
-    public boolean setMandatoryBackupTransport(
-            ComponentName admin,
-            ComponentName backupTransportComponent) {
-        if (!mHasFeature) {
-            return false;
-        }
-        Preconditions.checkNotNull(admin);
-        enforceDeviceOwner(admin);
-
-        final int callingUid = mInjector.binderGetCallingUid();
-        final AtomicBoolean success = new AtomicBoolean(false);
-        final CountDownLatch countDownLatch = new CountDownLatch(1);
-        final ISelectBackupTransportCallback selectBackupTransportCallbackInternal =
-                new ISelectBackupTransportCallback.Stub() {
-                    public void onSuccess(String transportName) {
-                        saveMandatoryBackupTransport(admin, callingUid, backupTransportComponent);
-                        success.set(true);
-                        countDownLatch.countDown();
-                    }
-
-                    public void onFailure(int reason) {
-                        countDownLatch.countDown();
-                    }
-                };
-        final long identity = mInjector.binderClearCallingIdentity();
-        try {
-            IBackupManager ibm = mInjector.getIBackupManager();
-            if (ibm != null && backupTransportComponent != null) {
-                if (!ibm.isBackupServiceActive(UserHandle.USER_SYSTEM)) {
-                    ibm.setBackupServiceActive(UserHandle.USER_SYSTEM, true);
-                }
-                ibm.selectBackupTransportAsync(
-                        backupTransportComponent, selectBackupTransportCallbackInternal);
-                countDownLatch.await();
-                if (success.get()) {
-                    ibm.setBackupEnabled(true);
-                }
-            } else if (backupTransportComponent == null) {
-                saveMandatoryBackupTransport(admin, callingUid, backupTransportComponent);
-                success.set(true);
-            }
-        } catch (RemoteException e) {
-            throw new IllegalStateException("Failed to set mandatory backup transport.", e);
-        } catch (InterruptedException e) {
-            throw new IllegalStateException("Failed to set mandatory backup transport.", e);
-        } finally {
-            mInjector.binderRestoreCallingIdentity(identity);
-        }
-        return success.get();
-    }
-
-    private void saveMandatoryBackupTransport(
-            ComponentName admin, int callingUid, ComponentName backupTransportComponent) {
-        synchronized (getLockObject()) {
-            ActiveAdmin activeAdmin =
-                    getActiveAdminWithPolicyForUidLocked(
-                            admin,
-                            DeviceAdminInfo.USES_POLICY_DEVICE_OWNER,
-                            callingUid);
-            if (!Objects.equals(backupTransportComponent,
-                    activeAdmin.mandatoryBackupTransport)) {
-                activeAdmin.mandatoryBackupTransport =
-                        backupTransportComponent;
-                saveSettingsLocked(UserHandle.USER_SYSTEM);
-            }
-        }
-    }
-
-    @Override
-    public ComponentName getMandatoryBackupTransport() {
-        if (!mHasFeature) {
-            return null;
-        }
-        synchronized (getLockObject()) {
-            ActiveAdmin activeAdmin = getDeviceOwnerAdminLocked();
-            return activeAdmin == null ? null : activeAdmin.mandatoryBackupTransport;
-        }
-    }
-
 
     @Override
     public boolean bindDeviceAdminServiceAsUser(
@@ -12306,6 +12279,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     /** Pauses security and network logging if there are unaffiliated users on the device */
+    @GuardedBy("getLockObject()")
     private void maybePauseDeviceWideLoggingLocked() {
         if (!areAllUsersAffiliatedWithDeviceLocked()) {
             Slog.i(LOG_TAG, "There are unaffiliated users, security and network logging will be "
@@ -12318,6 +12292,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     /** Resumes security and network logging (if they are enabled) if all users are affiliated */
+    @GuardedBy("getLockObject()")
     private void maybeResumeDeviceWideLoggingLocked() {
         if (areAllUsersAffiliatedWithDeviceLocked()) {
             final long ident = mInjector.binderClearCallingIdentity();
@@ -12333,6 +12308,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     /** Deletes any security and network logs that might have been collected so far */
+    @GuardedBy("getLockObject()")
     private void discardDeviceWideLogsLocked() {
         mSecurityLogMonitor.discardLogs();
         if (mNetworkLogger != null) {

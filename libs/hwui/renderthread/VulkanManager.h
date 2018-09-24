@@ -23,6 +23,8 @@
 #include <vulkan/vulkan.h>
 
 #include <SkSurface.h>
+#include <ui/Fence.h>
+#include <utils/StrongPointer.h>
 #include <vk/GrVkBackendContext.h>
 
 class GrVkExtensions;
@@ -109,6 +111,16 @@ public:
 
     // Presents the current VkImage.
     void swapBuffers(VulkanSurface* surface);
+
+    // Inserts a wait on fence command into the Vulkan command buffer.
+    status_t fenceWait(sp<Fence>& fence);
+
+    // Creates a fence that is signaled, when all the pending Vulkan commands are flushed.
+    status_t createReleaseFence(sp<Fence>& nativeFence);
+
+    // TODO(b/115636873): Handle composition preference.
+    SkColorType getSurfaceColorType() const { return SkColorType::kN32_SkColorType; }
+    sk_sp<SkColorSpace> getSurfaceColorSpace() { return SkColorSpace::MakeSRGB(); }
 
 private:
     friend class RenderThread;

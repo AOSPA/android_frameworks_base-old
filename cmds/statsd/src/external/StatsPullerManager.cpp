@@ -149,9 +149,6 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // system_uptime
         {android::util::SYSTEM_UPTIME,
          {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::SYSTEM_UPTIME)}},
-        // disk_space
-        {android::util::DISK_SPACE,
-         {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::DISK_SPACE)}},
         // remaining_battery_capacity
         {android::util::REMAINING_BATTERY_CAPACITY,
          {{},
@@ -164,6 +161,12 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
           {},
           1 * NS_PER_SEC,
           new ResourceHealthManagerPuller(android::util::FULL_BATTERY_CAPACITY)}},
+        // battery_voltage
+        {android::util::BATTERY_VOLTAGE,
+         {{},
+          {},
+          1 * NS_PER_SEC,
+          new ResourceHealthManagerPuller(android::util::BATTERY_VOLTAGE)}},
         // process_memory_state
         {android::util::PROCESS_MEMORY_STATE,
          {{4, 5, 6, 7, 8},
@@ -171,7 +174,7 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
           1 * NS_PER_SEC,
           new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_STATE)}},
         // temperature
-        {android::util::TEMPERATURE, {{}, {}, 1, new ResourceThermalManagerPuller()}},
+        {android::util::TEMPERATURE, {{}, {}, 1 * NS_PER_SEC, new ResourceThermalManagerPuller()}},
         // binder_calls
         {android::util::BINDER_CALLS,
          {{4, 5, 6, 8, 12},
@@ -183,7 +186,37 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
          {{},
           {},
           1 * NS_PER_SEC,
-          new StatsCompanionServicePuller(android::util::BINDER_CALLS_EXCEPTIONS)}}
+          new StatsCompanionServicePuller(android::util::BINDER_CALLS_EXCEPTIONS)}},
+        // looper_stats
+        {android::util::LOOPER_STATS,
+         {{5, 6, 7, 8, 9},
+          {2, 3, 4, 10},
+          1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::LOOPER_STATS)}},
+        // Disk Stats
+        {android::util::DISK_STATS,
+         {{},
+          {},
+          1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::DISK_STATS)}},
+        // Directory usage
+        {android::util::DIRECTORY_USAGE,
+         {{},
+          {},
+          1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::DIRECTORY_USAGE)}},
+        // Size of app's code, data, and cache
+        {android::util::APP_SIZE,
+         {{},
+          {},
+          1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::APP_SIZE)}},
+        // Size of specific categories of files. Eg. Music.
+        {android::util::CATEGORY_SIZE,
+         {{},
+          {},
+          1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::CATEGORY_SIZE)}},
         };
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {

@@ -34,19 +34,19 @@ public:
     renderthread::Frame getFrame() override;
     bool draw(const renderthread::Frame& frame, const SkRect& screenDirty, const SkRect& dirty,
               const LightGeometry& lightGeometry, LayerUpdateQueue* layerUpdateQueue,
-              const Rect& contentDrawBounds, bool opaque, bool wideColorGamut,
-              const LightInfo& lightInfo,
+              const Rect& contentDrawBounds, bool opaque, const LightInfo& lightInfo,
               const std::vector<sp<RenderNode> >& renderNodes,
               FrameInfoVisualizer* profiler) override;
     bool swapBuffers(const renderthread::Frame& frame, bool drew, const SkRect& screenDirty,
                      FrameInfo* currentFrameInfo, bool* requireSwap) override;
-    bool copyLayerInto(DeferredLayerUpdater* layer, SkBitmap* bitmap) override;
     DeferredLayerUpdater* createTextureLayer() override;
     bool setSurface(Surface* window, renderthread::SwapBehavior swapBehavior,
                     renderthread::ColorMode colorMode) override;
     void onStop() override;
     bool isSurfaceReady() override;
     bool isContextReady() override;
+    SkColorType getSurfaceColorType() const override;
+    sk_sp<SkColorSpace> getSurfaceColorSpace() override;
 
     static void invokeFunctor(const renderthread::RenderThread& thread, Functor* functor);
 

@@ -21,6 +21,7 @@
 #include "RenderThread.h"
 #include "pipeline/skia/ShaderCache.h"
 #include "pipeline/skia/SkiaMemoryTracer.h"
+#include "Properties.h"
 #include "renderstate/RenderState.h"
 
 #include <GrContextOptions.h>
@@ -50,7 +51,6 @@ CacheManager::CacheManager(const DisplayInfo& display) : mMaxSurfaceArea(display
     mVectorDrawableAtlas = new skiapipeline::VectorDrawableAtlas(
             mMaxSurfaceArea / 2,
             skiapipeline::VectorDrawableAtlas::StorageMode::disallowSharedSurface);
-    skiapipeline::ShaderCache::get().initShaderDiskCache();
 }
 
 void CacheManager::reset(sk_sp<GrContext> context) {
@@ -103,7 +103,7 @@ public:
     }
 };
 
-void CacheManager::configureContext(GrContextOptions* contextOptions) {
+void CacheManager::configureContext(GrContextOptions* contextOptions, const void* identity, ssize_t size) {
     contextOptions->fAllowPathMaskCaching = true;
 
     float screenMP = mMaxSurfaceArea / 1024.0f / 1024.0f;
@@ -133,7 +133,9 @@ void CacheManager::configureContext(GrContextOptions* contextOptions) {
         contextOptions->fExecutor = mTaskProcessor.get();
     }
 
-    contextOptions->fPersistentCache = &skiapipeline::ShaderCache::get();
+    auto& cache = skiapipeline::ShaderCache::get();
+    cache.initShaderDiskCache(identity, size);
+    contextOptions->fPersistentCache = &cache;
     contextOptions->fGpuPathRenderers &= ~GpuPathRenderers::kCoverageCounting;
 }
 
@@ -214,11 +216,12 @@ void CacheManager::dumpMemoryUsage(String8& log, const RenderState* renderState)
             log.appendFormat("  Layer Info:\n");
         }
 
+        const char* layerType = Properties::getRenderPipelineType() == RenderPipelineType::SkiaGL
+                ? "GlLayer" : "VkLayer";
         size_t layerMemoryTotal = 0;
         for (std::set<Layer*>::iterator it = renderState->mActiveLayers.begin();
              it != renderState->mActiveLayers.end(); it++) {
             const Layer* layer = *it;
-            const char* layerType = layer->getApi() == Layer::Api::OpenGL ? "GlLayer" : "VkLayer";
             log.appendFormat("    %s size %dx%d\n", layerType, layer->getWidth(),
                              layer->getHeight());
             layerMemoryTotal += layer->getWidth() * layer->getHeight() * 4;

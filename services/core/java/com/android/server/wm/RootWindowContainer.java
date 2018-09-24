@@ -174,24 +174,6 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         return null;
     }
 
-    /**
-     * Get an array with display ids ordered by focus priority - last items should be given
-     * focus first. Sparse array just maps position to displayId.
-     */
-    void getDisplaysInFocusOrder(SparseIntArray displaysInFocusOrder) {
-        displaysInFocusOrder.clear();
-
-        final int size = mChildren.size();
-        for (int i = 0; i < size; ++i) {
-            final DisplayContent displayContent = mChildren.get(i);
-            if (displayContent.isRemovalDeferred()) {
-                // Don't report displays that are going to be removed soon.
-                continue;
-            }
-            displaysInFocusOrder.put(i, displayContent.getDisplayId());
-        }
-    }
-
     DisplayContent getDisplayContent(int displayId) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final DisplayContent current = mChildren.get(i);
@@ -699,10 +681,11 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
                 i--;
                 WindowState win = mService.mDestroySurface.get(i);
                 win.mDestroying = false;
-                if (mService.mInputMethodWindow == win) {
-                    mService.setInputMethodWindowLocked(null);
+                final DisplayContent displayContent = win.getDisplayContent();
+                if (displayContent.mInputMethodWindow == win) {
+                    displayContent.setInputMethodWindowLocked(null);
                 }
-                if (win.getDisplayContent().mWallpaperController.isWallpaperTarget(win)) {
+                if (displayContent.mWallpaperController.isWallpaperTarget(win)) {
                     wallpaperDestroyed = true;
                 }
                 win.destroySurfaceUnchecked();
@@ -1098,6 +1081,25 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
     }
 
     @Override
+    void positionChildAt(int position, DisplayContent child, boolean includingParents) {
+        super.positionChildAt(position, child, includingParents);
+        final RootWindowContainerController controller = getController();
+        if (controller != null) {
+            controller.onChildPositionChanged(child, position);
+        }
+    }
+
+    void positionChildAt(int position, DisplayContent child) {
+        // Only called from controller so no need to notify the change to controller.
+        super.positionChildAt(position, child, false /* includingParents */);
+    }
+
+    @Override
+    RootWindowContainerController getController() {
+        return (RootWindowContainerController) super.getController();
+    }
+
+    @Override
     void scheduleAnimation() {
         mService.scheduleAnimationLocked();
     }
@@ -1111,5 +1113,19 @@ class RootWindowContainer extends WindowContainer<DisplayContent> {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             callback.accept(mChildren.get(i));
         }
+    }
+
+    /**
+     * Get current topmost focused IME window in system.
+     * Will look on all displays in current Z-order.
+     */
+    WindowState getCurrentInputMethodWindow() {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            final DisplayContent displayContent = mChildren.get(i);
+            if (displayContent.mInputMethodWindow != null) {
+                return displayContent.mInputMethodWindow;
+            }
+        }
+        return null;
     }
 }

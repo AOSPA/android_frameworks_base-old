@@ -30,6 +30,7 @@ import android.database.ContentObserver;
 import android.database.Cursor;
 import android.database.sqlite.SqliteWrapper;
 import android.net.Uri;
+import android.os.Build;
 import android.telephony.Rlog;
 import android.telephony.ServiceState;
 import android.telephony.SmsMessage;
@@ -382,7 +383,7 @@ public final class Telephony {
          * Return cursor for table query.
          * @hide
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public static Cursor query(ContentResolver cr, String[] projection,
                 String where, String orderBy) {
             android.util.SeempLog.record(10);
@@ -1225,7 +1226,10 @@ public final class Telephony {
              *
              * <p>Requires {@code android.Manifest.permission#CONTROL_INCALL_EXPERIENCE} to
              * send and receive.</p>
+             * @deprecated it is no longer supported, use {@link
+             * TelephonyManager#ACTION_SECRET_CODE} instead
              */
+            @Deprecated
             @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
             public static final String SECRET_CODE_ACTION =
                     "android.provider.Telephony.SECRET_CODE";

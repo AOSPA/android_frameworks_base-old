@@ -258,7 +258,6 @@ import android.view.animation.Animation;
 import android.view.animation.AnimationSet;
 import android.view.animation.AnimationUtils;
 import android.view.autofill.AutofillManagerInternal;
-import android.view.inputmethod.InputMethodManagerInternal;
 
 import com.android.internal.R;
 import com.android.internal.accessibility.AccessibilityShortcutController;
@@ -277,6 +276,7 @@ import com.android.internal.widget.PointerLocationView;
 import com.android.server.GestureLauncherService;
 import com.android.server.LocalServices;
 import com.android.server.SystemServiceManager;
+import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate;
 import com.android.server.policy.keyguard.KeyguardServiceDelegate.DrawnListener;
 import com.android.server.policy.keyguard.KeyguardStateMonitor.StateCallback;
@@ -3623,8 +3623,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return 0;
         } else if (mHasFeatureLeanback && interceptBugreportGestureTv(keyCode, down)) {
             return -1;
-        } else if (mHasFeatureLeanback && interceptAccessibilityGestureTv(keyCode, down)) {
-            return -1;
         } else if (keyCode == KeyEvent.KEYCODE_ALL_APPS) {
             if (!down) {
                 mHandler.removeMessages(MSG_HANDLE_ALL_APPS);
@@ -4812,8 +4810,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         final WindowManager.LayoutParams attrs = win.getAttrs();
         final boolean isDefaultDisplay = win.isDefaultDisplay();
-        final boolean needsToOffsetInputMethodTarget = isDefaultDisplay &&
-                (win == mLastInputMethodTargetWindow && mLastInputMethodWindow != null);
+        final boolean needsToOffsetInputMethodTarget =
+                (win == mLastInputMethodTargetWindow) && (mLastInputMethodWindow != null);
         if (needsToOffsetInputMethodTarget) {
             if (DEBUG_LAYOUT) Slog.i(TAG, "Offset ime target window by the last ime window state");
             offsetInputMethodWindowLw(mLastInputMethodWindow, displayFrames);
@@ -6114,6 +6112,22 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 }
                 break;
+            }
+        }
+
+        // Intercept the Accessibility keychord for TV (DPAD_DOWN + Back) before the keyevent is
+        // processed through interceptKeyEventBeforeDispatch since Talkback may consume this event
+        // before it has a chance to reach that method.
+        if (mHasFeatureLeanback) {
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_DPAD_DOWN:
+                case KeyEvent.KEYCODE_BACK: {
+                    boolean handled = interceptAccessibilityGestureTv(keyCode, down);
+                    if (handled) {
+                        result &= ~ACTION_PASS_TO_USER;
+                    }
+                    break;
+                }
             }
         }
 
@@ -7958,15 +7972,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // jump when we change orientations and we don't rotate
         // seamlessly.
         if (!displayRotation.getDisplayPolicy().navigationBarCanMove()) {
-            return false;
-        }
-        int delta = newRotation - oldRotation;
-        if (delta < 0) delta += 4;
-        // Likewise we don't rotate seamlessly for 180 degree rotations
-        // in this case the surfaces never resize, and our logic to
-        // revert the transformations on size change will fail. We could
-        // fix this in the future with the "tagged" frames idea.
-        if (delta == Surface.ROTATION_180) {
             return false;
         }
 

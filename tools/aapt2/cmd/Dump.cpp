@@ -298,7 +298,7 @@ int DumpTableCommand::Action(const std::vector<std::string>& args) {
       return 1;
     }
 
-    if (loaded_apk->GetApkFormat()) {
+    if (loaded_apk->GetApkFormat() == ApkFormat::kProto) {
       printer.Println("Proto APK");
     } else {
       printer.Println("Binary APK");
@@ -356,7 +356,7 @@ int DumpXmlStringsCommand::Action(const std::vector<std::string>& args) {
   for (auto xml_file : files_) {
     android::ResXMLTree tree;
 
-    if (loaded_apk->GetApkFormat() == kProto) {
+    if (loaded_apk->GetApkFormat() == ApkFormat::kProto) {
       auto xml = loaded_apk->LoadXml(xml_file, diag_);
       if (!xml) {
         return 1;
@@ -375,7 +375,7 @@ int DumpXmlStringsCommand::Action(const std::vector<std::string>& args) {
       std::string data = buffer.to_string();
       tree.setTo(data.data(), data.size(), /** copyData */ true);
 
-    } else if (loaded_apk->GetApkFormat() == kBinary) {
+    } else if (loaded_apk->GetApkFormat() == ApkFormat::kBinary) {
       io::IFile* file = loaded_apk->GetFileCollection()->FindFile(xml_file);
       if (!file) {
         diag_->Error(DiagMessage(xml_file) << "file '" << xml_file << "' not found in APK");
@@ -394,6 +394,36 @@ int DumpXmlStringsCommand::Action(const std::vector<std::string>& args) {
 
     Debug::DumpResStringPool(&tree.getStrings(), &printer);
   }
+
+  return 0;
+}
+
+int DumpPackageNameCommand::Action(const std::vector<std::string>& args) {
+  if (args.size() < 1) {
+    diag_->Error(DiagMessage() << "No dump apk specified.");
+    return 1;
+  }
+
+  auto loaded_apk = LoadedApk::LoadApkFromPath(args[0], diag_);
+  if (!loaded_apk) {
+    return 1;
+  }
+
+  io::FileOutputStream fout(STDOUT_FILENO, kStdOutBufferSize);
+  Printer printer(&fout);
+
+  xml::Element* manifest_el = loaded_apk->GetManifest()->root.get();
+  if (!manifest_el) {
+    diag_->Error(DiagMessage() << "No AndroidManifest.");
+    return 1;
+  }
+
+  xml::Attribute* attr = manifest_el->FindAttribute({}, "package");
+  if (!attr) {
+    diag_->Error(DiagMessage() << "No package name.");
+    return 1;
+  }
+  printer.Println(StringPrintf("%s", attr->value.c_str()));
 
   return 0;
 }

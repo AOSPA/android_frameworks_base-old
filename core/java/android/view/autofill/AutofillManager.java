@@ -45,6 +45,7 @@ import android.service.autofill.UserData;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
+import android.util.Slog;
 import android.util.SparseArray;
 import android.view.Choreographer;
 import android.view.KeyEvent;
@@ -559,6 +560,9 @@ public final class AutofillManager {
             // different bridge based on which activity is currently focused
             // in the current process. Since compat would be rarely used, just
             // create and register a new instance every time.
+            if (sDebug) {
+                Slog.d(TAG, "creating CompatibilityBridge for " + mContext);
+            }
             mCompatibilityBridge = new CompatibilityBridge();
         }
     }
@@ -1413,7 +1417,7 @@ public final class AutofillManager {
         try {
             mService.getAvailableFieldClassificationAlgorithms(receiver);
             final String[] algorithms = receiver
-                    .getObjectResult(SyncResultReceiver.TYPE_STRING_ARRAY);
+                .getObjectResult(SyncResultReceiver.TYPE_STRING_ARRAY);
             return algorithms != null ? Arrays.asList(algorithms) : Collections.emptyList();
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();

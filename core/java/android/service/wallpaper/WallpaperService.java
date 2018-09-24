@@ -45,6 +45,7 @@ import android.util.Log;
 import android.util.MergedConfiguration;
 import android.view.Display;
 import android.view.DisplayCutout;
+import android.view.DisplayInfo;
 import android.view.Gravity;
 import android.view.IWindowSession;
 import android.view.InputChannel;
@@ -763,9 +764,20 @@ public abstract class WallpaperService extends Service {
 
                     mLayout.x = 0;
                     mLayout.y = 0;
-                    mLayout.width = myWidth;
-                    mLayout.height = myHeight;
-                    
+
+                    if (!fixedSize) {
+                        mLayout.width = myWidth;
+                        mLayout.height = myHeight;
+                    } else {
+                        // Force the wallpaper to cover the screen in both dimensions
+                        // only internal implementations like ImageWallpaper
+                        DisplayInfo displayInfo = new DisplayInfo();
+                        mDisplay.getDisplayInfo(displayInfo);
+                        mLayout.width = Math.max(displayInfo.logicalWidth, myWidth);
+                        mLayout.height = Math.max(displayInfo.logicalHeight, myHeight);
+                        mWindowFlags |= WindowManager.LayoutParams.FLAG_SCALED;
+                    }
+
                     mLayout.format = mFormat;
                     
                     mCurWindowFlags = mWindowFlags;
@@ -847,6 +859,9 @@ public abstract class WallpaperService extends Service {
                         mStableInsets.bottom += padding.bottom;
                         mDisplayCutout.set(mDisplayCutout.get().inset(-padding.left, -padding.top,
                                 -padding.right, -padding.bottom));
+                    } else {
+                        w = myWidth;
+                        h = myHeight;
                     }
 
                     if (mCurWidth != w) {

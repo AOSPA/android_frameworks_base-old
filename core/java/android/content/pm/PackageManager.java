@@ -1979,6 +1979,8 @@ public abstract class PackageManager {
      * </ul>
      * A version of 1.1.0 or higher also indicates:
      * <ul>
+     * <li>The {@code VK_ANDROID_external_memory_android_hardware_buffer} extension is
+     *     supported.</li>
      * <li>{@code SYNC_FD} external semaphore and fence handles are supported.</li>
      * <li>{@code VkPhysicalDeviceSamplerYcbcrConversionFeatures::samplerYcbcrConversion} is
      *     supported.</li>
@@ -2274,10 +2276,16 @@ public abstract class PackageManager {
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device has biometric hardware to perform face authentication.
-     * @hide
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_FACE = "android.hardware.face";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device has biometric hardware to perform iris authentication.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_IRIS = "android.hardware.iris";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
@@ -2676,13 +2684,6 @@ public abstract class PackageManager {
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_DEVICE_ID_ATTESTATION =
             "android.software.device_id_attestation";
-
-    /**
-     * Action to external storage service to clean out removed apps.
-     * @hide
-     */
-    public static final String ACTION_CLEAN_EXTERNAL_STORAGE
-            = "android.content.pm.CLEAN_EXTERNAL_STORAGE";
 
     /**
      * Extra field name for the URI to a verification file. Passed to a package
@@ -3277,11 +3278,14 @@ public abstract class PackageManager {
             @PermissionInfoFlags int flags) throws NameNotFoundException;
 
     /**
-     * Returns true if some permissions are individually controlled
+     * Returns true if some permissions are individually controlled.
+     *
+     * <p>The user usually grants and revokes permission-groups. If this option is set some
+     * dangerous system permissions can be revoked/granted by the user separately from their group.
      *
      * @hide
      */
-    @TestApi
+    @TestApi @SystemApi
     public abstract boolean arePermissionsIndividuallyControlled();
 
     /**

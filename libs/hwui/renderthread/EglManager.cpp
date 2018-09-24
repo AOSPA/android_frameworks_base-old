@@ -18,7 +18,9 @@
 
 #include <cutils/properties.h>
 #include <log/log.h>
+#include <private/gui/SyncFeatures.h>
 #include <utils/Trace.h>
+#include "utils/Color.h"
 #include "utils/StringUtils.h"
 
 #include "DeviceInfo.h"
@@ -26,6 +28,7 @@
 #include "Properties.h"
 
 #include <EGL/eglext.h>
+#include <GLES/gl.h>
 
 #include <string>
 #include <vector>
@@ -74,6 +77,7 @@ static struct {
     bool pixelFormatFloat = false;
     bool glColorSpace = false;
     bool scRGB = false;
+    bool displayP3 = false;
     bool contextPriority = false;
     bool surfacelessContext = false;
 } EglExtensions;
@@ -124,6 +128,17 @@ void EglManager::initialize() {
     createPBufferSurface();
     makeCurrent(mPBufferSurface, nullptr, /* force */ true);
     DeviceInfo::initialize();
+
+    mSurfaceColorGamut = DataSpaceToColorGamut(
+        static_cast<android_dataspace>(DeviceInfo::get()->getTargetDataSpace()));
+
+    LOG_ALWAYS_FATAL_IF(mSurfaceColorGamut == SkColorSpace::kDCIP3_D65_Gamut &&
+                        !EglExtensions.displayP3, "EGL doesn't support Display P3.");
+
+    mSurfaceColorType = PixelFormatToColorType(
+        static_cast<android_pixel_format>(DeviceInfo::get()->getTargetPixelFormat()));
+    mSurfaceColorSpace = DataSpaceToColorSpace(
+        static_cast<android_dataspace>(DeviceInfo::get()->getTargetDataSpace()));
 }
 
 void EglManager::initExtensions() {
@@ -147,6 +162,7 @@ void EglManager::initExtensions() {
 #else
     EglExtensions.scRGB = extensions.has("EGL_EXT_gl_colorspace_scrgb");
 #endif
+    EglExtensions.displayP3 = extensions.has("EGL_EXT_gl_colorspace_display_p3");
     EglExtensions.contextPriority = extensions.has("EGL_IMG_context_priority");
     EglExtensions.surfacelessContext = extensions.has("EGL_KHR_surfaceless_context");
 }
@@ -159,6 +175,10 @@ void EglManager::loadConfigs() {
     ALOGD("Swap behavior %d", static_cast<int>(mSwapBehavior));
     EGLint swapBehavior =
             (mSwapBehavior == SwapBehavior::Preserved) ? EGL_SWAP_BEHAVIOR_PRESERVED_BIT : 0;
+
+    // Note: The default pixel format is RGBA_8888, when other formats are
+    // available, we should check the target pixel format and configure the
+    // attributes list properly.
     EGLint attribs[] = {EGL_RENDERABLE_TYPE,
                         EGL_OPENGL_ES2_BIT,
                         EGL_RED_SIZE,
@@ -254,11 +274,12 @@ void EglManager::createPBufferSurface() {
     }
 }
 
-EGLSurface EglManager::createSurface(EGLNativeWindowType window, bool wideColorGamut) {
+EGLSurface EglManager::createSurface(EGLNativeWindowType window, ColorMode colorMode) {
     LOG_ALWAYS_FATAL_IF(!hasEglContext(), "Not initialized");
 
-    wideColorGamut = wideColorGamut && EglExtensions.glColorSpace && EglExtensions.scRGB &&
-                     EglExtensions.pixelFormatFloat && EglExtensions.noConfigContext;
+    bool wideColorGamut = colorMode == ColorMode::WideColorGamut && EglExtensions.glColorSpace &&
+                          EglExtensions.scRGB && EglExtensions.pixelFormatFloat &&
+                          EglExtensions.noConfigContext;
 
     // The color space we want to use depends on whether linear blending is turned
     // on and whether the app has requested wide color gamut rendering. When wide
@@ -268,9 +289,9 @@ EGLSurface EglManager::createSurface(EGLNativeWindowType window, bool wideColorG
     // When wide gamut rendering is off:
     // - Blending is done by default in gamma space, which requires using a
     //   linear EGL color space (the GPU uses the color values as is)
-    // - If linear blending is on, we must use the sRGB EGL color space (the
-    //   GPU will perform sRGB to linear and linear to SRGB conversions before
-    //   and after blending)
+    // - If linear blending is on, we must use the non-linear EGL color space
+    //   (the GPU will perform sRGB to linear and linear to SRGB conversions
+    //   before and after blending)
     //
     // When wide gamut rendering is on we cannot rely on the GPU performing
     // linear blending for us. We use two different color spaces to tag the
@@ -278,7 +299,7 @@ EGLSurface EglManager::createSurface(EGLNativeWindowType window, bool wideColorG
     // - Gamma blending (default) requires the use of the scRGB-nl color space
     // - Linear blending requires the use of the scRGB color space
 
-    // Not all Android targets support the EGL_GL_COLOR_SPACE_KHR extension
+    // Not all Android targets support the EGL_GL_COLORSPACE_KHR extension
     // We insert to placeholders to set EGL_GL_COLORSPACE_KHR and its value.
     // According to section 3.4.1 of the EGL specification, the attributes
     // list is considered empty if the first entry is EGL_NONE
@@ -290,13 +311,21 @@ EGLSurface EglManager::createSurface(EGLNativeWindowType window, bool wideColorG
         if (wideColorGamut) {
             attribs[1] = EGL_GL_COLORSPACE_SCRGB_LINEAR_EXT;
         } else {
-            attribs[1] = EGL_GL_COLORSPACE_SRGB_KHR;
+            if (mSurfaceColorGamut == SkColorSpace::kDCIP3_D65_Gamut) {
+                attribs[1] = EGL_GL_COLORSPACE_DISPLAY_P3_EXT;
+            } else {
+                attribs[1] = EGL_GL_COLORSPACE_SRGB_KHR;
+            }
         }
 #else
         if (wideColorGamut) {
             attribs[1] = EGL_GL_COLORSPACE_SCRGB_EXT;
         } else {
-            attribs[1] = EGL_GL_COLORSPACE_LINEAR_KHR;
+            if (mSurfaceColorGamut == SkColorSpace::kDCIP3_D65_Gamut) {
+                attribs[1] = EGL_GL_COLORSPACE_DISPLAY_P3_EXT;
+            } else {
+                attribs[1] = EGL_GL_COLORSPACE_LINEAR_KHR;
+            }
         }
 #endif
     }
@@ -462,6 +491,109 @@ bool EglManager::setPreserveBuffer(EGLSurface surface, bool preserve) {
     }
 
     return preserved;
+}
+
+status_t EglManager::fenceWait(sp<Fence>& fence) {
+    if (!hasEglContext()) {
+        ALOGE("EglManager::fenceWait: EGLDisplay not initialized");
+        return INVALID_OPERATION;
+    }
+
+    if (SyncFeatures::getInstance().useWaitSync() &&
+        SyncFeatures::getInstance().useNativeFenceSync()) {
+        // Block GPU on the fence.
+        // Create an EGLSyncKHR from the current fence.
+        int fenceFd = fence->dup();
+        if (fenceFd == -1) {
+            ALOGE("EglManager::fenceWait: error dup'ing fence fd: %d", errno);
+            return -errno;
+        }
+        EGLint attribs[] = {
+            EGL_SYNC_NATIVE_FENCE_FD_ANDROID, fenceFd,
+            EGL_NONE
+        };
+        EGLSyncKHR sync = eglCreateSyncKHR(mEglDisplay,
+                EGL_SYNC_NATIVE_FENCE_ANDROID, attribs);
+        if (sync == EGL_NO_SYNC_KHR) {
+            close(fenceFd);
+            ALOGE("EglManager::fenceWait: error creating EGL fence: %#x", eglGetError());
+            return UNKNOWN_ERROR;
+        }
+
+        // XXX: The spec draft is inconsistent as to whether this should
+        // return an EGLint or void.  Ignore the return value for now, as
+        // it's not strictly needed.
+        eglWaitSyncKHR(mEglDisplay, sync, 0);
+        EGLint eglErr = eglGetError();
+        eglDestroySyncKHR(mEglDisplay, sync);
+        if (eglErr != EGL_SUCCESS) {
+            ALOGE("EglManager::fenceWait: error waiting for EGL fence: %#x", eglErr);
+            return UNKNOWN_ERROR;
+        }
+    } else {
+        // Block CPU on the fence.
+        status_t err = fence->waitForever("EglManager::fenceWait");
+        if (err != NO_ERROR) {
+            ALOGE("EglManager::fenceWait: error waiting for fence: %d", err);
+            return err;
+        }
+    }
+    return OK;
+}
+
+status_t EglManager::createReleaseFence(bool useFenceSync, EGLSyncKHR* eglFence,
+        sp<Fence>& nativeFence) {
+    if (!hasEglContext()) {
+        ALOGE("EglManager::createReleaseFence: EGLDisplay not initialized");
+        return INVALID_OPERATION;
+    }
+
+    if (SyncFeatures::getInstance().useNativeFenceSync()) {
+        EGLSyncKHR sync = eglCreateSyncKHR(mEglDisplay,
+                EGL_SYNC_NATIVE_FENCE_ANDROID, nullptr);
+        if (sync == EGL_NO_SYNC_KHR) {
+            ALOGE("EglManager::createReleaseFence: error creating EGL fence: %#x",
+                    eglGetError());
+            return UNKNOWN_ERROR;
+        }
+        glFlush();
+        int fenceFd = eglDupNativeFenceFDANDROID(mEglDisplay, sync);
+        eglDestroySyncKHR(mEglDisplay, sync);
+        if (fenceFd == EGL_NO_NATIVE_FENCE_FD_ANDROID) {
+            ALOGE("EglManager::createReleaseFence: error dup'ing native fence "
+                    "fd: %#x", eglGetError());
+            return UNKNOWN_ERROR;
+        }
+        nativeFence = new Fence(fenceFd);
+        *eglFence = EGL_NO_SYNC_KHR;
+    } else if (useFenceSync && SyncFeatures::getInstance().useFenceSync()) {
+        if (*eglFence != EGL_NO_SYNC_KHR) {
+            // There is already a fence for the current slot.  We need to
+            // wait on that before replacing it with another fence to
+            // ensure that all outstanding buffer accesses have completed
+            // before the producer accesses it.
+            EGLint result = eglClientWaitSyncKHR(mEglDisplay, *eglFence, 0, 1000000000);
+            if (result == EGL_FALSE) {
+                ALOGE("EglManager::createReleaseFence: error waiting for previous fence: %#x",
+                        eglGetError());
+                return UNKNOWN_ERROR;
+            } else if (result == EGL_TIMEOUT_EXPIRED_KHR) {
+                ALOGE("EglManager::createReleaseFence: timeout waiting for previous fence");
+                return TIMED_OUT;
+            }
+            eglDestroySyncKHR(mEglDisplay, *eglFence);
+        }
+
+        // Create a fence for the outstanding accesses in the current
+        // OpenGL ES context.
+        *eglFence = eglCreateSyncKHR(mEglDisplay, EGL_SYNC_FENCE_KHR, nullptr);
+        if (*eglFence == EGL_NO_SYNC_KHR) {
+            ALOGE("EglManager::createReleaseFence: error creating fence: %#x", eglGetError());
+            return UNKNOWN_ERROR;
+        }
+        glFlush();
+    }
+    return OK;
 }
 
 } /* namespace renderthread */

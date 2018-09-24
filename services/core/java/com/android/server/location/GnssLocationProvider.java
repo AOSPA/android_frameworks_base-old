@@ -1588,6 +1588,8 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
             mSingleShot = false;
             native_stop();
             mLastFixTime = 0;
+            // native_stop() may reset the position mode in hardware.
+            mLastPositionMode = null;
 
             // reset SV count to zero
             updateStatus(LocationProvider.TEMPORARILY_UNAVAILABLE);
@@ -2519,13 +2521,20 @@ public class GnssLocationProvider implements LocationProviderInterface, InjectNt
         if (apn == null) {
             return APN_INVALID;
         }
-
+        TelephonyManager phone = (TelephonyManager)
+                mContext.getSystemService(Context.TELEPHONY_SERVICE);
+        // Carrier configuration may override framework roaming state, we need to use the actual
+        // modem roaming state instead of the framework roaming state.
+        boolean isDataRoamingFromRegistration = phone.getServiceState().
+                getDataRoamingFromRegistration();
+        String projection = isDataRoamingFromRegistration ? Carriers.ROAMING_PROTOCOL :
+                Carriers.PROTOCOL;
         String selection = String.format("current = 1 and apn = '%s' and carrier_enabled = 1", apn);
         Cursor cursor = null;
         try {
             cursor = mContext.getContentResolver().query(
                     Carriers.CONTENT_URI,
-                    new String[]{Carriers.PROTOCOL},
+                    new String[]{projection},
                     selection,
                     null,
                     Carriers.DEFAULT_SORT_ORDER);

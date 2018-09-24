@@ -17,7 +17,10 @@
 package android.graphics;
 
 import android.annotation.ColorInt;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
+import android.annotation.Px;
 import android.annotation.Size;
 import android.annotation.UnsupportedAppUsage;
 import android.graphics.fonts.FontVariationAxis;
@@ -805,25 +808,39 @@ public class Paint {
      * Helper for getFlags(), returning true if UNDERLINE_TEXT_FLAG bit is set
      *
      * @return true if the underlineText bit is set in the paint's flags.
+     * @see #getUnderlinePosition()
+     * @see #getUnderlineThickness()
+     * @see #setUnderlineText(boolean)
      */
     public final boolean isUnderlineText() {
         return (getFlags() & UNDERLINE_TEXT_FLAG) != 0;
     }
 
     /**
-     * Distance from top of the underline to the baseline. Positive values mean below the baseline.
-     * This method returns where the underline should be drawn independent of if the underlineText
-     * bit is set at the moment.
-     * @hide
+     * Returns the distance from top of the underline to the baseline in pixels.
+     *
+     * The result is positive for positions that are below the baseline.
+     * This method returns where the underline should be drawn independent of if the {@link
+     * #UNDERLINE_TEXT_FLAG} bit is set.
+     *
+     * @return the position of the underline in pixels
+     * @see #isUnderlineText()
+     * @see #getUnderlineThickness()
+     * @see #setUnderlineText(boolean)
      */
-    public float getUnderlinePosition() {
+    public @Px float getUnderlinePosition() {
         return nGetUnderlinePosition(mNativePaint);
     }
 
     /**
-     * @hide
+     * Returns the thickness of the underline in pixels.
+     *
+     * @return the thickness of the underline in pixels
+     * @see #isUnderlineText()
+     * @see #getUnderlinePosition()
+     * @see #setUnderlineText(boolean)
      */
-    public float getUnderlineThickness() {
+    public @Px float getUnderlineThickness() {
         return nGetUnderlineThickness(mNativePaint);
     }
 
@@ -832,6 +849,9 @@ public class Paint {
      *
      * @param underlineText true to set the underlineText bit in the paint's
      *                      flags, false to clear it.
+     * @see #isUnderlineText()
+     * @see #getUnderlinePosition()
+     * @see #getUnderlineThickness()
      */
     public void setUnderlineText(boolean underlineText) {
         nSetUnderlineText(mNativePaint, underlineText);
@@ -840,26 +860,40 @@ public class Paint {
     /**
      * Helper for getFlags(), returning true if STRIKE_THRU_TEXT_FLAG bit is set
      *
-     * @return true if the strikeThruText bit is set in the paint's flags.
+     * @return true if the {@link #STRIKE_THRU_TEXT_FLAG} bit is set in the paint's flags.
+     * @see #getStrikeThruPosition()
+     * @see #getStrikeThruThickness()
+     * @see #setStrikeThruText(boolean)
      */
     public final boolean isStrikeThruText() {
         return (getFlags() & STRIKE_THRU_TEXT_FLAG) != 0;
     }
 
     /**
-     * Distance from top of the strike-through line to the baseline. Negative values mean above the
-     * baseline. This method returns where the strike-through line should be drawn independent of if
-     * the strikeThruText bit is set at the moment.
-     * @hide
+     * Distance from top of the strike-through line to the baseline in pixels.
+     *
+     * The result is negative for positions that are above the baseline.
+     * This method returns where the strike-through line should be drawn independent of if the
+     * {@link #STRIKE_THRU_TEXT_FLAG} bit is set.
+     *
+     * @return the position of the strike-through line in pixels
+     * @see #getStrikeThruThickness()
+     * @see #setStrikeThruText(boolean)
+     * @see #isStrikeThruText()
      */
-    public float getStrikeThruPosition() {
+    public @Px float getStrikeThruPosition() {
         return nGetStrikeThruPosition(mNativePaint);
     }
 
     /**
-     * @hide
+     * Returns the thickness of the strike-through line in pixels.
+     *
+     * @return the position of the strike-through line in pixels
+     * @see #getStrikeThruPosition()
+     * @see #setStrikeThruText(boolean)
+     * @see #isStrikeThruText()
      */
-    public float getStrikeThruThickness() {
+    public @Px float getStrikeThruThickness() {
         return nGetStrikeThruThickness(mNativePaint);
     }
 
@@ -868,6 +902,9 @@ public class Paint {
      *
      * @param strikeThruText true to set the strikeThruText bit in the paint's
      *                       flags, false to clear it.
+     * @see #getStrikeThruPosition()
+     * @see #getStrikeThruThickness()
+     * @see #isStrikeThruText()
      */
     public void setStrikeThruText(boolean strikeThruText) {
         nSetStrikeThruText(mNativePaint, strikeThruText);
@@ -1560,22 +1597,25 @@ public class Paint {
     }
 
     /**
-     * Return the paint's word-spacing for text. The default value is 0.
+     * Return the paint's extra word-spacing for text.
      *
-     * @return the paint's word-spacing for drawing text.
-     * @hide
+     * The default value is 0.
+     *
+     * @return the paint's extra word-spacing for drawing text in pixels.
+     * @see #setWordSpacing(float)
      */
     public float getWordSpacing() {
         return nGetWordSpacing(mNativePaint);
     }
 
     /**
-     * Set the paint's word-spacing for text. The default value is 0.
-     * The value is in pixels (note the units are not the same as for
-     * letter-spacing).
+     * Set the paint's extra word-spacing for text.
      *
-     * @param wordSpacing set the paint's word-spacing for drawing text.
-     * @hide
+     * Increases the white space width between words with the given amount of pixels.
+     * The default value is 0.
+     *
+     * @param wordSpacing set the paint's extra word-spacing for drawing text in pixels.
+     * @see #getWordSpacing()
      */
     public void setWordSpacing(float wordSpacing) {
         nSetWordSpacing(mNativePaint, wordSpacing);
@@ -1704,26 +1744,52 @@ public class Paint {
     }
 
     /**
-     * Get the current value of hyphen edit.
+     * Get the current value of packed hyphen edit.
+     *
+     * You can extract start hyphen edit and end hyphen edit by using
+     * {@link android.text.Hyphenator#unpackStartHyphenEdit(int)} and
+     * {@link android.text.Hyphenator#unpackEndHyphenEdit(int)}.
+     *
+     * The default value is 0 which is equivalent to packed value of
+     * {@link android.text.Hyphenator#START_HYPHEN_EDIT_NO_EDIT} and
+     * {@link android.text.Hyphenator#END_HYPHEN_EDIT_NO_EDIT}.
      *
      * @return the current hyphen edit value
-     *
-     * @hide
+     * @see #setHyphenEdit(int)
      */
     public int getHyphenEdit() {
         return nGetHyphenEdit(mNativePaint);
     }
 
     /**
-     * Set a hyphen edit on the paint (causes a hyphen to be added to text when
-     * measured or drawn).
+     * Set a packed hyphen edit on the paint.
      *
-     * @param hyphen 0 for no edit, 1 for adding a hyphen at the end, etc.
-     *        Definition of various values are in the HyphenEdit class in Minikin's Hyphenator.h.
+     * By setting hyphen edit, the measurement and drawing is performed with modifying hyphenation
+     * at the start of line and end of line. For example, by passing
+     * {@link android.text.Hyphenator#END_HYPHEN_EDIT_INSERT_HYPHEN} like as follows, HYPHEN(U+2010)
+     * character is appended at the end of line.
      *
-     * @hide
+     * <pre>
+     * <code>
+     *   Paint paint = new Paint();
+     *   paint.setHyphenEdit(Hyphenator.packHyphenEdit(
+     *       Hyphenator.START_HYPHEN_EDIT_NO_EDIT,
+     *       Hyphenator.END_HYPHEN_EDIT_INSERT_HYPHEN));
+     *   paint.measureText("abc", 0, 3);  // Returns the width of "abc‐"
+     *   Canvas.drawText("abc", 0, 3, 0f, 0f, paint);  // Draws "abc‐"
+     * </code>
+     * </pre>
+     *
+     * You can pack start hyphen edit and end hyphen edit by
+     * {@link android.text.Hyphenator#packHyphenEdit(int,int)}
+     *
+     * The default value is 0 which is equivalent to packed value of
+     * {@link android.text.Hyphenator#START_HYPHEN_EDIT_NO_EDIT} and
+     * {@link android.text.Hyphenator#END_HYPHEN_EDIT_NO_EDIT}.
+     *
+     * @param hyphen a packed hyphen edit value.
+     * @see #getHyphenEdit()
      */
-    @UnsupportedAppUsage
     public void setHyphenEdit(int hyphen) {
         nSetHyphenEdit(mNativePaint, hyphen);
     }
@@ -2261,17 +2327,53 @@ public class Paint {
     }
 
     /**
-     * Convenience overload that takes a char array instead of a
-     * String.
+     * Retrieve the character advances of the text.
      *
-     * @see #getTextRunAdvances(String, int, int, int, int, boolean, float[], int)
-     * @hide
+     * Returns the total advance width for the characters in the run from {@code index} for
+     * {@code count} of chars, and if {@code advances} is not null, the advance assigned to each of
+     * these characters (java chars).
+     *
+     * <p>
+     * The trailing surrogate in a valid surrogate pair is assigned an advance of 0.  Thus the
+     * number of returned advances is always equal to count, not to the number of unicode codepoints
+     * represented by the run.
+     * </p>
+     *
+     * <p>
+     * In the case of conjuncts or combining marks, the total advance is assigned to the first
+     * logical character, and the following characters are assigned an advance of 0.
+     * </p>
+     *
+     * <p>
+     * This generates the sum of the advances of glyphs for characters in a reordered cluster as the
+     * width of the first logical character in the cluster, and 0 for the widths of all other
+     * characters in the cluster.  In effect, such clusters are treated like conjuncts.
+     * </p>
+     *
+     * <p>
+     * The shaping bounds limit the amount of context available outside start and end that can be
+     * used for shaping analysis.  These bounds typically reflect changes in bidi level or font
+     * metrics across which shaping does not occur.
+     * </p>
+     *
+     * @param chars the text to measure.
+     * @param index the index of the first character to measure
+     * @param count the number of characters to measure
+     * @param contextIndex the index of the first character to use for shaping context.
+     *                     Context must cover the measureing target.
+     * @param contextCount the number of character to use for shaping context.
+     *                     Context must cover the measureing target.
+     * @param isRtl whether the run is in RTL direction
+     * @param advances array to receive the advances, must have room for all advances.
+     *                 This can be null if only total advance is needed
+     * @param advancesIndex the position in advances at which to put the advance corresponding to
+     *                      the character at start
+     * @return the total advance in pixels
      */
-    @UnsupportedAppUsage
-    public float getTextRunAdvances(char[] chars, int index, int count,
-            int contextIndex, int contextCount, boolean isRtl, float[] advances,
-            int advancesIndex) {
-
+    public float getTextRunAdvances(@NonNull char[] chars, @IntRange(from = 0) int index,
+            @IntRange(from = 0) int count, @IntRange(from = 0) int contextIndex,
+            @IntRange(from = 0) int contextCount, boolean isRtl, @Nullable float[] advances,
+            @IntRange(from = 0) int advancesIndex) {
         if (chars == null) {
             throw new IllegalArgumentException("text cannot be null");
         }
@@ -2305,131 +2407,6 @@ public class Paint {
             }
         }
         return res * mInvCompatScaling; // assume errors are not significant
-    }
-
-    /**
-     * Convenience overload that takes a CharSequence instead of a
-     * String.
-     *
-     * @see #getTextRunAdvances(String, int, int, int, int, boolean, float[], int)
-     * @hide
-     */
-    public float getTextRunAdvances(CharSequence text, int start, int end,
-            int contextStart, int contextEnd, boolean isRtl, float[] advances,
-            int advancesIndex) {
-        if (text == null) {
-            throw new IllegalArgumentException("text cannot be null");
-        }
-        if ((start | end | contextStart | contextEnd | advancesIndex | (end - start)
-                | (start - contextStart) | (contextEnd - end)
-                | (text.length() - contextEnd)
-                | (advances == null ? 0 :
-                    (advances.length - advancesIndex - (end - start)))) < 0) {
-            throw new IndexOutOfBoundsException();
-        }
-
-        if (text instanceof String) {
-            return getTextRunAdvances((String) text, start, end,
-                    contextStart, contextEnd, isRtl, advances, advancesIndex);
-        }
-        if (text instanceof SpannedString ||
-            text instanceof SpannableString) {
-            return getTextRunAdvances(text.toString(), start, end,
-                    contextStart, contextEnd, isRtl, advances, advancesIndex);
-        }
-        if (text instanceof GraphicsOperations) {
-            return ((GraphicsOperations) text).getTextRunAdvances(start, end,
-                    contextStart, contextEnd, isRtl, advances, advancesIndex, this);
-        }
-        if (text.length() == 0 || end == start) {
-            return 0f;
-        }
-
-        int contextLen = contextEnd - contextStart;
-        int len = end - start;
-        char[] buf = TemporaryBuffer.obtain(contextLen);
-        TextUtils.getChars(text, contextStart, contextEnd, buf, 0);
-        float result = getTextRunAdvances(buf, start - contextStart, len,
-                0, contextLen, isRtl, advances, advancesIndex);
-        TemporaryBuffer.recycle(buf);
-        return result;
-    }
-
-    /**
-     * Returns the total advance width for the characters in the run
-     * between start and end, and if advances is not null, the advance
-     * assigned to each of these characters (java chars).
-     *
-     * <p>The trailing surrogate in a valid surrogate pair is assigned
-     * an advance of 0.  Thus the number of returned advances is
-     * always equal to count, not to the number of unicode codepoints
-     * represented by the run.
-     *
-     * <p>In the case of conjuncts or combining marks, the total
-     * advance is assigned to the first logical character, and the
-     * following characters are assigned an advance of 0.
-     *
-     * <p>This generates the sum of the advances of glyphs for
-     * characters in a reordered cluster as the width of the first
-     * logical character in the cluster, and 0 for the widths of all
-     * other characters in the cluster.  In effect, such clusters are
-     * treated like conjuncts.
-     *
-     * <p>The shaping bounds limit the amount of context available
-     * outside start and end that can be used for shaping analysis.
-     * These bounds typically reflect changes in bidi level or font
-     * metrics across which shaping does not occur.
-     *
-     * @param text the text to measure. Cannot be null.
-     * @param start the index of the first character to measure
-     * @param end the index past the last character to measure
-     * @param contextStart the index of the first character to use for shaping context,
-     * must be <= start
-     * @param contextEnd the index past the last character to use for shaping context,
-     * must be >= end
-     * @param isRtl whether the run is in RTL direction
-     * @param advances array to receive the advances, must have room for all advances,
-     * can be null if only total advance is needed
-     * @param advancesIndex the position in advances at which to put the
-     * advance corresponding to the character at start
-     * @return the total advance
-     *
-     * @hide
-     */
-    public float getTextRunAdvances(String text, int start, int end, int contextStart,
-            int contextEnd, boolean isRtl, float[] advances, int advancesIndex) {
-        if (text == null) {
-            throw new IllegalArgumentException("text cannot be null");
-        }
-        if ((start | end | contextStart | contextEnd | advancesIndex | (end - start)
-                | (start - contextStart) | (contextEnd - end)
-                | (text.length() - contextEnd)
-                | (advances == null ? 0 :
-                    (advances.length - advancesIndex - (end - start)))) < 0) {
-            throw new IndexOutOfBoundsException();
-        }
-
-        if (text.length() == 0 || start == end) {
-            return 0f;
-        }
-
-        if (!mHasCompatScaling) {
-            return nGetTextAdvances(mNativePaint, text, start, end, contextStart, contextEnd,
-                    isRtl ? BIDI_FORCE_RTL : BIDI_FORCE_LTR, advances, advancesIndex);
-        }
-
-        final float oldSize = getTextSize();
-        setTextSize(oldSize * mCompatScaling);
-        final float totalAdvance = nGetTextAdvances(mNativePaint, text, start, end, contextStart,
-                contextEnd, isRtl ? BIDI_FORCE_RTL : BIDI_FORCE_LTR, advances, advancesIndex);
-        setTextSize(oldSize);
-
-        if (advances != null) {
-            for (int i = advancesIndex, e = i + (end - start); i < e; i++) {
-                advances[i] *= mInvCompatScaling;
-            }
-        }
-        return totalAdvance * mInvCompatScaling; // assume errors are insignificant
     }
 
     /**

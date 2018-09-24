@@ -24,6 +24,7 @@ import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.media.MediaCodecInfo.CodecCapabilities;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -42,6 +43,8 @@ import java.nio.ReadOnlyBufferException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  MediaCodec class can be used to access low-level media codecs, i.e. encoder/decoder components.
@@ -405,7 +408,7 @@ import java.util.Map;
  <p>
  The codec in turn will return a read-only output buffer via the {@link
  Callback#onOutputBufferAvailable onOutputBufferAvailable} callback in asynchronous mode, or in
- response to a {@link #dequeueOutputBuffer dequeuOutputBuffer} call in synchronous mode. After the
+ response to a {@link #dequeueOutputBuffer dequeueOutputBuffer} call in synchronous mode. After the
  output buffer has been processed, call one of the {@link #releaseOutputBuffer
  releaseOutputBuffer} methods to return the buffer to the codec.
  <p>
@@ -3580,8 +3583,19 @@ final public class MediaCodec {
         native_init();
     }
 
-    @UnsupportedAppUsage
-    private long mNativeContext;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
+    private long mNativeContext = 0;
+    private final Lock mNativeContextLock = new ReentrantLock();
+
+    private final long lockAndGetContext() {
+        mNativeContextLock.lock();
+        return mNativeContext;
+    }
+
+    private final void setAndUnlockContext(long context) {
+        mNativeContext = context;
+        mNativeContextLock.unlock();
+    }
 
     /** @hide */
     public static class MediaImage extends Image {
