@@ -86,7 +86,7 @@ public class MobileSignalController extends SignalController<
     private Config mConfig;
 
     private boolean mAlwasyShowTypeIcon = false;
-    private boolean mShowIconGForCDMA_1x = false;
+    private boolean mShow2GForCDMA_1x = false;
     private boolean mHideNoInternetState = false;
     private int mCallState = TelephonyManager.CALL_STATE_IDLE;
 
@@ -120,7 +120,7 @@ public class MobileSignalController extends SignalController<
                 com.android.internal.R.string.lockscreen_carrier_default);
 
         mAlwasyShowTypeIcon = context.getResources().getBoolean(R.bool.config_alwaysShowTypeIcon);
-        mShowIconGForCDMA_1x = context.getResources().getBoolean(R.bool.config_showIconGforCDMA_1X);
+        mShow2GForCDMA_1x = context.getResources().getBoolean(R.bool.config_show2GforCDMA_1X);
         mHideNoInternetState = context.getResources().getBoolean(R.bool.config_hideNoInternetState);
 
         mapIconSets();
@@ -240,9 +240,9 @@ public class MobileSignalController extends SignalController<
             mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_UNKNOWN,
                     TelephonyIcons.UNKNOWN);
             mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_EDGE, TelephonyIcons.E);
-            if ( mShowIconGForCDMA_1x ) {
-                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_CDMA, TelephonyIcons.G);
-                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_1xRTT, TelephonyIcons.G);
+            if (mShow2GForCDMA_1x) {
+                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_CDMA, TelephonyIcons.TWO_G);
+                mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_1xRTT, TelephonyIcons.TWO_G);
             }else {
                 mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_CDMA, TelephonyIcons.ONE_X);
                 mNetworkToIconLookup.put(TelephonyManager.NETWORK_TYPE_1xRTT, TelephonyIcons.ONE_X);
