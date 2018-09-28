@@ -65,6 +65,7 @@ public class PipTouchHandler {
     private static final boolean ENABLE_FLING_DISMISS = false;
 
     private static final int SHOW_DISMISS_AFFORDANCE_DELAY = 225;
+    private static final int BOTTOM_OFFSET_BUFFER_DP = 1;
 
     // Allow dragging the PIP to a location to close it
     private final boolean mEnableDimissDragToEdge;
@@ -314,8 +315,10 @@ public class PipTouchHandler {
                 // above the position as if shelf/IME shows, don't move the PIP window.
                 int movementBoundsAdjustment = toMovementBounds.bottom - mMovementBounds.bottom;
                 int offsetAdjustment = fromImeAdjustment ? mImeOffset : mShelfHeight;
+                final float bottomOffsetBufferInPx = BOTTOM_OFFSET_BUFFER_DP
+                        * mContext.getResources().getDisplayMetrics().density;
                 if (toAdjustedBounds.bottom >= mMovementBounds.bottom
-                        && animatingBounds.top
+                        && animatingBounds.top + Math.round(bottomOffsetBufferInPx)
                         < toAdjustedBounds.bottom - movementBoundsAdjustment - offsetAdjustment) {
                     return;
                 }
@@ -514,7 +517,7 @@ public class PipTouchHandler {
      * Sets the menu visibility.
      */
     private void setMenuState(int menuState, boolean resize) {
-        if (menuState == MENU_STATE_FULL) {
+        if (menuState == MENU_STATE_FULL && mMenuState != MENU_STATE_FULL) {
             // Save the current snap fraction and if we do not drag or move the PiP, then
             // we store back to this snap fraction.  Otherwise, we'll reset the snap
             // fraction and snap to the closest edge
@@ -523,7 +526,7 @@ public class PipTouchHandler {
                 mSavedSnapFraction = mMotionHelper.animateToExpandedState(expandedBounds,
                         mMovementBounds, mExpandedMovementBounds);
             }
-        } else if (menuState == MENU_STATE_NONE) {
+        } else if (menuState == MENU_STATE_NONE && mMenuState == MENU_STATE_FULL) {
             // Try and restore the PiP to the closest edge, using the saved snap fraction
             // if possible
             if (resize) {

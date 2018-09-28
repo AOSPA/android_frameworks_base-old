@@ -34,23 +34,20 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 
 import android.content.pm.ActivityInfo;
 import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
 
-import org.junit.runner.RunWith;
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
+
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 /**
  * Tests for the {@link ActivityStack} class.
@@ -167,7 +164,7 @@ public class ActivityStackTests extends ActivityTestsBase {
     public void testStopActivityWhenActivityDestroyed() throws Exception {
         final ActivityRecord r = new ActivityBuilder(mService).setTask(mTask).build();
         r.info.flags |= ActivityInfo.FLAG_NO_HISTORY;
-        mSupervisor.setFocusStackUnchecked("testStopActivityWithDestroy", mStack);
+        mStack.moveToFront("testStopActivityWithDestroy");
         mStack.stopActivityLocked(r);
         // Mostly testing to make sure there is a crash in the call part, so if we get here we are
         // good-to-go!
@@ -546,9 +543,20 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     private <T extends ActivityStack> T createStackForShouldBeVisibleTest(
             ActivityDisplay display, int windowingMode, int activityType, boolean onTop) {
-        final T stack = display.createStack(windowingMode, activityType, onTop);
-        final ActivityRecord r = new ActivityBuilder(mService).setUid(0).setStack(stack)
-                .setCreateTask(true).build();
+        final T stack;
+        if (activityType == ACTIVITY_TYPE_HOME) {
+            // Home stack and activity are created in ActivityTestsBase#setupActivityManagerService
+            stack = mDefaultDisplay.getStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME);
+            if (onTop) {
+                mDefaultDisplay.positionChildAtTop(stack, false /* includingParents */);
+            } else {
+                mDefaultDisplay.positionChildAtBottom(stack);
+            }
+        } else {
+            stack = display.createStack(windowingMode, activityType, onTop);
+            final ActivityRecord r = new ActivityBuilder(mService).setUid(0).setStack(stack)
+                    .setCreateTask(true).build();
+        }
         return stack;
     }
 
@@ -654,14 +662,13 @@ public class ActivityStackTests extends ActivityTestsBase {
 
     private void verifyShouldSleepActivities(boolean focusedStack,
             boolean keyguardGoingAway, boolean displaySleeping, boolean expected) {
-        mSupervisor.mFocusedStack = focusedStack ? mStack : null;
-
         final ActivityDisplay display = mock(ActivityDisplay.class);
         final KeyguardController keyguardController = mSupervisor.getKeyguardController();
 
         doReturn(display).when(mSupervisor).getActivityDisplay(anyInt());
         doReturn(keyguardGoingAway).when(keyguardController).isKeyguardGoingAway();
         doReturn(displaySleeping).when(display).isSleeping();
+        doReturn(focusedStack ? mStack : null).when(mSupervisor).getTopDisplayFocusedStack();
 
         assertEquals(expected, mStack.shouldSleepActivities());
     }

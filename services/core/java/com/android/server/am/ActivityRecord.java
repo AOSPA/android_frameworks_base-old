@@ -187,6 +187,7 @@ import com.android.internal.util.XmlUtils;
 import com.android.server.AttributeCache;
 import com.android.server.AttributeCache.Entry;
 import com.android.server.am.ActivityStack.ActivityState;
+import com.android.server.uri.UriPermissionOwner;
 import com.android.server.wm.AppWindowContainerController;
 import com.android.server.wm.AppWindowContainerListener;
 import com.android.server.wm.ConfigurationContainer;
@@ -340,6 +341,17 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     static final int STARTING_WINDOW_REMOVED = 2;
     int mStartingWindowState = STARTING_WINDOW_NOT_SHOWN;
     boolean mTaskOverlay = false; // Task is always on-top of other activities in the task.
+
+    // This activity is not being relaunched, or being relaunched for a non-resize reason.
+    static final int RELAUNCH_REASON_NONE = 0;
+    // This activity is being relaunched due to windowing mode change.
+    static final int RELAUNCH_REASON_WINDOWING_MODE_RESIZE = 1;
+    // This activity is being relaunched due to a free-resize operation.
+    static final int RELAUNCH_REASON_FREE_RESIZE = 2;
+    // Marking the reason why this activity is being relaunched. Mainly used to track that this
+    // activity is being relaunched to fulfill a resize request due to compatibility issues, e.g. in
+    // pre-NYC apps that don't have a sense of being resized.
+    int mRelaunchReason = RELAUNCH_REASON_NONE;
 
     TaskDescription taskDescription; // the recents information for this activity
     boolean mLaunchTaskBehind; // this activity is actively being launched with
@@ -699,9 +711,13 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         final boolean inPictureInPictureMode = inPinnedWindowingMode() && targetStackBounds != null;
         if (inPictureInPictureMode != mLastReportedPictureInPictureMode || forceUpdate) {
             // Picture-in-picture mode changes also trigger a multi-window mode change as well, so
-            // update that here in order
+            // update that here in order. Set the last reported MW state to the same as the PiP
+            // state since we haven't yet actually resized the task (these callbacks need to
+            // preceed the configuration change from the resiez.
+            // TODO(110009072): Once we move these callbacks to the client, remove all logic related
+            // to forcing the update of the picture-in-picture mode as a part of the PiP animation.
             mLastReportedPictureInPictureMode = inPictureInPictureMode;
-            mLastReportedMultiWindowMode = inMultiWindowMode();
+            mLastReportedMultiWindowMode = inPictureInPictureMode;
             final Configuration newConfig = task.computeNewOverrideConfigurationForBounds(
                     targetStackBounds, null);
             schedulePictureInPictureModeChanged(newConfig);
@@ -1033,7 +1049,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 (info.flags & FLAG_SHOW_FOR_ALL_USERS) != 0, info.configChanges,
                 task.voiceSession != null, mLaunchTaskBehind, isAlwaysFocusable(),
                 appInfo.targetSdkVersion, mRotationAnimationHint,
-                ActivityManagerService.getInputDispatchingTimeoutLocked(this) * 1000000L);
+                ActivityTaskManagerService.getInputDispatchingTimeoutLocked(this) * 1000000L);
 
         task.addActivityToTop(this);
 
@@ -1385,7 +1401,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
     UriPermissionOwner getUriPermissionsLocked() {
         if (uriPermissions == null) {
-            uriPermissions = new UriPermissionOwner(service.mAm, this);
+            uriPermissions = new UriPermissionOwner(service.mUgmInternal, this);
         }
         return uriPermissions;
     }
@@ -1437,7 +1453,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
      */
     final void deliverNewIntentLocked(int callingUid, Intent intent, String referrer) {
         // The activity now gets access to the data associated with this Intent.
-        service.mAm.grantUriPermissionFromIntentLocked(callingUid, packageName,
+        service.mUgmInternal.grantUriPermissionFromIntent(callingUid, packageName,
                 intent, getUriPermissionsLocked(), userId);
         final ReferrerIntent rintent = new ReferrerIntent(intent, referrer);
         boolean unsent = true;
@@ -1597,7 +1613,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
     void removeUriPermissionsLocked() {
         if (uriPermissions != null) {
-            uriPermissions.removeUriPermissionsLocked();
+            uriPermissions.removeUriPermissions();
             uriPermissions = null;
         }
     }
@@ -1801,7 +1817,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         // considers the resumed activity, as normal means will bring the activity from STOPPED
         // to RESUMED. Adding PAUSING in this scenario will lead to double lifecycles.
         if (!isState(STOPPED, STOPPING) || getStack().mTranslucentActivityWaiting != null
-                || mStackSupervisor.getResumedActivityLocked() == this) {
+                || isResumedActivityOnDisplay()) {
             return false;
         }
 
@@ -1938,7 +1954,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             } else {
                 if (deferRelaunchUntilPaused) {
                     stack.destroyActivityLocked(this, true /* removeFromApp */, "stop-config");
-                    mStackSupervisor.resumeFocusedStackTopActivityLocked();
+                    mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
                 } else {
                     mStackSupervisor.updatePreviousProcessLocked(this);
                 }
@@ -2141,7 +2157,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     mStackSupervisor.processStoppingActivitiesLocked(null /* idleActivity */,
                             false /* remove */, true /* processPausingActivities */);
                 }
-                service.mAm.scheduleAppGcsLocked();
+                service.scheduleAppGcsLocked();
             }
         }
     }
@@ -2166,13 +2182,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     !hasProcess() || app.getPid() == windowPid || windowPid == -1;
         }
         if (windowFromSameProcessAsActivity) {
-            return service.mAm.inputDispatchingTimedOut(
-                    (ProcessRecord) anrApp.mOwner, anrActivity, this, false, reason);
+            return service.inputDispatchingTimedOut(anrApp, anrActivity, this, false, reason);
         } else {
             // In this case another process added windows using this activity token. So, we call the
             // generic service input dispatch timed out method so that the right process is blamed.
-            return service.mAm.inputDispatchingTimedOut(
-                    windowPid, false /* aboveSystem */, reason) < 0;
+            return service.inputDispatchingTimedOut(windowPid, false /* aboveSystem */, reason) < 0;
         }
     }
 
@@ -2181,7 +2195,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         // another activity to start or has stopped, then the key dispatching
         // timeout should not be caused by this.
         if (mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(this) || stopped) {
-            final ActivityStack stack = mStackSupervisor.getFocusedStack();
+            final ActivityStack stack = mStackSupervisor.getTopDisplayFocusedStack();
             // Try to use the one which is closest to top.
             ActivityRecord r = stack.getResumedActivity();
             if (r == null) {
@@ -2371,7 +2385,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             frozenBeforeDestroy = true;
             if (!service.updateDisplayOverrideConfigurationLocked(config, this,
                     false /* deferResume */, displayId)) {
-                mStackSupervisor.resumeFocusedStackTopActivityLocked();
+                mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
             }
         }
         service.getTaskChangeNotificationController().notifyActivityRequestedOrientationChanged(
@@ -2635,6 +2649,15 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             startFreezingScreenLocked(app, globalChanges);
             forceNewConfig = false;
             preserveWindow &= isResizeOnlyChange(changes);
+            final boolean hasResizeChange = hasResizeChange(changes & ~info.getRealConfigChanged());
+            if (hasResizeChange) {
+                final boolean isDragResizing =
+                        getTask().getWindowContainerController().isDragResizing();
+                mRelaunchReason = isDragResizing ? RELAUNCH_REASON_FREE_RESIZE
+                        : RELAUNCH_REASON_WINDOWING_MODE_RESIZE;
+            } else {
+                mRelaunchReason = RELAUNCH_REASON_NONE;
+            }
             if (!attachedToProcess()) {
                 if (DEBUG_SWITCH || DEBUG_CONFIGURATION) Slog.v(TAG_CONFIGURATION,
                         "Config is destroying non-running " + this);
@@ -2756,6 +2779,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 | CONFIG_SCREEN_LAYOUT)) == 0;
     }
 
+    private static boolean hasResizeChange(int change) {
+        return (change & (CONFIG_SCREEN_SIZE | CONFIG_SMALLEST_SCREEN_SIZE | CONFIG_ORIENTATION
+                | CONFIG_SCREEN_LAYOUT)) != 0;
+    }
+
     void relaunchActivityLocked(boolean andResume, boolean preserveWindow) {
         if (service.mSuppressResizeConfigChanges && preserveWindow) {
             configChangeFlags = 0;
@@ -2812,10 +2840,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             }
             results = null;
             newIntents = null;
-            service.mAm.getAppWarningsLocked().onResumeActivity(this);
-            service.mAm.showAskCompatModeDialogLocked(this);
+            service.getAppWarningsLocked().onResumeActivity(this);
         } else {
-            service.mAm.mHandler.removeMessages(PAUSE_TIMEOUT_MSG, this);
+            final ActivityStack stack = getStack();
+            if (stack != null) {
+                stack.mHandler.removeMessages(PAUSE_TIMEOUT_MSG, this);
+            }
             setState(PAUSED, "relaunchActivityLocked");
         }
 
@@ -3022,8 +3052,28 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         return mStackSupervisor.topRunningActivityLocked() == this;
     }
 
+    /**
+     * @return {@code true} if this is the resumed activity on its current display, {@code false}
+     * otherwise.
+     */
+    boolean isResumedActivityOnDisplay() {
+        final ActivityDisplay display = getDisplay();
+        return display != null && this == display.getResumedActivity();
+    }
+
     void registerRemoteAnimations(RemoteAnimationDefinition definition) {
         mWindowContainerController.registerRemoteAnimations(definition);
+    }
+
+    static String relaunchReasonToString(int relaunchReason) {
+        switch (relaunchReason) {
+            case RELAUNCH_REASON_WINDOWING_MODE_RESIZE:
+                return "window_resize";
+            case RELAUNCH_REASON_FREE_RESIZE:
+                return "free_resize";
+            default:
+                return null;
+        }
     }
 
     @Override

@@ -504,6 +504,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private final IpConnectivityLog mMetricsLog;
 
+    @GuardedBy("mBandwidthRequests")
+    private final SparseArray<Integer> mBandwidthRequests = new SparseArray(10);
+
     @VisibleForTesting
     final MultinetworkPolicyTracker mMultinetworkPolicyTracker;
 
@@ -2113,6 +2116,18 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 pw.println("currently holding WakeLock for: " + (duration / 1000) + "s");
             }
             mWakelockLogs.reverseDump(fd, pw, args);
+
+            pw.println();
+            pw.println("bandwidth update requests (by uid):");
+            pw.increaseIndent();
+            synchronized (mBandwidthRequests) {
+                for (int i = 0; i < mBandwidthRequests.size(); i++) {
+                    pw.println("[" + mBandwidthRequests.keyAt(i)
+                            + "]: " + mBandwidthRequests.valueAt(i));
+                }
+            }
+            pw.decreaseIndent();
+
             pw.decreaseIndent();
         }
     }
@@ -2193,7 +2208,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                         loge("ERROR: already-connected network explicitly selected.");
                     }
                     nai.networkMisc.explicitlySelected = true;
-                    nai.networkMisc.acceptUnvalidated = (boolean) msg.obj;
+                    nai.networkMisc.acceptUnvalidated = msg.arg1 == 1;
                     break;
                 }
                 case NetworkAgent.EVENT_PACKET_KEEPALIVE: {
@@ -4287,6 +4302,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
         if (nai != null) {
             nai.asyncChannel.sendMessage(android.net.NetworkAgent.CMD_REQUEST_BANDWIDTH_UPDATE);
+            synchronized (mBandwidthRequests) {
+                final int uid = Binder.getCallingUid();
+                Integer uidReqs = mBandwidthRequests.get(uid);
+                if (uidReqs == null) {
+                    uidReqs = new Integer(0);
+                }
+                mBandwidthRequests.put(uid, ++uidReqs);
+            }
             return true;
         }
         return false;

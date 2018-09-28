@@ -141,6 +141,8 @@ extern int register_android_graphics_Region(JNIEnv* env);
 extern int register_android_graphics_SurfaceTexture(JNIEnv* env);
 extern int register_android_graphics_drawable_AnimatedVectorDrawable(JNIEnv* env);
 extern int register_android_graphics_drawable_VectorDrawable(JNIEnv* env);
+extern int register_android_graphics_fonts_Font(JNIEnv* env);
+extern int register_android_graphics_fonts_FontFamily(JNIEnv* env);
 extern int register_android_graphics_pdf_PdfDocument(JNIEnv* env);
 extern int register_android_graphics_pdf_PdfEditor(JNIEnv* env);
 extern int register_android_graphics_pdf_PdfRenderer(JNIEnv* env);
@@ -167,6 +169,7 @@ extern int register_android_os_HwBinder(JNIEnv *env);
 extern int register_android_os_HwBlob(JNIEnv *env);
 extern int register_android_os_HwParcel(JNIEnv *env);
 extern int register_android_os_HwRemoteBinder(JNIEnv *env);
+extern int register_android_os_NativeHandle(JNIEnv *env);
 extern int register_android_os_MessageQueue(JNIEnv* env);
 extern int register_android_os_Parcel(JNIEnv* env);
 extern int register_android_os_SELinux(JNIEnv* env);
@@ -184,7 +187,7 @@ extern int register_android_net_NetworkUtils(JNIEnv* env);
 extern int register_android_text_AndroidCharacter(JNIEnv *env);
 extern int register_android_text_Hyphenator(JNIEnv *env);
 extern int register_android_text_MeasuredParagraph(JNIEnv* env);
-extern int register_android_text_StaticLayout(JNIEnv *env);
+extern int register_android_text_LineBreaker(JNIEnv *env);
 extern int register_android_opengl_classes(JNIEnv *env);
 extern int register_android_ddm_DdmHandleNativeHeap(JNIEnv *env);
 extern int register_android_server_NetworkManagementSocketTagger(JNIEnv* env);
@@ -1337,7 +1340,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_text_AndroidCharacter),
     REG_JNI(register_android_text_Hyphenator),
     REG_JNI(register_android_text_MeasuredParagraph),
-    REG_JNI(register_android_text_StaticLayout),
+    REG_JNI(register_android_text_LineBreaker),
     REG_JNI(register_android_view_InputDevice),
     REG_JNI(register_android_view_KeyCharacterMap),
     REG_JNI(register_android_os_Process),
@@ -1349,6 +1352,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_os_HwBlob),
     REG_JNI(register_android_os_HwParcel),
     REG_JNI(register_android_os_HwRemoteBinder),
+    REG_JNI(register_android_os_NativeHandle),
     REG_JNI(register_android_os_VintfObject),
     REG_JNI(register_android_os_VintfRuntimeInfo),
     REG_JNI(register_android_nio_utils),
@@ -1409,6 +1413,8 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_graphics_YuvImage),
     REG_JNI(register_android_graphics_drawable_AnimatedVectorDrawable),
     REG_JNI(register_android_graphics_drawable_VectorDrawable),
+    REG_JNI(register_android_graphics_fonts_Font),
+    REG_JNI(register_android_graphics_fonts_FontFamily),
     REG_JNI(register_android_graphics_pdf_PdfDocument),
     REG_JNI(register_android_graphics_pdf_PdfEditor),
     REG_JNI(register_android_graphics_pdf_PdfRenderer),

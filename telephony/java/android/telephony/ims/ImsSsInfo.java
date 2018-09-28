@@ -16,9 +16,14 @@
 
 package android.telephony.ims;
 
+import android.annotation.IntDef;
 import android.annotation.SystemApi;
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
+
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 
 /**
  * Provides the result to the update operation for the supplementary service configuration.
@@ -38,22 +43,41 @@ public final class ImsSsInfo implements Parcelable {
      * Provision status of service
      */
     /** @hide */
+    @IntDef({
+            SERVICE_PROVISIONING_UNKNOWN,
+            SERVICE_NOT_PROVISIONED,
+            SERVICE_PROVISIONED
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ServiceProvisionStatus {}
+    /**
+     * Unknown provision status for the service.
+     */
+    public static final int SERVICE_PROVISIONING_UNKNOWN = (-1);
+    /**
+     * Service is not provisioned.
+     */
     public static final int SERVICE_NOT_PROVISIONED = 0;
-    /** @hide */
+    /**
+     * Service is provisioned.
+     */
     public static final int SERVICE_PROVISIONED = 1;
 
     // 0: disabled, 1: enabled
     /** @hide */
     // TODO: Make private, do not modify this field directly, use getter!
+    @UnsupportedAppUsage
     public int mStatus;
     /** @hide */
     // TODO: Make private, do not modify this field directly, use getter!
+    @UnsupportedAppUsage
     public String mIcbNum;
     /** @hide */
-    public int mProvisionStatus;
+    public int mProvisionStatus = SERVICE_PROVISIONING_UNKNOWN;
 
     /**@hide*/
     // TODO: Remove! Do not use this constructor, instead use public version.
+    @UnsupportedAppUsage
     public ImsSsInfo() {
     }
 
@@ -137,7 +161,13 @@ public final class ImsSsInfo implements Parcelable {
         return mIcbNum;
     }
 
-    /** @hide */
+    /**
+     * @return Supplementary Service Provision status. Valid Values are:
+     *     {@link #SERVICE_PROVISIONING_UNKNOWN},
+     *     {@link #SERVICE_NOT_PROVISIONED},
+     *     {@link #SERVICE_PROVISIONED}
+     */
+    @ServiceProvisionStatus
     public int getProvisionStatus() {
         return mProvisionStatus;
     }

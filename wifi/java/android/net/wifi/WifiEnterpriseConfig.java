@@ -16,6 +16,7 @@
 package android.net.wifi;
 
 import android.annotation.Nullable;
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.security.Credentials;
@@ -145,6 +146,7 @@ public class WifiEnterpriseConfig implements Parcelable {
     private static final List<String> UNQUOTED_KEYS = Arrays.asList(ENGINE_KEY, OPP_KEY_CACHING,
                                                                     EAP_ERP);
 
+    @UnsupportedAppUsage
     private HashMap<String, String> mFields = new HashMap<String, String>();
     private X509Certificate[] mCaCerts;
     private PrivateKey mClientPrivateKey;
@@ -589,6 +591,7 @@ public class WifiEnterpriseConfig implements Parcelable {
      * @param alias identifies the certificate
      * @hide
      */
+    @UnsupportedAppUsage
     public void setCaCertificateAlias(String alias) {
         setFieldValue(CA_CERT_KEY, alias, CA_CERT_PREFIX);
     }
@@ -627,6 +630,7 @@ public class WifiEnterpriseConfig implements Parcelable {
      * @return alias to the CA certificate
      * @hide
      */
+    @UnsupportedAppUsage
     public String getCaCertificateAlias() {
         return getFieldValue(CA_CERT_KEY, CA_CERT_PREFIX);
     }
@@ -775,6 +779,7 @@ public class WifiEnterpriseConfig implements Parcelable {
      * @param alias identifies the certificate
      * @hide
      */
+    @UnsupportedAppUsage
     public void setClientCertificateAlias(String alias) {
         setFieldValue(CLIENT_CERT_KEY, alias, CLIENT_CERT_PREFIX);
         setFieldValue(PRIVATE_KEY_ID_KEY, alias, Credentials.USER_PRIVATE_KEY);
@@ -793,6 +798,7 @@ public class WifiEnterpriseConfig implements Parcelable {
      * @return alias to the client certificate
      * @hide
      */
+    @UnsupportedAppUsage
     public String getClientCertificateAlias() {
         return getFieldValue(CLIENT_CERT_KEY, CLIENT_CERT_PREFIX);
     }
@@ -963,16 +969,15 @@ public class WifiEnterpriseConfig implements Parcelable {
      * for Hotspot 2.0 defined matching of AAA server certs per WFA HS2.0 spec, section 7.3.3.2,
      * second paragraph.
      *
-     * From wpa_supplicant documentation:
-     * Constraint for server domain name. If set, this FQDN is used as a suffix match requirement
+     * <p>From wpa_supplicant documentation:
+     * <p>Constraint for server domain name. If set, this FQDN is used as a suffix match requirement
      * for the AAAserver certificate in SubjectAltName dNSName element(s). If a matching dNSName is
-     * found, this constraint is met. If no dNSName values are present, this constraint is matched
-     * against SubjectName CN using same suffix match comparison.
-     * Suffix match here means that the host/domain name is compared one label at a time starting
+     * found, this constraint is met.
+     * <p>Suffix match here means that the host/domain name is compared one label at a time starting
      * from the top-level domain and all the labels in domain_suffix_match shall be included in the
      * certificate. The certificate may include additional sub-level labels in addition to the
      * required labels.
-     * For example, domain_suffix_match=example.com would match test.example.com but would not
+     * <p>For example, domain_suffix_match=example.com would match test.example.com but would not
      * match test-example.com.
      * @param domain The domain value
      */

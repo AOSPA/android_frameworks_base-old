@@ -46,7 +46,7 @@ import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.EnhancedEstimatesImpl;
 import com.android.systemui.power.PowerNotificationWarnings;
 import com.android.systemui.power.PowerUI;
-import com.android.systemui.statusbar.AppOpsListener;
+import com.android.systemui.statusbar.notification.AppOpsListener;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.ConfigurationControllerImpl;
 import com.android.systemui.statusbar.phone.DarkIconDispatcherImpl;
@@ -55,7 +55,7 @@ import com.android.systemui.statusbar.phone.ManagedProfileController;
 import com.android.systemui.statusbar.phone.ManagedProfileControllerImpl;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarIconControllerImpl;
-import com.android.systemui.statusbar.phone.StatusBarWindowManager;
+import com.android.systemui.statusbar.phone.StatusBarWindowController;
 import com.android.systemui.statusbar.policy.AccessibilityController;
 import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
 import com.android.systemui.statusbar.policy.BatteryController;
@@ -258,8 +258,8 @@ public class Dependency extends SystemUI {
         mProviders.put(TunerService.class, () ->
                 new TunerServiceImpl(mContext));
 
-        mProviders.put(StatusBarWindowManager.class, () ->
-                new StatusBarWindowManager(mContext));
+        mProviders.put(StatusBarWindowController.class, () ->
+                new StatusBarWindowController(mContext));
 
         mProviders.put(DarkIconDispatcher.class, () ->
                 new DarkIconDispatcherImpl(mContext));

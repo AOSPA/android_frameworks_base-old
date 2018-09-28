@@ -54,17 +54,15 @@ class RunningTasks {
 
         // Gather all of the tasks across all of the tasks, and add them to the sorted set
         mTmpSortedSet.clear();
-        mTmpStackTasks.clear();
         final int numDisplays = activityDisplays.size();
         for (int displayNdx = 0; displayNdx < numDisplays; ++displayNdx) {
             final ActivityDisplay display = activityDisplays.valueAt(displayNdx);
             for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
                 final ActivityStack stack = display.getChildAt(stackNdx);
+                mTmpStackTasks.clear();
                 stack.getRunningTasks(mTmpStackTasks, ignoreActivityType, ignoreWindowingMode,
                         callingUid, allowed);
-                for (int i = mTmpStackTasks.size() - 1; i >= 0; i--) {
-                    mTmpSortedSet.addAll(mTmpStackTasks);
-                }
+                mTmpSortedSet.addAll(mTmpStackTasks);
             }
         }
 
@@ -85,20 +83,10 @@ class RunningTasks {
      * Constructs a {@link RunningTaskInfo} from a given {@param task}.
      */
     private RunningTaskInfo createRunningTaskInfo(TaskRecord task) {
-        task.getNumRunningActivities(mTmpReport);
-
-        final RunningTaskInfo ci = new RunningTaskInfo();
-        ci.id = task.taskId;
-        ci.stackId = task.getStackId();
-        ci.baseActivity = mTmpReport.base.intent.getComponent();
-        ci.topActivity = mTmpReport.top.intent.getComponent();
-        ci.lastActiveTime = task.lastActiveTime;
-        ci.description = task.lastDescription;
-        ci.numActivities = mTmpReport.numActivities;
-        ci.numRunning = mTmpReport.numRunning;
-        ci.supportsSplitScreenMultiWindow = task.supportsSplitScreenWindowingMode();
-        ci.resizeMode = task.mResizeMode;
-        ci.configuration.setTo(task.getConfiguration());
-        return ci;
+        final RunningTaskInfo rti = new RunningTaskInfo();
+        task.fillTaskInfo(rti, mTmpReport);
+        // Fill in some deprecated values
+        rti.id = rti.taskId;
+        return rti;
     }
 }

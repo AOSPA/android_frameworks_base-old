@@ -114,16 +114,6 @@ const SymbolTable::Symbol* SymbolTable::FindByName(const ResourceName& name) {
   return shared_symbol.get();
 }
 
-const SymbolTable::Symbol* SymbolTable::FindByNameInAnyPackage(const ResourceName& name) {
-  for (auto& source : sources_) {
-    std::string package = source->GetPackageForSymbol(name);
-    if (!package.empty()) {
-      return FindByName(ResourceName(package, name.type, name.entry));
-    }
-  }
-  return {};
-}
-
 const SymbolTable::Symbol* SymbolTable::FindById(const ResourceId& id) {
   if (const std::shared_ptr<Symbol>& s = id_cache_.get(id)) {
     return s.get();
@@ -204,6 +194,7 @@ std::unique_ptr<SymbolTable::Symbol> ResourceTableSymbolSource::FindByName(
 
   if (sr.package->id && sr.type->id && sr.entry->id) {
     symbol->id = ResourceId(sr.package->id.value(), sr.type->id.value(), sr.entry->id.value());
+    symbol->is_dynamic = (sr.package->id.value() == 0);
   }
 
   if (name.type == ResourceType::kAttr || name.type == ResourceType::kAttrPrivate) {
@@ -219,25 +210,6 @@ std::unique_ptr<SymbolTable::Symbol> ResourceTableSymbolSource::FindByName(
     }
   }
   return symbol;
-}
-
-std::string ResourceTableSymbolSource::GetPackageForSymbol(const ResourceName& name) {
-  for (auto& package : table_->packages) {
-    ResourceTableType* type = package->FindType(name.type);
-    if (type == nullptr) {
-      continue;
-    }
-    ResourceEntry* entry = type->FindEntry(name.entry);
-    if (entry == nullptr) {
-      continue;
-    }
-    return package->name;
-  }
-  if (name.type == ResourceType::kAttr) {
-    // Recurse and try looking up a private attribute.
-    return GetPackageForSymbol(ResourceName(name.package, ResourceType::kAttrPrivate, name.entry));
-  }
-  return {};
 }
 
 bool AssetManagerSymbolSource::AddAssetPath(const StringPiece& path) {

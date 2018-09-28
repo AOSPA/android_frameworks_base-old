@@ -306,17 +306,17 @@ public class AccessibilityCache {
 
                 final int oldChildCount = oldInfo.getChildCount();
                 for (int i = 0; i < oldChildCount; i++) {
+                    final long oldChildId = oldInfo.getChildId(i);
+                    // If the child is no longer present, remove the sub-tree.
+                    if (newChildrenIds == null || newChildrenIds.indexOf(oldChildId) < 0) {
+                        clearSubTreeLocked(windowId, oldChildId);
+                    }
                     if (nodes.get(sourceId) == null) {
                         // We've removed (and thus recycled) this node because it was its own
                         // ancestor (the app gave us bad data), we can't continue using it.
                         // Clear the cache for this window and give up on adding the node.
                         clearNodesForWindowLocked(windowId);
                         return;
-                    }
-                    final long oldChildId = oldInfo.getChildId(i);
-                    // If the child is no longer present, remove the sub-tree.
-                    if (newChildrenIds == null || newChildrenIds.indexOf(oldChildId) < 0) {
-                        clearSubTreeLocked(windowId, oldChildId);
                     }
                 }
 
@@ -336,7 +336,13 @@ public class AccessibilityCache {
             AccessibilityNodeInfo clone = AccessibilityNodeInfo.obtain(info);
             nodes.put(sourceId, clone);
             if (clone.isAccessibilityFocused()) {
+                if (mAccessibilityFocus != AccessibilityNodeInfo.UNDEFINED_ITEM_ID
+                        && mAccessibilityFocus != sourceId) {
+                    refreshCachedNodeLocked(windowId, mAccessibilityFocus);
+                }
                 mAccessibilityFocus = sourceId;
+            } else if (mAccessibilityFocus == sourceId) {
+                mAccessibilityFocus = AccessibilityNodeInfo.UNDEFINED_ITEM_ID;
             }
             if (clone.isFocused()) {
                 mInputFocus = sourceId;
@@ -418,20 +424,28 @@ public class AccessibilityCache {
      *
      * @param nodes The nodes in the hosting window.
      * @param rootNodeId The id of the root to evict.
+     *
+     * @return {@code true} if the cache was cleared
      */
-    private void clearSubTreeRecursiveLocked(LongSparseArray<AccessibilityNodeInfo> nodes,
+    private boolean clearSubTreeRecursiveLocked(LongSparseArray<AccessibilityNodeInfo> nodes,
             long rootNodeId) {
         AccessibilityNodeInfo current = nodes.get(rootNodeId);
         if (current == null) {
-            return;
+            // The node isn't in the cache, but its descendents might be.
+            clear();
+            return true;
         }
         nodes.remove(rootNodeId);
         final int childCount = current.getChildCount();
         for (int i = 0; i < childCount; i++) {
             final long childNodeId = current.getChildId(i);
-            clearSubTreeRecursiveLocked(nodes, childNodeId);
+            if (clearSubTreeRecursiveLocked(nodes, childNodeId)) {
+                current.recycle();
+                return true;
+            }
         }
         current.recycle();
+        return false;
     }
 
     /**

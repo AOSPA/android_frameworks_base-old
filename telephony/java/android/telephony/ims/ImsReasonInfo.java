@@ -17,6 +17,7 @@
 package android.telephony.ims;
 
 import android.annotation.SystemApi;
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -163,6 +164,8 @@ public final class ImsReasonInfo implements Parcelable {
     public static final int CODE_SIP_NOT_REACHABLE = 341;
     // Others
     public static final int CODE_SIP_CLIENT_ERROR = 342;
+    // 481 Transaction Does Not Exist
+    public static final int CODE_SIP_TRANSACTION_DOES_NOT_EXIST = 343;
     // 5xx responses
     // 501 : Server Internal Error
     public static final int CODE_SIP_SERVER_INTERNAL_ERROR = 351;
@@ -593,12 +596,15 @@ public final class ImsReasonInfo implements Parcelable {
 
     // For main reason code
     /** @hide */
+    @UnsupportedAppUsage
     public int mCode;
     // For the extra code value; it depends on the code value.
     /** @hide */
+    @UnsupportedAppUsage
     public int mExtraCode;
     // For the additional message of the reason info.
     /** @hide */
+    @UnsupportedAppUsage
     public String mExtraMessage;
 
     /** @hide */
@@ -615,6 +621,7 @@ public final class ImsReasonInfo implements Parcelable {
     }
 
     /** @hide */
+    @UnsupportedAppUsage
     public ImsReasonInfo(int code, int extraCode) {
         mCode = code;
         mExtraCode = extraCode;

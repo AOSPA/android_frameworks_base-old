@@ -32,28 +32,8 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
-
-import android.app.ActivityOptions;
-import android.app.IApplicationThread;
-import android.content.ComponentName;
-import android.content.Intent;
-import android.content.pm.ActivityInfo;
-import android.content.pm.ActivityInfo.WindowLayout;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.IPackageManager;
-import android.graphics.Rect;
-import android.os.IBinder;
-import android.os.RemoteException;
-import android.platform.test.annotations.Presubmit;
-import android.service.voice.IVoiceInteractionSession;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
-import android.view.Gravity;
-
-import org.junit.runner.RunWith;
-import org.junit.Test;
-
 import static android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED;
+
 import static com.android.server.am.ActivityManagerService.ANIMATE;
 
 import static org.junit.Assert.assertEquals;
@@ -63,20 +43,58 @@ import static org.mockito.Mockito.anyBoolean;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.anyObject;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+
+import android.app.ActivityOptions;
+import android.app.IApplicationThread;
+import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.pm.ActivityInfo.WindowLayout;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.IPackageManager;
+import android.content.pm.PackageManagerInternal;
+import android.graphics.Rect;
+import android.os.IBinder;
+import android.os.RemoteException;
+import android.platform.test.annotations.Presubmit;
+import android.service.voice.IVoiceInteractionSession;
+import android.view.Gravity;
+
+import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
+import static android.content.Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED;
+import static com.android.server.am.ActivityManagerService.ANIMATE;
+import static com.android.server.am.ActivityStack.REMOVE_TASK_MODE_DESTROYING;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.anyObject;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.times;
 
-import com.android.internal.os.BatteryStatsImpl;
-import com.android.server.am.ActivityStarter.Factory;
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
+
 import com.android.server.am.LaunchParamsController.LaunchParamsModifier;
 import com.android.server.am.TaskRecord.TaskRecordFactory;
 
-import java.util.ArrayList;
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 /**
  * Tests for the {@link ActivityStarter} class.
@@ -91,6 +109,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
     private ActivityTaskManagerService mService;
     private ActivityStarter mStarter;
     private ActivityStartController mController;
+    private ActivityMetricsLogger mActivityMetricsLogger;
 
     private static final int PRECONDITION_NO_CALLER_APP = 1;
     private static final int PRECONDITION_NO_INTENT_COMPONENT = 1 << 1;
@@ -104,11 +123,17 @@ public class ActivityStarterTests extends ActivityTestsBase {
     private static final int PRECONDITION_CANNOT_START_ANY_ACTIVITY = 1 << 9;
     private static final int PRECONDITION_DISALLOW_APP_SWITCHING = 1 << 10;
 
+    private static final int FAKE_CALLING_UID = 666;
+    private static final int FAKE_REAL_CALLING_UID = 667;
+    private static final String FAKE_CALLING_PACKAGE = "com.whatever.dude";
+
     @Override
     public void setUp() throws Exception {
         super.setUp();
         mService = createActivityTaskManagerService();
         mController = mock(ActivityStartController.class);
+        mActivityMetricsLogger = mock(ActivityMetricsLogger.class);
+        clearInvocations(mActivityMetricsLogger);
         mStarter = new ActivityStarter(mController, mService, mService.mStackSupervisor,
                 mock(ActivityStartInterceptor.class));
     }
@@ -200,8 +225,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
 
         // If no caller app, return {@code null} {@link ProcessRecord}.
         final ProcessRecord record = containsConditions(preconditions, PRECONDITION_NO_CALLER_APP)
-                ? null : new ProcessRecord(service.mAm, mock(BatteryStatsImpl.class),
-                mock(ApplicationInfo.class), null, 0);
+                ? null : new ProcessRecord(service.mAm, mock(ApplicationInfo.class), null, 0);
 
         doReturn(record).when(service.mAm).getRecordForAppLocked(anyObject());
 
@@ -312,9 +336,6 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 .setCreateStack(false)
                 .build();
 
-        // supervisor needs a focused stack.
-        mService.mStackSupervisor.mFocusedStack = stack;
-
         // use factory that only returns spy task.
         final TaskRecordFactory factory = mock(TaskRecordFactory.class);
         TaskRecord.setTaskRecordFactory(factory);
@@ -327,6 +348,16 @@ public class ActivityStarterTests extends ActivityTestsBase {
                 .getLaunchStack(any(), any(), any(), anyBoolean());
         doReturn(stack).when(mService.mStackSupervisor)
                 .getLaunchStack(any(), any(), any(), anyBoolean(), anyInt());
+
+        // Set up mock package manager internal and make sure no unmocked methods are called
+        PackageManagerInternal mockPackageManager = mock(PackageManagerInternal.class,
+                invocation -> {
+                    throw new RuntimeException("Not stubbed");
+                });
+        doReturn(mockPackageManager).when(mService.mAm).getPackageManagerInternalLocked();
+
+        // Never review permissions
+        doReturn(false).when(mockPackageManager).isPermissionsReviewRequired(any(), anyInt());
 
         final Intent intent = new Intent();
         intent.addFlags(launchFlags);
@@ -404,8 +435,8 @@ public class ActivityStarterTests extends ActivityTestsBase {
         reusableActivity.getStack().setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_SECONDARY);
 
         // Set focus back to primary.
-        mService.mStackSupervisor.setFocusStackUnchecked("testSplitScreenDeliverToTop",
-                focusActivity.getStack());
+        final ActivityStack focusStack = focusActivity.getStack();
+        focusStack.moveToFront("testSplitScreenDeliverToTop");
 
         doReturn(reusableActivity).when(mService.mStackSupervisor).findTaskLocked(any(), anyInt());
 
@@ -453,6 +484,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
     @Test
     public void testTaskModeViolation() {
         final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
+        ((TestActivityDisplay) display).removeAllTasks();
         assertNoTasks(display);
 
         final ActivityStarter starter = prepareStarter(0);
@@ -471,5 +503,47 @@ public class ActivityStarterTests extends ActivityTestsBase {
             final ActivityStack stack = display.getChildAt(i);
             assertTrue(stack.getAllTasks().isEmpty());
         }
+    }
+
+    /**
+     * This test ensures that activity starts are not being logged when the logging is disabled.
+     */
+    @Test
+    public void testActivityStartsLogging_noLoggingWhenDisabled() {
+        doReturn(false).when(mService.mAm).isActivityStartsLoggingEnabled();
+        doReturn(mActivityMetricsLogger).when(mService.mStackSupervisor).getActivityMetricsLogger();
+
+        ActivityStarter starter = prepareStarter(FLAG_ACTIVITY_NEW_TASK);
+        starter.setReason("testActivityStartsLogging_noLoggingWhenDisabled").execute();
+
+        // verify logging wasn't done
+        verify(mActivityMetricsLogger, never()).logActivityStart(any(), any(), any(), anyInt(),
+                any(), anyInt(), anyBoolean(), anyInt(), anyInt(), anyBoolean(), anyInt(), any(),
+                anyInt(), anyBoolean(), any(), anyBoolean());
+    }
+
+    /**
+     * This test ensures that activity starts are being logged when the logging is enabled.
+     */
+    @Test
+    public void testActivityStartsLogging_logsWhenEnabled() {
+        // note: conveniently this package doesn't have any activity visible
+        doReturn(true).when(mService.mAm).isActivityStartsLoggingEnabled();
+        doReturn(mActivityMetricsLogger).when(mService.mStackSupervisor).getActivityMetricsLogger();
+
+        ActivityStarter starter = prepareStarter(FLAG_ACTIVITY_NEW_TASK)
+                .setCallingUid(FAKE_CALLING_UID)
+                .setRealCallingUid(FAKE_REAL_CALLING_UID)
+                .setCallingPackage(FAKE_CALLING_PACKAGE)
+                .setOriginatingPendingIntent(null);
+
+        starter.setReason("testActivityStartsLogging_logsWhenEnabled").execute();
+
+        // verify the above activity start was logged
+        verify(mActivityMetricsLogger, times(1)).logActivityStart(any(), any(), any(),
+                eq(FAKE_CALLING_UID), eq(FAKE_CALLING_PACKAGE), anyInt(), anyBoolean(),
+                eq(FAKE_REAL_CALLING_UID), anyInt(), anyBoolean(), anyInt(),
+                eq(ActivityBuilder.getDefaultComponent().getPackageName()), anyInt(), anyBoolean(),
+                any(), eq(false));
     }
 }

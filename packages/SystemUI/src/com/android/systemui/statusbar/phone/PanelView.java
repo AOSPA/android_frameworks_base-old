@@ -45,8 +45,10 @@ import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.statusbar.FlingAnimationUtils;
 import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone;
+import com.android.systemui.statusbar.policy.KeyguardMonitor;
 import android.util.BoostFramework;
 
 import java.io.FileDescriptor;
@@ -145,6 +147,9 @@ public abstract class PanelView extends FrameLayout {
     private boolean mGestureWaitForTouchSlop;
     private boolean mIgnoreXTouchSlop;
     private boolean mExpandLatencyTracking;
+    protected final KeyguardMonitor mKeyguardMonitor = Dependency.get(KeyguardMonitor.class);
+    protected final StatusBarStateController
+            mStatusBarStateController = Dependency.get(StatusBarStateController.class);
 
     protected void onExpandingFinished() {
         mBar.onExpandingFinished();
@@ -231,13 +236,7 @@ public abstract class PanelView extends FrameLayout {
     }
 
     private void trackMovement(MotionEvent event) {
-        // Add movement to velocity tracker using raw screen X and Y coordinates instead
-        // of window coordinates because the window frame may be moving at the same time.
-        float deltaX = event.getRawX() - event.getX();
-        float deltaY = event.getRawY() - event.getY();
-        event.offsetLocation(deltaX, deltaY);
         if (mVelocityTracker != null) mVelocityTracker.addMovement(event);
-        event.offsetLocation(-deltaX, -deltaY);
     }
 
     public void setTouchDisabled(boolean disabled) {
@@ -350,7 +349,7 @@ public abstract class PanelView extends FrameLayout {
                 }
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                if (mStatusBar.getBarState() == StatusBarState.KEYGUARD) {
+                if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
                     mMotionAborted = true;
                     endMotionEvent(event, x, y, true /* forceCancel */);
                     return false;
@@ -483,7 +482,7 @@ public abstract class PanelView extends FrameLayout {
                     mStatusBar.isFalsingThresholdNeeded(),
                     mStatusBar.isWakeUpComingFromTouch());
                     // Log collapse gesture if on lock screen.
-                    if (!expand && mStatusBar.getBarState() == StatusBarState.KEYGUARD) {
+                    if (!expand && mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
                         float displayDensity = mStatusBar.getDisplayDensity();
                         int heightDp = (int) Math.abs((y - mInitialTouchY) / displayDensity);
                         int velocityDp = (int) Math.abs(vel / displayDensity);
@@ -498,7 +497,7 @@ public abstract class PanelView extends FrameLayout {
                 mUpdateFlingVelocity = vel;
             }
         } else if (mPanelClosedOnDown && !mHeadsUpManager.hasPinnedHeadsUp() && !mTracking
-                && !mStatusBar.isBouncerShowing() && !mStatusBar.isKeyguardFadingAway()) {
+                && !mStatusBar.isBouncerShowing() && !mKeyguardMonitor.isKeyguardFadingAway()) {
             long timePassed = SystemClock.uptimeMillis() - mDownTime;
             if (timePassed < ViewConfiguration.getLongPressTimeout()) {
                 // Lets show the user that he can actually expand the panel
@@ -612,7 +611,7 @@ public abstract class PanelView extends FrameLayout {
                 }
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                if (mStatusBar.getBarState() == StatusBarState.KEYGUARD) {
+                if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
                     mMotionAborted = true;
                     if (mVelocityTracker != null) {
                         mVelocityTracker.recycle();
@@ -1259,7 +1258,7 @@ public abstract class PanelView extends FrameLayout {
         ));
     }
 
-    public abstract void resetViews();
+    public abstract void resetViews(boolean animate);
 
     protected abstract float getPeekHeight();
     /**

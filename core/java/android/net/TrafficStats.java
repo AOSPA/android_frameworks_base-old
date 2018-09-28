@@ -19,6 +19,7 @@ package android.net;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.app.DownloadManager;
 import android.app.backup.BackupManager;
 import android.app.usage.NetworkStatsManager;
@@ -141,6 +142,7 @@ public class TrafficStats {
 
     private static INetworkStatsService sStatsService;
 
+    @UnsupportedAppUsage
     private synchronized static INetworkStatsService getStatsService() {
         if (sStatsService == null) {
             sStatsService = INetworkStatsService.Stub.asInterface(
@@ -329,6 +331,14 @@ public class TrafficStats {
 
     /**
      * Remove any statistics parameters from the given {@link Socket}.
+     * <p>
+     * In Android 8.1 (API level 27) and lower, a socket is automatically
+     * untagged when it's sent to another process using binder IPC with a
+     * {@code ParcelFileDescriptor} container. In Android 9.0 (API level 28)
+     * and higher, the socket tag is kept when the socket is sent to another
+     * process using binder IPC. You can mimic the previous behavior by
+     * calling {@code untagSocket()} before sending the socket to another
+     * process.
      */
     public static void untagSocket(Socket socket) throws SocketException {
         SocketTagger.get().untag(socket);
@@ -528,6 +538,7 @@ public class TrafficStats {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public static long getMobileTcpRxPackets() {
         long total = 0;
         for (String iface : getMobileIfaces()) {
@@ -543,6 +554,7 @@ public class TrafficStats {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public static long getMobileTcpTxPackets() {
         long total = 0;
         for (String iface : getMobileIfaces()) {
@@ -576,6 +588,7 @@ public class TrafficStats {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public static long getTxBytes(String iface) {
         try {
             return getStatsService().getIfaceStats(iface, TYPE_TX_BYTES);
@@ -585,6 +598,7 @@ public class TrafficStats {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public static long getRxBytes(String iface) {
         try {
             return getStatsService().getIfaceStats(iface, TYPE_RX_BYTES);
@@ -940,6 +954,7 @@ public class TrafficStats {
      * Interfaces are never removed from this list, so counters should always be
      * monotonic.
      */
+    @UnsupportedAppUsage
     private static String[] getMobileIfaces() {
         try {
             return getStatsService().getMobileIfaces();

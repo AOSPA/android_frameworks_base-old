@@ -515,7 +515,7 @@ public class RecordingCanvas extends Canvas {
                             contextStart - paraStart,
                             contextEnd - contextStart,
                             x, y, isRtl, paint.getNativeInstance(),
-                            mp.getNativePtr());
+                            mp.getNativeMeasuredParagraph().getNativePtr());
                     return;
                 }
             }
@@ -536,9 +536,6 @@ public class RecordingCanvas extends Canvas {
             @Nullable int[] colors, int colorOffset, @Nullable short[] indices, int indexOffset,
             int indexCount, @NonNull Paint paint) {
         checkRange(verts.length, vertOffset, vertexCount);
-        if (isHardwareAccelerated()) {
-            return;
-        }
         if (texs != null) {
             checkRange(texs.length, texOffset, vertexCount);
         }

@@ -31,7 +31,7 @@ import com.android.internal.util.ContrastColorUtil;
 import com.android.keyguard.KeyguardHostView.OnDismissAction;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.NotificationData;
+import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.SmartReplyController;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.phone.KeyguardDismissUtil;
@@ -127,19 +127,14 @@ public class SmartReplyView extends ViewGroup {
         final int length = arr.getIndexCount();
         for (int i = 0; i < length; i++) {
             int attr = arr.getIndex(i);
-            switch (attr) {
-                case R.styleable.SmartReplyView_spacing:
-                    spacing = arr.getDimensionPixelSize(i, 0);
-                    break;
-                case R.styleable.SmartReplyView_singleLineButtonPaddingHorizontal:
-                    singleLineButtonPaddingHorizontal = arr.getDimensionPixelSize(i, 0);
-                    break;
-                case R.styleable.SmartReplyView_doubleLineButtonPaddingHorizontal:
-                    doubleLineButtonPaddingHorizontal = arr.getDimensionPixelSize(i, 0);
-                    break;
-                case R.styleable.SmartReplyView_buttonStrokeWidth:
-                    strokeWidth = arr.getDimensionPixelSize(i, 0);
-                    break;
+            if (attr == R.styleable.SmartReplyView_spacing) {
+                spacing = arr.getDimensionPixelSize(i, 0);
+            } else if (attr == R.styleable.SmartReplyView_singleLineButtonPaddingHorizontal) {
+                singleLineButtonPaddingHorizontal = arr.getDimensionPixelSize(i, 0);
+            } else if (attr == R.styleable.SmartReplyView_doubleLineButtonPaddingHorizontal) {
+                doubleLineButtonPaddingHorizontal = arr.getDimensionPixelSize(i, 0);
+            } else if (attr == R.styleable.SmartReplyView_buttonStrokeWidth) {
+                strokeWidth = arr.getDimensionPixelSize(i, 0);
             }
         }
         arr.recycle();
@@ -173,14 +168,14 @@ public class SmartReplyView extends ViewGroup {
                 Math.max(getChildCount(), 1), DECREASING_MEASURED_WIDTH_WITHOUT_PADDING_COMPARATOR);
     }
 
-    public void setRepliesFromRemoteInput(RemoteInput remoteInput, PendingIntent pendingIntent,
+    public void setRepliesFromRemoteInput(
+            RemoteInput remoteInput, PendingIntent pendingIntent,
             SmartReplyController smartReplyController, NotificationData.Entry entry,
-            View smartReplyContainer) {
+            View smartReplyContainer, CharSequence[] choices) {
         mSmartReplyContainer = smartReplyContainer;
         removeAllViews();
         mCurrentBackgroundColor = mDefaultBackgroundColor;
         if (remoteInput != null && pendingIntent != null) {
-            CharSequence[] choices = remoteInput.getChoices();
             if (choices != null) {
                 for (int i = 0; i < choices.length; ++i) {
                     Button replyButton = inflateReplyButton(

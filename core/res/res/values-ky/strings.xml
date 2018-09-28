@@ -60,7 +60,7 @@
     <string name="ClirMmi" msgid="7784673673446833091">"Чыгуучу номурду аныктоо"</string>
     <string name="ColpMmi" msgid="3065121483740183974">"Туташкан линия ID-си"</string>
     <string name="ColrMmi" msgid="4996540314421889589">"Туташкан линия ID-син Чектөө"</string>
-    <string name="CfMmi" msgid="5123218989141573515">"Чалууну багыттоо"</string>
+    <string name="CfMmi" msgid="5123218989141573515">"Башка номерге багыттоо"</string>
     <string name="CwMmi" msgid="9129678056795016867">"Чалууну кармап туруу"</string>
     <string name="BaMmi" msgid="455193067926770581">"Чалууга тыюу салуу"</string>
     <string name="PwdMmi" msgid="7043715687905254199">"Сырсөздү өзгөртүү"</string>
@@ -300,6 +300,12 @@
     <string name="permgrouplab_sensors" msgid="416037179223226722">"Дене сенсорлору"</string>
     <string name="permgroupdesc_sensors" msgid="7147968539346634043">"организмдин абалына көз салган сенсордун дайындарына мүмкүнчүлүк алуу"</string>
     <string name="permgrouprequest_sensors" msgid="6349806962814556786">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосуна организмдин абалына көз салган сенсордун дайындарын пайдаланууга уруксат берилсинби?"</string>
+    <string name="permgrouplab_aural" msgid="965607064083134896">"Музыка"</string>
+    <string name="permgroupdesc_aural" msgid="4870189506255958055">"музыкага кирүү мүмкүнчүлүгү"</string>
+    <string name="permgrouprequest_aural" msgid="6787926123071735620">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосуна музыканы пайдаланууга уруксат берилсинби?"</string>
+    <string name="permgrouplab_visual" msgid="8030190588123857921">"Сүрөттөр жана видеолор"</string>
+    <string name="permgroupdesc_visual" msgid="3415827902566663546">"сүрөттөр менен видеолорго кирүү мүмкүнчүлүгү"</string>
+    <string name="permgrouprequest_visual" msgid="6907523945030290376">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; колдонмосуна сүрөттөр менен видеолорду пайдаланууга уруксат берилсинби?"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="3901717936930170320">"Терезедеги мазмунду алып турат"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="3772225008605310672">"Учурда ачылып турган терезедеги маалыматты талдайт."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="3108723364676667320">"\"Сыйпалап изилдөө\" мүмкүнчүлүгүн иштетет"</string>
@@ -494,6 +500,20 @@
     <string name="permdesc_manageFingerprint" msgid="178208705828055464">"Колдонмого пайдалануу үчүн манжа изинин үлгүлөрүн кошуу жана жок кылуу мүмкүндүгүн берет."</string>
     <string name="permlab_useFingerprint" msgid="3150478619915124905">"манжа изинин аппараттык камсыздоосун колдонуу"</string>
     <string name="permdesc_useFingerprint" msgid="9165097460730684114">"Колдонмого аныктыгын текшерүү үчүн манжа изинин аппараттык камсыздоосун пайдалануу мүмкүндүгүн берет"</string>
+    <string name="permlab_audioRead" msgid="6617225220728465565">"музыка жыйнагыңызды окуу"</string>
+    <string name="permdesc_audioRead" msgid="5034032570243484805">"Колдонмого музыка жыйнагыңызды окууга мүмкүнчүлүк берет."</string>
+    <string name="permlab_audioWrite" msgid="2661772059799779292">"музыка жыйнагыңызды өчүрүү"</string>
+    <string name="permdesc_audioWrite" msgid="8888544708166230494">"Колдонмого музыка жыйнагыңызды өзгөртүүгө мүмкүнчүлүк берет."</string>
+    <string name="permlab_videoRead" msgid="9182618678674737229">"видео жыйнагыңызды окуу"</string>
+    <string name="permdesc_videoRead" msgid="7045676429859396194">"Колдонмого видео жыйнагыңызды окууга мүмкүнчүлүк берет."</string>
+    <string name="permlab_videoWrite" msgid="128769316366746446">"видео жыйнагыңызды өзгөртүү"</string>
+    <string name="permdesc_videoWrite" msgid="5448565757490640841">"Колдонмого видео жыйнагыңызды өзгөртүүгө мүмкүнчүлүк берет."</string>
+    <string name="permlab_imagesRead" msgid="3015078545742665304">"сүрөт жыйнагыңызды окуу"</string>
+    <string name="permdesc_imagesRead" msgid="3144263806038695580">"Колдонмого сүрөт жыйнагыңызды окууга мүмкүнчүлүк берет."</string>
+    <string name="permlab_imagesWrite" msgid="3391306186247235510">"сүрөт жыйнагыңызды өзгөртүү"</string>
+    <string name="permdesc_imagesWrite" msgid="7073662756617474375">"Колдонмого сүрөт жыйнагыңызды өзгөртүүгө мүмкүнчүлүк берет."</string>
+    <string name="permlab_mediaLocation" msgid="8675148183726247864">"медиа жыйнагыңыз сакталган жерлерди окуу"</string>
+    <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Колдонмого медиа жыйнагыңыз сакталган жерлерди окууга мүмкүнчүлүк берет."</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Манжа изи жарым-жартылай аныкталды. Кайра аракет кылыңыз."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"Манжа изи иштелбей койду. Кайра аракет кылыңыз."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="1087209702421076105">"Манжа изинин сенсору кирдеп калган. Тазалап, кайра аракет кылыңыз."</string>
@@ -790,7 +810,7 @@
     <string name="lockscreen_transport_stop_description" msgid="5907083260651210034">"Токтотуу"</string>
     <string name="lockscreen_transport_rew_description" msgid="6944412838651990410">"Артка түрүү"</string>
     <string name="lockscreen_transport_ffw_description" msgid="42987149870928985">"Алдыга түрүү"</string>
-    <string name="emergency_calls_only" msgid="6733978304386365407">"Шашылыш чалуу гана"</string>
+    <string name="emergency_calls_only" msgid="6733978304386365407">"Өзгөчө кырдаалда гана чалууга болот"</string>
     <string name="lockscreen_network_locked_message" msgid="143389224986028501">"Тармак кулпуланган"</string>
     <string name="lockscreen_sim_puk_locked_message" msgid="7441797339976230">"SIM-карта PUK-бөгөттө."</string>
     <string name="lockscreen_sim_puk_locked_instructions" msgid="8127916255245181063">"Колдонуучунун нускамасын караңыз же Кардарларды тейлөө борборуна кайрылыңыз."</string>
@@ -1874,8 +1894,13 @@
     <string name="autofill_save_title_with_type" msgid="8637809388029313305">"<xliff:g id="TYPE">%1$s</xliff:g> &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt; кызматында сакталсынбы?"</string>
     <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"<xliff:g id="TYPE_0">%1$s</xliff:g> жана <xliff:g id="TYPE_1">%2$s</xliff:g> &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt; кызматында сакталсынбы?"</string>
     <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"<xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> жана <xliff:g id="TYPE_2">%3$s</xliff:g> &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt; кызматында сакталсынбы?"</string>
+    <string name="autofill_update_title" msgid="4879673117448810818">"&lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt; кызматына жаңыртылсынбы?"</string>
+    <string name="autofill_update_title_with_type" msgid="339733442087186755">"<xliff:g id="TYPE">%1$s</xliff:g> &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt; кызматына жаңыртылсынбы?"</string>
+    <string name="autofill_update_title_with_2types" msgid="6321714204167424745">"<xliff:g id="TYPE_0">%1$s</xliff:g> жана <xliff:g id="TYPE_1">%2$s</xliff:g> &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt; кызматына жаңыртылсынбы?"</string>
+    <string name="autofill_update_title_with_3types" msgid="5866735124066629287">"<xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> жана <xliff:g id="TYPE_2">%3$s</xliff:g> &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt; кызматына жаңыртылсынбы?"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"Сактоо"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"Жок, рахмат"</string>
+    <string name="autofill_update_yes" msgid="310358413273276958">"Жаңыртуу"</string>
     <string name="autofill_save_type_password" msgid="5288448918465971568">"сырсөз"</string>
     <string name="autofill_save_type_address" msgid="4936707762193009542">"дарек"</string>
     <string name="autofill_save_type_credit_card" msgid="7127694776265563071">"насыя картасы"</string>

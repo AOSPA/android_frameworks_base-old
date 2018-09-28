@@ -19,8 +19,10 @@ package android.service.wallpaper;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.UnsupportedAppUsage;
 import android.app.Service;
 import android.app.WallpaperColors;
+import android.app.WallpaperInfo;
 import android.app.WallpaperManager;
 import android.content.Context;
 import android.content.Intent;
@@ -108,6 +110,7 @@ public abstract class WallpaperService extends Service {
     private static final int MSG_VISIBILITY_CHANGED = 10010;
     private static final int MSG_WALLPAPER_OFFSETS = 10020;
     private static final int MSG_WALLPAPER_COMMAND = 10025;
+    @UnsupportedAppUsage
     private static final int MSG_WINDOW_RESIZED = 10030;
     private static final int MSG_WINDOW_MOVED = 10035;
     private static final int MSG_TOUCH_EVENT = 10040;
@@ -190,6 +193,7 @@ public abstract class WallpaperService extends Service {
 
         final Object mLock = new Object();
         boolean mOffsetMessageEnqueued;
+        @UnsupportedAppUsage
         float mPendingXOffset;
         float mPendingYOffset;
         float mPendingXOffsetStep;
@@ -436,8 +440,7 @@ public abstract class WallpaperService extends Service {
 
         /**
          * Returns true if this engine is running in ambient mode -- that is,
-         * it is being shown in low power mode, in always on display.
-         * @hide
+         * it is being shown in low power mode, on always on display.
          */
         public boolean isInAmbientMode() {
             return mIsInAmbientMode;
@@ -479,6 +482,7 @@ public abstract class WallpaperService extends Service {
         }
 
         /** {@hide} */
+        @UnsupportedAppUsage
         public void setFixedSizeAllowed(boolean allowed) {
             mFixedSizeAllowed = allowed;
         }
@@ -563,10 +567,12 @@ public abstract class WallpaperService extends Service {
          * Called when the device enters or exits ambient mode.
          *
          * @param inAmbientMode {@code true} if in ambient mode.
-         * @param animated {@code true} if you'll have te opportunity of animating your transition
-         *                 {@code false} when the screen will blank and the wallpaper should be
-         *                 set to ambient mode immediately.
-         * @hide
+         * @param animated {@code true} if you'll have the opportunity of animating your transition
+         *                 {@code false} when the wallpaper should present its ambient version
+         *                 immediately.
+         *
+         * @see #isInAmbientMode()
+         * @see WallpaperInfo#supportsAmbientMode()
          */
         public void onAmbientModeChanged(boolean inAmbientMode, boolean animated) {
         }

@@ -24,6 +24,7 @@
 #include <sstream>
 #include <string>
 
+#include <android/fdsan.h>
 #include <fcntl.h>
 #include <grp.h>
 #include <inttypes.h>
@@ -69,6 +70,7 @@
 namespace {
 
 using android::String8;
+using android::base::StringAppendF;
 using android::base::StringPrintf;
 using android::base::WriteStringToFile;
 using android::base::GetBoolProperty;
@@ -78,6 +80,7 @@ using android::base::GetBoolProperty;
 
 static pid_t gSystemServerPid = 0;
 
+static const char kIsolatedStorage[] = "persist.sys.isolated_storage";
 static const char kZygoteClassName[] = "com/android/internal/os/Zygote";
 static jclass gZygoteClass;
 static jmethodID gCallPostForkChildHooks;
@@ -378,10 +381,32 @@ static int UnmountTree(const char* path) {
     return 0;
 }
 
+static bool createPkgSandbox(uid_t uid, const char* package_name, std::string& pkg_sandbox_dir,
+        std::string* error_msg) {
+    // Create /mnt/user/0/package/<package-name>
+    userid_t user_id = multiuser_get_user_id(uid);
+    StringAppendF(&pkg_sandbox_dir, "/%d", user_id);
+    if (fs_prepare_dir(pkg_sandbox_dir.c_str(), 0751, AID_ROOT, AID_ROOT) != 0) {
+        *error_msg = CREATE_ERROR("fs_prepare_dir failed on %s", pkg_sandbox_dir.c_str());
+        return false;
+    }
+    StringAppendF(&pkg_sandbox_dir, "/package");
+    if (fs_prepare_dir(pkg_sandbox_dir.c_str(), 0700, AID_ROOT, AID_ROOT) != 0) {
+        *error_msg = CREATE_ERROR("fs_prepare_dir failed on %s", pkg_sandbox_dir.c_str());
+        return false;
+    }
+    StringAppendF(&pkg_sandbox_dir, "/%s", package_name);
+    if (fs_prepare_dir(pkg_sandbox_dir.c_str(), 0755, uid, uid) != 0) {
+        *error_msg = CREATE_ERROR("fs_prepare_dir failed on %s", pkg_sandbox_dir.c_str());
+        return false;
+    }
+    return true;
+}
+
 // Create a private mount namespace and bind mount appropriate emulated
 // storage for the given user.
 static bool MountEmulatedStorage(uid_t uid, jint mount_mode,
-        bool force_mount_namespace, std::string* error_msg) {
+        bool force_mount_namespace, std::string* error_msg, const char* package_name) {
     // See storage config details at http://source.android.com/tech/storage/
 
     String8 storageSource;
@@ -407,27 +432,44 @@ static bool MountEmulatedStorage(uid_t uid, jint mount_mode,
         return true;
     }
 
-    if (TEMP_FAILURE_RETRY(mount(storageSource.string(), "/storage",
-            NULL, MS_BIND | MS_REC | MS_SLAVE, NULL)) == -1) {
-        *error_msg = CREATE_ERROR("Failed to mount %s to /storage: %s",
-                                  storageSource.string(),
-                                  strerror(errno));
-        return false;
-    }
+    if (GetBoolProperty(kIsolatedStorage, false)) {
+        if (package_name == nullptr) {
+            return true;
+        }
 
-    // Mount user-specific symlink helper into place
-    userid_t user_id = multiuser_get_user_id(uid);
-    const String8 userSource(String8::format("/mnt/user/%d", user_id));
-    if (fs_prepare_dir(userSource.string(), 0751, 0, 0) == -1) {
-        *error_msg = CREATE_ERROR("fs_prepare_dir failed on %s", userSource.string());
-        return false;
-    }
-    if (TEMP_FAILURE_RETRY(mount(userSource.string(), "/storage/self",
-            NULL, MS_BIND, NULL)) == -1) {
-        *error_msg = CREATE_ERROR("Failed to mount %s to /storage/self: %s",
-                                  userSource.string(),
-                                  strerror(errno));
-        return false;
+        std::string pkgSandboxDir("/mnt/user");
+        if (!createPkgSandbox(uid, package_name, pkgSandboxDir, error_msg)) {
+            return false;
+        }
+        if (TEMP_FAILURE_RETRY(mount(pkgSandboxDir.c_str(), "/storage",
+                nullptr, MS_BIND | MS_REC | MS_SLAVE, nullptr)) == -1) {
+            *error_msg = CREATE_ERROR("Failed to mount %s to /storage: %s",
+                    pkgSandboxDir.c_str(), strerror(errno));
+            return false;
+        }
+    } else {
+        if (TEMP_FAILURE_RETRY(mount(storageSource.string(), "/storage",
+                NULL, MS_BIND | MS_REC | MS_SLAVE, NULL)) == -1) {
+            *error_msg = CREATE_ERROR("Failed to mount %s to /storage: %s",
+                                      storageSource.string(),
+                                      strerror(errno));
+            return false;
+        }
+
+        // Mount user-specific symlink helper into place
+        userid_t user_id = multiuser_get_user_id(uid);
+        const String8 userSource(String8::format("/mnt/user/%d", user_id));
+        if (fs_prepare_dir(userSource.string(), 0751, 0, 0) == -1) {
+            *error_msg = CREATE_ERROR("fs_prepare_dir failed on %s", userSource.string());
+            return false;
+        }
+        if (TEMP_FAILURE_RETRY(mount(userSource.string(), "/storage/self",
+                NULL, MS_BIND, NULL)) == -1) {
+            *error_msg = CREATE_ERROR("Failed to mount %s to /storage/self: %s",
+                                      userSource.string(),
+                                      strerror(errno));
+            return false;
+        }
     }
 
     return true;
@@ -543,7 +585,7 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray javaGi
                              jlong permittedCapabilities, jlong effectiveCapabilities,
                              jint mount_external, jstring java_se_info, jstring java_se_name,
                              bool is_system_server, bool is_child_zygote, jstring instructionSet,
-                             jstring dataDir) {
+                             jstring dataDir, jstring packageName) {
   std::string error_msg;
 
   auto fail_fn = [env, java_se_name, is_system_server](const std::string& msg)
@@ -593,7 +635,18 @@ static void SpecializeCommon(JNIEnv* env, uid_t uid, gid_t gid, jintArray javaGi
     ALOGW("Native bridge will not be used because dataDir == NULL.");
   }
 
-  if (!MountEmulatedStorage(uid, mount_external, use_native_bridge, &error_msg)) {
+  ScopedUtfChars* package_name = nullptr;
+  const char* package_name_c_str = nullptr;
+  if (packageName != nullptr) {
+    package_name = new ScopedUtfChars(env, packageName);
+    package_name_c_str = package_name->c_str();
+  } else if (is_system_server) {
+    package_name_c_str = "android";
+  }
+  bool success = MountEmulatedStorage(uid, mount_external, use_native_bridge, &error_msg,
+      package_name_c_str);
+  delete package_name;
+  if (!success) {
     ALOGW("Failed to mount emulated storage: %s (%s)", error_msg.c_str(), strerror(errno));
     if (errno == ENOTCONN || errno == EROFS) {
       // When device is actively encrypting, we get ENOTCONN here
@@ -793,6 +846,8 @@ static pid_t ForkCommon(JNIEnv* env, jstring java_se_name, bool is_system_server
     fail_fn(error_msg);
   }
 
+  android_fdsan_error_level fdsan_error_level = android_fdsan_get_error_level();
+
   pid_t pid = fork();
 
   if (pid == 0) {
@@ -809,6 +864,9 @@ static pid_t ForkCommon(JNIEnv* env, jstring java_se_name, bool is_system_server
     if (!gOpenFdTable->ReopenOrDetach(&error_msg)) {
       fail_fn(error_msg);
     }
+
+    // Turn fdsan back on.
+    android_fdsan_set_error_level(fdsan_error_level);
   }
 
   // We blocked SIGCHLD prior to a fork, we unblock it here.
@@ -852,7 +910,7 @@ static jint com_android_internal_os_Zygote_nativeForkAndSpecialize(
         jint runtime_flags, jobjectArray rlimits,
         jint mount_external, jstring se_info, jstring se_name,
         jintArray fdsToClose, jintArray fdsToIgnore, jboolean is_child_zygote,
-        jstring instructionSet, jstring appDataDir) {
+        jstring instructionSet, jstring appDataDir, jstring packageName) {
     jlong capabilities = 0;
 
     // Grant CAP_WAKE_ALARM to the Bluetooth process.
@@ -905,7 +963,7 @@ static jint com_android_internal_os_Zygote_nativeForkAndSpecialize(
       SpecializeCommon(env, uid, gid, gids, runtime_flags, rlimits,
                        capabilities, capabilities,
                        mount_external, se_info, se_name, false,
-                       is_child_zygote == JNI_TRUE, instructionSet, appDataDir);
+                       is_child_zygote == JNI_TRUE, instructionSet, appDataDir, packageName);
     }
     return pid;
 }
@@ -919,7 +977,7 @@ static jint com_android_internal_os_Zygote_nativeForkSystemServer(
       SpecializeCommon(env, uid, gid, gids, runtime_flags, rlimits,
                        permittedCapabilities, effectiveCapabilities,
                        MOUNT_EXTERNAL_DEFAULT, NULL, NULL, true,
-                       false, NULL, NULL);
+                       false, NULL, NULL, nullptr);
   } else if (pid > 0) {
       // The zygote process checks whether the child process has died or not.
       ALOGI("System server process %d has been created", pid);
@@ -1000,7 +1058,7 @@ static const JNINativeMethod gMethods[] = {
     { "nativeSecurityInit", "()V",
       (void *) com_android_internal_os_Zygote_nativeSecurityInit },
     { "nativeForkAndSpecialize",
-      "(II[II[[IILjava/lang/String;Ljava/lang/String;[I[IZLjava/lang/String;Ljava/lang/String;)I",
+      "(II[II[[IILjava/lang/String;Ljava/lang/String;[I[IZLjava/lang/String;Ljava/lang/String;Ljava/lang/String;)I",
       (void *) com_android_internal_os_Zygote_nativeForkAndSpecialize },
     { "nativeForkSystemServer", "(II[II[[IJJ)I",
       (void *) com_android_internal_os_Zygote_nativeForkSystemServer },

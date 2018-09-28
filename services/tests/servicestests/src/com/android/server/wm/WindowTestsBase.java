@@ -16,30 +16,12 @@
 
 package com.android.server.wm;
 
+import static android.app.AppOpsManager.OP_NONE;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.view.Display.DEFAULT_DISPLAY;
-import static android.view.View.VISIBLE;
-
-import android.content.res.Configuration;
-import android.graphics.Rect;
-import android.hardware.display.DisplayManagerGlobal;
-import android.testing.DexmakerShareClassLoaderRule;
-import android.util.Log;
-import android.view.Display;
-import android.view.DisplayInfo;
-import org.junit.Assert;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
-
-import android.content.Context;
-import android.support.test.InstrumentationRegistry;
-import android.view.IWindow;
-import android.view.WindowManager;
-
-import static android.app.AppOpsManager.OP_NONE;
 import static android.view.DisplayAdjustments.DEFAULT_DISPLAY_ADJUSTMENTS;
+import static android.view.View.VISIBLE;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
@@ -52,9 +34,28 @@ import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD_DIALOG;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
+
 import static org.mockito.Mockito.mock;
 
+import android.content.Context;
+import android.content.res.Configuration;
+import android.graphics.Rect;
+import android.hardware.display.DisplayManagerGlobal;
+import android.testing.DexmakerShareClassLoaderRule;
+import android.util.Log;
+import android.view.Display;
+import android.view.DisplayInfo;
+import android.view.IWindow;
+import android.view.WindowManager;
+
+import androidx.test.InstrumentationRegistry;
+
 import com.android.server.AttributeCache;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Rule;
 
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -157,7 +158,11 @@ class WindowTestsBase {
         // If @After throws an exception, the error isn't logged. This will make sure any failures
         // in the tear down are clear. This can be removed when b/37850063 is fixed.
         try {
-            final LinkedList<WindowState> nonCommonWindows = new LinkedList();
+            // Test may schedule to perform surface placement or other messages. Wait until a
+            // stable state to clean up for consistency.
+            waitUntilHandlersIdle();
+
+            final LinkedList<WindowState> nonCommonWindows = new LinkedList<>();
 
             synchronized (sWm.mWindowMap) {
                 sWm.mRoot.forAllWindows(w -> {
@@ -170,7 +175,12 @@ class WindowTestsBase {
                     nonCommonWindows.pollLast().removeImmediately();
                 }
 
-                mDisplayContent.removeImmediately();
+                for (int i = sWm.mRoot.mChildren.size() - 1; i >= 0; --i) {
+                    final DisplayContent displayContent = sWm.mRoot.mChildren.get(i);
+                    if (!displayContent.isDefaultDisplay) {
+                        displayContent.removeImmediately();
+                    }
+                }
                 sWm.mInputMethodTarget = null;
                 sWm.mClosingApps.clear();
                 sWm.mOpeningApps.clear();
@@ -231,6 +241,11 @@ class WindowTestsBase {
     }
 
     AppWindowToken createAppWindowToken(DisplayContent dc, int windowingMode, int activityType) {
+        return createTestAppWindowToken(dc, windowingMode, activityType);
+    }
+
+    WindowTestUtils.TestAppWindowToken createTestAppWindowToken(DisplayContent dc, int
+            windowingMode, int activityType) {
         final TaskStack stack = createStackControllerOnStackOnDisplay(windowingMode, activityType,
                 dc).mContainer;
         final Task task = createTaskInStack(stack, 0 /* userId */);

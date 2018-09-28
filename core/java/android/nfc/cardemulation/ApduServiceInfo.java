@@ -19,6 +19,7 @@
 
 package android.nfc.cardemulation;
 
+import android.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -57,7 +58,8 @@ public class ApduServiceInfo implements Parcelable {
     /**
      * The service that implements this
      */
-    protected ResolveInfo mService;
+    @UnsupportedAppUsage
+    protected  ResolveInfo mService;
 
     /**
      * Description of the service
@@ -72,12 +74,14 @@ public class ApduServiceInfo implements Parcelable {
     /**
      * Mapping from category to static AID group
      */
-    protected HashMap<String, AidGroup> mStaticAidGroups;
+    @UnsupportedAppUsage
+    protected  HashMap<String, AidGroup> mStaticAidGroups;
 
     /**
      * Mapping from category to dynamic AID group
      */
-    protected HashMap<String, AidGroup> mDynamicAidGroups;
+    @UnsupportedAppUsage
+    protected  HashMap<String, AidGroup> mDynamicAidGroups;
 
     /**
      * Whether this service should only be started when the device is unlocked.
@@ -102,6 +106,7 @@ public class ApduServiceInfo implements Parcelable {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public ApduServiceInfo(ResolveInfo info, boolean onHost, String description,
             ArrayList<AidGroup> staticAidGroups, ArrayList<AidGroup> dynamicAidGroups,
             boolean requiresUnlock, int bannerResource, int uid,
@@ -123,6 +128,7 @@ public class ApduServiceInfo implements Parcelable {
         this.mSettingsActivityName = settingsActivityName;
     }
 
+    @UnsupportedAppUsage
     public ApduServiceInfo(PackageManager pm, ResolveInfo info, boolean onHost) throws
             XmlPullParserException, IOException {
         ServiceInfo si = info.serviceInfo;
@@ -377,18 +383,22 @@ public class ApduServiceInfo implements Parcelable {
         return (mStaticAidGroups.containsKey(category) || mDynamicAidGroups.containsKey(category));
     }
 
+    @UnsupportedAppUsage
     public boolean isOnHost() {
         return mOnHost;
     }
 
+    @UnsupportedAppUsage
     public boolean requiresUnlock() {
         return mRequiresDeviceUnlock;
     }
 
+    @UnsupportedAppUsage
     public String getDescription() {
         return mDescription;
     }
 
+    @UnsupportedAppUsage
     public int getUid() {
         return mUid;
     }
@@ -414,6 +424,7 @@ public class ApduServiceInfo implements Parcelable {
         return mService.loadIcon(pm);
     }
 
+    @UnsupportedAppUsage
     public Drawable loadBanner(PackageManager pm) {
         Resources res;
         try {
@@ -429,6 +440,7 @@ public class ApduServiceInfo implements Parcelable {
         }
     }
 
+    @UnsupportedAppUsage
     public String getSettingsActivityName() { return mSettingsActivityName; }
 
     @Override
@@ -486,6 +498,7 @@ public class ApduServiceInfo implements Parcelable {
         dest.writeString(mSettingsActivityName);
     };
 
+    @UnsupportedAppUsage
     public static final Parcelable.Creator<ApduServiceInfo> CREATOR =
             new Parcelable.Creator<ApduServiceInfo>() {
         @Override

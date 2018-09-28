@@ -21,10 +21,10 @@ import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 
 import com.android.systemui.Gefingerpoken;
-import com.android.systemui.statusbar.ExpandableNotificationRow;
-import com.android.systemui.statusbar.ExpandableView;
-import com.android.systemui.statusbar.NotificationData;
-import com.android.systemui.statusbar.stack.NotificationStackScrollLayout;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.row.ExpandableView;
+import com.android.systemui.statusbar.notification.NotificationData;
+import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 
 /**
  * A helper class to handle touches on the heads-up views.
@@ -118,7 +118,7 @@ public class HeadsUpTouchHelper implements Gefingerpoken {
                     mPanel.startExpandingFromPeek();
                     // This call needs to be after the expansion start otherwise we will get a
                     // flicker of one frame as it's not expanded yet.
-                    mHeadsUpManager.unpinAll();
+                    mHeadsUpManager.unpinAll(true);
                     mPanel.clearNotificationEffects();
                     endMotion();
                     return true;

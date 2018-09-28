@@ -17,7 +17,6 @@
 package com.android.systemui.statusbar.car.hvac;
 
 import android.car.Car;
-import android.car.CarNotConnectedException;
 import android.car.hardware.CarPropertyValue;
 import android.car.hardware.hvac.CarHvacManager;
 import android.car.hardware.hvac.CarHvacManager.CarHvacEventCallback;
@@ -147,7 +146,7 @@ public class HvacController {
                 return;
             }
             view.setTemp(mHvacManager.getFloatProperty(id, zone));
-        } catch (CarNotConnectedException e) {
+        } catch (Exception e) {
             view.setTemp(Float.NaN);
             Log.e(TAG, "Failed to get value from hvac service", e);
         }

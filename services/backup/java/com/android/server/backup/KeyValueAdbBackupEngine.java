@@ -9,6 +9,7 @@ import static com.android.server.backup.BackupManagerService.OP_TYPE_BACKUP_WAIT
 
 import android.app.ApplicationThreadConstants;
 import android.app.IBackupAgent;
+import android.app.backup.IBackupCallback;
 import android.app.backup.FullBackup;
 import android.app.backup.FullBackupDataOutput;
 import android.content.pm.ApplicationInfo;
@@ -20,6 +21,7 @@ import android.os.SELinux;
 import android.util.Slog;
 
 import com.android.internal.util.Preconditions;
+import com.android.server.backup.remote.ServiceBackupCallback;
 import com.android.server.backup.utils.FullBackupUtils;
 
 import libcore.io.IoUtils;
@@ -47,7 +49,7 @@ public class KeyValueAdbBackupEngine {
     private static final String BACKUP_KEY_VALUE_BACKUP_DATA_FILENAME_SUFFIX = ".data";
     private static final String BACKUP_KEY_VALUE_NEW_STATE_FILENAME_SUFFIX = ".new";
 
-    private BackupManagerServiceInterface mBackupManagerService;
+    private BackupManagerService mBackupManagerService;
     private final PackageManager mPackageManager;
     private final OutputStream mOutput;
     private final PackageInfo mCurrentPackage;
@@ -63,7 +65,7 @@ public class KeyValueAdbBackupEngine {
     private final BackupAgentTimeoutParameters mAgentTimeoutParameters;
 
     public KeyValueAdbBackupEngine(OutputStream output, PackageInfo packageInfo,
-            BackupManagerServiceInterface backupManagerService, PackageManager packageManager,
+            BackupManagerService backupManagerService, PackageManager packageManager,
             File baseStateDir, File dataDir) {
         mOutput = output;
         mCurrentPackage = packageInfo;
@@ -158,10 +160,17 @@ public class KeyValueAdbBackupEngine {
             mBackupManagerService.prepareOperationTimeout(token, kvBackupAgentTimeoutMillis, null,
                     OP_TYPE_BACKUP_WAIT);
 
+            IBackupCallback callback =
+                    new ServiceBackupCallback(
+                            mBackupManagerService.getBackupManagerBinder(), token);
             // Start backup and wait for BackupManagerService to get callback for success or timeout
             agent.doBackup(
-                    mSavedState, mBackupData, mNewState, Long.MAX_VALUE, token,
-                    mBackupManagerService.getBackupManagerBinder(), /*transportFlags=*/ 0);
+                    mSavedState,
+                    mBackupData,
+                    mNewState,
+                    /* quotaBytes */ Long.MAX_VALUE,
+                    callback,
+                    /* transportFlags */ 0);
             if (!mBackupManagerService.waitUntilOperationComplete(token)) {
                 Slog.e(TAG, "Key-value backup failed on package " + packageName);
                 return false;

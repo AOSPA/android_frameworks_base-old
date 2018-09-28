@@ -551,9 +551,6 @@
          radio is unable to find any MCC information to infer wifi country code from -->
     <bool translatable="false" name="config_wifi_revert_country_code_on_cellular_loss">false</bool>
 
-    <!-- Boolean indicating whether or not wifi firmware debugging is enabled -->
-    <bool translatable="false" name="config_wifi_enable_wifi_firmware_debugging">true</bool>
-
     <!-- Integer size limit, in KB, for a single WifiLogger ringbuffer, in default logging mode -->
     <integer translatable="false" name="config_wifi_logger_ring_buffer_default_size_limit_kb">32</integer>
 
@@ -593,10 +590,6 @@
     <integer translatable="false" name="config_wifi_framework_wifi_score_entry_rssi_threshold_24GHz">-80</integer>
     <integer translatable="false" name="config_wifi_framework_wifi_score_low_rssi_threshold_24GHz">-73</integer>
     <integer translatable="false" name="config_wifi_framework_wifi_score_good_rssi_threshold_24GHz">-60</integer>
-    <integer translatable="false" name="config_wifi_framework_wifi_score_bad_link_speed_24">6</integer>
-    <integer translatable="false" name="config_wifi_framework_wifi_score_bad_link_speed_5">12</integer>
-    <integer translatable="false" name="config_wifi_framework_wifi_score_good_link_speed_24">24</integer>
-    <integer translatable="false" name="config_wifi_framework_wifi_score_good_link_speed_5">36</integer>
 
     <!-- Integer delay in milliseconds before shutting down soft AP when there
          are no connected devices. Framework will enforce a minimum limit on
@@ -671,6 +664,10 @@
 
     <!-- Boolean indicating whether framework needs to set the tx power limit for meeting SAR requirements -->
     <bool translatable="false" name="config_wifi_framework_enable_sar_tx_power_limit">false</bool>
+
+    <!-- Boolean indicating whether framework should use detection of softAP mode to set the tx
+         power limit for meeting SAR requirements -->
+    <bool translatable="false" name="config_wifi_framework_enable_soft_ap_sar_tx_power_limit">false</bool>
 
     <!-- Boolean indicating whether framework needs to use body proximity to set the tx power limit
          for meeting SAR requirements -->
@@ -2111,6 +2108,9 @@
     <!-- Type of the long press sensor. Empty if long press is not supported. -->
     <string name="config_dozeLongPressSensorType" translatable="false"></string>
 
+    <!-- Type of the reach sensor. Empty if reach is not supported. -->
+    <string name="config_dozeReachSensorType" translatable="false"></string>
+
     <!-- Control whether the always on display mode is available. This should only be enabled on
          devices where the display has been tuned to be power efficient in DOZE and/or DOZE_SUSPEND
          states. -->
@@ -2362,6 +2362,9 @@
     <!-- Whether safe headphone volume is enabled or not (country specific). -->
     <bool name="config_safe_media_volume_enabled">true</bool>
 
+    <!-- Whether safe headphone volume warning dialog is disabled on Vol+ (operator specific). -->
+    <bool name="config_safe_media_disable_on_volume_up">true</bool>
+
     <!-- Set to true if the wifi display supports compositing content stored
          in gralloc protected buffers.  For this to be true, there must exist
          a protected hardware path for surface flinger to composite and send
@@ -2497,6 +2500,7 @@
         <item>com.android.server.notification.VisibilityExtractor</item>
         <!-- Depends on ZenModeExtractor -->
         <item>com.android.server.notification.BadgeExtractor</item>
+        <item>com.android.server.notification.CriticalNotificationExtractor</item>
 
     </string-array>
 
@@ -2737,6 +2741,9 @@
     <!-- ImsService package name to bind to by default. If none is specified in an overlay, an
          empty string is passed in -->
     <string name="config_ims_package"/>
+
+    <!-- String array containing numbers that shouldn't be logged. Country-specific. -->
+    <string-array name="unloggable_phone_numbers" />
 
     <!-- Flag specifying whether or not IMS will use the dynamic ImsResolver -->
     <bool name="config_dynamic_bind_ims">false</bool>
@@ -2987,6 +2994,10 @@
          -->
     <bool name="config_fillMainBuiltInDisplayCutout">false</bool>
 
+    <!-- If true, and there is a cutout on the main built in display, the cutout will be masked
+         by shrinking the display such that it does not overlap the cutout area. -->
+    <bool name="config_maskMainBuiltInDisplayCutout">false</bool>
+
     <!-- Ultrasound support for Mic/speaker path -->
     <!-- Whether the default microphone audio source supports near-ultrasound frequencies
          (range of 18 - 21 kHz). -->
@@ -3226,12 +3237,11 @@
     <string-array translatable="false" name="config_defaultFirstUserRestrictions">
     </string-array>
 
-    <!-- Specifies whether the permissions needed by a legacy app should be
-         reviewed before any of its components can run. A legacy app is one
-         with targetSdkVersion < 23, i.e apps using the old permission model.
-         If review is not required, permissions are reviewed before the app
-         is installed. -->
-    <bool name="config_permissionReviewRequired">false</bool>
+    <!-- Specifies whether certain permissions should be individually controlled. -->
+    <bool name="config_permissionsIndividuallyControlled">false</bool>
+
+    <!-- Specifies whether the user has to give consent to manage wireless (wifi + bluetooth). -->
+    <bool name="config_wirelessConsentRequired">false</bool>
 
     <!-- Default value for android:focusableInTouchMode for some framework scrolling containers.
          ListView/GridView are notably absent since this is their default anyway.

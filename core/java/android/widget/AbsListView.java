@@ -20,6 +20,7 @@ import android.annotation.ColorInt;
 import android.annotation.DrawableRes;
 import android.annotation.NonNull;
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
@@ -263,6 +264,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Controls CHOICE_MODE_MULTIPLE_MODAL. null when inactive.
      */
+    @UnsupportedAppUsage
     ActionMode mChoiceActionMode;
 
     /**
@@ -291,16 +293,19 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Controls how the next layout will happen
      */
+    @UnsupportedAppUsage
     int mLayoutMode = LAYOUT_NORMAL;
 
     /**
      * Should be used by subclasses to listen to changes in the dataset
      */
+    @UnsupportedAppUsage
     AdapterDataSetObserver mDataSetObserver;
 
     /**
      * The adapter containing the data to be displayed by this view
      */
+    @UnsupportedAppUsage
     ListAdapter mAdapter;
 
     /**
@@ -326,22 +331,26 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * The drawable used to draw the selector
      */
+    @UnsupportedAppUsage
     Drawable mSelector;
 
     /**
      * The current position of the selector in the list.
      */
+    @UnsupportedAppUsage
     int mSelectorPosition = INVALID_POSITION;
 
     /**
      * Defines the selector's location and dimension at drawing time
      */
+    @UnsupportedAppUsage
     Rect mSelectorRect = new Rect();
 
     /**
      * The data set used to store unused views that should be reused during the next layout
      * to avoid creating new ones
      */
+    @UnsupportedAppUsage
     final RecycleBin mRecycler = new RecycleBin();
 
     /**
@@ -352,6 +361,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * The selection's top padding
      */
+    @UnsupportedAppUsage
     int mSelectionTopPadding = 0;
 
     /**
@@ -362,6 +372,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * The selection's bottom padding
      */
+    @UnsupportedAppUsage
     int mSelectionBottomPadding = 0;
 
     /**
@@ -394,6 +405,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * The position of the view that received the down motion event
      */
+    @UnsupportedAppUsage
     int mMotionPosition;
 
     /**
@@ -414,12 +426,14 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * The Y value associated with the the down motion event
      */
+    @UnsupportedAppUsage
     int mMotionY;
 
     /**
      * One of TOUCH_MODE_REST, TOUCH_MODE_DOWN, TOUCH_MODE_TAP, TOUCH_MODE_SCROLL, or
      * TOUCH_MODE_DONE_WAITING
      */
+    @UnsupportedAppUsage
     int mTouchMode = TOUCH_MODE_REST;
 
     /**
@@ -435,16 +449,19 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Determines speed during touch scrolling
      */
+    @UnsupportedAppUsage
     private VelocityTracker mVelocityTracker;
 
     /**
      * Handles one frame of a fling
      */
+    @UnsupportedAppUsage
     private FlingRunnable mFlingRunnable;
 
     /**
      * Handles scrolling between positions within the list.
      */
+    @UnsupportedAppUsage
     AbsPositionScroller mPositionScroller;
 
     /**
@@ -478,11 +495,13 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Optional callback to notify client when scroll position has changed
      */
+    @UnsupportedAppUsage
     private OnScrollListener mOnScrollListener;
 
     /**
      * Keeps track of our accessory window
      */
+    @UnsupportedAppUsage
     PopupWindow mPopup;
 
     /**
@@ -516,6 +535,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      */
     int mResurrectToPosition = INVALID_POSITION;
 
+    @UnsupportedAppUsage
     private ContextMenuInfo mContextMenuInfo = null;
 
     /**
@@ -562,11 +582,13 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * The last CheckForLongPress runnable we posted, if any
      */
+    @UnsupportedAppUsage
     private CheckForLongPress mPendingCheckForLongPress;
 
     /**
      * The last CheckForTap runnable we posted, if any
      */
+    @UnsupportedAppUsage
     private CheckForTap mPendingCheckForTap;
 
     /**
@@ -605,6 +627,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * The select child's view (from the adapter's getView) is enabled.
      */
+    @UnsupportedAppUsage
     private boolean mIsChildViewEnabled;
 
     /**
@@ -621,6 +644,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Helper object that renders and controls the fast scroll thumb.
      */
+    @UnsupportedAppUsage
     private FastScroller mFastScroll;
 
     /**
@@ -631,6 +655,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
 
     private boolean mGlobalLayoutListenerAddedFilter;
 
+    @UnsupportedAppUsage
     private int mTouchSlop;
     private float mDensityScale;
 
@@ -642,6 +667,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     private Runnable mClearScrollingCache;
     Runnable mPositionScrollAfterLayout;
     private int mMinimumVelocity;
+    @UnsupportedAppUsage
     private int mMaximumVelocity;
     private float mVelocityScale = 1.0f;
 
@@ -666,6 +692,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * ID of the active pointer. This is used to retain consistency during
      * drags/flings if multiple pointers are used.
      */
+    @UnsupportedAppUsage
     private int mActivePointerId = INVALID_POINTER;
 
     /**
@@ -677,11 +704,13 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Maximum distance to overscroll by during edge effects
      */
+    @UnsupportedAppUsage
     int mOverscrollDistance;
 
     /**
      * Maximum distance to overfling during edge effects
      */
+    @UnsupportedAppUsage
     int mOverflingDistance;
 
     // These two EdgeGlows are always set and used together.
@@ -690,11 +719,13 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Tracks the state of the top edge glow.
      */
+    @UnsupportedAppUsage
     private EdgeEffect mEdgeGlowTop;
 
     /**
      * Tracks the state of the bottom edge glow.
      */
+    @UnsupportedAppUsage
     private EdgeEffect mEdgeGlowBottom;
 
     /**
@@ -800,7 +831,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
          * @param firstVisibleItem the index of the first visible cell (ignore if
          *        visibleItemCount == 0)
          * @param visibleItemCount the number of visible cells
-         * @param totalItemCount the number of items in the list adaptor
+         * @param totalItemCount the number of items in the list adapter
          */
         public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount,
                 int totalItemCount);
@@ -1451,6 +1482,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @hide
      */
     @Override
+    @UnsupportedAppUsage
     protected boolean isVerticalScrollBarHidden() {
         return isFastScrollEnabled();
     }
@@ -1502,6 +1534,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     /**
      * Notify our scroll listener (if there is one) of a change in scroll state
      */
+    @UnsupportedAppUsage
     void invokeOnItemScrollListener() {
         if (mFastScroll != null) {
             mFastScroll.onScroll(mFirstPosition, getChildCount(), mItemCount);
@@ -1724,7 +1757,9 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
 
     static class SavedState extends BaseSavedState {
         long selectedId;
+        @UnsupportedAppUsage
         long firstId;
+        @UnsupportedAppUsage
         int viewTop;
         int position;
         int height;
@@ -2261,6 +2296,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         }
     }
 
+    @UnsupportedAppUsage
     private boolean canScrollUp() {
         boolean canScrollUp;
         // 0th element is not visible
@@ -2277,6 +2313,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         return canScrollUp;
     }
 
+    @UnsupportedAppUsage
     private boolean canScrollDown() {
         boolean canScrollDown;
         int count = getChildCount();
@@ -2604,6 +2641,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         positionSelector(position, sel, false, -1, -1);
     }
 
+    @UnsupportedAppUsage
     private void positionSelector(int position, View sel, boolean manageHotspot, float x, float y) {
         final boolean positionChanged = position != mSelectorPosition;
         if (position != INVALID_POSITION) {
@@ -2890,6 +2928,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         mScrollDown = down;
     }
 
+    @UnsupportedAppUsage
     void updateSelectorState() {
         final Drawable selector = mSelector;
         if (selector != null && selector.isStateful()) {
@@ -3252,6 +3291,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         return false;
     }
 
+    @UnsupportedAppUsage
     boolean performLongPress(final View child,
             final int longPressPosition, final long longPressId) {
         return performLongPress(
@@ -3262,6 +3302,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                 CheckForLongPress.INVALID_COORD);
     }
 
+    @UnsupportedAppUsage
     boolean performLongPress(final View child,
             final int longPressPosition, final long longPressId, float x, float y) {
         // CHOICE_MODE_MULTIPLE_MODAL takes over long press.
@@ -4410,13 +4451,14 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                 translateX = 0;
                 translateY = 0;
             }
+            mEdgeGlowTop.setSize(width, height);
+            mEdgeGlowBottom.setSize(width, height);
             if (!mEdgeGlowTop.isFinished()) {
                 final int restoreCount = canvas.save();
                 canvas.clipRect(translateX, translateY,
                          translateX + width ,translateY + mEdgeGlowTop.getMaxHeight());
                 final int edgeY = Math.min(0, scrollY + mFirstPositionDistanceGuess) + translateY;
                 canvas.translate(translateX, edgeY);
-                mEdgeGlowTop.setSize(width, height);
                 if (mEdgeGlowTop.draw(canvas)) {
                     invalidateTopGlow();
                 }
@@ -4431,7 +4473,6 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                         - (clipToPadding ? mPaddingBottom : 0);
                 canvas.translate(edgeX, edgeY);
                 canvas.rotate(180, width, 0);
-                mEdgeGlowBottom.setSize(width, height);
                 if (mEdgeGlowBottom.draw(canvas)) {
                     invalidateBottomGlow();
                 }
@@ -4645,6 +4686,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      *
      * @param newState The new scroll state.
      */
+    @UnsupportedAppUsage
     void reportScrollStateChange(int newState) {
         if (newState != mLastScrollState) {
             if (mOnScrollListener != null) {
@@ -4664,6 +4706,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         /**
          * Tracks the decay of a fling scroll
          */
+        @UnsupportedAppUsage
         private final OverScroller mScroller;
 
         /**
@@ -4708,6 +4751,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             mScroller = new OverScroller(getContext());
         }
 
+        @UnsupportedAppUsage
         void start(int initialVelocity) {
             int initialY = initialVelocity < 0 ? Integer.MAX_VALUE : 0;
             mLastFlingY = initialY;
@@ -4785,6 +4829,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             postOnAnimation(this);
         }
 
+        @UnsupportedAppUsage
         void endFling() {
             mTouchMode = TOUCH_MODE_REST;
 
@@ -5039,6 +5084,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         smoothScrollBy(distance, duration, false, false);
     }
 
+    @UnsupportedAppUsage
     void smoothScrollBy(int distance, int duration, boolean linear,
             boolean suppressEndFlingStateChangeCall) {
         if (mFlingRunnable == null) {
@@ -5181,6 +5227,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @param incrementalDeltaY Change in deltaY from the previous event.
      * @return true if we're already at the beginning/end of the list and have nothing to do.
      */
+    @UnsupportedAppUsage
     boolean trackMotionScroll(int deltaY, int incrementalDeltaY) {
         final int childCount = getChildCount();
         if (childCount == 0) {
@@ -5429,6 +5476,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @param y Where the user touched
      * @return The position of the first (or only) item in the row containing y
      */
+    @UnsupportedAppUsage
     abstract int findMotionRow(int y);
 
     /**
@@ -5461,6 +5509,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * If there is a selection returns false.
      * Otherwise resurrects the selection and returns true if resurrected.
      */
+    @UnsupportedAppUsage
     boolean resurrectSelectionIfNeeded() {
         if (mSelectedPosition < 0 && resurrectSelection()) {
             updateSelectorState();
@@ -6625,6 +6674,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             @ViewDebug.IntToString(from = ITEM_VIEW_TYPE_IGNORE, to = "ITEM_VIEW_TYPE_IGNORE"),
             @ViewDebug.IntToString(from = ITEM_VIEW_TYPE_HEADER_OR_FOOTER, to = "ITEM_VIEW_TYPE_HEADER_OR_FOOTER")
         })
+        @UnsupportedAppUsage
         int viewType;
 
         /**
@@ -6652,6 +6702,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
          * scrap heap.
          * @hide
          */
+        @UnsupportedAppUsage
         int scrappedFromPosition;
 
         /**
@@ -6720,6 +6771,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
      * @see android.widget.AbsListView.RecyclerListener
      */
     class RecycleBin {
+        @UnsupportedAppUsage
         private RecyclerListener mRecyclerListener;
 
         /**
@@ -6801,6 +6853,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         /**
          * Clears the scrap heap.
          */
+        @UnsupportedAppUsage
         void clear() {
             if (mViewTypeCount == 1) {
                 final ArrayList<View> scrap = mCurrentScrap;

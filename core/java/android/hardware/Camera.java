@@ -21,6 +21,7 @@ import static android.system.OsConstants.*;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityThread;
 import android.app.AppOpsManager;
 import android.content.Context;
@@ -170,6 +171,7 @@ public class Camera {
     private static final int CAMERA_MSG_META_DATA        = 0x2000;
     /* ### QC ADD-ONS: END */
 
+    @UnsupportedAppUsage
     private long mNativeContext; // accessed by native methods
     private EventHandler mEventHandler;
     private ShutterCallback mShutterCallback;
@@ -253,6 +255,7 @@ public class Camera {
      * Camera HAL device API version 1.0
      * @hide
      */
+    @UnsupportedAppUsage
     public static final int CAMERA_HAL_API_VERSION_1_0 = 0x100;
 
     /**
@@ -510,6 +513,7 @@ public class Camera {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static Camera openLegacy(int cameraId, int halVersion) {
         if (halVersion < CAMERA_HAL_API_VERSION_1_0) {
             throw new IllegalArgumentException("Invalid HAL version " + halVersion);
@@ -683,6 +687,7 @@ public class Camera {
         release();
     }
 
+    @UnsupportedAppUsage
     private native final int native_setup(Object camera_this, int cameraId, int halVersion,
                                            String packageName);
 
@@ -795,6 +800,7 @@ public class Camera {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public native final void setPreviewSurface(Surface surface) throws IOException;
 
     /**
@@ -918,6 +924,7 @@ public class Camera {
      * FIXME: Unhide before release
      * @hide
      */
+    @UnsupportedAppUsage
     public native final boolean previewEnabled();
 
     /**
@@ -1094,11 +1101,13 @@ public class Camera {
      *
      * {@hide}
      */
+    @UnsupportedAppUsage
     public final void addRawImageCallbackBuffer(byte[] callbackBuffer)
     {
         addCallbackBuffer(callbackBuffer, CAMERA_MSG_RAW_IMAGE);
     }
 
+    @UnsupportedAppUsage
     private final void addCallbackBuffer(byte[] callbackBuffer, int msgType)
     {
         // CAMERA_MSG_VIDEO_FRAME may be allowed in the future.
@@ -1361,6 +1370,7 @@ public class Camera {
         }
     }
 
+    @UnsupportedAppUsage
     private static void postEventFromNative(Object camera_ref,
                                             int what, int arg1, int arg2, Object obj)
     {
@@ -2192,7 +2202,9 @@ public class Camera {
         mDetailedErrorCallback = cb;
     }
 
+    @UnsupportedAppUsage
     private native final void native_setParameters(String params);
+    @UnsupportedAppUsage
     private native final String native_getParameters();
 
     /**
@@ -2262,6 +2274,7 @@ public class Camera {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static Parameters getEmptyParameters() {
         Camera camera = new Camera();
         return camera.new Parameters();
@@ -2980,6 +2993,7 @@ public class Camera {
          *
          * @hide
          */
+        @UnsupportedAppUsage
         public void copyFrom(Parameters other) {
             if (other == null) {
                 throw new NullPointerException("other must not be null");
@@ -3011,6 +3025,7 @@ public class Camera {
          * @deprecated
          */
         @Deprecated
+        @UnsupportedAppUsage
         public void dump() {
             Log.e(TAG, "dump: size=" + mMap.size());
             for (String k : mMap.keySet()) {
@@ -4732,6 +4747,7 @@ public class Camera {
         // Splits a comma delimited string to an ArrayList of Area objects.
         // Example string: "(-10,-10,0,0,300),(0,0,10,10,700)". Return null if
         // the passing string is null or the size is 0 or (0,0,0,0,0).
+        @UnsupportedAppUsage
         private ArrayList<Area> splitArea(String str) {
             if (str == null || str.charAt(0) != '('
                     || str.charAt(str.length() - 1) != ')') {

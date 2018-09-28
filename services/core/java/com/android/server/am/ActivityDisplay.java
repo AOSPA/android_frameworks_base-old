@@ -16,6 +16,7 @@
 
 package com.android.server.am;
 
+import static android.app.ActivityTaskManager.INVALID_STACK_ID;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
@@ -31,13 +32,18 @@ import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;
 import static android.view.Display.REMOVE_MODE_DESTROY_CONTENT;
 import static com.android.server.am.ActivityDisplayProto.CONFIGURATION_CONTAINER;
+import static com.android.server.am.ActivityDisplayProto.FOCUSED_STACK_ID;
 import static com.android.server.am.ActivityDisplayProto.ID;
+import static com.android.server.am.ActivityDisplayProto.RESUMED_ACTIVITY;
 import static com.android.server.am.ActivityDisplayProto.STACKS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STACK;
+import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STATES;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_STACK;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.am.ActivityStackSupervisor.TAG_STATES;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
@@ -153,15 +159,19 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         onStackOrderChanged();
     }
 
-    void positionChildAtTop(ActivityStack stack) {
-        positionChildAt(stack, mStacks.size());
+    void positionChildAtTop(ActivityStack stack, boolean includingParents) {
+        positionChildAt(stack, mStacks.size(), includingParents);
     }
 
     void positionChildAtBottom(ActivityStack stack) {
-        positionChildAt(stack, 0);
+        positionChildAt(stack, 0, false /* includingParents */);
     }
 
     private void positionChildAt(ActivityStack stack, int position) {
+        positionChildAt(stack, position, false /* includingParents */);
+    }
+
+    private void positionChildAt(ActivityStack stack, int position, boolean includingParents) {
         // TODO: Keep in sync with WindowContainer.positionChildAt(), once we change that to adjust
         //       the position internally, also update the logic here
         mStacks.remove(stack);
@@ -173,7 +183,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         // we don't have to call WindowContainerController#positionChildAt() here.
         if (stack.getWindowContainerController() != null) {
             mWindowContainerController.positionChildAt(stack.getWindowContainerController(),
-                    insertPosition);
+                    insertPosition, includingParents);
         }
         onStackOrderChanged();
     }
@@ -315,16 +325,6 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
                     + windowingMode);
         }
 
-        if (windowingMode == WINDOWING_MODE_UNDEFINED) {
-            // TODO: Should be okay to have stacks with with undefined windowing mode long term, but
-            // have to set them to something for now due to logic that depending on them.
-            windowingMode = getWindowingMode(); // Put in current display's windowing mode
-            if (windowingMode == WINDOWING_MODE_UNDEFINED) {
-                // Else fullscreen for now...
-                windowingMode = WINDOWING_MODE_FULLSCREEN;
-            }
-        }
-
         final int stackId = getNextStackId();
         return createStackUnchecked(windowingMode, activityType, stackId, onTop);
     }
@@ -337,6 +337,101 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         }
         return (T) new ActivityStack(
                         this, stackId, mSupervisor, windowingMode, activityType, onTop);
+    }
+
+    ActivityStack getFocusedStack() {
+        for (int i = mStacks.size() - 1; i >= 0; --i) {
+            final ActivityStack stack = mStacks.get(i);
+            if (stack.isFocusable() && stack.shouldBeVisible(null /* starting */)) {
+                return stack;
+            }
+        }
+
+        return null;
+    }
+
+    ActivityStack getNextFocusableStack() {
+        return getNextFocusableStack(null /* currentFocus */, false /* ignoreCurrent */);
+    }
+
+    ActivityStack getNextFocusableStack(ActivityStack currentFocus, boolean ignoreCurrent) {
+        final int currentWindowingMode = currentFocus != null
+                ? currentFocus.getWindowingMode() : WINDOWING_MODE_UNDEFINED;
+
+        ActivityStack candidate = null;
+        for (int i = mStacks.size() - 1; i >= 0; --i) {
+            final ActivityStack stack = mStacks.get(i);
+            if (ignoreCurrent && stack == currentFocus) {
+                continue;
+            }
+            if (!stack.isFocusable() || !stack.shouldBeVisible(null)) {
+                continue;
+            }
+
+            if (currentWindowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY
+                    && candidate == null && stack.inSplitScreenPrimaryWindowingMode()) {
+                // If the currently focused stack is in split-screen secondary we save off the
+                // top primary split-screen stack as a candidate for focus because we might
+                // prefer focus to move to an other stack to avoid primary split-screen stack
+                // overlapping with a fullscreen stack when a fullscreen stack is higher in z
+                // than the next split-screen stack. Assistant stack, I am looking at you...
+                // We only move the focus to the primary-split screen stack if there isn't a
+                // better alternative.
+                candidate = stack;
+                continue;
+            }
+            if (candidate != null && stack.inSplitScreenSecondaryWindowingMode()) {
+                // Use the candidate stack since we are now at the secondary split-screen.
+                return candidate;
+            }
+            return stack;
+        }
+        return candidate;
+    }
+
+    ActivityRecord getResumedActivity() {
+        final ActivityStack focusedStack = getFocusedStack();
+        if (focusedStack == null) {
+            return null;
+        }
+        // TODO(b/111541062): Move this into ActivityStack#getResumedActivity()
+        // Check if the focused stack has the resumed activity
+        ActivityRecord resumedActivity = focusedStack.getResumedActivity();
+        if (resumedActivity == null || resumedActivity.app == null) {
+            // If there is no registered resumed activity in the stack or it is not running -
+            // try to use previously resumed one.
+            resumedActivity = focusedStack.mPausingActivity;
+            if (resumedActivity == null || resumedActivity.app == null) {
+                // If previously resumed activity doesn't work either - find the topmost running
+                // activity that can be focused.
+                resumedActivity = focusedStack.topRunningActivityLocked(true /* focusableOnly */);
+            }
+        }
+        return resumedActivity;
+    }
+
+    /**
+     * Pause all activities in either all of the stacks or just the back stacks.
+     * @param userLeaving Passed to pauseActivity() to indicate whether to call onUserLeaving().
+     * @param resuming The resuming activity.
+     * @param dontWait The resuming activity isn't going to wait for all activities to be paused
+     *                 before resuming.
+     * @return true if any activity was paused as a result of this call.
+     */
+    boolean pauseBackStacks(boolean userLeaving, ActivityRecord resuming, boolean dontWait) {
+        boolean someActivityPaused = false;
+        for (int stackNdx = mStacks.size() - 1; stackNdx >= 0; --stackNdx) {
+            final ActivityStack stack = mStacks.get(stackNdx);
+            // TODO(b/111541062): Check if resumed activity on this display instead
+            if (!mSupervisor.isTopDisplayFocusedStack(stack)
+                    && stack.getResumedActivity() != null) {
+                if (DEBUG_STATES) Slog.d(TAG_STATES, "pauseBackStacks: stack=" + stack +
+                        " mResumedActivity=" + stack.getResumedActivity());
+                someActivityPaused |= stack.startPausingLocked(userLeaving, false, resuming,
+                        dontWait);
+            }
+        }
+        return someActivityPaused;
     }
 
     /**
@@ -389,11 +484,16 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         final int windowingMode = stack.getWindowingMode();
 
         if (activityType == ACTIVITY_TYPE_HOME) {
+            // TODO(b/111363427) Rollback to throws exceptions once we figure out how to properly
+            // deal with home type stack when external display removed
             if (mHomeStack != null && mHomeStack != stack) {
-                throw new IllegalArgumentException("addStackReferenceIfNeeded: home stack="
+                // throw new IllegalArgumentException("addStackReferenceIfNeeded: home stack="
+                //         + mHomeStack + " already exist on display=" + this + " stack=" + stack);
+                Slog.e(TAG, "addStackReferenceIfNeeded: home stack="
                         + mHomeStack + " already exist on display=" + this + " stack=" + stack);
+            } else {
+                mHomeStack = stack;
             }
-            mHomeStack = stack;
         } else if (activityType == ACTIVITY_TYPE_RECENTS) {
             if (mRecentsStack != null && mRecentsStack != stack) {
                 throw new IllegalArgumentException("addStackReferenceIfNeeded: recents stack="
@@ -541,7 +641,21 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
                 windowingMode = getWindowingMode();
             }
         }
+        return validateWindowingMode(windowingMode, r, task, activityType);
+    }
 
+    /**
+     * Check that the requested windowing-mode is appropriate for the specified task and/or activity
+     * on this display.
+     *
+     * @param windowingMode The windowing-mode to validate.
+     * @param r The {@link ActivityRecord} to check against.
+     * @param task The {@link TaskRecord} to check against.
+     * @param activityType An activity type.
+     * @return The provided windowingMode or the closest valid mode which is appropriate.
+     */
+    int validateWindowingMode(int windowingMode, @Nullable ActivityRecord r,
+        @Nullable TaskRecord task, int activityType) {
         // Make sure the windowing mode we are trying to use makes sense for what is supported.
         final ActivityTaskManagerService service = mSupervisor.mService;
         boolean supportsMultiWindow = service.mSupportsMultiWindow;
@@ -585,7 +699,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
 
     /**
      * Get the topmost stack on the display. It may be different from focused stack, because
-     * focus may be on another display.
+     * some stacks are not focusable (e.g. PiP).
      */
     ActivityStack getTopStack() {
         return mStacks.isEmpty() ? null : mStacks.get(mStacks.size() - 1);
@@ -861,6 +975,16 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         final long token = proto.start(fieldId);
         super.writeToProto(proto, CONFIGURATION_CONTAINER, false /* trim */);
         proto.write(ID, mDisplayId);
+        final ActivityStack focusedStack = getFocusedStack();
+        if (focusedStack != null) {
+            proto.write(FOCUSED_STACK_ID, focusedStack.mStackId);
+            final ActivityRecord focusedActivity = focusedStack.getDisplay().getResumedActivity();
+            if (focusedActivity != null) {
+                focusedActivity.writeIdentifierToProto(proto, RESUMED_ACTIVITY);
+            }
+        } else {
+            proto.write(FOCUSED_STACK_ID, INVALID_STACK_ID);
+        }
         for (int stackNdx = mStacks.size() - 1; stackNdx >= 0; --stackNdx) {
             final ActivityStack stack = mStacks.get(stackNdx);
             stack.writeToProto(proto, STACKS);

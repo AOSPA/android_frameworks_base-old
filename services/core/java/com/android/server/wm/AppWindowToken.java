@@ -78,6 +78,7 @@ import static com.android.server.wm.AppWindowTokenProto.STARTING_MOVED;
 import static com.android.server.wm.AppWindowTokenProto.STARTING_WINDOW;
 import static com.android.server.wm.AppWindowTokenProto.THUMBNAIL;
 import static com.android.server.wm.AppWindowTokenProto.WINDOW_TOKEN;
+import static com.android.server.wm.WindowStateAnimator.STACK_CLIP_AFTER_ANIM;
 
 import android.annotation.CallSuper;
 import android.app.Activity;
@@ -264,6 +265,12 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
      */
     private boolean mWillCloseOrEnterPip;
 
+    /** Layer used to constrain the animation to a token's stack bounds. */
+    SurfaceControl mAnimationBoundsLayer;
+
+    /** Whether this token needs to create mAnimationBoundsLayer for cropping animations. */
+    boolean mNeedsAnimationBoundsLayer;
+
     AppWindowToken(WindowManagerService service, IApplicationToken token, boolean voiceInteraction,
             DisplayContent dc, long inputDispatchingTimeoutNanos, boolean fullscreen,
             boolean showForAllUsers, int targetSdk, int orientation, int rotationAnimationHint,
@@ -449,13 +456,13 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                     + ": hidden=" + isHidden() + " hiddenRequested=" + hiddenRequested);
 
             if (changed) {
-                mService.mInputMonitor.setUpdateInputWindowsNeededLw();
+                getDisplayContent().getInputMonitor().setUpdateInputWindowsNeededLw();
                 if (performLayout) {
                     mService.updateFocusedWindowLocked(UPDATE_FOCUS_WILL_PLACE_SURFACES,
                             false /*updateInputWindows*/);
                     mService.mWindowPlacerLocked.performSurfacePlacement();
                 }
-                mService.mInputMonitor.updateInputWindowsLw(false /*force*/);
+                getDisplayContent().getInputMonitor().updateInputWindowsLw(false /*force*/);
             }
         }
 
@@ -677,7 +684,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             if (DEBUG_FOCUS_LIGHT) Slog.v(TAG_WM, "Removing focused app token:" + this);
             mService.mFocusedApp = null;
             mService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, true /*updateInputWindows*/);
-            mService.mInputMonitor.setFocusedAppLw(null);
+            getDisplayContent().getInputMonitor().setFocusedAppLw(null);
         }
 
         if (!delayed) {
@@ -1523,7 +1530,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             if (mLetterbox == null) {
                 mLetterbox = new Letterbox(() -> makeChildSurface(null));
             }
-            mLetterbox.layout(getParent().getBounds(), w.mFrame);
+            mLetterbox.layout(getParent().getBounds(), w.getFrameLw());
         } else if (mLetterbox != null) {
             mLetterbox.hide();
         }
@@ -1720,6 +1727,20 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         return !isSplitScreenPrimary || allowSplitScreenPrimaryAnimation;
     }
 
+    /**
+     * Creates a layer to apply crop to an animation.
+     */
+    private SurfaceControl createAnimationBoundsLayer(Transaction t) {
+        if (DEBUG_APP_TRANSITIONS || DEBUG_ANIM) Slog.i(TAG, "Creating animation bounds layer");
+        final SurfaceControl.Builder builder = makeAnimationLeash()
+                .setParent(getAnimationLeashParent())
+                .setName(getSurfaceControl() + " - animation-bounds")
+                .setSize(getSurfaceWidth(), getSurfaceHeight());
+        final SurfaceControl boundsLayer = builder.build();
+        t.show(boundsLayer);
+        return boundsLayer;
+    }
+
     boolean applyAnimationLocked(WindowManager.LayoutParams lp, int transit, boolean enter,
             boolean isVoiceInteraction) {
 
@@ -1753,12 +1774,15 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 adapter = mService.mAppTransition.getRemoteAnimationController()
                         .createAnimationAdapter(this, mTmpPoint, mTmpRect);
             } else {
+                final int appStackClipMode = mService.mAppTransition.getAppStackClipMode();
+                mNeedsAnimationBoundsLayer = (appStackClipMode == STACK_CLIP_AFTER_ANIM);
+
                 final Animation a = loadAnimation(lp, transit, enter, isVoiceInteraction);
                 if (a != null) {
                     adapter = new LocalAnimationAdapter(
                             new WindowAnimationSpec(a, mTmpPoint, mTmpRect,
                                     mService.mAppTransition.canSkipFirstFrame(),
-                                    mService.mAppTransition.getAppStackClipMode(),
+                                    appStackClipMode,
                                     true /* isAppAnimation */),
                             mService.mSurfaceAnimationRunner);
                     if (a.getZAdjustment() == Animation.ZORDER_TOP) {
@@ -1808,7 +1832,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             // won't exactly match the final freeform window frame (e.g. when overlapping with
             // the status bar). In that case we need to use the final frame.
             if (freeform) {
-                frame.set(win.mFrame);
+                frame.set(win.getFrameLw());
             } else if (win.isLetterboxedAppWindow()) {
                 frame.set(getTask().getBounds());
             } else if (win.isDockedResizing()) {
@@ -1816,7 +1840,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
                 // animation target (which will be different than the task bounds)
                 frame.set(getTask().getParent().getBounds());
             } else {
-                frame.set(win.mContainingFrame);
+                frame.set(win.getContainingFrame());
             }
             surfaceInsets = win.getAttrs().surfaceInsets;
             // XXX(b/72757033): These are insets relative to the window frame, but we're really
@@ -1858,6 +1882,11 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
     @Override
     public void onAnimationLeashDestroyed(Transaction t) {
         super.onAnimationLeashDestroyed(t);
+        if (mAnimationBoundsLayer != null) {
+            t.destroy(mAnimationBoundsLayer);
+            mAnimationBoundsLayer = null;
+        }
+
         if (mAnimatingAppWindowTokenRegistry != null) {
             mAnimatingAppWindowTokenRegistry.notifyFinished(this);
         }
@@ -1908,6 +1937,26 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (mAnimatingAppWindowTokenRegistry != null) {
             mAnimatingAppWindowTokenRegistry.notifyStarting(this);
         }
+
+        // If the animation needs to be cropped then an animation bounds layer is created as a child
+        // of the pinned stack or animation layer. The leash is then reparented to this new layer.
+        if (mNeedsAnimationBoundsLayer) {
+            final TaskStack stack = getStack();
+            if (stack == null) {
+                return;
+            }
+            mAnimationBoundsLayer = createAnimationBoundsLayer(t);
+
+            // Set clip rect to stack bounds.
+            mTmpRect.setEmpty();
+            stack.getBounds(mTmpRect);
+
+            // Crop to stack bounds.
+            t.setWindowCrop(mAnimationBoundsLayer, mTmpRect);
+
+            // Reparent leash to animation bounds layer.
+            t.reparent(leash, mAnimationBoundsLayer.getHandle());
+        }
     }
 
     /**
@@ -1927,6 +1976,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         mTransit = TRANSIT_UNSET;
         mTransitFlags = 0;
         mNeedsZBoost = false;
+        mNeedsAnimationBoundsLayer = false;
 
         setAppLayoutChanges(FINISH_LAYOUT_REDO_ANIM | FINISH_LAYOUT_REDO_WALLPAPER,
                 "AppWindowToken");
@@ -2022,7 +2072,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (win == null) {
             return;
         }
-        final Rect frame = win.mFrame;
+        final Rect frame = win.getFrameLw();
         final int thumbnailDrawableRes = getTask().mUserId == mService.mCurrentUserId
                 ? R.drawable.ic_account_circle
                 : R.drawable.ic_corp_badge;
@@ -2034,7 +2084,8 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         }
         mThumbnail = new AppWindowThumbnail(getPendingTransaction(), this, thumbnail);
         final Animation animation =
-                mService.mAppTransition.createCrossProfileAppsThumbnailAnimationLocked(win.mFrame);
+                mService.mAppTransition.createCrossProfileAppsThumbnailAnimationLocked(
+                        win.getFrameLw());
         mThumbnail.startAnimation(getPendingTransaction(), animation, new Point(frame.left,
                 frame.top));
     }

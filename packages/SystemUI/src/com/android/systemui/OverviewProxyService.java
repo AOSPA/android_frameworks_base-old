@@ -32,7 +32,6 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
-import android.view.SurfaceControl;
 
 import com.android.systemui.OverviewProxyService.OverviewProxyListener;
 import com.android.systemui.recents.events.EventBus;
@@ -41,7 +40,6 @@ import com.android.systemui.recents.misc.SystemServicesProxy;
 import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.recents.ISystemUiProxy;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
-import com.android.systemui.shared.system.GraphicBufferCompat;
 import com.android.systemui.stackdivider.Divider;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.CallbackController;
@@ -55,6 +53,7 @@ import java.util.List;
 
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
 import static com.android.systemui.shared.system.NavigationBarCompat.FLAG_DISABLE_SWIPE_UP;
+import static com.android.systemui.shared.system.NavigationBarCompat.FLAG_SHOW_OVERVIEW_BUTTON;
 import static com.android.systemui.shared.system.NavigationBarCompat.InteractionType;
 
 /**
@@ -69,6 +68,13 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private static final long BACKOFF_MILLIS = 1000;
     private static final long DEFERRED_CALLBACK_MILLIS = 5000;
 
+    // Max backoff caps at 5 mins
+    private static final long MAX_BACKOFF_MILLIS = 10 * 60 * 1000;
+
+    // Default interaction flags if swipe up is disabled before connecting to launcher
+    private static final int DEFAULT_DISABLE_SWIPE_UP_STATE = FLAG_DISABLE_SWIPE_UP
+            | FLAG_SHOW_OVERVIEW_BUTTON;
+
     private final Context mContext;
     private final Handler mHandler;
     private final Runnable mConnectionRunnable = this::internalConnectToCurrentUser;
@@ -82,21 +88,14 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
     private int mConnectionBackoffAttempts;
     private @InteractionType int mInteractionFlags;
     private boolean mIsEnabled;
+    private int mCurrentBoundedUserId = -1;
 
     private ISystemUiProxy mSysUiProxy = new ISystemUiProxy.Stub() {
 
-        public GraphicBufferCompat screenshot(Rect sourceCrop, int width, int height, int minLayer,
-                int maxLayer, boolean useIdentityTransform, int rotation) {
-            long token = Binder.clearCallingIdentity();
-            try {
-                return new GraphicBufferCompat(SurfaceControl.screenshotToBuffer(sourceCrop, width,
-                        height, minLayer, maxLayer, useIdentityTransform, rotation));
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-        }
-
         public void startScreenPinning(int taskId) {
+            if (!verifyCaller("startScreenPinning")) {
+                return;
+            }
             long token = Binder.clearCallingIdentity();
             try {
                 mHandler.post(() -> {
@@ -112,6 +111,9 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
 
         public void onSplitScreenInvoked() {
+            if (!verifyCaller("onSplitScreenInvoked")) {
+                return;
+            }
             long token = Binder.clearCallingIdentity();
             try {
                 EventBus.getDefault().post(new DockedFirstAnimationFrameEvent());
@@ -121,6 +123,9 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
 
         public void onOverviewShown(boolean fromHome) {
+            if (!verifyCaller("onOverviewShown")) {
+                return;
+            }
             long token = Binder.clearCallingIdentity();
             try {
                 mHandler.post(() -> {
@@ -134,6 +139,9 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
 
         public void setInteractionState(@InteractionType int flags) {
+            if (!verifyCaller("setInteractionState")) {
+                return;
+            }
             long token = Binder.clearCallingIdentity();
             try {
                 if (mInteractionFlags != flags) {
@@ -151,6 +159,9 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
 
         public Rect getNonMinimizedSplitScreenSecondaryBounds() {
+            if (!verifyCaller("getNonMinimizedSplitScreenSecondaryBounds")) {
+                return null;
+            }
             long token = Binder.clearCallingIdentity();
             try {
                 Divider divider = SysUiServiceProvider.getComponent(mContext, Divider.class);
@@ -164,6 +175,9 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
 
         public void setBackButtonAlpha(float alpha, boolean animate) {
+            if (!verifyCaller("setBackButtonAlpha")) {
+                return;
+            }
             long token = Binder.clearCallingIdentity();
             try {
                 mHandler.post(() -> {
@@ -173,12 +187,22 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 Binder.restoreCallingIdentity(token);
             }
         }
+
+        private boolean verifyCaller(String reason) {
+            final int callerId = Binder.getCallingUserHandle().getIdentifier();
+            if (callerId != mCurrentBoundedUserId) {
+                Log.w(TAG_OPS, "Launcher called sysui with invalid user: " + callerId + ", reason: "
+                        + reason);
+                return false;
+            }
+            return true;
+        }
     };
 
     private final Runnable mDeferredConnectionCallback = () -> {
         Log.w(TAG_OPS, "Binder supposed established connection but actual connection to service "
             + "timed out, trying again");
-        internalConnectToCurrentUser();
+        retryConnectionWithBackoff();
     };
 
     private final BroadcastReceiver mLauncherStateChangedReceiver = new BroadcastReceiver() {
@@ -188,7 +212,7 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
 
             // When launcher service is disabled, reset interaction flags because it is inactive
             if (!isEnabled()) {
-                mInteractionFlags = 0;
+                mInteractionFlags = getDefaultInteractionFlags();
                 Prefs.remove(mContext, Prefs.Key.QUICK_STEP_INTERACTION_FLAGS);
             }
 
@@ -211,7 +235,9 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             }
             try {
                 mOverviewProxy.onBind(mSysUiProxy);
+                mCurrentBoundedUserId = mDeviceProvisionedController.getCurrentUser();
             } catch (RemoteException e) {
+                mCurrentBoundedUserId = -1;
                 Log.e(TAG_OPS, "Failed to call onBind()", e);
             }
             notifyConnectionChanged();
@@ -220,18 +246,21 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         @Override
         public void onNullBinding(ComponentName name) {
             Log.w(TAG_OPS, "Null binding of '" + name + "', try reconnecting");
-            internalConnectToCurrentUser();
+            mCurrentBoundedUserId = -1;
+            retryConnectionWithBackoff();
         }
 
         @Override
         public void onBindingDied(ComponentName name) {
             Log.w(TAG_OPS, "Binding died of '" + name + "', try reconnecting");
-            internalConnectToCurrentUser();
+            mCurrentBoundedUserId = -1;
+            retryConnectionWithBackoff();
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
             // Do nothing
+            mCurrentBoundedUserId = -1;
         }
     };
 
@@ -263,7 +292,8 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 com.android.internal.R.string.config_recentsComponentName));
         mQuickStepIntent = new Intent(ACTION_QUICKSTEP)
                 .setPackage(mRecentsComponentName.getPackageName());
-        mInteractionFlags = Prefs.getInt(mContext, Prefs.Key.QUICK_STEP_INTERACTION_FLAGS, 0);
+        mInteractionFlags = Prefs.getInt(mContext, Prefs.Key.QUICK_STEP_INTERACTION_FLAGS,
+                getDefaultInteractionFlags());
 
         // Listen for the package update changes.
         if (SystemServicesProxy.getInstance(context)
@@ -303,7 +333,8 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         boolean bound = false;
         try {
             bound = mContext.bindServiceAsUser(launcherServiceIntent,
-                    mOverviewServiceConnection, Context.BIND_AUTO_CREATE,
+                    mOverviewServiceConnection,
+                    Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE_WHILE_AWAKE,
                     UserHandle.of(mDeviceProvisionedController.getCurrentUser()));
         } catch (SecurityException e) {
             Log.e(TAG_OPS, "Unable to bind because of security error", e);
@@ -313,12 +344,20 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
             mHandler.postDelayed(mDeferredConnectionCallback, DEFERRED_CALLBACK_MILLIS);
         } else {
             // Retry after exponential backoff timeout
-            final long timeoutMs = (long) Math.scalb(BACKOFF_MILLIS, mConnectionBackoffAttempts);
-            mHandler.postDelayed(mConnectionRunnable, timeoutMs);
-            mConnectionBackoffAttempts++;
-            Log.w(TAG_OPS, "Failed to connect on attempt " + mConnectionBackoffAttempts
-                    + " will try again in " + timeoutMs + "ms");
+            retryConnectionWithBackoff();
         }
+    }
+
+    private void retryConnectionWithBackoff() {
+        if (mHandler.hasCallbacks(mConnectionRunnable)) {
+            return;
+        }
+        final long timeoutMs = (long) Math.min(
+                Math.scalb(BACKOFF_MILLIS, mConnectionBackoffAttempts), MAX_BACKOFF_MILLIS);
+        mHandler.postDelayed(mConnectionRunnable, timeoutMs);
+        mConnectionBackoffAttempts++;
+        Log.w(TAG_OPS, "Failed to connect on attempt " + mConnectionBackoffAttempts
+                + " will try again in " + timeoutMs + "ms");
     }
 
     @Override
@@ -359,6 +398,15 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         }
     }
 
+    private int getDefaultInteractionFlags() {
+        // If there is no settings available use device default or get it from settings
+        final boolean defaultState = getSwipeUpDefaultValue();
+        final boolean swipeUpEnabled = getSwipeUpSettingAvailable()
+                ? getSwipeUpEnabledFromSettings(defaultState)
+                : defaultState;
+        return swipeUpEnabled ? 0 : DEFAULT_DISABLE_SWIPE_UP_STATE;
+    }
+
     private void notifyBackButtonAlphaChanged(float alpha, boolean animate) {
         for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
             mConnectionCallbacks.get(i).onBackButtonAlphaChanged(alpha, animate);
@@ -389,6 +437,21 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
                 ActivityManagerWrapper.getInstance().getCurrentUserId()) != null;
     }
 
+    private boolean getSwipeUpDefaultValue() {
+        return mContext.getResources()
+                .getBoolean(com.android.internal.R.bool.config_swipe_up_gesture_default);
+    }
+
+    private boolean getSwipeUpSettingAvailable() {
+        return mContext.getResources()
+                .getBoolean(com.android.internal.R.bool.config_swipe_up_gesture_setting_available);
+    }
+
+    private boolean getSwipeUpEnabledFromSettings(boolean defaultValue) {
+        return Settings.Secure.getInt(mContext.getContentResolver(),
+                Settings.Secure.SWIPE_UP_TO_SWITCH_APPS_ENABLED, defaultValue ? 1 : 0) == 1;
+    }
+
     @Override
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println(TAG_OPS + " state:");
@@ -402,12 +465,10 @@ public class OverviewProxyService implements CallbackController<OverviewProxyLis
         pw.print("  quickStepIntent="); pw.println(mQuickStepIntent);
         pw.print("  quickStepIntentResolved="); pw.println(isEnabled());
 
-        final int swipeUpDefaultValue = mContext.getResources()
-                .getBoolean(com.android.internal.R.bool.config_swipe_up_gesture_default) ? 1 : 0;
-        final int swipeUpEnabled = Settings.Secure.getInt(mContext.getContentResolver(),
-                Settings.Secure.SWIPE_UP_TO_SWITCH_APPS_ENABLED, swipeUpDefaultValue);
-        pw.print("  swipeUpSetting="); pw.println(swipeUpEnabled != 0);
-        pw.print("  swipeUpSettingDefault="); pw.println(swipeUpDefaultValue != 0);
+        final boolean swipeUpDefaultValue = getSwipeUpDefaultValue();
+        final boolean swipeUpEnabled = getSwipeUpEnabledFromSettings(swipeUpDefaultValue);
+        pw.print("  swipeUpSetting="); pw.println(swipeUpEnabled);
+        pw.print("  swipeUpSettingDefault="); pw.println(swipeUpDefaultValue);
     }
 
     public interface OverviewProxyListener {

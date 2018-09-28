@@ -17,6 +17,7 @@
 package android.telephony;
 
 import android.annotation.Nullable;
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.text.TextUtils;
 
@@ -36,6 +37,7 @@ public final class CellIdentityLte extends CellIdentity {
     // 16-bit tracking area code
     private final int mTac;
     // 18-bit Absolute RF Channel Number
+    @UnsupportedAppUsage
     private final int mEarfcn;
     // cell bandwidth, in kHz
     private final int mBandwidth;
@@ -43,8 +45,9 @@ public final class CellIdentityLte extends CellIdentity {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public CellIdentityLte() {
-        super(TAG, TYPE_LTE, null, null, null, null);
+        super(TAG, CellInfo.TYPE_LTE, null, null, null, null);
         mCi = Integer.MAX_VALUE;
         mPci = Integer.MAX_VALUE;
         mTac = Integer.MAX_VALUE;
@@ -62,6 +65,7 @@ public final class CellIdentityLte extends CellIdentity {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public CellIdentityLte(int mcc, int mnc, int ci, int pci, int tac) {
         this(ci, pci, tac, Integer.MAX_VALUE, Integer.MAX_VALUE, String.valueOf(mcc),
                 String.valueOf(mnc), null, null);
@@ -99,7 +103,7 @@ public final class CellIdentityLte extends CellIdentity {
      */
     public CellIdentityLte(int ci, int pci, int tac, int earfcn, int bandwidth, String mccStr,
             String mncStr, String alphal, String alphas) {
-        super(TAG, TYPE_LTE, mccStr, mncStr, alphal, alphas);
+        super(TAG, CellInfo.TYPE_LTE, mccStr, mncStr, alphal, alphas);
         mCi = ci;
         mPci = pci;
         mTac = tac;
@@ -241,7 +245,7 @@ public final class CellIdentityLte extends CellIdentity {
     @Override
     public void writeToParcel(Parcel dest, int flags) {
         if (DBG) log("writeToParcel(Parcel, int): " + toString());
-        super.writeToParcel(dest, TYPE_LTE);
+        super.writeToParcel(dest, CellInfo.TYPE_LTE);
         dest.writeInt(mCi);
         dest.writeInt(mPci);
         dest.writeInt(mTac);
@@ -251,7 +255,7 @@ public final class CellIdentityLte extends CellIdentity {
 
     /** Construct from Parcel, type has already been processed */
     private CellIdentityLte(Parcel in) {
-        super(TAG, TYPE_LTE, in);
+        super(TAG, CellInfo.TYPE_LTE, in);
         mCi = in.readInt();
         mPci = in.readInt();
         mTac = in.readInt();

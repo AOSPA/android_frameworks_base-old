@@ -29,6 +29,7 @@ import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
+import android.annotation.UnsupportedAppUsage;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
@@ -68,6 +69,7 @@ public class LocationManager {
     private static final String TAG = "LocationManager";
 
     private final Context mContext;
+    @UnsupportedAppUsage
     private final ILocationManager mService;
     private final GnssMeasurementCallbackTransport mGnssMeasurementCallbackTransport;
     private final GnssNavigationMessageCallbackTransport mGnssNavigationMessageCallbackTransport;
@@ -738,6 +740,11 @@ public class LocationManager {
      * calling Activity. If a Looper is specified with a {@link LocationListener}
      * then callbacks are made on the supplied Looper thread.
      *
+     * <p> When location callbacks are invoked, the system will hold a wakelock
+     * on your application's behalf for some period of time, but not
+     * indefinitely. If your application requires a long running wakelock
+     * within the location callback, you should acquire it yourself.
+     *
      * <p class="note"> Prior to Jellybean, the minTime parameter was
      * only a hint, and some location provider implementations ignored it.
      * From Jellybean and onwards it is mandatory for Android compatible
@@ -1010,6 +1017,7 @@ public class LocationManager {
         }
     }
 
+    @UnsupportedAppUsage
     private void requestLocationUpdates(LocationRequest request, LocationListener listener,
             Looper looper, PendingIntent intent) {
         android.util.SeempLog.record(47);
@@ -2340,6 +2348,7 @@ public class LocationManager {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public boolean sendNiResponse(int notifId, int userResponse) {
         try {
             return mService.sendNiResponse(notifId, userResponse);

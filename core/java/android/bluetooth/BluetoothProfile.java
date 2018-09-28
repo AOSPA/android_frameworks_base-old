@@ -20,6 +20,7 @@ package android.bluetooth;
 import android.Manifest;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
+import android.annotation.UnsupportedAppUsage;
 
 import java.util.List;
 
@@ -85,6 +86,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     int PAN = 5;
 
     /**
@@ -122,6 +124,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     int A2DP_SINK = 11;
 
     /**
@@ -129,6 +132,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     int AVRCP_CONTROLLER = 12;
 
     /**
@@ -204,6 +208,7 @@ public interface BluetoothProfile {
      *
      * @hide
      **/
+    @UnsupportedAppUsage
     int PRIORITY_AUTO_CONNECT = 1000;
 
     /**
@@ -229,6 +234,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     int PRIORITY_UNDEFINED = -1;
 
     /**

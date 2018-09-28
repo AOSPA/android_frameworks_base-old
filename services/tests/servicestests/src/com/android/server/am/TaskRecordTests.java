@@ -29,20 +29,17 @@ import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.res.XmlResourceParser;
 import android.graphics.Rect;
 import android.platform.test.annotations.Presubmit;
 import android.service.voice.IVoiceInteractionSession;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.runner.AndroidJUnit4;
 import android.util.Xml;
 
-import com.android.frameworks.servicestests.R;
+import androidx.test.filters.MediumTest;
+import androidx.test.runner.AndroidJUnit4;
+
 import com.android.internal.app.IVoiceInteractor;
 import com.android.server.am.TaskRecord.TaskRecordFactory;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -57,9 +54,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.Reader;
-import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Comparator;
 
 /**
  * Tests for exercising {@link TaskRecord}.
@@ -156,9 +151,9 @@ public class TaskRecordTests extends ActivityTestsBase {
 
     private TaskRecord createTaskRecord(int taskId) {
         return new TaskRecord(mService.mActivityTaskManager, taskId, new Intent(), null, null, null,
-                null, null, false,
-                false, false, 0, 10050, null, new ArrayList<>(), 0, false, null, 0, 0, 0, 0, 0,
-                null, 0, false, false, false, 0, 0);
+                ActivityBuilder.getDefaultComponent(), null, false, false, false, 0, 10050, null,
+                new ArrayList<>(), 0, false, null, 0, 0, 0, 0, 0, null, 0, false, false, false, 0, 0
+        );
     }
 
     private static class TestTaskRecordFactory extends TaskRecordFactory {

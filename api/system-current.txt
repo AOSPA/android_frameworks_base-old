@@ -201,6 +201,7 @@ package android {
     field public static final java.lang.String WRITE_EMBEDDED_SUBSCRIPTIONS = "android.permission.WRITE_EMBEDDED_SUBSCRIPTIONS";
     field public static final java.lang.String WRITE_GSERVICES = "android.permission.WRITE_GSERVICES";
     field public static final java.lang.String WRITE_MEDIA_STORAGE = "android.permission.WRITE_MEDIA_STORAGE";
+    field public static final java.lang.String WRITE_OBB = "android.permission.WRITE_OBB";
     field public static final java.lang.String WRITE_SECURE_SETTINGS = "android.permission.WRITE_SECURE_SETTINGS";
   }
 
@@ -1115,7 +1116,6 @@ package android.content.pm {
     method public abstract void grantRuntimePermission(java.lang.String, java.lang.String, android.os.UserHandle);
     method public abstract int installExistingPackage(java.lang.String) throws android.content.pm.PackageManager.NameNotFoundException;
     method public abstract int installExistingPackage(java.lang.String, int) throws android.content.pm.PackageManager.NameNotFoundException;
-    method public boolean isPackageSuspended(java.lang.String) throws android.content.pm.PackageManager.NameNotFoundException;
     method public java.util.List<android.content.pm.ResolveInfo> queryBroadcastReceiversAsUser(android.content.Intent, int, android.os.UserHandle);
     method public abstract void registerDexModule(java.lang.String, android.content.pm.PackageManager.DexModuleRegisterCallback);
     method public abstract void removeOnPermissionsChangeListener(android.content.pm.PackageManager.OnPermissionsChangedListener);
@@ -3835,6 +3835,7 @@ package android.os {
     method public final void putInt64Array(long, long[]);
     method public final void putInt8(long, byte);
     method public final void putInt8Array(long, byte[]);
+    method public final void putNativeHandle(long, android.os.NativeHandle);
     method public final void putString(long, java.lang.String);
     method public static java.lang.Boolean[] wrapArray(boolean[]);
     method public static java.lang.Long[] wrapArray(long[]);
@@ -3854,6 +3855,7 @@ package android.os {
     method public final double readDouble();
     method public final java.util.ArrayList<java.lang.Double> readDoubleVector();
     method public final android.os.HwBlob readEmbeddedBuffer(long, long, long, boolean);
+    method public final android.os.NativeHandle readEmbeddedNativeHandle(long, long);
     method public final float readFloat();
     method public final java.util.ArrayList<java.lang.Float> readFloatVector();
     method public final short readInt16();
@@ -3864,6 +3866,8 @@ package android.os {
     method public final java.util.ArrayList<java.lang.Long> readInt64Vector();
     method public final byte readInt8();
     method public final java.util.ArrayList<java.lang.Byte> readInt8Vector();
+    method public final android.os.NativeHandle readNativeHandle();
+    method public final java.util.ArrayList<android.os.NativeHandle> readNativeHandleVector();
     method public final java.lang.String readString();
     method public final java.util.ArrayList<java.lang.String> readStringVector();
     method public final android.os.IHwBinder readStrongBinder();
@@ -3887,6 +3891,8 @@ package android.os {
     method public final void writeInt8(byte);
     method public final void writeInt8Vector(java.util.ArrayList<java.lang.Byte>);
     method public final void writeInterfaceToken(java.lang.String);
+    method public final void writeNativeHandle(android.os.NativeHandle);
+    method public final void writeNativeHandleVector(java.util.ArrayList<android.os.NativeHandle>);
     method public final void writeStatus(int);
     method public final void writeString(java.lang.String);
     method public final void writeStringVector(java.util.ArrayList<java.lang.String>);
@@ -3930,6 +3936,18 @@ package android.os {
     method public void setPrivacyPolicy(int);
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.os.IncidentReportArgs> CREATOR;
+  }
+
+  public final class NativeHandle implements java.io.Closeable {
+    ctor public NativeHandle();
+    ctor public NativeHandle(java.io.FileDescriptor, boolean);
+    ctor public NativeHandle(java.io.FileDescriptor[], int[], boolean);
+    method public void close() throws java.io.IOException;
+    method public android.os.NativeHandle dup() throws java.io.IOException;
+    method public java.io.FileDescriptor getFileDescriptor();
+    method public java.io.FileDescriptor[] getFileDescriptors();
+    method public int[] getInts();
+    method public boolean hasSingleFileDescriptor();
   }
 
   public final class PowerManager {
@@ -4371,7 +4389,10 @@ package android.provider {
     field public static final java.lang.String AUTOFILL_USER_DATA_MAX_USER_DATA_SIZE = "autofill_user_data_max_user_data_size";
     field public static final java.lang.String AUTOFILL_USER_DATA_MAX_VALUE_LENGTH = "autofill_user_data_max_value_length";
     field public static final java.lang.String AUTOFILL_USER_DATA_MIN_VALUE_LENGTH = "autofill_user_data_min_value_length";
+    field public static final java.lang.String HUSH_GESTURE_USED = "hush_gesture_used";
     field public static final java.lang.String INSTANT_APPS_ENABLED = "instant_apps_enabled";
+    field public static final java.lang.String MANUAL_RINGER_TOGGLE_COUNT = "manual_ringer_toggle_count";
+    field public static final java.lang.String VOLUME_HUSH_GESTURE = "volume_hush_gesture";
   }
 
   public final class TimeZoneRulesDataContract {
@@ -4524,9 +4545,11 @@ package android.service.autofill {
   public abstract class AutofillFieldClassificationService extends android.app.Service {
     method public android.os.IBinder onBind(android.content.Intent);
     method public float[][] onGetScores(java.lang.String, android.os.Bundle, java.util.List<android.view.autofill.AutofillValue>, java.util.List<java.lang.String>);
+    field public static final java.lang.String RESOURCE_AVAILABLE_ALGORITHMS = "autofill_field_classification_available_algorithms";
+    field public static final java.lang.String RESOURCE_DEFAULT_ALGORITHM = "autofill_field_classification_default_algorithm";
     field public static final java.lang.String SERVICE_INTERFACE = "android.service.autofill.AutofillFieldClassificationService";
-    field public static final java.lang.String SERVICE_META_DATA_KEY_AVAILABLE_ALGORITHMS = "android.autofill.field_classification.available_algorithms";
-    field public static final java.lang.String SERVICE_META_DATA_KEY_DEFAULT_ALGORITHM = "android.autofill.field_classification.default_algorithm";
+    field public static final deprecated java.lang.String SERVICE_META_DATA_KEY_AVAILABLE_ALGORITHMS = "android.autofill.field_classification.available_algorithms";
+    field public static final deprecated java.lang.String SERVICE_META_DATA_KEY_DEFAULT_ALGORITHM = "android.autofill.field_classification.default_algorithm";
   }
 
 }
@@ -4663,8 +4686,10 @@ package android.service.notification {
     method public int getUser();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.service.notification.Adjustment> CREATOR;
+    field public static final java.lang.String KEY_IMPORTANCE = "key_importance";
     field public static final java.lang.String KEY_PEOPLE = "key_people";
     field public static final java.lang.String KEY_SMART_ACTIONS = "key_smart_actions";
+    field public static final java.lang.String KEY_SMART_REPLIES = "key_smart_replies";
     field public static final java.lang.String KEY_SNOOZE_CRITERIA = "key_snooze_criteria";
     field public static final java.lang.String KEY_USER_SENTIMENT = "key_user_sentiment";
   }
@@ -4696,9 +4721,11 @@ package android.service.notification {
     method public final void adjustNotification(android.service.notification.Adjustment);
     method public final void adjustNotifications(java.util.List<android.service.notification.Adjustment>);
     method public final android.os.IBinder onBind(android.content.Intent);
-    method public abstract android.service.notification.Adjustment onNotificationEnqueued(android.service.notification.StatusBarNotification);
+    method public android.service.notification.Adjustment onNotificationEnqueued(android.service.notification.StatusBarNotification);
+    method public android.service.notification.Adjustment onNotificationEnqueued(android.service.notification.StatusBarNotification, android.app.NotificationChannel);
     method public void onNotificationRemoved(android.service.notification.StatusBarNotification, android.service.notification.NotificationListenerService.RankingMap, android.service.notification.NotificationStats, int);
     method public abstract void onNotificationSnoozedUntilContext(android.service.notification.StatusBarNotification, java.lang.String);
+    method public void onNotificationsSeen(java.util.List<java.lang.String>);
     method public final void unsnoozeNotification(java.lang.String);
     field public static final java.lang.String SERVICE_INTERFACE = "android.service.notification.NotificationAssistantService";
   }
@@ -4707,6 +4734,7 @@ package android.service.notification {
     ctor public NotificationStats();
     ctor protected NotificationStats(android.os.Parcel);
     method public int describeContents();
+    method public int getDismissalSentiment();
     method public int getDismissalSurface();
     method public boolean hasDirectReplied();
     method public boolean hasExpanded();
@@ -4715,6 +4743,7 @@ package android.service.notification {
     method public boolean hasSnoozed();
     method public boolean hasViewedSettings();
     method public void setDirectReplied();
+    method public void setDismissalSentiment(int);
     method public void setDismissalSurface(int);
     method public void setExpanded();
     method public void setSeen();
@@ -4727,6 +4756,10 @@ package android.service.notification {
     field public static final int DISMISSAL_OTHER = 0; // 0x0
     field public static final int DISMISSAL_PEEK = 1; // 0x1
     field public static final int DISMISSAL_SHADE = 3; // 0x3
+    field public static final int DISMISS_SENTIMENT_NEGATIVE = 0; // 0x0
+    field public static final int DISMISS_SENTIMENT_NEUTRAL = 1; // 0x1
+    field public static final int DISMISS_SENTIMENT_POSITIVE = 2; // 0x2
+    field public static final int DISMISS_SENTIMENT_UNKNOWN = -1000; // 0xfffffc18
   }
 
   public final class SnoozeCriterion implements android.os.Parcelable {
@@ -5520,6 +5553,19 @@ package android.telephony.data {
     field public static final int RESULT_SUCCESS = 0; // 0x0
   }
 
+  public abstract class QualifiedNetworksService extends android.app.Service {
+    ctor public QualifiedNetworksService();
+    method public abstract android.telephony.data.QualifiedNetworksService.NetworkAvailabilityUpdater createNetworkAvailabilityUpdater(int);
+    field public static final java.lang.String QUALIFIED_NETWORKS_SERVICE_INTERFACE = "android.telephony.data.QualifiedNetworksService";
+  }
+
+  public abstract class QualifiedNetworksService.NetworkAvailabilityUpdater implements java.lang.AutoCloseable {
+    ctor public QualifiedNetworksService.NetworkAvailabilityUpdater(int);
+    method public abstract void close();
+    method public final int getSlotIndex();
+    method public final void updateQualifiedNetworkTypes(int, int[]);
+  }
+
 }
 
 package android.telephony.euicc {
@@ -5939,6 +5985,7 @@ package android.telephony.ims {
     field public static final int CODE_SIP_SERVER_TIMEOUT = 353; // 0x161
     field public static final int CODE_SIP_SERVICE_UNAVAILABLE = 352; // 0x160
     field public static final int CODE_SIP_TEMPRARILY_UNAVAILABLE = 336; // 0x150
+    field public static final int CODE_SIP_TRANSACTION_DOES_NOT_EXIST = 343; // 0x157
     field public static final int CODE_SIP_USER_REJECTED = 361; // 0x169
     field public static final int CODE_SUPP_SVC_CANCELLED = 1202; // 0x4b2
     field public static final int CODE_SUPP_SVC_FAILED = 1201; // 0x4b1
@@ -6037,12 +6084,16 @@ package android.telephony.ims {
     ctor public ImsSsInfo(int, java.lang.String);
     method public int describeContents();
     method public java.lang.String getIcbNum();
+    method public int getProvisionStatus();
     method public int getStatus();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.telephony.ims.ImsSsInfo> CREATOR;
     field public static final int DISABLED = 0; // 0x0
     field public static final int ENABLED = 1; // 0x1
     field public static final int NOT_REGISTERED = -1; // 0xffffffff
+    field public static final int SERVICE_NOT_PROVISIONED = 0; // 0x0
+    field public static final int SERVICE_PROVISIONED = 1; // 0x1
+    field public static final int SERVICE_PROVISIONING_UNKNOWN = -1; // 0xffffffff
   }
 
   public final class ImsStreamMediaProfile implements android.os.Parcelable {
@@ -6174,6 +6225,10 @@ package android.telephony.ims.feature {
     field public static final int STATE_INITIALIZING = 1; // 0x1
     field public static final int STATE_READY = 2; // 0x2
     field public static final int STATE_UNAVAILABLE = 0; // 0x0
+  }
+
+  public static class ImsFeature.Capabilities {
+    field protected int mCapabilities;
   }
 
   protected static class ImsFeature.CapabilityCallbackProxy {

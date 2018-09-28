@@ -16,6 +16,7 @@
 
 package android.view;
 
+import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.View.PFLAG_DRAW_ANIMATION;
 import static android.view.WindowCallbacks.RESIZE_MODE_DOCKED_DIVIDER;
@@ -30,6 +31,7 @@ import android.Manifest;
 import android.animation.LayoutTransition;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
 import android.app.ResourcesManager;
@@ -174,6 +176,7 @@ public final class ViewRootImpl implements ViewParent,
      */
     static final int MAX_TRACKBALL_DELAY = 250;
 
+    @UnsupportedAppUsage
     static final ThreadLocal<HandlerActionQueue> sRunQueues = new ThreadLocal<HandlerActionQueue>();
 
     static final ArrayList<Runnable> sFirstDrawHandlers = new ArrayList();
@@ -237,7 +240,9 @@ public final class ViewRootImpl implements ViewParent,
      */
     @GuardedBy("mWindowCallbacks")
     final ArrayList<WindowCallbacks> mWindowCallbacks = new ArrayList<>();
+    @UnsupportedAppUsage
     final Context mContext;
+    @UnsupportedAppUsage
     final IWindowSession mWindowSession;
     @NonNull Display mDisplay;
     final DisplayManager mDisplayManager;
@@ -259,6 +264,7 @@ public final class ViewRootImpl implements ViewParent,
 
     int mSeq;
 
+    @UnsupportedAppUsage
     View mView;
 
     View mAccessibilityFocusedHost;
@@ -291,6 +297,7 @@ public final class ViewRootImpl implements ViewParent,
 
     // Set to true if the owner of this window is in the stopped state,
     // so the window should no longer be active.
+    @UnsupportedAppUsage
     boolean mStopped = false;
 
     // Set to true if the owner of this window is in ambient mode,
@@ -310,8 +317,11 @@ public final class ViewRootImpl implements ViewParent,
     final Region mTransparentRegion;
     final Region mPreviousTransparentRegion;
 
+    @UnsupportedAppUsage
     int mWidth;
+    @UnsupportedAppUsage
     int mHeight;
+    @UnsupportedAppUsage
     Rect mDirty;
     public boolean mIsAnimating;
 
@@ -325,10 +335,12 @@ public final class ViewRootImpl implements ViewParent,
 
     CompatibilityInfo.Translator mTranslator;
 
+    @UnsupportedAppUsage
     final View.AttachInfo mAttachInfo;
     InputChannel mInputChannel;
     InputQueue.Callback mInputQueueCallback;
     InputQueue mInputQueue;
+    @UnsupportedAppUsage
     FallbackEventHandler mFallbackEventHandler;
     Choreographer mChoreographer;
 
@@ -393,8 +405,10 @@ public final class ViewRootImpl implements ViewParent,
 
     // These can be accessed by any thread, must be protected with a lock.
     // Surface can never be reassigned or cleared (use Surface.clear()).
+    @UnsupportedAppUsage
     public final Surface mSurface = new Surface();
 
+    @UnsupportedAppUsage
     boolean mAdded;
     boolean mAddedTouchMode;
 
@@ -429,6 +443,7 @@ public final class ViewRootImpl implements ViewParent,
     boolean mScrollMayChange;
     @SoftInputModeFlags
     int mSoftInputMode;
+    @UnsupportedAppUsage
     WeakReference<View> mLastScrolledFocus;
     int mScrollY;
     int mCurScrollY;
@@ -563,6 +578,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /** Add static config callback to be notified about global config changes. */
+    @UnsupportedAppUsage
     public static void addConfigCallback(ConfigChangedCallback callback) {
         synchronized (sConfigCallbacks) {
             sConfigCallbacks.add(callback);
@@ -899,6 +915,7 @@ public final class ViewRootImpl implements ViewParent,
         return (mWindowAttributes.flags & WindowManager.LayoutParams.FLAG_LOCAL_FOCUS_MODE) != 0;
     }
 
+    @UnsupportedAppUsage
     public int getWindowFlags() {
         return mWindowAttributes.flags;
     }
@@ -938,6 +955,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    @UnsupportedAppUsage
     public void detachFunctor(long functor) {
         if (mAttachInfo.mThreadedRenderer != null) {
             // Fence so that any pending invokeFunctor() messages will be processed
@@ -955,6 +973,7 @@ public final class ViewRootImpl implements ViewParent,
      *                          has invoked. If false, the functor may be invoked
      *                          asynchronously.
      */
+    @UnsupportedAppUsage
     public static void invokeFunctor(long functor, boolean waitForCompletion) {
         ThreadedRenderer.invokeFunctor(functor, waitForCompletion);
     }
@@ -988,6 +1007,7 @@ public final class ViewRootImpl implements ViewParent,
         mNextRtFrameCallback = callback;
     }
 
+    @UnsupportedAppUsage
     private void enableHardwareAcceleration(WindowManager.LayoutParams attrs) {
         mAttachInfo.mHardwareAccelerated = false;
         mAttachInfo.mHardwareAccelerationRequested = false;
@@ -1048,6 +1068,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    @UnsupportedAppUsage
     public View getView() {
         return mView;
     }
@@ -1200,11 +1221,28 @@ public final class ViewRootImpl implements ViewParent,
 
         // Get new instance of display based on current display adjustments. It may be updated later
         // if moving between the displays also involved a configuration change.
-        mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(displayId,
-            mView.getResources());
+        updateInternalDisplay(displayId, mView.getResources());
         mAttachInfo.mDisplayState = mDisplay.getState();
         // Internal state updated, now notify the view hierarchy.
         mView.dispatchMovedToDisplay(mDisplay, config);
+    }
+
+    /**
+     * Updates {@link #mDisplay} to the display object corresponding to {@param displayId}.
+     * Uses DEFAULT_DISPLAY if there isn't a display object in the system corresponding
+     * to {@param displayId}.
+     */
+    private void updateInternalDisplay(int displayId, Resources resources) {
+        final Display preferredDisplay =
+                ResourcesManager.getInstance().getAdjustedDisplay(displayId, resources);
+        if (preferredDisplay == null) {
+            // Fallback to use default display.
+            Slog.w(TAG, "Cannot get desired display with Id: " + displayId);
+            mDisplay = ResourcesManager.getInstance()
+                    .getAdjustedDisplay(DEFAULT_DISPLAY, resources);
+        } else {
+            mDisplay = preferredDisplay;
+        }
     }
 
     void pokeDrawLockIfNeeded() {
@@ -1249,6 +1287,7 @@ public final class ViewRootImpl implements ViewParent,
         invalidate();
     }
 
+    @UnsupportedAppUsage
     void invalidate() {
         mDirty.set(0, 0, mWidth, mHeight);
         if (!mWillDrawSoon) {
@@ -1430,6 +1469,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    @UnsupportedAppUsage
     void scheduleTraversals() {
         if (!mTraversalScheduled) {
             mTraversalScheduled = true;
@@ -2109,7 +2149,7 @@ public final class ViewRootImpl implements ViewParent,
                                         & View.PFLAG_REQUEST_TRANSPARENT_REGIONS) == 0) {
                                     // Don't pre-allocate if transparent regions
                                     // are requested as they may not be needed
-                                    mSurface.allocateBuffers();
+                                    mAttachInfo.mThreadedRenderer.allocateBuffers(mSurface);
                                 }
                             } catch (OutOfResourcesException e) {
                                 handleOutOfResourcesException(e);
@@ -3105,13 +3145,27 @@ public final class ViewRootImpl implements ViewParent,
         Trace.traceBegin(Trace.TRACE_TAG_VIEW, "draw");
 
         boolean usingAsyncReport = false;
-        if (mReportNextDraw && mAttachInfo.mThreadedRenderer != null
-                && mAttachInfo.mThreadedRenderer.isEnabled()) {
-            usingAsyncReport = true;
-            mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) -> {
-                // TODO: Use the frame number
-                pendingDrawFinished();
-            });
+        if (mAttachInfo.mThreadedRenderer != null && mAttachInfo.mThreadedRenderer.isEnabled()) {
+            ArrayList<Runnable> commitCallbacks = mAttachInfo.mTreeObserver
+                    .captureFrameCommitCallbacks();
+            if (mReportNextDraw) {
+                usingAsyncReport = true;
+                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) -> {
+                    // TODO: Use the frame number
+                    pendingDrawFinished();
+                    if (commitCallbacks != null) {
+                        for (int i = 0; i < commitCallbacks.size(); i++) {
+                            commitCallbacks.get(i).run();
+                        }
+                    }
+                });
+            } else if (commitCallbacks != null && commitCallbacks.size() > 0) {
+                mAttachInfo.mThreadedRenderer.setFrameCompleteCallback((long frameNr) -> {
+                    for (int i = 0; i < commitCallbacks.size(); i++) {
+                        commitCallbacks.get(i).run();
+                    }
+                });
+            }
         }
 
         try {
@@ -3658,6 +3712,7 @@ public final class ViewRootImpl implements ViewParent,
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public View getAccessibilityFocusedHost() {
         return mAccessibilityFocusedHost;
     }
@@ -3665,6 +3720,7 @@ public final class ViewRootImpl implements ViewParent,
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public AccessibilityNodeInfo getAccessibilityFocusedVirtualView() {
         return mAccessibilityFocusedVirtualView;
     }
@@ -3921,8 +3977,7 @@ public final class ViewRootImpl implements ViewParent,
         // Handle configuration change.
         if (mForceNextConfigUpdate || mLastConfigurationFromResources.diff(config) != 0) {
             // Update the display with new DisplayAdjustments.
-            mDisplay = ResourcesManager.getInstance().getAdjustedDisplay(
-                    mDisplay.getDisplayId(), localResources);
+            updateInternalDisplay(mDisplay.getDisplayId(), localResources);
 
             final int lastLayoutDirection = mLastConfigurationFromResources.getLayoutDirection();
             final int currentLayoutDirection = config.getLayoutDirection();
@@ -4282,6 +4337,7 @@ public final class ViewRootImpl implements ViewParent,
      * @param inTouchMode Whether we want to be in touch mode.
      * @return True if the touch mode changed and focus changed was changed as a result
      */
+    @UnsupportedAppUsage
     boolean ensureTouchMode(boolean inTouchMode) {
         if (DBG) Log.d("touchmode", "ensureTouchMode(" + inTouchMode + "), current "
                 + "touch mode is " + mAttachInfo.mInTouchMode);
@@ -6286,6 +6342,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /* drag/drop */
+    @UnsupportedAppUsage
     void setLocalDragState(Object obj) {
         mLocalDragState = obj;
     }
@@ -6433,6 +6490,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    @UnsupportedAppUsage
     public void getLastTouchPoint(Point outLocation) {
         outLocation.x = (int) mLastTouchPoint.x;
         outLocation.y = (int) mLastTouchPoint.y;
@@ -6831,6 +6889,7 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    @UnsupportedAppUsage
     private void dispatchResized(Rect frame, Rect overscanInsets, Rect contentInsets,
             Rect visibleInsets, Rect stableInsets, Rect outsets, boolean reportDraw,
             MergedConfiguration mergedConfiguration, Rect backDropFrame, boolean forceLayout,
@@ -6995,10 +7054,12 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    @UnsupportedAppUsage
     void enqueueInputEvent(InputEvent event) {
         enqueueInputEvent(event, null, 0, false);
     }
 
+    @UnsupportedAppUsage
     void enqueueInputEvent(InputEvent event,
             InputEventReceiver receiver, int flags, boolean processImmediately) {
         adjustInputEventForCompatibility(event);
@@ -7339,6 +7400,7 @@ public final class ViewRootImpl implements ViewParent,
         mInvalidateOnAnimationRunnable.addViewRect(info);
     }
 
+    @UnsupportedAppUsage
     public void cancelInvalidate(View view) {
         mHandler.removeMessages(MSG_INVALIDATE, view);
         // fixme: might leak the AttachInfo.InvalidateInfo objects instead of returning
@@ -7347,10 +7409,12 @@ public final class ViewRootImpl implements ViewParent,
         mInvalidateOnAnimationRunnable.removeView(view);
     }
 
+    @UnsupportedAppUsage
     public void dispatchInputEvent(InputEvent event) {
         dispatchInputEvent(event, null);
     }
 
+    @UnsupportedAppUsage
     public void dispatchInputEvent(InputEvent event, InputEventReceiver receiver) {
         SomeArgs args = SomeArgs.obtain();
         args.arg1 = event;
@@ -7366,6 +7430,7 @@ public final class ViewRootImpl implements ViewParent,
         mHandler.sendMessage(msg);
     }
 
+    @UnsupportedAppUsage
     public void dispatchKeyFromIme(KeyEvent event) {
         Message msg = mHandler.obtainMessage(MSG_DISPATCH_KEY_FROM_IME, event);
         msg.setAsynchronous(true);
@@ -7384,6 +7449,7 @@ public final class ViewRootImpl implements ViewParent,
      * Note that it is the responsibility of the caller of this API to recycle the InputEvent it
      * passes in.
      */
+    @UnsupportedAppUsage
     public void dispatchUnhandledInputEvent(InputEvent event) {
         if (event instanceof MotionEvent) {
             event = MotionEvent.obtain((MotionEvent) event);
@@ -8086,6 +8152,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     public static final class CalledFromWrongThreadException extends AndroidRuntimeException {
+        @UnsupportedAppUsage
         public CalledFromWrongThreadException(String msg) {
             super(msg);
         }

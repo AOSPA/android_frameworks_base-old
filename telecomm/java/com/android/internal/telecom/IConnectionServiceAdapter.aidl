@@ -122,5 +122,5 @@ oneway interface IConnectionServiceAdapter {
 
     void onConnectionServiceFocusReleased(in Session.Info sessionInfo);
 
-    void resetCdmaConnectionTime(String callIdi, in Session.Info sessionInfo);
+    void resetConnectionTime(String callIdi, in Session.Info sessionInfo);
 }

@@ -18,6 +18,7 @@ package com.android.server.hdmi;
 
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
+import com.android.server.hdmi.Constants.AudioCodec;
 
 /**
  * A helper class to build {@link HdmiCecMessage} from various cec commands.
@@ -265,6 +266,25 @@ public class HdmiCecMessageBuilder {
         return buildCommand(src, dest, Constants.MESSAGE_REPORT_ARC_TERMINATED);
     }
 
+
+    /**
+     * Build &lt;Request Short Audio Descriptor&gt; command.
+     *
+     * @param src source address of command
+     * @param dest destination address of command
+     * @param audioFormats the {@link AudioCodec}s desired
+     * @return newly created {@link HdmiCecMessage}
+     */
+    static HdmiCecMessage buildRequestShortAudioDescriptor(int src, int dest,
+            @AudioCodec int[] audioFormats) {
+        byte[] params = new byte[Math.min(audioFormats.length,4)] ;
+        for (int i = 0; i < params.length ; i++){
+            params[i] = (byte) (audioFormats[i] & 0xff);
+        }
+        return buildCommand(src, dest, Constants.MESSAGE_REQUEST_SHORT_AUDIO_DESCRIPTOR, params);
+    }
+
+
     /**
      * Build &lt;Text View On&gt; command.
      *
@@ -274,6 +294,16 @@ public class HdmiCecMessageBuilder {
      */
     static HdmiCecMessage buildTextViewOn(int src, int dest) {
         return buildCommand(src, dest, Constants.MESSAGE_TEXT_VIEW_ON);
+    }
+
+    /**
+     * Build &lt;Request Active Source&gt; command.
+     *
+     * @param src source address of command
+     * @return newly created {@link HdmiCecMessage}
+     */
+    static HdmiCecMessage buildRequestActiveSource(int src) {
+        return buildCommand(src, Constants.ADDR_BROADCAST, Constants.MESSAGE_REQUEST_ACTIVE_SOURCE);
     }
 
     /**

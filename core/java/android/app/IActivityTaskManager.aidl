@@ -139,6 +139,7 @@ interface IActivityTaskManager {
     ComponentName getCallingActivity(in IBinder token);
     void setFocusedTask(int taskId);
     boolean removeTask(int taskId);
+    void removeAllVisibleRecentTasks();
     List<ActivityManager.RunningTaskInfo> getTasks(int maxNum);
     List<ActivityManager.RunningTaskInfo> getFilteredTasks(int maxNum, int ignoreActivityType,
             int ignoreWindowingMode);
@@ -196,7 +197,6 @@ interface IActivityTaskManager {
     void startInPlaceAnimationOnFrontMostApplication(in Bundle opts);
     void registerTaskStackListener(in ITaskStackListener listener);
     void unregisterTaskStackListener(in ITaskStackListener listener);
-    int createStackOnDisplay(int displayId);
     void setTaskResizeable(int taskId, int resizeableMode);
     void exitFreeformMode(in IBinder token);
     void resizeTask(int taskId, in Rect bounds, int resizeMode);

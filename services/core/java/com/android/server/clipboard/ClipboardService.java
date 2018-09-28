@@ -21,7 +21,9 @@ import android.app.ActivityManager;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
+import android.app.IUriGrantsManager;
 import android.app.KeyguardManager;
+import android.app.UriGrantsManager;
 import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.ContentProvider;
@@ -45,10 +47,14 @@ import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.Settings;
 import android.util.Slog;
 import android.util.SparseArray;
 
+import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.uri.UriGrantsManagerInternal;
+import com.android.server.wm.WindowManagerInternal;
 
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -143,6 +149,9 @@ public class ClipboardService extends SystemService {
         SystemProperties.getBoolean("ro.kernel.qemu", false);
 
     private final IActivityManager mAm;
+    private final IUriGrantsManager mUgm;
+    private final UriGrantsManagerInternal mUgmInternal;
+    private final WindowManagerInternal mWm;
     private final IUserManager mUm;
     private final PackageManager mPm;
     private final AppOpsManager mAppOps;
@@ -159,15 +168,13 @@ public class ClipboardService extends SystemService {
         super(context);
 
         mAm = ActivityManager.getService();
+        mUgm = UriGrantsManager.getService();
+        mUgmInternal = LocalServices.getService(UriGrantsManagerInternal.class);
+        mWm = LocalServices.getService(WindowManagerInternal.class);
         mPm = getContext().getPackageManager();
         mUm = (IUserManager) ServiceManager.getService(Context.USER_SERVICE);
         mAppOps = (AppOpsManager) getContext().getSystemService(Context.APP_OPS_SERVICE);
-        IBinder permOwner = null;
-        try {
-            permOwner = mAm.newUriPermissionOwner("clipboard");
-        } catch (RemoteException e) {
-            Slog.w("clipboard", "AM dead", e);
-        }
+        final IBinder permOwner = mUgmInternal.newUriPermissionOwner("clipboard");
         mPermissionOwner = permOwner;
         if (IS_EMULATOR) {
             mHostClipboardMonitor = new HostClipboardMonitor(
@@ -497,12 +504,10 @@ public class ClipboardService extends SystemService {
         final long ident = Binder.clearCallingIdentity();
         try {
             // This will throw SecurityException if caller can't grant
-            mAm.checkGrantUriPermission(sourceUid, null,
+            mUgmInternal.checkGrantUriPermission(sourceUid, null,
                     ContentProvider.getUriWithoutUserId(uri),
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                     ContentProvider.getUserIdFromUri(uri, UserHandle.getUserId(sourceUid)));
-        } catch (RemoteException ignored) {
-            // Ignored because we're in same process
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -531,7 +536,7 @@ public class ClipboardService extends SystemService {
 
         final long ident = Binder.clearCallingIdentity();
         try {
-            mAm.grantUriPermissionFromOwner(mPermissionOwner, sourceUid, targetPkg,
+            mUgm.grantUriPermissionFromOwner(mPermissionOwner, sourceUid, targetPkg,
                     ContentProvider.getUriWithoutUserId(uri),
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                     ContentProvider.getUserIdFromUri(uri, UserHandle.getUserId(sourceUid)),
@@ -588,12 +593,10 @@ public class ClipboardService extends SystemService {
 
         final long ident = Binder.clearCallingIdentity();
         try {
-            mAm.revokeUriPermissionFromOwner(mPermissionOwner,
+            mUgmInternal.revokeUriPermissionFromOwner(mPermissionOwner,
                     ContentProvider.getUriWithoutUserId(uri),
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                     ContentProvider.getUserIdFromUri(uri, UserHandle.getUserId(sourceUid)));
-        } catch (RemoteException ignored) {
-            // Ignored because we're in same process
         } finally {
             Binder.restoreCallingIdentity(ident);
         }
@@ -624,18 +627,19 @@ public class ClipboardService extends SystemService {
         if (mAppOps.noteOp(op, callingUid, callingPackage) != AppOpsManager.MODE_ALLOWED) {
             return false;
         }
-        try {
-            // Installed apps can access the clipboard at any time.
-            if (!AppGlobals.getPackageManager().isInstantApp(callingPackage,
-                        UserHandle.getUserId(callingUid))) {
-                return true;
-            }
-            // Instant apps can only access the clipboard if they are in the foreground.
-            return mAm.isAppForeground(callingUid);
-        } catch (RemoteException e) {
-            Slog.e("clipboard", "Failed to get Instant App status for package " + callingPackage,
-                    e);
-            return false;
+        // The default IME is always allowed to access the clipboard.
+        String defaultIme = Settings.Secure.getStringForUser(getContext().getContentResolver(),
+                Settings.Secure.DEFAULT_INPUT_METHOD, UserHandle.getUserId(callingUid));
+        if (defaultIme != null && defaultIme.equals(callingPackage)) {
+            return true;
         }
+
+        // Otherwise only focused applications can access the clipboard.
+        boolean uidFocused = mWm.isUidFocused(callingUid);
+        if (!uidFocused) {
+            Slog.e(TAG, "Denying clipboard access to " + callingPackage
+                    + ", application is not in focus.");
+        }
+        return uidFocused;
     }
 }

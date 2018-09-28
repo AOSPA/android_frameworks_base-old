@@ -126,6 +126,7 @@ applications that come with the platform
     <privapp-permissions package="com.android.omadm.service">
         <permission name="android.permission.CHANGE_CONFIGURATION"/>
         <permission name="android.permission.CONNECTIVITY_INTERNAL"/>
+        <permission name="android.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS"/>
         <permission name="android.permission.MODIFY_PHONE_STATE"/>
         <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
         <permission name="android.permission.WRITE_APN_SETTINGS"/>
@@ -133,13 +134,18 @@ applications that come with the platform
     </privapp-permissions>
 
     <privapp-permissions package="com.android.packageinstaller">
-        <permission name="android.permission.CLEAR_APP_CACHE"/>
         <permission name="android.permission.DELETE_PACKAGES"/>
         <permission name="android.permission.INSTALL_PACKAGES"/>
+        <permission name="android.permission.USE_RESERVED_DISK"/>
+        <permission name="android.permission.MANAGE_USERS"/>
+        <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
+    </privapp-permissions>
+
+    <privapp-permissions package="com.android.permissioncontroller">
+        <permission name="android.permission.CLEAR_APP_CACHE"/>
         <permission name="android.permission.MANAGE_USERS"/>
         <permission name="android.permission.OBSERVE_GRANT_REVOKE_PERMISSIONS"/>
         <permission name="android.permission.UPDATE_APP_OPS_STATS"/>
-        <permission name="android.permission.USE_RESERVED_DISK"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.phone">

@@ -24,7 +24,6 @@ import static android.app.ActivityManager.USER_OP_IS_CURRENT;
 import static android.app.ActivityManager.USER_OP_SUCCESS;
 import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
-
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_MU;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -49,6 +48,7 @@ import android.app.IStopUserCallback;
 import android.app.IUserSwitchObserver;
 import android.app.KeyguardManager;
 import android.app.usage.UsageEvents;
+import android.appwidget.AppWidgetManagerInternal;
 import android.content.Context;
 import android.content.IIntentReceiver;
 import android.content.Intent;
@@ -104,11 +104,9 @@ import com.android.server.wm.WindowManagerService;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -269,6 +267,7 @@ class UserController implements Handler.Callback {
         });
     }
 
+    @GuardedBy("mLock")
     List<Integer> getRunningUsersLU() {
         ArrayList<Integer> runningUsers = new ArrayList<>();
         for (Integer userId : mUserLru) {
@@ -293,6 +292,7 @@ class UserController implements Handler.Callback {
         return runningUsers;
     }
 
+    @GuardedBy("mLock")
     void stopRunningUsersLU(int maxRunningUsers) {
         List<Integer> currentlyRunning = getRunningUsersLU();
         Iterator<Integer> iterator = currentlyRunning.iterator();
@@ -535,6 +535,9 @@ class UserController implements Handler.Callback {
             }
         }
 
+        // Spin up app widgets prior to boot-complete, so they can be ready promptly
+        mInjector.startUserWidgets(userId);
+
         Slog.i(TAG, "Sending BOOT_COMPLETE user #" + userId);
         // Do not report secondary users, runtime restarts or first boot/upgrade
         if (userId == UserHandle.USER_SYSTEM
@@ -595,6 +598,7 @@ class UserController implements Handler.Callback {
      * Stops the user along with its related users. The method calls
      * {@link #getUsersToStopLU(int)} to determine the list of users that should be stopped.
      */
+    @GuardedBy("mLock")
     private int stopUsersLU(final int userId, boolean force, final IStopUserCallback callback) {
         if (userId == UserHandle.USER_SYSTEM) {
             return USER_OP_ERROR_IS_SYSTEM;
@@ -626,6 +630,7 @@ class UserController implements Handler.Callback {
         return USER_OP_SUCCESS;
     }
 
+    @GuardedBy("mLock")
     private void stopSingleUserLU(final int userId, final IStopUserCallback callback) {
         if (DEBUG_MU) Slog.i(TAG, "stopSingleUserLocked userId=" + userId);
         final UserState uss = mStartedUsers.get(userId);
@@ -783,6 +788,7 @@ class UserController implements Handler.Callback {
      * Determines the list of users that should be stopped together with the specified
      * {@code userId}. The returned list includes {@code userId}.
      */
+    @GuardedBy("mLock")
     private @NonNull int[] getUsersToStopLU(int userId) {
         int startedUsersSize = mStartedUsers.size();
         IntArray userIds = new IntArray();
@@ -1368,6 +1374,7 @@ class UserController implements Handler.Callback {
         mUserSwitchObservers.finishBroadcast();
     }
 
+    @GuardedBy("mLock")
     void sendContinueUserSwitchLU(UserState uss, int oldUserId, int newUserId) {
         mCurWaitingUserSwitchCallbacks = null;
         mHandler.removeMessages(USER_SWITCH_TIMEOUT_MSG);
@@ -1581,6 +1588,7 @@ class UserController implements Handler.Callback {
         }
     }
 
+    @GuardedBy("mLock")
     private void updateStartedUserArrayLU() {
         int num = 0;
         for (int i = 0; i < mStartedUsers.size(); i++) {
@@ -1719,6 +1727,7 @@ class UserController implements Handler.Callback {
         }
     }
 
+    @GuardedBy("mLock")
     UserInfo getCurrentUserLU() {
         int userId = mTargetUserId != UserHandle.USER_NULL ? mTargetUserId : mCurrentUserId;
         return getUserInfo(userId);
@@ -1730,11 +1739,13 @@ class UserController implements Handler.Callback {
         }
     }
 
+    @GuardedBy("mLock")
     int getCurrentOrTargetUserIdLU() {
         return mTargetUserId != UserHandle.USER_NULL ? mTargetUserId : mCurrentUserId;
     }
 
 
+    @GuardedBy("mLock")
     int getCurrentUserIdLU() {
         return mCurrentUserId;
     }
@@ -1745,6 +1756,7 @@ class UserController implements Handler.Callback {
         }
     }
 
+    @GuardedBy("mLock")
     private boolean isCurrentUserLU(int userId) {
         return userId == getCurrentOrTargetUserIdLU();
     }
@@ -2165,6 +2177,13 @@ class UserController implements Handler.Callback {
             }
         }
 
+        void startUserWidgets(int userId) {
+            AppWidgetManagerInternal awm = LocalServices.getService(AppWidgetManagerInternal.class);
+            if (awm != null) {
+                awm.unlockUser(userId);
+            }
+        }
+
         void updateUserConfiguration() {
             mService.mActivityTaskManager.updateUserConfiguration();
         }
@@ -2232,7 +2251,7 @@ class UserController implements Handler.Callback {
 
         protected void stackSupervisorResumeFocusedStackTopActivity() {
             synchronized (mService) {
-                mService.mStackSupervisor.resumeFocusedStackTopActivityLocked();
+                mService.mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
             }
         }
 

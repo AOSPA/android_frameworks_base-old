@@ -107,11 +107,10 @@ public class CachedBluetoothDeviceManager {
      * @param device the address of the new Bluetooth device
      * @return the newly created CachedBluetoothDevice object
      */
-    public CachedBluetoothDevice addDevice(LocalBluetoothAdapter adapter,
-            LocalBluetoothProfileManager profileManager,
-            BluetoothDevice device) {
-        CachedBluetoothDevice newDevice = new CachedBluetoothDevice(mContext, adapter,
-            profileManager, device);
+    public CachedBluetoothDevice addDevice(BluetoothDevice device) {
+        LocalBluetoothProfileManager profileManager = mBtManager.getProfileManager();
+        CachedBluetoothDevice newDevice = new CachedBluetoothDevice(mContext, profileManager,
+                device);
         if (profileManager.getHearingAidProfile() != null
             && profileManager.getHearingAidProfile().getHiSyncId(newDevice.getDevice())
                 != BluetoothHearingAid.HI_SYNC_ID_INVALID) {
@@ -268,7 +267,7 @@ public class CachedBluetoothDeviceManager {
     public synchronized void onBtClassChanged(BluetoothDevice device) {
         CachedBluetoothDevice cachedDevice = findDevice(device);
         if (cachedDevice != null) {
-            cachedDevice.refreshBtClass();
+            cachedDevice.dispatchAttributesChanged();
         }
     }
 

@@ -18,10 +18,11 @@ package com.android.server.am;
 
 import android.content.Context;
 import android.os.Handler;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.annotation.UiThreadTest;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.annotation.UiThreadTest;
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.server.AppOpsService;
 
@@ -66,7 +67,7 @@ public class AppErrorDialogTest {
     @UiThreadTest
     public void testCreateWorks() throws Exception {
         AppErrorDialog.Data data = new AppErrorDialog.Data();
-        data.proc = new ProcessRecord(null, null, mContext.getApplicationInfo(), "name", 12345);
+        data.proc = new ProcessRecord(null, mContext.getApplicationInfo(), "name", 12345);
         data.result = new AppErrorResult();
 
         AppErrorDialog dialog = new AppErrorDialog(mContext, mService, data);

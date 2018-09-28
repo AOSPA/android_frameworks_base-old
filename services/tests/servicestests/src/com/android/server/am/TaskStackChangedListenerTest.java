@@ -16,7 +16,8 @@
 
 package com.android.server.am;
 
-import static android.support.test.InstrumentationRegistry.getInstrumentation;
+import static androidx.test.InstrumentationRegistry.getInstrumentation;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -33,22 +34,24 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.res.Resources.Theme;
 import android.os.RemoteException;
-import android.support.test.InstrumentationRegistry;
-import android.support.test.filters.MediumTest;
-import android.support.test.runner.AndroidJUnit4;
 import android.support.test.uiautomator.UiDevice;
 import android.text.TextUtils;
-import android.util.Pair;
+
+import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.MediumTest;
+import androidx.test.runner.AndroidJUnit4;
+
 import com.android.internal.annotations.GuardedBy;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 @MediumTest
 @RunWith(AndroidJUnit4.class)
@@ -140,10 +143,10 @@ public class TaskStackChangedListenerTest {
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT, params[1]);
     }
 
-    @Test
     /**
      * Tests for onTaskCreated, onTaskMovedToFront, onTaskRemoved and onTaskRemovalStarted.
      */
+    @Test
     public void testTaskChangeCallBacks() throws Exception {
         final Object[] params = new Object[2];
         final CountDownLatch taskCreatedLaunchLatch = new CountDownLatch(1);
@@ -181,6 +184,7 @@ public class TaskStackChangedListenerTest {
 
         final ActivityTaskChangeCallbacks activity =
                 (ActivityTaskChangeCallbacks) startTestActivity(ActivityTaskChangeCallbacks.class);
+        activity.setDetachedFromWindowLatch(onDetachedFromWindowLatch);
         final int id = activity.getTaskId();
 
         // Test for onTaskCreated.
@@ -207,22 +211,24 @@ public class TaskStackChangedListenerTest {
         assertEquals(1, taskRemovedLatch.getCount());
         waitForCallback(taskRemovedLatch);
         assertEquals(id, params[0]);
+        waitForCallback(onDetachedFromWindowLatch);
         assertTrue(activity.onDetachedFromWindowCalled);
     }
 
     /**
      * Starts the provided activity and returns the started instance.
      */
-    private Activity startTestActivity(Class<?> activityClass) {
+    private TestActivity startTestActivity(Class<?> activityClass) throws InterruptedException {
         final Context context = InstrumentationRegistry.getContext();
         final ActivityMonitor monitor =
                 new ActivityMonitor(activityClass.getName(), null, false);
         InstrumentationRegistry.getInstrumentation().addMonitor(monitor);
         context.startActivity(new Intent(context, activityClass));
-        final Activity activity = monitor.waitForActivityWithTimeout(1000);
+        final TestActivity activity = (TestActivity)monitor.waitForActivityWithTimeout(1000);
         if (activity == null) {
             throw new RuntimeException("Timed out waiting for Activity");
         }
+        activity.waitForResumeStateChange(true);
         return activity;
     }
 
@@ -240,7 +246,43 @@ public class TaskStackChangedListenerTest {
         }catch (InterruptedException e) {}
     }
 
-    public static class ActivityA extends Activity {
+    public static class TestActivity extends Activity {
+        boolean mIsResumed = false;
+
+        @Override
+        protected void onPostResume() {
+            super.onPostResume();
+            synchronized (this) {
+                mIsResumed = true;
+                notifyAll();
+            }
+        }
+
+        @Override
+        protected void onPause() {
+            super.onPause();
+            synchronized (this) {
+                mIsResumed = false;
+                notifyAll();
+            }
+        }
+
+        /**
+         * If isResumed is {@code true}, sleep the thread until the activity is resumed.
+         * if {@code false}, sleep the thread until the activity is paused.
+         */
+        public void waitForResumeStateChange(boolean isResumed) throws InterruptedException {
+            synchronized (this) {
+                if (mIsResumed == isResumed) {
+                    return;
+                }
+                wait(5000);
+            }
+            assertTrue("The activity resume state change timed out", mIsResumed == isResumed);
+        }
+    }
+
+    public static class ActivityA extends TestActivity {
 
         private boolean mActivityBLaunched = false;
 
@@ -256,7 +298,7 @@ public class TaskStackChangedListenerTest {
         }
     }
 
-    public static class ActivityB extends Activity {
+    public static class ActivityB extends TestActivity {
 
         @Override
         protected void onPostResume() {
@@ -269,7 +311,7 @@ public class TaskStackChangedListenerTest {
         }
     }
 
-    public static class ActivityRequestedOrientationChange extends Activity {
+    public static class ActivityRequestedOrientationChange extends TestActivity {
         @Override
         protected void onPostResume() {
             super.onPostResume();
@@ -278,7 +320,7 @@ public class TaskStackChangedListenerTest {
         }
     }
 
-    public static class ActivityTaskDescriptionChange extends Activity {
+    public static class ActivityTaskDescriptionChange extends TestActivity {
         @Override
         protected void onPostResume() {
             super.onPostResume();
@@ -287,12 +329,18 @@ public class TaskStackChangedListenerTest {
         }
     }
 
-    public static class ActivityTaskChangeCallbacks extends Activity {
-        public boolean onDetachedFromWindowCalled = false;;
+    public static class ActivityTaskChangeCallbacks extends TestActivity {
+        boolean onDetachedFromWindowCalled = false;
+        CountDownLatch onDetachedFromWindowCountDownLatch;
 
         @Override
         public void onDetachedFromWindow() {
             onDetachedFromWindowCalled = true;
+            onDetachedFromWindowCountDownLatch.countDown();
+        }
+
+        void setDetachedFromWindowLatch(CountDownLatch countDownLatch) {
+            onDetachedFromWindowCountDownLatch = countDownLatch;
         }
     }
 }

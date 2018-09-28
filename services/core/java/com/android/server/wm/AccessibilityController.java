@@ -119,13 +119,13 @@ final class AccessibilityController {
         }
     }
 
-    public void performComputeChangedWindowsNotLocked() {
+    public void performComputeChangedWindowsNotLocked(boolean forceSend) {
         WindowsForAccessibilityObserver observer = null;
         synchronized (mService) {
             observer = mWindowsForAccessibilityObserver;
         }
         if (observer != null) {
-            observer.performComputeChangedWindowsNotLocked();
+            observer.performComputeChangedWindowsNotLocked(forceSend);
         }
     }
 
@@ -193,7 +193,7 @@ final class AccessibilityController {
             observer = mWindowsForAccessibilityObserver;
         }
         if (observer != null) {
-            observer.performComputeChangedWindowsNotLocked();
+            observer.performComputeChangedWindowsNotLocked(false);
         }
     }
 
@@ -549,7 +549,8 @@ final class AccessibilityController {
                     touchableRegion.getBounds(touchableFrame);
                     RectF windowFrame = mTempRectF;
                     windowFrame.set(touchableFrame);
-                    windowFrame.offset(-windowState.mFrame.left, -windowState.mFrame.top);
+                    windowFrame.offset(-windowState.getFrameLw().left,
+                            -windowState.getFrameLw().top);
                     matrix.mapRect(windowFrame);
                     Region windowBounds = mTempRegion2;
                     windowBounds.set((int) windowFrame.left, (int) windowFrame.top,
@@ -1010,12 +1011,12 @@ final class AccessibilityController {
             mHandler = new MyHandler(mService.mH.getLooper());
             mRecurringAccessibilityEventsIntervalMillis = ViewConfiguration
                     .getSendRecurringAccessibilityEventsInterval();
-            computeChangedWindows();
+            computeChangedWindows(true);
         }
 
-        public void performComputeChangedWindowsNotLocked() {
+        public void performComputeChangedWindowsNotLocked(boolean forceSend) {
             mHandler.removeMessages(MyHandler.MESSAGE_COMPUTE_CHANGED_WINDOWS);
-            computeChangedWindows();
+            computeChangedWindows(forceSend);
         }
 
         public void scheduleComputeChangedWindowsLocked() {
@@ -1025,7 +1026,12 @@ final class AccessibilityController {
             }
         }
 
-        public void computeChangedWindows() {
+        /**
+         * Check if windows have changed, and send them to the accessibilty subsystem if they have.
+         *
+         * @param forceSend Send the windows the accessibility even if they haven't changed.
+         */
+        public void computeChangedWindows(boolean forceSend) {
             if (DEBUG) {
                 Slog.i(LOG_TAG, "computeChangedWindows()");
             }
@@ -1170,36 +1176,38 @@ final class AccessibilityController {
                 visibleWindows.clear();
                 addedWindows.clear();
 
-                // We computed the windows and if they changed notify the client.
-                if (mOldWindows.size() != windows.size()) {
-                    // Different size means something changed.
-                    windowsChanged = true;
-                } else if (!mOldWindows.isEmpty() || !windows.isEmpty()) {
-                    // Since we always traverse windows from high to low layer
-                    // the old and new windows at the same index should be the
-                    // same, otherwise something changed.
-                    for (int i = 0; i < windowCount; i++) {
-                        WindowInfo oldWindow = mOldWindows.get(i);
-                        WindowInfo newWindow = windows.get(i);
-                        // We do not care for layer changes given the window
-                        // order does not change. This brings no new information
-                        // to the clients.
-                        if (windowChangedNoLayer(oldWindow, newWindow)) {
-                            windowsChanged = true;
-                            break;
+                if (!forceSend) {
+                    // We computed the windows and if they changed notify the client.
+                    if (mOldWindows.size() != windows.size()) {
+                        // Different size means something changed.
+                        windowsChanged = true;
+                    } else if (!mOldWindows.isEmpty() || !windows.isEmpty()) {
+                        // Since we always traverse windows from high to low layer
+                        // the old and new windows at the same index should be the
+                        // same, otherwise something changed.
+                        for (int i = 0; i < windowCount; i++) {
+                            WindowInfo oldWindow = mOldWindows.get(i);
+                            WindowInfo newWindow = windows.get(i);
+                            // We do not care for layer changes given the window
+                            // order does not change. This brings no new information
+                            // to the clients.
+                            if (windowChangedNoLayer(oldWindow, newWindow)) {
+                                windowsChanged = true;
+                                break;
+                            }
                         }
                     }
                 }
 
-                if (windowsChanged) {
+                if (forceSend || windowsChanged) {
                     cacheWindows(windows);
                 }
             }
 
             // Now we do not hold the lock, so send the windows over.
-            if (windowsChanged) {
+            if (forceSend || windowsChanged) {
                 if (DEBUG) {
-                    Log.i(LOG_TAG, "Windows changed:" + windows);
+                    Log.i(LOG_TAG, "Windows changed or force sending:" + windows);
                 }
                 mCallback.onWindowsForAccessibilityChanged(windows);
             } else {
@@ -1222,7 +1230,7 @@ final class AccessibilityController {
             // Move to origin as all transforms are captured by the matrix.
             RectF windowFrame = mTempRectF;
             windowFrame.set(touchableFrame);
-            windowFrame.offset(-windowState.mFrame.left, -windowState.mFrame.top);
+            windowFrame.offset(-windowState.getFrameLw().left, -windowState.getFrameLw().top);
 
             // Map the frame to get what appears on the screen.
             Matrix matrix = mTempMatrix;
@@ -1344,7 +1352,7 @@ final class AccessibilityController {
             public void handleMessage(Message message) {
                 switch (message.what) {
                     case MESSAGE_COMPUTE_CHANGED_WINDOWS: {
-                        computeChangedWindows();
+                        computeChangedWindows(false);
                     } break;
                 }
             }

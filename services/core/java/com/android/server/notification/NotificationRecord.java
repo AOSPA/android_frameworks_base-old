@@ -49,7 +49,6 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.notification.Adjustment;
@@ -70,6 +69,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
+import com.android.server.uri.UriGrantsManagerInternal;
 
 import java.io.PrintWriter;
 import java.lang.reflect.Array;
@@ -96,6 +96,7 @@ public final class NotificationRecord {
     private static final int MAX_LOGTAG_LENGTH = 35;
     final StatusBarNotification sbn;
     IActivityManager mAm;
+    UriGrantsManagerInternal mUgmInternal;
     final int mTargetSdkVersion;
     final int mOriginalFlags;
     private final Context mContext;
@@ -140,8 +141,11 @@ public final class NotificationRecord {
     private int mAuthoritativeRank;
     private String mGlobalSortKey;
     private int mPackageVisibility;
-    private int mUserImportance = IMPORTANCE_UNSPECIFIED;
+    private int mSystemImportance = IMPORTANCE_UNSPECIFIED;
+    private int mAssistantImportance = IMPORTANCE_UNSPECIFIED;
     private int mImportance = IMPORTANCE_UNSPECIFIED;
+    // Field used in global sort key to bypass normal notifications
+    private int mCriticality = CriticalNotificationExtractor.NORMAL;
     private CharSequence mImportanceExplanation = null;
 
     private int mSuppressedVisualEffects = 0;
@@ -160,6 +164,7 @@ public final class NotificationRecord {
     private String mGroupLogTag;
     private String mChannelIdLogTag;
     private ArrayList<Notification.Action> mSmartActions;
+    private ArrayList<CharSequence> mSmartReplies;
 
     private final List<Adjustment> mAdjustments;
     private final NotificationStats mStats;
@@ -182,6 +187,7 @@ public final class NotificationRecord {
         mTargetSdkVersion = LocalServices.getService(PackageManagerInternal.class)
                 .getPackageTargetSdkVersion(sbn.getPackageName());
         mAm = ActivityManager.getService();
+        mUgmInternal = LocalServices.getService(UriGrantsManagerInternal.class);
         mOriginalFlags = sbn.getNotification().flags;
         mRankingTimeMs = calculateRankingTimeMs(0L);
         mCreationTimeMs = sbn.getPostTime();
@@ -194,7 +200,7 @@ public final class NotificationRecord {
         mSound = calculateSound();
         mVibration = calculateVibration();
         mAttributes = calculateAttributes();
-        mImportance = calculateImportance();
+        mImportance = calculateInitialImportance();
         mLight = calculateLights();
         mAdjustments = new ArrayList<>();
         mStats = new NotificationStats();
@@ -317,7 +323,7 @@ public final class NotificationRecord {
         return attributes;
     }
 
-    private int calculateImportance() {
+    private int calculateInitialImportance() {
         final Notification n = sbn.getNotification();
         int importance = getChannel().getImportance();
         int requestedImportance = IMPORTANCE_DEFAULT;
@@ -521,8 +527,10 @@ public final class NotificationRecord {
         pw.println(prefix + "mRecentlyIntrusive=" + mRecentlyIntrusive);
         pw.println(prefix + "mPackagePriority=" + mPackagePriority);
         pw.println(prefix + "mPackageVisibility=" + mPackageVisibility);
-        pw.println(prefix + "mUserImportance="
-                + NotificationListenerService.Ranking.importanceToString(mUserImportance));
+        pw.println(prefix + "mSystemImportance="
+                + NotificationListenerService.Ranking.importanceToString(mSystemImportance));
+        pw.println(prefix + "mAsstImportance="
+                + NotificationListenerService.Ranking.importanceToString(mAssistantImportance));
         pw.println(prefix + "mImportance="
                 + NotificationListenerService.Ranking.importanceToString(mImportance));
         pw.println(prefix + "mImportanceExplanation=" + mImportanceExplanation);
@@ -634,6 +642,15 @@ public final class NotificationRecord {
                 if (signals.containsKey(Adjustment.KEY_SMART_ACTIONS)) {
                     setSmartActions(signals.getParcelableArrayList(Adjustment.KEY_SMART_ACTIONS));
                 }
+                if (signals.containsKey(Adjustment.KEY_SMART_REPLIES)) {
+                    setSmartReplies(signals.getCharSequenceArrayList(Adjustment.KEY_SMART_REPLIES));
+                }
+                if (signals.containsKey(Adjustment.KEY_IMPORTANCE)) {
+                    int importance = signals.getInt(Adjustment.KEY_IMPORTANCE);
+                    importance = Math.max(IMPORTANCE_UNSPECIFIED, importance);
+                    importance = Math.min(IMPORTANCE_HIGH, importance);
+                    setAssistantImportance(importance);
+                }
             }
         }
     }
@@ -647,7 +664,7 @@ public final class NotificationRecord {
         mContactAffinity = contactAffinity;
         if (mImportance < IMPORTANCE_DEFAULT &&
                 mContactAffinity > ValidateNotificationPeople.VALID_CONTACT) {
-            setImportance(IMPORTANCE_DEFAULT, getPeopleExplanation());
+            setSystemImportance(IMPORTANCE_DEFAULT);
         }
     }
 
@@ -686,11 +703,6 @@ public final class NotificationRecord {
         return mPackageVisibility;
     }
 
-    public void setUserImportance(int importance) {
-        mUserImportance = importance;
-        applyUserImportance();
-    }
-
     private String getUserExplanation() {
         if (mUserExplanation == null) {
             mUserExplanation = mContext.getResources().getString(
@@ -699,31 +711,42 @@ public final class NotificationRecord {
         return mUserExplanation;
     }
 
-    private String getPeopleExplanation() {
-        if (mPeopleExplanation == null) {
-            mPeopleExplanation = mContext.getResources().getString(
-                    com.android.internal.R.string.importance_from_person);
-        }
-        return mPeopleExplanation;
+    /**
+     * Sets the importance value the system thinks the record should have.
+     * e.g. bumping up foreground service notifications or people to people notifications.
+     */
+    public void setSystemImportance(int importance) {
+        mSystemImportance = importance;
+        calculateImportance();
     }
 
-    private void applyUserImportance() {
-        if (mUserImportance != IMPORTANCE_UNSPECIFIED) {
-            mImportance = mUserImportance;
-            mImportanceExplanation = getUserExplanation();
-        }
+    /**
+     * Sets the importance value the
+     * {@link android.service.notification.NotificationAssistantService} thinks the record should
+     * have.
+     */
+    public void setAssistantImportance(int importance) {
+        mAssistantImportance = importance;
+        calculateImportance();
     }
 
-    public int getUserImportance() {
-        return mUserImportance;
-    }
-
-    public void setImportance(int importance, CharSequence explanation) {
-        if (importance != IMPORTANCE_UNSPECIFIED) {
-            mImportance = importance;
-            mImportanceExplanation = explanation;
+    /**
+     * Recalculates the importance of the record after fields affecting importance have changed
+     */
+    protected void calculateImportance() {
+        mImportance = calculateInitialImportance();
+        mImportanceExplanation = "app";
+        if (getChannel().isImportanceLocked()) {
+            mImportanceExplanation = "user";
         }
-        applyUserImportance();
+        if (!getChannel().isImportanceLocked() && mAssistantImportance != IMPORTANCE_UNSPECIFIED) {
+            mImportance = mAssistantImportance;
+            mImportanceExplanation = "asst";
+        }
+        if (mSystemImportance != IMPORTANCE_UNSPECIFIED) {
+            mImportance = mSystemImportance;
+            mImportanceExplanation = "system";
+        }
     }
 
     public int getImportance() {
@@ -737,6 +760,19 @@ public final class NotificationRecord {
     public boolean setIntercepted(boolean intercept) {
         mIntercept = intercept;
         return mIntercept;
+    }
+
+    /**
+     * Set to affect global sort key.
+     *
+     * @param criticality used in a string based sort thus 0 is the most critical
+     */
+    public void setCriticality(int criticality) {
+        mCriticality = criticality;
+    }
+
+    public int getCriticality() {
+        return mCriticality;
     }
 
     public boolean isIntercepted() {
@@ -913,7 +949,7 @@ public final class NotificationRecord {
     }
 
     /**
-     * @see RankingHelper#getIsAppImportanceLocked(String, int)
+     * @see PreferencesHelper#getIsAppImportanceLocked(String, int)
      */
     public boolean getIsAppImportanceLocked() {
         return mIsAppImportanceLocked;
@@ -1029,6 +1065,10 @@ public final class NotificationRecord {
         mStats.setDismissalSurface(surface);
     }
 
+    public void recordDismissalSentiment(@NotificationStats.DismissalSentiment int sentiment) {
+        mStats.setDismissalSentiment(sentiment);
+    }
+
     public void recordSnoozed() {
         mStats.setSnoozed();
     }
@@ -1059,6 +1099,14 @@ public final class NotificationRecord {
 
     public ArrayList<Notification.Action> getSmartActions() {
         return mSmartActions;
+    }
+
+    public void setSmartReplies(ArrayList<CharSequence> smartReplies) {
+        mSmartReplies = smartReplies;
+    }
+
+    public ArrayList<CharSequence> getSmartReplies() {
+        return mSmartReplies;
     }
 
     /**
@@ -1107,7 +1155,7 @@ public final class NotificationRecord {
         final long ident = Binder.clearCallingIdentity();
         try {
             // This will throw SecurityException if caller can't grant
-            mAm.checkGrantUriPermission(sourceUid, null,
+            mUgmInternal.checkGrantUriPermission(sourceUid, null,
                     ContentProvider.getUriWithoutUserId(uri),
                     Intent.FLAG_GRANT_READ_URI_PERMISSION,
                     ContentProvider.getUserIdFromUri(uri, UserHandle.getUserId(sourceUid)));
@@ -1116,8 +1164,6 @@ public final class NotificationRecord {
                 mGrantableUris = new ArraySet<>();
             }
             mGrantableUris.add(uri);
-        } catch (RemoteException ignored) {
-            // Ignored because we're in same process
         } catch (SecurityException e) {
             if (!userOverriddenUri) {
                 if (mTargetSdkVersion >= Build.VERSION_CODES.P) {

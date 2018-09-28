@@ -612,7 +612,7 @@ final class ConnectionServiceAdapterServant {
         }
 
         @Override
-        public void resetCdmaConnectionTime(String callId, Session.Info sessionInfo) {
+        public void resetConnectionTime(String callId, Session.Info sessionInfo) {
             // Do nothing
         }
     };

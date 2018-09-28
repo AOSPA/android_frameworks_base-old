@@ -23,7 +23,6 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.media.AudioManager;
 import android.os.ParcelUuid;
 import android.os.SystemClock;
 import android.text.TextUtils;
@@ -50,17 +49,12 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private static final String TAG = "CachedBluetoothDevice";
 
     private final Context mContext;
-    private final LocalBluetoothAdapter mLocalAdapter;
+    private final BluetoothAdapter mLocalAdapter;
     private final LocalBluetoothProfileManager mProfileManager;
-    private final AudioManager mAudioManager;
     private final BluetoothDevice mDevice;
-    //TODO: consider remove, BluetoothDevice.getName() is already cached
-    private String mName;
     private long mHiSyncId;
     // Need this since there is no method for getting RSSI
     private short mRssi;
-    //TODO: consider remove, BluetoothDevice.getBluetoothClass() is already cached
-    private BluetoothClass mBtClass;
     private HashMap<LocalBluetoothProfile, Integer> mProfileConnectionState;
 
     private final List<LocalBluetoothProfile> mProfiles =
@@ -163,7 +157,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             Log.d(TAG, "onProfileStateChanged: profile " + profile +
                     " newProfileState " + newProfileState);
         }
-        if (mLocalAdapter.getBluetoothState() == BluetoothAdapter.STATE_TURNING_OFF)
+        if (mLocalAdapter.getState() == BluetoothAdapter.STATE_TURNING_OFF)
         {
             if (BluetoothUtils.D) {
                 Log.d(TAG, " BT Turninig Off...Profile conn state change ignored...");
@@ -199,13 +193,11 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     CachedBluetoothDevice(Context context,
-                          LocalBluetoothAdapter adapter,
                           LocalBluetoothProfileManager profileManager,
                           BluetoothDevice device) {
         mContext = context;
-        mLocalAdapter = adapter;
+        mLocalAdapter = BluetoothAdapter.getDefaultAdapter();
         mProfileManager = profileManager;
-        mAudioManager = context.getSystemService(AudioManager.class);
         mDevice = device;
         mProfileConnectionState = new HashMap<LocalBluetoothProfile, Integer>();
         fillData();
@@ -321,7 +313,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             }
             return;
         }
-        Log.i(TAG, "Failed to connect " + profile.toString() + " to " + mName);
+        Log.i(TAG, "Failed to connect " + profile.toString() + " to " + getName());
     }
 
     private boolean ensurePaired() {
@@ -409,8 +401,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     // TODO: do any of these need to run async on a background thread?
     private void fillData() {
-        fetchName();
-        fetchBtClass();
         updateProfiles();
         fetchActiveDevices();
         migratePhonebookPermissionChoice();
@@ -433,21 +423,15 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         return mDevice.getAddress();
     }
 
-    public String getName() {
-        return mName;
-    }
-
     /**
-     * Populate name from BluetoothDevice.ACTION_FOUND intent
+     * Get name from remote device
+     * @return {@link BluetoothDevice#getAliasName()} if
+     * {@link BluetoothDevice#getAliasName()} is not null otherwise return
+     * {@link BluetoothDevice#getAddress()}
      */
-    void setNewName(String name) {
-        if (mName == null) {
-            mName = name;
-            if (mName == null || TextUtils.isEmpty(mName)) {
-                mName = mDevice.getAddress();
-            }
-            dispatchAttributesChanged();
-        }
+    public String getName() {
+        final String aliasName = mDevice.getAliasName();
+        return TextUtils.isEmpty(aliasName) ? getAddress() : aliasName;
     }
 
     /**
@@ -455,9 +439,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
      * @param name new alias name to be set, should never be null
      */
     public void setName(String name) {
-        // Prevent mName to be set to null if setName(null) is called
-        if (name != null && !TextUtils.equals(name, mName)) {
-            mName = name;
+        // Prevent getName() to be set to null if setName(null) is called
+        if (name != null && !TextUtils.equals(name, getName())) {
             mDevice.setAlias(name);
             dispatchAttributesChanged();
         }
@@ -494,19 +477,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     void refreshName() {
-        fetchName();
-        dispatchAttributesChanged();
-    }
-
-    private void fetchName() {
-        mName = mDevice.getAliasName();
-
-        if (TextUtils.isEmpty(mName)) {
-            mName = mDevice.getAddress();
-            if (BluetoothUtils.D) {
-                Log.d(TAG, "Device has no name (yet), use address: " + mName);
-            }
+        if (BluetoothUtils.D) {
+            Log.d(TAG, "Device name: " + getName());
         }
+        dispatchAttributesChanged();
     }
 
     /**
@@ -639,13 +613,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         return getBondState() == BluetoothDevice.BOND_BONDING;
     }
 
-    /**
-     * Fetches a new value for the cached BT class.
-     */
-    private void fetchBtClass() {
-        mBtClass = mDevice.getBluetoothClass();
-    }
-
     private boolean updateProfiles() {
         ParcelUuid[] uuids = mDevice.getUuids();
         if (uuids == null) return false;
@@ -687,15 +654,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         if (hearingAidProfile != null) {
             mIsActiveDeviceHearingAid = hearingAidProfile.getActiveDevices().contains(mDevice);
         }
-    }
-
-    /**
-     * Refreshes the UI for the BT class, including fetching the latest value
-     * for the class.
-     */
-    void refreshBtClass() {
-        fetchBtClass();
-        dispatchAttributesChanged();
     }
 
     /**
@@ -753,15 +711,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         }
     }
 
-    void setBtClass(BluetoothClass btClass) {
-        if (btClass != null && mBtClass != btClass) {
-            mBtClass = btClass;
-            dispatchAttributesChanged();
-        }
-    }
-
     public BluetoothClass getBtClass() {
-        return mBtClass;
+        return mDevice.getBluetoothClass();
     }
 
     public List<LocalBluetoothProfile> getProfiles() {
@@ -795,7 +746,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         }
     }
 
-    private void dispatchAttributesChanged() {
+    void dispatchAttributesChanged() {
         synchronized (mCallbacks) {
             for (Callback callback : mCallbacks) {
                 callback.onDeviceAttributesChanged();
@@ -843,7 +794,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         if (comparison != 0) return comparison;
 
         // Fallback on name
-        return mName.compareTo(another.mName);
+        return getName().compareTo(another.getName());
     }
 
     public interface Callback {
@@ -1228,7 +1179,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     /**
      * @return {@code true} if {@code cachedBluetoothDevice} is a2dp device
      */
-    public boolean isA2dpDevice() {
+    public boolean isConnectedA2dpDevice() {
         A2dpProfile a2dpProfile = mProfileManager.getA2dpProfile();
         A2dpSinkProfile a2dpSinkProfile = mProfileManager.getA2dpSinkProfile();
         Log.i(TAG, "a2dpProfile :" + a2dpProfile + " a2dpSinkProfile :" + a2dpSinkProfile);
@@ -1245,7 +1196,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     /**
      * @return {@code true} if {@code cachedBluetoothDevice} is HFP device
      */
-    public boolean isHfpDevice() {
+    public boolean isConnectedHfpDevice() {
         HeadsetProfile headsetProfile = mProfileManager.getHeadsetProfile();
         return headsetProfile != null && headsetProfile.getConnectionStatus(mDevice) ==
                 BluetoothProfile.STATE_CONNECTED;

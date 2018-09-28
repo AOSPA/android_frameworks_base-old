@@ -22,6 +22,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
+import android.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
 import android.os.Binder;
@@ -113,6 +114,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * @hide
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @UnsupportedAppUsage
     public static final String ACTION_ACTIVE_DEVICE_CHANGED =
             "android.bluetooth.headset.profile.action.ACTIVE_DEVICE_CHANGED";
 
@@ -403,6 +405,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * results once close() has been called. Multiple invocations of close()
      * are ok.
      */
+    @UnsupportedAppUsage
     /*package*/ void close() {
         if (VDBG) log("close()");
 
@@ -613,6 +616,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * @return priority of the device
      * @hide
      */
+    @UnsupportedAppUsage
     public int getPriority(BluetoothDevice device) {
         if (VDBG) log("getPriority(" + device + ")");
         final IBluetoothHeadset service = mService;
@@ -735,6 +739,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public int getAudioState(BluetoothDevice device) {
         if (VDBG) log("getAudioState");
         final IBluetoothHeadset service = mService;
@@ -862,6 +867,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * @return false if there was some error such as there is no active headset
      * @hide
      */
+    @UnsupportedAppUsage
     public boolean connectAudio() {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
@@ -888,6 +894,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * @return false if audio is not connected, or on error, true otherwise
      * @hide
      */
+    @UnsupportedAppUsage
     public boolean disconnectAudio() {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
@@ -925,6 +932,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * @hide
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @UnsupportedAppUsage
     public boolean startScoUsingVirtualVoiceCall() {
         if (DBG) log("startScoUsingVirtualVoiceCall()");
         final IBluetoothHeadset service = mService;
@@ -954,6 +962,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * @hide
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @UnsupportedAppUsage
     public boolean stopScoUsingVirtualVoiceCall() {
         if (DBG) log("stopScoUsingVirtualVoiceCall()");
         final IBluetoothHeadset service = mService;
@@ -978,6 +987,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public void phoneStateChanged(int numActive, int numHeld, int callState, String number,
             int type) {
         final IBluetoothHeadset service = mService;
@@ -1076,6 +1086,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_ADMIN)
+    @UnsupportedAppUsage
     public boolean setActiveDevice(@Nullable BluetoothDevice device) {
         if (DBG) {
             Log.d(TAG, "setActiveDevice: " + device);
@@ -1105,6 +1116,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * @hide
      */
     @RequiresPermission(android.Manifest.permission.BLUETOOTH)
+    @UnsupportedAppUsage
     public BluetoothDevice getActiveDevice() {
         if (VDBG) {
             Log.d(TAG, "getActiveDevice");
@@ -1189,6 +1201,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         }
     };
 
+    @UnsupportedAppUsage
     private boolean isEnabled() {
         return mAdapter.getState() == BluetoothAdapter.STATE_ON;
     }

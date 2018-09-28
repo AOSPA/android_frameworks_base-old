@@ -45,7 +45,6 @@ statsd_common_src := \
     src/external/puller_util.cpp \
     src/logd/LogEvent.cpp \
     src/logd/LogListener.cpp \
-    src/logd/LogReader.cpp \
     src/matchers/CombinationLogMatchingTracker.cpp \
     src/matchers/matcher_util.cpp \
     src/matchers/SimpleLogMatchingTracker.cpp \
@@ -60,7 +59,6 @@ statsd_common_src := \
     src/metrics/MetricsManager.cpp \
     src/metrics/metrics_manager_util.cpp \
     src/packages/UidMap.cpp \
-    src/perfetto/perfetto_config.proto \
     src/storage/StorageManager.cpp \
     src/StatsLogProcessor.cpp \
     src/StatsService.cpp \
@@ -73,8 +71,7 @@ statsd_common_src := \
 
 # TODO(b/110563449): Once statsd is using a blueprint file, migrate to the proper filegroups.
 statsd_common_src += \
-    ../../../../system/extras/perfprofd/binder_interface/aidl/android/os/IPerfProfd.aidl \
-    src/perfprofd/perfprofd_config.proto
+    ../../../../system/extras/perfprofd/binder_interface/aidl/android/os/IPerfProfd.aidl
 
 statsd_common_c_includes := \
     $(LOCAL_PATH)/src \
@@ -196,7 +193,6 @@ LOCAL_SRC_FILES := \
     tests/external/puller_util_test.cpp \
     tests/indexed_priority_queue_test.cpp \
     tests/LogEntryMatcher_test.cpp \
-    tests/LogReader_test.cpp \
     tests/LogEvent_test.cpp \
     tests/MetricsManager_test.cpp \
     tests/StatsLogProcessor_test.cpp \
@@ -234,7 +230,6 @@ LOCAL_SRC_FILES := \
 LOCAL_STATIC_LIBRARIES := \
     $(statsd_common_static_libraries) \
     libgmock \
-    libmetricprotos \
     libplatformprotos
 
 LOCAL_PROTOC_OPTIMIZE_TYPE := full
@@ -255,11 +250,8 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := statsdprotolite
 
 LOCAL_SRC_FILES := \
-    src/metrics_constants/metrics_constants.proto \
     src/stats_log.proto \
     src/statsd_config.proto \
-    src/perfetto/perfetto_config.proto \
-    src/perfprofd/perfprofd_config.proto \
     src/atoms.proto
 
 LOCAL_PROTOC_OPTIMIZE_TYPE := lite
@@ -321,7 +313,6 @@ LOCAL_AIDL_INCLUDES := $(statsd_common_aidl_includes)
 
 LOCAL_STATIC_LIBRARIES := \
     $(statsd_common_static_libraries) \
-    libmetricprotos \
     libplatformprotos
 
 LOCAL_SHARED_LIBRARIES := $(statsd_common_shared_libraries) \

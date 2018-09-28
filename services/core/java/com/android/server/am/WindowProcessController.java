@@ -93,6 +93,12 @@ public class WindowProcessController {
     private volatile String mRequiredAbi;
     // Running any services that are foreground?
     private volatile boolean mHasForegroundServices;
+    // was app launched for debugging?
+    private volatile boolean mDebugging;
+    // Active instrumentation running in process?
+    private volatile boolean mInstrumenting;
+    // Set to true when process was launched with a wrapper attached
+    private volatile boolean mUsingWrapper;
 
     // Thread currently set for VR scheduling
     int mVrThreadTid;
@@ -187,6 +193,30 @@ public class WindowProcessController {
 
     String getRequiredAbi() {
         return mRequiredAbi;
+    }
+
+    public void setDebugging(boolean debugging) {
+        mDebugging = debugging;
+    }
+
+    boolean isDebugging() {
+        return mDebugging;
+    }
+
+    public void setUsingWrapper(boolean usingWrapper) {
+        mUsingWrapper = usingWrapper;
+    }
+
+    boolean isUsingWrapper() {
+        return mUsingWrapper;
+    }
+
+    public void setInstrumenting(boolean instrumenting) {
+        mInstrumenting = instrumenting;
+    }
+
+    boolean isInstrumenting() {
+        return mInstrumenting;
     }
 
     public void addPackage(String packageName) {
@@ -334,7 +364,12 @@ public class WindowProcessController {
 
     boolean shouldKillProcessForRemovedTask(TaskRecord tr) {
         for (int k = 0; k < mActivities.size(); k++) {
-            final TaskRecord otherTask = mActivities.get(k).getTask();
+            final ActivityRecord activity = mActivities.get(k);
+            if (!activity.stopped) {
+                // Don't kill process(es) that has an activity not stopped.
+                return false;
+            }
+            final TaskRecord otherTask = activity.getTask();
             if (tr.taskId != otherTask.taskId && otherTask.inRecents) {
                 // Don't kill process(es) that has an activity in a different task that is
                 // also in recents.
@@ -429,6 +464,19 @@ public class WindowProcessController {
         }
 
         return minTaskLayer;
+    }
+
+    int computeRelaunchReason() {
+        synchronized (mAtm.mGlobalLock) {
+            final int activitiesSize = mActivities.size();
+            for (int i = activitiesSize - 1; i >= 0; i--) {
+                final ActivityRecord r = mActivities.get(i);
+                if (r.mRelaunchReason != ActivityRecord.RELAUNCH_REASON_NONE) {
+                    return r.mRelaunchReason;
+                }
+            }
+        }
+        return ActivityRecord.RELAUNCH_REASON_NONE;
     }
 
     void clearProfilerIfNeeded() {

@@ -17,6 +17,7 @@
 package android.telephony;
 
 import android.annotation.Nullable;
+import android.annotation.UnsupportedAppUsage;
 import android.os.Parcel;
 import android.text.TextUtils;
 
@@ -36,13 +37,14 @@ public final class CellIdentityWcdma extends CellIdentity {
     // 9-bit UMTS Primary Scrambling Code described in TS 25.331, 0..511
     private final int mPsc;
     // 16-bit UMTS Absolute RF Channel Number described in TS 25.101 sec. 5.4.4
+    @UnsupportedAppUsage
     private final int mUarfcn;
 
     /**
      * @hide
      */
     public CellIdentityWcdma() {
-        super(TAG, TYPE_TDSCDMA, null, null, null, null);
+        super(TAG, CellInfo.TYPE_WCDMA, null, null, null, null);
         mLac = Integer.MAX_VALUE;
         mCid = Integer.MAX_VALUE;
         mPsc = Integer.MAX_VALUE;
@@ -93,7 +95,7 @@ public final class CellIdentityWcdma extends CellIdentity {
      */
     public CellIdentityWcdma (int lac, int cid, int psc, int uarfcn,
                               String mccStr, String mncStr, String alphal, String alphas) {
-        super(TAG, TYPE_WCDMA, mccStr, mncStr, alphal, alphas);
+        super(TAG, CellInfo.TYPE_WCDMA, mccStr, mncStr, alphal, alphas);
         mLac = lac;
         mCid = cid;
         mPsc = psc;
@@ -227,7 +229,7 @@ public final class CellIdentityWcdma extends CellIdentity {
     @Override
     public void writeToParcel(Parcel dest, int flags) {
         if (DBG) log("writeToParcel(Parcel, int): " + toString());
-        super.writeToParcel(dest, TYPE_WCDMA);
+        super.writeToParcel(dest, CellInfo.TYPE_WCDMA);
         dest.writeInt(mLac);
         dest.writeInt(mCid);
         dest.writeInt(mPsc);
@@ -236,7 +238,7 @@ public final class CellIdentityWcdma extends CellIdentity {
 
     /** Construct from Parcel, type has already been processed */
     private CellIdentityWcdma(Parcel in) {
-        super(TAG, TYPE_WCDMA, in);
+        super(TAG, CellInfo.TYPE_WCDMA, in);
         mLac = in.readInt();
         mCid = in.readInt();
         mPsc = in.readInt();

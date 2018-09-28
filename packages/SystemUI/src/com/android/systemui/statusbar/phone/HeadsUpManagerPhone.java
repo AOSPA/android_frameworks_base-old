@@ -22,7 +22,6 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import androidx.collection.ArraySet;
-import android.graphics.Rect;
 import android.graphics.Region;
 import android.graphics.Region.Op;
 import android.util.Log;
@@ -31,15 +30,16 @@ import android.view.DisplayCutout;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewTreeObserver;
-import android.view.ViewTreeObserver.InternalInsetsInfo;
 
-import com.android.internal.annotations.VisibleForTesting;
+import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.R;
 import com.android.systemui.ScreenDecorations;
-import com.android.systemui.statusbar.ExpandableNotificationRow;
-import com.android.systemui.statusbar.NotificationData;
 import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.StatusBarStateController.StateListener;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.notification.NotificationData;
+import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
@@ -48,7 +48,6 @@ import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Stack;
 
 /**
@@ -58,7 +57,6 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
        ViewTreeObserver.OnComputeInternalInsetsListener, VisualStabilityManager.Callback,
        OnHeadsUpChangedListener, ConfigurationController.ConfigurationListener {
     private static final String TAG = "HeadsUpManagerPhone";
-    private static final boolean DEBUG = false;
 
     private final View mStatusBarWindowView;
     private final NotificationGroupManager mGroupManager;
@@ -80,6 +78,8 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
     private boolean mWaitingOnCollapseWhenGoingAway;
     private boolean mIsObserving;
     private int mStatusBarState;
+
+    private final StateListener mStateListener = this::setStatusBarState;
 
     private final Pools.Pool<HeadsUpEntryPhone> mEntryPool = new Pools.Pool<HeadsUpEntryPhone>() {
         private Stack<HeadsUpEntryPhone> mPoolObjects = new Stack<>();
@@ -117,10 +117,17 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
         addListener(new OnHeadsUpChangedListener() {
             @Override
             public void onHeadsUpPinnedModeChanged(boolean hasPinnedNotification) {
-                if (DEBUG) Log.w(TAG, "onHeadsUpPinnedModeChanged");
+                if (Log.isLoggable(TAG, Log.WARN)) {
+                    Log.w(TAG, "onHeadsUpPinnedModeChanged");
+                }
                 updateTouchableRegionListener();
             }
         });
+        Dependency.get(StatusBarStateController.class).addListener(mStateListener);
+    }
+
+    public void destroy() {
+        Dependency.get(StatusBarStateController.class).removeListener(mStateListener);
     }
 
     private void initResources() {
@@ -156,7 +163,7 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
      */
     public boolean shouldSwallowClick(@NonNull String key) {
         HeadsUpManager.HeadsUpEntry entry = getHeadsUpEntry(key);
-        return entry != null && mClock.currentTimeMillis() < entry.postTime;
+        return entry != null && mClock.currentTimeMillis() < entry.mPostTime;
     }
 
     public void onExpandingFinished() {
@@ -165,9 +172,9 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
             mReleaseOnExpandFinish = false;
         } else {
             for (NotificationData.Entry entry : mEntriesToRemoveAfterExpand) {
-                if (isHeadsUp(entry.key)) {
+                if (contains(entry.key)) {
                     // Maybe the heads-up was removed already
-                    removeHeadsUpEntry(entry);
+                    removeAlertEntry(entry.key);
                 }
             }
         }
@@ -202,7 +209,7 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
     /**
      * Set the current state of the statusbar.
      */
-    public void setStatusBarState(int statusBarState) {
+    private void setStatusBarState(int statusBarState) {
         mStatusBarState = statusBarState;
     }
 
@@ -238,25 +245,12 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
         }
     }
 
-    @VisibleForTesting
-    public void removeMinimumDisplayTimeForTesting() {
-        mMinimumDisplayTime = 0;
-        mHeadsUpNotificationDecay = 0;
-        mTouchAcceptanceDelay = 0;
-    }
-
     ///////////////////////////////////////////////////////////////////////////////////////////////
     //  HeadsUpManager public methods overrides:
 
     @Override
     public boolean isTrackingHeadsUp() {
         return mTrackingHeadsUp;
-    }
-
-    @Override
-    public void snooze() {
-        super.snooze();
-        mReleaseOnExpandFinish = true;
     }
 
     /**
@@ -266,14 +260,15 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
      * for a bit since it wasn't shown long enough
      */
     @Override
-    public boolean removeNotification(@NonNull String key, boolean ignoreEarliestRemovalTime) {
-        if (wasShownLongEnough(key) || ignoreEarliestRemovalTime) {
-            return super.removeNotification(key, ignoreEarliestRemovalTime);
-        } else {
-            HeadsUpEntryPhone entry = getHeadsUpEntryPhone(key);
-            entry.removeAsSoonAsPossible();
-            return false;
-        }
+    public boolean removeNotification(@NonNull String key, boolean releaseImmediately) {
+        return super.removeNotification(key, canRemoveImmediately(key)
+                || releaseImmediately);
+    }
+
+    @Override
+    public void snooze() {
+        super.snooze();
+        mReleaseOnExpandFinish = true;
     }
 
     public void addSwipedOutNotification(@NonNull String key) {
@@ -357,9 +352,9 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
     public void onReorderingAllowed() {
         mBar.getNotificationScrollLayout().setHeadsUpGoingAwayAnimationsAllowed(false);
         for (NotificationData.Entry entry : mEntriesToRemoveWhenReorderingAllowed) {
-            if (isHeadsUp(entry.key)) {
+            if (contains(entry.key)) {
                 // Maybe the heads-up was removed already
-                removeHeadsUpEntry(entry);
+                removeAlertEntry(entry.key);
             }
         }
         mEntriesToRemoveWhenReorderingAllowed.clear();
@@ -370,14 +365,14 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
     //  HeadsUpManager utility (protected) methods overrides:
 
     @Override
-    protected HeadsUpEntry createHeadsUpEntry() {
+    protected HeadsUpEntry createAlertEntry() {
         return mEntryPool.acquire();
     }
 
     @Override
-    protected void releaseHeadsUpEntry(HeadsUpEntry entry) {
-        entry.reset();
-        mEntryPool.release((HeadsUpEntryPhone) entry);
+    protected void onAlertEntryRemoved(AlertEntry alertEntry) {
+        super.onAlertEntryRemoved(alertEntry);
+        mEntryPool.release((HeadsUpEntryPhone) alertEntry);
     }
 
     @Override
@@ -389,7 +384,7 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
     @Override
     protected void dumpInternal(FileDescriptor fd, PrintWriter pw, String[] args) {
         super.dumpInternal(fd, pw, args);
-        pw.print("  mStatusBarState="); pw.println(mStatusBarState);
+        pw.print("  mBarState="); pw.println(mStatusBarState);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -397,7 +392,7 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
 
     @Nullable
     private HeadsUpEntryPhone getHeadsUpEntryPhone(@NonNull String key) {
-        return (HeadsUpEntryPhone) getHeadsUpEntry(key);
+        return (HeadsUpEntryPhone) mAlertEntries.get(key);
     }
 
     @Nullable
@@ -405,7 +400,7 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
         return (HeadsUpEntryPhone) getTopHeadsUpEntry();
     }
 
-    private boolean wasShownLongEnough(@NonNull String key) {
+    private boolean canRemoveImmediately(@NonNull String key) {
         if (mSwipedOutKeys.contains(key)) {
             // We always instantly dismiss views being manually swiped out.
             mSwipedOutKeys.remove(key);
@@ -464,33 +459,29 @@ public class HeadsUpManagerPhone extends HeadsUpManager implements Dumpable,
                     mVisualStabilityManager.addReorderingAllowedCallback(
                             HeadsUpManagerPhone.this);
                 } else if (!mTrackingHeadsUp) {
-                    removeHeadsUpEntry(entry);
+                    removeAlertEntry(entry.key);
                 } else {
                     mEntriesToRemoveAfterExpand.add(entry);
                 }
             };
 
-            super.setEntry(entry, removeHeadsUpRunnable);
-        }
-
-        public boolean wasShownLongEnough() {
-            return earliestRemovaltime < mClock.currentTimeMillis();
+            setEntry(entry, removeHeadsUpRunnable);
         }
 
         @Override
         public void updateEntry(boolean updatePostTime) {
             super.updateEntry(updatePostTime);
 
-            if (mEntriesToRemoveAfterExpand.contains(entry)) {
-                mEntriesToRemoveAfterExpand.remove(entry);
+            if (mEntriesToRemoveAfterExpand.contains(mEntry)) {
+                mEntriesToRemoveAfterExpand.remove(mEntry);
             }
-            if (mEntriesToRemoveWhenReorderingAllowed.contains(entry)) {
-                mEntriesToRemoveWhenReorderingAllowed.remove(entry);
+            if (mEntriesToRemoveWhenReorderingAllowed.contains(mEntry)) {
+                mEntriesToRemoveWhenReorderingAllowed.remove(mEntry);
             }
         }
 
         @Override
-        public void expanded(boolean expanded) {
+        public void setExpanded(boolean expanded) {
             if (this.expanded == expanded) {
                 return;
             }

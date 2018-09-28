@@ -26,10 +26,12 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 
+import static android.os.Process.SYSTEM_UID;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_RECENTS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_RECENTS_TRIM_TASKS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_TASKS;
@@ -104,7 +106,6 @@ class RecentTasks {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "RecentTasks" : TAG_AM;
     private static final String TAG_RECENTS = TAG + POSTFIX_RECENTS;
     private static final String TAG_TASKS = TAG + POSTFIX_TASKS;
-    private static final boolean TRIMMED = true;
 
     private static final int DEFAULT_INITIAL_CAPACITY = 5;
 
@@ -132,7 +133,7 @@ class RecentTasks {
         /**
          * Called when a task is removed from the recent tasks list.
          */
-        void onRecentTaskRemoved(TaskRecord task, boolean wasTrimmed);
+        void onRecentTaskRemoved(TaskRecord task, boolean wasTrimmed, boolean killProcess);
     }
 
     /**
@@ -286,7 +287,7 @@ class RecentTasks {
      * @return whether the home app is also the active handler of recent tasks.
      */
     boolean isRecentsComponentHomeActivity(int userId) {
-        final ComponentName defaultHomeActivity = mService.mAm.getPackageManagerInternalLocked()
+        final ComponentName defaultHomeActivity = mService.getPackageManagerInternalLocked()
                 .getDefaultHomeActivity(userId);
         return defaultHomeActivity != null && mRecentsComponent != null &&
                 defaultHomeActivity.getPackageName().equals(mRecentsComponent.getPackageName());
@@ -320,9 +321,9 @@ class RecentTasks {
         }
     }
 
-    private void notifyTaskRemoved(TaskRecord task, boolean wasTrimmed) {
+    private void notifyTaskRemoved(TaskRecord task, boolean wasTrimmed, boolean killProcess) {
         for (int i = 0; i < mCallbacks.size(); i++) {
-            mCallbacks.get(i).onRecentTaskRemoved(task, wasTrimmed);
+            mCallbacks.get(i).onRecentTaskRemoved(task, wasTrimmed, killProcess);
         }
     }
 
@@ -497,7 +498,7 @@ class RecentTasks {
             if (tr.userId == userId) {
                 if(DEBUG_TASKS) Slog.i(TAG_TASKS,
                         "remove RecentTask " + tr + " when finishing user" + userId);
-                remove(mTasks.get(i));
+                remove(tr);
             }
         }
     }
@@ -545,6 +546,16 @@ class RecentTasks {
         }
     }
 
+    void removeAllVisibleTasks() {
+        for (int i = mTasks.size() - 1; i >= 0; --i) {
+            final TaskRecord tr = mTasks.get(i);
+            if (isVisibleRecentTask(tr)) {
+                mTasks.remove(i);
+                notifyTaskRemoved(tr, true /* wasTrimmed */, true /* killProcess */);
+            }
+        }
+    }
+
     void cleanupDisabledPackageTasksLocked(String packageName, Set<String> filterByClasses,
             int userId) {
         for (int i = mTasks.size() - 1; i >= 0; --i) {
@@ -589,8 +600,7 @@ class RecentTasks {
             }
             if (task.autoRemoveRecents && task.getTopActivity() == null) {
                 // This situation is broken, and we should just get rid of it now.
-                mTasks.remove(i);
-                notifyTaskRemoved(task, !TRIMMED);
+                remove(task);
                 Slog.w(TAG, "Removing auto-remove without activity: " + task);
                 continue;
             }
@@ -636,8 +646,7 @@ class RecentTasks {
                     if (app == NO_APPLICATION_INFO_TOKEN
                             || (app.flags & ApplicationInfo.FLAG_INSTALLED) == 0) {
                         // Doesn't exist any more! Good-bye.
-                        mTasks.remove(i);
-                        notifyTaskRemoved(task, !TRIMMED);
+                        remove(task);
                         Slog.w(TAG, "Removing no longer valid recent: " + task);
                         continue;
                     } else {
@@ -702,8 +711,7 @@ class RecentTasks {
             if (intent == null || !callingPackage.equals(intent.getComponent().getPackageName())) {
                 continue;
             }
-            ActivityManager.RecentTaskInfo taskInfo = createRecentTaskInfo(tr);
-            AppTaskImpl taskImpl = new AppTaskImpl(mService, taskInfo.persistentId, callingUid);
+            AppTaskImpl taskImpl = new AppTaskImpl(mService, tr.taskId, callingUid);
             list.add(taskImpl.asBinder());
         }
         return list;
@@ -735,11 +743,21 @@ class RecentTasks {
      */
     ParceledListSlice<ActivityManager.RecentTaskInfo> getRecentTasks(int maxNum, int flags,
             boolean getTasksAllowed, boolean getDetailedTasks, int userId, int callingUid) {
+        return new ParceledListSlice<>(getRecentTasksImpl(maxNum, flags, getTasksAllowed,
+                getDetailedTasks, userId, callingUid));
+    }
+
+
+    /**
+     * @return the list of recent tasks for presentation.
+     */
+    ArrayList<ActivityManager.RecentTaskInfo> getRecentTasksImpl(int maxNum, int flags,
+            boolean getTasksAllowed, boolean getDetailedTasks, int userId, int callingUid) {
         final boolean withExcluded = (flags & RECENT_WITH_EXCLUDED) != 0;
 
         if (!mService.mAm.isUserRunning(userId, FLAG_AND_UNLOCKED)) {
             Slog.i(TAG, "user " + userId + " is still locked. Cannot load recents");
-            return ParceledListSlice.emptyList();
+            return new ArrayList<>();
         }
         loadUserRecentsLocked(userId);
 
@@ -790,7 +808,7 @@ class RecentTasks {
             if (i == 0
                     || withExcluded
                     || (tr.intent == null)
-                    || ((tr.intent.getFlags() & Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                    || ((tr.intent.getFlags() & FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
                     == 0)) {
                 if (!getTasksAllowed) {
                     // If the caller doesn't have the GET_TASKS permission, then only
@@ -827,7 +845,7 @@ class RecentTasks {
                 res.add(rti);
             }
         }
-        return new ParceledListSlice<>(res);
+        return res;
     }
 
     /**
@@ -1039,7 +1057,7 @@ class RecentTasks {
      */
     void remove(TaskRecord task) {
         mTasks.remove(task);
-        notifyTaskRemoved(task, !TRIMMED);
+        notifyTaskRemoved(task, false /* wasTrimmed */, false /* killProcess */);
     }
 
     /**
@@ -1051,7 +1069,7 @@ class RecentTasks {
         // Remove from the end of the list until we reach the max number of recents
         while (recentsCount > mGlobalMaxNumTasks) {
             final TaskRecord tr = mTasks.remove(recentsCount - 1);
-            notifyTaskRemoved(tr, TRIMMED);
+            notifyTaskRemoved(tr, true /* wasTrimmed */, false /* killProcess */);
             recentsCount--;
             if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "Trimming over max-recents task=" + tr
                     + " max=" + mGlobalMaxNumTasks);
@@ -1105,7 +1123,7 @@ class RecentTasks {
 
             // Task is no longer active, trim it from the list
             mTasks.remove(task);
-            notifyTaskRemoved(task, TRIMMED);
+            notifyTaskRemoved(task, true /* wasTrimmed */, false /* killProcess */);
             notifyTaskPersisterLocked(task, false /* flush */);
         }
     }
@@ -1159,9 +1177,8 @@ class RecentTasks {
             case ACTIVITY_TYPE_ASSISTANT:
                 // Ignore assistant that chose to be excluded from Recents, even if it's a top
                 // task.
-                if ((task.getBaseIntent().getFlags()
-                        & Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-                        == Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) {
+                if ((task.getBaseIntent().getFlags() & FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                        == FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS) {
                     return false;
                 }
         }
@@ -1193,8 +1210,8 @@ class RecentTasks {
     private boolean isInVisibleRange(TaskRecord task, int numVisibleTasks) {
         // Keep the last most task even if it is excluded from recents
         final boolean isExcludeFromRecents =
-                (task.getBaseIntent().getFlags() & Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-                        == Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
+                (task.getBaseIntent().getFlags() & FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                        == FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
         if (isExcludeFromRecents) {
             if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "\texcludeFromRecents=true");
             return numVisibleTasks == 1;
@@ -1260,7 +1277,7 @@ class RecentTasks {
         // callbacks here.
         final TaskRecord removedTask = mTasks.remove(removeIndex);
         if (removedTask != task) {
-            notifyTaskRemoved(removedTask, !TRIMMED);
+            notifyTaskRemoved(removedTask, false /* wasTrimmed */, false /* killProcess */);
             if (DEBUG_RECENTS_TRIM_TASKS) Slog.d(TAG, "Trimming task=" + removedTask
                     + " for addition of task=" + task);
         }
@@ -1512,6 +1529,7 @@ class RecentTasks {
             return;
         }
 
+        // Dump raw recent task list
         boolean printedAnything = false;
         boolean printedHeader = false;
         final int size = mTasks.size();
@@ -1534,6 +1552,30 @@ class RecentTasks {
             }
         }
 
+        // Dump visible recent task list
+        if (mHasVisibleRecentTasks) {
+            // Reset the header flag for the next block
+            printedHeader = false;
+            ArrayList<ActivityManager.RecentTaskInfo> tasks = getRecentTasksImpl(Integer.MAX_VALUE,
+                    0, true /* getTasksAllowed */, false /* getDetailedTasks */,
+                    mService.getCurrentUserId(), SYSTEM_UID);
+            for (int i = 0; i < tasks.size(); i++) {
+                final ActivityManager.RecentTaskInfo taskInfo = tasks.get(i);
+                if (!printedHeader) {
+                    if (printedAnything) {
+                        // Separate from the last block if it printed
+                        pw.println();
+                    }
+                    pw.println("  Visible recent tasks (most recent first):");
+                    printedHeader = true;
+                    printedAnything = true;
+                }
+
+                pw.print("  * RecentTaskInfo #"); pw.print(i); pw.print(": ");
+                taskInfo.dump(pw, "    ");
+            }
+        }
+
         if (!printedAnything) {
             pw.println("  (nothing)");
         }
@@ -1543,33 +1585,11 @@ class RecentTasks {
      * Creates a new RecentTaskInfo from a TaskRecord.
      */
     ActivityManager.RecentTaskInfo createRecentTaskInfo(TaskRecord tr) {
-        // Compose the recent task info
         ActivityManager.RecentTaskInfo rti = new ActivityManager.RecentTaskInfo();
-        rti.id = tr.getTopActivity() == null ? INVALID_TASK_ID : tr.taskId;
-        rti.persistentId = tr.taskId;
-        rti.baseIntent = new Intent(tr.getBaseIntent());
-        rti.origActivity = tr.origActivity;
-        rti.realActivity = tr.realActivity;
-        rti.description = tr.lastDescription;
-        rti.stackId = tr.getStackId();
-        rti.userId = tr.userId;
-        rti.taskDescription = new ActivityManager.TaskDescription(tr.lastTaskDescription);
-        rti.lastActiveTime = tr.lastActiveTime;
-        rti.affiliatedTaskId = tr.mAffiliatedTaskId;
-        rti.affiliatedTaskColor = tr.mAffiliatedTaskColor;
-        rti.numActivities = 0;
-        if (!tr.matchParentBounds()) {
-            rti.bounds = new Rect(tr.getOverrideBounds());
-        }
-        rti.supportsSplitScreenMultiWindow = tr.supportsSplitScreenWindowingMode();
-        rti.resizeMode = tr.mResizeMode;
-        rti.configuration.setTo(tr.getConfiguration());
-
-        tr.getNumRunningActivities(mTmpReport);
-        rti.numActivities = mTmpReport.numActivities;
-        rti.baseActivity = (mTmpReport.base != null) ? mTmpReport.base.intent.getComponent() : null;
-        rti.topActivity = (mTmpReport.top != null) ? mTmpReport.top.intent.getComponent() : null;
-
+        tr.fillTaskInfo(rti, mTmpReport);
+        // Fill in some deprecated values
+        rti.id = rti.isRunning ? rti.taskId : INVALID_TASK_ID;
+        rti.persistentId = rti.taskId;
         return rti;
     }
 

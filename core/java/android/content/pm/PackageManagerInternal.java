@@ -31,6 +31,7 @@ import android.util.SparseArray;
 
 import com.android.internal.util.function.TriFunction;
 
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.List;
@@ -48,6 +49,7 @@ public abstract class PackageManagerInternal {
     public static final int PACKAGE_VERIFIER = 3;
     public static final int PACKAGE_BROWSER = 4;
     public static final int PACKAGE_SYSTEM_TEXT_CLASSIFIER = 5;
+    public static final int PACKAGE_PERMISSION_CONTROLLER = 6;
     @IntDef(value = {
         PACKAGE_SYSTEM,
         PACKAGE_SETUP_WIZARD,
@@ -55,6 +57,7 @@ public abstract class PackageManagerInternal {
         PACKAGE_VERIFIER,
         PACKAGE_BROWSER,
         PACKAGE_SYSTEM_TEXT_CLASSIFIER,
+        PACKAGE_PERMISSION_CONTROLLER,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface KnownPackage {}
@@ -646,14 +649,13 @@ public abstract class PackageManagerInternal {
     public abstract boolean isDataRestoreSafe(@NonNull Signature restoringFromSig,
             @NonNull String packageName);
 
-
     /**
-     * Returns true if the the signing information for {@code clientUid} is sufficient to gain
-     * access gated by {@code capability}.  This can happen if the two UIDs have the same signing
-     * information, if the signing information {@code clientUid} indicates that it has the signing
-     * certificate for {@code serverUid} in its signing history (if it was previously signed by it),
-     * or if the signing certificate for {@code clientUid} is in ths signing history for {@code
-     * serverUid} and with the {@code capability} specified.
+     * Returns {@code true} if the the signing information for {@code clientUid} is sufficient
+     * to gain access gated by {@code capability}.  This can happen if the two UIDs have the
+     * same signing information, if the signing information {@code clientUid} indicates that
+     * it has the signing certificate for {@code serverUid} in its signing history (if it was
+     * previously signed by it), or if the signing certificate for {@code clientUid} is in the
+     * signing history for {@code serverUid} and with the {@code capability} specified.
      */
     public abstract boolean hasSignatureCapability(int serverUid, int clientUid,
             @PackageParser.SigningDetails.CertCapabilities int capability);
@@ -671,4 +673,33 @@ public abstract class PackageManagerInternal {
      * @param delegate A delegate instance or null to clear.
      */
     public abstract void setCheckPermissionDelegate(@Nullable CheckPermissionDelegate delegate);
+
+    /**
+     * Get appIds of all available apps which specified android:sharedUserId in the manifest.
+     *
+     * @return a SparseArray mapping from appId to it's sharedUserId.
+     */
+    public abstract SparseArray<String> getAppsWithSharedUserIds();
+
+    /**
+     * Return if device is currently in a "core" boot environment, typically
+     * used to support full-disk encryption. Only apps marked with
+     * {@code coreApp} attribute are available.
+     */
+    public abstract boolean isOnlyCoreApps();
+
+    /**
+     * Make a best-effort attempt to provide the requested free disk space by
+     * deleting cached files.
+     *
+     * @throws IOException if the request was unable to be fulfilled.
+     */
+    public abstract void freeStorage(String volumeUuid, long bytes, int storageFlags)
+            throws IOException;
+
+    /** Returns {@code true} if the specified component is enabled and matches the given flags. */
+    public abstract boolean isEnabledAndMatches(@NonNull ComponentInfo info, int flags, int userId);
+
+    /** Returns {@code true} if the given user requires extra badging for icons. */
+    public abstract boolean userNeedsBadging(int userId);
 }

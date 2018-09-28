@@ -102,12 +102,7 @@ public:
     */
     static bool SetPixels(JNIEnv* env, jintArray colors, int srcOffset,
             int srcStride, int x, int y, int width, int height,
-            const SkBitmap& dstBitmap);
-
-    static sk_sp<SkColorSpace> defaultColorSpace();
-    static sk_sp<SkColorSpace> linearColorSpace();
-    static sk_sp<SkColorSpace> colorSpaceForType(SkColorType type);
-    static bool isColorSpaceSRGB(SkColorSpace* colorSpace);
+            SkBitmap* dstBitmap);
 
     static SkColorSpaceTransferFn getNativeTransferParameters(JNIEnv* env, jobject transferParams);
     static SkMatrix44 getNativeXYZMatrix(JNIEnv* env, jfloatArray xyzD50);

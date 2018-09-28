@@ -102,7 +102,7 @@ public class ZenModeHelper {
     private final ZenModeFiltering mFiltering;
     protected final RingerModeDelegate mRingerModeDelegate = new
             RingerModeDelegate();
-    private final ZenModeConditions mConditions;
+    @VisibleForTesting protected final ZenModeConditions mConditions;
     private final SparseArray<ZenModeConfig> mConfigs = new SparseArray<>();
     private final Metrics mMetrics = new Metrics();
     private final ConditionProviders.Config mServiceConfig;
@@ -225,7 +225,7 @@ public class ZenModeHelper {
             config.user = user;
         }
         synchronized (mConfig) {
-            setConfigLocked(config, reason);
+            setConfigLocked(config, null, reason);
         }
         cleanUpZenRules();
     }
@@ -312,7 +312,7 @@ public class ZenModeHelper {
             ZenRule rule = new ZenRule();
             populateZenRule(automaticZenRule, rule, true);
             newConfig.automaticRules.put(rule.id, rule);
-            if (setConfigLocked(newConfig, reason, true)) {
+            if (setConfigLocked(newConfig, reason, rule.component, true)) {
                 return rule.id;
             } else {
                 throw new AndroidRuntimeException("Could not create rule");
@@ -342,7 +342,7 @@ public class ZenModeHelper {
             }
             populateZenRule(automaticZenRule, rule, false);
             newConfig.automaticRules.put(ruleId, rule);
-            return setConfigLocked(newConfig, reason, true);
+            return setConfigLocked(newConfig, reason, rule.component, true);
         }
     }
 
@@ -360,7 +360,7 @@ public class ZenModeHelper {
                 throw new SecurityException(
                         "Cannot delete rules not owned by your condition provider");
             }
-            return setConfigLocked(newConfig, reason, true);
+            return setConfigLocked(newConfig, reason, null, true);
         }
     }
 
@@ -376,7 +376,7 @@ public class ZenModeHelper {
                     newConfig.automaticRules.removeAt(i);
                 }
             }
-            return setConfigLocked(newConfig, reason, true);
+            return setConfigLocked(newConfig, reason, null, true);
         }
     }
 
@@ -508,8 +508,8 @@ public class ZenModeHelper {
 
     public void setManualZenMode(int zenMode, Uri conditionId, String caller, String reason) {
         setManualZenMode(zenMode, conditionId, reason, caller, true /*setRingerMode*/);
-        Settings.Global.putInt(mContext.getContentResolver(), Global.SHOW_ZEN_SETTINGS_SUGGESTION,
-                0);
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                Settings.Secure.SHOW_ZEN_SETTINGS_SUGGESTION, 0);
     }
 
     private void setManualZenMode(int zenMode, Uri conditionId, String reason, String caller,
@@ -537,7 +537,7 @@ public class ZenModeHelper {
                 newRule.enabler = caller;
                 newConfig.manualRule = newRule;
             }
-            setConfigLocked(newConfig, reason, setRingerMode);
+            setConfigLocked(newConfig, reason, null, setRingerMode);
         }
     }
 
@@ -612,7 +612,11 @@ public class ZenModeHelper {
                 config.manualRule = null;  // don't restore the manual rule
             }
 
-            boolean resetToDefaultRules = true;
+            // booleans to determine whether to reset the rules to the default rules
+            boolean allRulesDisabled = true;
+            boolean hasDefaultRules = config.automaticRules.containsAll(
+                    ZenModeConfig.DEFAULT_RULE_IDS);
+
             long time = System.currentTimeMillis();
             if (config.automaticRules != null && config.automaticRules.size() > 0) {
                 for (ZenRule automaticRule : config.automaticRules.values()) {
@@ -622,29 +626,32 @@ public class ZenModeHelper {
                         automaticRule.condition = null;
                         automaticRule.creationTime = time;
                     }
-                    resetToDefaultRules &= !automaticRule.enabled;
+
+                    allRulesDisabled &= !automaticRule.enabled;
                 }
             }
 
-            if (config.version < ZenModeConfig.XML_VERSION || forRestore) {
-                Settings.Global.putInt(mContext.getContentResolver(),
-                        Global.SHOW_ZEN_UPGRADE_NOTIFICATION, 1);
+            if (!hasDefaultRules && allRulesDisabled
+                    && (forRestore || config.version < ZenModeConfig.XML_VERSION)) {
+                // reset zen automatic rules to default on restore or upgrade if:
+                // - doesn't already have default rules and
+                // - all previous automatic rules were disabled
+                config.automaticRules = new ArrayMap<>();
+                appendDefaultRules(config);
+                reason += ", reset to default rules";
+            }
 
-                // resets zen automatic rules to default
-                // if all prev auto rules were disabled on update
-                if (resetToDefaultRules) {
-                    config.automaticRules = new ArrayMap<>();
-                    appendDefaultRules(config);
-                    reason += ", reset to default rules";
-                }
+            if (config.version < ZenModeConfig.XML_VERSION) {
+                Settings.Secure.putInt(mContext.getContentResolver(),
+                        Settings.Secure.SHOW_ZEN_UPGRADE_NOTIFICATION, 1);
             } else {
                 // devices not restoring/upgrading already have updated zen settings
-                Settings.Global.putInt(mContext.getContentResolver(),
-                        Global.ZEN_SETTINGS_UPDATED, 1);
+                Settings.Secure.putInt(mContext.getContentResolver(),
+                        Settings.Secure.ZEN_SETTINGS_UPDATED, 1);
             }
             if (DEBUG) Log.d(TAG, reason);
             synchronized (mConfig) {
-                setConfigLocked(config, reason);
+                setConfigLocked(config, null, reason);
             }
         }
     }
@@ -673,7 +680,7 @@ public class ZenModeHelper {
         synchronized (mConfig) {
             final ZenModeConfig newConfig = mConfig.copy();
             newConfig.applyNotificationPolicy(policy);
-            setConfigLocked(newConfig, "setNotificationPolicy");
+            setConfigLocked(newConfig, null, "setNotificationPolicy");
         }
     }
 
@@ -697,7 +704,7 @@ public class ZenModeHelper {
                     }
                 }
             }
-            setConfigLocked(newConfig, "cleanUpZenRules");
+            setConfigLocked(newConfig, null, "cleanUpZenRules");
         }
     }
 
@@ -710,17 +717,19 @@ public class ZenModeHelper {
         }
     }
 
-    public boolean setConfigLocked(ZenModeConfig config, String reason) {
-        return setConfigLocked(config, reason, true /*setRingerMode*/);
+    public boolean setConfigLocked(ZenModeConfig config, ComponentName triggeringComponent,
+            String reason) {
+        return setConfigLocked(config, reason, triggeringComponent, true /*setRingerMode*/);
     }
 
-    public void setConfig(ZenModeConfig config, String reason) {
+    public void setConfig(ZenModeConfig config, ComponentName triggeringComponent, String reason) {
         synchronized (mConfig) {
-            setConfigLocked(config, reason);
+            setConfigLocked(config, triggeringComponent, reason);
         }
     }
 
-    private boolean setConfigLocked(ZenModeConfig config, String reason, boolean setRingerMode) {
+    private boolean setConfigLocked(ZenModeConfig config, String reason,
+            ComponentName triggeringComponent, boolean setRingerMode) {
         final long identity = Binder.clearCallingIdentity();
         try {
             if (config == null || !config.isValid()) {
@@ -733,7 +742,8 @@ public class ZenModeHelper {
                 if (DEBUG) Log.d(TAG, "setConfigLocked: store config for user " + config.user);
                 return true;
             }
-            mConditions.evaluateConfig(config, false /*processSubscriptions*/);  // may modify config
+            // may modify config
+            mConditions.evaluateConfig(config, null, false /*processSubscriptions*/);
             mConfigs.put(config.user, config);
             if (DEBUG) Log.d(TAG, "setConfigLocked reason=" + reason, new Throwable());
             ZenLog.traceConfig(reason, mConfig, config);
@@ -746,7 +756,7 @@ public class ZenModeHelper {
                 dispatchOnPolicyChanged();
             }
             mConfig = config;
-            mHandler.postApplyConfig(config, reason, setRingerMode);
+            mHandler.postApplyConfig(config, reason, triggeringComponent, setRingerMode);
             return true;
         } catch (SecurityException e) {
             Log.wtf(TAG, "Invalid rule in config", e);
@@ -756,13 +766,14 @@ public class ZenModeHelper {
         }
     }
 
-    private void applyConfig(ZenModeConfig config, String reason, boolean setRingerMode) {
+    private void applyConfig(ZenModeConfig config, String reason,
+            ComponentName triggeringComponent, boolean setRingerMode) {
         final String val = Integer.toString(config.hashCode());
         Global.putString(mContext.getContentResolver(), Global.ZEN_MODE_CONFIG_ETAG, val);
         if (!evaluateZenMode(reason, setRingerMode)) {
             applyRestrictions();  // evaluateZenMode will also apply restrictions if changed
         }
-        mConditions.evaluateConfig(config, true /*processSubscriptions*/);
+        mConditions.evaluateConfig(config, triggeringComponent, true /*processSubscriptions*/);
     }
 
     private int getZenModeSetting() {
@@ -820,10 +831,10 @@ public class ZenModeHelper {
                 if (automaticRule.isAutomaticActive()) {
                     if (zenSeverity(automaticRule.zenMode) > zenSeverity(zen)) {
                         // automatic rule triggered dnd and user hasn't seen update dnd dialog
-                        if (Settings.Global.getInt(mContext.getContentResolver(),
-                                Global.ZEN_SETTINGS_SUGGESTION_VIEWED, 1) == 0) {
-                            Settings.Global.putInt(mContext.getContentResolver(),
-                                    Global.SHOW_ZEN_SETTINGS_SUGGESTION, 1);
+                        if (Settings.Secure.getInt(mContext.getContentResolver(),
+                                Settings.Secure.ZEN_SETTINGS_SUGGESTION_VIEWED, 1) == 0) {
+                            Settings.Secure.putInt(mContext.getContentResolver(),
+                                    Settings.Secure.SHOW_ZEN_SETTINGS_SUGGESTION, 1);
                         }
                         zen = automaticRule.zenMode;
                     }
@@ -1188,18 +1199,20 @@ public class ZenModeHelper {
                 && zen != Global.ZEN_MODE_OFF
                 && !isWatch
                 && Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.SHOW_ZEN_UPGRADE_NOTIFICATION, 0) != 0;
+                Settings.Secure.SHOW_ZEN_UPGRADE_NOTIFICATION, 0) != 0
+                && Settings.Global.getInt(mContext.getContentResolver(),
+                Settings.Secure.ZEN_SETTINGS_UPDATED, 0) != 1;
 
         if (isWatch) {
             Settings.Global.putInt(mContext.getContentResolver(),
-                    Global.SHOW_ZEN_UPGRADE_NOTIFICATION, 0);
+                    Settings.Secure.SHOW_ZEN_UPGRADE_NOTIFICATION, 0);
         }
 
         if (showNotification) {
             mNotificationManager.notify(TAG, SystemMessage.NOTE_ZEN_UPGRADE,
                     createZenUpgradeNotification());
-            Settings.Global.putInt(mContext.getContentResolver(),
-                    Global.SHOW_ZEN_UPGRADE_NOTIFICATION, 0);
+            Settings.Secure.putInt(mContext.getContentResolver(),
+                    Settings.Secure.SHOW_ZEN_UPGRADE_NOTIFICATION, 0);
         }
     }
 
@@ -1268,13 +1281,16 @@ public class ZenModeHelper {
 
         private final class ConfigMessageData {
             public final ZenModeConfig config;
+            public ComponentName triggeringComponent;
             public final String reason;
             public final boolean setRingerMode;
 
-            ConfigMessageData(ZenModeConfig config, String reason, boolean setRingerMode) {
+            ConfigMessageData(ZenModeConfig config, String reason,
+                    ComponentName triggeringComponent, boolean setRingerMode) {
                 this.config = config;
                 this.reason = reason;
                 this.setRingerMode = setRingerMode;
+                this.triggeringComponent = triggeringComponent;
             }
         }
 
@@ -1294,9 +1310,10 @@ public class ZenModeHelper {
             sendEmptyMessageDelayed(MSG_METRICS, METRICS_PERIOD_MS);
         }
 
-        private void postApplyConfig(ZenModeConfig config, String reason, boolean setRingerMode) {
+        private void postApplyConfig(ZenModeConfig config, String reason,
+                ComponentName triggeringComponent, boolean setRingerMode) {
             sendMessage(obtainMessage(MSG_APPLY_CONFIG,
-                    new ConfigMessageData(config, reason, setRingerMode)));
+                    new ConfigMessageData(config, reason, triggeringComponent, setRingerMode)));
         }
 
         @Override
@@ -1311,7 +1328,7 @@ public class ZenModeHelper {
                 case MSG_APPLY_CONFIG:
                     ConfigMessageData applyConfigData = (ConfigMessageData) msg.obj;
                     applyConfig(applyConfigData.config, applyConfigData.reason,
-                            applyConfigData.setRingerMode);
+                            applyConfigData.triggeringComponent, applyConfigData.setRingerMode);
             }
         }
     }

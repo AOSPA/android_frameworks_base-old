@@ -16,6 +16,7 @@
 
 package android.net.wifi;
 
+import android.Manifest;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
@@ -721,6 +722,17 @@ public class WifiScanner {
     }
 
     /**
+     * Enable/Disable wifi scanning.
+     *
+     * {@hide}
+     */
+    @RequiresPermission(Manifest.permission.NETWORK_STACK)
+    public void setScanningEnabled(boolean enable) {
+        validateChannel();
+        mAsyncChannel.sendMessage(enable ? CMD_ENABLE : CMD_DISABLE);
+    }
+
+    /**
      * Register a listener that will receive results from all single scans
      * Either the onSuccess/onFailure will be called once when the listener is registered. After
      * (assuming onSuccess was called) all subsequent single scan results will be delivered to the
@@ -916,6 +928,7 @@ public class WifiScanner {
      *                 scans should also not share this object.
      * {@hide}
      */
+    @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
     public void startDisconnectedPnoScan(ScanSettings scanSettings, PnoSettings pnoSettings,
             PnoScanListener listener) {
         Preconditions.checkNotNull(listener, "listener cannot be null");
@@ -930,9 +943,9 @@ public class WifiScanner {
      * Stop an ongoing wifi PNO scan
      * @param listener specifies which scan to cancel; must be same object as passed in {@link
      *  #startPnoScan}
-     * TODO(rpius): Check if we can remove pnoSettings param in stop.
      * {@hide}
      */
+    @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
     public void stopPnoScan(ScanListener listener) {
         Preconditions.checkNotNull(listener, "listener cannot be null");
         int key = removeListener(listener);
@@ -1164,6 +1177,10 @@ public class WifiScanner {
     public static final int CMD_DEREGISTER_SCAN_LISTENER    = BASE + 28;
     /** @hide */
     public static final int CMD_GET_SINGLE_SCAN_RESULTS     = BASE + 29;
+    /** @hide */
+    public static final int CMD_ENABLE                      = BASE + 30;
+    /** @hide */
+    public static final int CMD_DISABLE                     = BASE + 31;
 
     private Context mContext;
     private IWifiScanner mService;

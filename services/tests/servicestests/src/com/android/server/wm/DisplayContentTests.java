@@ -30,6 +30,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
+
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 
 import static org.hamcrest.Matchers.is;
@@ -37,27 +38,31 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-
-import org.junit.Test;
-import org.junit.runner.RunWith;
 
 import android.annotation.SuppressLint;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.SystemClock;
 import android.platform.test.annotations.Presubmit;
-import android.support.test.filters.FlakyTest;
-import android.support.test.filters.SmallTest;
-import android.support.test.runner.AndroidJUnit4;
 import android.util.DisplayMetrics;
 import android.util.SparseIntArray;
 import android.view.DisplayCutout;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.Surface;
 
+import androidx.test.filters.FlakyTest;
+import androidx.test.filters.SmallTest;
+import androidx.test.runner.AndroidJUnit4;
+
 import com.android.server.wm.utils.WmDisplayCutout;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -351,34 +356,36 @@ public class DisplayContentTests extends WindowTestsBase {
      */
     @Test
     public void testMaxUiWidth() throws Exception {
+        // Prevent base display metrics for test from being updated to the value of real display.
+        final DisplayContent displayContent = createDisplayNoUpdateDisplayInfo();
         final int baseWidth = 1440;
         final int baseHeight = 2560;
         final int baseDensity = 300;
 
-        mDisplayContent.updateBaseDisplayMetrics(baseWidth, baseHeight, baseDensity);
+        displayContent.updateBaseDisplayMetrics(baseWidth, baseHeight, baseDensity);
 
         final int maxWidth = 300;
         final int resultingHeight = (maxWidth * baseHeight) / baseWidth;
         final int resultingDensity = (maxWidth * baseDensity) / baseWidth;
 
-        mDisplayContent.setMaxUiWidth(maxWidth);
-        verifySizes(mDisplayContent, maxWidth, resultingHeight, resultingDensity);
+        displayContent.setMaxUiWidth(maxWidth);
+        verifySizes(displayContent, maxWidth, resultingHeight, resultingDensity);
 
         // Assert setting values again does not change;
-        mDisplayContent.updateBaseDisplayMetrics(baseWidth, baseHeight, baseDensity);
-        verifySizes(mDisplayContent, maxWidth, resultingHeight, resultingDensity);
+        displayContent.updateBaseDisplayMetrics(baseWidth, baseHeight, baseDensity);
+        verifySizes(displayContent, maxWidth, resultingHeight, resultingDensity);
 
         final int smallerWidth = 200;
         final int smallerHeight = 400;
         final int smallerDensity = 100;
 
         // Specify smaller dimension, verify that it is honored
-        mDisplayContent.updateBaseDisplayMetrics(smallerWidth, smallerHeight, smallerDensity);
-        verifySizes(mDisplayContent, smallerWidth, smallerHeight, smallerDensity);
+        displayContent.updateBaseDisplayMetrics(smallerWidth, smallerHeight, smallerDensity);
+        verifySizes(displayContent, smallerWidth, smallerHeight, smallerDensity);
 
         // Verify that setting the max width to a greater value than the base width has no effect
-        mDisplayContent.setMaxUiWidth(maxWidth);
-        verifySizes(mDisplayContent, smallerWidth, smallerHeight, smallerDensity);
+        displayContent.setMaxUiWidth(maxWidth);
+        verifySizes(displayContent, smallerWidth, smallerHeight, smallerDensity);
     }
 
     /**
@@ -390,7 +397,8 @@ public class DisplayContentTests extends WindowTestsBase {
                 WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD, mDisplayContent).mContainer;
         final Task task = createTaskInStack(alwaysOnTopStack, 0 /* userId */);
         alwaysOnTopStack.setAlwaysOnTop(true);
-        mDisplayContent.positionStackAt(POSITION_TOP, alwaysOnTopStack);
+        mDisplayContent.positionStackAt(POSITION_TOP, alwaysOnTopStack,
+                false /* includingParents */);
         assertTrue(alwaysOnTopStack.isAlwaysOnTop());
         // Ensure always on top state is synced to the children of the stack.
         assertTrue(alwaysOnTopStack.getTopChild().isAlwaysOnTop());
@@ -404,7 +412,8 @@ public class DisplayContentTests extends WindowTestsBase {
         final TaskStack anotherAlwaysOnTopStack = createStackControllerOnStackOnDisplay(
                 WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD, mDisplayContent).mContainer;
         anotherAlwaysOnTopStack.setAlwaysOnTop(true);
-        mDisplayContent.positionStackAt(POSITION_TOP, anotherAlwaysOnTopStack);
+        mDisplayContent.positionStackAt(POSITION_TOP, anotherAlwaysOnTopStack,
+                false /* includingParents */);
         assertTrue(anotherAlwaysOnTopStack.isAlwaysOnTop());
         int topPosition = mDisplayContent.getStacks().size() - 1;
         // Ensure the new alwaysOnTop stack is put below the pinned stack, but on top of the
@@ -420,7 +429,8 @@ public class DisplayContentTests extends WindowTestsBase {
         assertEquals(nonAlwaysOnTopStack, mDisplayContent.getStacks().get(topPosition - 3));
 
         anotherAlwaysOnTopStack.setAlwaysOnTop(false);
-        mDisplayContent.positionStackAt(POSITION_TOP, anotherAlwaysOnTopStack);
+        mDisplayContent.positionStackAt(POSITION_TOP, anotherAlwaysOnTopStack,
+                false /* includingParents */);
         assertFalse(anotherAlwaysOnTopStack.isAlwaysOnTop());
         // Ensure, when always on top is turned off for a stack, the stack is put just below all
         // other always on top stacks.
@@ -476,22 +486,42 @@ public class DisplayContentTests extends WindowTestsBase {
     @Test
     public void testDisplayCutout_rot90() throws Exception {
         synchronized (sWm.getWindowManagerLock()) {
-            final DisplayContent dc = createNewDisplay();
-            dc.mInitialDisplayWidth = 200;
-            dc.mInitialDisplayHeight = 400;
-            Rect r1 = new Rect(80, 0, 120, 10);
+            // Prevent mInitialDisplayCutout from being updated from real display (e.g. null
+            // if the device has no cutout).
+            final DisplayContent dc = createDisplayNoUpdateDisplayInfo();
+            // Rotation may use real display info to compute bound, so here also uses the
+            // same width and height.
+            final int displayWidth = dc.mInitialDisplayWidth;
+            final int displayHeight = dc.mInitialDisplayHeight;
+            final int cutoutWidth = 40;
+            final int cutoutHeight = 10;
+            final int left = (displayWidth - cutoutWidth) / 2;
+            final int top = 0;
+            final int right = (displayWidth + cutoutWidth) / 2;
+            final int bottom = cutoutHeight;
+
+            final Rect r1 = new Rect(left, top, right, bottom);
             final DisplayCutout cutout = new WmDisplayCutout(
                     fromBoundingRect(r1.left, r1.top, r1.right, r1.bottom), null)
-                    .computeSafeInsets(200, 400).getDisplayCutout();
+                    .computeSafeInsets(displayWidth, displayHeight).getDisplayCutout();
 
             dc.mInitialDisplayCutout = cutout;
             dc.setRotation(Surface.ROTATION_90);
             dc.computeScreenConfiguration(new Configuration()); // recomputes dc.mDisplayInfo.
 
-            final Rect r = new Rect(0, 80, 10, 120);
+            // ----o----------      -------------
+            // |   |     |   |      |
+            // |   ------o   |      o---
+            // |             |      |  |
+            // |             |  ->  |  |
+            // |             |      ---o
+            // |             |      |
+            // |             |      -------------
+            final Rect r = new Rect(top, left, bottom, right);
             assertEquals(new WmDisplayCutout(
                     fromBoundingRect(r.left, r.top, r.right, r.bottom), null)
-                    .computeSafeInsets(400, 200).getDisplayCutout(), dc.getDisplayInfo().displayCutout);
+                    .computeSafeInsets(displayHeight, displayWidth)
+                    .getDisplayCutout(), dc.getDisplayInfo().displayCutout);
         }
     }
 
@@ -546,11 +576,46 @@ public class DisplayContentTests extends WindowTestsBase {
                 .setDisplayInfoOverrideFromWindowManager(dc.getDisplayId(), null);
     }
 
+    @Test
+    public void testGetPreferredOptionsPanelGravityFromDifferentDisplays() {
+        final DisplayContent portraitDisplay = createNewDisplay();
+        portraitDisplay.mInitialDisplayHeight = 2000;
+        portraitDisplay.mInitialDisplayWidth = 1000;
+
+        portraitDisplay.setRotation(Surface.ROTATION_0);
+        assertFalse(isOptionsPanelAtRight(portraitDisplay.getDisplayId()));
+        portraitDisplay.setRotation(Surface.ROTATION_90);
+        assertTrue(isOptionsPanelAtRight(portraitDisplay.getDisplayId()));
+
+        final DisplayContent landscapeDisplay = createNewDisplay();
+        landscapeDisplay.mInitialDisplayHeight = 1000;
+        landscapeDisplay.mInitialDisplayWidth = 2000;
+
+        landscapeDisplay.setRotation(Surface.ROTATION_0);
+        assertTrue(isOptionsPanelAtRight(landscapeDisplay.getDisplayId()));
+        landscapeDisplay.setRotation(Surface.ROTATION_90);
+        assertFalse(isOptionsPanelAtRight(landscapeDisplay.getDisplayId()));
+    }
+
+    private boolean isOptionsPanelAtRight(int displayId) {
+        return (sWm.getPreferredOptionsPanelGravity(displayId) & Gravity.RIGHT) == Gravity.RIGHT;
+    }
+
     private static void verifySizes(DisplayContent displayContent, int expectedBaseWidth,
                              int expectedBaseHeight, int expectedBaseDensity) {
         assertEquals(displayContent.mBaseDisplayWidth, expectedBaseWidth);
         assertEquals(displayContent.mBaseDisplayHeight, expectedBaseHeight);
         assertEquals(displayContent.mBaseDisplayDensity, expectedBaseDensity);
+    }
+
+    /**
+     * Create DisplayContent that does not update display base/initial values from device to keep
+     * the values set by test.
+     */
+    private DisplayContent createDisplayNoUpdateDisplayInfo() {
+        final DisplayContent displayContent = spy(createNewDisplay());
+        doNothing().when(displayContent).updateDisplayInfo();
+        return displayContent;
     }
 
     private void assertForAllWindowsOrder(List<WindowState> expectedWindowsBottomToTop) {

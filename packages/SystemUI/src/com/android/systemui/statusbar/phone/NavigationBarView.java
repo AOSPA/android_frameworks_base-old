@@ -25,6 +25,7 @@ import static com.android.systemui.shared.system.NavigationBarCompat.HIT_TARGET_
 import android.animation.LayoutTransition;
 import android.animation.LayoutTransition.TransitionListener;
 import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
 import android.animation.TimeInterpolator;
 import android.animation.ValueAnimator;
 import android.annotation.DrawableRes;
@@ -61,6 +62,7 @@ import android.widget.FrameLayout;
 import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.DockedStackExistsListener;
+import com.android.systemui.Interpolators;
 import com.android.systemui.OverviewProxyService;
 import com.android.systemui.R;
 import com.android.systemui.RecentsComponent;
@@ -121,9 +123,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     private Rect mTmpRect = new Rect();
 
     private KeyButtonDrawable mBackIcon;
-    private KeyButtonDrawable mBackCarModeIcon, mBackLandCarModeIcon;
-    private KeyButtonDrawable mBackAltCarModeIcon, mBackAltLandCarModeIcon;
-    private KeyButtonDrawable mHomeDefaultIcon, mHomeCarModeIcon;
+    private KeyButtonDrawable mHomeDefaultIcon;
+    private KeyButtonDrawable mBackCarModeIcon;
+    private KeyButtonDrawable mHomeCarModeIcon;
     private KeyButtonDrawable mRecentIcon;
     private KeyButtonDrawable mDockedIcon;
     private KeyButtonDrawable mImeIcon;
@@ -263,13 +265,11 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
 
         @Override
         public boolean performAccessibilityAction(View host, int action, Bundle args) {
-            switch (action) {
-                case R.id.action_toggle_overview:
-                    SysUiServiceProvider.getComponent(getContext(), Recents.class)
-                            .toggleRecentApps();
-                    break;
-                default:
-                    return super.performAccessibilityAction(host, action, args);
+            if (action == R.id.action_toggle_overview) {
+                SysUiServiceProvider.getComponent(getContext(), Recents.class)
+                        .toggleRecentApps();
+            } else {
+                return super.performAccessibilityAction(host, action, args);
             }
             return true;
         }
@@ -461,16 +461,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
                 && ((mOverviewProxyService.getInteractionFlags() & FLAG_DISABLE_QUICK_SCRUB) == 0);
     }
 
-    // TODO(b/80003212): change car mode icons to vector icons.
     private void updateCarModeIcons(Context ctx) {
-        mBackCarModeIcon = getDrawable(ctx,
-                R.drawable.ic_sysbar_back_carmode, R.drawable.ic_sysbar_back_carmode);
-        mBackLandCarModeIcon = mBackCarModeIcon;
-        mBackAltCarModeIcon = getDrawable(ctx,
-                R.drawable.ic_sysbar_back_ime_carmode, R.drawable.ic_sysbar_back_ime_carmode);
-        mBackAltLandCarModeIcon = mBackAltCarModeIcon;
-        mHomeCarModeIcon = getDrawable(ctx,
-                R.drawable.ic_sysbar_home_carmode, R.drawable.ic_sysbar_home_carmode);
+        mBackCarModeIcon = getDrawable(ctx, R.drawable.ic_sysbar_back_carmode);
+        mHomeCarModeIcon = getDrawable(ctx, R.drawable.ic_sysbar_home_carmode);
     }
 
     private void reloadNavIcons() {
@@ -483,14 +476,15 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         Context lightContext = new ContextThemeWrapper(ctx, dualToneLightTheme);
         Context darkContext = new ContextThemeWrapper(ctx, dualToneDarkTheme);
 
-        if (oldConfig.orientation != newConfig.orientation
-                || oldConfig.densityDpi != newConfig.densityDpi) {
+        final boolean orientationChange = oldConfig.orientation != newConfig.orientation;
+        final boolean densityChange = oldConfig.densityDpi != newConfig.densityDpi;
+        final boolean dirChange = oldConfig.getLayoutDirection() != newConfig.getLayoutDirection();
+
+        if (orientationChange || densityChange) {
             mDockedIcon = getDrawable(lightContext, darkContext, R.drawable.ic_sysbar_docked);
             mHomeDefaultIcon = getHomeDrawable(lightContext, darkContext);
         }
-        if (oldConfig.densityDpi != newConfig.densityDpi
-                || oldConfig.getLayoutDirection() != newConfig.getLayoutDirection()) {
-            mBackIcon = getBackDrawable(lightContext, darkContext);
+        if (densityChange || dirChange) {
             mRecentIcon = getDrawable(lightContext, darkContext, R.drawable.ic_sysbar_recent);
             mMenuIcon = getDrawable(lightContext, darkContext, R.drawable.ic_sysbar_menu);
 
@@ -506,6 +500,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
                 updateCarModeIcons(ctx);
             }
         }
+        if (orientationChange || densityChange || dirChange) {
+            mBackIcon = getBackDrawable(lightContext, darkContext);
+        }
     }
 
     public KeyButtonDrawable getBackDrawable(Context lightContext, Context darkContext) {
@@ -519,17 +516,33 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         final boolean quickStepEnabled = mOverviewProxyService.shouldShowSwipeUpUI();
         KeyButtonDrawable drawable = quickStepEnabled
                 ? getDrawable(lightContext, darkContext, R.drawable.ic_sysbar_home_quick_step)
-                : getDrawable(lightContext, darkContext, R.drawable.ic_sysbar_home,
-                        false /* hasShadow */);
+                : getDrawable(lightContext, darkContext, R.drawable.ic_sysbar_home);
         orientHomeButton(drawable);
         return drawable;
     }
 
     private void orientBackButton(KeyButtonDrawable drawable) {
         final boolean useAltBack =
-            (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0;
-        drawable.setRotation(useAltBack
-                ? -90 : (getLayoutDirection() == View.LAYOUT_DIRECTION_RTL) ? 180 : 0);
+                (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0;
+        final boolean isRtl = getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+        float degrees = useAltBack
+                ? (isRtl ? 270 : -90)
+                : (isRtl ? 180 : 0);
+        if (drawable.getRotation() == degrees) {
+            return;
+        }
+
+        // Animate the back button's rotation to the new degrees and only in portrait move up the
+        // back button to line up with the other buttons
+        float targetY = !mOverviewProxyService.shouldShowSwipeUpUI() && !mVertical && useAltBack
+                ? - getResources().getDimension(R.dimen.navbar_back_button_ime_offset)
+                : 0;
+        ObjectAnimator navBarAnimator = ObjectAnimator.ofPropertyValuesHolder(drawable,
+                PropertyValuesHolder.ofFloat(KeyButtonDrawable.KEY_DRAWABLE_ROTATE, degrees),
+                PropertyValuesHolder.ofFloat(KeyButtonDrawable.KEY_DRAWABLE_TRANSLATE_Y, targetY));
+        navBarAnimator.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
+        navBarAnimator.setDuration(200);
+        navBarAnimator.start();
     }
 
     private void orientHomeButton(KeyButtonDrawable drawable) {
@@ -555,11 +568,9 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
                 darkContext.getDrawable(icon), hasShadow);
     }
 
-    private KeyButtonDrawable getDrawable(Context ctx, @DrawableRes int lightIcon,
-            @DrawableRes int darkIcon) {
-        // Legacy image icons using separate light and dark images will not support shadows
-        return KeyButtonDrawable.create(ctx, ctx.getDrawable(lightIcon),
-            ctx.getDrawable(darkIcon), false /* hasShadow */);
+    private KeyButtonDrawable getDrawable(Context ctx, @DrawableRes int icon) {
+        // Legacy image icons using a single image will not support shadows
+        return KeyButtonDrawable.create(ctx, ctx.getDrawable(icon), null, false /* hasShadow */);
     }
 
     private TintedKeyButtonDrawable getDrawable(Context ctx, @DrawableRes int icon,
@@ -574,16 +585,8 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         super.setLayoutDirection(layoutDirection);
     }
 
-    private KeyButtonDrawable getBackIconWithAlt(boolean carMode, boolean landscape) {
-        return landscape
-                ? carMode ? mBackAltLandCarModeIcon : mBackIcon
-                : carMode ? mBackAltCarModeIcon : mBackIcon;
-    }
-
-    private KeyButtonDrawable getBackIcon(boolean carMode, boolean landscape) {
-        return landscape
-                ? carMode ? mBackLandCarModeIcon : mBackIcon
-                : carMode ? mBackCarModeIcon : mBackIcon;
+    private KeyButtonDrawable getBackIcon(boolean carMode) {
+        return carMode ? mBackCarModeIcon : mBackIcon;
     }
 
     public void setNavigationIconHints(int hints) {
@@ -623,12 +626,10 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
         // to recent icon is not required.
         final boolean useAltBack =
                 (mNavigationIconHints & StatusBarManager.NAVIGATION_HINT_BACK_ALT) != 0;
-        KeyButtonDrawable backIcon = useAltBack
-                ? getBackIconWithAlt(mUseCarModeUi, mVertical)
-                : getBackIcon(mUseCarModeUi, mVertical);
+        KeyButtonDrawable backIcon = getBackIcon(mUseCarModeUi);
+        orientBackButton(backIcon);
         KeyButtonDrawable homeIcon = mUseCarModeUi ? mHomeCarModeIcon : mHomeDefaultIcon;
         if (!mUseCarModeUi) {
-            orientBackButton(backIcon);
             orientHomeButton(homeIcon);
         }
         getHomeButton().setImageDrawable(homeIcon);
@@ -771,8 +772,19 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
                 showSwipeUpUI ? mQuickStepAccessibilityDelegate : null);
     }
 
+    public boolean isNotificationsFullyCollapsed() {
+        return mPanelView.isFullyCollapsed();
+    }
+
+    /**
+     * Updates the {@link WindowManager.LayoutParams.FLAG_SLIPPERY} state dependent on if swipe up
+     * is enabled, or the notifications is fully opened without being in an animated state. If
+     * slippery is enabled, touch events will leave the nav bar window and enter into the fullscreen
+     * app/home window, if not nav bar will receive a cancelled touch event once gesture leaves bar.
+     */
     public void updateSlippery() {
-        setSlippery(!isQuickStepSwipeUpEnabled() || mPanelView.isFullyExpanded());
+        setSlippery(!isQuickStepSwipeUpEnabled() ||
+                (mPanelView.isFullyExpanded() && !mPanelView.isCollapsing()));
     }
 
     private void setSlippery(boolean slippery) {
@@ -885,6 +897,10 @@ public class NavigationBarView extends FrameLayout implements PluginListener<Nav
     }
 
     public boolean isRotateButtonVisible() { return mShowRotateButton; }
+
+    void hideRecentsOnboarding() {
+        mRecentsOnboarding.hide(true);
+    }
 
     /**
      * @return the button at the given {@param x} and {@param y}.

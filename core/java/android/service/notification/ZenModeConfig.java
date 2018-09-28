@@ -20,6 +20,7 @@ import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_FULL_SCRE
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_LIGHTS;
 import static android.app.NotificationManager.Policy.SUPPRESSED_EFFECT_PEEK;
 
+import android.annotation.UnsupportedAppUsage;
 import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.NotificationManager;
@@ -145,6 +146,7 @@ public class ZenModeConfig implements Parcelable {
     private static final String RULE_ATT_CREATION_TIME = "creationTime";
     private static final String RULE_ATT_ENABLER = "enabler";
 
+    @UnsupportedAppUsage
     public boolean allowAlarms = DEFAULT_ALLOW_ALARMS;
     public boolean allowMedia = DEFAULT_ALLOW_MEDIA;
     public boolean allowSystem = DEFAULT_ALLOW_SYSTEM;
@@ -161,8 +163,10 @@ public class ZenModeConfig implements Parcelable {
     public int version;
 
     public ZenRule manualRule;
+    @UnsupportedAppUsage
     public ArrayMap<String, ZenRule> automaticRules = new ArrayMap<>();
 
+    @UnsupportedAppUsage
     public ZenModeConfig() { }
 
     public ZenModeConfig(Parcel source) {
@@ -240,9 +244,27 @@ public class ZenModeConfig implements Parcelable {
                 .append(",allowMessagesFrom=").append(sourceToString(allowMessagesFrom))
                 .append(",suppressedVisualEffects=").append(suppressedVisualEffects)
                 .append(",areChannelsBypassingDnd=").append(areChannelsBypassingDnd)
-                .append(",automaticRules=").append(automaticRules)
-                .append(",manualRule=").append(manualRule)
+                .append(",\nautomaticRules=").append(rulesToString())
+                .append(",\nmanualRule=").append(manualRule)
                 .append(']').toString();
+    }
+
+    private String rulesToString() {
+        if (automaticRules.isEmpty()) {
+            return "{}";
+        }
+
+        StringBuilder buffer = new StringBuilder(automaticRules.size() * 28);
+        buffer.append('{');
+        for (int i = 0; i < automaticRules.size(); i++) {
+            if (i > 0) {
+                buffer.append(",\n");
+            }
+            Object value = automaticRules.valueAt(i);
+            buffer.append(value);
+        }
+        buffer.append('}');
+        return buffer.toString();
     }
 
     private Diff diff(ZenModeConfig to) {
@@ -498,7 +520,7 @@ public class ZenModeConfig implements Parcelable {
                     Boolean allowWhenScreenOff = unsafeBoolean(parser, ALLOW_ATT_SCREEN_OFF);
                     if (allowWhenScreenOff != null) {
                         readSuppressedEffects = true;
-                        if (allowWhenScreenOff) {
+                        if (!allowWhenScreenOff) {
                             rt.suppressedVisualEffects |= SUPPRESSED_EFFECT_LIGHTS
                                     | SUPPRESSED_EFFECT_FULL_SCREEN_INTENT;
                         }
@@ -506,7 +528,7 @@ public class ZenModeConfig implements Parcelable {
                     Boolean allowWhenScreenOn = unsafeBoolean(parser, ALLOW_ATT_SCREEN_ON);
                     if (allowWhenScreenOn != null) {
                         readSuppressedEffects = true;
-                        if (allowWhenScreenOn) {
+                        if (!allowWhenScreenOn) {
                             rt.suppressedVisualEffects |= SUPPRESSED_EFFECT_PEEK;
                         }
                     }
@@ -1025,12 +1047,13 @@ public class ZenModeConfig implements Parcelable {
         return true;
     }
 
+    @UnsupportedAppUsage
     public static ScheduleInfo tryParseScheduleConditionId(Uri conditionId) {
         final boolean isSchedule =  conditionId != null
-                && conditionId.getScheme().equals(Condition.SCHEME)
-                && conditionId.getAuthority().equals(ZenModeConfig.SYSTEM_AUTHORITY)
+                && Condition.SCHEME.equals(conditionId.getScheme())
+                && ZenModeConfig.SYSTEM_AUTHORITY.equals(conditionId.getAuthority())
                 && conditionId.getPathSegments().size() == 1
-                && conditionId.getPathSegments().get(0).equals(ZenModeConfig.SCHEDULE_PATH);
+                && ZenModeConfig.SCHEDULE_PATH.equals(conditionId.getPathSegments().get(0));
         if (!isSchedule) return null;
         final int[] start = tryParseHourAndMinute(conditionId.getQueryParameter("start"));
         final int[] end = tryParseHourAndMinute(conditionId.getQueryParameter("end"));
@@ -1050,10 +1073,15 @@ public class ZenModeConfig implements Parcelable {
     }
 
     public static class ScheduleInfo {
+        @UnsupportedAppUsage
         public int[] days;
+        @UnsupportedAppUsage
         public int startHour;
+        @UnsupportedAppUsage
         public int startMinute;
+        @UnsupportedAppUsage
         public int endHour;
+        @UnsupportedAppUsage
         public int endMinute;
         public boolean exitAtAlarm;
         public long nextAlarm;
@@ -1128,10 +1156,10 @@ public class ZenModeConfig implements Parcelable {
 
     public static EventInfo tryParseEventConditionId(Uri conditionId) {
         final boolean isEvent = conditionId != null
-                && conditionId.getScheme().equals(Condition.SCHEME)
-                && conditionId.getAuthority().equals(ZenModeConfig.SYSTEM_AUTHORITY)
+                && Condition.SCHEME.equals(conditionId.getScheme())
+                && ZenModeConfig.SYSTEM_AUTHORITY.equals(conditionId.getAuthority())
                 && conditionId.getPathSegments().size() == 1
-                && conditionId.getPathSegments().get(0).equals(EVENT_PATH);
+                && EVENT_PATH.equals(conditionId.getPathSegments().get(0));
         if (!isEvent) return null;
         final EventInfo rt = new EventInfo();
         rt.userId = tryParseInt(conditionId.getQueryParameter("userId"), UserHandle.USER_NULL);
@@ -1271,14 +1299,20 @@ public class ZenModeConfig implements Parcelable {
     }
 
     public static class ZenRule implements Parcelable {
+        @UnsupportedAppUsage
         public boolean enabled;
+        @UnsupportedAppUsage
         public boolean snoozing;         // user manually disabled this instance
+        @UnsupportedAppUsage
         public String name;              // required for automatic
+        @UnsupportedAppUsage
         public int zenMode;
+        @UnsupportedAppUsage
         public Uri conditionId;          // required for automatic
         public Condition condition;      // optional
         public ComponentName component;  // optional
         public String id;                // required for automatic (unique)
+        @UnsupportedAppUsage
         public long creationTime;        // required for automatic
         public String enabler;          // package name, only used for manual rules.
 
@@ -1340,14 +1374,14 @@ public class ZenModeConfig implements Parcelable {
         @Override
         public String toString() {
             return new StringBuilder(ZenRule.class.getSimpleName()).append('[')
-                    .append("enabled=").append(enabled)
+                    .append("id=").append(id)
+                    .append(",enabled=").append(String.valueOf(enabled).toUpperCase())
                     .append(",snoozing=").append(snoozing)
                     .append(",name=").append(name)
                     .append(",zenMode=").append(Global.zenModeToString(zenMode))
                     .append(",conditionId=").append(conditionId)
                     .append(",condition=").append(condition)
                     .append(",component=").append(component)
-                    .append(",id=").append(id)
                     .append(",creationTime=").append(creationTime)
                     .append(",enabler=").append(enabler)
                     .append(']').toString();
@@ -1438,14 +1472,13 @@ public class ZenModeConfig implements Parcelable {
                     && Objects.equals(other.condition, condition)
                     && Objects.equals(other.component, component)
                     && Objects.equals(other.id, id)
-                    && other.creationTime == creationTime
                     && Objects.equals(other.enabler, enabler);
         }
 
         @Override
         public int hashCode() {
             return Objects.hash(enabled, snoozing, name, zenMode, conditionId, condition,
-                    component, id, creationTime, enabler);
+                    component, id, enabler);
         }
 
         public boolean isAutomaticActive() {
@@ -1479,7 +1512,7 @@ public class ZenModeConfig implements Parcelable {
             final int N = lines.size();
             for (int i = 0; i < N; i++) {
                 if (i > 0) {
-                    sb.append(',');
+                    sb.append(",\n");
                 }
                 sb.append(lines.get(i));
             }

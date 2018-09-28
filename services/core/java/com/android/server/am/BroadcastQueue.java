@@ -664,12 +664,10 @@ public final class BroadcastQueue {
         // the broadcast and if the calling app is in the foreground and the broadcast is
         // explicit we launch the review UI passing it a pending intent to send the skipped
         // broadcast.
-        if (mService.mPermissionReviewRequired) {
-            if (!requestStartTargetPermissionsReviewIfNeededLocked(r, filter.packageName,
-                    filter.owningUserId)) {
-                r.delivery[index] = BroadcastRecord.DELIVERY_SKIPPED;
-                return;
-            }
+        if (!requestStartTargetPermissionsReviewIfNeededLocked(r, filter.packageName,
+                filter.owningUserId)) {
+            r.delivery[index] = BroadcastRecord.DELIVERY_SKIPPED;
+            return;
         }
 
         r.delivery[index] = BroadcastRecord.DELIVERY_DELIVERED;
@@ -1240,7 +1238,7 @@ public final class BroadcastQueue {
         // the broadcast and if the calling app is in the foreground and the broadcast is
         // explicit we launch the review UI passing it a pending intent to send the skipped
         // broadcast.
-        if (mService.mPermissionReviewRequired && !skip) {
+        if (!skip) {
             if (!requestStartTargetPermissionsReviewIfNeededLocked(r,
                     info.activityInfo.packageName, UserHandle.getUserId(
                             info.activityInfo.applicationInfo.uid))) {
@@ -1464,7 +1462,7 @@ public final class BroadcastQueue {
         // If the receiver app is being debugged we quietly ignore unresponsiveness, just
         // tidying up and moving on to the next broadcast without crashing or ANRing this
         // app just because it's stopped at a breakpoint.
-        final boolean debugging = (r.curApp != null && r.curApp.debugging);
+        final boolean debugging = (r.curApp != null && r.curApp.isDebugging());
 
         Slog.w(TAG, "Timeout of broadcast " + r + " - receiver=" + r.receiver
                 + ", started " + (now - r.receiverTime) + "ms ago");

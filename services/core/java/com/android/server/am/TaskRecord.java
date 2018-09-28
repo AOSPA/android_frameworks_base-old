@@ -16,9 +16,9 @@
 
 package com.android.server.am;
 
+import static android.app.ActivityTaskManager.INVALID_STACK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_FORCED;
 import static android.app.ActivityTaskManager.RESIZE_MODE_SYSTEM;
-import static android.app.ActivityTaskManager.INVALID_STACK_ID;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
@@ -63,6 +63,7 @@ import static com.android.server.am.ActivityStackSupervisor.ON_TOP;
 import static com.android.server.am.ActivityStackSupervisor.PAUSE_IMMEDIATELY;
 import static com.android.server.am.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.am.TaskRecordProto.ACTIVITIES;
+import static com.android.server.am.TaskRecordProto.ACTIVITY_TYPE;
 import static com.android.server.am.TaskRecordProto.BOUNDS;
 import static com.android.server.am.TaskRecordProto.CONFIGURATION_CONTAINER;
 import static com.android.server.am.TaskRecordProto.FULLSCREEN;
@@ -74,7 +75,6 @@ import static com.android.server.am.TaskRecordProto.ORIG_ACTIVITY;
 import static com.android.server.am.TaskRecordProto.REAL_ACTIVITY;
 import static com.android.server.am.TaskRecordProto.RESIZE_MODE;
 import static com.android.server.am.TaskRecordProto.STACK_ID;
-import static com.android.server.am.TaskRecordProto.ACTIVITY_TYPE;
 
 import static java.lang.Integer.MAX_VALUE;
 
@@ -87,7 +87,7 @@ import android.app.ActivityManager.TaskSnapshot;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
 import android.app.AppGlobals;
-import android.app.IActivityManager;
+import android.app.TaskInfo;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -477,7 +477,7 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
         mResizeMode = resizeMode;
         mWindowContainerController.setResizeable(resizeMode);
         mService.mStackSupervisor.ensureActivitiesVisibleLocked(null, 0, !PRESERVE_WINDOWS);
-        mService.mStackSupervisor.resumeFocusedStackTopActivityLocked();
+        mService.mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
     }
 
     void setTaskDockedResizing(boolean resizing) {
@@ -551,7 +551,7 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
                     mService.mStackSupervisor.ensureActivitiesVisibleLocked(r, 0,
                             preserveWindow);
                     if (!kept) {
-                        mService.mStackSupervisor.resumeFocusedStackTopActivityLocked();
+                        mService.mStackSupervisor.resumeFocusedStacksTopActivitiesLocked();
                     }
                 }
             }
@@ -657,7 +657,7 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
         boolean kept = true;
         try {
             final ActivityRecord r = topRunningActivityLocked();
-            final boolean wasFocused = r != null && supervisor.isFocusedStack(sourceStack)
+            final boolean wasFocused = r != null && supervisor.isTopDisplayFocusedStack(sourceStack)
                     && (topRunningActivityLocked() == r);
             final boolean wasResumed = r != null && sourceStack.getResumedActivity() == r;
             final boolean wasPaused = r != null && sourceStack.mPausingActivity == r;
@@ -751,7 +751,7 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
             // The task might have already been running and its visibility needs to be synchronized
             // with the visibility of the stack / windows.
             supervisor.ensureActivitiesVisibleLocked(null, 0, !mightReplaceWindow);
-            supervisor.resumeFocusedStackTopActivityLocked();
+            supervisor.resumeFocusedStacksTopActivitiesLocked();
         }
 
         // TODO: Handle incorrect request to move before the actual move, not after.
@@ -1747,6 +1747,14 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
         return updateOverrideConfiguration(bounds, null /* insetBounds */);
     }
 
+    void setLastNonFullscreenBounds(Rect bounds) {
+        if (mLastNonFullscreenBounds == null) {
+            mLastNonFullscreenBounds = new Rect(bounds);
+        } else {
+            mLastNonFullscreenBounds.set(bounds);
+        }
+    }
+
     /**
      * Update task's override configuration based on the bounds.
      * @param bounds The bounds of the task.
@@ -1768,7 +1776,7 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
         final boolean persistBounds = getWindowConfiguration().persistTaskBounds();
         if (matchParentBounds) {
             if (!currentBounds.isEmpty() && persistBounds) {
-                mLastNonFullscreenBounds = currentBounds;
+                setLastNonFullscreenBounds(currentBounds);
             }
             setBounds(null);
             newConfig.unset();
@@ -1778,7 +1786,7 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
             setBounds(mTmpRect);
 
             if (mStack == null || persistBounds) {
-                mLastNonFullscreenBounds = getOverrideBounds();
+                setLastNonFullscreenBounds(getOverrideBounds());
             }
             computeOverrideConfiguration(newConfig, mTmpRect, insetBounds,
                     mTmpRect.right != bounds.right, mTmpRect.bottom != bounds.bottom);
@@ -1937,6 +1945,35 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
         for (int i = getChildCount() - 1; i >= 0; i--) {
             getChildAt(i).clearOptionsLocked(false /* withAbort */);
         }
+    }
+
+    /**
+     * Fills in a {@link TaskInfo} with information from this task.
+     * @param info the {@link TaskInfo} to fill in
+     * @param reuseActivitiesReport a temporary activities report that we can reuse to fetch the
+     *                              running activities
+     */
+    void fillTaskInfo(TaskInfo info, TaskActivitiesReport reuseActivitiesReport) {
+        getNumRunningActivities(reuseActivitiesReport);
+        info.userId = userId;
+        info.stackId = getStackId();
+        info.taskId = taskId;
+        info.isRunning = getTopActivity() != null;
+        info.baseIntent = getBaseIntent();
+        info.baseActivity = reuseActivitiesReport.base != null
+                ? reuseActivitiesReport.base.intent.getComponent()
+                : null;
+        info.topActivity = reuseActivitiesReport.top != null
+                ? reuseActivitiesReport.top.intent.getComponent()
+                : null;
+        info.origActivity = origActivity;
+        info.realActivity = realActivity;
+        info.numActivities = reuseActivitiesReport.numActivities;
+        info.lastActiveTime = lastActiveTime;
+        info.taskDescription = new ActivityManager.TaskDescription(lastTaskDescription);
+        info.supportsSplitScreenMultiWindow = supportsSplitScreenWindowingMode();
+        info.resizeMode = mResizeMode;
+        info.configuration.setTo(getConfiguration());
     }
 
     void dump(PrintWriter pw, String prefix) {

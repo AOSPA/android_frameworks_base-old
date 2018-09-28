@@ -23,6 +23,7 @@ import com.android.i18n.phonenumbers.Phonenumber.PhoneNumber;
 import com.android.i18n.phonenumbers.ShortNumberInfo;
 
 import android.annotation.IntDef;
+import android.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
@@ -281,6 +282,7 @@ public class PhoneNumberUtils {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static String extractNetworkPortionAlt(String phoneNumber) {
         if (phoneNumber == null) {
             return null;
@@ -354,6 +356,7 @@ public class PhoneNumberUtils {
      * RFC 3601 says pause is 'p' and tonewait is 'w'.
      * @hide
      */
+    @UnsupportedAppUsage
     public static String convertPreDial(String phoneNumber) {
         if (phoneNumber == null) {
             return null;
@@ -466,6 +469,7 @@ public class PhoneNumberUtils {
     /**
      * @hide only for testing.
      */
+    @UnsupportedAppUsage
     public static boolean compare(String a, String b, boolean useStrictComparation) {
         return (useStrictComparation ? compareStrictly(a, b) : compareLoosely(a, b));
     }
@@ -484,6 +488,7 @@ public class PhoneNumberUtils {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean
     compareLoosely(String a, String b) {
         int ia, ib;
@@ -581,6 +586,7 @@ public class PhoneNumberUtils {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean
     compareStrictly(String a, String b) {
         return compareStrictly(a, b, true);
@@ -589,6 +595,7 @@ public class PhoneNumberUtils {
     /**
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean
     compareStrictly(String a, String b, boolean acceptInvalidCCCPrefix) {
         if (a == null || b == null) {
@@ -1262,6 +1269,7 @@ public class PhoneNumberUtils {
      * @deprecated Use link #formatNumber(String phoneNumber, String defaultCountryIso) instead
      */
     @Deprecated
+    @UnsupportedAppUsage
     public static String formatNumber(String source, int defaultFormattingType) {
         SpannableStringBuilder text = new SpannableStringBuilder(source);
         formatNumber(text, defaultFormattingType);
@@ -1722,6 +1730,7 @@ public class PhoneNumberUtils {
     //
     // However, in order to loose match 650-555-1212 and 555-1212, we need to set the min match
     // to 7.
+    @UnsupportedAppUsage
     static final int MIN_MATCH = 7;
 
     /**
@@ -1746,6 +1755,7 @@ public class PhoneNumberUtils {
      *         listed in the RIL / SIM, otherwise return false.
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean isEmergencyNumber(int subId, String number) {
         // Return true only if the specified number *exactly* matches
         // one of the emergency numbers listed by the RIL / SIM.
@@ -1796,6 +1806,7 @@ public class PhoneNumberUtils {
      *         same digits as any of those emergency numbers.
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean isPotentialEmergencyNumber(int subId, String number) {
         // Check against the emergency numbers listed by the RIL / SIM,
         // and *don't* require an exact match.
@@ -1860,6 +1871,7 @@ public class PhoneNumberUtils {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean isEmergencyNumber(String number, String defaultCountryIso) {
             return isEmergencyNumber(getDefaultVoiceSubId(), number, defaultCountryIso);
     }
@@ -2083,6 +2095,7 @@ public class PhoneNumberUtils {
      * is currently in.
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean isLocalEmergencyNumber(Context context, int subId, String number) {
         return isLocalEmergencyNumberInternal(subId, number,
                                               context,
@@ -2111,6 +2124,7 @@ public class PhoneNumberUtils {
      * @see android.location.CountryDetector
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean isPotentialLocalEmergencyNumber(Context context, String number) {
         return isPotentialLocalEmergencyNumber(context, getDefaultVoiceSubId(), number);
     }
@@ -2137,6 +2151,7 @@ public class PhoneNumberUtils {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean isPotentialLocalEmergencyNumber(Context context, int subId,
             String number) {
         return isLocalEmergencyNumberInternal(subId, number,
@@ -2265,6 +2280,7 @@ public class PhoneNumberUtils {
      * to read the VM number.
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean isVoiceMailNumber(Context context, int subId, String number) {
         String vmNumber, mdn;
         try {
@@ -2411,6 +2427,7 @@ public class PhoneNumberUtils {
      *
      * @hide TODO: pending API Council approval
      */
+    @UnsupportedAppUsage
     public static String cdmaCheckAndProcessPlusCode(String dialStr) {
         if (!TextUtils.isEmpty(dialStr)) {
             if (isReallyDialable(dialStr.charAt(0)) &&
@@ -2590,6 +2607,7 @@ public class PhoneNumberUtils {
      * @hide
      */
     @Deprecated
+    @UnsupportedAppUsage
     public static CharSequence ttsSpanAsPhoneNumber(CharSequence phoneNumber) {
         return createTtsSpannable(phoneNumber);
     }
@@ -2701,6 +2719,7 @@ public class PhoneNumberUtils {
      * i.e. NXX-NXX-XXXX, N is any digit 2-9 and X is any digit 0-9
      * @hide
      */
+    @UnsupportedAppUsage
     public static boolean isNanp (String dialStr) {
         boolean retVal = false;
         if (dialStr != null) {
@@ -2748,6 +2767,7 @@ public class PhoneNumberUtils {
      * @param number
      * @return true if number contains @
      */
+    @UnsupportedAppUsage
     public static boolean isUriNumber(String number) {
         // Note we allow either "@" or "%40" to indicate a URI, in case
         // the passed-in string is URI-escaped.  (Neither "@" nor "%40"
@@ -2765,6 +2785,7 @@ public class PhoneNumberUtils {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public static String getUsernameFromUriNumber(String number) {
         // The delimiter between username and domain name can be
         // either "@" or "%40" (the URI-escaped equivalent.)
