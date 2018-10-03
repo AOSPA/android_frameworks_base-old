@@ -1272,13 +1272,12 @@ public abstract class DhcpPacket {
     public static ByteBuffer buildDiscoverPacket(int encap, int transactionId,
         short secs, byte[] clientMac, boolean broadcast, byte[] expectedParams) {
         return buildDiscoverPacket(encap, transactionId, secs, clientMac,
-                                   broadcase, expectedParams, false);
+                                   broadcast, expectedParams, false);
     }
     public static ByteBuffer buildDiscoverPacket(int encap, int transactionId,
         short secs, byte[] clientMac, boolean broadcast, byte[] expectedParams,
-        booleanrapidCommit) {
-        DhcpPacket pkt = new DhcpDiscoverPacket(transactionId, secs, INADDR_ANY /* relayIp */,
-                clientMac, broadcast, INADDR_ANY /* srcIp */, rapidCommit);
+        boolean rapidCommit) {
+        DhcpPacket pkt = new DhcpDiscoverPacket(transactionId, secs, clientMac, broadcast, rapidCommit);
         pkt.mRequestedParams = expectedParams;
         return pkt.buildPacket(encap, DHCP_SERVER, DHCP_CLIENT);
     }

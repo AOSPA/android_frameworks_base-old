@@ -40,6 +40,7 @@ class DhcpDiscoverPacket extends DhcpPacket {
                        boolean rapidCommit) {
         super(transId, secs, INADDR_ANY, INADDR_ANY, INADDR_ANY, INADDR_ANY,
               clientMac, broadcast, rapidCommit);
+        mSrcIp = INADDR_ANY;
     }
 
     public String toString() {

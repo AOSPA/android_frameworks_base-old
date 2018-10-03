@@ -3528,7 +3528,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         }
 
         /* Acquire perf lock *only* during new app launch */
-        if (mTmpFindTaskResult.r == null || mTmpFindTaskResult.r.getState() == ActivityState.DESTROYED) {
+        if (mTmpFindTaskResult.mRecord == null || mTmpFindTaskResult.mRecord.getState() == ActivityState.DESTROYED) {
             acquireAppLaunchPerfLock(r.packageName);
         }
 
