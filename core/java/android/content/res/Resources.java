@@ -916,8 +916,10 @@ public class Resources {
      *           tool. This integer encodes the package, type, and resource
      *           entry. The value 0 is an invalid identifier.
      * @throws NotFoundException Throws NotFoundException if the given ID does not exist.
-     * 
+     *
+     * @deprecated Prefer {@link android.graphics.drawable.AnimatedImageDrawable}.
      */
+    @Deprecated
     public Movie getMovie(@RawRes int id) throws NotFoundException {
         final InputStream is = openRawResource(id);
         final Movie movie = Movie.decodeStream(is);
@@ -1127,10 +1129,8 @@ public class Resources {
      *
      * @throws NotFoundException Throws NotFoundException if the given ID does
      *         not exist or is not a floating-point value.
-     * @hide Pending API council approval.
      */
-    @UnsupportedAppUsage
-    public float getFloat(int id) {
+    public float getFloat(@DimenRes int id) {
         final TypedValue value = obtainTempTypedValue();
         try {
             mResourcesImpl.getValue(id, value, true);

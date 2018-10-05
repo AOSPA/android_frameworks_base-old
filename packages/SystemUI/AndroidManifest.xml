@@ -121,7 +121,7 @@
     <uses-permission android:name="android.permission.MEDIA_CONTENT_CONTROL" />
     <uses-permission android:name="android.permission.ACCESS_KEYGUARD_SECURE_STORAGE" />
     <uses-permission android:name="android.permission.TRUST_LISTENER" />
-    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC_INTERNAL" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <uses-permission android:name="android.permission.RESET_FINGERPRINT_LOCKOUT" />
     <uses-permission android:name="android.permission.MANAGE_SLICE_PERMISSIONS" />
@@ -217,6 +217,7 @@
 
     <protected-broadcast android:name="com.android.settingslib.action.REGISTER_SLICE_RECEIVER" />
     <protected-broadcast android:name="com.android.settingslib.action.UNREGISTER_SLICE_RECEIVER" />
+    <protected-broadcast android:name="com.android.settings.flashlight.action.FLASHLIGHT_CHANGED" />
 
     <application
         android:name=".SystemUIApplication"

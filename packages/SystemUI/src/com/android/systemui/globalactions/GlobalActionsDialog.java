@@ -55,6 +55,7 @@ import android.telephony.ServiceState;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.ArraySet;
+import android.util.FeatureFlagUtils;
 import android.util.Log;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
@@ -89,6 +90,7 @@ import com.android.systemui.Interpolators;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.plugins.GlobalActions.GlobalActionsManager;
 import com.android.systemui.statusbar.phone.ScrimController;
+import com.android.systemui.util.EmergencyDialerConstants;
 import com.android.systemui.volume.SystemUIInterpolators.LogAccelerateInterpolator;
 
 import java.util.ArrayList;
@@ -100,7 +102,7 @@ import java.util.List;
  * is provisioned.
  */
 class GlobalActionsDialog implements DialogInterface.OnDismissListener,
-        DialogInterface.OnClickListener {
+        DialogInterface.OnClickListener, DialogInterface.OnShowListener {
 
     static public final String SYSTEM_DIALOG_REASON_KEY = "reason";
     static public final String SYSTEM_DIALOG_REASON_GLOBAL_ACTIONS = "globalactions";
@@ -317,8 +319,8 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         ArraySet<String> addedKeys = new ArraySet<String>();
         mHasLogoutButton = false;
         mHasLockdownButton = false;
-        mSeparatedEmergencyButtonEnabled = Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.FASTER_EMERGENCY_PHONE_CALL_ENABLED, 0) != 0;
+        mSeparatedEmergencyButtonEnabled = FeatureFlagUtils
+                .isEnabled(mContext, FeatureFlagUtils.EMERGENCY_DIAL_SHORTCUTS);
         for (int i = 0; i < defaultActions.length; i++) {
             String actionKey = defaultActions[i];
             if (addedKeys.contains(actionKey)) {
@@ -397,6 +399,7 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
         dialog.setKeyguardShowing(mKeyguardShowing);
 
         dialog.setOnDismissListener(this);
+        dialog.setOnShowListener(this);
 
         return dialog;
     }
@@ -448,9 +451,6 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
     }
 
     private class EmergencyDialerAction extends SinglePressAction {
-        private static final String ACTION_EMERGENCY_DIALER_DIAL =
-                "com.android.phone.EmergencyDialer.DIAL";
-
         private EmergencyDialerAction() {
             super(R.drawable.ic_faster_emergency,
                     R.string.global_action_emergency);
@@ -458,8 +458,11 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
 
         @Override
         public void onPress() {
-            Intent intent = new Intent(ACTION_EMERGENCY_DIALER_DIAL);
+            MetricsLogger.action(mContext, MetricsEvent.ACTION_EMERGENCY_DIALER_FROM_POWER_MENU);
+            Intent intent = new Intent(EmergencyDialerConstants.ACTION_DIAL);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            intent.putExtra(EmergencyDialerConstants.EXTRA_ENTRY_TYPE,
+                    EmergencyDialerConstants.ENTRY_TYPE_POWER_MENU);
             mContext.startActivityAsUser(intent, UserHandle.CURRENT);
         }
 
@@ -860,6 +863,11 @@ class GlobalActionsDialog implements DialogInterface.OnDismissListener,
             dialog.dismiss();
         }
         item.onPress();
+    }
+
+    /** {@inheritDoc} */
+    public void onShow(DialogInterface dialog) {
+        MetricsLogger.visible(mContext, MetricsEvent.POWER_MENU);
     }
 
     /**

@@ -1635,6 +1635,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                 break;
             }
             case DISPATCH_UIDS_CHANGED_UI_MSG: {
+                if (false) { // DO NOT SUBMIT WITH TRUE
+                    maybeTriggerWatchdog();
+                }
                 dispatchUidsChanged();
             } break;
             case DISPATCH_OOM_ADJ_OBSERVER_MSG: {
@@ -2415,7 +2418,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             int logSampleRate = Settings.Global.getInt(mContext.getContentResolver(),
-                    Settings.Global.HIDDEN_API_ACCESS_LOG_SAMPLING_RATE, -1);
+                    Settings.Global.HIDDEN_API_ACCESS_LOG_SAMPLING_RATE, 0x200);
             if (logSampleRate < 0 || logSampleRate > 0x10000) {
                 logSampleRate = -1;
             }
@@ -4406,6 +4409,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     private final void handleAppDiedLocked(ProcessRecord app,
             boolean restarting, boolean allowRestart) {
         int pid = app.pid;
+        final boolean clearLaunchStartTime = !restarting && app.removed && app.foregroundActivities;
         boolean kept = cleanUpApplicationRecordLocked(app, restarting, allowRestart, -1,
                 false /*replacingPid*/);
         if (!kept && !restarting) {
@@ -4444,6 +4448,19 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         } finally {
             mWindowManager.continueSurfaceLayout();
+        }
+
+        // TODO (b/67683350)
+        // When an app process is removed, activities from the process may be relaunched. In the
+        // case of forceStopPackageLocked the activities are finished before any window is drawn,
+        // and the launch time is not cleared. This will be incorrectly used to calculate launch
+        // time for the next launched activity launched in the same windowing mode.
+        if (clearLaunchStartTime) {
+            final LaunchTimeTracker.Entry entry = mStackSupervisor
+                    .getLaunchTimeTracker().getEntry(mStackSupervisor.getWindowingMode());
+            if (entry != null) {
+                entry.mLaunchStartTime = 0;
+            }
         }
     }
 
@@ -4627,17 +4644,18 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     /**
      * If a stack trace dump file is configured, dump process stack traces.
-     * @param clearTraces causes the dump file to be erased prior to the new
-     *    traces being written, if true; when false, the new traces will be
-     *    appended to any existing file content.
      * @param firstPids of dalvik VM processes to dump stack traces for first
      * @param lastPids of dalvik VM processes to dump stack traces for last
      * @param nativePids optional list of native pids to dump stack crawls
      */
-    public static File dumpStackTraces(boolean clearTraces, ArrayList<Integer> firstPids,
+    public static File dumpStackTraces(ArrayList<Integer> firstPids,
             ProcessCpuTracker processCpuTracker, SparseArray<Boolean> lastPids,
             ArrayList<Integer> nativePids) {
         ArrayList<Integer> extraPids = null;
+
+        if (DEBUG_ANR) {
+            Slog.d(TAG, "dumpStackTraces pids=" + lastPids + " nativepids=" + nativePids);
+        }
 
         // Measure CPU usage as soon as we're called in order to get a realistic sampling
         // of the top users at the time of the request.
@@ -5256,27 +5274,56 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public Debug.MemoryInfo[] getProcessMemoryInfo(int[] pids) {
         enforceNotIsolatedCaller("getProcessMemoryInfo");
+
+        final long now = SystemClock.uptimeMillis();
+        final long lastNow = now - mConstants.MEMORY_INFO_THROTTLE_TIME;
+
+        final int callingPid = Binder.getCallingPid();
+        final int callingUid = Binder.getCallingUid();
+        final int userId = UserHandle.getUserId(callingUid);
+        final boolean allUsers = ActivityManager.checkUidPermission(INTERACT_ACROSS_USERS_FULL,
+                callingUid) == PackageManager.PERMISSION_GRANTED;
+        // Check REAL_GET_TASKS to see if they are allowed to access other uids
+        final boolean allUids = mAtmInternal.isGetTasksAllowed(
+                "getProcessMemoryInfo", callingPid, callingUid);
+
         Debug.MemoryInfo[] infos = new Debug.MemoryInfo[pids.length];
         for (int i=pids.length-1; i>=0; i--) {
-            ProcessRecord proc;
-            int oomAdj;
+            infos[i] = new Debug.MemoryInfo();
+            final ProcessRecord proc;
+            final int oomAdj;
             synchronized (this) {
                 synchronized (mPidsSelfLocked) {
                     proc = mPidsSelfLocked.get(pids[i]);
                     oomAdj = proc != null ? proc.setAdj : 0;
                 }
             }
-            infos[i] = new Debug.MemoryInfo();
-            long startTime = SystemClock.currentThreadTimeMillis();
-            Debug.getMemoryInfo(pids[i], infos[i]);
-            long endTime = SystemClock.currentThreadTimeMillis();
+            if (!allUids || (!allUsers && (proc == null
+                    || UserHandle.getUserId(proc.uid) != userId))) {
+                // The caller is not allow to get information about this other process...
+                // just leave it empty.
+                continue;
+            }
+            if (proc != null && proc.lastMemInfoTime >= lastNow && proc.lastMemInfo != null) {
+                // It hasn't been long enough that we want to take another sample; return
+                // the last one.
+                infos[i].set(proc.lastMemInfo);
+                continue;
+            }
+            final long startTime = SystemClock.currentThreadTimeMillis();
+            final Debug.MemoryInfo memInfo = new Debug.MemoryInfo();
+            Debug.getMemoryInfo(pids[i], memInfo);
+            final long endTime = SystemClock.currentThreadTimeMillis();
+            infos[i].set(memInfo);
             if (proc != null) {
                 synchronized (this) {
+                    proc.lastMemInfo = memInfo;
+                    proc.lastMemInfoTime = SystemClock.uptimeMillis();
                     if (proc.thread != null && proc.setAdj == oomAdj) {
                         // Record this for posterity if the process has been stable.
                         proc.baseProcessTracker.addPss(infos[i].getTotalPss(),
                                 infos[i].getTotalUss(), infos[i].getTotalRss(), false,
-                                ProcessStats.ADD_PSS_EXTERNAL_SLOW, endTime-startTime,
+                                ProcessStats.ADD_PSS_EXTERNAL_SLOW, endTime - startTime,
                                 proc.pkgList.mPkgList);
                         for (int ipkg = proc.pkgList.size() - 1; ipkg >= 0; ipkg--) {
                             ProcessStats.ProcessStateHolder holder = proc.pkgList.valueAt(ipkg);
@@ -5301,6 +5348,16 @@ public class ActivityManagerService extends IActivityManager.Stub
     @Override
     public long[] getProcessPss(int[] pids) {
         enforceNotIsolatedCaller("getProcessPss");
+
+        final int callingPid = Binder.getCallingPid();
+        final int callingUid = Binder.getCallingUid();
+        final int userId = UserHandle.getUserId(callingUid);
+        final boolean allUsers = ActivityManager.checkUidPermission(INTERACT_ACROSS_USERS_FULL,
+                callingUid) == PackageManager.PERMISSION_GRANTED;
+        // Check REAL_GET_TASKS to see if they are allowed to access other uids
+        final boolean allUids = mAtmInternal.isGetTasksAllowed(
+                "getProcessPss", callingPid, callingUid);
+
         long[] pss = new long[pids.length];
         for (int i=pids.length-1; i>=0; i--) {
             ProcessRecord proc;
@@ -5310,6 +5367,11 @@ public class ActivityManagerService extends IActivityManager.Stub
                     proc = mPidsSelfLocked.get(pids[i]);
                     oomAdj = proc != null ? proc.setAdj : 0;
                 }
+            }
+            if (!allUids || (!allUsers && UserHandle.getUserId(proc.uid) != userId)) {
+                // The caller is not allow to get information about this other process...
+                // just leave it empty.
+                continue;
             }
             long[] tmpUss = new long[3];
             long startTime = SystemClock.currentThreadTimeMillis();
@@ -8252,7 +8314,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             checkTime(startTime, "getContentProviderImpl: done!");
 
             grantEphemeralAccessLocked(userId, null /*intent*/,
-                    cpi.applicationInfo.uid, UserHandle.getAppId(Binder.getCallingUid()));
+                    UserHandle.getAppId(cpi.applicationInfo.uid),
+                    UserHandle.getAppId(Binder.getCallingUid()));
         }
 
         // Wait for the provider to be published...
@@ -11938,7 +12001,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                         printed = true;
                     }
                     pw.print("    "); UserHandle.formatUid(pw, reg.uid);
-                    pw.print(" "); pw.print(reg.pkg); pw.print(":");
+                    pw.print(" "); pw.print(reg.pkg);
+                    final IUidObserver observer = mUidObservers.getRegisteredCallbackItem(i);
+                    pw.print(" "); pw.print(observer.getClass().getTypeName()); pw.print(":");
                     if ((reg.which&ActivityManager.UID_OBSERVER_IDLE) != 0) {
                         pw.print(" IDLE");
                     }
@@ -15526,12 +15591,6 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         synchronized(this) {
             // !!! TODO: currently no check here that we're already bound
-            BatteryStatsImpl.Uid.Pkg.Serv ss = null;
-            BatteryStatsImpl stats = mBatteryStatsService.getActiveStatistics();
-            synchronized (stats) {
-                ss = stats.getServiceStatsLocked(app.uid, app.packageName, app.name);
-            }
-
             // Backup agent is now in use, its package can't be stopped.
             try {
                 AppGlobals.getPackageManager().setPackageStoppedState(
@@ -15542,7 +15601,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         + app.packageName + ": " + e);
             }
 
-            BackupRecord r = new BackupRecord(ss, app, backupMode);
+            BackupRecord r = new BackupRecord(app, backupMode);
             ComponentName hostingName =
                     (backupMode == ApplicationThreadConstants.BACKUP_MODE_INCREMENTAL)
                             ? new ComponentName(app.packageName, app.backupAgentName)
@@ -17078,8 +17137,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             activeInstr.mUiAutomationConnection = uiAutomationConnection;
             activeInstr.mResultClass = className;
 
-            boolean disableHiddenApiChecks =
-                    (flags & INSTRUMENTATION_FLAG_DISABLE_HIDDEN_API_CHECKS) != 0;
+            boolean disableHiddenApiChecks = ai.usesNonSdkApi()
+                    || (flags & INSTRUMENTATION_FLAG_DISABLE_HIDDEN_API_CHECKS) != 0;
             if (disableHiddenApiChecks) {
                 enforceCallingPermission(android.Manifest.permission.DISABLE_HIDDEN_API_CHECKS,
                         "disable hidden API checks");
@@ -17779,6 +17838,19 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
+        // If the app was recently in the foreground and moved to a foreground service status,
+        // allow it to get a higher rank in memory for some time, compared to other foreground
+        // services so that it can finish performing any persistence/processing of in-memory state.
+        if (app.hasForegroundServices() && adj > ProcessList.PERCEPTIBLE_RECENT_FOREGROUND_APP_ADJ
+                && (app.lastTopTime + mConstants.TOP_TO_FGS_GRACE_DURATION > now
+                    || app.setProcState <= ActivityManager.PROCESS_STATE_TOP)) {
+            adj = ProcessList.PERCEPTIBLE_RECENT_FOREGROUND_APP_ADJ;
+            app.adjType = "fg-service-act";
+            if (DEBUG_OOM_ADJ_REASON || logUid == appUid) {
+                reportOomAdjMessageLocked(TAG_OOM_ADJ, "Raise to recent fg: " + app);
+            }
+        }
+
         if (adj > ProcessList.PERCEPTIBLE_APP_ADJ
                 || procState > ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND) {
             if (app.forcingToImportant != null) {
@@ -18046,6 +18118,10 @@ public class ActivityManagerService extends IActivityManager.Stub
                                         cr.trackProcState(procState, mAdjSeq, now);
                                         trackedProcState = true;
                                     }
+                                } else if ((cr.flags & Context.BIND_ADJUST_BELOW_PERCEPTIBLE) != 0
+                                        && clientAdj < ProcessList.PERCEPTIBLE_APP_ADJ
+                                        && adj > ProcessList.PERCEPTIBLE_APP_ADJ + 1) {
+                                    newAdj = ProcessList.PERCEPTIBLE_APP_ADJ + 1;
                                 } else if ((cr.flags&Context.BIND_NOT_VISIBLE) != 0
                                         && clientAdj < ProcessList.PERCEPTIBLE_APP_ADJ
                                         && adj > ProcessList.PERCEPTIBLE_APP_ADJ) {
@@ -19057,6 +19133,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             // Must be called before updating setProcState
             maybeUpdateUsageStatsLocked(app, nowElapsed);
 
+            maybeUpdateLastTopTime(app, now);
+
             app.setProcState = app.curProcState;
             if (app.setProcState >= ActivityManager.PROCESS_STATE_HOME) {
                 app.notCachedSinceIdle = false;
@@ -19278,6 +19356,13 @@ public class ActivityManagerService extends IActivityManager.Stub
         app.reportedInteraction = isInteraction;
         if (!isInteraction) {
             app.interactionEventTime = 0;
+        }
+    }
+
+    private void maybeUpdateLastTopTime(ProcessRecord app, long nowUptime) {
+        if (app.setProcState <= ActivityManager.PROCESS_STATE_TOP
+                && app.curProcState > ActivityManager.PROCESS_STATE_TOP) {
+            app.lastTopTime = nowUptime;
         }
     }
 
@@ -21577,6 +21662,27 @@ public class ActivityManagerService extends IActivityManager.Stub
                 return superImpl.apply(permName, Process.SHELL_UID);
             }
             return superImpl.apply(permName, uid);
+        }
+    }
+
+    /**
+     * If debug.trigger.watchdog is set to 1, sleep 10 minutes with the AM lock held, which would
+     * cause a watchdog kill.
+     */
+    void maybeTriggerWatchdog() {
+        final String key = "debug.trigger.watchdog";
+        if (Watchdog.DEBUG && SystemProperties.getInt(key, 0) == 1) {
+            Slog.w(TAG, "!!! TRIGGERING WATCHDOG !!!");
+
+            // Clear the property; otherwise the system would hang again after a watchdog restart.
+            SystemProperties.set(key, "");
+            synchronized (ActivityManagerService.this) {
+                try {
+                    // Arbitrary long sleep for watchdog to catch.
+                    Thread.sleep(60 * 60 * 1000);
+                } catch (InterruptedException e) {
+                }
+            }
         }
     }
 }

@@ -49,6 +49,7 @@ cc_library_shared {
         "sharedmem.cpp",
         "storage_manager.cpp",
         "surface_texture.cpp",
+        "system_fonts.cpp",
         "trace.cpp",
     ],
 
@@ -64,6 +65,8 @@ cc_library_shared {
         "libsensor",
         "libandroid_runtime",
         "libnetd_client",
+        "libhwui",
+        "libxml2",
     ],
 
     static_libs: [

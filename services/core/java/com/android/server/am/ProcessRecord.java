@@ -20,6 +20,7 @@ import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 
+import android.os.Debug;
 import android.util.ArraySet;
 import android.util.DebugUtils;
 import android.util.EventLog;
@@ -197,6 +198,7 @@ final class ProcessRecord implements WindowProcessListener {
     long lastRequestedGc;       // When we last asked the app to do a gc
     long lastLowMemory;         // When we last told the app that memory is low
     long lastProviderTime;      // The last time someone else was using a provider in this process.
+    long lastTopTime;           // The last time the process was in the TOP state or greater.
     boolean reportLowMemory;    // Set to true when waiting to report low mem
     boolean empty;              // Is this an empty background process?
     boolean cached;             // Is this a cached process?
@@ -206,6 +208,11 @@ final class ProcessRecord implements WindowProcessListener {
     int adjSourceProcState;     // Debugging: proc state of adjSource's process.
     Object adjTarget;           // Debugging: target component impacting oom_adj.
     Runnable crashHandler;      // Optional local handler to be invoked in the process crash.
+
+    // Cache of last retrieve memory info and uptime, to throttle how frequently
+    // apps can requyest it.
+    Debug.MemoryInfo lastMemInfo;
+    long lastMemInfoTime;
 
     // Controller for driving the process state on the window manager side.
     final private WindowProcessController mWindowProcessController;
@@ -407,6 +414,11 @@ final class ProcessRecord implements WindowProcessListener {
         if (lastProviderTime > 0) {
             pw.print(prefix); pw.print("lastProviderTime=");
             TimeUtils.formatDuration(lastProviderTime, nowUptime, pw);
+            pw.println();
+        }
+        if (lastTopTime > 0) {
+            pw.print(prefix); pw.print("lastTopTime=");
+            TimeUtils.formatDuration(lastTopTime, nowUptime, pw);
             pw.println();
         }
         if (hasStartedServices) {

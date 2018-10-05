@@ -31,6 +31,7 @@ import android.graphics.Rect;
 import android.graphics.SurfaceTexture;
 import android.media.AudioAttributes;
 import android.media.IAudioService;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -171,7 +172,7 @@ public class Camera {
     private static final int CAMERA_MSG_META_DATA        = 0x2000;
     /* ### QC ADD-ONS: END */
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private long mNativeContext; // accessed by native methods
     private EventHandler mEventHandler;
     private ShutterCallback mShutterCallback;
@@ -800,7 +801,7 @@ public class Camera {
     /**
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public native final void setPreviewSurface(Surface surface) throws IOException;
 
     /**

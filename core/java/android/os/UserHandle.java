@@ -38,12 +38,16 @@ public final class UserHandle implements Parcelable {
     public static final @UserIdInt int USER_ALL = -1;
 
     /** @hide A user handle to indicate all users on the device */
+    @SystemApi
+    @TestApi
     public static final UserHandle ALL = new UserHandle(USER_ALL);
 
     /** @hide A user id to indicate the currently active user */
     public static final @UserIdInt int USER_CURRENT = -2;
 
     /** @hide A user handle to indicate the current user of the device */
+    @SystemApi
+    @TestApi
     public static final UserHandle CURRENT = new UserHandle(USER_CURRENT);
 
     /** @hide A user id to indicate that we would like to send to the current
@@ -57,6 +61,7 @@ public final class UserHandle implements Parcelable {
     public static final UserHandle CURRENT_OR_SELF = new UserHandle(USER_CURRENT_OR_SELF);
 
     /** @hide An undefined user id */
+    @SystemApi
     public static final @UserIdInt int USER_NULL = -10000;
 
     /**
@@ -82,6 +87,7 @@ public final class UserHandle implements Parcelable {
     public static final int USER_SERIAL_SYSTEM = 0;
 
     /** @hide A user handle to indicate the "system" user of the device */
+    @SystemApi
     @TestApi
     public static final UserHandle SYSTEM = new UserHandle(USER_SYSTEM);
 

@@ -23,6 +23,7 @@ import android.os.Looper;
 import android.os.Process;
 import android.os.ServiceManager;
 import android.util.ArrayMap;
+import android.util.DisplayMetrics;
 import android.view.IWindowManager;
 import android.view.WindowManagerGlobal;
 
@@ -51,6 +52,7 @@ import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.phone.ConfigurationControllerImpl;
 import com.android.systemui.statusbar.phone.DarkIconDispatcherImpl;
 import com.android.systemui.statusbar.phone.LightBarController;
+import com.android.systemui.statusbar.phone.LockscreenGestureLogger;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
 import com.android.systemui.statusbar.phone.ManagedProfileControllerImpl;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
@@ -131,6 +133,10 @@ public class Dependency extends SystemUI {
      */
     public static final DependencyKey<Looper> BG_LOOPER = new DependencyKey<>("background_looper");
     /**
+     * Key for getting a background Handler for background work.
+     */
+    public static final DependencyKey<Handler> BG_HANDLER = new DependencyKey<>("background_handler");
+    /**
      * Key for getting a Handler for receiving time tick broadcasts on.
      */
     public static final DependencyKey<Handler> TIME_TICK_HANDLER =
@@ -164,6 +170,7 @@ public class Dependency extends SystemUI {
             thread.start();
             return thread.getLooper();
         });
+        mProviders.put(BG_HANDLER, () -> new Handler(getDependency(BG_LOOPER)));
         mProviders.put(MAIN_HANDLER, () -> new Handler(Looper.getMainLooper()));
         mProviders.put(ActivityStarter.class, () -> new ActivityStarterDelegate());
         mProviders.put(ActivityStarterDelegate.class, () ->
@@ -286,7 +293,7 @@ public class Dependency extends SystemUI {
                 new PluginDependencyProvider(get(PluginManager.class)));
 
         mProviders.put(LocalBluetoothManager.class, () ->
-                LocalBluetoothManager.getInstance(mContext, null));
+                LocalBluetoothManager.create(mContext, getDependency(BG_HANDLER)));
 
         mProviders.put(VolumeDialogController.class, () ->
                 new VolumeDialogControllerImpl(mContext));
@@ -327,6 +334,12 @@ public class Dependency extends SystemUI {
 
         mProviders.put(IStatusBarService.class, () -> IStatusBarService.Stub.asInterface(
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE)));
+
+        // Single instance of DisplayMetrics, gets updated by StatusBar, but can be used
+        // anywhere it is needed.
+        mProviders.put(DisplayMetrics.class, () -> new DisplayMetrics());
+
+        mProviders.put(LockscreenGestureLogger.class, () -> new LockscreenGestureLogger());
 
         // Put all dependencies above here so the factory can override them if it wants.
         SystemUIFactory.getInstance().injectDependencies(mProviders, mContext);

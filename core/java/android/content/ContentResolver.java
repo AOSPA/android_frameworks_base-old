@@ -437,6 +437,12 @@ public abstract class ContentResolver {
      */
     public static final String ANY_CURSOR_ITEM_TYPE = "vnd.android.cursor.item/*";
 
+    /**
+     * Default MIME type for files whose type is otherwise unknown.
+     * @hide
+     */
+    public static final String MIME_TYPE_DEFAULT = "application/octet-stream";
+
     /** @hide */
     @UnsupportedAppUsage
     public static final int SYNC_ERROR_SYNC_ALREADY_IN_PROGRESS = 1;
@@ -2127,7 +2133,7 @@ public abstract class ContentResolver {
                     uri, observer == null ? null : observer.getContentObserver(),
                     observer != null && observer.deliverSelfNotifications(),
                     syncToNetwork ? NOTIFY_SYNC_TO_NETWORK : 0,
-                    userHandle, mTargetSdkVersion);
+                    userHandle, mTargetSdkVersion, mContext.getPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2144,7 +2150,7 @@ public abstract class ContentResolver {
             getContentService().notifyChange(
                     uri, observer == null ? null : observer.getContentObserver(),
                     observer != null && observer.deliverSelfNotifications(), flags,
-                    userHandle, mTargetSdkVersion);
+                    userHandle, mTargetSdkVersion, mContext.getPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2317,7 +2323,9 @@ public abstract class ContentResolver {
                 .syncOnce()     // Immediate sync.
                 .build();
         try {
-            getContentService().syncAsUser(request, userId);
+            // Note ActivityThread.currentPackageName() may not be accurate in a shared process
+            // case, but it's only for debugging.
+            getContentService().syncAsUser(request, userId, ActivityThread.currentPackageName());
         } catch(RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2329,7 +2337,9 @@ public abstract class ContentResolver {
      */
     public static void requestSync(SyncRequest request) {
         try {
-            getContentService().sync(request);
+            // Note ActivityThread.currentPackageName() may not be accurate in a shared process
+            // case, but it's only for debugging.
+            getContentService().sync(request, ActivityThread.currentPackageName());
         } catch(RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

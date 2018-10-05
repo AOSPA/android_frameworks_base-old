@@ -22,6 +22,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UnsupportedAppUsage;
 import android.graphics.Paint;
+import android.os.Build;
 import android.text.style.LeadingMarginSpan;
 import android.text.style.LeadingMarginSpan.LeadingMarginSpan2;
 import android.text.style.LineHeightSpan;
@@ -1216,11 +1217,19 @@ public class StaticLayout extends Layout {
     }
 
     /**
+     * Returns the packed hyphen edit value for this line.
+     *
+     * You can extract start hyphen edit and end hyphen edit by using
+     * {@link Hyphenator#unpackStartHyphenEdit(int)} and
+     * {@link Hyphenator#unpackEndHyphenEdit(int)}.
+     *
+     * @param lineNumber a line number
+     * @return A packed hyphen edit value.
      * @hide
      */
     @Override
-    public int getHyphen(int line) {
-        return mLines[mColumns * line + HYPHEN] & HYPHEN_MASK;
+    public int getHyphen(int lineNumber) {
+        return mLines[mColumns * lineNumber + HYPHEN] & HYPHEN_MASK;
     }
 
     /**
@@ -1285,7 +1294,7 @@ public class StaticLayout extends Layout {
      *
      * @hide
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public int getHeight(boolean cap) {
         if (cap && mLineCount > mMaximumVisibleLineCount && mMaxLineHeight == -1
                 && Log.isLoggable(TAG, Log.WARN)) {

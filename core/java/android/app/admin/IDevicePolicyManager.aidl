@@ -145,6 +145,7 @@ interface IDevicePolicyManager {
     int getDeviceOwnerUserId();
 
     boolean setProfileOwner(in ComponentName who, String ownerName, int userHandle);
+    ComponentName getProfileOwnerAsUser(int userHandle);
     ComponentName getProfileOwner(int userHandle);
     String getProfileOwnerName(int userHandle);
     void setProfileEnabled(in ComponentName who);
@@ -361,8 +362,6 @@ interface IDevicePolicyManager {
 
     void setBackupServiceEnabled(in ComponentName admin, boolean enabled);
     boolean isBackupServiceEnabled(in ComponentName admin);
-    boolean setMandatoryBackupTransport(in ComponentName admin, in ComponentName backupTransportComponent);
-    ComponentName getMandatoryBackupTransport();
 
     void setNetworkLoggingEnabled(in ComponentName admin, boolean enabled);
     boolean isNetworkLoggingEnabled(in ComponentName admin);

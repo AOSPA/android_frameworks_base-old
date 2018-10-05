@@ -27,6 +27,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ParceledListSlice;
 import android.graphics.Region;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -73,7 +74,7 @@ import java.util.List;
  * follows the established service life cycle. Starting an accessibility service is triggered
  * exclusively by the user explicitly turning the service on in device settings. After the system
  * binds to a service, it calls {@link AccessibilityService#onServiceConnected()}. This method can
- * be overriden by clients that want to perform post binding setup.
+ * be overridden by clients that want to perform post binding setup.
  * </p>
  * <p>
  * An accessibility service stops either when the user turns it off in device settings or when
@@ -399,7 +400,7 @@ public abstract class AccessibilityService extends Service {
     @IntDef(prefix = { "SHOW_MODE_" }, value = {
             SHOW_MODE_AUTO,
             SHOW_MODE_HIDDEN,
-            SHOW_MODE_WITH_HARD_KEYBOARD
+            SHOW_MODE_IGNORE_HARD_KEYBOARD
     })
     public @interface SoftKeyboardShowMode {}
 
@@ -419,7 +420,7 @@ public abstract class AccessibilityService extends Service {
      * Allow the soft keyboard to be shown, even if a hard keyboard is connected
      * @see SoftKeyboardController
      */
-    public static final int SHOW_MODE_WITH_HARD_KEYBOARD = 2;
+    public static final int SHOW_MODE_IGNORE_HARD_KEYBOARD = 2;
 
     /**
      * Mask used to cover the show modes supported in public API
@@ -446,7 +447,7 @@ public abstract class AccessibilityService extends Service {
     @UnsupportedAppUsage
     private AccessibilityServiceInfo mInfo;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private IBinder mWindowToken;
 
     private WindowManager mWindowManager;
@@ -1205,7 +1206,7 @@ public abstract class AccessibilityService extends Service {
      *
      * @see AccessibilityService#SHOW_MODE_AUTO
      * @see AccessibilityService#SHOW_MODE_HIDDEN
-     * @see AccessibilityService#SHOW_MODE_WITH_HARD_KEYBOARD
+     * @see AccessibilityService#SHOW_MODE_IGNORE_HARD_KEYBOARD
      */
     public static final class SoftKeyboardController {
         private final AccessibilityService mService;
@@ -1354,7 +1355,7 @@ public abstract class AccessibilityService extends Service {
          *
          * @see AccessibilityService#SHOW_MODE_AUTO
          * @see AccessibilityService#SHOW_MODE_HIDDEN
-         * @see AccessibilityService#SHOW_MODE_WITH_HARD_KEYBOARD
+         * @see AccessibilityService#SHOW_MODE_IGNORE_HARD_KEYBOARD
          */
         @SoftKeyboardShowMode
         public int getShowMode() {
@@ -1384,7 +1385,7 @@ public abstract class AccessibilityService extends Service {
          *
          * @see AccessibilityService#SHOW_MODE_AUTO
          * @see AccessibilityService#SHOW_MODE_HIDDEN
-         * @see AccessibilityService#SHOW_MODE_WITH_HARD_KEYBOARD
+         * @see AccessibilityService#SHOW_MODE_IGNORE_HARD_KEYBOARD
          */
         public boolean setShowMode(@SoftKeyboardShowMode int showMode) {
            final IAccessibilityServiceConnection connection =

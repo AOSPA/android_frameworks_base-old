@@ -56,6 +56,10 @@
 #include "android_util_Binder.h"
 #include <binder/Parcel.h>
 
+#include "mediaplayer2.pb.h"
+
+using android::media::MediaPlayer2Proto::PlayerMessage;
+
 // Modular DRM begin
 #define FIND_CLASS(var, className) \
 var = env->FindClass(className); \
@@ -157,7 +161,7 @@ public:
     JNIMediaPlayer2Listener(JNIEnv* env, jobject thiz, jobject weak_thiz);
     ~JNIMediaPlayer2Listener();
     virtual void notify(int64_t srcId, int msg, int ext1, int ext2,
-                        const Parcel *obj = NULL) override;
+                        const PlayerMessage *obj = NULL) override;
 private:
     JNIMediaPlayer2Listener();
     jclass      mClass;     // Reference to MediaPlayer2 class
@@ -190,18 +194,21 @@ JNIMediaPlayer2Listener::~JNIMediaPlayer2Listener()
     env->DeleteGlobalRef(mClass);
 }
 
-void JNIMediaPlayer2Listener::notify(int64_t srcId, int msg, int ext1, int ext2, const Parcel *obj)
+void JNIMediaPlayer2Listener::notify(int64_t srcId, int msg, int ext1, int ext2,
+        const PlayerMessage* obj)
 {
     JNIEnv *env = JavaVMHelper::getJNIEnv();
-    if (obj && obj->dataSize() > 0) {
-        jobject jParcel = createJavaParcelObject(env);
-        if (jParcel != NULL) {
-            Parcel* nativeParcel = parcelForJavaObject(env, jParcel);
-            nativeParcel->setData(obj->data(), obj->dataSize());
-            env->CallStaticVoidMethod(mClass, fields.post_event, mObject,
-                    srcId, msg, ext1, ext2, jParcel);
-            env->DeleteLocalRef(jParcel);
-        }
+    if (obj != NULL) {
+        int size = obj->ByteSize();
+        jbyte* temp = new jbyte[size];
+        obj->SerializeToArray(temp, size);
+
+        // return the response as a byte array.
+        jbyteArray out = env->NewByteArray(size);
+        env->SetByteArrayRegion(out, 0, size, temp);
+        env->CallStaticVoidMethod(mClass, fields.post_event, mObject,
+                srcId, msg, ext1, ext2, out);
+        delete[] temp;
     } else {
         env->CallStaticVoidMethod(mClass, fields.post_event, mObject,
                 srcId, msg, ext1, ext2, NULL);
@@ -902,7 +909,7 @@ android_media_MediaPlayer2_getAudioStreamType(JNIEnv *env, jobject thiz)
 }
 
 static jboolean
-android_media_MediaPlayer2_setParameter(JNIEnv *env, jobject thiz, jint key, jobject java_request)
+android_media_MediaPlayer2_setParameter(JNIEnv *env, jobject thiz, jint key, jobject)
 {
     ALOGV("setParameter: key %d", key);
     sp<MediaPlayer2> mp = getMediaPlayer(env, thiz);
@@ -911,6 +918,11 @@ android_media_MediaPlayer2_setParameter(JNIEnv *env, jobject thiz, jint key, job
         return false;
     }
 
+    return false;
+    // TODO: set/getParameter is temporarily disabled to remove android_runtime.so dependency.
+    //       Once JAudioTrack migration is done, the AudioAttribute jobject
+    //       should be directly passed to AudioTrack without native parcel conversion.
+    /*
     Parcel *request = parcelForJavaObject(env, java_request);
     status_t err = mp->setParameter(key, *request);
     if (err == OK) {
@@ -918,6 +930,7 @@ android_media_MediaPlayer2_setParameter(JNIEnv *env, jobject thiz, jint key, job
     } else {
         return false;
     }
+    */
 }
 
 static jobject
@@ -930,6 +943,11 @@ android_media_MediaPlayer2_getParameter(JNIEnv *env, jobject thiz, jint key)
         return NULL;
     }
 
+    return NULL;
+    // TODO: set/getParameter is temporarily disabled to remove android_runtime.so dependency.
+    //       Once JAudioTrack migration is done, the AudioAttribute jobject
+    //       should be directly passed to AudioTrack without native parcel conversion.
+    /*
     jobject jParcel = createJavaParcelObject(env);
     if (jParcel != NULL) {
         Parcel* nativeParcel = parcelForJavaObject(env, jParcel);
@@ -940,6 +958,7 @@ android_media_MediaPlayer2_getParameter(JNIEnv *env, jobject thiz, jint key)
         }
     }
     return jParcel;
+    */
 }
 
 static void
@@ -978,75 +997,39 @@ android_media_MediaPlayer2_setVolume(JNIEnv *env, jobject thiz, jfloat leftVolum
     process_media_player_call( env, thiz, mp->setVolume((float) leftVolume, (float) rightVolume), NULL, NULL );
 }
 
-// Sends the request and reply parcels to the media player via the
-// binder interface.
-static jint
-android_media_MediaPlayer2_invoke(JNIEnv *env, jobject thiz,
-                                 jobject java_request, jobject java_reply)
-{
+static jbyteArray
+android_media_MediaPlayer2_invoke(JNIEnv *env, jobject thiz, jbyteArray requestData) {
     sp<MediaPlayer2> media_player = getMediaPlayer(env, thiz);
-    if (media_player == NULL ) {
+    if (media_player == NULL) {
         jniThrowException(env, "java/lang/IllegalStateException", NULL);
-        return UNKNOWN_ERROR;
+        return NULL;
     }
 
-    Parcel *request = parcelForJavaObject(env, java_request);
-    Parcel *reply = parcelForJavaObject(env, java_reply);
+    // Get the byte[] pointer and data length.
+    jbyte* pData = env->GetByteArrayElements(requestData, NULL);
+    jsize pDataLen = env->GetArrayLength(requestData);
 
-    request->setDataPosition(0);
+    // Deserialize from the byte stream.
+    PlayerMessage request;
+    PlayerMessage response;
+    request.ParseFromArray(pData, pDataLen);
 
-    // Don't use process_media_player_call which use the async loop to
-    // report errors, instead returns the status.
-    return (jint) media_player->invoke(*request, reply);
-}
-
-// Sends the new filter to the client.
-static jint
-android_media_MediaPlayer2_setMetadataFilter(JNIEnv *env, jobject thiz, jobject request)
-{
-    sp<MediaPlayer2> media_player = getMediaPlayer(env, thiz);
-    if (media_player == NULL ) {
-        jniThrowException(env, "java/lang/IllegalStateException", NULL);
-        return UNKNOWN_ERROR;
+    process_media_player_call( env, thiz, media_player->invoke(request, &response),
+            "java.lang.RuntimeException", NULL );
+    if (env->ExceptionCheck()) {
+        return NULL;
     }
 
-    Parcel *filter = parcelForJavaObject(env, request);
+    int size = response.ByteSize();
+    jbyte* temp = new jbyte[size];
+    response.SerializeToArray(temp, size);
 
-    if (filter == NULL ) {
-        jniThrowException(env, "java/lang/RuntimeException", "Filter is null");
-        return UNKNOWN_ERROR;
-    }
+    // return the response as a byte array.
+    jbyteArray out = env->NewByteArray(size);
+    env->SetByteArrayRegion(out, 0, size, temp);
+    delete[] temp;
 
-    return (jint) media_player->setMetadataFilter(*filter);
-}
-
-static jboolean
-android_media_MediaPlayer2_getMetadata(JNIEnv *env, jobject thiz, jboolean update_only,
-                                      jboolean apply_filter, jobject reply)
-{
-    sp<MediaPlayer2> media_player = getMediaPlayer(env, thiz);
-    if (media_player == NULL ) {
-        jniThrowException(env, "java/lang/IllegalStateException", NULL);
-        return JNI_FALSE;
-    }
-
-    Parcel *metadata = parcelForJavaObject(env, reply);
-
-    if (metadata == NULL ) {
-        jniThrowException(env, "java/lang/RuntimeException", "Reply parcel is null");
-        return JNI_FALSE;
-    }
-
-    metadata->freeData();
-    // On return metadata is positioned at the beginning of the
-    // metadata. Note however that the parcel actually starts with the
-    // return code so you should not rewind the parcel using
-    // setDataPosition(0).
-    if (media_player->getMetadata(update_only, apply_filter, metadata) == OK) {
-        return JNI_TRUE;
-    } else {
-        return JNI_FALSE;
-    }
+    return out;
 }
 
 // This function gets some field IDs, which in turn causes class initialization.
@@ -1068,7 +1051,7 @@ android_media_MediaPlayer2_native_init(JNIEnv *env)
     }
 
     fields.post_event = env->GetStaticMethodID(clazz, "postEventFromNative",
-                                               "(Ljava/lang/Object;JIIILjava/lang/Object;)V");
+                                               "(Ljava/lang/Object;JIII[B)V");
     if (fields.post_event == NULL) {
         return;
     }
@@ -1512,9 +1495,7 @@ static const JNINativeMethod gMethods[] = {
     {"setLooping",          "(Z)V",                             (void *)android_media_MediaPlayer2_setLooping},
     {"isLooping",           "()Z",                              (void *)android_media_MediaPlayer2_isLooping},
     {"_setVolume",          "(FF)V",                            (void *)android_media_MediaPlayer2_setVolume},
-    {"native_invoke",       "(Landroid/os/Parcel;Landroid/os/Parcel;)I",(void *)android_media_MediaPlayer2_invoke},
-    {"native_setMetadataFilter", "(Landroid/os/Parcel;)I",      (void *)android_media_MediaPlayer2_setMetadataFilter},
-    {"native_getMetadata", "(ZZLandroid/os/Parcel;)Z",          (void *)android_media_MediaPlayer2_getMetadata},
+    {"_invoke",             "([B)[B",                           (void *)android_media_MediaPlayer2_invoke},
     {"native_init",         "()V",                              (void *)android_media_MediaPlayer2_native_init},
     {"native_setup",        "(Ljava/lang/Object;)V",            (void *)android_media_MediaPlayer2_native_setup},
     {"native_finalize",     "()V",                              (void *)android_media_MediaPlayer2_native_finalize},

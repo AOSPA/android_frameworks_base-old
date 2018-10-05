@@ -1096,7 +1096,9 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         protoOutputStream.write(FONT_SCALE, fontScale);
         protoOutputStream.write(MCC, mcc);
         protoOutputStream.write(MNC, mnc);
-        mLocaleList.writeToProto(protoOutputStream, LOCALES);
+        if (mLocaleList != null) {
+            mLocaleList.writeToProto(protoOutputStream, LOCALES);
+        }
         protoOutputStream.write(SCREEN_LAYOUT, screenLayout);
         protoOutputStream.write(COLOR_MODE, colorMode);
         protoOutputStream.write(TOUCHSCREEN, touchscreen);
@@ -1111,7 +1113,9 @@ public final class Configuration implements Parcelable, Comparable<Configuration
         protoOutputStream.write(SCREEN_HEIGHT_DP, screenHeightDp);
         protoOutputStream.write(SMALLEST_SCREEN_WIDTH_DP, smallestScreenWidthDp);
         protoOutputStream.write(DENSITY_DPI, densityDpi);
-        windowConfiguration.writeToProto(protoOutputStream, WINDOW_CONFIGURATION);
+        if (windowConfiguration != null) {
+            windowConfiguration.writeToProto(protoOutputStream, WINDOW_CONFIGURATION);
+        }
         protoOutputStream.end(token);
     }
 
@@ -2072,23 +2076,23 @@ public final class Configuration implements Parcelable, Comparable<Configuration
                 break;
         }
 
-        switch (config.colorMode & Configuration.COLOR_MODE_HDR_MASK) {
-            case Configuration.COLOR_MODE_HDR_YES:
-                parts.add("highdr");
-                break;
-            case Configuration.COLOR_MODE_HDR_NO:
-                parts.add("lowdr");
-                break;
-            default:
-                break;
-        }
-
         switch (config.colorMode & Configuration.COLOR_MODE_WIDE_COLOR_GAMUT_MASK) {
             case Configuration.COLOR_MODE_WIDE_COLOR_GAMUT_YES:
                 parts.add("widecg");
                 break;
             case Configuration.COLOR_MODE_WIDE_COLOR_GAMUT_NO:
                 parts.add("nowidecg");
+                break;
+            default:
+                break;
+        }
+
+        switch (config.colorMode & Configuration.COLOR_MODE_HDR_MASK) {
+            case Configuration.COLOR_MODE_HDR_YES:
+                parts.add("highdr");
+                break;
+            case Configuration.COLOR_MODE_HDR_NO:
+                parts.add("lowdr");
                 break;
             default:
                 break;

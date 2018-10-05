@@ -63,7 +63,6 @@ const int FIELD_ID_DIMENSION_LEAF_IN_CONDITION = 5;
 // for GaugeBucketInfo
 const int FIELD_ID_ATOM = 3;
 const int FIELD_ID_ELAPSED_ATOM_TIMESTAMP = 4;
-const int FIELD_ID_WALL_CLOCK_ATOM_TIMESTAMP = 5;
 const int FIELD_ID_BUCKET_NUM = 6;
 const int FIELD_ID_START_BUCKET_ELAPSED_MILLIS = 7;
 const int FIELD_ID_END_BUCKET_ELAPSED_MILLIS = 8;
@@ -286,16 +285,9 @@ void GaugeMetricProducer::onDumpReportLocked(const int64_t dumpTimeNs,
                     const int64_t elapsedTimestampNs =  truncateTimestamp ?
                         truncateTimestampNsToFiveMinutes(atom.mElapsedTimestamps) :
                             atom.mElapsedTimestamps;
-                    const int64_t wallClockNs = truncateTimestamp ?
-                        truncateTimestampNsToFiveMinutes(atom.mWallClockTimestampNs) :
-                            atom.mWallClockTimestampNs;
                     protoOutput->write(
                         FIELD_TYPE_INT64 | FIELD_COUNT_REPEATED | FIELD_ID_ELAPSED_ATOM_TIMESTAMP,
                         (long long)elapsedTimestampNs);
-                    protoOutput->write(
-                        FIELD_TYPE_INT64 | FIELD_COUNT_REPEATED |
-                            FIELD_ID_WALL_CLOCK_ATOM_TIMESTAMP,
-                        (long long)wallClockNs);
                 }
             }
             protoOutput->end(bucketInfoToken);
@@ -367,13 +359,26 @@ void GaugeMetricProducer::onSlicedConditionMayChangeLocked(bool overallCondition
 }
 
 std::shared_ptr<vector<FieldValue>> GaugeMetricProducer::getGaugeFields(const LogEvent& event) {
+    std::shared_ptr<vector<FieldValue>> gaugeFields;
     if (mFieldMatchers.size() > 0) {
-        std::shared_ptr<vector<FieldValue>> gaugeFields = std::make_shared<vector<FieldValue>>();
+        gaugeFields = std::make_shared<vector<FieldValue>>();
         filterGaugeValues(mFieldMatchers, event.getValues(), gaugeFields.get());
-        return gaugeFields;
     } else {
-        return std::make_shared<vector<FieldValue>>(event.getValues());
+        gaugeFields = std::make_shared<vector<FieldValue>>(event.getValues());
     }
+    // Trim all dimension fields from output. Dimensions will appear in output report and will
+    // benefit from dictionary encoding. For large pulled atoms, this can give the benefit of
+    // optional repeated field.
+    for (const auto& field : mDimensionsInWhat) {
+        for (auto it = gaugeFields->begin(); it != gaugeFields->end();) {
+            if (it->mField.matches(field)) {
+                it = gaugeFields->erase(it);
+            } else {
+                it++;
+            }
+        }
+    }
+    return gaugeFields;
 }
 
 void GaugeMetricProducer::onDataPulled(const std::vector<std::shared_ptr<LogEvent>>& allData) {
@@ -437,7 +442,7 @@ void GaugeMetricProducer::onMatchedLogEventInternalLocked(
     if ((*mCurrentSlicedBucket)[eventKey].size() >= mGaugeAtomsPerDimensionLimit) {
         return;
     }
-    GaugeAtom gaugeAtom(getGaugeFields(event), eventTimeNs, getWallClockNs());
+    GaugeAtom gaugeAtom(getGaugeFields(event), eventTimeNs);
     (*mCurrentSlicedBucket)[eventKey].push_back(gaugeAtom);
     // Anomaly detection on gauge metric only works when there is one numeric
     // field specified.

@@ -165,10 +165,25 @@ class TouchExplorer extends BaseEventStreamTransformation
     /**
      * Creates a new instance.
      *
-     * @param inputFilter The input filter associated with this explorer.
      * @param context A context handle for accessing resources.
+     * @param service The service to notify touch interaction and gesture completed and to perform
+     *                action.
      */
     public TouchExplorer(Context context, AccessibilityManagerService service) {
+        this(context, service, null);
+    }
+
+    /**
+     * Creates a new instance.
+     *
+     * @param context A context handle for accessing resources.
+     * @param service The service to notify touch interaction and gesture completed and to perform
+     *                action.
+     * @param detector The gesture detector to handle accessibility touch event. If null the default
+     *                one created in place, or for testing purpose.
+     */
+    public TouchExplorer(Context context, AccessibilityManagerService service,
+            AccessibilityGestureDetector detector) {
         mContext = context;
         mAms = service;
         mReceivedPointerTracker = new ReceivedPointerTracker();
@@ -185,7 +200,11 @@ class TouchExplorer extends BaseEventStreamTransformation
         mSendTouchInteractionEndDelayed = new SendAccessibilityEventDelayed(
                 AccessibilityEvent.TYPE_TOUCH_INTERACTION_END,
                 mDetermineUserIntentTimeout);
-        mGestureDetector = new AccessibilityGestureDetector(context, this);
+        if (detector == null) {
+            mGestureDetector = new AccessibilityGestureDetector(context, this);
+        } else {
+            mGestureDetector = detector;
+        }
         final float density = context.getResources().getDisplayMetrics().density;
         mScaledMinPointerDistanceToUseMiddleLocation =
             (int) (MIN_POINTER_DISTANCE_TO_USE_MIDDLE_LOCATION_DIP * density);
@@ -1311,7 +1330,20 @@ class TouchExplorer extends BaseEventStreamTransformation
 
     @Override
     public String toString() {
-        return LOG_TAG;
+        return "TouchExplorer { " +
+                "mCurrentState: " + getStateSymbolicName(mCurrentState) +
+                ", mDetermineUserIntentTimeout: " + mDetermineUserIntentTimeout +
+                ", mDoubleTapSlop: " + mDoubleTapSlop +
+                ", mDraggingPointerId: " + mDraggingPointerId +
+                ", mLongPressingPointerId: " + mLongPressingPointerId +
+                ", mLongPressingPointerDeltaX: " + mLongPressingPointerDeltaX +
+                ", mLongPressingPointerDeltaY: " + mLongPressingPointerDeltaY +
+                ", mLastTouchedWindowId: " + mLastTouchedWindowId +
+                ", mScaledMinPointerDistanceToUseMiddleLocation: "
+                + mScaledMinPointerDistanceToUseMiddleLocation +
+                ", mTempPoint: " + mTempPoint +
+                ", mTouchExplorationInProgress: " + mTouchExplorationInProgress +
+                " }";
     }
 
     class InjectedPointerTracker {

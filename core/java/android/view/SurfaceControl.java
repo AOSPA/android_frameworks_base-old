@@ -109,8 +109,6 @@ public class SurfaceControl implements Parcelable {
             int flags, int mask);
     private static native void nativeSetWindowCrop(long transactionObj, long nativeObject,
             int l, int t, int r, int b);
-    private static native void nativeSetFinalCrop(long transactionObj, long nativeObject,
-            int l, int t, int r, int b);
     private static native void nativeSetLayerStack(long transactionObj, long nativeObject,
             int layerStack);
 
@@ -266,6 +264,13 @@ public class SurfaceControl implements Parcelable {
      *
      */
     public static final int FX_SURFACE_DIM = 0x00020000;
+
+    /**
+     * Surface creation flag: Creates a container surface.
+     * This surface will have no buffers and will only be used
+     * as a container for other surfaces, or for its InputInfo.
+     */
+    public static final int FX_SURFACE_CONTAINER = 0x00080000;
 
     /**
      * Mask used for FX values above.
@@ -535,6 +540,23 @@ public class SurfaceControl implements Parcelable {
                 mFlags |= FX_SURFACE_DIM;
             } else {
                 mFlags &= ~FX_SURFACE_DIM;
+            }
+            return this;
+        }
+
+        /**
+         * Indicates whether a 'ContainerLayer' is to be constructed.
+         *
+         * Container layers will not be rendered in any fashion and instead are used
+         * as a parent of renderable layers.
+         *
+         * @param isContainerLayer Whether to create a container layer.
+         */
+        public Builder setContainerLayer(boolean isContainerLayer) {
+            if (isContainerLayer) {
+                mFlags |= FX_SURFACE_CONTAINER;
+            } else {
+                mFlags &= ~FX_SURFACE_CONTAINER;
             }
             return this;
         }
@@ -943,13 +965,6 @@ public class SurfaceControl implements Parcelable {
         checkNotReleased();
         synchronized (SurfaceControl.class) {
             sGlobalTransaction.setWindowCrop(this, crop);
-        }
-    }
-
-    public void setFinalCrop(Rect crop) {
-        checkNotReleased();
-        synchronized (SurfaceControl.class) {
-            sGlobalTransaction.setFinalCrop(this, crop);
         }
     }
 
@@ -1506,18 +1521,6 @@ public class SurfaceControl implements Parcelable {
         }
 
         @UnsupportedAppUsage
-        public Transaction setFinalCrop(SurfaceControl sc, Rect crop) {
-            sc.checkNotReleased();
-            if (crop != null) {
-                nativeSetFinalCrop(mNativeObject, sc.mNativeObject,
-                        crop.left, crop.top, crop.right, crop.bottom);
-            } else {
-                nativeSetFinalCrop(mNativeObject, sc.mNativeObject, 0, 0, 0, 0);
-            }
-
-            return this;
-        }
-
         public Transaction setLayerStack(SurfaceControl sc, int layerStack) {
             sc.checkNotReleased();
             nativeSetLayerStack(mNativeObject, sc.mNativeObject, layerStack);

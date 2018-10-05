@@ -545,12 +545,12 @@ import java.util.List;
  * <a name="SavingPersistentState"></a>
  * <h3>Saving Persistent State</h3>
  *
- * <p>There are generally two kinds of persistent state than an activity
+ * <p>There are generally two kinds of persistent state that an activity
  * will deal with: shared document-like data (typically stored in a SQLite
  * database using a {@linkplain android.content.ContentProvider content provider})
  * and internal state such as user preferences.</p>
  *
- * <p>For content provider data, we suggest that activities use a
+ * <p>For content provider data, we suggest that activities use an
  * "edit in place" user model.  That is, any edits a user makes are effectively
  * made immediately without requiring an additional confirmation step.
  * Supporting this model is generally a simple matter of following two rules:</p>
@@ -847,7 +847,7 @@ public class Activity extends ContextThemeWrapper
     /*package*/ ActionBar mActionBar = null;
     private boolean mEnableDefaultActionBarUp;
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private VoiceInteractor mVoiceInteractor;
 
     @UnsupportedAppUsage
@@ -1349,7 +1349,12 @@ public class Activity extends ContextThemeWrapper
      * to give the activity a hint that its state is no longer saved -- it will generally
      * be called after {@link #onSaveInstanceState} and prior to the activity being
      * resumed/started again.
+     *
+     * @deprecated starting with {@link android.os.Build.VERSION_CODES#P} onSaveInstanceState is
+     * called after {@link #onStop}, so this hint isn't accurate anymore: you should consider your
+     * state not saved in between {@code onStart} and {@code onStop} callbacks inclusively.
      */
+    @Deprecated
     public void onStateNotSaved() {
     }
 
@@ -1378,6 +1383,7 @@ public class Activity extends ContextThemeWrapper
         if (DEBUG_LIFECYCLE) Slog.v(TAG, "onResume " + this);
         getApplication().dispatchActivityResumed(this);
         mActivityTransitionState.onResume(this, isTopOfTask());
+        enableAutofillCompatibilityIfNeeded();
         if (mAutoFillResetNeeded) {
             if (!mAutoFillIgnoreFirstResumePause) {
                 View focus = getCurrentFocus();
@@ -2305,7 +2311,7 @@ public class Activity extends ContextThemeWrapper
      *
      * @param newConfig The new device configuration.
      */
-    public void onConfigurationChanged(Configuration newConfig) {
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {
         if (DEBUG_LIFECYCLE) Slog.v(TAG, "onConfigurationChanged " + this + ": " + newConfig);
         mCalled = true;
 
@@ -3518,7 +3524,7 @@ public class Activity extends ContextThemeWrapper
      * {@link android.view.Window#FEATURE_OPTIONS_PANEL} panel,
      * so that subclasses of Activity don't need to deal with feature codes.
      */
-    public boolean onCreatePanelMenu(int featureId, Menu menu) {
+    public boolean onCreatePanelMenu(int featureId, @NonNull Menu menu) {
         if (featureId == Window.FEATURE_OPTIONS_PANEL) {
             boolean show = onCreateOptionsMenu(menu);
             show |= mFragments.dispatchCreateOptionsMenu(menu, getMenuInflater());
@@ -3536,8 +3542,8 @@ public class Activity extends ContextThemeWrapper
      * panel, so that subclasses of
      * Activity don't need to deal with feature codes.
      */
-    public boolean onPreparePanel(int featureId, View view, Menu menu) {
-        if (featureId == Window.FEATURE_OPTIONS_PANEL && menu != null) {
+    public boolean onPreparePanel(int featureId, @Nullable View view, @NonNull Menu menu) {
+        if (featureId == Window.FEATURE_OPTIONS_PANEL) {
             boolean goforit = onPrepareOptionsMenu(menu);
             goforit |= mFragments.dispatchPrepareOptionsMenu(menu);
             return goforit;
@@ -3550,7 +3556,8 @@ public class Activity extends ContextThemeWrapper
      *
      * @return The default implementation returns true.
      */
-    public boolean onMenuOpened(int featureId, Menu menu) {
+    @Override
+    public boolean onMenuOpened(int featureId, @NonNull Menu menu) {
         if (featureId == Window.FEATURE_ACTION_BAR) {
             initWindowDecorActionBar();
             if (mActionBar != null) {
@@ -3571,7 +3578,7 @@ public class Activity extends ContextThemeWrapper
      * panel, so that subclasses of
      * Activity don't need to deal with feature codes.
      */
-    public boolean onMenuItemSelected(int featureId, MenuItem item) {
+    public boolean onMenuItemSelected(int featureId, @NonNull MenuItem item) {
         CharSequence titleCondensed = item.getTitleCondensed();
 
         switch (featureId) {
@@ -3621,7 +3628,7 @@ public class Activity extends ContextThemeWrapper
      * For context menus ({@link Window#FEATURE_CONTEXT_MENU}), the
      * {@link #onContextMenuClosed(Menu)} will be called.
      */
-    public void onPanelClosed(int featureId, Menu menu) {
+    public void onPanelClosed(int featureId, @NonNull Menu menu) {
         switch (featureId) {
             case Window.FEATURE_OPTIONS_PANEL:
                 mFragments.dispatchOptionsMenuClosed(menu);
@@ -3729,7 +3736,7 @@ public class Activity extends ContextThemeWrapper
      *
      * @see #onCreateOptionsMenu
      */
-    public boolean onOptionsItemSelected(MenuItem item) {
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         if (mParent != null) {
             return mParent.onOptionsItemSelected(item);
         }
@@ -3953,7 +3960,7 @@ public class Activity extends ContextThemeWrapper
      * @return boolean Return false to allow normal context menu processing to
      *         proceed, true to consume it here.
      */
-    public boolean onContextItemSelected(MenuItem item) {
+    public boolean onContextItemSelected(@NonNull MenuItem item) {
         if (mParent != null) {
             return mParent.onContextItemSelected(item);
         }
@@ -3967,7 +3974,7 @@ public class Activity extends ContextThemeWrapper
      *
      * @param menu The context menu that is being closed.
      */
-    public void onContextMenuClosed(Menu menu) {
+    public void onContextMenuClosed(@NonNull Menu menu) {
         if (mParent != null) {
             mParent.onContextMenuClosed(menu);
         }
@@ -4744,7 +4751,7 @@ public class Activity extends ContextThemeWrapper
     /**
      * @hide Implement to provide correct calling token.
      */
-    @UnsupportedAppUsage
+    @Override
     public void startActivityAsUser(Intent intent, UserHandle user) {
         startActivityAsUser(intent, null, user);
     }
@@ -6345,7 +6352,8 @@ public class Activity extends ContextThemeWrapper
      * @see android.view.Window#getLayoutInflater
      */
     @Nullable
-    public View onCreateView(String name, Context context, AttributeSet attrs) {
+    public View onCreateView(@NonNull String name, @NonNull Context context,
+            @NonNull AttributeSet attrs) {
         return null;
     }
 
@@ -6359,7 +6367,9 @@ public class Activity extends ContextThemeWrapper
      * @see android.view.LayoutInflater#createView
      * @see android.view.Window#getLayoutInflater
      */
-    public View onCreateView(View parent, String name, Context context, AttributeSet attrs) {
+    @Nullable
+    public View onCreateView(@Nullable View parent, @NonNull String name,
+            @NonNull Context context, @NonNull AttributeSet attrs) {
         if (!"fragment".equals(name)) {
             return onCreateView(name, context, attrs);
         }
@@ -6377,11 +6387,13 @@ public class Activity extends ContextThemeWrapper
      * closed for you after you return.
      * @param args additional arguments to the dump request.
      */
-    public void dump(String prefix, FileDescriptor fd, PrintWriter writer, String[] args) {
+    public void dump(@NonNull String prefix, @Nullable FileDescriptor fd,
+            @NonNull PrintWriter writer, @Nullable String[] args) {
         dumpInner(prefix, fd, writer, args);
     }
 
-    void dumpInner(String prefix, FileDescriptor fd, PrintWriter writer, String[] args) {
+    void dumpInner(@NonNull String prefix, @Nullable FileDescriptor fd,
+            @NonNull PrintWriter writer, @Nullable String[] args) {
         if (args != null && args.length > 0 && args[0].equals("--autofill")) {
             dumpAutofillManager(prefix, writer);
             return;
@@ -7089,7 +7101,7 @@ public class Activity extends ContextThemeWrapper
 
     // ------------------ Internal API ------------------
 
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     final void setParent(Activity parent) {
         mParent = parent;
     }
@@ -7154,7 +7166,6 @@ public class Activity extends ContextThemeWrapper
         mWindow.setColorMode(info.colorMode);
 
         setAutofillCompatibilityEnabled(application.isAutofillCompatibilityEnabled());
-        enableAutofillCompatibilityIfNeeded();
     }
 
     private void enableAutofillCompatibilityIfNeeded() {
@@ -7200,7 +7211,7 @@ public class Activity extends ContextThemeWrapper
         mActivityTransitionState.setEnterActivityOptions(this, getActivityOptions());
     }
 
-    final void performNewIntent(Intent intent) {
+    final void performNewIntent(@NonNull Intent intent) {
         mCanEnterPictureInPicture = true;
         onNewIntent(intent);
     }

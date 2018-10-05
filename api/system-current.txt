@@ -46,9 +46,7 @@ package android {
     field public static final java.lang.String CAMERA_DISABLE_TRANSMIT_LED = "android.permission.CAMERA_DISABLE_TRANSMIT_LED";
     field public static final java.lang.String CAPTURE_AUDIO_HOTWORD = "android.permission.CAPTURE_AUDIO_HOTWORD";
     field public static final java.lang.String CAPTURE_AUDIO_OUTPUT = "android.permission.CAPTURE_AUDIO_OUTPUT";
-    field public static final java.lang.String CAPTURE_SECURE_VIDEO_OUTPUT = "android.permission.CAPTURE_SECURE_VIDEO_OUTPUT";
     field public static final java.lang.String CAPTURE_TV_INPUT = "android.permission.CAPTURE_TV_INPUT";
-    field public static final java.lang.String CAPTURE_VIDEO_OUTPUT = "android.permission.CAPTURE_VIDEO_OUTPUT";
     field public static final java.lang.String CHANGE_APP_IDLE_STATE = "android.permission.CHANGE_APP_IDLE_STATE";
     field public static final java.lang.String CHANGE_COMPONENT_ENABLED_STATE = "android.permission.CHANGE_COMPONENT_ENABLED_STATE";
     field public static final java.lang.String CHANGE_CONFIGURATION = "android.permission.CHANGE_CONFIGURATION";
@@ -93,6 +91,7 @@ package android {
     field public static final java.lang.String KILL_UID = "android.permission.KILL_UID";
     field public static final java.lang.String LOCAL_MAC_ADDRESS = "android.permission.LOCAL_MAC_ADDRESS";
     field public static final java.lang.String LOCATION_HARDWARE = "android.permission.LOCATION_HARDWARE";
+    field public static final java.lang.String LOCK_DEVICE = "android.permission.LOCK_DEVICE";
     field public static final java.lang.String LOOP_RADIO = "android.permission.LOOP_RADIO";
     field public static final java.lang.String MANAGE_ACTIVITY_STACKS = "android.permission.MANAGE_ACTIVITY_STACKS";
     field public static final java.lang.String MANAGE_APP_OPS_RESTRICTIONS = "android.permission.MANAGE_APP_OPS_RESTRICTIONS";
@@ -134,7 +133,6 @@ package android {
     field public static final java.lang.String QUERY_TIME_ZONE_RULES = "android.permission.QUERY_TIME_ZONE_RULES";
     field public static final java.lang.String READ_CONTENT_RATING_SYSTEMS = "android.permission.READ_CONTENT_RATING_SYSTEMS";
     field public static final java.lang.String READ_DREAM_STATE = "android.permission.READ_DREAM_STATE";
-    field public static final java.lang.String READ_FRAME_BUFFER = "android.permission.READ_FRAME_BUFFER";
     field public static final java.lang.String READ_INSTALL_SESSIONS = "android.permission.READ_INSTALL_SESSIONS";
     field public static final java.lang.String READ_LOGS = "android.permission.READ_LOGS";
     field public static final java.lang.String READ_NETWORK_USAGE_HISTORY = "android.permission.READ_NETWORK_USAGE_HISTORY";
@@ -158,6 +156,7 @@ package android {
     field public static final java.lang.String REGISTER_CONNECTION_MANAGER = "android.permission.REGISTER_CONNECTION_MANAGER";
     field public static final java.lang.String REGISTER_SIM_SUBSCRIPTION = "android.permission.REGISTER_SIM_SUBSCRIPTION";
     field public static final java.lang.String REMOVE_DRM_CERTIFICATES = "android.permission.REMOVE_DRM_CERTIFICATES";
+    field public static final java.lang.String RESET_PASSWORD = "android.permission.RESET_PASSWORD";
     field public static final java.lang.String RESTRICTED_VR_ACCESS = "android.permission.RESTRICTED_VR_ACCESS";
     field public static final java.lang.String RETRIEVE_WINDOW_CONTENT = "android.permission.RETRIEVE_WINDOW_CONTENT";
     field public static final java.lang.String REVOKE_RUNTIME_PERMISSIONS = "android.permission.REVOKE_RUNTIME_PERMISSIONS";
@@ -216,9 +215,22 @@ package android {
     field public static final int userRestriction = 16844164; // 0x1010584
   }
 
+  public static final class R.bool {
+    field public static final int config_sendPackageName = 17891328; // 0x1110000
+  }
+
   public static final class R.raw {
     field public static final int loaderror = 17825792; // 0x1100000
     field public static final int nodomain = 17825793; // 0x1100001
+  }
+
+  public static final class R.string {
+    field public static final int config_feedback_intent_extra_key = 17039391; // 0x104001f
+    field public static final int config_feedback_intent_name_key = 17039392; // 0x1040020
+    field public static final int config_help_intent_extra_key = 17039389; // 0x104001d
+    field public static final int config_help_intent_name_key = 17039390; // 0x104001e
+    field public static final int config_help_package_name_key = 17039387; // 0x104001b
+    field public static final int config_help_package_name_value = 17039388; // 0x104001c
   }
 
   public static final class R.style {
@@ -345,6 +357,11 @@ package android.app {
     field public static final android.os.Parcelable.Creator<android.app.AppOpsManager.PackageOps> CREATOR;
   }
 
+  public final class AutomaticZenRule implements android.os.Parcelable {
+    ctor public AutomaticZenRule(java.lang.String, android.content.ComponentName, android.net.Uri, int, boolean, long);
+    ctor public AutomaticZenRule(java.lang.String, android.content.ComponentName, android.net.Uri, int, boolean, long, android.service.notification.ZenPolicy);
+  }
+
   public class BroadcastOptions {
     method public static android.app.BroadcastOptions makeBasic();
     method public void setDontSendToRestrictedApps(boolean);
@@ -361,9 +378,11 @@ package android.app {
     method public final void attachBaseContext(android.content.Context);
     method public final android.os.IBinder onBind(android.content.Intent);
     method public deprecated void onGetInstantAppIntentFilter(int[], java.lang.String, android.app.InstantAppResolverService.InstantAppResolutionCallback);
-    method public void onGetInstantAppIntentFilter(android.content.Intent, int[], java.lang.String, android.app.InstantAppResolverService.InstantAppResolutionCallback);
+    method public deprecated void onGetInstantAppIntentFilter(android.content.Intent, int[], java.lang.String, android.app.InstantAppResolverService.InstantAppResolutionCallback);
+    method public void onGetInstantAppIntentFilter(android.content.Intent, int[], android.os.UserHandle, java.lang.String, android.app.InstantAppResolverService.InstantAppResolutionCallback);
     method public deprecated void onGetInstantAppResolveInfo(int[], java.lang.String, android.app.InstantAppResolverService.InstantAppResolutionCallback);
-    method public void onGetInstantAppResolveInfo(android.content.Intent, int[], java.lang.String, android.app.InstantAppResolverService.InstantAppResolutionCallback);
+    method public deprecated void onGetInstantAppResolveInfo(android.content.Intent, int[], java.lang.String, android.app.InstantAppResolverService.InstantAppResolutionCallback);
+    method public void onGetInstantAppResolveInfo(android.content.Intent, int[], android.os.UserHandle, java.lang.String, android.app.InstantAppResolverService.InstantAppResolutionCallback);
   }
 
   public static final class InstantAppResolverService.InstantAppResolutionCallback {
@@ -462,9 +481,6 @@ package android.app {
     method public android.app.Vr2dDisplayProperties.Builder setEnabled(boolean);
   }
 
-  public static abstract class Vr2dDisplayProperties.Vr2dDisplayFlag implements java.lang.annotation.Annotation {
-  }
-
   public class VrManager {
     method public int getVr2dDisplayId();
     method public boolean isPersistentVrModeEnabled();
@@ -503,9 +519,11 @@ package android.app.admin {
     method public android.content.ComponentName getDeviceOwnerComponentOnAnyUser();
     method public java.lang.String getDeviceOwnerNameOnAnyUser();
     method public java.lang.CharSequence getDeviceOwnerOrganizationName();
+    method public int getDeviceOwnerUserId();
     method public java.util.List<java.lang.String> getPermittedAccessibilityServices(int);
     method public java.util.List<java.lang.String> getPermittedInputMethodsForCurrentUser();
     method public android.content.ComponentName getProfileOwner() throws java.lang.IllegalArgumentException;
+    method public android.content.ComponentName getProfileOwnerAsUser(int);
     method public java.lang.String getProfileOwnerNameAsUser(int) throws java.lang.IllegalArgumentException;
     method public int getUserProvisioningState();
     method public boolean isDeviceManaged();
@@ -527,6 +545,7 @@ package android.app.admin {
     field public static final java.lang.String EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_LABEL = "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_LABEL";
     field public static final java.lang.String EXTRA_PROVISIONING_ORGANIZATION_NAME = "android.app.extra.PROVISIONING_ORGANIZATION_NAME";
     field public static final java.lang.String EXTRA_PROVISIONING_SUPPORT_URL = "android.app.extra.PROVISIONING_SUPPORT_URL";
+    field public static final java.lang.String EXTRA_RESTRICTION = "android.app.extra.RESTRICTION";
     field public static final int STATE_USER_PROFILE_COMPLETE = 4; // 0x4
     field public static final int STATE_USER_SETUP_COMPLETE = 2; // 0x2
     field public static final int STATE_USER_SETUP_FINALIZED = 3; // 0x3
@@ -921,6 +940,7 @@ package android.content {
     method public abstract void sendBroadcast(android.content.Intent, java.lang.String, android.os.Bundle);
     method public abstract void sendBroadcastAsUser(android.content.Intent, android.os.UserHandle, java.lang.String, android.os.Bundle);
     method public abstract void sendOrderedBroadcast(android.content.Intent, java.lang.String, android.os.Bundle, android.content.BroadcastReceiver, android.os.Handler, int, java.lang.String, android.os.Bundle);
+    method public void startActivityAsUser(android.content.Intent, android.os.UserHandle);
     field public static final java.lang.String BACKUP_SERVICE = "backup";
     field public static final java.lang.String CONTEXTHUB_SERVICE = "contexthub";
     field public static final java.lang.String EUICC_CARD_SERVICE = "euicc_card";
@@ -986,6 +1006,7 @@ package android.content {
     field public static final java.lang.String EXTRA_REMOTE_CALLBACK = "android.intent.extra.REMOTE_CALLBACK";
     field public static final java.lang.String EXTRA_RESULT_NEEDED = "android.intent.extra.RESULT_NEEDED";
     field public static final java.lang.String EXTRA_UNKNOWN_INSTANT_APP = "android.intent.extra.UNKNOWN_INSTANT_APP";
+    field public static final java.lang.String EXTRA_USER_ID = "android.intent.extra.USER_ID";
     field public static final java.lang.String EXTRA_VERIFICATION_BUNDLE = "android.intent.extra.VERIFICATION_BUNDLE";
   }
 
@@ -1101,6 +1122,7 @@ package android.content.pm {
 
   public abstract class PackageManager {
     method public abstract void addOnPermissionsChangeListener(android.content.pm.PackageManager.OnPermissionsChangedListener);
+    method public abstract boolean arePermissionsIndividuallyControlled();
     method public abstract java.util.List<android.content.IntentFilter> getAllIntentFilters(java.lang.String);
     method public android.content.pm.dex.ArtManager getArtManager();
     method public abstract java.lang.String getDefaultBrowserPackageNameAsUser(int);
@@ -1248,6 +1270,14 @@ package android.content.pm.permission {
     method public boolean isStandard();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.content.pm.permission.RuntimePermissionPresentationInfo> CREATOR;
+  }
+
+}
+
+package android.graphics.drawable {
+
+  public final class Icon implements android.os.Parcelable {
+    method public static android.graphics.drawable.Icon createWithResource(android.content.res.Resources, int);
   }
 
 }
@@ -2601,6 +2631,7 @@ package android.location {
     method public deprecated boolean addGpsNavigationMessageListener(android.location.GpsNavigationMessageEvent.Listener);
     method public void flushGnssBatch();
     method public int getGnssBatchSize();
+    method public java.lang.String getNetworkProviderPackage();
     method public boolean isLocationEnabledForUser(android.os.UserHandle);
     method public boolean isProviderEnabledForUser(java.lang.String, android.os.UserHandle);
     method public boolean registerGnssBatchedLocationCallback(long, boolean, android.location.BatchedLocationCallback, android.os.Handler);
@@ -3783,6 +3814,14 @@ package android.os {
     field public static final java.lang.String ACTION_UPDATE_SMS_SHORT_CODES = "android.intent.action.UPDATE_SMS_SHORT_CODES";
   }
 
+  public class Environment {
+    method public static java.io.File getOdmDirectory();
+    method public static java.io.File getOemDirectory();
+    method public static java.io.File getProductDirectory();
+    method public static java.io.File getProductServicesDirectory();
+    method public static java.io.File getVendorDirectory();
+  }
+
   public class HidlSupport {
     method public static boolean deepEquals(java.lang.Object, java.lang.Object);
     method public static int deepHashCode(java.lang.Object);
@@ -4083,10 +4122,15 @@ package android.os {
     method public boolean isSystem();
     method public static int myUserId();
     method public static android.os.UserHandle of(int);
+    field public static final android.os.UserHandle ALL;
+    field public static final android.os.UserHandle CURRENT;
+    field public static final android.os.UserHandle SYSTEM;
+    field public static final int USER_NULL = -10000; // 0xffffd8f0
   }
 
   public class UserManager {
     method public void clearSeedAccountData();
+    method public int[] getProfileIds(int, boolean);
     method public java.lang.String getSeedAccountName();
     method public android.os.PersistableBundle getSeedAccountOptions();
     method public java.lang.String getSeedAccountType();
@@ -4360,6 +4404,7 @@ package android.provider {
 
   public final class Settings {
     field public static final java.lang.String ACTION_ENTERPRISE_PRIVACY_SETTINGS = "android.settings.ENTERPRISE_PRIVACY_SETTINGS";
+    field public static final java.lang.String ACTION_SHOW_ADMIN_SUPPORT_DETAILS = "android.settings.SHOW_ADMIN_SUPPORT_DETAILS";
   }
 
   public static final class Settings.Global extends android.provider.Settings.NameValueTable {
@@ -4545,11 +4590,9 @@ package android.service.autofill {
   public abstract class AutofillFieldClassificationService extends android.app.Service {
     method public android.os.IBinder onBind(android.content.Intent);
     method public float[][] onGetScores(java.lang.String, android.os.Bundle, java.util.List<android.view.autofill.AutofillValue>, java.util.List<java.lang.String>);
-    field public static final java.lang.String RESOURCE_AVAILABLE_ALGORITHMS = "autofill_field_classification_available_algorithms";
-    field public static final java.lang.String RESOURCE_DEFAULT_ALGORITHM = "autofill_field_classification_default_algorithm";
     field public static final java.lang.String SERVICE_INTERFACE = "android.service.autofill.AutofillFieldClassificationService";
-    field public static final deprecated java.lang.String SERVICE_META_DATA_KEY_AVAILABLE_ALGORITHMS = "android.autofill.field_classification.available_algorithms";
-    field public static final deprecated java.lang.String SERVICE_META_DATA_KEY_DEFAULT_ALGORITHM = "android.autofill.field_classification.default_algorithm";
+    field public static final java.lang.String SERVICE_META_DATA_KEY_AVAILABLE_ALGORITHMS = "android.autofill.field_classification.available_algorithms";
+    field public static final java.lang.String SERVICE_META_DATA_KEY_DEFAULT_ALGORITHM = "android.autofill.field_classification.default_algorithm";
   }
 
 }
@@ -5389,16 +5432,17 @@ package android.telephony {
     method public boolean handlePinMmi(java.lang.String);
     method public boolean handlePinMmiForSubscriber(int, java.lang.String);
     method public boolean isDataConnectivityPossible();
-    method public boolean isIdle();
-    method public boolean isOffhook();
-    method public boolean isRadioOn();
-    method public boolean isRinging();
+    method public deprecated boolean isIdle();
+    method public deprecated boolean isOffhook();
+    method public deprecated boolean isRadioOn();
+    method public deprecated boolean isRinging();
     method public boolean isVideoCallingEnabled();
     method public deprecated boolean isVisualVoicemailEnabled(android.telecom.PhoneAccountHandle);
     method public boolean needsOtaServiceProvisioning();
     method public int setAllowedCarriers(int, java.util.List<android.service.carrier.CarrierIdentifier>);
     method public void setDataActivationState(int);
     method public deprecated void setDataEnabled(int, boolean);
+    method public void setDataRoamingEnabled(boolean);
     method public boolean setRadio(boolean);
     method public boolean setRadioPower(boolean);
     method public void setSimPowerState(int);
@@ -5917,6 +5961,7 @@ package android.telephony.ims {
     field public static final int CODE_NETWORK_DETACH = 1513; // 0x5e9
     field public static final int CODE_NETWORK_REJECT = 1504; // 0x5e0
     field public static final int CODE_NETWORK_RESP_TIMEOUT = 1503; // 0x5df
+    field public static final int CODE_NO_CSFB_IN_CS_ROAM = 1516; // 0x5ec
     field public static final int CODE_NO_VALID_SIM = 1501; // 0x5dd
     field public static final int CODE_OEM_CAUSE_1 = 61441; // 0xf001
     field public static final int CODE_OEM_CAUSE_10 = 61450; // 0xf00a
@@ -5986,6 +6031,7 @@ package android.telephony.ims {
     field public static final int CODE_SIP_SERVICE_UNAVAILABLE = 352; // 0x160
     field public static final int CODE_SIP_TEMPRARILY_UNAVAILABLE = 336; // 0x150
     field public static final int CODE_SIP_TRANSACTION_DOES_NOT_EXIST = 343; // 0x157
+    field public static final int CODE_SIP_USER_MARKED_UNWANTED = 365; // 0x16d
     field public static final int CODE_SIP_USER_REJECTED = 361; // 0x169
     field public static final int CODE_SUPP_SVC_CANCELLED = 1202; // 0x4b2
     field public static final int CODE_SUPP_SVC_FAILED = 1201; // 0x4b1
@@ -6759,7 +6805,6 @@ package android.webkit {
     method public static android.content.pm.PackageInfo getLoadedPackageInfo();
     method public static int loadWebViewNativeLibraryFromPackage(java.lang.String, java.lang.ClassLoader);
     method public static void prepareWebViewInZygote();
-    field public static final java.lang.String CHROMIUM_WEBVIEW_VMSIZE_SIZE_PROPERTY = "persist.sys.webview.vmsize";
     field public static final int LIBLOAD_ADDRESS_SPACE_NOT_RESERVED = 2; // 0x2
     field public static final int LIBLOAD_FAILED_JNI_CALL = 7; // 0x7
     field public static final int LIBLOAD_FAILED_LISTING_WEBVIEW_PACKAGES = 4; // 0x4

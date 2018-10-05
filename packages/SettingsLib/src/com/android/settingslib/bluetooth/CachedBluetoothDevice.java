@@ -16,6 +16,7 @@
 
 package com.android.settingslib.bluetooth;
 
+import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHearingAid;
@@ -27,7 +28,7 @@ import android.os.ParcelUuid;
 import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Log;
-import android.bluetooth.BluetoothAdapter;
+
 import androidx.annotation.VisibleForTesting;
 import android.os.SystemProperties;
 
@@ -73,24 +74,10 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     private final Collection<Callback> mCallbacks = new ArrayList<Callback>();
 
-    // Following constants indicate the user's choices of Phone book/message access settings
-    // User hasn't made any choice or settings app has wiped out the memory
-    public final static int ACCESS_UNKNOWN = 0;
-    // User has accepted the connection and let Settings app remember the decision
-    public final static int ACCESS_ALLOWED = 1;
-    // User has rejected the connection and let Settings app remember the decision
-    public final static int ACCESS_REJECTED = 2;
-
     // How many times user should reject the connection to make the choice persist.
     private final static int MESSAGE_REJECTION_COUNT_LIMIT_TO_PERSIST = 2;
 
     private final static String MESSAGE_REJECTION_COUNT_PREFS_NAME = "bluetooth_message_reject";
-
-    /**
-     * When we connect to multiple profiles, we only want to display a single
-     * error even if they all fail. This tracks that state.
-     */
-    private boolean mIsConnectingErrorPossible;
 
     public long getHiSyncId() {
         return mHiSyncId;
@@ -255,9 +242,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             return;
         }
 
-        // Reset the only-show-one-error-dialog tracking variable
-        mIsConnectingErrorPossible = true;
-
         int preferredProfiles = 0;
         for (LocalBluetoothProfile profile : mProfiles) {
             if (connectAllProfiles ? profile.isConnectable() : profile.isAutoConnectable()) {
@@ -278,8 +262,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         if (!ensurePaired()) {
             return;
         }
-        // Reset the only-show-one-error-dialog tracking variable
-        mIsConnectingErrorPossible = true;
 
         for (LocalBluetoothProfile profile : mProfiles) {
             if (profile.isAutoConnectable()) {
@@ -296,8 +278,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
      */
     public void connectProfile(LocalBluetoothProfile profile) {
         mConnectAttempted = SystemClock.elapsedRealtime();
-        // Reset the only-show-one-error-dialog tracking variable
-        mIsConnectingErrorPossible = true;
         connectInt(profile);
         // Refresh the UI based on profile.connect() call
         refresh();
@@ -688,9 +668,9 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     void onBondingStateChanged(int bondState) {
         if (bondState == BluetoothDevice.BOND_NONE) {
             mProfiles.clear();
-            setPhonebookPermissionChoice(ACCESS_UNKNOWN);
-            setMessagePermissionChoice(ACCESS_UNKNOWN);
-            setSimPermissionChoice(ACCESS_UNKNOWN);
+            mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
+            mDevice.setMessageAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
+            mDevice.setSimAccessPermission(BluetoothDevice.ACCESS_UNKNOWN);
             mMessageRejectionCount = 0;
             saveMessageRejectionCount();
         }
@@ -801,26 +781,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         void onDeviceAttributesChanged();
     }
 
-    public int getPhonebookPermissionChoice() {
-        int permission = mDevice.getPhonebookAccessPermission();
-        if (permission == BluetoothDevice.ACCESS_ALLOWED) {
-            return ACCESS_ALLOWED;
-        } else if (permission == BluetoothDevice.ACCESS_REJECTED) {
-            return ACCESS_REJECTED;
-        }
-        return ACCESS_UNKNOWN;
-    }
-
-    public void setPhonebookPermissionChoice(int permissionChoice) {
-        int permission = BluetoothDevice.ACCESS_UNKNOWN;
-        if (permissionChoice == ACCESS_ALLOWED) {
-            permission = BluetoothDevice.ACCESS_ALLOWED;
-        } else if (permissionChoice == ACCESS_REJECTED) {
-            permission = BluetoothDevice.ACCESS_REJECTED;
-        }
-        mDevice.setPhonebookAccessPermission(permission);
-    }
-
     // Migrates data from old data store (in Settings app's shared preferences) to new (in Bluetooth
     // app's shared preferences).
     private void migratePhonebookPermissionChoice() {
@@ -831,10 +791,11 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         }
 
         if (mDevice.getPhonebookAccessPermission() == BluetoothDevice.ACCESS_UNKNOWN) {
-            int oldPermission = preferences.getInt(mDevice.getAddress(), ACCESS_UNKNOWN);
-            if (oldPermission == ACCESS_ALLOWED) {
+            int oldPermission =
+                    preferences.getInt(mDevice.getAddress(), BluetoothDevice.ACCESS_UNKNOWN);
+            if (oldPermission == BluetoothDevice.ACCESS_ALLOWED) {
                 mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_ALLOWED);
-            } else if (oldPermission == ACCESS_REJECTED) {
+            } else if (oldPermission == BluetoothDevice.ACCESS_REJECTED) {
                 mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_REJECTED);
             }
         }
@@ -842,46 +803,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         SharedPreferences.Editor editor = preferences.edit();
         editor.remove(mDevice.getAddress());
         editor.commit();
-    }
-
-    public int getMessagePermissionChoice() {
-        int permission = mDevice.getMessageAccessPermission();
-        if (permission == BluetoothDevice.ACCESS_ALLOWED) {
-            return ACCESS_ALLOWED;
-        } else if (permission == BluetoothDevice.ACCESS_REJECTED) {
-            return ACCESS_REJECTED;
-        }
-        return ACCESS_UNKNOWN;
-    }
-
-    public void setMessagePermissionChoice(int permissionChoice) {
-        int permission = BluetoothDevice.ACCESS_UNKNOWN;
-        if (permissionChoice == ACCESS_ALLOWED) {
-            permission = BluetoothDevice.ACCESS_ALLOWED;
-        } else if (permissionChoice == ACCESS_REJECTED) {
-            permission = BluetoothDevice.ACCESS_REJECTED;
-        }
-        mDevice.setMessageAccessPermission(permission);
-    }
-
-    public int getSimPermissionChoice() {
-        int permission = mDevice.getSimAccessPermission();
-        if (permission == BluetoothDevice.ACCESS_ALLOWED) {
-            return ACCESS_ALLOWED;
-        } else if (permission == BluetoothDevice.ACCESS_REJECTED) {
-            return ACCESS_REJECTED;
-        }
-        return ACCESS_UNKNOWN;
-    }
-
-    void setSimPermissionChoice(int permissionChoice) {
-        int permission = BluetoothDevice.ACCESS_UNKNOWN;
-        if (permissionChoice == ACCESS_ALLOWED) {
-            permission = BluetoothDevice.ACCESS_ALLOWED;
-        } else if (permissionChoice == ACCESS_REJECTED) {
-            permission = BluetoothDevice.ACCESS_REJECTED;
-        }
-        mDevice.setSimAccessPermission(permission);
     }
 
     // Migrates data from old data store (in Settings app's shared preferences) to new (in Bluetooth
@@ -894,10 +815,11 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         }
 
         if (mDevice.getMessageAccessPermission() == BluetoothDevice.ACCESS_UNKNOWN) {
-            int oldPermission = preferences.getInt(mDevice.getAddress(), ACCESS_UNKNOWN);
-            if (oldPermission == ACCESS_ALLOWED) {
+            int oldPermission =
+                    preferences.getInt(mDevice.getAddress(), BluetoothDevice.ACCESS_UNKNOWN);
+            if (oldPermission == BluetoothDevice.ACCESS_ALLOWED) {
                 mDevice.setMessageAccessPermission(BluetoothDevice.ACCESS_ALLOWED);
-            } else if (oldPermission == ACCESS_REJECTED) {
+            } else if (oldPermission == BluetoothDevice.ACCESS_REJECTED) {
                 mDevice.setMessageAccessPermission(BluetoothDevice.ACCESS_REJECTED);
             }
         }
@@ -942,15 +864,15 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         if (BluetoothUuid.containsAnyUuid(uuids, PbapServerProfile.PBAB_CLIENT_UUIDS)) {
             // The pairing dialog now warns of phone-book access for paired devices.
             // No separate prompt is displayed after pairing.
-            if (getPhonebookPermissionChoice() == CachedBluetoothDevice.ACCESS_UNKNOWN) {
+            if (mDevice.getPhonebookAccessPermission() == BluetoothDevice.ACCESS_UNKNOWN) {
                 if ((mDevice.getBluetoothClass() != null) &&
                    (mDevice.getBluetoothClass().getDeviceClass()
                         == BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE ||
                     mDevice.getBluetoothClass().getDeviceClass()
                         == BluetoothClass.Device.AUDIO_VIDEO_WEARABLE_HEADSET)) {
-                    setPhonebookPermissionChoice(CachedBluetoothDevice.ACCESS_ALLOWED);
+                    mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_ALLOWED);
                 } else {
-                    setPhonebookPermissionChoice(CachedBluetoothDevice.ACCESS_REJECTED);
+                    mDevice.setPhonebookAccessPermission(BluetoothDevice.ACCESS_REJECTED);
                 }
             }
         }

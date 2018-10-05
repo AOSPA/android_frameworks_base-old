@@ -218,6 +218,7 @@
   <java-symbol type="id" name="selection_end_handle" />
   <java-symbol type="id" name="insertion_handle" />
   <java-symbol type="id" name="accessibilityActionClickOnClickableSpan" />
+  <java-symbol type="id" name="accessibilityActionOutsideTouch" />
   <java-symbol type="id" name="camera" />
   <java-symbol type="id" name="mic" />
   <java-symbol type="id" name="overlay" />
@@ -273,6 +274,7 @@
   <java-symbol type="string" name="config_wlan_network_service_package" />
   <java-symbol type="string" name="config_wwan_data_service_package" />
   <java-symbol type="string" name="config_wlan_data_service_package" />
+  <java-symbol type="string" name="config_qualified_networks_service_package" />
   <java-symbol type="bool" name="config_networkSamplingWakesDevice" />
   <java-symbol type="bool" name="config_showMenuShortcutsWhenKeyboardPresent" />
   <java-symbol type="bool" name="config_sip_wifi_only" />
@@ -2099,7 +2101,7 @@
   <java-symbol type="string" name="vpn_lockdown_error" />
   <java-symbol type="string" name="vpn_lockdown_config" />
   <java-symbol type="string" name="wallpaper_binding_label" />
-  <java-symbol type="style" name="Theme.Dialog.AppError" />
+  <java-symbol type="style" name="Theme.DeviceDefault.Dialog.AppError" />
   <java-symbol type="style" name="Theme.Leanback.Dialog.Alert" />
   <java-symbol type="style" name="Theme.Toast" />
   <java-symbol type="xml" name="storage_list" />
@@ -2393,6 +2395,10 @@
   <!-- From KeyguardServiceDelegate -->
   <java-symbol type="string" name="config_keyguardComponent" />
 
+  <!-- Biometric messages -->
+  <java-symbol type="string" name="biometric_error_hw_unavailable" />
+  <java-symbol type="string" name="biometric_not_recognized" />
+
   <!-- Fingerprint messages -->
   <java-symbol type="string" name="fingerprint_error_unable_to_process" />
   <java-symbol type="string" name="fingerprint_error_hw_not_available" />
@@ -2410,7 +2416,6 @@
   <java-symbol type="string" name="fingerprint_error_lockout" />
   <java-symbol type="string" name="fingerprint_error_lockout_permanent" />
   <java-symbol type="string" name="fingerprint_name_template" />
-  <java-symbol type="string" name="fingerprint_not_recognized" />
   <java-symbol type="string" name="fingerprint_authenticated" />
   <java-symbol type="string" name="fingerprint_error_no_fingerprints" />
   <java-symbol type="string" name="fingerprint_error_hw_not_present" />
@@ -2627,8 +2632,16 @@
   <java-symbol type="dimen" name="magnifier_width" />
   <java-symbol type="dimen" name="magnifier_height" />
   <java-symbol type="dimen" name="magnifier_elevation" />
-  <java-symbol type="dimen" name="magnifier_zoom_scale" />
-  <java-symbol type="dimen" name="magnifier_offset" />
+  <java-symbol type="dimen" name="magnifier_zoom" />
+  <java-symbol type="dimen" name="magnifier_vertical_offset" />
+  <java-symbol type="dimen" name="magnifier_horizontal_offset" />
+  <java-symbol type="attr" name="magnifierWidth" />
+  <java-symbol type="attr" name="magnifierHeight" />
+  <java-symbol type="attr" name="magnifierElevation" />
+  <java-symbol type="attr" name="magnifierZoom" />
+  <java-symbol type="attr" name="magnifierVerticalOffset" />
+  <java-symbol type="attr" name="magnifierHorizontalOffset" />
+  <java-symbol type="attr" name="magnifierStyle" />
 
   <java-symbol type="string" name="date_picker_prev_month_button" />
   <java-symbol type="string" name="date_picker_next_month_button" />
@@ -3072,6 +3085,7 @@
   <java-symbol type="string" name="color_inversion_feature_name" />
   <java-symbol type="string" name="color_correction_feature_name" />
   <java-symbol type="string" name="config_defaultAccessibilityService" />
+  <java-symbol type="string" name="accessibility_shortcut_spoken_feedback" />
 
   <!-- Accessibility Button -->
   <java-symbol type="layout" name="accessibility_button_chooser" />
@@ -3249,17 +3263,15 @@
 
   <java-symbol type="style" name="Theme.DeviceDefault.QuickSettings" />
 
-  <java-symbol type="bool" name="enable_pbap_pce_profile" />
-
   <java-symbol type="integer" name="default_data_warning_level_mb" />
   <java-symbol type="bool" name="config_useVideoPauseWorkaround" />
   <java-symbol type="bool" name="config_sendPackageName" />
-  <java-symbol type="string" name="config_helpPackageNameKey" />
-  <java-symbol type="string" name="config_helpPackageNameValue" />
-  <java-symbol type="string" name="config_helpIntentExtraKey" />
-  <java-symbol type="string" name="config_helpIntentNameKey" />
-  <java-symbol type="string" name="config_feedbackIntentExtraKey" />
-  <java-symbol type="string" name="config_feedbackIntentNameKey" />
+  <java-symbol type="string" name="config_help_package_name_key" />
+  <java-symbol type="string" name="config_help_package_name_value" />
+  <java-symbol type="string" name="config_help_intent_extra_key" />
+  <java-symbol type="string" name="config_help_intent_name_key" />
+  <java-symbol type="string" name="config_feedback_intent_extra_key" />
+  <java-symbol type="string" name="config_feedback_intent_name_key" />
 
   <java-symbol type="array" name="config_hideWhenDisabled_packageNames" />
 
@@ -3456,4 +3468,11 @@
 
   <java-symbol type="array" name="config_disableApksUnlessMatchedSku_apk_list" />
   <java-symbol type="array" name="config_disableApkUnlessMatchedSku_skus_list" />
+
+  <java-symbol type="string" name="config_misprovisionedDeviceModel" />
+  <java-symbol type="string" name="config_misprovisionedBrandValue" />
+
+  <java-symbol type="integer" name="db_wal_truncate_size" />
+  <java-symbol type="integer" name="config_wakeUpDelayDoze" />
+  <java-symbol type="string" name="config_dozeWakeScreenSensorType" />
 </resources>

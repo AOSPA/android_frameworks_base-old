@@ -18,7 +18,6 @@ package com.android.settingslib.bluetooth;
 
 import android.bluetooth.BluetoothA2dp;
 import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothHeadset;
 import android.bluetooth.BluetoothHearingAid;
@@ -54,22 +53,23 @@ public class BluetoothEventManager {
     private final BroadcastReceiver mBroadcastReceiver = new BluetoothBroadcastReceiver();
     private final BroadcastReceiver mProfileBroadcastReceiver = new BluetoothBroadcastReceiver();
     private final Collection<BluetoothCallback> mCallbacks = new ArrayList<>();
-
-    private android.os.Handler mReceiverHandler;
-    private Context mContext;
+    private final android.os.Handler mReceiverHandler;
+    private final Context mContext;
 
     interface Handler {
         void onReceive(Context context, Intent intent, BluetoothDevice device);
     }
 
     BluetoothEventManager(LocalBluetoothAdapter adapter,
-            CachedBluetoothDeviceManager deviceManager, Context context) {
+            CachedBluetoothDeviceManager deviceManager, Context context,
+            android.os.Handler handler) {
         mLocalAdapter = adapter;
         mDeviceManager = deviceManager;
         mAdapterIntentFilter = new IntentFilter();
         mProfileIntentFilter = new IntentFilter();
         mHandlerMap = new HashMap<>();
         mContext = context;
+        mReceiverHandler = handler;
 
         // Bluetooth on/off broadcasts
         addHandler(BluetoothAdapter.ACTION_STATE_CHANGED, new AdapterStateChangedHandler());
@@ -81,7 +81,6 @@ public class BluetoothEventManager {
         addHandler(BluetoothAdapter.ACTION_DISCOVERY_STARTED, new ScanningStateChangedHandler(true));
         addHandler(BluetoothAdapter.ACTION_DISCOVERY_FINISHED, new ScanningStateChangedHandler(false));
         addHandler(BluetoothDevice.ACTION_FOUND, new DeviceFoundHandler());
-        addHandler(BluetoothDevice.ACTION_DISAPPEARED, new DeviceDisappearedHandler());
         addHandler(BluetoothDevice.ACTION_NAME_CHANGED, new NameChangedHandler());
         addHandler(BluetoothDevice.ACTION_ALIAS_CHANGED, new NameChangedHandler());
 
@@ -106,14 +105,6 @@ public class BluetoothEventManager {
                 new AudioModeChangedHandler());
 
         mContext.registerReceiver(mBroadcastReceiver, mAdapterIntentFilter, null, mReceiverHandler);
-    }
-
-    public void setReceiverHandler(android.os.Handler handler) {
-        mContext.unregisterReceiver(mBroadcastReceiver);
-        mContext.unregisterReceiver(mProfileBroadcastReceiver);
-        mReceiverHandler = handler;
-        mContext.registerReceiver(mBroadcastReceiver, mAdapterIntentFilter, null, mReceiverHandler);
-        registerProfileIntentReceiver();
     }
 
     /** Register to start receiving callbacks for Bluetooth events. */
@@ -234,12 +225,6 @@ public class BluetoothEventManager {
                 BluetoothDevice device) {
             int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE,
                     BluetoothAdapter.ERROR);
-            // Reregister Profile Broadcast Receiver as part of TURN OFF
-            if (state == BluetoothAdapter.STATE_OFF)
-            {
-                context.unregisterReceiver(mProfileBroadcastReceiver);
-                registerProfileIntentReceiver();
-            }
             // update local profiles and get paired devices
             mLocalAdapter.setBluetoothStateInt(state);
             // send callback to update UI and possibly start scanning
@@ -282,7 +267,8 @@ public class BluetoothEventManager {
                 cachedDevice = mDeviceManager.addDevice(device);
                 Log.d(TAG, "DeviceFoundHandler created new CachedBluetoothDevice: "
                         + cachedDevice);
-                // callback to UI to create Preference for new device
+            } else if (cachedDevice.getBondState() == BluetoothDevice.BOND_BONDED) {
+                // Dispatch device add callback to show bonded BT device in discovery mode
                 dispatchDeviceAdded(cachedDevice);
             }
             cachedDevice.setRssi(rssi);
@@ -297,24 +283,6 @@ public class BluetoothEventManager {
             int state = intent.getIntExtra(BluetoothAdapter.EXTRA_CONNECTION_STATE,
                     BluetoothAdapter.ERROR);
             dispatchConnectionStateChanged(cachedDevice, state);
-        }
-    }
-
-    private class DeviceDisappearedHandler implements Handler {
-        public void onReceive(Context context, Intent intent,
-                BluetoothDevice device) {
-            CachedBluetoothDevice cachedDevice = mDeviceManager.findDevice(device);
-            if (cachedDevice == null) {
-                Log.w(TAG, "received ACTION_DISAPPEARED for an unknown device: " + device);
-                return;
-            }
-            if (CachedBluetoothDeviceManager.onDeviceDisappeared(cachedDevice)) {
-                synchronized (mCallbacks) {
-                    for (BluetoothCallback callback : mCallbacks) {
-                        callback.onDeviceDeleted(cachedDevice);
-                    }
-                }
-            }
         }
     }
 

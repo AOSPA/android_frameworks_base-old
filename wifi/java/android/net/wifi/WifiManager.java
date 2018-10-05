@@ -1042,6 +1042,7 @@ public class WifiManager {
     private AsyncChannel mAsyncChannel;
     private CountDownLatch mConnected;
     private Looper mLooper;
+    private boolean mVerboseLoggingEnabled = false;
 
     /* LocalOnlyHotspot callback message types */
     /** @hide */
@@ -1074,6 +1075,7 @@ public class WifiManager {
         mService = service;
         mLooper = looper;
         mTargetSdkVersion = context.getApplicationInfo().targetSdkVersion;
+        updateVerboseLoggingEnabledFromService();
     }
 
     /**
@@ -2599,7 +2601,7 @@ public class WifiManager {
      *
      * @hide
      */
-    private static class SoftApCallbackProxy extends ISoftApCallback.Stub {
+    private class SoftApCallbackProxy extends ISoftApCallback.Stub {
         private final Handler mHandler;
         private final SoftApCallback mCallback;
 
@@ -2610,8 +2612,10 @@ public class WifiManager {
 
         @Override
         public void onStateChanged(int state, int failureReason) {
-            Log.v(TAG, "SoftApCallbackProxy: onStateChanged: state=" + state + ", failureReason=" +
-                    failureReason);
+            if (mVerboseLoggingEnabled) {
+                Log.v(TAG, "SoftApCallbackProxy: onStateChanged: state=" + state
+                        + ", failureReason=" + failureReason);
+            }
             mHandler.post(() -> {
                 mCallback.onStateChanged(state, failureReason);
             });
@@ -2619,7 +2623,9 @@ public class WifiManager {
 
         @Override
         public void onNumClientsChanged(int numClients) {
-            Log.v(TAG, "SoftApCallbackProxy: onNumClientsChanged: numClients=" + numClients);
+            if (mVerboseLoggingEnabled) {
+                Log.v(TAG, "SoftApCallbackProxy: onNumClientsChanged: numClients=" + numClients);
+            }
             mHandler.post(() -> {
                 mCallback.onNumClientsChanged(numClients);
             });
@@ -3925,7 +3931,7 @@ public class WifiManager {
      *
      * @hide
      */
-    private static class TrafficStateCallbackProxy extends ITrafficStateCallback.Stub {
+    private class TrafficStateCallbackProxy extends ITrafficStateCallback.Stub {
         private final Handler mHandler;
         private final TrafficStateCallback mCallback;
 
@@ -3936,7 +3942,9 @@ public class WifiManager {
 
         @Override
         public void onStateChanged(int state) {
-            Log.v(TAG, "TrafficStateCallbackProxy: onStateChanged state=" + state);
+            if (mVerboseLoggingEnabled) {
+                Log.v(TAG, "TrafficStateCallbackProxy: onStateChanged state=" + state);
+            }
             mHandler.post(() -> {
                 mCallback.onStateChanged(state);
             });
@@ -3992,6 +4000,14 @@ public class WifiManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Helper method to update the local verbose logging flag based on the verbose logging
+     * level from wifi service.
+     */
+    private void updateVerboseLoggingEnabledFromService() {
+        mVerboseLoggingEnabled = getVerboseLoggingLevel() > 0;
     }
 
     /**

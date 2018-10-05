@@ -260,7 +260,6 @@ public final class ScanFilter implements Parcelable {
 
     /**
      * Returns the filter set on the service Solicitation uuid.
-     * @hide
      */
     @Nullable
     public ParcelUuid getServiceSolicitationUuid() {
@@ -269,7 +268,6 @@ public final class ScanFilter implements Parcelable {
 
     /**
      * Returns the filter set on the service Solicitation uuid mask.
-     * @hide
      */
     @Nullable
     public ParcelUuid getServiceSolicitationUuidMask() {
@@ -405,9 +403,8 @@ public final class ScanFilter implements Parcelable {
     /**
      * Check if the solicitation uuid pattern is contained in a list of parcel uuids.
      *
-     * @hide
      */
-    public static boolean matchesServiceSolicitationUuids(ParcelUuid solicitationUuid,
+    private static boolean matchesServiceSolicitationUuids(ParcelUuid solicitationUuid,
             ParcelUuid parcelSolicitationUuidMask, List<ParcelUuid> solicitationUuids) {
         if (solicitationUuid == null) {
             return true;
@@ -588,7 +585,6 @@ public final class ScanFilter implements Parcelable {
 
         /**
          * Set filter on service solicitation uuid.
-         * @hide
          */
         public Builder setServiceSolicitationUuid(ParcelUuid serviceSolicitationUuid) {
             mServiceSolicitationUuid = serviceSolicitationUuid;
@@ -604,7 +600,6 @@ public final class ScanFilter implements Parcelable {
          *
          * @throws IllegalArgumentException If {@code serviceSolicitationUuid} is {@code null} but
          *             {@code serviceSolicitationUuidMask} is not {@code null}.
-         * @hide
          */
         public Builder setServiceSolicitationUuid(ParcelUuid serviceSolicitationUuid,
                 ParcelUuid solicitationUuidMask) {

@@ -1902,7 +1902,7 @@ public class PackageParser {
      * @throws XmlPullParserException
      * @throws IOException
      */
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     private Package parseBaseApk(String apkPath, Resources res, XmlResourceParser parser, int flags,
             String[] outError) throws XmlPullParserException, IOException {
         final String splitName;
@@ -3657,6 +3657,11 @@ public class PackageParser {
                 com.android.internal.R.styleable.AndroidManifestApplication_appComponentFactory);
         if (factory != null) {
             ai.appComponentFactory = buildClassName(ai.packageName, factory, outError);
+        }
+
+        if (sa.getBoolean(
+                com.android.internal.R.styleable.AndroidManifestApplication_usesNonSdkApi, false)) {
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_USES_NON_SDK_API;
         }
 
         if (outError[0] == null) {

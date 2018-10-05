@@ -25,6 +25,7 @@ import android.annotation.SdkConstant;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.UnsupportedAppUsage;
 import android.annotation.WorkerThread;
 import android.app.Activity;
 import android.app.ActivityThread;
@@ -34,10 +35,13 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageMoveObserver;
 import android.content.pm.PackageManager;
+import android.content.res.ObbInfo;
+import android.content.res.ObbScanner;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.FileUtils;
 import android.os.Handler;
+import android.os.IInstalld;
 import android.os.IVold;
 import android.os.IVoldTaskListener;
 import android.os.Looper;
@@ -213,11 +217,10 @@ public class StorageManager {
     /** {@hide} */
     public static final int DEBUG_VIRTUAL_DISK = 1 << 5;
 
-    // NOTE: keep in sync with installd
     /** {@hide} */
-    public static final int FLAG_STORAGE_DE = 1 << 0;
+    public static final int FLAG_STORAGE_DE = IInstalld.FLAG_STORAGE_DE;
     /** {@hide} */
-    public static final int FLAG_STORAGE_CE = 1 << 1;
+    public static final int FLAG_STORAGE_CE = IInstalld.FLAG_STORAGE_CE;
 
     /** {@hide} */
     public static final int FLAG_FOR_WRITE = 1 << 8;
@@ -230,6 +233,7 @@ public class StorageManager {
     public static final int FSTRIM_FLAG_DEEP = IVold.FSTRIM_FLAG_DEEP_TRIM;
 
     /** @hide The volume is not encrypted. */
+    @UnsupportedAppUsage
     public static final int ENCRYPTION_STATE_NONE =
             IVold.ENCRYPTION_STATE_NONE;
 
@@ -446,6 +450,7 @@ public class StorageManager {
 
     /** {@hide} */
     @Deprecated
+    @UnsupportedAppUsage
     public static StorageManager from(Context context) {
         return context.getSystemService(StorageManager.class);
     }
@@ -462,6 +467,7 @@ public class StorageManager {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public StorageManager(Context context, Looper looper) throws ServiceNotFoundException {
         mContext = context;
         mResolver = context.getContentResolver();
@@ -476,6 +482,7 @@ public class StorageManager {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public void registerListener(StorageEventListener listener) {
         synchronized (mDelegates) {
             final StorageEventListenerDelegate delegate = new StorageEventListenerDelegate(listener,
@@ -496,6 +503,7 @@ public class StorageManager {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public void unregisterListener(StorageEventListener listener) {
         synchronized (mDelegates) {
             for (Iterator<StorageEventListenerDelegate> i = mDelegates.iterator(); i.hasNext();) {
@@ -518,6 +526,7 @@ public class StorageManager {
      * @hide
      */
     @Deprecated
+    @UnsupportedAppUsage
     public void enableUsbMassStorage() {
     }
 
@@ -527,6 +536,7 @@ public class StorageManager {
      * @hide
      */
     @Deprecated
+    @UnsupportedAppUsage
     public void disableUsbMassStorage() {
     }
 
@@ -537,6 +547,7 @@ public class StorageManager {
      * @hide
      */
     @Deprecated
+    @UnsupportedAppUsage
     public boolean isUsbMassStorageConnected() {
         return false;
     }
@@ -548,6 +559,7 @@ public class StorageManager {
      * @hide
      */
     @Deprecated
+    @UnsupportedAppUsage
     public boolean isUsbMassStorageEnabled() {
         return false;
     }
@@ -580,12 +592,22 @@ public class StorageManager {
         try {
             final String canonicalPath = new File(rawPath).getCanonicalPath();
             final int nonce = mObbActionListener.addListener(listener);
-            mStorageManager.mountObb(rawPath, canonicalPath, key, mObbActionListener, nonce);
+            mStorageManager.mountObb(rawPath, canonicalPath, key, mObbActionListener, nonce,
+                    getObbInfo(canonicalPath));
             return true;
         } catch (IOException e) {
             throw new IllegalArgumentException("Failed to resolve path: " + rawPath, e);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    private ObbInfo getObbInfo(String canonicalPath) {
+        try {
+            final ObbInfo obbInfo = ObbScanner.getObbInfo(canonicalPath);
+            return obbInfo;
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Couldn't get OBB info for " + canonicalPath, e);
         }
     }
 
@@ -658,6 +680,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public @NonNull List<DiskInfo> getDisks() {
         try {
             return Arrays.asList(mStorageManager.getDisks());
@@ -667,6 +690,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public @Nullable DiskInfo findDiskById(String id) {
         Preconditions.checkNotNull(id);
         // TODO; go directly to service to make this faster
@@ -679,6 +703,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public @Nullable VolumeInfo findVolumeById(String id) {
         Preconditions.checkNotNull(id);
         // TODO; go directly to service to make this faster
@@ -691,6 +716,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public @Nullable VolumeInfo findVolumeByUuid(String fsUuid) {
         Preconditions.checkNotNull(fsUuid);
         // TODO; go directly to service to make this faster
@@ -724,6 +750,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public @Nullable VolumeInfo findEmulatedForPrivate(VolumeInfo privateVol) {
         if (privateVol != null) {
             return findVolumeById(privateVol.getId().replace("private", "emulated"));
@@ -802,6 +829,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public @NonNull List<VolumeInfo> getVolumes() {
         try {
             return Arrays.asList(mStorageManager.getVolumes(0));
@@ -835,6 +863,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public @Nullable String getBestVolumeDescription(VolumeInfo vol) {
         if (vol == null) return null;
 
@@ -858,6 +887,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public @Nullable VolumeInfo getPrimaryPhysicalVolume() {
         final List<VolumeInfo> vols = getVolumes();
         for (VolumeInfo vol : vols) {
@@ -878,6 +908,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public void unmount(String volId) {
         try {
             mStorageManager.unmount(volId);
@@ -887,6 +918,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public void format(String volId) {
         try {
             mStorageManager.format(volId);
@@ -928,6 +960,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public void partitionPublic(String diskId) {
         try {
             mStorageManager.partitionPublic(diskId);
@@ -1057,6 +1090,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     private static @Nullable StorageVolume getStorageVolume(StorageVolume[] volumes, File file) {
         if (file == null) {
             return null;
@@ -1086,6 +1120,7 @@ public class StorageManager {
      * @hide
      */
     @Deprecated
+    @UnsupportedAppUsage
     public @NonNull String getVolumeState(String mountPoint) {
         final StorageVolume vol = getStorageVolume(new File(mountPoint));
         if (vol != null) {
@@ -1149,6 +1184,7 @@ public class StorageManager {
     }
 
     /** {@hide} */
+    @UnsupportedAppUsage
     public static @NonNull StorageVolume[] getVolumeList(int userId, int flags) {
         final IStorageManager storageManager = IStorageManager.Stub.asInterface(
                 ServiceManager.getService("mount"));
@@ -1182,6 +1218,7 @@ public class StorageManager {
      * @hide
      */
     @Deprecated
+    @UnsupportedAppUsage
     public @NonNull String[] getVolumePaths() {
         StorageVolume[] volumes = getVolumeList();
         int count = volumes.length;
@@ -1221,6 +1258,7 @@ public class StorageManager {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public long getStorageBytesUntilLow(File path) {
         return path.getUsableSpace() - getStorageFullBytes(path);
     }
@@ -1231,6 +1269,7 @@ public class StorageManager {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public long getStorageLowBytes(File path) {
         final long lowPercent = Settings.Global.getInt(mResolver,
                 Settings.Global.SYS_STORAGE_THRESHOLD_PERCENTAGE, DEFAULT_THRESHOLD_PERCENTAGE);
@@ -1274,6 +1313,7 @@ public class StorageManager {
      *
      * @hide
      */
+    @UnsupportedAppUsage
     public long getStorageFullBytes(File path) {
         return Settings.Global.getLong(mResolver, Settings.Global.SYS_STORAGE_FULL_THRESHOLD_BYTES,
                 DEFAULT_FULL_THRESHOLD_BYTES);
@@ -1390,6 +1430,7 @@ public class StorageManager {
      * @return true for file encrypted. (Implies isEncrypted() == true)
      *         false not encrypted or block encrypted
      */
+    @UnsupportedAppUsage
     public static boolean isFileEncryptedNativeOnly() {
         if (!isEncrypted()) {
             return false;
@@ -1480,7 +1521,11 @@ public class StorageManager {
         return SystemProperties.getBoolean(PROP_HAS_ADOPTABLE, false);
     }
 
-    /** {@hide} */
+    /**
+     * @deprecated disabled now that FUSE has been replaced by sdcardfs
+     * @hide
+     */
+    @Deprecated
     public static File maybeTranslateEmulatedPathToInternal(File path) {
         // Disabled now that FUSE has been replaced by sdcardfs
         return path;
@@ -2050,8 +2095,10 @@ public class StorageManager {
 
     /// Consts to match the password types in cryptfs.h
     /** @hide */
+    @UnsupportedAppUsage
     public static final int CRYPT_TYPE_PASSWORD = IVold.PASSWORD_TYPE_PASSWORD;
     /** @hide */
+    @UnsupportedAppUsage
     public static final int CRYPT_TYPE_DEFAULT = IVold.PASSWORD_TYPE_DEFAULT;
     /** @hide */
     public static final int CRYPT_TYPE_PATTERN = IVold.PASSWORD_TYPE_PATTERN;

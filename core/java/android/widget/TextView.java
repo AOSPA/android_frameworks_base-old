@@ -63,6 +63,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.graphics.fonts.Font;
 import android.graphics.fonts.FontVariationAxis;
 import android.icu.text.DecimalFormatSymbols;
 import android.os.AsyncTask;
@@ -312,6 +313,7 @@ import java.util.function.Supplier;
  * @attr ref android.R.styleable#TextView_fallbackLineSpacing
  * @attr ref android.R.styleable#TextView_letterSpacing
  * @attr ref android.R.styleable#TextView_fontFeatureSettings
+ * @attr ref android.R.styleable#TextView_fontVariationSettings
  * @attr ref android.R.styleable#TextView_breakStrategy
  * @attr ref android.R.styleable#TextView_hyphenationFrequency
  * @attr ref android.R.styleable#TextView_autoSizeTextType
@@ -2068,7 +2070,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     private void setTypefaceFromAttrs(@Nullable Typeface typeface, @Nullable String familyName,
             @XMLTypefaceAttr int typefaceIndex, @Typeface.Style int style,
-            @IntRange(from = -1, to = Typeface.MAX_WEIGHT) int weight) {
+            @IntRange(from = -1, to = Font.FONT_WEIGHT_MAX) int weight) {
         if (typeface == null && familyName != null) {
             // Lookup normal Typeface from system font map.
             final Typeface normalTypeface = Typeface.create(familyName, Typeface.NORMAL);
@@ -2095,9 +2097,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     private void resolveStyleAndSetTypeface(@NonNull Typeface typeface, @Typeface.Style int style,
-            @IntRange(from = -1, to = Typeface.MAX_WEIGHT) int weight) {
+            @IntRange(from = -1, to = Font.FONT_WEIGHT_MAX) int weight) {
         if (weight >= 0) {
-            weight = Math.min(Typeface.MAX_WEIGHT, weight);
+            weight = Math.min(Font.FONT_WEIGHT_MAX, weight);
             final boolean italic = (style & Typeface.ITALIC) != 0;
             setTypeface(Typeface.create(typeface, weight, italic));
         } else {
@@ -3528,6 +3530,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         boolean mHasLetterSpacing = false;
         float mLetterSpacing = 0;
         String mFontFeatureSettings = null;
+        String mFontVariationSettings = null;
 
         @Override
         public String toString() {
@@ -3555,6 +3558,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     + "    mHasLetterSpacing:" + mHasLetterSpacing + "\n"
                     + "    mLetterSpacing:" + mLetterSpacing + "\n"
                     + "    mFontFeatureSettings:" + mFontFeatureSettings + "\n"
+                    + "    mFontVariationSettings:" + mFontVariationSettings + "\n"
                     + "}";
         }
     }
@@ -3598,12 +3602,14 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 com.android.internal.R.styleable.TextAppearance_letterSpacing);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_fontFeatureSettings,
                 com.android.internal.R.styleable.TextAppearance_fontFeatureSettings);
+        sAppearanceValues.put(com.android.internal.R.styleable.TextView_fontVariationSettings,
+                com.android.internal.R.styleable.TextAppearance_fontVariationSettings);
     }
 
     /**
      * Read the Text Appearance attributes from a given TypedArray and set its values to the given
      * set. If the TypedArray contains a value that was already set in the given attributes, that
-     * will be overriden.
+     * will be overridden.
      *
      * @param context The Context to be used
      * @param appearance The TypedArray to read properties from
@@ -3700,6 +3706,9 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 case com.android.internal.R.styleable.TextAppearance_fontFeatureSettings:
                     attributes.mFontFeatureSettings = appearance.getString(attr);
                     break;
+                case com.android.internal.R.styleable.TextAppearance_fontVariationSettings:
+                    attributes.mFontVariationSettings = appearance.getString(attr);
+                    break;
                 default:
             }
         }
@@ -3755,6 +3764,10 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if (attributes.mFontFeatureSettings != null) {
             setFontFeatureSettings(attributes.mFontFeatureSettings);
+        }
+
+        if (attributes.mFontVariationSettings != null) {
+            setFontVariationSettings(attributes.mFontVariationSettings);
         }
     }
 
@@ -4370,6 +4383,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *
      * @see #getFontVariationSettings()
      * @see FontVariationAxis
+     *
+     * @attr ref android.R.styleable#TextView_fontVariationSettings
      */
     public boolean setFontVariationSettings(@Nullable String fontVariationSettings) {
         final String existingSettings = mTextPaint.getFontVariationSettings();

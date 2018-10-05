@@ -75,8 +75,7 @@ public:
      */
     bool createOrUpdateLayer(RenderNode* node, const DamageAccumulator& dmgAccumulator,
                              ErrorHandler* errorHandler) {
-        return mRenderPipeline->createOrUpdateLayer(node, dmgAccumulator, mWideColorGamut,
-                errorHandler);
+        return mRenderPipeline->createOrUpdateLayer(node, dmgAccumulator, errorHandler);
     }
 
     /**
@@ -135,7 +134,6 @@ public:
     void prepareAndDraw(RenderNode* node);
 
     void buildLayer(RenderNode* node);
-    bool copyLayerInto(DeferredLayerUpdater* layer, SkBitmap* bitmap);
     void markLayerInUse(RenderNode* node);
 
     void destroyHardwareResources();

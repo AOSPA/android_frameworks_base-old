@@ -17,34 +17,34 @@
 package com.android.server;
 
 import android.app.IActivityController;
-import android.os.Binder;
-import android.os.Build;
-import android.os.RemoteException;
-import android.system.ErrnoException;
-import android.system.Os;
-import android.system.OsConstants;
-import android.system.StructRlimit;
-import com.android.internal.os.ZygoteConnectionConstants;
-import com.android.server.am.ActivityManagerService;
-
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.hidl.manager.V1_0.IServiceManager;
+import android.os.Binder;
+import android.os.Build;
 import android.os.Debug;
 import android.os.FileUtils;
 import android.os.Handler;
 import android.os.IPowerManager;
 import android.os.Looper;
 import android.os.Process;
+import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.OsConstants;
+import android.system.StructRlimit;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
+
+import com.android.internal.os.ZygoteConnectionConstants;
+import com.android.server.am.ActivityManagerService;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -66,6 +66,9 @@ import java.text.SimpleDateFormat;
 /** This class calls its monitor every minute. Killing this process if they don't return **/
 public class Watchdog extends Thread {
     static final String TAG = "Watchdog";
+
+    /** Debug flag. */
+    public static final boolean DEBUG = true; // STOPSHIP disable it (b/113252928)
 
     // Set this to true to use debug default values.
     static final boolean DB = false;
@@ -146,7 +149,7 @@ public class Watchdog extends Thread {
             mCompleted = true;
         }
 
-        public void addMonitor(Monitor monitor) {
+        void addMonitorLocked(Monitor monitor) {
             mMonitors.add(monitor);
         }
 
@@ -173,7 +176,7 @@ public class Watchdog extends Thread {
             mHandler.postAtFrontOfQueue(this);
         }
 
-        public boolean isOverdueLocked() {
+        boolean isOverdueLocked() {
             return (!mCompleted) && (SystemClock.uptimeMillis() > mStartTime + mWaitMax);
         }
 
@@ -199,7 +202,7 @@ public class Watchdog extends Thread {
             return mName;
         }
 
-        public String describeBlockedStateLocked() {
+        String describeBlockedStateLocked() {
             if (mCurrentMonitor == null) {
                 return "Blocked in handler on " + mName + " (" + getThread().getName() + ")";
             } else {
@@ -329,7 +332,7 @@ public class Watchdog extends Thread {
             if (isAlive()) {
                 throw new RuntimeException("Monitors can't be added once the Watchdog is running");
             }
-            mMonitorChecker.addMonitor(monitor);
+            mMonitorChecker.addMonitorLocked(monitor);
         }
     }
 
@@ -485,11 +488,12 @@ public class Watchdog extends Thread {
                         continue;
                     } else if (waitState == WAITED_HALF) {
                         if (!waitedHalf) {
+                            if (DEBUG) Slog.d(TAG, "WAITED_HALF");
                             // We've waited half the deadlock-detection interval.  Pull a stack
                             // trace and wait another half.
                             ArrayList<Integer> pids = new ArrayList<Integer>();
                             pids.add(Process.myPid());
-                            initialStack = ActivityManagerService.dumpStackTraces(true, pids,
+                            initialStack = ActivityManagerService.dumpStackTraces(pids,
                                     null, null, getInterestingNativePids());
                             waitedHalf = true;
                         }
@@ -514,19 +518,13 @@ public class Watchdog extends Thread {
             ArrayList<Integer> pids = new ArrayList<>();
             pids.add(Process.myPid());
             if (mPhonePid > 0) pids.add(mPhonePid);
-            // Pass !waitedHalf so that just in case we somehow wind up here without having
-            // dumped the halfway stacks, we properly re-initialize the trace file.
-            final File finalStack = ActivityManagerService.dumpStackTraces(
-                    !waitedHalf, pids, null, null, getInterestingNativePids());
 
-            //Collect Binder State logs to get status of all the transactions
-            if (Build.IS_DEBUGGABLE) {
-                binderStateRead();
-            }
+            final File finalStack = ActivityManagerService.dumpStackTraces(
+                    pids, null, null, getInterestingNativePids());
 
             // Give some extra time to make sure the stack traces get written.
             // The system's been hanging for a minute, another second or two won't hurt much.
-            SystemClock.sleep(2000);
+            SystemClock.sleep(5000);
 
             final String tracesDirProp = SystemProperties.get("dalvik.vm.stack-trace-dir", "");
             File watchdogTraces;

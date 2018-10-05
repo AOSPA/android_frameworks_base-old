@@ -210,7 +210,7 @@ public:
             const sp<InputWindowHandle>& inputWindowHandle, bool monitor);
     status_t unregisterInputChannel(JNIEnv* env, const sp<InputChannel>& inputChannel);
 
-    void setInputWindows(JNIEnv* env, jobjectArray windowHandleObjArray);
+    void setInputWindows(JNIEnv* env, jobjectArray windowHandleObjArray, int32_t displayId);
     void setFocusedApplication(JNIEnv* env, jobject applicationHandleObj);
     void setInputDispatchMode(bool enabled, bool frozen);
     void setSystemUiVisibility(int32_t visibility);
@@ -230,11 +230,11 @@ public:
     virtual sp<PointerControllerInterface> obtainPointerController(int32_t deviceId);
     virtual void notifyInputDevicesChanged(const Vector<InputDeviceInfo>& inputDevices);
     virtual sp<KeyCharacterMap> getKeyboardLayoutOverlay(const InputDeviceIdentifier& identifier);
-    virtual String8 getDeviceAlias(const InputDeviceIdentifier& identifier);
+    virtual std::string getDeviceAlias(const InputDeviceIdentifier& identifier);
     virtual TouchAffineTransformation getTouchAffineTransformation(JNIEnv *env,
             jfloatArray matrixArr);
     virtual TouchAffineTransformation getTouchAffineTransformation(
-            const String8& inputDeviceDescriptor, int32_t surfaceRotation);
+            const std::string& inputDeviceDescriptor, int32_t surfaceRotation);
 
     /* --- InputDispatcherPolicyInterface implementation --- */
 
@@ -480,7 +480,7 @@ void NativeInputManager::getReaderConfiguration(InputReaderConfiguration* outCon
         for (jsize i = 0; i < length; i++) {
             jstring item = jstring(env->GetObjectArrayElement(excludedDeviceNames, i));
             const char* deviceNameChars = env->GetStringUTFChars(item, NULL);
-            outConfig->excludedDeviceNames.add(String8(deviceNameChars));
+            outConfig->excludedDeviceNames.push_back(deviceNameChars);
             env->ReleaseStringUTFChars(item, deviceNameChars);
             env->DeleteLocalRef(item);
         }
@@ -606,7 +606,7 @@ sp<KeyCharacterMap> NativeInputManager::getKeyboardLayoutOverlay(
     JNIEnv* env = jniEnv();
 
     sp<KeyCharacterMap> result;
-    ScopedLocalRef<jstring> descriptor(env, env->NewStringUTF(identifier.descriptor.string()));
+    ScopedLocalRef<jstring> descriptor(env, env->NewStringUTF(identifier.descriptor.c_str()));
     ScopedLocalRef<jobject> identifierObj(env, env->NewObject(gInputDeviceIdentifierInfo.clazz,
             gInputDeviceIdentifierInfo.constructor, descriptor.get(),
             identifier.vendor, identifier.product));
@@ -620,24 +620,24 @@ sp<KeyCharacterMap> NativeInputManager::getKeyboardLayoutOverlay(
         ScopedUtfChars filenameChars(env, filenameObj.get());
         ScopedUtfChars contentsChars(env, contentsObj.get());
 
-        KeyCharacterMap::loadContents(String8(filenameChars.c_str()),
-                String8(contentsChars.c_str()), KeyCharacterMap::FORMAT_OVERLAY, &result);
+        KeyCharacterMap::loadContents(filenameChars.c_str(),
+                contentsChars.c_str(), KeyCharacterMap::FORMAT_OVERLAY, &result);
     }
     checkAndClearExceptionFromCallback(env, "getKeyboardLayoutOverlay");
     return result;
 }
 
-String8 NativeInputManager::getDeviceAlias(const InputDeviceIdentifier& identifier) {
+std::string NativeInputManager::getDeviceAlias(const InputDeviceIdentifier& identifier) {
     ATRACE_CALL();
     JNIEnv* env = jniEnv();
 
-    ScopedLocalRef<jstring> uniqueIdObj(env, env->NewStringUTF(identifier.uniqueId.string()));
+    ScopedLocalRef<jstring> uniqueIdObj(env, env->NewStringUTF(identifier.uniqueId.c_str()));
     ScopedLocalRef<jstring> aliasObj(env, jstring(env->CallObjectMethod(mServiceObj,
             gServiceClassInfo.getDeviceAlias, uniqueIdObj.get())));
-    String8 result;
+    std::string result;
     if (aliasObj.get()) {
         ScopedUtfChars aliasChars(env, aliasObj.get());
-        result.setTo(aliasChars.c_str());
+        result = aliasChars.c_str();
     }
     checkAndClearExceptionFromCallback(env, "getDeviceAlias");
     return result;
@@ -736,7 +736,8 @@ void NativeInputManager::getDispatcherConfiguration(InputDispatcherConfiguration
     }
 }
 
-void NativeInputManager::setInputWindows(JNIEnv* env, jobjectArray windowHandleObjArray) {
+void NativeInputManager::setInputWindows(JNIEnv* env, jobjectArray windowHandleObjArray,
+         int32_t displayId) {
     Vector<sp<InputWindowHandle> > windowHandles;
 
     if (windowHandleObjArray) {
@@ -756,7 +757,7 @@ void NativeInputManager::setInputWindows(JNIEnv* env, jobjectArray windowHandleO
         }
     }
 
-    mInputManager->getDispatcher()->setInputWindows(windowHandles);
+    mInputManager->getDispatcher()->setInputWindows(windowHandles, displayId);
 
     // Do this after the dispatcher has updated the window handle state.
     bool newPointerGesturesEnabled = true;
@@ -932,10 +933,10 @@ TouchAffineTransformation NativeInputManager::getTouchAffineTransformation(
 }
 
 TouchAffineTransformation NativeInputManager::getTouchAffineTransformation(
-        const String8& inputDeviceDescriptor, int32_t surfaceRotation) {
+        const std::string& inputDeviceDescriptor, int32_t surfaceRotation) {
     JNIEnv* env = jniEnv();
 
-    ScopedLocalRef<jstring> descriptorObj(env, env->NewStringUTF(inputDeviceDescriptor.string()));
+    ScopedLocalRef<jstring> descriptorObj(env, env->NewStringUTF(inputDeviceDescriptor.c_str()));
 
     jobject cal = env->CallObjectMethod(mServiceObj,
             gServiceClassInfo.getTouchCalibrationForInputDevice, descriptorObj.get(),
@@ -1281,7 +1282,7 @@ static void nativeSetDisplayViewport(JNIEnv* env, jclass /* clazz */, jlong ptr,
     v.deviceWidth = deviceWidth;
     v.deviceHeight = deviceHeight;
     if (uniqueId != nullptr) {
-        v.uniqueId.setTo(ScopedUtfChars(env, uniqueId).c_str());
+        v.uniqueId = ScopedUtfChars(env, uniqueId).c_str();
     }
 
     im->setDisplayViewport(viewportType, v);
@@ -1446,10 +1447,10 @@ static void nativeToggleCapsLock(JNIEnv* env, jclass /* clazz */,
 }
 
 static void nativeSetInputWindows(JNIEnv* env, jclass /* clazz */,
-        jlong ptr, jobjectArray windowHandleObjArray) {
+        jlong ptr, jobjectArray windowHandleObjArray, jint displayId) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
 
-    im->setInputWindows(env, windowHandleObjArray);
+    im->setInputWindows(env, windowHandleObjArray, displayId);
 }
 
 static void nativeSetFocusedApplication(JNIEnv* env, jclass /* clazz */,
@@ -1678,7 +1679,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
             (void*) nativeInjectInputEvent },
     { "nativeToggleCapsLock", "(JI)V",
             (void*) nativeToggleCapsLock },
-    { "nativeSetInputWindows", "(J[Lcom/android/server/input/InputWindowHandle;)V",
+    { "nativeSetInputWindows", "(J[Lcom/android/server/input/InputWindowHandle;I)V",
             (void*) nativeSetInputWindows },
     { "nativeSetFocusedApplication", "(JLcom/android/server/input/InputApplicationHandle;)V",
             (void*) nativeSetFocusedApplication },

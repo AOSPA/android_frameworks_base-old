@@ -31,6 +31,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.FLAG_PRIVATE;
 import static android.view.Display.REMOVE_MODE_DESTROY_CONTENT;
+
 import static com.android.server.am.ActivityDisplayProto.CONFIGURATION_CONTAINER;
 import static com.android.server.am.ActivityDisplayProto.FOCUSED_STACK_ID;
 import static com.android.server.am.ActivityDisplayProto.ID;
@@ -38,12 +39,14 @@ import static com.android.server.am.ActivityDisplayProto.RESUMED_ACTIVITY;
 import static com.android.server.am.ActivityDisplayProto.STACKS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STACK;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STATES;
+import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_TASKS;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_STACK;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.am.ActivityStackSupervisor.FindTaskResult;
 import static com.android.server.am.ActivityStackSupervisor.TAG_STATES;
+import static com.android.server.am.ActivityStackSupervisor.TAG_TASKS;
 
-import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
@@ -103,6 +106,12 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
 
     private boolean mSleeping;
 
+    /**
+     * The display is removed from the system and we are just waiting for all activities on it to be
+     * finished before removing this object.
+     */
+    private boolean mRemoved;
+
     // Cached reference to some special stacks we tend to get a lot so we don't need to loop
     // through the list to find them.
     private ActivityStack mHomeStack = null;
@@ -114,6 +123,8 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
     private Point mTmpDisplaySize = new Point();
 
     private DisplayWindowController mWindowContainerController;
+
+    private final FindTaskResult mTmpFindTaskResult = new FindTaskResult();
 
     @VisibleForTesting
     ActivityDisplay(ActivityStackSupervisor supervisor, int displayId) {
@@ -130,6 +141,10 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
 
     protected DisplayWindowController createWindowContainerController() {
         return new DisplayWindowController(mDisplay, this);
+    }
+
+    DisplayWindowController getWindowContainerController() {
+        return mWindowContainerController;
     }
 
     void updateBounds() {
@@ -155,6 +170,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
                 + " from displayId=" + mDisplayId);
         mStacks.remove(stack);
         removeStackReferenceIfNeeded(stack);
+        releaseSelfIfNeeded();
         mSupervisor.mService.updateSleepIfNeededLocked();
         onStackOrderChanged();
     }
@@ -280,7 +296,13 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
     <T extends ActivityStack> T getOrCreateStack(@Nullable ActivityRecord r,
             @Nullable ActivityOptions options, @Nullable TaskRecord candidateTask, int activityType,
             boolean onTop) {
-        final int windowingMode = resolveWindowingMode(r, options, candidateTask, activityType);
+        // First preference is the windowing mode in the activity options if set.
+        int windowingMode = (options != null)
+                ? options.getLaunchWindowingMode() : WINDOWING_MODE_UNDEFINED;
+        // Validate that our desired windowingMode will work under the current conditions.
+        // UNDEFINED windowing mode is a valid result and means that the new stack will inherit
+        // it's display's windowing mode.
+        windowingMode = validateWindowingMode(windowingMode, r, candidateTask, activityType);
         return getOrCreateStack(windowingMode, activityType, onTop);
     }
 
@@ -292,7 +314,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
      * Creates a stack matching the input windowing mode and activity type on this display.
      * @param windowingMode The windowing mode the stack should be created in. If
      *                      {@link WindowConfiguration#WINDOWING_MODE_UNDEFINED} then the stack will
-     *                      be created in {@link WindowConfiguration#WINDOWING_MODE_FULLSCREEN}.
+     *                      inherit it's parent's windowing mode.
      * @param activityType The activityType the stack should be created in. If
      *                     {@link WindowConfiguration#ACTIVITY_TYPE_UNDEFINED} then the stack will
      *                     be created in {@link WindowConfiguration#ACTIVITY_TYPE_STANDARD}.
@@ -435,6 +457,41 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
     }
 
     /**
+     * Find task for putting the Activity in.
+     */
+    void findTaskLocked(final ActivityRecord r, final boolean isPreferredDisplay,
+            FindTaskResult result) {
+        mTmpFindTaskResult.clear();
+        for (int stackNdx = getChildCount() - 1; stackNdx >= 0; --stackNdx) {
+            final ActivityStack stack = getChildAt(stackNdx);
+            if (!r.hasCompatibleActivityType(stack)) {
+                if (DEBUG_TASKS) {
+                    Slog.d(TAG_TASKS, "Skipping stack: (mismatch activity/stack) " + stack);
+                }
+                continue;
+            }
+
+            stack.findTaskLocked(r, mTmpFindTaskResult);
+            // It is possible to have tasks in multiple stacks with the same root affinity, so
+            // we should keep looking after finding an affinity match to see if there is a
+            // better match in another stack. Also, task affinity isn't a good enough reason
+            // to target a display which isn't the source of the intent, so skip any affinity
+            // matches not on the specified display.
+            if (mTmpFindTaskResult.mRecord != null) {
+                if (mTmpFindTaskResult.mIdealMatch) {
+                    result.setTo(mTmpFindTaskResult);
+                    return;
+                } else if (isPreferredDisplay) {
+                    // Note: since the traversing through the stacks is top down, the floating
+                    // tasks should always have lower priority than any affinity-matching tasks
+                    // in the fullscreen stacks
+                    result.setTo(mTmpFindTaskResult);
+                }
+            }
+        }
+    }
+
+    /**
      * Removes stacks in the input windowing modes from the system if they are of activity type
      * ACTIVITY_TYPE_STANDARD or ACTIVITY_TYPE_UNDEFINED
      */
@@ -484,16 +541,11 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         final int windowingMode = stack.getWindowingMode();
 
         if (activityType == ACTIVITY_TYPE_HOME) {
-            // TODO(b/111363427) Rollback to throws exceptions once we figure out how to properly
-            // deal with home type stack when external display removed
             if (mHomeStack != null && mHomeStack != stack) {
-                // throw new IllegalArgumentException("addStackReferenceIfNeeded: home stack="
-                //         + mHomeStack + " already exist on display=" + this + " stack=" + stack);
-                Slog.e(TAG, "addStackReferenceIfNeeded: home stack="
+                throw new IllegalArgumentException("addStackReferenceIfNeeded: home stack="
                         + mHomeStack + " already exist on display=" + this + " stack=" + stack);
-            } else {
-                mHomeStack = stack;
             }
+            mHomeStack = stack;
         } else if (activityType == ACTIVITY_TYPE_RECENTS) {
             if (mRecentsStack != null && mRecentsStack != stack) {
                 throw new IllegalArgumentException("addStackReferenceIfNeeded: recents stack="
@@ -543,7 +595,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
                 if (!otherStack.inSplitScreenSecondaryWindowingMode()) {
                     continue;
                 }
-                otherStack.setWindowingMode(WINDOWING_MODE_FULLSCREEN, false /* animate */,
+                otherStack.setWindowingMode(WINDOWING_MODE_UNDEFINED, false /* animate */,
                         false /* showRecents */, false /* enteringSplitScreenMode */,
                         true /* deferEnsuringVisibility */);
             }
@@ -604,10 +656,14 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
             return false;
         }
 
+        final int displayWindowingMode = getWindowingMode();
         if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
                 || windowingMode == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY) {
             return supportsSplitScreen
-                    && WindowConfiguration.supportSplitScreenWindowingMode(activityType);
+                    && WindowConfiguration.supportSplitScreenWindowingMode(activityType)
+                    // Freeform windows and split-screen windows don't mix well, so prevent
+                    // split windowing modes on freeform displays.
+                    && displayWindowingMode != WINDOWING_MODE_FREEFORM;
         }
 
         if (!supportsFreeform && windowingMode == WINDOWING_MODE_FREEFORM) {
@@ -620,6 +676,16 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         return true;
     }
 
+    /**
+     * Resolves the windowing mode that an {@link ActivityRecord} would be in if started on this
+     * display with the provided parameters.
+     *
+     * @param r The ActivityRecord in question.
+     * @param options Options to start with.
+     * @param task The task within-which the activity would start.
+     * @param activityType The type of activity to start.
+     * @return The resolved (not UNDEFINED) windowing-mode that the activity would be in.
+     */
     int resolveWindowingMode(@Nullable ActivityRecord r, @Nullable ActivityOptions options,
             @Nullable TaskRecord task, int activityType) {
 
@@ -641,7 +707,9 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
                 windowingMode = getWindowingMode();
             }
         }
-        return validateWindowingMode(windowingMode, r, task, activityType);
+        windowingMode = validateWindowingMode(windowingMode, r, task, activityType);
+        return windowingMode != WINDOWING_MODE_UNDEFINED
+                ? windowingMode : WINDOWING_MODE_FULLSCREEN;
     }
 
     /**
@@ -678,23 +746,21 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         final boolean inSplitScreenMode = hasSplitScreenPrimaryStack();
         if (!inSplitScreenMode
                 && windowingMode == WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY) {
-            // Switch to fullscreen windowing mode if we are not in split-screen mode and we are
+            // Switch to the display's windowing mode if we are not in split-screen mode and we are
             // trying to launch in split-screen secondary.
-            windowingMode = WINDOWING_MODE_FULLSCREEN;
-        } else if (inSplitScreenMode && windowingMode == WINDOWING_MODE_FULLSCREEN
+            windowingMode = WINDOWING_MODE_UNDEFINED;
+        } else if (inSplitScreenMode && (windowingMode == WINDOWING_MODE_FULLSCREEN
+                        || windowingMode == WINDOWING_MODE_UNDEFINED)
                 && supportsSplitScreen) {
             windowingMode = WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
         }
 
         if (windowingMode != WINDOWING_MODE_UNDEFINED
                 && isWindowingModeSupported(windowingMode, supportsMultiWindow, supportsSplitScreen,
-                supportsFreeform, supportsPip, activityType)) {
+                        supportsFreeform, supportsPip, activityType)) {
             return windowingMode;
         }
-        // Try to use the display's windowing mode otherwise fallback to fullscreen.
-        windowingMode = getWindowingMode();
-        return windowingMode != WINDOWING_MODE_UNDEFINED
-                ? windowingMode : WINDOWING_MODE_FULLSCREEN;
+        return WINDOWING_MODE_UNDEFINED;
     }
 
     /**
@@ -796,28 +862,47 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         return false;
     }
 
+    /**
+     * @see #mRemoved
+     */
+    boolean isRemoved() {
+        return mRemoved;
+    }
+
     void remove() {
         final boolean destroyContentOnRemoval = shouldDestroyContentOnRemove();
-        while (getChildCount() > 0) {
-            final ActivityStack stack = getChildAt(0);
-            if (destroyContentOnRemoval) {
-                // Override the stack configuration to make it equal to the current applied one, so
-                // that we don't accidentally report configuration change to activities that are
-                // going to be finished.
-                stack.onOverrideConfigurationChanged(stack.getConfiguration());
-                mSupervisor.moveStackToDisplayLocked(stack.mStackId, DEFAULT_DISPLAY,
-                        false /* onTop */);
+
+        // Stacks could be reparented from the removed display to other display. While
+        // reparenting the last stack of the removed display, the remove display is ready to be
+        // released (no more ActivityStack). But, we cannot release it at that moment or the
+        // related WindowContainer and WindowContainerController will also be removed. So, we
+        // set display as removed after reparenting stack finished.
+        for (int i = mStacks.size() - 1; i >= 0; --i) {
+            final ActivityStack stack = mStacks.get(i);
+            // Always finish non-standard type stacks.
+            if (destroyContentOnRemoval || !stack.isActivityTypeStandardOrUndefined()) {
                 stack.finishAllActivitiesLocked(true /* immediately */);
             } else {
-                // Moving all tasks to fullscreen stack, because it's guaranteed to be
-                // a valid launch stack for all activities. This way the task history from
-                // external display will be preserved on primary after move.
-                mSupervisor.moveTasksToFullscreenStackLocked(stack, true /* onTop */);
+                // If default display is in split-window mode, set windowing mode of the stack to
+                // split-screen secondary. Otherwise, set the windowing mode to undefined by
+                // default to let stack inherited the windowing mode from the new display.
+                int windowingMode = mSupervisor.getDefaultDisplay().hasSplitScreenPrimaryStack()
+                        ? WINDOWING_MODE_SPLIT_SCREEN_SECONDARY : WINDOWING_MODE_UNDEFINED;
+                mSupervisor.moveStackToDisplayLocked(stack.mStackId, DEFAULT_DISPLAY, true);
+                stack.setWindowingMode(windowingMode);
             }
         }
+        mRemoved = true;
 
-        mWindowContainerController.removeContainer();
-        mWindowContainerController = null;
+        releaseSelfIfNeeded();
+    }
+
+    private void releaseSelfIfNeeded() {
+        if (mStacks.isEmpty() && mRemoved) {
+            mWindowContainerController.removeContainer();
+            mWindowContainerController = null;
+            mSupervisor.removeChild(this);
+        }
     }
 
     /** Update and get all UIDs that are present on the display and have access to it. */

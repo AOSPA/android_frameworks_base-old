@@ -74,10 +74,6 @@ public abstract class FileSystemProvider extends DocumentsProvider {
 
     private Handler mHandler;
 
-    private static final String MIMETYPE_JPEG = "image/jpeg";
-    private static final String MIMETYPE_JPG = "image/jpg";
-    private static final String MIMETYPE_OCTET_STREAM = "application/octet-stream";
-
     protected abstract File getFileForDocId(String docId, boolean visible)
             throws FileNotFoundException;
 
@@ -374,8 +370,12 @@ public abstract class FileSystemProvider extends DocumentsProvider {
         final File parent = getFileForDocId(parentDocumentId);
         final MatrixCursor result = new DirectoryCursor(
                 resolveProjection(projection), parentDocumentId, parent);
-        for (File file : parent.listFiles()) {
-            includeFile(result, null, file);
+        if (parent.isDirectory()) {
+            for (File file : FileUtils.listFilesOrEmpty(parent)) {
+                includeFile(result, null, file);
+            }
+        } else {
+            Log.w(TAG, "parentDocumentId '" + parentDocumentId + "' is not Directory");
         }
         return result;
     }
@@ -429,7 +429,7 @@ public abstract class FileSystemProvider extends DocumentsProvider {
                     return mime;
                 }
             }
-            return MIMETYPE_OCTET_STREAM;
+            return ContentResolver.MIME_TYPE_DEFAULT;
         }
     }
 

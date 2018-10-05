@@ -16,13 +16,12 @@
 
 package com.android.internal.view;
 
-import android.net.Uri;
 import android.os.ResultReceiver;
 import android.text.style.SuggestionSpan;
 import android.view.inputmethod.InputMethodInfo;
 import android.view.inputmethod.InputMethodSubtype;
 import android.view.inputmethod.EditorInfo;
-import com.android.internal.inputmethod.IInputContentUriToken;
+
 import com.android.internal.view.InputBindResult;
 import com.android.internal.view.IInputContext;
 import com.android.internal.view.IInputMethodClient;
@@ -30,8 +29,6 @@ import com.android.internal.view.IInputMethodClient;
 /**
  * Public interface to the global input method manager, used by all client
  * applications.
- * You need to update BridgeIInputMethodManager.java as well when changing
- * this file.
  */
 interface IInputMethodManager {
     // TODO: Use ParceledListSlice instead
@@ -45,9 +42,6 @@ interface IInputMethodManager {
     // TODO: We should change the return type from List to List<Parcelable>
     // Currently there is a bug that aidl doesn't accept List<Parcelable>
     List getShortcutInputMethodsAndSubtypes();
-    void addClient(in IInputMethodClient client,
-            in IInputContext inputContext, int uid, int pid);
-    void removeClient(in IInputMethodClient client);
 
     void finishInput(in IInputMethodClient client);
     boolean showSoftInput(in IInputMethodClient client, int flags,
@@ -69,28 +63,20 @@ interface IInputMethodManager {
             int auxiliarySubtypeMode);
     void showInputMethodAndSubtypeEnablerFromClient(in IInputMethodClient client, String topId);
     boolean isInputMethodPickerShownForTest();
+    // TODO(Bug 114488811): this can be removed once we deprecate special null token rule.
     void setInputMethod(in IBinder token, String id);
+    // TODO(Bug 114488811): this can be removed once we deprecate special null token rule.
     void setInputMethodAndSubtype(in IBinder token, String id, in InputMethodSubtype subtype);
-    void hideMySoftInput(in IBinder token, int flags);
-    void showMySoftInput(in IBinder token, int flags);
-    void updateStatusIcon(in IBinder token, String packageName, int iconId);
-    void setImeWindowStatus(in IBinder token, int vis, int backDisposition);
-    void reportStartInput(in IBinder token, in IBinder startInputToken);
     void registerSuggestionSpansForNotification(in SuggestionSpan[] spans);
     boolean notifySuggestionPicked(in SuggestionSpan span, String originalString, int index);
     InputMethodSubtype getCurrentInputMethodSubtype();
     boolean setCurrentInputMethodSubtype(in InputMethodSubtype subtype);
+    // TODO(Bug 114488811): this can be removed once we deprecate special null token rule.
     boolean switchToPreviousInputMethod(in IBinder token);
+    // TODO(Bug 114488811): this can be removed once we deprecate special null token rule.
     boolean switchToNextInputMethod(in IBinder token, boolean onlyCurrentIme);
-    boolean shouldOfferSwitchingToNextInputMethod(in IBinder token);
     void setAdditionalInputMethodSubtypes(String id, in InputMethodSubtype[] subtypes);
+    // This is kept due to @UnsupportedAppUsage.
+    // TODO(Bug 113914148): Consider removing this.
     int getInputMethodWindowVisibleHeight();
-    void clearLastInputMethodWindowForTransition(in IBinder token);
-
-    IInputContentUriToken createInputContentUriToken(in IBinder token, in Uri contentUri,
-            in String packageName);
-
-    void reportFullscreenMode(in IBinder token, boolean fullscreen);
-
-    oneway void notifyUserAction(int sequenceNumber);
 }

@@ -42,6 +42,8 @@ static constexpr android::DisplayInfo sDummyDisplay{
         false,  // secure?
         0,      // appVsyncOffset
         0,      // presentationDeadline
+        1080,   // viewportW
+        1920,   // viewportH
 };
 
 static DeviceInfo* sDeviceInfo = nullptr;
@@ -64,12 +66,16 @@ void DeviceInfo::initialize(int maxTextureSize) {
         sDeviceInfo = new DeviceInfo();
         sDeviceInfo->mDisplayInfo = DeviceInfo::queryDisplayInfo();
         sDeviceInfo->mMaxTextureSize = maxTextureSize;
+        sDeviceInfo->queryCompositionPreference(&sDeviceInfo->mTargetDataSpace,
+                                                &sDeviceInfo->mTargetPixelFormat);
     });
 }
 
 void DeviceInfo::load() {
     mDisplayInfo = queryDisplayInfo();
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &mMaxTextureSize);
+    sDeviceInfo->queryCompositionPreference(&sDeviceInfo->mTargetDataSpace,
+                                            &sDeviceInfo->mTargetPixelFormat);
 }
 
 DisplayInfo DeviceInfo::queryDisplayInfo() {
@@ -82,6 +88,18 @@ DisplayInfo DeviceInfo::queryDisplayInfo() {
     status_t status = SurfaceComposerClient::getDisplayInfo(dtoken, &displayInfo);
     LOG_ALWAYS_FATAL_IF(status, "Failed to get display info, error %d", status);
     return displayInfo;
+}
+
+void DeviceInfo::queryCompositionPreference(ui::Dataspace* dataSpace,
+                                            ui::PixelFormat* pixelFormat) {
+    if (Properties::isolatedProcess) {
+        *dataSpace = ui::Dataspace::V0_SRGB;
+        *pixelFormat = ui::PixelFormat::RGBA_8888;
+    }
+
+    status_t status =
+        SurfaceComposerClient::getCompositionPreference(dataSpace, pixelFormat);
+    LOG_ALWAYS_FATAL_IF(status, "Failed to get composition preference, error %d", status);
 }
 
 } /* namespace uirenderer */

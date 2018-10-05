@@ -178,6 +178,10 @@ abstract public class ManagedServices {
         }
     }
 
+    protected int getBindFlags() {
+        return BIND_AUTO_CREATE | BIND_FOREGROUND_SERVICE | BIND_ALLOW_WHITELIST_MANAGEMENT;
+    }
+
     protected void onServiceRemovedLocked(ManagedServiceInfo removed) { }
 
     private ManagedServiceInfo newServiceInfo(IInterface service,
@@ -216,12 +220,14 @@ abstract public class ManagedServices {
         }
 
         pw.println("    Live " + getCaption() + "s (" + mServices.size() + "):");
-        for (ManagedServiceInfo info : mServices) {
-            if (filter != null && !filter.matches(info.component)) continue;
-            pw.println("      " + info.component
-                    + " (user " + info.userid + "): " + info.service
-                    + (info.isSystem?" SYSTEM":"")
-                    + (info.isGuest(this)?" GUEST":""));
+        synchronized (mMutex) {
+            for (ManagedServiceInfo info : mServices) {
+                if (filter != null && !filter.matches(info.component)) continue;
+                pw.println("      " + info.component
+                        + " (user " + info.userid + "): " + info.service
+                        + (info.isSystem ? " SYSTEM" : "")
+                        + (info.isGuest(this) ? " GUEST" : ""));
+            }
         }
 
         pw.println("    Snoozed " + getCaption() + "s (" +
@@ -260,9 +266,11 @@ abstract public class ManagedServices {
             cmpt.writeToProto(proto, ManagedServicesProto.ENABLED);
         }
 
-        for (ManagedServiceInfo info : mServices) {
-            if (filter != null && !filter.matches(info.component)) continue;
-            info.writeToProto(proto, ManagedServicesProto.LIVE_SERVICES, this);
+        synchronized (mMutex) {
+            for (ManagedServiceInfo info : mServices) {
+                if (filter != null && !filter.matches(info.component)) continue;
+                info.writeToProto(proto, ManagedServicesProto.LIVE_SERVICES, this);
+            }
         }
 
         for (ComponentName name : mSnoozingForCurrentProfiles) {
@@ -631,11 +639,13 @@ abstract public class ManagedServices {
 
     public boolean isSameUser(IInterface service, int userId) {
         checkNotNull(service);
-        ManagedServiceInfo info = getServiceFromTokenLocked(service);
-        if (info != null) {
-            return info.isSameUser(userId);
+        synchronized (mMutex) {
+            ManagedServiceInfo info = getServiceFromTokenLocked(service);
+            if (info != null) {
+                return info.isSameUser(userId);
+            }
+            return false;
         }
-        return false;
     }
 
     public void unregisterService(IInterface service, int userid) {
@@ -688,7 +698,8 @@ abstract public class ManagedServices {
 
             for (int userId : userIds) {
                 if (enabled) {
-                    if (isPackageOrComponentAllowed(component.toString(), userId)) {
+                    if (isPackageOrComponentAllowed(component.toString(), userId)
+                            || isPackageOrComponentAllowed(component.getPackageName(), userId)) {
                         registerServiceLocked(component, userId);
                     } else {
                         Slog.d(TAG, component + " no longer has permission to be bound");
@@ -1057,9 +1068,9 @@ abstract public class ManagedServices {
                 }
             };
             if (!mContext.bindServiceAsUser(intent,
-                serviceConnection,
-                BIND_AUTO_CREATE | BIND_FOREGROUND_SERVICE | BIND_ALLOW_WHITELIST_MANAGEMENT,
-                new UserHandle(userid))) {
+                    serviceConnection,
+                    getBindFlags(),
+                    new UserHandle(userid))) {
                 mServicesBound.remove(servicesBindingTag);
                 Slog.w(TAG, "Unable to bind " + getCaption() + " service: " + intent);
                 return;
