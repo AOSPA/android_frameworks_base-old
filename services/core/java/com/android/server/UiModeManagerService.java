@@ -42,30 +42,24 @@ import android.os.ResultReceiver;
 import android.os.ServiceManager;
 import android.os.ShellCallback;
 import android.os.ShellCommand;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.service.dreams.Sandman;
 import android.service.vr.IVrManager;
 import android.service.vr.IVrStateCallbacks;
-import android.text.TextUtils;
 import android.util.Slog;
-
-import java.io.File;
-import java.io.FileDescriptor;
-import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Collections;
 
 import com.android.internal.R;
 import com.android.internal.app.DisableCarModeActivity;
 import com.android.internal.messages.nano.SystemMessageProto.SystemMessage;
 import com.android.internal.notification.SystemNotificationChannels;
 import com.android.internal.util.DumpUtils;
-import com.android.server.power.ShutdownThread;
 import com.android.server.twilight.TwilightListener;
 import com.android.server.twilight.TwilightManager;
 import com.android.server.twilight.TwilightState;
+
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
 
 final class UiModeManagerService extends SystemService {
     private static final String TAG = UiModeManager.class.getSimpleName();
@@ -113,6 +107,8 @@ final class UiModeManagerService extends SystemService {
     private StatusBarManager mStatusBarManager;
 
     private PowerManager.WakeLock mWakeLock;
+
+    private final LocalService mLocalService = new LocalService();
 
     public UiModeManagerService(Context context) {
         super(context);
@@ -248,6 +244,7 @@ final class UiModeManagerService extends SystemService {
 
         }, TAG + ".onStart");
         publishBinderService(Context.UI_MODE_SERVICE, mService);
+        publishLocalService(UiModeManagerInternal.class, mLocalService);
     }
 
     private final IUiModeManager.Stub mService = new IUiModeManager.Stub() {
@@ -373,7 +370,8 @@ final class UiModeManagerService extends SystemService {
             pw.println("Current UI Mode Service state:");
             pw.print("  mDockState="); pw.print(mDockState);
                     pw.print(" mLastBroadcastState="); pw.println(mLastBroadcastState);
-            pw.print("  mNightMode="); pw.print(mNightMode);
+            pw.print("  mNightMode="); pw.print(mNightMode); pw.print(" (");
+                    pw.print(Shell.nightModeToStr(mNightMode)); pw.print(") ");
                     pw.print(" mNightModeLocked="); pw.print(mNightModeLocked);
                     pw.print(" mCarModeEnabled="); pw.print(mCarModeEnabled);
                     pw.print(" mComputedNightMode="); pw.print(mComputedNightMode);
@@ -466,7 +464,7 @@ final class UiModeManagerService extends SystemService {
             uiMode |= mNightMode << 4;
         }
 
-        if (mPowerSave && !mNightModeLocked) {
+        if (mPowerSave) {
             uiMode &= ~Configuration.UI_MODE_NIGHT_NO;
             uiMode |= Configuration.UI_MODE_NIGHT_YES;
         }
@@ -842,6 +840,24 @@ final class UiModeManagerService extends SystemService {
                     return UiModeManager.MODE_NIGHT_AUTO;
                 default:
                     return -1;
+            }
+        }
+    }
+
+    public final class LocalService extends UiModeManagerInternal {
+
+        @Override
+        public boolean isNightMode() {
+            synchronized (mLock) {
+                final boolean isIt = (mConfiguration.uiMode & Configuration.UI_MODE_NIGHT_YES) != 0;
+                if (LOG) {
+                    Slog.d(TAG,
+                        "LocalService.isNightMode(): mNightMode=" + mNightMode
+                        + "; mComputedNightMode=" + mComputedNightMode
+                        + "; uiMode=" + mConfiguration.uiMode
+                        + "; isIt=" + isIt);
+                }
+                return isIt;
             }
         }
     }

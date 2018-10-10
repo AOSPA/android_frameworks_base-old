@@ -317,63 +317,78 @@ public class DisconnectCause {
      * The network has reported that an alternative emergency number has been dialed, but the user
      * must exit airplane mode to place the call.
      */
-    public static final int IMS_SIP_ALTERNATE_EMERGENCY_CALL = 117;
+    public static final int IMS_SIP_ALTERNATE_EMERGENCY_CALL = 71;
 
-    //*********************************************************************************************
-    // When adding a disconnect type:
-    // 1) Update toString() with the newly added disconnect type.
-    // 2) Update android.telecom.DisconnectCauseUtil with any mappings to a telecom.DisconnectCause.
-    //*********************************************************************************************
+    /**
+     * Indicates that a new outgoing call cannot be placed because there is already an outgoing
+     * call dialing out.
+     */
+    public static final int ALREADY_DIALING = 72;
 
-    public static final int QOS_UNAVAILABLE = 71;
-    public static final int REQUESTED_FACILITY_NOT_SUBSCRIBED = 72;
-    public static final int INCOMING_CALLS_BARRED_WITHIN_CUG = 73;
-    public static final int BEARER_CAPABILITY_UNAVAILABLE = 74;
-    public static final int SERVICE_OPTION_NOT_AVAILABLE = 75;
-    public static final int BEARER_SERVICE_NOT_IMPLEMENTED = 76;
-    public static final int REQUESTED_FACILITY_NOT_IMPLEMENTED = 77;
-    public static final int ONLY_DIGITAL_INFORMATION_BEARER_AVAILABLE = 78;
-    public static final int SERVICE_OR_OPTION_NOT_IMPLEMENTED = 79;
-    public static final int INVALID_TRANSACTION_IDENTIFIER = 80;
-    public static final int USER_NOT_MEMBER_OF_CUG = 81;
-    public static final int INCOMPATIBLE_DESTINATION = 82;
-    public static final int INVALID_TRANSIT_NW_SELECTION = 83;
-    public static final int SEMANTICALLY_INCORRECT_MESSAGE = 84;
-    public static final int INVALID_MANDATORY_INFORMATION = 85;
-    public static final int MESSAGE_TYPE_NON_IMPLEMENTED = 86;
-    public static final int MESSAGE_TYPE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 87;
-    public static final int INFORMATION_ELEMENT_NON_EXISTENT = 88;
-    public static final int CONDITIONAL_IE_ERROR = 89;
-    public static final int MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 90;
-    public static final int RECOVERY_ON_TIMER_EXPIRED = 91;
-    public static final int PROTOCOL_ERROR_UNSPECIFIED = 92;
-    public static final int INTERWORKING_UNSPECIFIED = 93;
-    public static final int LOCAL_LOW_BATTERY = 94;
-    public static final int NO_CIRCUIT_AVAIL = 96;
-    public static final int NO_ROUTE_TO_DESTINATION = 97;
-    public static final int OPERATOR_DETERMINED_BARRING = 98;
-    public static final int CALL_FAIL_NO_USER_RESPONDING = 99;
-    public static final int CALL_FAIL_NO_ANSWER_FROM_USER = 100;
-    public static final int CALL_FAIL_DESTINATION_OUT_OF_ORDER = 101;
-    public static final int BEARER_CAPABILITY_NOT_AUTHORIZED = 102;
-    public static final int CHANNEL_UNACCEPTABLE = 103;
-    public static final int CALL_REJECTED = 104;
-    public static final int NUMBER_CHANGED = 105;
-    public static final int PREEMPTION = 106;
-    public static final int FACILITY_REJECTED = 107;
-    public static final int RESP_TO_STATUS_ENQUIRY = 108;
-    public static final int NETWORK_OUT_OF_ORDER = 109;
-    public static final int TEMPORARY_FAILURE = 110;
-    public static final int SWITCHING_EQUIPMENT_CONGESTION = 111;
-    public static final int ACCESS_INFORMATION_DISCARDED = 112;
-    public static final int REQUESTED_CIRCUIT_OR_CHANNEL_NOT_AVAILABLE = 113;
-    public static final int RESOURCES_UNAVAILABLE_OR_UNSPECIFIED = 114;
+    /**
+     * Indicates that a new outgoing call cannot be placed while there is a ringing call.
+     */
+    public static final int CANT_CALL_WHILE_RINGING = 73;
+
+    /**
+     * Indicates that a new outgoing call cannot be placed because calling has been disabled using
+     * the ro.telephony.disable-call system property.
+     */
+    public static final int CALLING_DISABLED = 74;
+
+    /**
+     * Indicates that a new outgoing call cannot be placed because there is currently an ongoing
+     * foreground and background call.
+     */
+    public static final int TOO_MANY_ONGOING_CALLS = 75;
+
+    public static final int QOS_UNAVAILABLE = 76;
+    public static final int REQUESTED_FACILITY_NOT_SUBSCRIBED = 77;
+    public static final int INCOMING_CALLS_BARRED_WITHIN_CUG = 78;
+    public static final int BEARER_CAPABILITY_UNAVAILABLE = 79;
+    public static final int SERVICE_OPTION_NOT_AVAILABLE = 80;
+    public static final int BEARER_SERVICE_NOT_IMPLEMENTED = 81;
+    public static final int REQUESTED_FACILITY_NOT_IMPLEMENTED = 82;
+    public static final int ONLY_DIGITAL_INFORMATION_BEARER_AVAILABLE = 83;
+    public static final int SERVICE_OR_OPTION_NOT_IMPLEMENTED = 84;
+    public static final int INVALID_TRANSACTION_IDENTIFIER = 85;
+    public static final int USER_NOT_MEMBER_OF_CUG = 86;
+    public static final int INCOMPATIBLE_DESTINATION = 87;
+    public static final int INVALID_TRANSIT_NW_SELECTION = 88;
+    public static final int SEMANTICALLY_INCORRECT_MESSAGE = 89;
+    public static final int INVALID_MANDATORY_INFORMATION = 90;
+    public static final int MESSAGE_TYPE_NON_IMPLEMENTED = 91;
+    public static final int MESSAGE_TYPE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 92;
+    public static final int INFORMATION_ELEMENT_NON_EXISTENT = 93;
+    public static final int CONDITIONAL_IE_ERROR = 94;
+    public static final int MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 95;
+    public static final int RECOVERY_ON_TIMER_EXPIRED = 96;
+    public static final int PROTOCOL_ERROR_UNSPECIFIED = 97;
+    public static final int INTERWORKING_UNSPECIFIED = 98;
+    public static final int LOCAL_LOW_BATTERY = 99;
+    public static final int NO_CIRCUIT_AVAIL = 100;
+    public static final int NO_ROUTE_TO_DESTINATION = 101;
+    public static final int OPERATOR_DETERMINED_BARRING = 102;
+    public static final int CALL_FAIL_NO_USER_RESPONDING = 103;
+    public static final int CALL_FAIL_NO_ANSWER_FROM_USER = 104;
+    public static final int CALL_FAIL_DESTINATION_OUT_OF_ORDER = 105;
+    public static final int BEARER_CAPABILITY_NOT_AUTHORIZED = 106;
+    public static final int CHANNEL_UNACCEPTABLE = 107;
+    public static final int CALL_REJECTED = 108;
+    public static final int NUMBER_CHANGED = 109;
+    public static final int PREEMPTION = 110;
+    public static final int FACILITY_REJECTED = 111;
+    public static final int RESP_TO_STATUS_ENQUIRY = 112;
+    public static final int NETWORK_OUT_OF_ORDER = 113;
+    public static final int TEMPORARY_FAILURE = 114;
+    public static final int SWITCHING_EQUIPMENT_CONGESTION = 115;
+    public static final int ACCESS_INFORMATION_DISCARDED = 116;
+    public static final int REQUESTED_CIRCUIT_OR_CHANNEL_NOT_AVAILABLE = 117;
+    public static final int RESOURCES_UNAVAILABLE_OR_UNSPECIFIED = 118;
 
     /** call failed due to LTE to 3G/2G handover not feasible */
-    public static final int HO_NOT_FEASIBLE = 115;
-    public static final int NON_SELECTED_USER_CLEARING = 116;
-
-
+    public static final int HO_NOT_FEASIBLE = 119;
+    public static final int NON_SELECTED_USER_CLEARING = 120;
 
     //*********************************************************************************************
     // When adding a disconnect type:
@@ -383,7 +398,7 @@ public class DisconnectCause {
     // 4) Update toString() with the newly added disconnect type.
     // 5) Update android.telecom.DisconnectCauseUtil with any mappings to a telecom.DisconnectCause.
     //
-    // NextId: 117
+    // NextId: 121
     //*********************************************************************************************
 
     /** Smallest valid value for call disconnect codes. */
@@ -567,6 +582,14 @@ public class DisconnectCause {
             return "NORMAL_UNSPECIFIED";
         case IMS_SIP_ALTERNATE_EMERGENCY_CALL:
             return "IMS_SIP_ALTERNATE_EMERGENCY_CALL";
+        case ALREADY_DIALING:
+            return "ALREADY_DIALING";
+        case CANT_CALL_WHILE_RINGING:
+            return "CANT_CALL_WHILE_RINGING";
+        case CALLING_DISABLED:
+            return "CALLING_DISABLED";
+        case TOO_MANY_ONGOING_CALLS:
+            return "TOO_MANY_ONGOING_CALLS";
         case NETWORK_OUT_OF_ORDER:
             return "NETWORK_OUT_OF_ORDER";
         case TEMPORARY_FAILURE:

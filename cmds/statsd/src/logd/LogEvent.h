@@ -18,6 +18,8 @@
 
 #include "FieldValue.h"
 
+#include <android/frameworks/stats/1.0/types.h>
+#include <android/os/StatsLogEventWrapper.h>
 #include <android/util/ProtoOutputStream.h>
 #include <log/log_event_list.h>
 #include <log/log_read.h>
@@ -26,6 +28,8 @@
 
 #include <string>
 #include <vector>
+
+using namespace android::frameworks::stats::V1_0;
 
 namespace android {
 namespace os {
@@ -61,6 +65,8 @@ public:
      */
     explicit LogEvent(log_msg& msg);
 
+    explicit LogEvent(const StatsLogEventWrapper& statsLogEventWrapper);
+
     /**
      * Constructs a LogEvent with synthetic data for testing. Must call init() before reading.
      */
@@ -74,9 +80,31 @@ public:
      */
     explicit LogEvent(int32_t tagId, int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
                       int32_t uid,
-                      const std::map<int32_t, int64_t>& int_map,
+                      const std::map<int32_t, int32_t>& int_map,
+                      const std::map<int32_t, int64_t>& long_map,
                       const std::map<int32_t, std::string>& string_map,
                       const std::map<int32_t, float>& float_map);
+
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const SpeakerImpedance& speakerImpedance);
+
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const HardwareFailed& hardwareFailed);
+
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const PhysicalDropDetected& physicalDropDetected);
+
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const ChargeCycles& chargeCycles);
+
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const BatteryHealthSnapshotArgs& batteryHealthSnapshotArgs);
+
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const SlowIo& slowIo);
+
+    explicit LogEvent(int64_t wallClockTimestampNs, int64_t elapsedTimestampNs,
+                      const BatteryCausedShutdown& batteryCausedShutdown);
 
     ~LogEvent();
 
@@ -119,7 +147,8 @@ public:
     bool write(float value);
     bool write(const std::vector<AttributionNodeInternal>& nodes);
     bool write(const AttributionNodeInternal& node);
-    bool writeKeyValuePairs(const std::map<int32_t, int64_t>& int_map,
+    bool writeKeyValuePairs(const std::map<int32_t, int32_t>& int_map,
+                            const std::map<int32_t, int64_t>& long_map,
                             const std::map<int32_t, std::string>& string_map,
                             const std::map<int32_t, float>& float_map);
 

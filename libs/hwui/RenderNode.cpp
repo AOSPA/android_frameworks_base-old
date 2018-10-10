@@ -112,7 +112,9 @@ void RenderNode::prepareTree(TreeInfo& info) {
     LOG_ALWAYS_FATAL_IF(!info.damageAccumulator, "DamageAccumulator missing");
     MarkAndSweepRemoved observer(&info);
 
+    const int before = info.disableForceDark;
     prepareTreeImpl(observer, info, false);
+    LOG_ALWAYS_FATAL_IF(before != info.disableForceDark, "Mis-matched force dark");
 }
 
 void RenderNode::addAnimator(const sp<BaseRenderNodeAnimator>& animator) {
@@ -158,7 +160,7 @@ void RenderNode::pushLayerUpdate(TreeInfo& info) {
         CC_UNLIKELY(properties().getWidth() == 0) || CC_UNLIKELY(properties().getHeight() == 0) ||
         CC_UNLIKELY(!properties().fitsOnLayer())) {
         if (CC_UNLIKELY(hasLayer())) {
-            renderthread::CanvasContext::destroyLayer(this);
+            this->setLayerSurface(nullptr);
         }
         return;
     }
@@ -195,6 +197,11 @@ void RenderNode::prepareTreeImpl(TreeObserver& observer, TreeInfo& info, bool fu
     if (info.mode == TreeInfo::MODE_FULL) {
         pushStagingPropertiesChanges(info);
     }
+
+    if (!mProperties.getAllowForceDark()) {
+        info.disableForceDark++;
+    }
+
     uint32_t animatorDirtyMask = 0;
     if (CC_LIKELY(info.runAnimations)) {
         animatorDirtyMask = mAnimatorManager.animate(info);
@@ -232,6 +239,9 @@ void RenderNode::prepareTreeImpl(TreeObserver& observer, TreeInfo& info, bool fu
     }
     pushLayerUpdate(info);
 
+    if (!mProperties.getAllowForceDark()) {
+        info.disableForceDark--;
+    }
     info.damageAccumulator->popTransform();
 }
 
@@ -272,21 +282,45 @@ void RenderNode::syncDisplayList(TreeObserver& observer, TreeInfo* info) {
     mStagingDisplayList = nullptr;
     if (mDisplayList) {
         mDisplayList->syncContents();
-        if (CC_UNLIKELY(Properties::forceDarkMode)) {
-            auto usage = usageHint();
-            if (usage == UsageHint::Unknown) {
-                if (mDisplayList->mChildNodes.size() > 1) {
-                    usage = UsageHint::Background;
-                } else if (mDisplayList->mChildNodes.size() == 1 &&
-                           mDisplayList->mChildNodes.front().getRenderNode()->usageHint() !=
-                                   UsageHint::Background) {
-                    usage = UsageHint::Background;
-                }
-            }
-            mDisplayList->mDisplayList.applyColorTransform(
-                    usage == UsageHint::Background ? ColorTransform::Dark : ColorTransform::Light);
+        handleForceDark(info);
+    }
+}
+
+void RenderNode::handleForceDark(android::uirenderer::TreeInfo *info) {
+    if (CC_LIKELY(!info || info->disableForceDark)) {
+        return;
+    }
+    auto usage = usageHint();
+    const auto& children = mDisplayList->mChildNodes;
+    if (mDisplayList->hasText()) {
+        usage = UsageHint::Foreground;
+    }
+    if (usage == UsageHint::Unknown) {
+        if (children.size() > 1) {
+            usage = UsageHint::Background;
+        } else if (children.size() == 1 &&
+                children.front().getRenderNode()->usageHint() !=
+                        UsageHint::Background) {
+            usage = UsageHint::Background;
         }
     }
+    if (children.size() > 1) {
+        // Crude overlap check
+        SkRect drawn = SkRect::MakeEmpty();
+        for (auto iter = children.rbegin(); iter != children.rend(); ++iter) {
+            const auto& child = iter->getRenderNode();
+            // We use stagingProperties here because we haven't yet sync'd the children
+            SkRect bounds = SkRect::MakeXYWH(child->stagingProperties().getX(), child->stagingProperties().getY(),
+                    child->stagingProperties().getWidth(), child->stagingProperties().getHeight());
+            if (bounds.contains(drawn)) {
+                // This contains everything drawn after it, so make it a background
+                child->setUsageHint(UsageHint::Background);
+            }
+            drawn.join(bounds);
+        }
+    }
+    mDisplayList->mDisplayList.applyColorTransform(
+            usage == UsageHint::Background ? ColorTransform::Dark : ColorTransform::Light);
 }
 
 void RenderNode::pushStagingDisplayListChanges(TreeObserver& observer, TreeInfo& info) {
@@ -313,7 +347,7 @@ void RenderNode::deleteDisplayList(TreeObserver& observer, TreeInfo* info) {
 
 void RenderNode::destroyHardwareResources(TreeInfo* info) {
     if (hasLayer()) {
-        renderthread::CanvasContext::destroyLayer(this);
+        this->setLayerSurface(nullptr);
     }
     setStagingDisplayList(nullptr);
 
@@ -323,7 +357,7 @@ void RenderNode::destroyHardwareResources(TreeInfo* info) {
 
 void RenderNode::destroyLayers() {
     if (hasLayer()) {
-        renderthread::CanvasContext::destroyLayer(this);
+        this->setLayerSurface(nullptr);
     }
     if (mDisplayList) {
         mDisplayList->updateChildren([](RenderNode* child) { child->destroyLayers(); });

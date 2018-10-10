@@ -29,6 +29,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.ServiceConnection;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.IBinder.DeathRecipient;
@@ -587,6 +588,7 @@ final class RemoteFillService implements DeathRecipient {
             }
             final RemoteFillService remoteService = getService();
             if (remoteService != null) {
+                if (sVerbose) Slog.v(LOG_TAG, "calling onFillRequest() for id=" + mRequest.getId());
                 try {
                     remoteService.mAutoFillService.onFillRequest(mRequest, mCallback);
                 } catch (RemoteException e) {
@@ -659,6 +661,7 @@ final class RemoteFillService implements DeathRecipient {
         public void run() {
             final RemoteFillService remoteService = getService();
             if (remoteService != null) {
+                if (sVerbose) Slog.v(LOG_TAG, "calling onSaveRequest()");
                 try {
                     remoteService.mAutoFillService.onSaveRequest(mRequest, mCallback);
                 } catch (RemoteException e) {

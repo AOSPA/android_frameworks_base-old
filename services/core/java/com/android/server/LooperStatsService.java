@@ -93,10 +93,12 @@ public class LooperStatsService extends Binder {
         if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
         List<LooperStats.ExportedEntry> entries = mStats.getEntries();
         entries.sort(Comparator
-                .comparing((LooperStats.ExportedEntry entry) -> entry.threadName)
+                .comparing((LooperStats.ExportedEntry entry) -> entry.workSourceUid)
+                .thenComparing(entry -> entry.threadName)
                 .thenComparing(entry -> entry.handlerClassName)
                 .thenComparing(entry -> entry.messageName));
         String header = String.join(",", Arrays.asList(
+                "work_source_uid",
                 "thread_name",
                 "handler_class",
                 "message_name",
@@ -110,11 +112,11 @@ public class LooperStatsService extends Binder {
                 "exception_count"));
         pw.println(header);
         for (LooperStats.ExportedEntry entry : entries) {
-            pw.printf("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n", entry.threadName,
-                    entry.handlerClassName, entry.messageName, entry.isInteractive,
-                    entry.messageCount, entry.recordedMessageCount, entry.totalLatencyMicros,
-                    entry.maxLatencyMicros, entry.cpuUsageMicros, entry.maxCpuUsageMicros,
-                    entry.exceptionCount);
+            pw.printf("%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n", entry.workSourceUid,
+                    entry.threadName, entry.handlerClassName, entry.messageName,
+                    entry.isInteractive, entry.messageCount, entry.recordedMessageCount,
+                    entry.totalLatencyMicros, entry.maxLatencyMicros, entry.cpuUsageMicros,
+                    entry.maxCpuUsageMicros, entry.exceptionCount);
         }
     }
 
@@ -127,7 +129,12 @@ public class LooperStatsService extends Binder {
     }
 
     private void setSamplingInterval(int samplingInterval) {
-        mStats.setSamplingInterval(samplingInterval);
+        if (samplingInterval > 0) {
+            mStats.setSamplingInterval(samplingInterval);
+        } else {
+            Slog.w(TAG, "Ignored invalid sampling interval (value must be positive): "
+                    + samplingInterval);
+        }
     }
 
     /**
@@ -189,6 +196,10 @@ public class LooperStatsService extends Binder {
             } else if ("reset".equals(cmd)) {
                 mStats.reset();
                 return 0;
+            } else if ("sampling_interval".equals(cmd)) {
+                int sampling = Integer.parseUnsignedInt(getNextArgRequired());
+                setSamplingInterval(sampling);
+                return 0;
             } else {
                 return handleDefaultCommands(cmd);
             }
@@ -198,9 +209,10 @@ public class LooperStatsService extends Binder {
         public void onHelp() {
             final PrintWriter pw = getOutPrintWriter();
             pw.println(LOOPER_STATS_SERVICE_NAME + " commands:");
-            pw.println("  enable: Enable collecting stats");
-            pw.println("  disable: Disable collecting stats");
-            pw.println("  reset: Reset stats");
+            pw.println("  enable: Enable collecting stats.");
+            pw.println("  disable: Disable collecting stats.");
+            pw.println("  sampling_interval: Change the sampling interval.");
+            pw.println("  reset: Reset stats.");
         }
     }
 }

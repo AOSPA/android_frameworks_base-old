@@ -26,7 +26,6 @@ import android.annotation.UnsupportedAppUsage;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
@@ -59,6 +58,7 @@ import libcore.net.event.NetworkEventDispatcher;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -3807,8 +3807,9 @@ public class ConnectivityManager {
 
     private void unsupportedStartingFrom(int version) {
         if (Process.myUid() == Process.SYSTEM_UID) {
-            // The getApplicationInfo() call we make below is not supported in system context, and
-            // we want to allow the system to use these APIs anyway.
+            // The getApplicationInfo() call we make below is not supported in system context. Let
+            // the call through here, and rely on the fact that ConnectivityService will refuse to
+            // allow the system to use these APIs anyway.
             return;
         }
 
@@ -3825,11 +3826,6 @@ public class ConnectivityManager {
     // functions by accessing ConnectivityService directly. However, it should be clear that doing
     // so is unsupported and may break in the future. http://b/22728205
     private void checkLegacyRoutingApiAccess() {
-        if (mContext.checkCallingOrSelfPermission("com.android.permission.INJECT_OMADM_SETTINGS")
-                == PackageManager.PERMISSION_GRANTED) {
-            return;
-        }
-
         unsupportedStartingFrom(VERSION_CODES.M);
     }
 
@@ -3934,6 +3930,28 @@ public class ConnectivityManager {
             return mService.getNetworkWatchlistConfigHash();
         } catch (RemoteException e) {
             Log.e(TAG, "Unable to get watchlist config hash");
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the {@code uid} of the owner of a network connection.
+     *
+     * @param protocol The protocol of the connection. Only {@code IPPROTO_TCP} and
+     * {@code IPPROTO_UDP} currently supported.
+     * @param local The local {@link InetSocketAddress} of a connection.
+     * @param remote The remote {@link InetSocketAddress} of a connection.
+     *
+     * @return {@code uid} if the connection is found and the app has permission to observe it
+     * (e.g., if it is associated with the calling VPN app's tunnel) or
+     * {@link android.os.Process#INVALID_UID} if the connection is not found.
+     */
+    public int getConnectionOwnerUid(int protocol, InetSocketAddress local,
+                                     InetSocketAddress remote) {
+        ConnectionInfo connectionInfo = new ConnectionInfo(protocol, local, remote);
+        try {
+            return mService.getConnectionOwnerUid(connectionInfo);
+        } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }

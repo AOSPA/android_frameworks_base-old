@@ -60,6 +60,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 
@@ -85,9 +86,8 @@ public class SubscriptionManager {
     /** @hide */
     public static final int INVALID_PHONE_INDEX = -1;
 
-    /** An invalid slot identifier */
-    /** @hide */
-    public static final int INVALID_SIM_SLOT_INDEX = -1;
+    /** Indicates invalid sim slot. This can be returned by {@link #getSlotIndex(int)}. */
+    public static final int INVALID_SIM_SLOT_INDEX = -2;
 
     /** Indicates the caller wants the default sub id. */
     /** @hide */
@@ -138,9 +138,8 @@ public class SubscriptionManager {
     /** @hide */
     public static final String SIM_SLOT_INDEX = "sim_id";
 
-    /** SIM is not inserted */
-    /** @hide */
-    public static final int SIM_NOT_INSERTED = -1;
+    /** Indicates SIM is not inserted. This can be returned by {@link #getSlotIndex(int)}. */
+    public static final int SIM_NOT_INSERTED = -3;
 
     /**
      * TelephonyProvider column name for user displayed name.
@@ -1263,16 +1262,22 @@ public class SubscriptionManager {
 
     /**
      * Get slotIndex associated with the subscription.
-     * @return slotIndex as a positive integer or a negative value if an error either
-     * SIM_NOT_INSERTED or < 0 if an invalid slot index
-     * @hide
+     *
+     * @param subscriptionId the unique SubscriptionInfo index in database
+     * @return slotIndex as a positive integer or a negative value,
+     * <ol>
+     * <li>{@link #INVALID_SUBSCRIPTION_ID} if the supplied subscriptionId is invalid </li>
+     * <li>{@link #SIM_NOT_INSERTED} if sim is not inserted </li>
+     * <li>{@link #INVALID_SIM_SLOT_INDEX} if the supplied subscriptionId doesn't have an
+     *     associated slot index </li>
+     * </ol>
      */
-    @UnsupportedAppUsage
-    public static int getSlotIndex(int subId) {
-        if (!isValidSubscriptionId(subId)) {
+    public static int getSlotIndex(int subscriptionId) {
+        if (!isValidSubscriptionId(subscriptionId)) {
             if (DBG) {
-                logd("[getSlotIndex]- fail");
+                logd("[getSlotIndex]- supplied subscriptionId is invalid. ");
             }
+            return INVALID_SUBSCRIPTION_ID;
         }
 
         int result = INVALID_SIM_SLOT_INDEX;
@@ -1280,7 +1285,7 @@ public class SubscriptionManager {
         try {
             ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
             if (iSub != null) {
-                result = iSub.getSlotIndex(subId);
+                result = iSub.getSlotIndex(subscriptionId);
             }
         } catch (RemoteException ex) {
             // ignore it
@@ -1811,6 +1816,19 @@ public class SubscriptionManager {
      */
     @UnsupportedAppUsage
     public static Resources getResourcesForSubId(Context context, int subId) {
+        return getResourcesForSubId(context, subId, false);
+    }
+
+    /**
+     * Returns the resources associated with Subscription.
+     * @param context Context object
+     * @param subId Subscription Id of Subscription who's resources are required
+     * @param useRootLocale if root locale should be used. Localized locale is used if false.
+     * @return Resources associated with Subscription.
+     * @hide
+     */
+    public static Resources getResourcesForSubId(Context context, int subId,
+            boolean useRootLocale) {
         final SubscriptionInfo subInfo =
                 SubscriptionManager.from(context).getActiveSubscriptionInfo(subId);
 
@@ -1822,10 +1840,28 @@ public class SubscriptionManager {
             newConfig.mnc = subInfo.getMnc();
             if (newConfig.mnc == 0) newConfig.mnc = Configuration.MNC_ZERO;
         }
+
+        if (useRootLocale) {
+            newConfig.setLocale(Locale.ROOT);
+        }
+
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
         DisplayMetrics newMetrics = new DisplayMetrics();
         newMetrics.setTo(metrics);
         return new Resources(context.getResources().getAssets(), newMetrics, newConfig);
+    }
+
+    /**
+     * Checks if the supplied subscription ID corresponds to an active subscription.
+     *
+     * @param subscriptionId the subscription ID.
+     * @return {@code true} if the supplied subscription ID corresponds to an active subscription;
+     * {@code false} if it does not correspond to an active subscription; or throw a
+     * SecurityException if the caller hasn't got the right permission.
+     */
+    @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
+    public boolean isActiveSubscriptionId(int subscriptionId) {
+        return isActiveSubId(subscriptionId);
     }
 
     /**
@@ -1838,7 +1874,7 @@ public class SubscriptionManager {
         try {
             ISub iSub = ISub.Stub.asInterface(ServiceManager.getService("isub"));
             if (iSub != null) {
-                return iSub.isActiveSubId(subId);
+                return iSub.isActiveSubId(subId, mContext.getOpPackageName());
             }
         } catch (RemoteException ex) {
         }
@@ -2117,9 +2153,15 @@ public class SubscriptionManager {
 
     /**
      * Set preferred default data.
-     * Set on which slot default data will be on.
+     * Set on which slot most cellular data will be on.
+     * It's also usually what we set up internet connection on.
      *
-     * @param slotId which slot is preferred to for cellular data.
+     * PreferredData overwrites user setting of default data subscription. And it's used
+     * by AlternativeNetworkAccessService or carrier apps to switch primary and CBRS
+     * subscription dynamically in multi-SIM devices.
+     *
+     * @param slotId which slot is preferred to for cellular data. If it's INVALID, it means
+     *               it's unset and defaultDataSubId is used to determine which modem is preferred.
      * @hide
      *
      */

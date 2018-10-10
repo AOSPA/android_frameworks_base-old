@@ -1527,7 +1527,7 @@
     <bool name="config_checkWallpaperAtBoot">true</bool>
 
     <!-- Class name of WallpaperManagerService. -->
-    <string name="config_wallpaperManagerServiceName">com.android.server.wallpaper.WallpaperManagerService</string>
+    <string name="config_wallpaperManagerServiceName" translatable="false">com.android.server.wallpaper.WallpaperManagerService</string>
 
     <!-- Enables the TimeZoneRuleManager service. This is the master switch for the updateable time
          zone update mechanism. -->
@@ -2116,8 +2116,8 @@
     <!-- Type of the long press sensor. Empty if long press is not supported. -->
     <string name="config_dozeLongPressSensorType" translatable="false"></string>
 
-    <!-- Type of the reach sensor. Empty if reach is not supported. -->
-    <string name="config_dozeReachSensorType" translatable="false"></string>
+    <!-- Type of sensor that wakes up the lock screen. Empty if not supported. -->
+    <string name="config_dozeWakeLockScreenSensorType" translatable="false"></string>
 
     <!-- Type of the wake up sensor. Empty if not supported. -->
     <string name="config_dozeWakeScreenSensorType" translatable="false"></string>
@@ -3492,6 +3492,9 @@
     <!-- Name of the font family used for system surfaces where the font should use medium weight -->
     <string name="config_headlineFontFamilyMedium">@string/font_family_button_material</string>
 
+    <!-- Size of icon shown beside a preference locked by admin -->
+    <dimen name="config_restricted_icon_size">@dimen/restricted_icon_size_material</dimen>
+
     <string translatable="false" name="config_batterySaverDeviceSpecificConfig"></string>
 
     <!-- Package name that should be granted Notification Assistant access -->
@@ -3553,6 +3556,18 @@
 
     <!-- Brand value for attestation of misprovisioned device. -->
     <string name="config_misprovisionedBrandValue" translatable="false"></string>
+
+    <!-- Pre-scale volume at volume step 1 for Absolute Volume -->
+    <fraction name="config_prescaleAbsoluteVolume_index1">50%</fraction>
+
+    <!-- Pre-scale volume at volume step 2 for Absolute Volume -->
+    <fraction name="config_prescaleAbsoluteVolume_index2">70%</fraction>
+
+    <!-- Pre-scale volume at volume step 3 for Absolute Volume -->
+    <fraction name="config_prescaleAbsoluteVolume_index3">85%</fraction>
+
+    <!-- Whether or not the "SMS app service" feature is enabled -->
+    <bool name="config_useSmsAppService">true</bool>
     
     <!-- List of names that represent dual SoftAp interfaces. -->
     <string-array translatable="false" name="config_wifi_dual_sap_interfaces">

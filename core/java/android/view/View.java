@@ -4864,7 +4864,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         setOverScrollMode(OVER_SCROLL_IF_CONTENT_SCROLLS);
         mUserPaddingStart = UNDEFINED_PADDING;
         mUserPaddingEnd = UNDEFINED_PADDING;
-        mRenderNode = RenderNode.create(getClass().getName(), this);
+        mRenderNode = RenderNode.create(getClass().getName(), new ViewAnimationHostBridge(this));
 
         if (!sCompatibilityDone && context != null) {
             final int targetSdkVersion = context.getApplicationInfo().targetSdkVersion;
@@ -5732,7 +5732,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @UnsupportedAppUsage
     View() {
         mResources = null;
-        mRenderNode = RenderNode.create(getClass().getName(), this);
+        mRenderNode = RenderNode.create(getClass().getName(), new ViewAnimationHostBridge(this));
     }
 
     final boolean debugDraw() {
@@ -7315,7 +7315,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // Here we check whether we still need the default focus highlight, and switch it on/off.
         switchDefaultFocusHighlight();
 
-        InputMethodManager imm = InputMethodManager.peekInstance();
+        InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
         if (!gainFocus) {
             if (isPressed()) {
                 setPressed(false);
@@ -8523,6 +8523,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
         if (importance == IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
                 || importance == IMPORTANT_FOR_AUTOFILL_NO) {
+            if (Log.isLoggable(AUTOFILL_LOG_TAG, Log.VERBOSE)) {
+                Log.v(AUTOFILL_LOG_TAG, "View (autofillId=" +  getAutofillViewId() + ", "
+                        + getClass() + ") is not important for autofill because its "
+                        + "importance is " + importance);
+            }
             return false;
         }
 
@@ -12476,7 +12481,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         mPrivateFlags3 &= ~PFLAG3_TEMPORARY_DETACH;
         onFinishTemporaryDetach();
         if (hasWindowFocus() && hasFocus()) {
-            InputMethodManager.getInstance().focusIn(this);
+            getContext().getSystemService(InputMethodManager.class).focusIn(this);
         }
         notifyEnterOrExitForAutoFillIfNeeded(true);
     }
@@ -12868,7 +12873,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *        focus, false otherwise.
      */
     public void onWindowFocusChanged(boolean hasWindowFocus) {
-        InputMethodManager imm = InputMethodManager.peekInstance();
+        InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
         if (!hasWindowFocus) {
             if (isPressed()) {
                 setPressed(false);
@@ -14638,9 +14643,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Recomputes the matrix if necessary.
      *
      * @return True if the transform matrix is the identity matrix, false otherwise.
+     * @hide
      */
     @UnsupportedAppUsage
-    final boolean hasIdentityMatrix() {
+    public final boolean hasIdentityMatrix() {
         return mRenderNode.hasIdentityMatrix();
     }
 
@@ -15245,6 +15251,44 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Sets whether or not to allow force dark to apply to this view.
+     *
+     * Setting this to false will disable the auto-dark feature on everything this view
+     * draws, including any descendants.
+     *
+     * Setting this to true will allow this view to be automatically made dark, however
+     * a value of 'true' will not override any 'false' value in its parent chain nor will
+     * it prevent any 'false' in any of its children.
+     *
+     * The default behavior of force dark is also influenced by the Theme's
+     * {@link android.R.styleable#Theme_isLightTheme isLightTheme} attribute.
+     * If a theme is isLightTheme="false", then force dark is globally disabled for that theme.
+     *
+     * @param allow Whether or not to allow force dark.
+     *
+     * @hide
+     */
+    public void setAllowForceDark(boolean allow) {
+        if (mRenderNode.setAllowForceDark(allow)) {
+            // Currently toggling force-dark requires a new display list push to apply
+            // TODO: Make it not clobber the display list so this is just a damageSelf() instead
+            invalidate();
+        }
+    }
+
+    /**
+     * See {@link #setAllowForceDark(boolean)}
+     *
+     * @return true if force dark is allowed (default), false if it is disabled
+     *
+     * @hide
+     */
+    @ViewDebug.ExportedProperty(category = "drawing")
+    public boolean getAllowForceDark() {
+        return mRenderNode.getAllowForceDark();
+    }
+
+    /**
      * Top position of this view relative to its parent.
      *
      * @return The top of this view, in pixels.
@@ -15597,7 +15641,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     /**
      * Sets the visual z position of this view, in pixels. This is equivalent to setting the
      * {@link #setTranslationZ(float) translationZ} property to be the difference between
-     * the x value passed in and the current {@link #getElevation() elevation} property.
+     * the z value passed in and the current {@link #getElevation() elevation} property.
      *
      * @param z The visual z position of this view, in pixels.
      */
@@ -17936,7 +17980,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         rebuildOutline();
 
         if (isFocused()) {
-            InputMethodManager imm = InputMethodManager.peekInstance();
+            InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
             if (imm != null) {
                 imm.focusIn(this);
             }
@@ -18519,7 +18563,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         onDetachedFromWindow();
         onDetachedFromWindowInternal();
 
-        InputMethodManager imm = InputMethodManager.peekInstance();
+        InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
         if (imm != null) {
             imm.onViewDetachedFromWindow(this);
         }
@@ -20565,7 +20609,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      */
     private RenderNode getDrawableRenderNode(Drawable drawable, RenderNode renderNode) {
         if (renderNode == null) {
-            renderNode = RenderNode.create(drawable.getClass().getName(), this);
+            renderNode = RenderNode.create(drawable.getClass().getName(),
+                    new ViewAnimationHostBridge(this));
             renderNode.setUsageHint(RenderNode.USAGE_BACKGROUND);
         }
 

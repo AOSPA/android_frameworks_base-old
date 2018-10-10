@@ -22,6 +22,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.DisplayAdjustments.DEFAULT_DISPLAY_ADJUSTMENTS;
 
 import static com.android.server.am.ActivityStack.REMOVE_TASK_MODE_DESTROYING;
 import static com.android.server.am.ActivityStackSupervisor.ON_TOP;
@@ -56,11 +57,14 @@ import android.content.pm.IPackageManager;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
+import android.hardware.display.DisplayManagerGlobal;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.service.voice.IVoiceInteractionSession;
 import android.testing.DexmakerShareClassLoaderRule;
+import android.view.Display;
+import android.view.DisplayInfo;
 
 import androidx.test.InstrumentationRegistry;
 
@@ -86,12 +90,17 @@ import java.util.List;
 public class ActivityTestsBase {
     private static boolean sOneTimeSetupDone = false;
 
+    private static int sNextDisplayId = DEFAULT_DISPLAY + 1;
+
     @Rule
     public final DexmakerShareClassLoaderRule mDexmakerShareClassLoaderRule =
             new DexmakerShareClassLoaderRule();
 
     private final Context mContext = InstrumentationRegistry.getContext();
     private HandlerThread mHandlerThread;
+
+    ActivityTaskManagerService mService;
+    ActivityStackSupervisor mSupervisor;
 
     // Default package name
     static final String DEFAULT_COMPONENT_PACKAGE_NAME = "com.foo";
@@ -122,6 +131,11 @@ public class ActivityTestsBase {
         return atm;
     }
 
+    void setupActivityTaskManagerService() {
+        mService = createActivityTaskManagerService();
+        mSupervisor = mService.mStackSupervisor;
+    }
+
     ActivityManagerService createActivityManagerService() {
         final TestActivityTaskManagerService atm =
                 spy(new TestActivityTaskManagerService(mContext));
@@ -134,6 +148,18 @@ public class ActivityTestsBase {
         return am;
     }
 
+    /** Creates a {@link TestActivityDisplay}. */
+    TestActivityDisplay createNewActivityDisplay() {
+        return TestActivityDisplay.create(mSupervisor, sNextDisplayId++);
+    }
+
+    /** Creates and adds a {@link TestActivityDisplay} to supervisor at the given position. */
+    TestActivityDisplay addNewActivityDisplayAt(int position) {
+        final TestActivityDisplay display = createNewActivityDisplay();
+        mSupervisor.addChild(display, position);
+        return display;
+    }
+
     void setupActivityManagerService(
             TestActivityManagerService am, TestActivityTaskManagerService atm) {
         atm.setActivityManagerService(am);
@@ -142,6 +168,9 @@ public class ActivityTestsBase {
         // Makes sure the supervisor is using with the spy object.
         atm.mStackSupervisor.setService(atm);
         doReturn(mock(IPackageManager.class)).when(am).getPackageManager();
+        PackageManagerInternal mockPackageManager = mock(PackageManagerInternal.class);
+        doReturn(mockPackageManager).when(am).getPackageManagerInternalLocked();
+        doReturn(null).when(mockPackageManager).getDefaultHomeActivity(anyInt());
         doNothing().when(am).grantEphemeralAccessLocked(anyInt(), any(), anyInt(), anyInt());
         am.mWindowManager = prepareMockWindowManager();
         atm.setWindowManager(am.mWindowManager);
@@ -149,10 +178,9 @@ public class ActivityTestsBase {
         // Put a home stack on the default display, so that we'll always have something focusable.
         final TestActivityStackSupervisor supervisor =
                 (TestActivityStackSupervisor) atm.mStackSupervisor;
-        supervisor.mHomeStack = supervisor.mDisplay.createStack(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_HOME, ON_TOP);
+        supervisor.mDisplay.createStack(WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_HOME, ON_TOP);
         final TaskRecord task = new TaskBuilder(atm.mStackSupervisor)
-                .setStack(supervisor.mHomeStack).build();
+                .setStack(supervisor.getDefaultDisplay().getHomeStack()).build();
         new ActivityBuilder(atm).setTask(task).build();
     }
 
@@ -173,6 +201,7 @@ public class ActivityTestsBase {
         private boolean mCreateTask;
         private ActivityStack mStack;
         private int mActivityFlags;
+        private int mLaunchMode;
 
         ActivityBuilder(ActivityTaskManagerService service) {
             mService = service;
@@ -195,6 +224,11 @@ public class ActivityTestsBase {
 
         ActivityBuilder setActivityFlags(int flags) {
             mActivityFlags = flags;
+            return this;
+        }
+
+        ActivityBuilder setLaunchMode(int launchMode) {
+            mLaunchMode = launchMode;
             return this;
         }
 
@@ -233,6 +267,7 @@ public class ActivityTestsBase {
             aInfo.applicationInfo.packageName = mComponent.getPackageName();
             aInfo.applicationInfo.uid = mUid;
             aInfo.flags |= mActivityFlags;
+            aInfo.launchMode = mLaunchMode;
 
             final ActivityRecord activity = new ActivityRecord(mService, null /* caller */,
                     0 /* launchedFromPid */, 0, null, intent, null,
@@ -248,7 +283,7 @@ public class ActivityTestsBase {
             final WindowProcessController wpc = new WindowProcessController(mService,
                     mService.mContext.getApplicationInfo(), "name", 12345,
                     UserHandle.getUserId(12345), mock(Object.class),
-                    mock(WindowProcessListener.class));
+                    mock(WindowProcessListener.class), null);
             wpc.setThread(mock(IApplicationThread.class));
             activity.setProcess(wpc);
             return activity;
@@ -406,13 +441,14 @@ public class ActivityTestsBase {
         }
 
         @Override
+        void updateUsageStats(ActivityRecord component, boolean resumed) {
+        }
+
+        @Override
         final protected ActivityStackSupervisor createStackSupervisor() {
             final ActivityStackSupervisor supervisor = spy(createTestSupervisor());
             final KeyguardController keyguardController = mock(KeyguardController.class);
 
-            // No home stack is set.
-            doNothing().when(supervisor).moveHomeStackToFront(any());
-            doReturn(true).when(supervisor).moveHomeStackTaskToTop(any());
             // Invoked during {@link ActivityStack} creation.
             doNothing().when(supervisor).updateUIDsPresentOnDisplay();
             // Always keep things awake.
@@ -464,10 +500,6 @@ public class ActivityTestsBase {
         }
 
         @Override
-        void updateUsageStats(ActivityRecord component, boolean resumed) {
-        }
-
-        @Override
         Configuration getGlobalConfiguration() {
             return mContext.getResources().getConfiguration();
         }
@@ -500,7 +532,7 @@ public class ActivityTestsBase {
         @Override
         public void initialize() {
             super.initialize();
-            mDisplay = spy(new TestActivityDisplay(this, DEFAULT_DISPLAY));
+            mDisplay = spy(TestActivityDisplay.create(this, DEFAULT_DISPLAY));
             addChild(mDisplay, ActivityDisplay.POSITION_TOP);
         }
 
@@ -516,10 +548,20 @@ public class ActivityTestsBase {
     }
 
     protected static class TestActivityDisplay extends ActivityDisplay {
-
         private final ActivityStackSupervisor mSupervisor;
-        TestActivityDisplay(ActivityStackSupervisor supervisor, int displayId) {
-            super(supervisor, displayId);
+
+        static TestActivityDisplay create(ActivityStackSupervisor supervisor, int displayId) {
+            if (displayId == DEFAULT_DISPLAY) {
+                return new TestActivityDisplay(supervisor,
+                        supervisor.mDisplayManager.getDisplay(displayId));
+            }
+            final Display display = new Display(DisplayManagerGlobal.getInstance(), displayId,
+                    new DisplayInfo(), DEFAULT_DISPLAY_ADJUSTMENTS);
+            return new TestActivityDisplay(supervisor, display);
+        }
+
+        TestActivityDisplay(ActivityStackSupervisor supervisor, Display display) {
+            super(supervisor, display);
             // Normally this comes from display-properties as exposed by WM. Without that, just
             // hard-code to FULLSCREEN for tests.
             setWindowingMode(WINDOWING_MODE_FULLSCREEN);

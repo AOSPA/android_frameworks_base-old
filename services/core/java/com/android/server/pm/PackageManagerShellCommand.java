@@ -124,6 +124,7 @@ class PackageManagerShellCommand extends ShellCommand {
     int mTargetUser;
     boolean mBrief;
     boolean mComponents;
+    int mQueryFlags;
 
     PackageManagerShellCommand(PackageManagerService service) {
         mInterface = service;
@@ -739,6 +740,9 @@ class PackageManagerShellCommand extends ShellCommand {
                 } else if ("--components".equals(opt)) {
                     mComponents = true;
                     return true;
+                } else if ("--query-flags".equals(opt)) {
+                    mQueryFlags = Integer.decode(cmd.getNextArgRequired());
+                    return true;
                 }
                 return false;
             }
@@ -784,7 +788,8 @@ class PackageManagerShellCommand extends ShellCommand {
             throw new RuntimeException(e.getMessage(), e);
         }
         try {
-            ResolveInfo ri = mInterface.resolveIntent(intent, intent.getType(), 0, mTargetUser);
+            ResolveInfo ri = mInterface.resolveIntent(intent, intent.getType(), mQueryFlags,
+                    mTargetUser);
             PrintWriter pw = getOutPrintWriter();
             if (ri == null) {
                 pw.println("No activity found");
@@ -806,8 +811,8 @@ class PackageManagerShellCommand extends ShellCommand {
             throw new RuntimeException(e.getMessage(), e);
         }
         try {
-            List<ResolveInfo> result = mInterface.queryIntentActivities(intent, intent.getType(), 0,
-                    mTargetUser).getList();
+            List<ResolveInfo> result = mInterface.queryIntentActivities(intent, intent.getType(),
+                    mQueryFlags, mTargetUser).getList();
             PrintWriter pw = getOutPrintWriter();
             if (result == null || result.size() <= 0) {
                 pw.println("No activities found");
@@ -840,8 +845,8 @@ class PackageManagerShellCommand extends ShellCommand {
             throw new RuntimeException(e.getMessage(), e);
         }
         try {
-            List<ResolveInfo> result = mInterface.queryIntentServices(intent, intent.getType(), 0,
-                    mTargetUser).getList();
+            List<ResolveInfo> result = mInterface.queryIntentServices(intent, intent.getType(),
+                    mQueryFlags, mTargetUser).getList();
             PrintWriter pw = getOutPrintWriter();
             if (result == null || result.size() <= 0) {
                 pw.println("No services found");
@@ -874,8 +879,8 @@ class PackageManagerShellCommand extends ShellCommand {
             throw new RuntimeException(e.getMessage(), e);
         }
         try {
-            List<ResolveInfo> result = mInterface.queryIntentReceivers(intent, intent.getType(), 0,
-                    mTargetUser).getList();
+            List<ResolveInfo> result = mInterface.queryIntentReceivers(intent, intent.getType(),
+                    mQueryFlags, mTargetUser).getList();
             PrintWriter pw = getOutPrintWriter();
             if (result == null || result.size() <= 0) {
                 pw.println("No receivers found");
@@ -2234,6 +2239,9 @@ class PackageManagerShellCommand extends ShellCommand {
                 case "--install-location":
                     sessionParams.installLocation = Integer.parseInt(getNextArg());
                     break;
+                case "--install-reason":
+                    sessionParams.installReason = Integer.parseInt(getNextArg());
+                    break;
                 case "--force-uuid":
                     sessionParams.installFlags |= PackageManager.INSTALL_FORCE_VOLUME_UUID;
                     sessionParams.volumeUuid = getNextArg();
@@ -2728,22 +2736,26 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      -d: only list dangerous permissions");
         pw.println("      -u: list only the permissions users will see");
         pw.println("");
-        pw.println("  resolve-activity [--brief] [--components] [--user USER_ID] INTENT");
+        pw.println("  resolve-activity [--brief] [--components] [--query-flags FLAGS]");
+        pw.println("       [--user USER_ID] INTENT");
         pw.println("    Prints the activity that resolves to the given INTENT.");
         pw.println("");
-        pw.println("  query-activities [--brief] [--components] [--user USER_ID] INTENT");
+        pw.println("  query-activities [--brief] [--components] [--query-flags FLAGS]");
+        pw.println("       [--user USER_ID] INTENT");
         pw.println("    Prints all activities that can handle the given INTENT.");
         pw.println("");
-        pw.println("  query-services [--brief] [--components] [--user USER_ID] INTENT");
+        pw.println("  query-services [--brief] [--components] [--query-flags FLAGS]");
+        pw.println("       [--user USER_ID] INTENT");
         pw.println("    Prints all services that can handle the given INTENT.");
         pw.println("");
-        pw.println("  query-receivers [--brief] [--components] [--user USER_ID] INTENT");
+        pw.println("  query-receivers [--brief] [--components] [--query-flags FLAGS]");
+        pw.println("       [--user USER_ID] INTENT");
         pw.println("    Prints all broadcast receivers that can handle the given INTENT.");
         pw.println("");
         pw.println("  install [-lrtsfdg] [-i PACKAGE] [--user USER_ID|all|current]");
         pw.println("       [-p INHERIT_PACKAGE] [--install-location 0/1/2]");
-        pw.println("       [--originating-uri URI] [---referrer URI]");
-        pw.println("       [--abi ABI_NAME] [--force-sdk]");
+        pw.println("       [--install-reason 0/1/2/3/4] [--originating-uri URI]");
+        pw.println("       [--referrer URI] [--abi ABI_NAME] [--force-sdk]");
         pw.println("       [--preload] [--instantapp] [--full] [--dont-kill]");
         pw.println("       [--force-uuid internal|UUID] [--pkg PACKAGE] [-S BYTES] [PATH|-]");
         pw.println("    Install an application.  Must provide the apk data to install, either as a");
@@ -2768,14 +2780,17 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("      --full: cause the app to be installed as a non-ephemeral full app");
         pw.println("      --install-location: force the install location:");
         pw.println("          0=auto, 1=internal only, 2=prefer external");
+        pw.println("      --install-reason: indicates why the app is being installed:");
+        pw.println("          0=unknown, 1=admin policy, 2=device restore,");
+        pw.println("          3=device setup, 4=user request");
         pw.println("      --force-uuid: force install on to disk volume with given UUID");
         pw.println("      --force-sdk: allow install even when existing app targets platform");
         pw.println("          codename but new one targets a final API level");
         pw.println("");
         pw.println("  install-create [-lrtsfdg] [-i PACKAGE] [--user USER_ID|all|current]");
         pw.println("       [-p INHERIT_PACKAGE] [--install-location 0/1/2]");
-        pw.println("       [--originating-uri URI] [---referrer URI]");
-        pw.println("       [--abi ABI_NAME] [--force-sdk]");
+        pw.println("       [--install-reason 0/1/2/3/4] [--originating-uri URI]");
+        pw.println("       [--referrer URI] [--abi ABI_NAME] [--force-sdk]");
         pw.println("       [--preload] [--instantapp] [--full] [--dont-kill]");
         pw.println("       [--force-uuid internal|UUID] [--pkg PACKAGE] [-S BYTES]");
         pw.println("    Like \"install\", but starts an install session.  Use \"install-write\"");

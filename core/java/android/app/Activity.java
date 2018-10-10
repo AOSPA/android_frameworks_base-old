@@ -394,7 +394,7 @@ import java.util.List;
  *         <td>The final call you receive before your
  *             activity is destroyed.  This can happen either because the
  *             activity is finishing (someone called {@link Activity#finish} on
- *             it, or because the system is temporarily destroying this
+ *             it), or because the system is temporarily destroying this
  *             instance of the activity to save space.  You can distinguish
  *             between these two scenarios with the {@link
  *             Activity#isFinishing} method.</td>
@@ -1588,11 +1588,13 @@ public class Activity extends ContextThemeWrapper
      * @param outState The bundle to save the state to.
      */
     final void performSaveInstanceState(@NonNull Bundle outState) {
+        getApplication().dispatchActivityPreSaveInstanceState(this, outState);
         onSaveInstanceState(outState);
         saveManagedDialogs(outState);
         mActivityTransitionState.saveState(outState);
         storeHasCurrentPermissionRequest(outState);
         if (DEBUG_LIFECYCLE) Slog.v(TAG, "onSaveInstanceState " + this + ": " + outState);
+        getApplication().dispatchActivityPostSaveInstanceState(this, outState);
     }
 
     /**
@@ -1606,11 +1608,13 @@ public class Activity extends ContextThemeWrapper
      */
     final void performSaveInstanceState(@NonNull Bundle outState,
             @NonNull PersistableBundle outPersistentState) {
+        getApplication().dispatchActivityPreSaveInstanceState(this, outState);
         onSaveInstanceState(outState, outPersistentState);
         saveManagedDialogs(outState);
         storeHasCurrentPermissionRequest(outState);
         if (DEBUG_LIFECYCLE) Slog.v(TAG, "onSaveInstanceState " + this + ": " + outState +
                 ", " + outPersistentState);
+        getApplication().dispatchActivityPostSaveInstanceState(this, outState);
     }
 
     /**
@@ -1981,7 +1985,7 @@ public class Activity extends ContextThemeWrapper
     /**
      * Perform any final cleanup before an activity is destroyed.  This can
      * happen either because the activity is finishing (someone called
-     * {@link #finish} on it, or because the system is temporarily destroying
+     * {@link #finish} on it), or because the system is temporarily destroying
      * this instance of the activity to save space.  You can distinguish
      * between these two scenarios with the {@link #isFinishing} method.
      *
@@ -7195,6 +7199,7 @@ public class Activity extends ContextThemeWrapper
 
     @UnsupportedAppUsage
     final void performCreate(Bundle icicle, PersistableBundle persistentState) {
+        getApplication().dispatchActivityPreCreated(this, icicle);
         mCanEnterPictureInPicture = true;
         restoreHasCurrentPermissionRequest(icicle);
         if (persistentState != null) {
@@ -7209,6 +7214,7 @@ public class Activity extends ContextThemeWrapper
                 com.android.internal.R.styleable.Window_windowNoDisplay, false);
         mFragments.dispatchActivityCreated();
         mActivityTransitionState.setEnterActivityOptions(this, getActivityOptions());
+        getApplication().dispatchActivityPostCreated(this, icicle);
     }
 
     final void performNewIntent(@NonNull Intent intent) {
@@ -7217,6 +7223,7 @@ public class Activity extends ContextThemeWrapper
     }
 
     final void performStart(String reason) {
+        getApplication().dispatchActivityPreStarted(this);
         mActivityTransitionState.setEnterActivityOptions(this, getActivityOptions());
         mFragments.noteStateNotSaved();
         mCalled = false;
@@ -7284,6 +7291,7 @@ public class Activity extends ContextThemeWrapper
         }
 
         mActivityTransitionState.enterReady(this);
+        getApplication().dispatchActivityPostStarted(this);
     }
 
     /**
@@ -7338,6 +7346,7 @@ public class Activity extends ContextThemeWrapper
     }
 
     final void performResume(boolean followedByPause, String reason) {
+        getApplication().dispatchActivityPreResumed(this);
         performRestart(true /* start */, reason);
 
         mFragments.execPendingActions();
@@ -7387,9 +7396,11 @@ public class Activity extends ContextThemeWrapper
                 "Activity " + mComponent.toShortString() +
                 " did not call through to super.onPostResume()");
         }
+        getApplication().dispatchActivityPostResumed(this);
     }
 
     final void performPause() {
+        getApplication().dispatchActivityPrePaused(this);
         mDoReportFullyDrawn = false;
         mFragments.dispatchPause();
         mCalled = false;
@@ -7402,6 +7413,7 @@ public class Activity extends ContextThemeWrapper
                     "Activity " + mComponent.toShortString() +
                     " did not call through to super.onPause()");
         }
+        getApplication().dispatchActivityPostPaused(this);
     }
 
     final void performUserLeaving() {
@@ -7417,6 +7429,7 @@ public class Activity extends ContextThemeWrapper
         mCanEnterPictureInPicture = false;
 
         if (!mStopped) {
+            getApplication().dispatchActivityPreStopped(this);
             if (mWindow != null) {
                 mWindow.closeAllPanels();
             }
@@ -7451,11 +7464,13 @@ public class Activity extends ContextThemeWrapper
             }
 
             mStopped = true;
+            getApplication().dispatchActivityPostStopped(this);
         }
         mResumed = false;
     }
 
     final void performDestroy() {
+        getApplication().dispatchActivityPreDestroyed(this);
         mDestroyed = true;
         mWindow.destroy();
         mFragments.dispatchDestroy();
@@ -7465,6 +7480,7 @@ public class Activity extends ContextThemeWrapper
         if (mVoiceInteractor != null) {
             mVoiceInteractor.detachActivity();
         }
+        getApplication().dispatchActivityPostDestroyed(this);
     }
 
     final void dispatchMultiWindowModeChanged(boolean isInMultiWindowMode,

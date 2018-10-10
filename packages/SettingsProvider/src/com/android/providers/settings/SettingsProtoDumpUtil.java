@@ -659,6 +659,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.GPU_DEBUG_LAYERS,
                 GlobalSettingsProto.Gpu.DEBUG_LAYERS);
+        dumpSetting(s, p,
+                Settings.Global.ANGLE_ENABLED_APP,
+                GlobalSettingsProto.Gpu.ANGLE_ENABLED_APP);
         p.end(gpuToken);
 
         final long hdmiToken = p.start(GlobalSettingsProto.HDMI);
@@ -1140,6 +1143,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.SMS_SHORT_CODES_UPDATE_METADATA_URL,
                 GlobalSettingsProto.Sms.SHORT_CODES_UPDATE_METADATA_URL);
+        dumpSetting(s, p,
+                Settings.Global.SMS_ACCESS_RESTRICTION_ENABLED,
+                GlobalSettingsProto.Sms.ACCESS_RESTRICTION_ENABLED);
         p.end(smsToken);
 
         final long soundsToken = p.start(GlobalSettingsProto.SOUNDS);

@@ -39,7 +39,6 @@ import android.app.PendingIntent;
 import android.app.UserSwitchObserver;
 import android.app.admin.DevicePolicyManager;
 import android.app.trust.TrustManager;
-import android.hardware.biometrics.BiometricSourceType;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -49,6 +48,9 @@ import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.database.ContentObserver;
+import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.BiometricSourceType;
+import android.hardware.biometrics.IBiometricEnabledOnKeyguardCallback;
 import android.hardware.face.FaceManager;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintManager.AuthenticationCallback;
@@ -75,7 +77,6 @@ import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.util.SparseBooleanArray;
-import android.util.SparseIntArray;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.IccCardConstants;
@@ -85,9 +86,8 @@ import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.util.Preconditions;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.settingslib.WirelessUtils;
-import com.android.systemui.recents.misc.SysUiTaskStackChangeListener;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
-
+import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.google.android.collect.Lists;
 
 import java.io.FileDescriptor;
@@ -355,6 +355,18 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 default:
                     super.handleMessage(msg);
                     break;
+            }
+        }
+    };
+
+    private boolean mFaceSettingEnabledForUser;
+    private BiometricManager mBiometricManager;
+    private IBiometricEnabledOnKeyguardCallback mBiometricEnabledCallback =
+            new IBiometricEnabledOnKeyguardCallback.Stub() {
+        @Override
+        public void onChanged(BiometricSourceType type, boolean enabled) throws RemoteException {
+            if (type == BiometricSourceType.FACE) {
+                mFaceSettingEnabledForUser = enabled;
             }
         }
     };
@@ -1126,7 +1138,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     private CancellationSignal mFingerprintCancelSignal;
     private CancellationSignal mFaceCancelSignal;
     private FingerprintManager mFpm;
-    private FaceManager mFaceAuthenticationManager;
+    private FaceManager mFaceManager;
 
     /**
      * When we receive a
@@ -1465,17 +1477,21 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)) {
             mFpm = (FingerprintManager) context.getSystemService(Context.FINGERPRINT_SERVICE);
         }
-
         if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_FACE)) {
-            mFaceAuthenticationManager =
-                    (FaceManager) context.getSystemService(Context.FACE_SERVICE);
+            mFaceManager = (FaceManager) context.getSystemService(Context.FACE_SERVICE);
         }
+
+        if (mFpm != null || mFaceManager != null) {
+            mBiometricManager = context.getSystemService(BiometricManager.class);
+            mBiometricManager.registerEnabledOnKeyguardCallback(mBiometricEnabledCallback);
+        }
+
         updateBiometricListeningState();
         if (mFpm != null) {
             mFpm.addLockoutResetCallback(mFingerprintLockoutResetCallback);
         }
-        if (mFaceAuthenticationManager != null) {
-            mFaceAuthenticationManager.addLockoutResetCallback(mFaceLockoutResetCallback);
+        if (mFaceManager != null) {
+            mFaceManager.addLockoutResetCallback(mFaceLockoutResetCallback);
         }
 
         ActivityManagerWrapper.getInstance().registerTaskStackListener(mTaskStackListener);
@@ -1556,7 +1572,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 (mBouncer && !mKeyguardGoingAway) || mGoingToSleep ||
                 shouldListenForFaceAssistant() || (mKeyguardOccluded && mIsDreaming))
                 && !mSwitchingUser && !isFaceDisabled(getCurrentUser())
-                && !mKeyguardGoingAway;
+                && !mKeyguardGoingAway && mFaceSettingEnabledForUser;
     }
 
 
@@ -1590,7 +1606,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
                 mFaceCancelSignal.cancel();
             }
             mFaceCancelSignal = new CancellationSignal();
-            mFaceAuthenticationManager.authenticate(null, mFaceCancelSignal, 0,
+            mFaceManager.authenticate(null, mFaceCancelSignal, 0,
                     mFaceAuthenticationCallback, null);
             setFaceRunningState(BIOMETRIC_STATE_RUNNING);
         }
@@ -1614,9 +1630,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
     }
 
     public boolean isUnlockWithFacePossible(int userId) {
-        return mFaceAuthenticationManager != null && mFaceAuthenticationManager.isHardwareDetected()
+        return mFaceManager != null && mFaceManager.isHardwareDetected()
                 && !isFaceDisabled(userId)
-                && mFaceAuthenticationManager.hasEnrolledTemplates(userId);
+                && mFaceManager.hasEnrolledTemplates(userId);
     }
 
     private void stopListeningForFingerprint() {
@@ -2190,8 +2206,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
         }
     }
 
-    private final SysUiTaskStackChangeListener
-            mTaskStackListener = new SysUiTaskStackChangeListener() {
+    private final TaskStackChangeListener
+            mTaskStackListener = new TaskStackChangeListener() {
         @Override
         public void onTaskStackChangedBackground() {
             try {
@@ -2440,7 +2456,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             pw.println("    strongAuthFlags=" + Integer.toHexString(strongAuthFlags));
             pw.println("    trustManaged=" + getUserTrustIsManaged(userId));
         }
-        if (mFaceAuthenticationManager != null && mFaceAuthenticationManager.isHardwareDetected()) {
+        if (mFaceManager != null && mFaceManager.isHardwareDetected()) {
             final int userId = ActivityManager.getCurrentUser();
             final int strongAuthFlags = mStrongAuthTracker.getStrongAuthForUser(userId);
             pw.println("  Face authentication state (user=" + userId + ")");
@@ -2452,6 +2468,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener {
             pw.println("    possible=" + isUnlockWithFacePossible(userId));
             pw.println("    strongAuthFlags=" + Integer.toHexString(strongAuthFlags));
             pw.println("    trustManaged=" + getUserTrustIsManaged(userId));
+            pw.println("    enabledByUser=" + mFaceSettingEnabledForUser);
         }
     }
 }

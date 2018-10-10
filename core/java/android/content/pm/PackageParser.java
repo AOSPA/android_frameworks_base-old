@@ -40,7 +40,6 @@ import static android.os.Build.VERSION_CODES.O;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_UNSPECIFIED;
 
-import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
@@ -73,6 +72,7 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
+import android.permission.PermissionManager;
 import android.system.ErrnoException;
 import android.system.OsConstants;
 import android.system.StructStat;
@@ -258,19 +258,6 @@ public class PackageParser {
         }
     }
 
-    /** @hide */
-    public static class SplitPermissionInfo {
-        public final String rootPerm;
-        public final String[] newPerms;
-        public final int targetSdk;
-
-        public SplitPermissionInfo(String rootPerm, String[] newPerms, int targetSdk) {
-            this.rootPerm = rootPerm;
-            this.newPerms = newPerms;
-            this.targetSdk = targetSdk;
-        }
-    }
-
     /**
      * List of new permissions that have been added since 1.0.
      * NOTE: These must be declared in SDK version order, with permissions
@@ -287,34 +274,6 @@ public class PackageParser {
                     android.os.Build.VERSION_CODES.DONUT, 0),
             new PackageParser.NewPermissionInfo(android.Manifest.permission.READ_PHONE_STATE,
                     android.os.Build.VERSION_CODES.DONUT, 0)
-    };
-
-    /**
-     * List of permissions that have been split into more granular or dependent
-     * permissions.
-     * @hide
-     */
-    public static final PackageParser.SplitPermissionInfo SPLIT_PERMISSIONS[] =
-        new PackageParser.SplitPermissionInfo[] {
-            // READ_EXTERNAL_STORAGE is always required when an app requests
-            // WRITE_EXTERNAL_STORAGE, because we can't have an app that has
-            // write access without read access.  The hack here with the target
-            // target SDK version ensures that this grant is always done.
-            new PackageParser.SplitPermissionInfo(android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                    new String[] { android.Manifest.permission.READ_EXTERNAL_STORAGE },
-                    android.os.Build.VERSION_CODES.CUR_DEVELOPMENT+1),
-            new PackageParser.SplitPermissionInfo(android.Manifest.permission.READ_CONTACTS,
-                    new String[] { android.Manifest.permission.READ_CALL_LOG },
-                    android.os.Build.VERSION_CODES.JELLY_BEAN),
-            new PackageParser.SplitPermissionInfo(android.Manifest.permission.WRITE_CONTACTS,
-                    new String[] { android.Manifest.permission.WRITE_CALL_LOG },
-                    android.os.Build.VERSION_CODES.JELLY_BEAN),
-            new PackageParser.SplitPermissionInfo(Manifest.permission.ACCESS_FINE_LOCATION,
-                    new String[] { android.Manifest.permission.ACCESS_BACKGROUND_LOCATION },
-                    android.os.Build.VERSION_CODES.P0),
-            new PackageParser.SplitPermissionInfo(Manifest.permission.ACCESS_COARSE_LOCATION,
-                    new String[] { android.Manifest.permission.ACCESS_BACKGROUND_LOCATION },
-                    android.os.Build.VERSION_CODES.P0),
     };
 
     /**
@@ -493,10 +452,12 @@ public class PackageParser {
         public final boolean use32bitAbi;
         public final boolean extractNativeLibs;
         public final boolean isolatedSplits;
+        public final boolean isSplitRequired;
 
         public ApkLite(String codePath, String packageName, String splitName,
                 boolean isFeatureSplit,
-                String configForSplit, String usesSplitName, int versionCode, int versionCodeMajor,
+                String configForSplit, String usesSplitName, boolean isSplitRequired,
+                int versionCode, int versionCodeMajor,
                 int revisionCode, int installLocation, List<VerifierInfo> verifiers,
                 SigningDetails signingDetails, boolean coreApp,
                 boolean debuggable, boolean multiArch, boolean use32bitAbi,
@@ -519,6 +480,7 @@ public class PackageParser {
             this.use32bitAbi = use32bitAbi;
             this.extractNativeLibs = extractNativeLibs;
             this.isolatedSplits = isolatedSplits;
+            this.isSplitRequired = isSplitRequired;
         }
 
         public long getLongVersionCode() {
@@ -1736,6 +1698,7 @@ public class PackageParser {
         boolean extractNativeLibs = true;
         boolean isolatedSplits = false;
         boolean isFeatureSplit = false;
+        boolean isSplitRequired = false;
         String configForSplit = null;
         String usesSplitName = null;
 
@@ -1758,6 +1721,8 @@ public class PackageParser {
                 configForSplit = attrs.getAttributeValue(i);
             } else if (attr.equals("isFeatureSplit")) {
                 isFeatureSplit = attrs.getAttributeBooleanValue(i, false);
+            } else if (attr.equals("isSplitRequired")) {
+                isSplitRequired = attrs.getAttributeBooleanValue(i, false);
             }
         }
 
@@ -1813,8 +1778,8 @@ public class PackageParser {
         }
 
         return new ApkLite(codePath, packageSplit.first, packageSplit.second, isFeatureSplit,
-                configForSplit, usesSplitName, versionCode, versionCodeMajor, revisionCode,
-                installLocation, verifiers, signingDetails, coreApp, debuggable,
+                configForSplit, usesSplitName, isSplitRequired, versionCode, versionCodeMajor,
+                revisionCode, installLocation, verifiers, signingDetails, coreApp, debuggable,
                 multiArch, use32bitAbi, extractNativeLibs, isolatedSplits);
     }
 
@@ -2474,16 +2439,18 @@ public class PackageParser {
             Slog.i(TAG, implicitPerms.toString());
         }
 
-        final int NS = PackageParser.SPLIT_PERMISSIONS.length;
+
+        final int NS = PermissionManager.SPLIT_PERMISSIONS.length;
         for (int is=0; is<NS; is++) {
-            final PackageParser.SplitPermissionInfo spi
-                    = PackageParser.SPLIT_PERMISSIONS[is];
-            if (pkg.applicationInfo.targetSdkVersion >= spi.targetSdk
-                    || !pkg.requestedPermissions.contains(spi.rootPerm)) {
+            final PermissionManager.SplitPermissionInfo spi =
+                    PermissionManager.SPLIT_PERMISSIONS[is];
+            if (pkg.applicationInfo.targetSdkVersion >= spi.getTargetSdk()
+                    || !pkg.requestedPermissions.contains(spi.getRootPermission())) {
                 continue;
             }
-            for (int in=0; in<spi.newPerms.length; in++) {
-                final String perm = spi.newPerms[in];
+            final String[] newPerms = spi.getNewPermissions();
+            for (int in = 0; in < newPerms.length; in++) {
+                final String perm = newPerms[in];
                 if (!pkg.requestedPermissions.contains(perm)) {
                     pkg.requestedPermissions.add(perm);
                 }
@@ -5818,52 +5785,32 @@ public class PackageParser {
             int AUTH = 16;
         }
 
-        /**
-         * APK Signature Scheme v3 includes support for adding a proof-of-rotation record that
-         * contains two pieces of information:
-         *   1) the past signing certificates
-         *   2) the flags that APK wants to assign to each of the past signing certificates.
-         *
-         * These flags, which have a one-to-one relationship for the {@code pastSigningCertificates}
-         * collection, represent the second piece of information and are viewed as capabilities.
-         * They are an APK's way of telling the platform: "this is how I want to trust my old certs,
-         * please enforce that." This is useful for situation where this app itself is using its
-         * signing certificate as an authorization mechanism, like whether or not to allow another
-         * app to have its SIGNATURE permission.  An app could specify whether to allow other apps
-         * signed by its old cert 'X' to still get a signature permission it defines, for example.
-         */
-        @Nullable
-        public final int[] pastSigningCertificatesFlags;
-
         /** A representation of unknown signing details. Use instead of null. */
         public static final SigningDetails UNKNOWN =
-                new SigningDetails(null, SignatureSchemeVersion.UNKNOWN, null, null, null);
+                new SigningDetails(null, SignatureSchemeVersion.UNKNOWN, null, null);
 
         @VisibleForTesting
         public SigningDetails(Signature[] signatures,
                 @SignatureSchemeVersion int signatureSchemeVersion,
-                ArraySet<PublicKey> keys, Signature[] pastSigningCertificates,
-                int[] pastSigningCertificatesFlags) {
+                ArraySet<PublicKey> keys, Signature[] pastSigningCertificates) {
             this.signatures = signatures;
             this.signatureSchemeVersion = signatureSchemeVersion;
             this.publicKeys = keys;
             this.pastSigningCertificates = pastSigningCertificates;
-            this.pastSigningCertificatesFlags = pastSigningCertificatesFlags;
         }
 
         public SigningDetails(Signature[] signatures,
                 @SignatureSchemeVersion int signatureSchemeVersion,
-                Signature[] pastSigningCertificates, int[] pastSigningCertificatesFlags)
+                Signature[] pastSigningCertificates)
                 throws CertificateException {
             this(signatures, signatureSchemeVersion, toSigningKeys(signatures),
-                    pastSigningCertificates, pastSigningCertificatesFlags);
+                    pastSigningCertificates);
         }
 
         public SigningDetails(Signature[] signatures,
                 @SignatureSchemeVersion int signatureSchemeVersion)
                 throws CertificateException {
-            this(signatures, signatureSchemeVersion,
-                    null, null);
+            this(signatures, signatureSchemeVersion, null);
         }
 
         public SigningDetails(SigningDetails orig) {
@@ -5877,17 +5824,14 @@ public class PackageParser {
                 this.publicKeys = new ArraySet<>(orig.publicKeys);
                 if (orig.pastSigningCertificates != null) {
                     this.pastSigningCertificates = orig.pastSigningCertificates.clone();
-                    this.pastSigningCertificatesFlags = orig.pastSigningCertificatesFlags.clone();
                 } else {
                     this.pastSigningCertificates = null;
-                    this.pastSigningCertificatesFlags = null;
                 }
             } else {
                 this.signatures = null;
                 this.signatureSchemeVersion = SignatureSchemeVersion.UNKNOWN;
                 this.publicKeys = null;
                 this.pastSigningCertificates = null;
-                this.pastSigningCertificatesFlags = null;
             }
         }
 
@@ -5989,7 +5933,7 @@ public class PackageParser {
                     if (Signature.areEffectiveMatch(
                             oldDetails.signatures[0],
                             pastSigningCertificates[i])
-                            && pastSigningCertificatesFlags[i] == flags) {
+                            && pastSigningCertificates[i].getFlags() == flags) {
                         return true;
                     }
                 }
@@ -6039,7 +5983,7 @@ public class PackageParser {
                 for (int i = 0; i < pastSigningCertificates.length - 1; i++) {
                     if (pastSigningCertificates[i].equals(signature)) {
                         if (flags == PAST_CERT_EXISTS
-                                || (flags & pastSigningCertificatesFlags[i]) == flags) {
+                                || (flags & pastSigningCertificates[i].getFlags()) == flags) {
                             return true;
                         }
                     }
@@ -6123,7 +6067,7 @@ public class PackageParser {
                             pastSigningCertificates[i].toByteArray());
                     if (Arrays.equals(sha256Certificate, digest)) {
                         if (flags == PAST_CERT_EXISTS
-                                || (flags & pastSigningCertificatesFlags[i]) == flags) {
+                                || (flags & pastSigningCertificates[i].getFlags()) == flags) {
                             return true;
                         }
                     }
@@ -6160,7 +6104,6 @@ public class PackageParser {
             dest.writeInt(this.signatureSchemeVersion);
             dest.writeArraySet(this.publicKeys);
             dest.writeTypedArray(this.pastSigningCertificates, flags);
-            dest.writeIntArray(this.pastSigningCertificatesFlags);
         }
 
         protected SigningDetails(Parcel in) {
@@ -6169,7 +6112,6 @@ public class PackageParser {
             this.signatureSchemeVersion = in.readInt();
             this.publicKeys = (ArraySet<PublicKey>) in.readArraySet(boot);
             this.pastSigningCertificates = in.createTypedArray(Signature.CREATOR);
-            this.pastSigningCertificatesFlags = in.createIntArray();
         }
 
         public static final Creator<SigningDetails> CREATOR = new Creator<SigningDetails>() {
@@ -6208,9 +6150,6 @@ public class PackageParser {
             if (!Arrays.equals(pastSigningCertificates, that.pastSigningCertificates)) {
                 return false;
             }
-            if (!Arrays.equals(pastSigningCertificatesFlags, that.pastSigningCertificatesFlags)) {
-                return false;
-            }
 
             return true;
         }
@@ -6221,7 +6160,6 @@ public class PackageParser {
             result = 31 * result + signatureSchemeVersion;
             result = 31 * result + (publicKeys != null ? publicKeys.hashCode() : 0);
             result = 31 * result + Arrays.hashCode(pastSigningCertificates);
-            result = 31 * result + Arrays.hashCode(pastSigningCertificatesFlags);
             return result;
         }
 
@@ -6232,7 +6170,6 @@ public class PackageParser {
             private Signature[] mSignatures;
             private int mSignatureSchemeVersion = SignatureSchemeVersion.UNKNOWN;
             private Signature[] mPastSigningCertificates;
-            private int[] mPastSigningCertificatesFlags;
 
             @UnsupportedAppUsage
             public Builder() {
@@ -6259,33 +6196,11 @@ public class PackageParser {
                 return this;
             }
 
-            /** set the flags for the {@code pastSigningCertificates} */
-            @UnsupportedAppUsage
-            public Builder setPastSigningCertificatesFlags(int[] pastSigningCertificatesFlags) {
-                mPastSigningCertificatesFlags = pastSigningCertificatesFlags;
-                return this;
-            }
-
             private void checkInvariants() {
                 // must have signatures and scheme version set
                 if (mSignatures == null) {
                     throw new IllegalStateException("SigningDetails requires the current signing"
                             + " certificates.");
-                }
-
-                // pastSigningCerts and flags must match up
-                boolean pastMismatch = false;
-                if (mPastSigningCertificates != null && mPastSigningCertificatesFlags != null) {
-                    if (mPastSigningCertificates.length != mPastSigningCertificatesFlags.length) {
-                        pastMismatch = true;
-                    }
-                } else if (!(mPastSigningCertificates == null
-                        && mPastSigningCertificatesFlags == null)) {
-                    pastMismatch = true;
-                }
-                if (pastMismatch) {
-                    throw new IllegalStateException("SigningDetails must have a one to one mapping "
-                            + "between pastSigningCertificates and pastSigningCertificatesFlags");
                 }
             }
             /** build a {@code SigningDetails} object */
@@ -6294,7 +6209,7 @@ public class PackageParser {
                     throws CertificateException {
                 checkInvariants();
                 return new SigningDetails(mSignatures, mSignatureSchemeVersion,
-                        mPastSigningCertificates, mPastSigningCertificatesFlags);
+                        mPastSigningCertificates);
             }
         }
     }

@@ -302,7 +302,7 @@ public final class BroadcastQueue {
             mService.notifyPackageUse(r.intent.getComponent().getPackageName(),
                                       PackageManager.NOTIFY_PACKAGE_USE_BROADCAST_RECEIVER);
             app.thread.scheduleReceiver(new Intent(r.intent), r.curReceiver,
-                    mService.compatibilityInfoForPackageLocked(r.curReceiver.applicationInfo),
+                    mService.compatibilityInfoForPackage(r.curReceiver.applicationInfo),
                     r.resultCode, r.resultData, r.resultExtras, r.ordered, r.userId,
                     app.getReportedProcState());
             if (DEBUG_BROADCAST)  Slog.v(TAG_BROADCAST,
@@ -741,7 +741,7 @@ public final class BroadcastQueue {
 
         // Show a permission review UI only for explicit broadcast from a foreground app
         if (callerForeground && receiverRecord.intent.getComponent() != null) {
-            IIntentSender target = mService.getIntentSenderLocked(
+            IIntentSender target = mService.mPendingIntentController.getIntentSender(
                     ActivityManager.INTENT_SENDER_BROADCAST, receiverRecord.callerPackage,
                     receiverRecord.callingUid, receiverRecord.userId, null, null, 0,
                     new Intent[]{receiverRecord.intent},
@@ -1668,7 +1668,7 @@ public final class BroadcastQueue {
 
     final boolean dumpLocked(FileDescriptor fd, PrintWriter pw, String[] args,
             int opti, boolean dumpAll, String dumpPackage, boolean needSep) {
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
         if (mParallelBroadcasts.size() > 0 || mOrderedBroadcasts.size() > 0
                 || mPendingBroadcast != null) {
             boolean printed = false;

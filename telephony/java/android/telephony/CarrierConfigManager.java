@@ -278,6 +278,14 @@ public class CarrierConfigManager {
             KEY_HIDE_CARRIER_NETWORK_SETTINGS_BOOL = "hide_carrier_network_settings_bool";
 
     /**
+     * Do only allow auto selection in Advanced Network Settings when in home network.
+     * Manual selection is allowed when in roaming network.
+     * @hide
+     */
+    public static final String
+            KEY_ONLY_AUTO_SELECT_IN_HOME_NETWORK_BOOL = "only_auto_select_in_home_network";
+
+    /**
      * Control whether users receive a simplified network settings UI and improved network
      * selection.
      */
@@ -1102,6 +1110,15 @@ public class CarrierConfigManager {
     public static final String KEY_WFC_DATA_SPN_FORMAT_IDX_INT = "wfc_data_spn_format_idx_int";
 
     /**
+     * Use root locale when reading wfcSpnFormats.
+     *
+     * If true, then the root locale will always be used when reading wfcSpnFormats. This means the
+     * non localized version of wfcSpnFormats will be used.
+     * @hide
+     */
+    public static final String KEY_WFC_SPN_USE_ROOT_LOCALE = "wfc_spn_use_root_locale";
+
+    /**
      * The Component Name of the activity that can setup the emergency addrees for WiFi Calling
      * as per carrier requirement.
      * @hide
@@ -1644,9 +1661,19 @@ public class CarrierConfigManager {
      * When {@code false}, use default title for Enhanced 4G LTE Mode settings.
      * When {@code true}, use the variant.
      * @hide
+     * @deprecated use {@link #KEY_ENHANCED_4G_LTE_TITLE_VARIANT_INT}.
      */
+    @Deprecated
     public static final String KEY_ENHANCED_4G_LTE_TITLE_VARIANT_BOOL =
             "enhanced_4g_lte_title_variant_bool";
+
+    /**
+     * The index indicates the carrier specified title string of Enahnce 4G LTE Mode settings.
+     * Default value is 0, which indicates the default title string.
+     * @hide
+     */
+    public static final String KEY_ENHANCED_4G_LTE_TITLE_VARIANT_INT =
+            "enhanced_4g_lte_title_variant_int";
 
     /**
      * Indicates whether the carrier wants to notify the user when handover of an LTE video call to
@@ -1985,6 +2012,17 @@ public class CarrierConfigManager {
             "skip_cf_fail_to_disable_dialog_bool";
 
     /**
+     * Flag specifying whether operator supports including no reply condition timer option on
+     * CFNRy (3GPP TS 24.082 3: Call Forwarding on No Reply) in the call forwarding settings UI.
+     * {@code true}  - include no reply condition timer option on CFNRy
+     * {@code false} - don't include no reply condition timer option on CFNRy
+     *
+     * @hide
+     */
+    public static final String KEY_SUPPORT_NO_REPLY_TIMER_FOR_CFNRY_BOOL =
+            "support_no_reply_timer_for_cfnry_bool";
+
+    /**
      * List of the FAC (feature access codes) to dial as a normal call.
      * @hide
      */
@@ -2123,6 +2161,16 @@ public class CarrierConfigManager {
     public static final String KEY_CONFIG_SHOW_ORIG_DIAL_STRING_FOR_CDMA_BOOL =
             "config_show_orig_dial_string_for_cdma";
 
+    /**
+     * Flag specifying whether to show notification(call blocking disabled) when Enhanced Call
+     * Blocking(KEY_SUPPORT_ENHANCED_CALL_BLOCKING_BOOL) is enabled and making emergency call.
+     * When true, notification is shown always.
+     * When false, notification is shown only when any setting of "Enhanced Blocked number" is
+     * enabled.
+     */
+    public static final String KEY_SHOW_CALL_BLOCKING_DISABLED_NOTIFICATION_ALWAYS_BOOL =
+            "show_call_blocking_disabled_notification_always_bool";
+
     /** The default value for every variable. */
     private final static PersistableBundle sDefaults;
 
@@ -2180,6 +2228,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_ENABLE_DIALER_KEY_VIBRATION_BOOL, true);
         sDefaults.putBoolean(KEY_HAS_IN_CALL_NOISE_SUPPRESSION_BOOL, false);
         sDefaults.putBoolean(KEY_HIDE_CARRIER_NETWORK_SETTINGS_BOOL, false);
+        sDefaults.putBoolean(KEY_ONLY_AUTO_SELECT_IN_HOME_NETWORK_BOOL, false);
         sDefaults.putBoolean(KEY_SIMPLIFIED_NETWORK_SETTINGS_BOOL, false);
         sDefaults.putBoolean(KEY_HIDE_SIM_LOCK_SETTINGS_BOOL, false);
 
@@ -2303,6 +2352,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_WFC_OPERATOR_ERROR_CODES_STRING_ARRAY, null);
         sDefaults.putInt(KEY_WFC_SPN_FORMAT_IDX_INT, 0);
         sDefaults.putInt(KEY_WFC_DATA_SPN_FORMAT_IDX_INT, 0);
+        sDefaults.putBoolean(KEY_WFC_SPN_USE_ROOT_LOCALE, false);
         sDefaults.putString(KEY_WFC_EMERGENCY_ADDRESS_CARRIER_APP_STRING, "");
         sDefaults.putBoolean(KEY_CONFIG_WIFI_DISABLE_IN_ECBM, false);
         sDefaults.putBoolean(KEY_CARRIER_NAME_OVERRIDE_BOOL, false);
@@ -2410,6 +2460,7 @@ public class CarrierConfigManager {
 
         sDefaults.putStringArray(KEY_IMS_REASONINFO_MAPPING_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_ENHANCED_4G_LTE_TITLE_VARIANT_BOOL, false);
+        sDefaults.putInt(KEY_ENHANCED_4G_LTE_TITLE_VARIANT_INT, 0);
         sDefaults.putBoolean(KEY_NOTIFY_VT_HANDOVER_TO_WIFI_FAILURE_BOOL, false);
         sDefaults.putStringArray(KEY_FILTERED_CNAP_NAMES_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_EDITABLE_WFC_ROAMING_MODE_BOOL, false);
@@ -2439,6 +2490,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SHOW_IMS_REGISTRATION_STATUS_BOOL, false);
         sDefaults.putBoolean(KEY_RTT_SUPPORTED_BOOL, false);
         sDefaults.putBoolean(KEY_DISABLE_CHARGE_INDICATION_BOOL, false);
+        sDefaults.putBoolean(KEY_SUPPORT_NO_REPLY_TIMER_FOR_CFNRY_BOOL, true);
         sDefaults.putStringArray(KEY_FEATURE_ACCESS_CODES_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_IDENTIFY_HIGH_DEFINITION_CALLS_IN_CALL_LOG_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_PRECISE_FAILED_CAUSE_BOOL, false);
@@ -2462,6 +2514,7 @@ public class CarrierConfigManager {
                 });
         sDefaults.putString(KEY_WCDMA_DEFAULT_SIGNAL_STRENGTH_MEASUREMENT_STRING, "");
         sDefaults.putBoolean(KEY_CONFIG_SHOW_ORIG_DIAL_STRING_FOR_CDMA_BOOL, false);
+        sDefaults.putBoolean(KEY_SHOW_CALL_BLOCKING_DISABLED_NOTIFICATION_ALWAYS_BOOL, false);
     }
 
     /**

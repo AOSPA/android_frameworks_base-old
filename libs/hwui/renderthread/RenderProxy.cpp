@@ -298,6 +298,12 @@ void RenderProxy::removeFrameMetricsObserver(FrameMetricsObserver* observerPtr) 
     });
 }
 
+void RenderProxy::setForceDark(bool enable) {
+    mRenderThread.queue().post([this, enable]() {
+        mContext->setForceDark(enable);
+    });
+}
+
 int RenderProxy::copySurfaceInto(sp<Surface>& surface, int left, int top, int right, int bottom,
                                  SkBitmap* bitmap) {
     auto& thread = RenderThread::getInstance();
@@ -343,13 +349,6 @@ int RenderProxy::copyHWBitmapInto(Bitmap* hwBitmap, SkBitmap* bitmap) {
             return (int)thread.readback().copyHWBitmapInto(hwBitmap, bitmap);
         });
     }
-}
-
-void RenderProxy::onBitmapDestroyed(uint32_t pixelRefId) {
-    if (!RenderThread::hasInstance()) return;
-    RenderThread& thread = RenderThread::getInstance();
-    thread.queue().post(
-            [&thread, pixelRefId]() { thread.renderState().onBitmapDestroyed(pixelRefId); });
 }
 
 void RenderProxy::disableVsync() {

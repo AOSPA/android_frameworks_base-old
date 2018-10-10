@@ -107,7 +107,7 @@ public:
     bool isRenderable() const { return mDisplayList && !mDisplayList->isEmpty(); }
 
     bool hasProjectionReceiver() const {
-        return mDisplayList && mDisplayList->projectionReceiveIndex >= 0;
+        return mDisplayList && mDisplayList->containsProjectionReceiver();
     }
 
     const char* getName() const { return mName.string(); }
@@ -220,6 +220,7 @@ private:
 
     void syncProperties();
     void syncDisplayList(TreeObserver& observer, TreeInfo* info);
+    void handleForceDark(TreeInfo* info);
 
     void prepareTreeImpl(TreeObserver& observer, TreeInfo& info, bool functorsNeedLayer);
     void pushStagingPropertiesChanges(TreeInfo& info);

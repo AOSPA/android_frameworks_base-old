@@ -627,6 +627,13 @@ public class AudioService extends IAudioService.Stub
     // If absolute volume is supported in AVRCP device
     private boolean mAvrcpAbsVolSupported = false;
 
+    // Pre-scale for Bluetooth Absolute Volume
+    private float[] mPrescaleAbsoluteVolume = new float[] {
+        0.5f,    // Pre-scale for index 1
+        0.7f,    // Pre-scale for index 2
+        0.85f,   // Pre-scale for index 3
+    };
+
     private static Long mLastDeviceConnectMsgTime = new Long(0);
 
     private NotificationManager mNm;
@@ -878,6 +885,23 @@ public class AudioService extends IAudioService.Stub
         mUserManagerInternal.addUserRestrictionsListener(mUserRestrictionsListener);
 
         mRecordMonitor.initMonitor();
+
+        final float[] preScale = new float[3];
+        preScale[0] = mContext.getResources().getFraction(
+                com.android.internal.R.fraction.config_prescaleAbsoluteVolume_index1,
+                1, 1);
+        preScale[1] = mContext.getResources().getFraction(
+                com.android.internal.R.fraction.config_prescaleAbsoluteVolume_index2,
+                1, 1);
+        preScale[2] = mContext.getResources().getFraction(
+                com.android.internal.R.fraction.config_prescaleAbsoluteVolume_index3,
+                1, 1);
+        for (int i = 0; i < preScale.length; i++) {
+            if (0.0f <= preScale[i] && preScale[i] <= 1.0f) {
+                mPrescaleAbsoluteVolume[i] = preScale[i];
+            }
+        }
+
     }
 
     public void systemReady() {
@@ -4793,7 +4817,9 @@ public class AudioService extends IAudioService.Stub
     @Override
     public void setHearingAidDeviceConnectionState(BluetoothDevice device, int state)
     {
-        Log.i(TAG, "setBluetoothHearingAidDeviceConnectionState");
+        mDeviceLogger.log((new AudioEventLogger.StringEvent(
+                "setHearingAidDeviceConnectionState state=" + state
+                        + " addr=" + device.getAddress())).printLog(TAG));
 
         setBluetoothHearingAidDeviceConnectionState(
                 device, state,  false /* suppressNoisyIntent */, AudioSystem.DEVICE_NONE);
@@ -4831,12 +4857,12 @@ public class AudioService extends IAudioService.Stub
     public int setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(BluetoothDevice device,
                 int state, int profile, boolean suppressNoisyIntent, int a2dpVolume)
     {
-        mDeviceLogger.log(new AudioEventLogger.StringEvent(
+        mDeviceLogger.log((new AudioEventLogger.StringEvent(
                 "setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent state=" + state
                 // only querying address as this is the only readily available field on the device
                 + " addr=" + device.getAddress()
                 + " prof=" + profile + " supprNoisy=" + suppressNoisyIntent
-                + " vol=" + a2dpVolume));
+                + " vol=" + a2dpVolume)).printLog(TAG));
         if (mAudioHandler.hasMessages(MSG_SET_A2DP_SINK_CONNECTION_STATE, device)) {
             mDeviceLogger.log(new AudioEventLogger.StringEvent("A2DP connection state ignored"));
             return 0;
@@ -5058,18 +5084,12 @@ public class AudioService extends IAudioService.Stub
             if (index == 0) {
                 // 0% for volume 0
                 index = 0;
-            } else if (index == 1) {
-                // 50% for volume 1
-                index = (int)(mIndexMax * 0.5) /10;
-            } else if (index == 2) {
-                // 70% for volume 2
-                index = (int)(mIndexMax * 0.70) /10;
-            } else if (index == 3) {
-                // 85% for volume 3
-                index = (int)(mIndexMax * 0.85) /10;
+            } else if (index > 0 && index <= 3) {
+                // Pre-scale for volume steps 1 2 and 3
+                index = (int) (mIndexMax * mPrescaleAbsoluteVolume[index - 1]) / 10;
             } else {
                 // otherwise, full gain
-                index = (mIndexMax + 5)/10;
+                index = (mIndexMax + 5) / 10;
             }
             return index;
         }
@@ -6003,6 +6023,8 @@ public class AudioService extends IAudioService.Stub
     }
 
     private void onSendBecomingNoisyIntent() {
+        mDeviceLogger.log((new AudioEventLogger.StringEvent(
+                "broadcast ACTION_AUDIO_BECOMING_NOISY")).printLog(TAG));
         sendBroadcastToAll(new Intent(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
     }
 
@@ -7451,7 +7473,7 @@ public class AudioService extends IAudioService.Stub
     // - wired: logged before onSetWiredDeviceConnectionState() is executed
     // - A2DP: logged at reception of method call
     final private AudioEventLogger mDeviceLogger = new AudioEventLogger(
-            LOG_NB_EVENTS_DEVICE_CONNECTION, "wired/A2DP device connection");
+            LOG_NB_EVENTS_DEVICE_CONNECTION, "wired/A2DP/hearing aid device connection");
 
     final private AudioEventLogger mForceUseLogger = new AudioEventLogger(
             LOG_NB_EVENTS_FORCE_USE,

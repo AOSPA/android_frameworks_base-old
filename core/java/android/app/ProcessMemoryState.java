@@ -23,19 +23,20 @@ import android.os.Parcelable;
  * The memory stats for a process.
  * {@hide}
  */
-public class ProcessMemoryState implements Parcelable {
-    public int uid;
-    public String processName;
-    public int oomScore;
-    public long pgfault;
-    public long pgmajfault;
-    public long rssInBytes;
-    public long cacheInBytes;
-    public long swapInBytes;
+public final class ProcessMemoryState implements Parcelable {
+    public final int uid;
+    public final String processName;
+    public final int oomScore;
+    public final long pgfault;
+    public final long pgmajfault;
+    public final long rssInBytes;
+    public final long cacheInBytes;
+    public final long swapInBytes;
+    public final long rssHighWatermarkInBytes;
 
     public ProcessMemoryState(int uid, String processName, int oomScore, long pgfault,
                               long pgmajfault, long rssInBytes, long cacheInBytes,
-                              long swapInBytes) {
+                              long swapInBytes, long rssHighWatermarkInBytes) {
         this.uid = uid;
         this.processName = processName;
         this.oomScore = oomScore;
@@ -44,6 +45,7 @@ public class ProcessMemoryState implements Parcelable {
         this.rssInBytes = rssInBytes;
         this.cacheInBytes = cacheInBytes;
         this.swapInBytes = swapInBytes;
+        this.rssHighWatermarkInBytes = rssHighWatermarkInBytes;
     }
 
     private ProcessMemoryState(Parcel in) {
@@ -55,6 +57,7 @@ public class ProcessMemoryState implements Parcelable {
         rssInBytes = in.readLong();
         cacheInBytes = in.readLong();
         swapInBytes = in.readLong();
+        rssHighWatermarkInBytes = in.readLong();
     }
 
     public static final Creator<ProcessMemoryState> CREATOR = new Creator<ProcessMemoryState>() {
@@ -84,5 +87,6 @@ public class ProcessMemoryState implements Parcelable {
         parcel.writeLong(rssInBytes);
         parcel.writeLong(cacheInBytes);
         parcel.writeLong(swapInBytes);
+        parcel.writeLong(rssHighWatermarkInBytes);
     }
 }

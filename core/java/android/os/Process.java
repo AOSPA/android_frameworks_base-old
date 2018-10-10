@@ -42,6 +42,11 @@ public class Process {
     public static final String SECONDARY_ZYGOTE_SOCKET = "zygote_secondary";
 
     /**
+     * An invalid UID value.
+     */
+    public static final int INVALID_UID = -1;
+
+    /**
      * Defines the root UID.
      * @hide
      */
@@ -478,6 +483,8 @@ public class Process {
      * @param appDataDir null-ok the data directory of the app.
      * @param invokeWith null-ok the command to invoke with.
      * @param packageName null-ok the name of the package this process belongs to.
+     * @param packagesForUid null-ok all the packages with the same uid as this process.
+     * @param visibleVols null-ok storage volumes that can be accessed by this process.
      * @param zygoteArgs Additional arguments to supply to the zygote process.
      * 
      * @return An object that describes the result of the attempt to start the process.
@@ -496,10 +503,13 @@ public class Process {
                                   @Nullable String appDataDir,
                                   @Nullable String invokeWith,
                                   @Nullable String packageName,
+                                  @Nullable String[] packagesForUid,
+                                  @Nullable String[] visibleVols,
                                   @Nullable String[] zygoteArgs) {
         return zygoteProcess.start(processClass, niceName, uid, gid, gids,
                     runtimeFlags, mountExternal, targetSdkVersion, seInfo,
-                    abi, instructionSet, appDataDir, invokeWith, packageName, zygoteArgs);
+                    abi, instructionSet, appDataDir, invokeWith, packageName,
+                    packagesForUid, visibleVols, zygoteArgs);
     }
 
     /** @hide */
@@ -514,10 +524,13 @@ public class Process {
                                   @Nullable String appDataDir,
                                   @Nullable String invokeWith,
                                   @Nullable String packageName,
+                                  @Nullable String[] packagesForUid,
+                                  @Nullable String[] visibleVols,
                                   @Nullable String[] zygoteArgs) {
         return WebViewZygote.getProcess().start(processClass, niceName, uid, gid, gids,
                     runtimeFlags, mountExternal, targetSdkVersion, seInfo,
-                    abi, instructionSet, appDataDir, invokeWith, packageName, zygoteArgs);
+                    abi, instructionSet, appDataDir, invokeWith, packageName,
+                    packagesForUid, visibleVols, zygoteArgs);
     }
 
     /**

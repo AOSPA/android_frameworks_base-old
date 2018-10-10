@@ -101,6 +101,7 @@ import android.view.View.OnClickListener;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
+import android.view.ViewParent;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -388,7 +389,8 @@ public class Editor {
                 com.android.internal.R.bool.config_enableHapticTextHandle);
 
         if (FLAG_USE_MAGNIFIER) {
-            mMagnifierAnimator = new MagnifierMotionAnimator(new Magnifier(mTextView));
+            final Magnifier magnifier = new Magnifier.Builder(mTextView).build();
+            mMagnifierAnimator = new MagnifierMotionAnimator(magnifier);
         }
     }
 
@@ -1539,6 +1541,10 @@ public class Editor {
         }
     }
 
+    private InputMethodManager getInputMethodManager() {
+        return mTextView.getContext().getSystemService(InputMethodManager.class);
+    }
+
     public void beginBatchEdit() {
         mInBatchEditControllers = true;
         final InputMethodState ims = mInputMethodState;
@@ -1707,7 +1713,7 @@ public class Editor {
         if (req == null) {
             return false;
         }
-        final InputMethodManager imm = InputMethodManager.peekInstance();
+        final InputMethodManager imm = getInputMethodManager();
         if (imm == null) {
             return false;
         }
@@ -1742,7 +1748,7 @@ public class Editor {
 
     private void sendUpdateSelection() {
         if (null != mInputMethodState && mInputMethodState.mBatchEditNesting <= 0) {
-            final InputMethodManager imm = InputMethodManager.peekInstance();
+            final InputMethodManager imm = getInputMethodManager();
             if (null != imm) {
                 final int selectionStart = mTextView.getSelectionStart();
                 final int selectionEnd = mTextView.getSelectionEnd();
@@ -1768,7 +1774,7 @@ public class Editor {
 
         final InputMethodState ims = mInputMethodState;
         if (ims != null && ims.mBatchEditNesting == 0) {
-            InputMethodManager imm = InputMethodManager.peekInstance();
+            InputMethodManager imm = getInputMethodManager();
             if (imm != null) {
                 if (imm.isActive(mTextView)) {
                     if (ims.mContentChanged || ims.mSelectionModeChanged) {
@@ -2245,7 +2251,7 @@ public class Editor {
                 && mTextView.isTextEditable() && !mTextView.isTextSelectable()
                 && mShowSoftInputOnFocus) {
             // Show the IME to be able to replace text, except when selecting non editable text.
-            final InputMethodManager imm = InputMethodManager.peekInstance();
+            final InputMethodManager imm = getInputMethodManager();
             if (imm != null) {
                 imm.showSoftInput(mTextView, 0, null);
             }
@@ -2255,7 +2261,7 @@ public class Editor {
 
     private boolean extractedTextModeWillBeStarted() {
         if (!(mTextView.isInExtractedMode())) {
-            final InputMethodManager imm = InputMethodManager.peekInstance();
+            final InputMethodManager imm = getInputMethodManager();
             return  imm != null && imm.isFullscreenMode();
         }
         return false;
@@ -4272,7 +4278,7 @@ public class Editor {
             if (ims == null || ims.mBatchEditNesting > 0) {
                 return;
             }
-            final InputMethodManager imm = InputMethodManager.peekInstance();
+            final InputMethodManager imm = getInputMethodManager();
             if (null == imm) {
                 return;
             }
@@ -4795,6 +4801,24 @@ public class Editor {
             return glyphHeight > magnifierContentHeight;
         }
 
+        private boolean viewIsMatrixTransformed() {
+            if (mMagnifierAnimator.mMagnifierIsShowing) {
+                // Do not check again when the magnifier is currently showing.
+                return false;
+            }
+            if (!mTextView.hasIdentityMatrix()) {
+                return true;
+            }
+            ViewParent viewParent = mTextView.getParent();
+            while (viewParent != null) {
+                if (viewParent instanceof View && !((View) viewParent).hasIdentityMatrix()) {
+                    return true;
+                }
+                viewParent = viewParent.getParent();
+            }
+            return false;
+        }
+
         /**
          * Computes the position where the magnifier should be shown, relative to
          * {@code mTextView}, and writes them to {@code showPosInView}. Also decides
@@ -4923,6 +4947,7 @@ public class Editor {
 
             final PointF showPosInView = new PointF();
             final boolean shouldShow = !tooLargeTextForMagnifier()
+                    && !viewIsMatrixTransformed()
                     && obtainMagnifierShowCoordinates(event, showPosInView);
             if (shouldShow) {
                 // Make the cursor visible and stop blinking.

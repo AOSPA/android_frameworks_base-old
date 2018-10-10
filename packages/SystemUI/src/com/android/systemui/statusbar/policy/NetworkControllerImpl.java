@@ -673,6 +673,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         Locale current = mContext.getResources().getConfiguration().locale;
         if (!current.equals(mLocale)) {
             mLocale = current;
+            mWifiSignalController.refreshLocale();
             notifyAllListeners();
         }
     }

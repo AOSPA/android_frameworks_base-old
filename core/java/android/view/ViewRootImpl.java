@@ -43,6 +43,7 @@ import android.content.pm.PackageManager;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
@@ -52,7 +53,6 @@ import android.graphics.PointF;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.Region;
-import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManager.DisplayListener;
@@ -243,6 +243,12 @@ public final class ViewRootImpl implements ViewParent,
     final ArrayList<WindowCallbacks> mWindowCallbacks = new ArrayList<>();
     @UnsupportedAppUsage
     final Context mContext;
+    /**
+     * TODO(b/116349163): Check if we can merge this into {@link #mContext}.
+     */
+    @NonNull
+    private Context mDisplayContext;
+
     @UnsupportedAppUsage
     final IWindowSession mWindowSession;
     @NonNull Display mDisplay;
@@ -539,6 +545,7 @@ public final class ViewRootImpl implements ViewParent,
 
     public ViewRootImpl(Context context, Display display) {
         mContext = context;
+        mDisplayContext = context.createDisplayContext(display);
         mWindowSession = WindowManagerGlobal.getWindowSession();
         mDisplay = display;
         mBasePackageName = context.getBasePackageName();
@@ -992,6 +999,9 @@ public final class ViewRootImpl implements ViewParent,
         ThreadedRenderer.invokeFunctor(functor, waitForCompletion);
     }
 
+    /**
+     * @param animator animator to register with the hardware renderer
+     */
     public void registerAnimatingRenderNode(RenderNode animator) {
         if (mAttachInfo.mThreadedRenderer != null) {
             mAttachInfo.mThreadedRenderer.registerAnimatingRenderNode(animator);
@@ -1003,8 +1013,10 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    public void registerVectorDrawableAnimator(
-            AnimatedVectorDrawable.VectorDrawableAnimatorRT animator) {
+    /**
+     * @param animator animator to register with the hardware renderer
+     */
+    public void registerVectorDrawableAnimator(NativeVectorDrawableAnimator animator) {
         if (mAttachInfo.mThreadedRenderer != null) {
             mAttachInfo.mThreadedRenderer.registerVectorDrawableAnimator(animator);
         }
@@ -1074,11 +1086,33 @@ public final class ViewRootImpl implements ViewParent,
                 mAttachInfo.mThreadedRenderer = ThreadedRenderer.create(mContext, translucent,
                         attrs.getTitle().toString());
                 mAttachInfo.mThreadedRenderer.setWideGamut(wideGamut);
+                updateForceDarkMode();
                 if (mAttachInfo.mThreadedRenderer != null) {
                     mAttachInfo.mHardwareAccelerated =
                             mAttachInfo.mHardwareAccelerationRequested = true;
                 }
             }
+        }
+    }
+
+    private int getNightMode() {
+        return mContext.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+    }
+
+    private void updateForceDarkMode() {
+        if (mAttachInfo.mThreadedRenderer == null) return;
+
+        boolean nightMode = getNightMode() == Configuration.UI_MODE_NIGHT_YES;
+        TypedArray a = mContext.obtainStyledAttributes(R.styleable.Theme);
+        boolean isLightTheme = a.getBoolean(R.styleable.Theme_isLightTheme, false);
+        a.recycle();
+
+        boolean changed = mAttachInfo.mThreadedRenderer.setForceDark(nightMode);
+        changed |= mAttachInfo.mThreadedRenderer.getRootNode().setAllowForceDark(isLightTheme);
+
+        if (changed) {
+            // TODO: Don't require regenerating all display lists to apply this setting
+            invalidateWorld(mView);
         }
     }
 
@@ -1257,6 +1291,7 @@ public final class ViewRootImpl implements ViewParent,
         } else {
             mDisplay = preferredDisplay;
         }
+        mDisplayContext = mContext.createDisplayContext(mDisplay);
     }
 
     void pokeDrawLockIfNeeded() {
@@ -2587,7 +2622,7 @@ public final class ViewRootImpl implements ViewParent,
                     .mayUseInputMethod(mWindowAttributes.flags);
             if (imTarget != mLastWasImTarget) {
                 mLastWasImTarget = imTarget;
-                InputMethodManager imm = InputMethodManager.peekInstance();
+                InputMethodManager imm = mDisplayContext.getSystemService(InputMethodManager.class);
                 if (imm != null && imTarget) {
                     imm.onPreWindowFocus(mView, hasWindowFocus);
                     imm.onPostWindowFocus(mView, mView.findFocus(),
@@ -2703,7 +2738,7 @@ public final class ViewRootImpl implements ViewParent,
             mLastWasImTarget = WindowManager.LayoutParams
                     .mayUseInputMethod(mWindowAttributes.flags);
 
-            InputMethodManager imm = InputMethodManager.peekInstance();
+            InputMethodManager imm = mDisplayContext.getSystemService(InputMethodManager.class);
             if (imm != null && mLastWasImTarget && !isInLocalFocusMode()) {
                 imm.onPreWindowFocus(mView, hasWindowFocus);
             }
@@ -4080,6 +4115,8 @@ public final class ViewRootImpl implements ViewParent,
             mForceNextWindowRelayout = true;
             requestLayout();
         }
+
+        updateForceDarkMode();
     }
 
     /**
@@ -4344,7 +4381,8 @@ public final class ViewRootImpl implements ViewParent,
                     enqueueInputEvent(event, null, 0, true);
                 } break;
                 case MSG_CHECK_FOCUS: {
-                    InputMethodManager imm = InputMethodManager.peekInstance();
+                    InputMethodManager imm =
+                            mDisplayContext.getSystemService(InputMethodManager.class);
                     if (imm != null) {
                         imm.checkFocus();
                     }
@@ -4886,7 +4924,7 @@ public final class ViewRootImpl implements ViewParent,
         @Override
         protected int onProcess(QueuedInputEvent q) {
             if (mLastWasImTarget && !isInLocalFocusMode()) {
-                InputMethodManager imm = InputMethodManager.peekInstance();
+                InputMethodManager imm = mDisplayContext.getSystemService(InputMethodManager.class);
                 if (imm != null) {
                     final InputEvent event = q.mEvent;
                     if (DEBUG_IMF) Log.v(mTag, "Sending input event to IME: " + event);

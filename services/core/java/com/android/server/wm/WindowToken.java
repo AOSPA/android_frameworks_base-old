@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
+
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_FOCUS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WINDOW_MOVEMENT;
@@ -162,7 +163,7 @@ class WindowToken extends WindowContainer<WindowState> {
 
         for (int i = 0; i < count; i++) {
             final WindowState win = mChildren.get(i);
-            if (win.mWinAnimator.isAnimationSet()) {
+            if (win.isAnimating()) {
                 delayed = true;
             }
             changed |= win.onSetAppExiting();
@@ -234,18 +235,6 @@ class WindowToken extends WindowContainer<WindowState> {
         return false;
     }
 
-    int getHighestAnimLayer() {
-        int highest = -1;
-        for (int j = 0; j < mChildren.size(); j++) {
-            final WindowState w = mChildren.get(j);
-            final int wLayer = w.getHighestAnimLayer();
-            if (wLayer > highest) {
-                highest = wLayer;
-            }
-        }
-        return highest;
-    }
-
     AppWindowToken asAppWindowToken() {
         // TODO: Not sure if this is the best way to handle this vs. using instanceof and casting.
         // I am not an app window token!
@@ -266,6 +255,7 @@ class WindowToken extends WindowContainer<WindowState> {
         super.removeImmediately();
     }
 
+    @Override
     void onDisplayChanged(DisplayContent dc) {
         dc.reParentWindowToken(this);
         mDisplayContent = dc;
@@ -275,6 +265,7 @@ class WindowToken extends WindowContainer<WindowState> {
         // to another display before the window behind
         // it is ready.
 
+        updateSurfaceSize(dc);
         super.onDisplayChanged(dc);
     }
 

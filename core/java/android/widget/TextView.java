@@ -321,6 +321,12 @@ import java.util.function.Supplier;
  * @attr ref android.R.styleable#TextView_autoSizeMaxTextSize
  * @attr ref android.R.styleable#TextView_autoSizeStepGranularity
  * @attr ref android.R.styleable#TextView_autoSizePresetSizes
+ * @attr ref android.R.styleable#TextView_textCursorDrawable
+ * @attr ref android.R.styleable#TextView_textSelectHandle
+ * @attr ref android.R.styleable#TextView_textSelectHandleLeft
+ * @attr ref android.R.styleable#TextView_textSelectHandleRight
+ * @attr ref android.R.styleable#TextView_allowUndo
+ * @attr ref android.R.styleable#TextView_enabled
  */
 @RemoteView
 public class TextView extends View implements ViewTreeObserver.OnPreDrawListener {
@@ -876,9 +882,6 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private boolean mTextSetFromXmlOrResourceId = false;
     // Resource id used to set the text.
     private @StringRes int mTextId = ResourceId.ID_NULL;
-    // Last value used on AFM.notifyValueChanged(), used to optimize autofill workflow by avoiding
-    // calls when the value did not change
-    private CharSequence mLastValueSentToAutofillManager;
     //
     // End of autofill-related attributes
 
@@ -2156,7 +2159,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if (!enabled) {
             // Hide the soft input if the currently active TextView is disabled
-            InputMethodManager imm = InputMethodManager.peekInstance();
+            InputMethodManager imm = getInputMethodManager();
             if (imm != null && imm.isActive(this)) {
                 imm.hideSoftInputFromWindow(getWindowToken(), 0);
             }
@@ -2166,7 +2169,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
         if (enabled) {
             // Make sure IME is updated with current editor info.
-            InputMethodManager imm = InputMethodManager.peekInstance();
+            InputMethodManager imm = getInputMethodManager();
             if (imm != null) imm.restartInput(this);
         }
 
@@ -2392,7 +2395,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             if (mEditor != null) mEditor.mInputType = EditorInfo.TYPE_NULL;
         }
 
-        InputMethodManager imm = InputMethodManager.peekInstance();
+        InputMethodManager imm = getInputMethodManager();
         if (imm != null) imm.restartInput(this);
     }
 
@@ -5769,7 +5772,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             Editable t = mEditableFactory.newEditable(text);
             text = t;
             setFilters(t, mFilters);
-            InputMethodManager imm = InputMethodManager.peekInstance();
+            InputMethodManager imm = getInputMethodManager();
             if (imm != null) imm.restartInput(this);
         } else if (precomputed != null) {
             if (mTextDir == null) {
@@ -5878,7 +5881,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         if (needEditableForNotification) {
             sendAfterTextChanged((Editable) text);
         } else {
-            notifyAutoFillManagerAfterTextChangedIfNeeded();
+            notifyAutoFillManagerAfterTextChanged();
         }
 
         // SelectionModifierCursorController depends on textCanBeSelected, which depends on text
@@ -6148,7 +6151,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             setTextInternal(removeSuggestionSpans(mText));
         }
 
-        InputMethodManager imm = InputMethodManager.peekInstance();
+        InputMethodManager imm = getInputMethodManager();
         if (imm != null) imm.restartInput(this);
     }
 
@@ -6436,7 +6439,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 return;
 
             } else if (actionCode == EditorInfo.IME_ACTION_DONE) {
-                InputMethodManager imm = InputMethodManager.peekInstance();
+                InputMethodManager imm = getInputMethodManager();
                 if (imm != null && imm.isActive(this)) {
                     imm.hideSoftInputFromWindow(getWindowToken(), 0);
                 }
@@ -7902,7 +7905,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     if (!hasOnClickListeners()) {
                         if (mMovement != null && mText instanceof Editable
                                 && mLayout != null && onCheckIsTextEditor()) {
-                            InputMethodManager imm = InputMethodManager.peekInstance();
+                            InputMethodManager imm = getInputMethodManager();
                             viewClicked(imm);
                             if (imm != null && getShowSoftInputOnFocus()) {
                                 imm.showSoftInput(this, 0);
@@ -7956,7 +7959,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                                     & KeyEvent.FLAG_EDITOR_ACTION) != 0) {
                                 // No target for next focus, but make sure the IME
                                 // if this came from it.
-                                InputMethodManager imm = InputMethodManager.peekInstance();
+                                InputMethodManager imm = getInputMethodManager();
                                 if (imm != null && imm.isActive(this)) {
                                     imm.hideSoftInputFromWindow(getWindowToken(), 0);
                                 }
@@ -9927,33 +9930,23 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         }
 
         // Always notify AutoFillManager - it will return right away if autofill is disabled.
-        notifyAutoFillManagerAfterTextChangedIfNeeded();
+        notifyAutoFillManagerAfterTextChanged();
 
         hideErrorIfUnchanged();
     }
 
-    private void notifyAutoFillManagerAfterTextChangedIfNeeded() {
+    private void notifyAutoFillManagerAfterTextChanged() {
         // It is important to not check whether the view is important for autofill
         // since the user can trigger autofill manually on not important views.
         if (!isAutofillable()) {
             return;
         }
         final AutofillManager afm = mContext.getSystemService(AutofillManager.class);
-        if (afm == null) {
-            return;
-        }
-
-        if (mLastValueSentToAutofillManager == null
-                || !mLastValueSentToAutofillManager.equals(mText)) {
+        if (afm != null) {
             if (android.view.autofill.Helper.sVerbose) {
-                Log.v(LOG_TAG, "notifying AFM after text changed");
+                Log.v(LOG_TAG, "notifyAutoFillManagerAfterTextChanged");
             }
             afm.notifyValueChanged(TextView.this);
-            mLastValueSentToAutofillManager = mText;
-        } else {
-            if (android.view.autofill.Helper.sVerbose) {
-                Log.v(LOG_TAG, "not notifying AFM on unchanged text");
-            }
         }
     }
 
@@ -10260,7 +10253,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
 
             if (touchIsFinished && (isTextEditable() || textIsSelectable)) {
                 // Show the IME, except when selecting in read-only text.
-                final InputMethodManager imm = InputMethodManager.peekInstance();
+                final InputMethodManager imm = getInputMethodManager();
                 viewClicked(imm);
                 if (isTextEditable() && mEditor.mShowSoftInputOnFocus && imm != null) {
                     imm.showSoftInput(this, 0);
@@ -11299,7 +11292,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         // Show the IME, except when selecting in read-only text.
         if ((mMovement != null || onCheckIsTextEditor()) && hasSpannableText() && mLayout != null
                 && (isTextEditable() || isTextSelectable()) && isFocused()) {
-            final InputMethodManager imm = InputMethodManager.peekInstance();
+            final InputMethodManager imm = getInputMethodManager();
             viewClicked(imm);
             if (!isTextSelectable() && mEditor.mShowSoftInputOnFocus && imm != null) {
                 handled |= imm.showSoftInput(this, 0);
@@ -11367,13 +11360,17 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         sendAccessibilityEventUnchecked(event);
     }
 
+    private InputMethodManager getInputMethodManager() {
+        return getContext().getSystemService(InputMethodManager.class);
+    }
+
     /**
      * Returns whether this text view is a current input method target.  The
      * default implementation just checks with {@link InputMethodManager}.
      * @return True if the TextView is a current input method target; false otherwise.
      */
     public boolean isInputMethodTarget() {
-        InputMethodManager imm = InputMethodManager.peekInstance();
+        InputMethodManager imm = getInputMethodManager();
         return imm != null && imm.isActive(this);
     }
 
@@ -12491,11 +12488,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     advancesIndex);
         }
 
-        public int getTextRunCursor(int contextStart, int contextEnd, int dir,
+        public int getTextRunCursor(int contextStart, int contextEnd, boolean isRtl,
                 int offset, int cursorOpt, Paint p) {
             int contextCount = contextEnd - contextStart;
             return p.getTextRunCursor(mChars, contextStart + mStart,
-                    contextCount, dir, offset + mStart, cursorOpt);
+                    contextCount, isRtl, offset + mStart, cursorOpt);
         }
     }
 

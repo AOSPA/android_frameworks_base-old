@@ -119,15 +119,13 @@ public:
 
     ANDROID_API void addFrameMetricsObserver(FrameMetricsObserver* observer);
     ANDROID_API void removeFrameMetricsObserver(FrameMetricsObserver* observer);
-    ANDROID_API long getDroppedFrameReportCount();
+    ANDROID_API void setForceDark(bool enable);
 
     ANDROID_API static int copySurfaceInto(sp<Surface>& surface, int left, int top, int right,
                                            int bottom, SkBitmap* bitmap);
     ANDROID_API static void prepareToDraw(Bitmap& bitmap);
 
     static int copyHWBitmapInto(Bitmap* hwBitmap, SkBitmap* bitmap);
-
-    static void onBitmapDestroyed(uint32_t pixelRefId);
 
     ANDROID_API static void disableVsync();
 

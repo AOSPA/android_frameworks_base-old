@@ -664,8 +664,8 @@ public class DevicePolicyManager {
 
     /**
      * A String extra indicating the security type of the wifi network in
-     * {@link #EXTRA_PROVISIONING_WIFI_SSID} and could be one of {@code NONE}, {@code WPA} or
-     * {@code WEP}.
+     * {@link #EXTRA_PROVISIONING_WIFI_SSID} and could be one of {@code NONE}, {@code WPA},
+     * {@code WEP} or {@code EAP}.
      *
      * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} that starts device owner
      * provisioning via an NFC bump.
@@ -680,8 +680,89 @@ public class DevicePolicyManager {
      * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} that starts device owner
      * provisioning via an NFC bump.
      */
-    public static final String EXTRA_PROVISIONING_WIFI_PASSWORD
-        = "android.app.extra.PROVISIONING_WIFI_PASSWORD";
+    public static final String EXTRA_PROVISIONING_WIFI_PASSWORD =
+            "android.app.extra.PROVISIONING_WIFI_PASSWORD";
+
+    /**
+     * The EAP method of the wifi network in {@link #EXTRA_PROVISIONING_WIFI_SSID}
+     * and could be one of {@code PEAP}, {@code TLS}, {@code TTLS}, {@code PWD}, {@code SIM},
+     * {@code AKA} or {@code AKA_PRIME}. This is only used if the
+     * {@link #EXTRA_PROVISIONING_WIFI_SECURITY_TYPE} is {@code EAP}.
+     *
+     * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} that starts device owner
+     * provisioning via an NFC bump. It can also be used for QR code provisioning.
+     */
+    public static final String EXTRA_PROVISIONING_WIFI_EAP_METHOD =
+            "android.app.extra.PROVISIONING_WIFI_EAP_METHOD";
+
+    /**
+     * The phase 2 authentication of the wifi network in {@link #EXTRA_PROVISIONING_WIFI_SSID}
+     * and could be one of {@code NONE}, {@code PAP}, {@code MSCHAP}, {@code MSCHAPV2}, {@code GTC},
+     * {@code SIM}, {@code AKA} or {@code AKA_PRIME}. This is only used if the
+     * {@link #EXTRA_PROVISIONING_WIFI_SECURITY_TYPE} is {@code EAP}.
+     *
+     * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} that starts device owner
+     * provisioning via an NFC bump. It can also be used for QR code provisioning.
+     */
+    public static final String EXTRA_PROVISIONING_WIFI_PHASE2_AUTH =
+            "android.app.extra.PROVISIONING_WIFI_PHASE2_AUTH";
+
+    /**
+     * The CA certificate of the wifi network in {@link #EXTRA_PROVISIONING_WIFI_SSID}. This should
+     * be an X.509 certificate Base64 encoded DER format, ie. PEM representation of a certificate
+     * without header, footer and line breaks. <a href=
+     * "https://tools.ietf.org/html/rfc7468"> More information</a> This is only
+     * used if the {@link
+     * #EXTRA_PROVISIONING_WIFI_SECURITY_TYPE} is {@code EAP}.
+     *
+     * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} that starts device owner
+     * provisioning via an NFC bump. It can also be used for QR code provisioning.
+     */
+    public static final String EXTRA_PROVISIONING_WIFI_CA_CERTIFICATE =
+            "android.app.extra.PROVISIONING_WIFI_CA_CERTIFICATE";
+
+    /**
+     * The user certificate of the wifi network in {@link #EXTRA_PROVISIONING_WIFI_SSID}. This
+     * should be an X.509 certificate and private key Base64 encoded DER format, ie. PEM
+     * representation of a certificate and key without header, footer and line breaks. <a href=
+     * "https://tools.ietf.org/html/rfc7468"> More information</a> This is only
+     * used if the {@link #EXTRA_PROVISIONING_WIFI_SECURITY_TYPE} is {@code EAP}.
+     *
+     * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} that starts device owner
+     * provisioning via an NFC bump. It can also be used for QR code provisioning.
+     */
+    public static final String EXTRA_PROVISIONING_WIFI_USER_CERTIFICATE =
+            "android.app.extra.PROVISIONING_WIFI_USER_CERTIFICATE";
+
+    /**
+     * The identity of the wifi network in {@link #EXTRA_PROVISIONING_WIFI_SSID}. This is only used
+     * if the {@link #EXTRA_PROVISIONING_WIFI_SECURITY_TYPE} is {@code EAP}.
+     *
+     * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} that starts device owner
+     * provisioning via an NFC bump. It can also be used for QR code provisioning.
+     */
+    public static final String EXTRA_PROVISIONING_WIFI_IDENTITY =
+            "android.app.extra.PROVISIONING_WIFI_IDENTITY";
+
+    /**
+     * The anonymous identity of the wifi network in {@link #EXTRA_PROVISIONING_WIFI_SSID}. This is
+     * only used if the {@link #EXTRA_PROVISIONING_WIFI_SECURITY_TYPE} is {@code EAP}.
+     *
+     * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} that starts device owner
+     * provisioning via an NFC bump. It can also be used for QR code provisioning.
+     */
+
+    public static final String EXTRA_PROVISIONING_WIFI_ANONYMOUS_IDENTITY =
+            "android.app.extra.PROVISIONING_WIFI_ANONYMOUS_IDENTITY";
+    /**
+     * The domain of the wifi network in {@link #EXTRA_PROVISIONING_WIFI_SSID}. This is only used if
+     * the {@link #EXTRA_PROVISIONING_WIFI_SECURITY_TYPE} is {@code EAP}.
+     *
+     * <p>Use in an NFC record with {@link #MIME_TYPE_PROVISIONING_NFC} that starts device owner
+     * provisioning via an NFC bump. It can also be used for QR code provisioning.
+     */
+    public static final String EXTRA_PROVISIONING_WIFI_DOMAIN =
+            "android.app.extra.PROVISIONING_WIFI_DOMAIN";
 
     /**
      * A String extra holding the proxy host for the wifi network in
@@ -1067,8 +1148,22 @@ public class DevicePolicyManager {
      * <li>{@link #EXTRA_PROVISIONING_WIFI_PROXY_PORT} (convert to String), optional</li>
      * <li>{@link #EXTRA_PROVISIONING_WIFI_PROXY_BYPASS}, optional</li>
      * <li>{@link #EXTRA_PROVISIONING_WIFI_PAC_URL}, optional</li>
-     * <li>{@link #EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}, optional, supported from
-     * {@link android.os.Build.VERSION_CODES#M} </li></ul>
+     * <li>{@link #EXTRA_PROVISIONING_ADMIN_EXTRAS_BUNDLE}, optional, supported from {@link
+     * android.os.Build.VERSION_CODES#M} </li>
+     * <li>{@link #EXTRA_PROVISIONING_WIFI_EAP_METHOD}, optional, supported from {@link
+     * android.os.Build.VERSION_CODES#Q}</li>
+     * <li>{@link #EXTRA_PROVISIONING_WIFI_PHASE2_AUTH}, optional, supported from {@link
+     * android.os.Build.VERSION_CODES#Q}</li>
+     * <li>{@link #EXTRA_PROVISIONING_WIFI_CA_CERTIFICATE}, optional, supported from {@link
+     * android.os.Build.VERSION_CODES#Q}</li>
+     * <li>{@link #EXTRA_PROVISIONING_WIFI_USER_CERTIFICATE}, optional, supported from {@link
+     * android.os.Build.VERSION_CODES#Q}</li>
+     * <li>{@link #EXTRA_PROVISIONING_WIFI_IDENTITY}, optional, supported from {@link
+     * android.os.Build.VERSION_CODES#Q}</li>
+     * <li>{@link #EXTRA_PROVISIONING_WIFI_ANONYMOUS_IDENTITY}, optional, supported from {@link
+     * android.os.Build.VERSION_CODES#Q}</li>
+     * <li>{@link #EXTRA_PROVISIONING_WIFI_DOMAIN}, optional, supported from {@link
+     * android.os.Build.VERSION_CODES#Q}</li></ul>
      *
      * <p>
      * As of {@link android.os.Build.VERSION_CODES#M}, the properties should contain
@@ -3450,15 +3545,14 @@ public class DevicePolicyManager {
      * @param flags Bit mask of additional options: currently supported flags are
      *            {@link #WIPE_EXTERNAL_STORAGE} and {@link #WIPE_RESET_PROTECTION_DATA}.
      * @param reason a string that contains the reason for wiping data, which can be
-     *                          presented to the user.
+     *            presented to the user. If the string is null or empty, user won't be notified.
      * @throws SecurityException if the calling application does not own an active administrator
      *             that uses {@link DeviceAdminInfo#USES_POLICY_WIPE_DATA}
      * @throws IllegalArgumentException if the input reason string is null or empty.
      */
-    public void wipeData(int flags, @NonNull CharSequence reason) {
+    public void wipeData(int flags, CharSequence reason) {
         throwIfParentInstance("wipeData");
-        Preconditions.checkNotNull(reason, "CharSequence is null");
-        wipeDataInternal(flags, reason.toString());
+        wipeDataInternal(flags, reason != null ? reason.toString() : null);
     }
 
     /**
@@ -3469,7 +3563,7 @@ public class DevicePolicyManager {
      * @see #wipeData(int, CharSequence)
      * @hide
      */
-    private void wipeDataInternal(int flags, @NonNull String wipeReasonForUser) {
+    private void wipeDataInternal(int flags, String wipeReasonForUser) {
         if (mService != null) {
             try {
                 mService.wipeDataWithReason(flags, wipeReasonForUser);
@@ -7405,6 +7499,10 @@ public class DevicePolicyManager {
      * If any app targeting {@link android.os.Build.VERSION_CODES#O} or higher calls this method
      * with {@link android.provider.Settings.Secure#INSTALL_NON_MARKET_APPS},
      * an {@link UnsupportedOperationException} is thrown.
+     *
+     * Starting from Android Q, the device and profile owner can also call
+     * {@link UserManager#DISALLOW_INSTALL_UNKNOWN_SOURCES_GLOBALLY} to restrict unknown sources for
+     * all users.
      * </strong>
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with.

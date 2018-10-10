@@ -18,11 +18,15 @@ package android.app;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.content.ComponentName;
+import android.content.IIntentReceiver;
 import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.UserInfo;
+import android.os.Bundle;
 import android.os.IBinder;
+import android.os.TransactionTooLargeException;
 import android.view.RemoteAnimationAdapter;
 
 import java.util.ArrayList;
@@ -183,12 +187,6 @@ public abstract class ActivityManagerInternal {
     /** Trims memory usage in the system by removing/stopping unused application processes. */
     public abstract void trimApplications();
 
-    /** Returns the screen compatibility mode for the given application. */
-    public abstract int getPackageScreenCompatMode(ApplicationInfo ai);
-
-    /** Sets the screen compatibility mode for the given application. */
-    public abstract void setPackageScreenCompatMode(ApplicationInfo ai, int mode);
-
     /** Closes all system dialogs. */
     public abstract void closeSystemDialogs(String reason);
 
@@ -201,6 +199,11 @@ public abstract class ActivityManagerInternal {
     public abstract boolean hasRunningActivity(int uid, @Nullable String packageName);
 
     public abstract void updateOomAdj();
+    public abstract void updateCpuStats();
+    public abstract void updateUsageStats(
+            ComponentName activity, int uid, int userId, boolean resumed);
+    public abstract void updateForegroundTimeIfOnBattery(
+            String packageName, int uid, long cpuTimeDiff);
     public abstract void sendForegroundProfileChanged(int userId);
 
     /**
@@ -208,11 +211,6 @@ public abstract class ActivityManagerInternal {
      * intercept activity launches for work apps when the Work Challenge is present.
      */
     public abstract boolean shouldConfirmCredentials(int userId);
-
-    /**
-     * @return The intent used to launch the home activity.
-     */
-    public abstract Intent getHomeIntent();
 
     public abstract int[] getCurrentProfileIds();
     public abstract UserInfo getCurrentUser();
@@ -226,4 +224,22 @@ public abstract class ActivityManagerInternal {
 
     /** Gets the task id for a given activity. */
     public abstract int getTaskIdForActivity(@NonNull IBinder token, boolean onlyRoot);
+
+    public abstract void setBooting(boolean booting);
+    public abstract boolean isBooting();
+    public abstract void setBooted(boolean booted);
+    public abstract boolean isBooted();
+    public abstract void finishBooting();
+
+    public abstract void tempWhitelistForPendingIntent(int callerPid, int callerUid, int targetUid,
+            long duration, String tag);
+    public abstract int broadcastIntentInPackage(String packageName, int uid, Intent intent,
+            String resolvedType, IIntentReceiver resultTo, int resultCode, String resultData,
+            Bundle resultExtras, String requiredPermission, Bundle bOptions, boolean serialized,
+            boolean sticky, int userId);
+    public abstract ComponentName startServiceInPackage(int uid, Intent service,
+            String resolvedType, boolean fgRequired, String callingPackage, int userId)
+            throws TransactionTooLargeException;
+
+    public abstract void disconnectActivityFromServices(Object connectionHolder);
 }

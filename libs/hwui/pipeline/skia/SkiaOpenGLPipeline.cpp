@@ -21,6 +21,7 @@
 #include "SkiaPipeline.h"
 #include "SkiaProfileRenderer.h"
 #include "hwui/Bitmap.h"
+#include "private/hwui/DrawGlInfo.h"
 #include "renderstate/RenderState.h"
 #include "renderthread/EglManager.h"
 #include "renderthread/Frame.h"
@@ -43,7 +44,13 @@ namespace uirenderer {
 namespace skiapipeline {
 
 SkiaOpenGLPipeline::SkiaOpenGLPipeline(RenderThread& thread)
-        : SkiaPipeline(thread), mEglManager(thread.eglManager()) {}
+        : SkiaPipeline(thread), mEglManager(thread.eglManager()) {
+    thread.renderState().registerContextCallback(this);
+}
+
+SkiaOpenGLPipeline::~SkiaOpenGLPipeline() {
+    mRenderThread.renderState().removeContextCallback(this);
+}
 
 MakeCurrentResult SkiaOpenGLPipeline::makeCurrent() {
     // TODO: Figure out why this workaround is needed, see b/13913604
@@ -135,6 +142,13 @@ DeferredLayerUpdater* SkiaOpenGLPipeline::createTextureLayer() {
     return new DeferredLayerUpdater(mRenderThread.renderState());
 }
 
+void SkiaOpenGLPipeline::onContextDestroyed() {
+    if (mEglSurface != EGL_NO_SURFACE) {
+        mEglManager.destroySurface(mEglSurface);
+        mEglSurface = EGL_NO_SURFACE;
+    }
+}
+
 void SkiaOpenGLPipeline::onStop() {
     if (mEglManager.isCurrent(mEglSurface)) {
         mEglManager.makeCurrent(EGL_NO_SURFACE);
@@ -153,6 +167,12 @@ bool SkiaOpenGLPipeline::setSurface(Surface* surface, SwapBehavior swapBehavior,
         mEglSurface = mEglManager.createSurface(surface, colorMode);
     }
 
+    if (colorMode == ColorMode::SRGB) {
+        mSurfaceColorType = SkColorType::kN32_SkColorType;
+    } else if (colorMode == ColorMode::WideColorGamut) {
+        mSurfaceColorType = SkColorType::kRGBA_F16_SkColorType;
+    }
+
     if (mEglSurface != EGL_NO_SURFACE) {
         const bool preserveBuffer = (swapBehavior != SwapBehavior::kSwap_discardBuffer);
         mBufferPreserved = mEglManager.setPreserveBuffer(mEglSurface, preserveBuffer);
@@ -168,14 +188,6 @@ bool SkiaOpenGLPipeline::isSurfaceReady() {
 
 bool SkiaOpenGLPipeline::isContextReady() {
     return CC_LIKELY(mEglManager.hasEglContext());
-}
-
-SkColorType SkiaOpenGLPipeline::getSurfaceColorType() const {
-    return mEglManager.getSurfaceColorType();
-}
-
-sk_sp<SkColorSpace> SkiaOpenGLPipeline::getSurfaceColorSpace() {
-    return mEglManager.getSurfaceColorSpace();
 }
 
 void SkiaOpenGLPipeline::invokeFunctor(const RenderThread& thread, Functor* functor) {

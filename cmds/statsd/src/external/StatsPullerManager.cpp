@@ -163,13 +163,10 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
           new ResourceHealthManagerPuller(android::util::FULL_BATTERY_CAPACITY)}},
         // battery_voltage
         {android::util::BATTERY_VOLTAGE,
-         {{},
-          {},
-          1 * NS_PER_SEC,
-          new ResourceHealthManagerPuller(android::util::BATTERY_VOLTAGE)}},
+         {{}, {}, 1 * NS_PER_SEC, new ResourceHealthManagerPuller(android::util::BATTERY_VOLTAGE)}},
         // process_memory_state
         {android::util::PROCESS_MEMORY_STATE,
-         {{4, 5, 6, 7, 8},
+         {{4, 5, 6, 7, 8, 9},
           {2, 3},
           1 * NS_PER_SEC,
           new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_STATE)}},
@@ -195,29 +192,38 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
           new StatsCompanionServicePuller(android::util::LOOPER_STATS)}},
         // Disk Stats
         {android::util::DISK_STATS,
-         {{},
-          {},
-          1 * NS_PER_SEC,
-          new StatsCompanionServicePuller(android::util::DISK_STATS)}},
+         {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::DISK_STATS)}},
         // Directory usage
         {android::util::DIRECTORY_USAGE,
-         {{},
-          {},
-          1 * NS_PER_SEC,
-          new StatsCompanionServicePuller(android::util::DIRECTORY_USAGE)}},
+         {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::DIRECTORY_USAGE)}},
         // Size of app's code, data, and cache
         {android::util::APP_SIZE,
-         {{},
-          {},
-          1 * NS_PER_SEC,
-          new StatsCompanionServicePuller(android::util::APP_SIZE)}},
+         {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::APP_SIZE)}},
         // Size of specific categories of files. Eg. Music.
         {android::util::CATEGORY_SIZE,
+         {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::CATEGORY_SIZE)}},
+        // Number of fingerprints registered to each user.
+        {android::util::NUM_FINGERPRINTS,
          {{},
           {},
           1 * NS_PER_SEC,
-          new StatsCompanionServicePuller(android::util::CATEGORY_SIZE)}},
-        };
+          new StatsCompanionServicePuller(android::util::NUM_FINGERPRINTS)}},
+        // ProcStats.
+        {android::util::PROC_STATS,
+         {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::PROC_STATS)}},
+        // ProcStatsPkgProc.
+        {android::util::PROC_STATS_PKG_PROC,
+         {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::PROC_STATS_PKG_PROC)}},
+        // Disk I/O stats per uid.
+        {android::util::DISK_IO,
+         {{2,3,4,5,6,7,8,9,10,11},
+          {},
+          3 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::DISK_IO)}},
+        // PowerProfile constants for power model calculations.
+        {android::util::POWER_PROFILE,
+         {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::POWER_PROFILE)}},
+};
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {
 }

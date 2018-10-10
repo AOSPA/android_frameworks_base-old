@@ -3031,6 +3031,7 @@ public abstract class Context {
             AUDIO_SERVICE,
             FINGERPRINT_SERVICE,
             //@hide: FACE_SERVICE,
+            BIOMETRIC_SERVICE,
             MEDIA_ROUTER_SERVICE,
             TELEPHONY_SERVICE,
             TELEPHONY_SUBSCRIPTION_SERVICE,
@@ -3087,6 +3088,7 @@ public abstract class Context {
             //@hide: SYSTEM_UPDATE_SERVICE,
             //@hide: TIME_DETECTOR_SERVICE,
             //@hide: TIME_ZONE_DETECTOR_SERVICE,
+            PERMISSION_SERVICE,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ServiceName {}
@@ -3167,11 +3169,11 @@ public abstract class Context {
      *
      * <p>Note: Instant apps, for which {@link PackageManager#isInstantApp()} returns true,
      * don't have access to the following system services: {@link #DEVICE_POLICY_SERVICE},
-     * {@link #FINGERPRINT_SERVICE}, {@link #SHORTCUT_SERVICE}, {@link #USB_SERVICE},
-     * {@link #WALLPAPER_SERVICE}, {@link #WIFI_P2P_SERVICE}, {@link #WIFI_SERVICE},
-     * {@link #WIFI_AWARE_SERVICE}. For these services this method will return <code>null</code>.
-     * Generally, if you are running as an instant app you should always check whether the result
-     * of this method is null.
+     * {@link #FINGERPRINT_SERVICE}, {@link #KEYGUARD_SERVICE}, {@link #SHORTCUT_SERVICE},
+     * {@link #USB_SERVICE}, {@link #WALLPAPER_SERVICE}, {@link #WIFI_P2P_SERVICE},
+     * {@link #WIFI_SERVICE}, {@link #WIFI_AWARE_SERVICE}. For these services this method will
+     * return <code>null</code>.  Generally, if you are running as an instant app you should always
+     * check whether the result of this method is null.
      *
      * @param name The name of the desired service.
      *
@@ -3258,11 +3260,11 @@ public abstract class Context {
      *
      * <p>Note: Instant apps, for which {@link PackageManager#isInstantApp()} returns true,
      * don't have access to the following system services: {@link #DEVICE_POLICY_SERVICE},
-     * {@link #FINGERPRINT_SERVICE}, {@link #SHORTCUT_SERVICE}, {@link #USB_SERVICE},
-     * {@link #WALLPAPER_SERVICE}, {@link #WIFI_P2P_SERVICE}, {@link #WIFI_SERVICE},
-     * {@link #WIFI_AWARE_SERVICE}. For these services this method will return <code>null</code>.
-     * Generally, if you are running as an instant app you should always check whether the result
-     * of this method is null.
+     * {@link #FINGERPRINT_SERVICE}, {@link #KEYGUARD_SERVICE}, {@link #SHORTCUT_SERVICE},
+     * {@link #USB_SERVICE}, {@link #WALLPAPER_SERVICE}, {@link #WIFI_P2P_SERVICE},
+     * {@link #WIFI_SERVICE}, {@link #WIFI_AWARE_SERVICE}. For these services this method will
+     * return <code>null</code>.  Generally, if you are running as an instant app you should always
+     * check whether the result of this method is null.
      *
      * @param serviceClass The class of the desired service.
      * @return The service or null if the class is not a supported system service.
@@ -3681,15 +3683,6 @@ public abstract class Context {
     public static final String AUDIO_SERVICE = "audio";
 
     /**
-     * Use with {@link #getSystemService(String)}
-     *
-     * @hide
-     * @see #getSystemService(String)
-     * @see com.android.server.biometrics.BiometricPromptService
-     */
-    public static final String BIOMETRIC_PROMPT_SERVICE = "biometric_prompt";
-
-    /**
      * Use with {@link #getSystemService(String)} to retrieve a
      * {@link android.hardware.fingerprint.FingerprintManager} for handling management
      * of fingerprints.
@@ -3701,7 +3694,6 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
-     * Use with {@link #getSystemService} to retrieve a
      * {@link android.hardware.face.FaceManager} for handling management
      * of face authentication.
      *
@@ -3710,6 +3702,16 @@ public abstract class Context {
      * @see android.hardware.face.FaceManager
      */
     public static final String FACE_SERVICE = "face";
+
+    /**
+     * Use with {@link #getSystemService(String)} to retrieve a
+     * {@link android.hardware.biometrics.BiometricManager} for handling management
+     * of face authentication.
+     *
+     * @see #getSystemService
+     * @see android.hardware.biometrics.BiometricManager
+     */
+    public static final String BIOMETRIC_SERVICE = "biometric";
 
     /**
      * Use with {@link #getSystemService} to retrieve a
@@ -3859,6 +3861,14 @@ public abstract class Context {
      */
     public static final String SOUND_TRIGGER_SERVICE = "soundtrigger";
 
+    /**
+     * Official published name of the (internal) permission service.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    @SystemApi
+    public static final String PERMISSION_SERVICE = "permission";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve an
@@ -4299,6 +4309,12 @@ public abstract class Context {
      * @see #getSystemService(String)
      */
     public static final String TIME_ZONE_DETECTOR_SERVICE = "time_zone_detector";
+
+    /**
+     * Binder service name for {@link AppBindingService}.
+     * @hide
+     */
+    public static final String APP_BINDING_SERVICE = "app_binding";
 
     /**
      * Determine whether the given permission is allowed for a particular

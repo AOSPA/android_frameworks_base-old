@@ -497,6 +497,16 @@ public final class Settings {
             "android.settings.BLUETOOTH_SETTINGS";
 
     /**
+     * Activity action: Show Settings app search UI when this action is available for device.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_APP_SEARCH_SETTINGS = "android.settings.APP_SEARCH_SETTINGS";
+
+    /**
      * Activity Action: Show settings to allow configuration of Assist Gesture.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -7280,12 +7290,12 @@ public final class Settings {
         private static final Validator DOZE_DOUBLE_TAP_GESTURE_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
-         * Whether the device should pulse on reach gesture.
+         * Gesture that wakes up the lock screen.
          * @hide
          */
-        public static final String DOZE_REACH_GESTURE = "doze_reach_gesture";
+        public static final String DOZE_WAKE_LOCK_SCREEN_GESTURE = "doze_wake_lock_screen_gesture";
 
-        private static final Validator DOZE_REACH_GESTURE_VALIDATOR = BOOLEAN_VALIDATOR;
+        private static final Validator DOZE_WAKE_LOCK_SCREEN_GESTURE_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
          * Gesture that wakes up the display, showing the ambient version of the status bar.
@@ -7699,6 +7709,15 @@ public final class Settings {
         public static final String FACE_UNLOCK_KEYGUARD_ENABLED = "face_unlock_keyguard_enabled";
 
         private static final Validator FACE_UNLOCK_KEYGUARD_ENABLED_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
+         * Whether or not face unlock is allowed for apps (through BiometricPrompt).
+         * @hide
+         */
+        public static final String FACE_UNLOCK_APP_ENABLED = "face_unlock_app_enabled";
+
+        private static final Validator FACE_UNLOCK_APP_ENABLED_VALIDATOR =
                 BOOLEAN_VALIDATOR;
 
         /**
@@ -8197,11 +8216,12 @@ public final class Settings {
             DOZE_ALWAYS_ON,
             DOZE_PICK_UP_GESTURE,
             DOZE_DOUBLE_TAP_GESTURE,
-            DOZE_REACH_GESTURE,
+            DOZE_WAKE_LOCK_SCREEN_GESTURE,
             DOZE_WAKE_SCREEN_GESTURE,
             NFC_PAYMENT_DEFAULT_COMPONENT,
             AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN,
             FACE_UNLOCK_KEYGUARD_ENABLED,
+            FACE_UNLOCK_APP_ENABLED,
             ASSIST_GESTURE_ENABLED,
             ASSIST_GESTURE_SILENCE_ALERTS_ENABLED,
             ASSIST_GESTURE_WAKE_ENABLED,
@@ -8345,12 +8365,13 @@ public final class Settings {
             VALIDATORS.put(DOZE_ALWAYS_ON, DOZE_ALWAYS_ON_VALIDATOR);
             VALIDATORS.put(DOZE_PICK_UP_GESTURE, DOZE_PICK_UP_GESTURE_VALIDATOR);
             VALIDATORS.put(DOZE_DOUBLE_TAP_GESTURE, DOZE_DOUBLE_TAP_GESTURE_VALIDATOR);
-            VALIDATORS.put(DOZE_REACH_GESTURE, DOZE_REACH_GESTURE_VALIDATOR);
+            VALIDATORS.put(DOZE_WAKE_LOCK_SCREEN_GESTURE, DOZE_WAKE_LOCK_SCREEN_GESTURE_VALIDATOR);
             VALIDATORS.put(DOZE_WAKE_SCREEN_GESTURE, DOZE_WAKE_SCREEN_GESTURE_VALIDATOR);
             VALIDATORS.put(NFC_PAYMENT_DEFAULT_COMPONENT, NFC_PAYMENT_DEFAULT_COMPONENT_VALIDATOR);
             VALIDATORS.put(AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN,
                     AUTOMATIC_STORAGE_MANAGER_DAYS_TO_RETAIN_VALIDATOR);
             VALIDATORS.put(FACE_UNLOCK_KEYGUARD_ENABLED, FACE_UNLOCK_KEYGUARD_ENABLED_VALIDATOR);
+            VALIDATORS.put(FACE_UNLOCK_APP_ENABLED, FACE_UNLOCK_APP_ENABLED_VALIDATOR);
             VALIDATORS.put(ASSIST_GESTURE_ENABLED, ASSIST_GESTURE_ENABLED_VALIDATOR);
             VALIDATORS.put(ASSIST_GESTURE_SILENCE_ALERTS_ENABLED,
                     ASSIST_GESTURE_SILENCE_ALERTS_ENABLED_VALIDATOR);
@@ -9257,6 +9278,19 @@ public final class Settings {
        public static final String MOBILE_DATA_ALWAYS_ON = "mobile_data_always_on";
 
         /**
+         * Whether the wifi data connection should remain active even when higher
+         * priority networks like Ethernet are active, to keep both networks.
+         * In the case where higher priority networks are connected, wifi will be
+         * unused unless an application explicitly requests to use it.
+         *
+         * See ConnectivityService for more info.
+         *
+         * (0 = disabled, 1 = enabled)
+         * @hide
+         */
+        public static final String WIFI_ALWAYS_REQUESTED = "wifi_always_requested";
+
+        /**
          * Size of the event buffer for IP connectivity metrics.
          * @hide
          */
@@ -9608,8 +9642,7 @@ public final class Settings {
          * Use the old dnsmasq DHCP server for tethering instead of the framework implementation.
          *
          * Integer values are interpreted as boolean, and the absence of an explicit setting
-         * is interpreted as |true|.
-         * TODO: make the default |false|
+         * is interpreted as |false|.
          * @hide
          */
         public static final String TETHER_ENABLE_LEGACY_DHCP_SERVER =
@@ -10834,6 +10867,12 @@ public final class Settings {
                 = "activity_starts_logging_enabled";
 
         /**
+         * @hide
+         * @see com.android.server.appbinding.AppBindingConstants
+         */
+        public static final String APP_BINDING_CONSTANTS = "app_binding_constants";
+
+        /**
          * App ops specific settings.
          * This is encoded as a key=value list, separated by commas. Ex:
          *
@@ -11593,6 +11632,12 @@ public final class Settings {
         public static final String GPU_DEBUG_APP = "gpu_debug_app";
 
         /**
+         * App should try to use ANGLE
+         * @hide
+         */
+        public static final String ANGLE_ENABLED_APP = "angle_enabled_app";
+
+        /**
          * Ordered GPU debug layer list
          * i.e. <layer1>:<layer2>:...:<layerN>
          * @hide
@@ -12318,6 +12363,18 @@ public final class Settings {
         @TestApi
         public static final String LOCATION_GLOBAL_KILL_SWITCH =
                 "location_global_kill_switch";
+
+        /**
+         * If set to 1, app cannot request read sms permission unless it's the default sms handler.
+         *
+         * STOPSHIP: Remove this once we ship with the restriction enabled.
+         *
+         * @hide
+         */
+        @SystemApi
+        @TestApi
+        public static final String SMS_ACCESS_RESTRICTION_ENABLED =
+                "sms_access_restriction_enabled";
 
         /**
          * If set to 1, SettingsProvider's restoreAnyVersion="true" attribute will be ignored

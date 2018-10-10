@@ -17,8 +17,6 @@
 package android.view;
 
 import com.android.internal.os.IResultReceiver;
-import com.android.internal.view.IInputContext;
-import com.android.internal.view.IInputMethodClient;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
 
@@ -71,8 +69,7 @@ interface IWindowManager
     boolean stopViewServer();            // Transaction #2
     boolean isViewServerRunning();       // Transaction #3
 
-    IWindowSession openSession(in IWindowSessionCallback callback, in IInputMethodClient client,
-            in IInputContext inputContext);
+    IWindowSession openSession(in IWindowSessionCallback callback);
 
     void getInitialDisplaySize(int displayId, out Point size);
     void getBaseDisplaySize(int displayId, out Point size);
@@ -90,7 +87,6 @@ interface IWindowManager
     void setEventDispatching(boolean enabled);
     void addWindowToken(IBinder token, int type, int displayId);
     void removeWindowToken(IBinder token, int displayId);
-    void setFocusedApp(IBinder token, boolean moveFocusNow);
     void prepareAppTransition(int transit, boolean alwaysKeepCurrent);
     int getPendingAppTransition();
     void overridePendingAppTransition(String packageName, int enterAnim, int exitAnim,

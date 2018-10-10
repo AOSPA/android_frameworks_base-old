@@ -75,116 +75,6 @@ interface ITelephony {
     void call(String callingPackage, String number);
 
     /**
-     * End call if there is a call in progress, otherwise does nothing.
-     *
-     * @return whether it hung up
-     */
-    boolean endCall();
-
-    /**
-     * End call on particular subId or go to the Home screen
-     * @param subId user preferred subId.
-     * @return whether it hung up
-     */
-    boolean endCallForSubscriber(int subId);
-
-    /**
-     * Answer the currently-ringing call.
-     *
-     * If there's already a current active call, that call will be
-     * automatically put on hold.  If both lines are currently in use, the
-     * current active call will be ended.
-     *
-     * TODO: provide a flag to let the caller specify what policy to use
-     * if both lines are in use.  (The current behavior is hardwired to
-     * "answer incoming, end ongoing", which is how the CALL button
-     * is specced to behave.)
-     *
-     * TODO: this should be a oneway call (especially since it's called
-     * directly from the key queue thread).
-     */
-    void answerRingingCall();
-
-    /**
-     * Answer the currently-ringing call on particular subId .
-     *
-     * If there's already a current active call, that call will be
-     * automatically put on hold.  If both lines are currently in use, the
-     * current active call will be ended.
-     *
-     * TODO: provide a flag to let the caller specify what policy to use
-     * if both lines are in use.  (The current behavior is hardwired to
-     * "answer incoming, end ongoing", which is how the CALL button
-     * is specced to behave.)
-     *
-     * TODO: this should be a oneway call (especially since it's called
-     * directly from the key queue thread).
-     */
-    void answerRingingCallForSubscriber(int subId);
-
-    /**
-     * Silence the ringer if an incoming call is currently ringing.
-     * (If vibrating, stop the vibrator also.)
-     *
-     * It's safe to call this if the ringer has already been silenced, or
-     * even if there's no incoming call.  (If so, this method will do nothing.)
-     *
-     * TODO: this should be a oneway call too (see above).
-     *       (Actually *all* the methods here that return void can
-     *       probably be oneway.)
-     */
-    void silenceRinger();
-
-    /**
-     * Check if we are in either an active or holding call
-     * @param callingPackage the name of the package making the call.
-     * @return true if the phone state is OFFHOOK.
-     */
-    boolean isOffhook(String callingPackage);
-
-    /**
-     * Check if a particular subId has an active or holding call
-     *
-     * @param subId user preferred subId.
-     * @param callingPackage the name of the package making the call.
-     * @return true if the phone state is OFFHOOK.
-     */
-    boolean isOffhookForSubscriber(int subId, String callingPackage);
-
-    /**
-     * Check if an incoming phone call is ringing or call waiting
-     * on a particular subId.
-     *
-     * @param subId user preferred subId.
-     * @param callingPackage the name of the package making the call.
-     * @return true if the phone state is RINGING.
-     */
-    boolean isRingingForSubscriber(int subId, String callingPackage);
-
-    /**
-     * Check if an incoming phone call is ringing or call waiting.
-     * @param callingPackage the name of the package making the call.
-     * @return true if the phone state is RINGING.
-     */
-    boolean isRinging(String callingPackage);
-
-    /**
-     * Check if the phone is idle.
-     * @param callingPackage the name of the package making the call.
-     * @return true if the phone state is IDLE.
-     */
-    boolean isIdle(String callingPackage);
-
-    /**
-     * Check if the phone is idle on a particular subId.
-     *
-     * @param subId user preferred subId.
-     * @param callingPackage the name of the package making the call.
-     * @return true if the phone state is IDLE.
-     */
-    boolean isIdleForSubscriber(int subId, String callingPackage);
-
-    /**
      * Check to see if the radio is on or not.
      * @param callingPackage the name of the package making the call.
      * @return returns true if the radio is on.
@@ -865,14 +755,15 @@ interface ITelephony {
      * Ask the radio to connect to the input network and change selection mode to manual.
      *
      * @param subId the id of the subscription.
-     * @param operatorNumeric the PLMN of the operator to attach to.
-     * @param persistSelection Whether the selection will persist until reboot. If true, only allows
+     * @param operatorInfo the operator inforamtion, included the PLMN, long name and short name of
+     * the operator to attach to.
+     * @param persistSelection whether the selection will persist until reboot. If true, only allows
      * attaching to the selected PLMN until reboot; otherwise, attach to the chosen PLMN and resume
      * normal network selection next time.
-     * @return true if the request suceeded.
+     * @return {@code true} on success; {@code true} on any failure.
      */
-    boolean setNetworkSelectionModeManual(int subId, in String operatorNumeric,
-            boolean persistSelection);
+    boolean setNetworkSelectionModeManual(
+            int subId, in OperatorInfo operatorInfo, boolean persisSelection);
 
     /**
      * Set the preferred network type.
@@ -916,6 +807,13 @@ interface ITelephony {
      * @return true on enabled
      */
     boolean isDataEnabled(int subId);
+
+     /**
+     * Checks if manual network selection is allowed.
+     *
+     * @return {@code true} if manual network selection is allowed, otherwise return {@code false}.
+     */
+     boolean isManualNetworkSelectionAllowed(int subId);
 
     /**
      * Get P-CSCF address from PCO after data connection is established or modified.
@@ -1586,4 +1484,19 @@ interface ITelephony {
      * Return the network selection mode on the subscription with id {@code subId}.
      */
      int getNetworkSelectionMode(int subId);
+
+    /**
+     * Get a list of SMS apps on a user.
+     */
+    String[] getSmsApps(int userId);
+
+    /**
+     * Get the default SMS app on a given user.
+     */
+    String getDefaultSmsApp(int userId);
+
+    /**
+     * Set the default SMS app to a given package on a given user.
+     */
+    void setDefaultSmsApp(int userId, String packageName);
 }

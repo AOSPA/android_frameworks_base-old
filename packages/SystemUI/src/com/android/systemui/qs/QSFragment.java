@@ -103,6 +103,9 @@ public class QSFragment extends Fragment implements QS, CommandQueue.Callbacks {
             setListening(savedInstanceState.getBoolean(EXTRA_LISTENING));
             setEditLocation(view);
             mQSCustomizer.restoreInstanceState(savedInstanceState);
+            if (mQsExpanded) {
+                mQSPanel.getTileLayout().restoreInstanceState(savedInstanceState);
+            }
         }
         SysUiServiceProvider.getComponent(getContext(), CommandQueue.class).addCallbacks(this);
     }
@@ -127,6 +130,9 @@ public class QSFragment extends Fragment implements QS, CommandQueue.Callbacks {
         outState.putBoolean(EXTRA_EXPANDED, mQsExpanded);
         outState.putBoolean(EXTRA_LISTENING, mListening);
         mQSCustomizer.saveInstanceState(outState);
+        if (mQsExpanded) {
+            mQSPanel.getTileLayout().saveInstanceState(outState);
+        }
     }
 
     @VisibleForTesting
@@ -256,7 +262,7 @@ public class QSFragment extends Fragment implements QS, CommandQueue.Callbacks {
     public void setExpanded(boolean expanded) {
         if (DEBUG) Log.d(TAG, "setExpanded " + expanded);
         mQsExpanded = expanded;
-        mQSPanel.setListening(mListening && mQsExpanded);
+        mQSPanel.setListening(mListening, mQsExpanded);
         updateQsState();
     }
 
@@ -287,8 +293,7 @@ public class QSFragment extends Fragment implements QS, CommandQueue.Callbacks {
         mListening = listening;
         mHeader.setListening(listening);
         mFooter.setListening(listening);
-        mQSPanel.setListening(mListening && mQsExpanded);
-        mQSPanel.getFooter().setListening(listening);
+        mQSPanel.setListening(mListening, mQsExpanded);
     }
 
     @Override
@@ -365,7 +370,11 @@ public class QSFragment extends Fragment implements QS, CommandQueue.Callbacks {
                 .setListener(new AnimatorListenerAdapter() {
                     @Override
                     public void onAnimationEnd(Animator animation) {
-                        getView().animate().setListener(null);
+                        if (getView() != null) {
+                            // The view could be destroyed before the animation completes when
+                            // switching users.
+                            getView().animate().setListener(null);
+                        }
                         mHeaderAnimating = false;
                         updateQsState();
                     }

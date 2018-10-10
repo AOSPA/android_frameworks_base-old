@@ -29,7 +29,7 @@ namespace skiapipeline {
 
 void SkiaDisplayList::syncContents() {
     for (auto& functor : mChildFunctors) {
-        functor.syncFunctor();
+        functor->syncFunctor();
     }
     for (auto& animatedImage : mAnimatedImages) {
         animatedImage->syncProperties();
@@ -132,7 +132,6 @@ void SkiaDisplayList::reset() {
     mChildFunctors.clear();
     mChildNodes.clear();
 
-    projectionReceiveIndex = -1;
     allocator.~LinearAllocator();
     new (&allocator) LinearAllocator();
 }

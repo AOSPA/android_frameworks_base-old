@@ -65,11 +65,11 @@ import com.android.internal.os.RegionalizationEnvironment;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.EmergencyAffordanceManager;
 import com.android.internal.widget.ILockSettings;
-import com.android.server.accessibility.AccessibilityManagerService;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.ActivityTaskManagerService;
+import com.android.server.appbinding.AppBindingService;
 import com.android.server.audio.AudioService;
-import com.android.server.biometrics.BiometricPromptService;
+import com.android.server.biometrics.BiometricService;
 import com.android.server.broadcastradio.BroadcastRadioService;
 import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
@@ -1633,7 +1633,7 @@ public final class SystemServer {
             if (hasFeatureFace || hasFeatureFingerprint) {
                 // Start this service after all biometric services.
                 traceBeginAndSlog("StartBiometricPromptService");
-                mSystemServiceManager.startService(BiometricPromptService.class);
+                mSystemServiceManager.startService(BiometricService.class);
                 traceEnd();
             }
 
@@ -1753,6 +1753,10 @@ public final class SystemServer {
             mSystemServiceManager.startService(AUTO_FILL_MANAGER_SERVICE_CLASS);
             traceEnd();
         }
+
+        traceBeginAndSlog("AppServiceManager");
+        mSystemServiceManager.startService(AppBindingService.Lifecycle.class);
+        traceEnd();
 
         // It is now time to start up the app processes...
 

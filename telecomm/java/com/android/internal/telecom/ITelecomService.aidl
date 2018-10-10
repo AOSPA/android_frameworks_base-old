@@ -279,4 +279,14 @@ interface ITelecomService {
      * @see TelecomServiceImpl#acceptHandover
      */
     void acceptHandover(in Uri srcAddr, int videoState, in PhoneAccountHandle destAcct);
+
+    /**
+     * @see TelecomServiceImpl#isInEmergencyCall
+     */
+    boolean isInEmergencyCall();
+
+    /**
+     * @see TelecomServiceImpl#handleCallIntent
+     */
+    void handleCallIntent(in Intent intent);
 }

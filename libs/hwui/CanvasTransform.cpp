@@ -28,6 +28,7 @@
 #include <cmath>
 
 #include <log/log.h>
+#include <SkHighContrastFilter.h>
 
 namespace android::uirenderer {
 
@@ -78,7 +79,6 @@ static void applyColorTransform(ColorTransform transform, SkPaint& paint) {
         info.fColors = _colorStorage.data();
         info.fColorOffsets = _offsetStorage.data();
         SkShader::GradientType type = paint.getShader()->asAGradient(&info);
-        ALOGW_IF(type, "Found gradient of type = %d", type);
 
         if (info.fColorCount <= 10) {
             switch (type) {
@@ -107,10 +107,43 @@ static void applyColorTransform(ColorTransform transform, SkPaint& paint) {
     }
 }
 
+static BitmapPalette paletteForColorHSV(SkColor color) {
+    float hsv[3];
+    SkColorToHSV(color, hsv);
+    return hsv[2] >= .5f ? BitmapPalette::Light : BitmapPalette::Dark;
+}
+
+static BitmapPalette filterPalette(const SkPaint* paint, BitmapPalette palette) {
+    if (palette == BitmapPalette::Unknown || !paint || !paint->getColorFilter()) {
+        return palette;
+    }
+
+    SkColor color = palette == BitmapPalette::Light ? SK_ColorWHITE : SK_ColorBLACK;
+    color = paint->getColorFilter()->filterColor(color);
+    return paletteForColorHSV(color);
+}
+
 bool transformPaint(ColorTransform transform, SkPaint* paint) {
     // TODO
     applyColorTransform(transform, *paint);
     return true;
+}
+
+bool transformPaint(ColorTransform transform, SkPaint* paint, BitmapPalette palette) {
+    palette = filterPalette(paint, palette);
+    bool shouldInvert = false;
+    if (palette == BitmapPalette::Light && transform == ColorTransform::Dark) {
+        shouldInvert = true;
+    }
+    if (palette == BitmapPalette::Dark && transform == ColorTransform::Light) {
+        shouldInvert = true;
+    }
+    if (shouldInvert) {
+        SkHighContrastConfig config;
+        config.fInvertStyle = SkHighContrastConfig::InvertStyle::kInvertLightness;
+        paint->setColorFilter(SkHighContrastFilter::Make(config)->makeComposed(paint->refColorFilter()));
+    }
+    return shouldInvert;
 }
 
 };  // namespace android::uirenderer

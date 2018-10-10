@@ -18,6 +18,8 @@
 
 #include "SkiaPipeline.h"
 
+#include "renderstate/RenderState.h"
+
 namespace android {
 
 class Bitmap;
@@ -25,10 +27,10 @@ class Bitmap;
 namespace uirenderer {
 namespace skiapipeline {
 
-class SkiaOpenGLPipeline : public SkiaPipeline {
+class SkiaOpenGLPipeline : public SkiaPipeline, public IGpuContextCallback {
 public:
     SkiaOpenGLPipeline(renderthread::RenderThread& thread);
-    virtual ~SkiaOpenGLPipeline() {}
+    virtual ~SkiaOpenGLPipeline();
 
     renderthread::MakeCurrentResult makeCurrent() override;
     renderthread::Frame getFrame() override;
@@ -45,10 +47,11 @@ public:
     void onStop() override;
     bool isSurfaceReady() override;
     bool isContextReady() override;
-    SkColorType getSurfaceColorType() const override;
-    sk_sp<SkColorSpace> getSurfaceColorSpace() override;
 
     static void invokeFunctor(const renderthread::RenderThread& thread, Functor* functor);
+
+protected:
+    void onContextDestroyed() override;
 
 private:
     renderthread::EglManager& mEglManager;

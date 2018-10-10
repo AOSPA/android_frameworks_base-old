@@ -679,11 +679,12 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         removed = true;
         stopFreezingScreen(true, true);
 
-        if (mService.mFocusedApp == this) {
-            if (DEBUG_FOCUS_LIGHT) Slog.v(TAG_WM, "Removing focused app token:" + this);
-            mService.mFocusedApp = null;
+        final DisplayContent dc = getDisplayContent();
+        if (dc.mFocusedApp == this) {
+            if (DEBUG_FOCUS_LIGHT) Slog.v(TAG_WM, "Removing focused app token:" + this
+                   + " displayId=" + dc.getDisplayId());
+            dc.setFocusedApp(null);
             mService.updateFocusedWindowLocked(UPDATE_FOCUS_NORMAL, true /*updateInputWindows*/);
-            getDisplayContent().getInputMonitor().setFocusedAppLw(null);
         }
 
         if (!delayed) {
@@ -1061,6 +1062,18 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         if (prevDisplayContent != displayContent) {
             onDisplayChanged(displayContent);
             prevDisplayContent.setLayoutNeeded();
+        }
+    }
+
+    @Override
+    void onDisplayChanged(DisplayContent dc) {
+        DisplayContent prevDc = mDisplayContent;
+        super.onDisplayChanged(dc);
+        if (prevDc != null && prevDc.mFocusedApp == this) {
+            prevDc.setFocusedApp(null);
+            if (dc.getTopStack().getTopChild().getTopChild() == this) {
+                dc.setFocusedApp(this);
+            }
         }
     }
 
@@ -1632,17 +1645,6 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
         return null;
     }
 
-    int getLowestAnimLayer() {
-        for (int i = 0; i < mChildren.size(); i++) {
-            final WindowState w = mChildren.get(i);
-            if (w.mRemoved) {
-                continue;
-            }
-            return w.mWinAnimator.mAnimLayer;
-        }
-        return Integer.MAX_VALUE;
-    }
-
     WindowState getHighestAnimLayerWindow(WindowState currentTarget) {
         WindowState candidate = null;
         for (int i = mChildren.indexOf(currentTarget); i >= 0; i--) {
@@ -1650,8 +1652,7 @@ class AppWindowToken extends WindowToken implements WindowManagerService.AppFree
             if (w.mRemoved) {
                 continue;
             }
-            if (candidate == null || w.mWinAnimator.mAnimLayer >
-                    candidate.mWinAnimator.mAnimLayer) {
+            if (candidate == null) {
                 candidate = w;
             }
         }

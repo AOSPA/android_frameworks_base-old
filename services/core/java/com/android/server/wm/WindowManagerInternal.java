@@ -19,6 +19,7 @@ package com.android.server.wm;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ClipData;
+import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.hardware.display.DisplayManagerInternal;
@@ -30,7 +31,6 @@ import android.view.InputChannel;
 import android.view.MagnificationSpec;
 import android.view.WindowInfo;
 
-import com.android.internal.view.IInputMethodClient;
 import com.android.server.input.InputManagerService;
 import com.android.server.policy.WindowManagerPolicy;
 
@@ -340,20 +340,6 @@ public abstract class WindowManagerInternal {
     public abstract int getInputMethodWindowVisibleHeight(int displayId);
 
     /**
-      * Saves last input method window for transition.
-      *
-      * Note that it is assumed that this method is called only by InputMethodManagerService.
-      */
-    public abstract void saveLastInputMethodWindowForTransition();
-
-    /**
-     * Clears last input method window for transition.
-     *
-     * Note that it is assumed that this method is called only by InputMethodManagerService.
-     */
-    public abstract void clearLastInputMethodWindowForTransition();
-
-    /**
      * Notifies WindowManagerService that the current IME window status is being changed.
      *
      * <p>Only {@link com.android.server.inputmethod.InputMethodManagerService} is the expected and
@@ -444,12 +430,35 @@ public abstract class WindowManagerInternal {
     public abstract boolean isUidFocused(int uid);
 
     /**
-     * Returns {@code true} if a process that is identified by {@code client} has IME focus.
+     * Checks whether the specified IME client has IME focus or not.
+     *
+     * @param uid UID of the process to be queried
+     * @param pid PID of the process to be queried
+     * @param displayId Display ID reported from the client. Note that this method also verifies
+     *                  whether the specified process is allowed to access to this display or not
+     * @return {@code true} if the IME client specified with {@code uid}, {@code pid}, and
+     *         {@code displayId} has IME focus
      */
-    public abstract boolean inputMethodClientHasFocus(IInputMethodClient client);
+    public abstract boolean isInputMethodClientFocus(int uid, int pid, int displayId);
+
+    /**
+     * Checks whether the given {@code uid} is allowed to use the given {@code displayId} or not.
+     *
+     * @param displayId Display ID to be checked
+     * @param uid UID to be checked.
+     * @return {@code true} if the given {@code uid} is allowed to use the given {@code displayId}
+     */
+    public abstract boolean isUidAllowedOnDisplay(int displayId, int uid);
 
     /**
      * Return the display Id for given window.
      */
     public abstract int getDisplayIdForWindow(IBinder windowToken);
+
+    // TODO: use WindowProcessController once go/wm-unified is done.
+    /**
+     * Notifies the window manager that configuration of the process associated with the input pid
+     * changed.
+     */
+    public abstract void onProcessConfigurationChanged(int pid, Configuration newConfig);
 }

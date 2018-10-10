@@ -85,6 +85,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.inputmethod.IInputContentUriToken;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperations;
+import com.android.internal.inputmethod.InputMethodPrivilegedOperationsRegistry;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -409,14 +410,6 @@ public class InputMethodService extends AbstractInputMethodService {
     @GuardedBy("mLock")
     private boolean mNotifyUserActionSent;
 
-    /**
-     * {@code true} when the previous IME had non-empty inset at the bottom of the screen and we
-     * have not shown our own window yet.  In this situation, the previous inset continues to be
-     * shown as an empty region until it is explicitly updated. Basically we can trigger the update
-     * by calling 1) {@code mWindow.show()} or 2) {@link #clearInsetOfPreviousIme()}.
-     */
-    boolean mShouldClearInsetOfPreviousIme;
-
     @UnsupportedAppUsage
     final Insets mTmpInsets = new Insets();
     final int[] mTmpLocation = new int[2];
@@ -465,7 +458,7 @@ public class InputMethodService extends AbstractInputMethodService {
         public final void initializeInternal(IBinder token, int displayId,
                 IInputMethodPrivilegedOperations privilegedOperations) {
             mPrivOps.set(privilegedOperations);
-            mImm.registerInputMethodPrivOps(token, mPrivOps);
+            InputMethodPrivilegedOperationsRegistry.put(token, mPrivOps);
             updateInputMethodDisplay(displayId);
             attachToken(token);
         }
@@ -580,7 +573,6 @@ public class InputMethodService extends AbstractInputMethodService {
             mShowInputFlags = 0;
             mShowInputRequested = false;
             doHideWindow();
-            clearInsetOfPreviousIme();
             if (resultReceiver != null) {
                 resultReceiver.send(wasVis != isInputViewShown()
                         ? InputMethodManager.RESULT_HIDDEN
@@ -600,7 +592,6 @@ public class InputMethodService extends AbstractInputMethodService {
             if (dispatchOnShowInputRequested(flags, false)) {
                 showWindow(true);
             }
-            clearInsetOfPreviousIme();
             // If user uses hard keyboard, IME button should always be shown.
             setImeWindowStatus(mapToImeWindowStatus(isInputViewShown()), mBackDisposition);
 
@@ -945,9 +936,6 @@ public class InputMethodService extends AbstractInputMethodService {
         super.onCreate();
         mImm = (InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
         mSettingsObserver = SettingsObserver.createAndRegister(this);
-        // If the previous IME has occupied non-empty inset in the screen, we need to decide whether
-        // we continue to use the same size of the inset or update it
-        mShouldClearInsetOfPreviousIme = (mImm.getInputMethodWindowVisibleHeight() > 0);
         // TODO(b/111364446) Need to address context lifecycle issue if need to re-create
         // for update resources & configuration correctly when show soft input
         // in non-default display.
@@ -1031,7 +1019,7 @@ public class InputMethodService extends AbstractInputMethodService {
         if (mToken != null) {
             // This is completely optional, but allows us to show more explicit error messages
             // when IME developers are doing something unsupported.
-            mImm.unregisterInputMethodPrivOps(mToken);
+            InputMethodPrivilegedOperationsRegistry.remove(mToken);
         }
     }
 
@@ -1881,9 +1869,6 @@ public class InputMethodService extends AbstractInputMethodService {
             if (DEBUG) Log.v(TAG, "showWindow: showing!");
             onWindowShown();
             mWindow.show();
-            // Put here rather than in onWindowShown() in case people forget to call
-            // super.onWindowShown().
-            mShouldClearInsetOfPreviousIme = false;
         }
     }
 
@@ -1930,32 +1915,6 @@ public class InputMethodService extends AbstractInputMethodService {
      */
     public void onWindowHidden() {
         // Intentionally empty
-    }
-
-    /**
-     * Reset the inset occupied the previous IME when and only when
-     * {@link #mShouldClearInsetOfPreviousIme} is {@code true}.
-     */
-    private void clearInsetOfPreviousIme() {
-        if (DEBUG) Log.v(TAG, "clearInsetOfPreviousIme() "
-                + " mShouldClearInsetOfPreviousIme=" + mShouldClearInsetOfPreviousIme);
-        if (!mShouldClearInsetOfPreviousIme) return;
-
-        clearLastInputMethodWindowForTransition();
-        mShouldClearInsetOfPreviousIme = false;
-    }
-
-    /**
-     * Tells the system that the IME decided to not show a window and the system no longer needs to
-     * use the previous IME's inset.
-     *
-     * <p>Caveat: {@link android.inputmethodservice.InputMethodService#clearInsetOfPreviousIme()}
-     * is the only expected caller of this method.  Do not depend on this anywhere else.</p>
-     *
-     * <p>TODO: We probably need to reconsider how IME should be handled.</p>
-     */
-    private void clearLastInputMethodWindowForTransition() {
-        mPrivOps.clearLastInputMethodWindowForTransition();
     }
 
     /**
@@ -2136,7 +2095,7 @@ public class InputMethodService extends AbstractInputMethodService {
      * Called when the application has reported a new location of its text
      * cursor.  This is only called if explicitly requested by the input method.
      * The default implementation does nothing.
-     * @deprecated Use {#link onUpdateCursorAnchorInfo(CursorAnchorInfo)} instead.
+     * @deprecated Use {@link #onUpdateCursorAnchorInfo(CursorAnchorInfo)} instead.
      */
     @Deprecated
     public void onUpdateCursor(Rect newCursor) {
@@ -2203,7 +2162,7 @@ public class InputMethodService extends AbstractInputMethodService {
     }
 
     /**
-     * @return {#link ExtractEditText} if it is considered to be visible and active. Otherwise
+     * @return {@link ExtractEditText} if it is considered to be visible and active. Otherwise
      * {@code null} is returned.
      */
     private ExtractEditText getExtractEditTextIfVisible() {
@@ -2844,18 +2803,22 @@ public class InputMethodService extends AbstractInputMethodService {
     }
 
     /**
-     * @return The recommended height of the input method window.
-     * An IME author can get the last input method's height as the recommended height
-     * by calling this in
-     * {@link android.inputmethodservice.InputMethodService#onStartInputView(EditorInfo, boolean)}.
-     * If you don't need to use a predefined fixed height, you can avoid the window-resizing of IME
-     * switching by using this value as a visible inset height. It's efficient for the smooth
-     * transition between different IMEs. However, note that this may return 0 (or possibly
-     * unexpectedly low height). You should thus avoid relying on the return value of this method
-     * all the time. Please make sure to use a reasonable height for the IME.
+     * Aimed to return the previous input method's {@link Insets#contentTopInsets}, but its actual
+     * semantics has never been well defined.
+     *
+     * <p>Note that the previous document clearly mentioned that this method could return {@code 0}
+     * at any time for whatever reason.  Now this method is just always returning {@code 0}.</p>
+     *
+     * @return on Android {@link android.os.Build.VERSION_CODES#Q} and later devices this method
+     *         always returns {@code 0}
+     * @deprecated the actual behavior of this method has never been well defined.  You cannot use
+     *             this method in a reliable and predictable way
      */
+    @Deprecated
     public int getInputMethodWindowRecommendedHeight() {
-        return mImm.getInputMethodWindowVisibleHeight();
+        Log.w(TAG, "getInputMethodWindowRecommendedHeight() is deprecated and now always returns 0."
+                + " Do not use this method.");
+        return 0;
     }
 
     /**
@@ -2979,7 +2942,6 @@ public class InputMethodService extends AbstractInputMethodService {
                 + " visibleTopInsets=" + mTmpInsets.visibleTopInsets
                 + " touchableInsets=" + mTmpInsets.touchableInsets
                 + " touchableRegion=" + mTmpInsets.touchableRegion);
-        p.println(" mShouldClearInsetOfPreviousIme=" + mShouldClearInsetOfPreviousIme);
         p.println(" mSettingsObserver=" + mSettingsObserver);
     }
 }

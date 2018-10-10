@@ -22,6 +22,7 @@ import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NA
 
 import android.annotation.Nullable;
 import android.os.FileUtils;
+import android.os.SystemProperties;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -36,14 +37,26 @@ import java.util.regex.Pattern;
  * Static utility methods related to {@link MemoryStat}.
  */
 final class MemoryStatUtil {
+    static final int BYTES_IN_KILOBYTE = 1024;
+    static final int PAGE_SIZE = 4096;
+
     private static final String TAG = TAG_WITH_CLASS_NAME ? "MemoryStatUtil" : TAG_AM;
+
+    /** True if device has per-app memcg */
+    private static final boolean DEVICE_HAS_PER_APP_MEMCG =
+            SystemProperties.getBoolean("ro.config.per_app_memcg", false);
 
     /** Path to check if device has memcg */
     private static final String MEMCG_TEST_PATH = "/dev/memcg/apps/memory.stat";
     /** Path to memory stat file for logging app start memory state */
     private static final String MEMORY_STAT_FILE_FMT = "/dev/memcg/apps/uid_%d/pid_%d/memory.stat";
+    /** Path to memory max usage file for logging app memory state */
+    private static final String MEMORY_MAX_USAGE_FILE_FMT =
+            "/dev/memcg/apps/uid_%d/pid_%d/memory.max_usage_in_bytes";
     /** Path to procfs stat file for logging app start memory state */
     private static final String PROC_STAT_FILE_FMT = "/proc/%d/stat";
+    /** Path to procfs status file for logging app memory state */
+    private static final String PROC_STATUS_FILE_FMT = "/proc/%d/status";
 
     private static final Pattern PGFAULT = Pattern.compile("total_pgfault (\\d+)");
     private static final Pattern PGMAJFAULT = Pattern.compile("total_pgmajfault (\\d+)");
@@ -51,19 +64,19 @@ final class MemoryStatUtil {
     private static final Pattern CACHE_IN_BYTES = Pattern.compile("total_cache (\\d+)");
     private static final Pattern SWAP_IN_BYTES = Pattern.compile("total_swap (\\d+)");
 
+    private static final Pattern RSS_HIGH_WATERMARK_IN_BYTES =
+            Pattern.compile("VmHWM:\\s*(\\d+)\\s*kB");
+
     private static final int PGFAULT_INDEX = 9;
     private static final int PGMAJFAULT_INDEX = 11;
-    private static final int RSS_IN_BYTES_INDEX = 23;
-
-    /** True if device has memcg */
-    private static volatile Boolean sDeviceHasMemCg;
+    private static final int RSS_IN_PAGES_INDEX = 23;
 
     private MemoryStatUtil() {}
 
     /**
      * Reads memory stat for a process.
      *
-     * Reads from memcg if available on device, else fallback to procfs.
+     * Reads from per-app memcg if available on device, else fallback to procfs.
      * Returns null if no stats can be read.
      */
     @Nullable
@@ -78,8 +91,15 @@ final class MemoryStatUtil {
      */
     @Nullable
     static MemoryStat readMemoryStatFromMemcg(int uid, int pid) {
-        final String path = String.format(Locale.US, MEMORY_STAT_FILE_FMT, uid, pid);
-        return parseMemoryStatFromMemcg(readFileContents(path));
+        final String statPath = String.format(Locale.US, MEMORY_STAT_FILE_FMT, uid, pid);
+        MemoryStat stat = parseMemoryStatFromMemcg(readFileContents(statPath));
+        if (stat == null) {
+            return null;
+        }
+        String maxUsagePath = String.format(Locale.US, MEMORY_MAX_USAGE_FILE_FMT, uid, pid);
+        stat.rssHighWatermarkInBytes = parseMemoryMaxUsageFromMemCg(
+                readFileContents(maxUsagePath));
+        return stat;
     }
 
     /**
@@ -89,8 +109,14 @@ final class MemoryStatUtil {
      */
     @Nullable
     static MemoryStat readMemoryStatFromProcfs(int pid) {
-        final String path = String.format(Locale.US, PROC_STAT_FILE_FMT, pid);
-        return parseMemoryStatFromProcfs(readFileContents(path));
+        final String statPath = String.format(Locale.US, PROC_STAT_FILE_FMT, pid);
+        MemoryStat stat = parseMemoryStatFromProcfs(readFileContents(statPath));
+        if (stat == null) {
+            return null;
+        }
+        final String statusPath = String.format(Locale.US, PROC_STATUS_FILE_FMT, pid);
+        stat.rssHighWatermarkInBytes = parseVmHWMFromProcfs(readFileContents(statusPath));
+        return stat;
     }
 
     private static String readFileContents(String path) {
@@ -111,7 +137,7 @@ final class MemoryStatUtil {
     /**
      * Parses relevant statistics out from the contents of a memory.stat file in memcg.
      */
-    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    @VisibleForTesting
     @Nullable
     static MemoryStat parseMemoryStatFromMemcg(String memoryStatContents) {
         if (memoryStatContents == null || memoryStatContents.isEmpty()) {
@@ -121,22 +147,35 @@ final class MemoryStatUtil {
         final MemoryStat memoryStat = new MemoryStat();
         Matcher m;
         m = PGFAULT.matcher(memoryStatContents);
-        memoryStat.pgfault = m.find() ? Long.valueOf(m.group(1)) : 0;
+        memoryStat.pgfault = m.find() ? Long.parseLong(m.group(1)) : 0;
         m = PGMAJFAULT.matcher(memoryStatContents);
-        memoryStat.pgmajfault = m.find() ? Long.valueOf(m.group(1)) : 0;
+        memoryStat.pgmajfault = m.find() ? Long.parseLong(m.group(1)) : 0;
         m = RSS_IN_BYTES.matcher(memoryStatContents);
-        memoryStat.rssInBytes = m.find() ? Long.valueOf(m.group(1)) : 0;
+        memoryStat.rssInBytes = m.find() ? Long.parseLong(m.group(1)) : 0;
         m = CACHE_IN_BYTES.matcher(memoryStatContents);
-        memoryStat.cacheInBytes = m.find() ? Long.valueOf(m.group(1)) : 0;
+        memoryStat.cacheInBytes = m.find() ? Long.parseLong(m.group(1)) : 0;
         m = SWAP_IN_BYTES.matcher(memoryStatContents);
-        memoryStat.swapInBytes = m.find() ? Long.valueOf(m.group(1)) : 0;
+        memoryStat.swapInBytes = m.find() ? Long.parseLong(m.group(1)) : 0;
         return memoryStat;
     }
 
+    @VisibleForTesting
+    static long parseMemoryMaxUsageFromMemCg(String memoryMaxUsageContents) {
+        if (memoryMaxUsageContents == null || memoryMaxUsageContents.isEmpty()) {
+            return 0;
+        }
+        try {
+            return Long.parseLong(memoryMaxUsageContents);
+        } catch (NumberFormatException e) {
+            Slog.e(TAG, "Failed to parse value", e);
+            return 0;
+        }
+    }
+
     /**
-     * Parses relevant statistics out from the contents of a /proc/pid/stat file in procfs.
+     * Parses relevant statistics out from the contents of the /proc/pid/stat file in procfs.
      */
-    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    @VisibleForTesting
     @Nullable
     static MemoryStat parseMemoryStatFromProcfs(String procStatContents) {
         if (procStatContents == null || procStatContents.isEmpty()) {
@@ -148,23 +187,37 @@ final class MemoryStatUtil {
             return null;
         }
 
-        final MemoryStat memoryStat = new MemoryStat();
-        memoryStat.pgfault = Long.valueOf(splits[PGFAULT_INDEX]);
-        memoryStat.pgmajfault = Long.valueOf(splits[PGMAJFAULT_INDEX]);
-        memoryStat.rssInBytes = Long.valueOf(splits[RSS_IN_BYTES_INDEX]);
-        return memoryStat;
+        try {
+            final MemoryStat memoryStat = new MemoryStat();
+            memoryStat.pgfault = Long.parseLong(splits[PGFAULT_INDEX]);
+            memoryStat.pgmajfault = Long.parseLong(splits[PGMAJFAULT_INDEX]);
+            memoryStat.rssInBytes = Long.parseLong(splits[RSS_IN_PAGES_INDEX]) * PAGE_SIZE;
+            return memoryStat;
+        } catch (NumberFormatException e) {
+            Slog.e(TAG, "Failed to parse value", e);
+            return null;
+        }
     }
 
     /**
-     * Checks if memcg is available on device.
-     *
-     * Touches the filesystem to do the check.
+     * Parses RSS high watermark out from the contents of the /proc/pid/status file in procfs. The
+     * returned value is in bytes.
+     */
+    @VisibleForTesting
+    static long parseVmHWMFromProcfs(String procStatusContents) {
+        if (procStatusContents == null || procStatusContents.isEmpty()) {
+            return 0;
+        }
+        Matcher m = RSS_HIGH_WATERMARK_IN_BYTES.matcher(procStatusContents);
+        // Convert value read from /proc/pid/status from kilobytes to bytes.
+        return m.find() ? Long.parseLong(m.group(1)) * BYTES_IN_KILOBYTE : 0;
+    }
+
+    /**
+     * Returns whether per-app memcg is available on device.
      */
     static boolean hasMemcg() {
-        if (sDeviceHasMemCg == null) {
-            sDeviceHasMemCg = (new File(MEMCG_TEST_PATH)).exists();
-        }
-        return sDeviceHasMemCg;
+        return DEVICE_HAS_PER_APP_MEMCG;
     }
 
     static final class MemoryStat {
@@ -178,5 +231,7 @@ final class MemoryStatUtil {
         long cacheInBytes;
         /** Number of bytes of swap usage */
         long swapInBytes;
+        /** Number of bytes of peak anonymous and swap cache memory */
+        long rssHighWatermarkInBytes;
     }
 }

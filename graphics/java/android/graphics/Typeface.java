@@ -34,7 +34,6 @@ import android.os.Build;
 import android.provider.FontRequest;
 import android.provider.FontsContract;
 import android.text.FontConfig;
-import android.util.ArrayMap;
 import android.util.Base64;
 import android.util.LongSparseArray;
 import android.util.LruCache;
@@ -1104,19 +1103,15 @@ public class Typeface {
         }
 
         for (FontConfig.Alias alias : aliases) {
+            if (systemFontMap.containsKey(alias.getName())) {
+                continue; // If alias and named family are conflict, use named family.
+            }
             final Typeface base = systemFontMap.get(alias.getToName());
             final int weight = alias.getWeight();
             final Typeface newFace = weight == 400 ? base :
                     new Typeface(nativeCreateWeightAlias(base.native_instance, weight));
             systemFontMap.put(alias.getName(), newFace);
         }
-    }
-
-    // Following methods are left for layoutlib
-    // TODO: Remove once layoutlib stop calling buildSystemFallback
-    /** @hide */
-    public static void buildSystemFallback(String xmlPath, String fontDir,
-            ArrayMap<String, Typeface> fontMap, ArrayMap<String, FontFamily[]> fallbackMap) {
     }
 
     static {
