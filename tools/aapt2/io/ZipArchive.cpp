@@ -33,6 +33,11 @@ ZipFile::ZipFile(ZipArchiveHandle handle, const ZipEntry& entry,
     : zip_handle_(handle), zip_entry_(entry), source_(source) {}
 
 std::unique_ptr<IData> ZipFile::OpenAsData() {
+  // The file will fail to be mmaped if it is empty
+  if (zip_entry_.uncompressed_length == 0) {
+    return util::make_unique<EmptyData>();
+  }
+
   if (zip_entry_.method == kCompressStored) {
     int fd = GetFileDescriptor(zip_handle_);
 
@@ -152,6 +157,13 @@ IFile* ZipFileCollection::FindFile(const StringPiece& path) {
 
 std::unique_ptr<IFileCollectionIterator> ZipFileCollection::Iterator() {
   return util::make_unique<ZipFileCollectionIterator>(this);
+}
+
+char ZipFileCollection::GetDirSeparator() {
+  // According to the zip file specification, section  4.4.17.1:
+  // "All slashes MUST be forward slashes '/' as opposed to backwards slashes '\' for compatibility
+  // with Amiga and UNIX file systems etc."
+  return '/';
 }
 
 ZipFileCollection::~ZipFileCollection() {

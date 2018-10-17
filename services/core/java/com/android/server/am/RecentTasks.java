@@ -30,8 +30,9 @@ import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
-
 import static android.os.Process.SYSTEM_UID;
+import static android.view.Display.DEFAULT_DISPLAY;
+
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_RECENTS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_RECENTS_TRIM_TASKS;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_TASKS;
@@ -55,7 +56,6 @@ import android.content.pm.ParceledListSlice;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.IBinder;
@@ -431,7 +431,7 @@ class RecentTasks {
     void onSystemReadyLocked() {
         loadRecentsComponent(mService.mContext.getResources());
         mTasks.clear();
-        mTaskPersister.startPersisting();
+        mTaskPersister.onSystemReady();
     }
 
     Bitmap getTaskDescriptionIcon(String path) {
@@ -755,7 +755,7 @@ class RecentTasks {
             boolean getTasksAllowed, boolean getDetailedTasks, int userId, int callingUid) {
         final boolean withExcluded = (flags & RECENT_WITH_EXCLUDED) != 0;
 
-        if (!mService.mAm.isUserRunning(userId, FLAG_AND_UNLOCKED)) {
+        if (!mService.mAmInternal.isUserRunning(userId, FLAG_AND_UNLOCKED)) {
             Slog.i(TAG, "user " + userId + " is still locked. Cannot load recents");
             return new ArrayList<>();
         }
@@ -1244,7 +1244,6 @@ class RecentTasks {
      */
     protected boolean isTrimmable(TaskRecord task) {
         final ActivityStack stack = task.getStack();
-        final ActivityStack homeStack = mSupervisor.mHomeStack;
 
         // No stack for task, just trim it
         if (stack == null) {
@@ -1252,13 +1251,14 @@ class RecentTasks {
         }
 
         // Ignore tasks from different displays
-        if (stack.getDisplay() != homeStack.getDisplay()) {
+        // TODO (b/115289124): No Recents on non-default displays.
+        if (stack.mDisplayId != DEFAULT_DISPLAY) {
             return false;
         }
 
         // Trim tasks that are in stacks that are behind the home stack
         final ActivityDisplay display = stack.getDisplay();
-        return display.getIndexOf(stack) < display.getIndexOf(homeStack);
+        return display.getIndexOf(stack) < display.getIndexOf(display.getHomeStack());
     }
 
     /**

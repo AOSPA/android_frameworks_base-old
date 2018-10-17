@@ -17,20 +17,21 @@
 package com.android.server.am;
 
 import static android.app.ActivityManager.LOCK_TASK_MODE_NONE;
-import static android.app.ActivityTaskManager.INVALID_STACK_ID;
 import static android.app.ActivityManager.TaskDescription.ATTR_TASKDESCRIPTION_PREFIX;
 import static android.app.ActivityOptions.ANIM_CLIP_REVEAL;
 import static android.app.ActivityOptions.ANIM_CUSTOM;
+import static android.app.ActivityOptions.ANIM_OPEN_CROSS_PROFILE_APPS;
 import static android.app.ActivityOptions.ANIM_REMOTE_ANIMATION;
 import static android.app.ActivityOptions.ANIM_SCALE_UP;
 import static android.app.ActivityOptions.ANIM_SCENE_TRANSITION;
-import static android.app.ActivityOptions.ANIM_OPEN_CROSS_PROFILE_APPS;
 import static android.app.ActivityOptions.ANIM_THUMBNAIL_ASPECT_SCALE_DOWN;
 import static android.app.ActivityOptions.ANIM_THUMBNAIL_ASPECT_SCALE_UP;
 import static android.app.ActivityOptions.ANIM_THUMBNAIL_SCALE_DOWN;
 import static android.app.ActivityOptions.ANIM_THUMBNAIL_SCALE_UP;
+import static android.app.ActivityTaskManager.INVALID_STACK_ID;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.OP_PICTURE_IN_PICTURE;
+import static android.app.WaitResult.INVALID_DELAY;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
@@ -80,7 +81,8 @@ import static android.content.res.Configuration.UI_MODE_TYPE_VR_HEADSET;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Build.VERSION_CODES.O;
 import static android.os.Process.SYSTEM_UID;
-import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
+import static android.view.WindowManagerPolicyConstants.NAV_BAR_LEFT;
+
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SAVED_STATE;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STATES;
@@ -93,6 +95,13 @@ import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_SWITCH;
 import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_VISIBILITY;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.am.ActivityRecordProto.CONFIGURATION_CONTAINER;
+import static com.android.server.am.ActivityRecordProto.FRONT_OF_TASK;
+import static com.android.server.am.ActivityRecordProto.IDENTIFIER;
+import static com.android.server.am.ActivityRecordProto.PROC_ID;
+import static com.android.server.am.ActivityRecordProto.STATE;
+import static com.android.server.am.ActivityRecordProto.TRANSLUCENT;
+import static com.android.server.am.ActivityRecordProto.VISIBLE;
 import static com.android.server.am.ActivityStack.ActivityState.INITIALIZING;
 import static com.android.server.am.ActivityStack.ActivityState.PAUSED;
 import static com.android.server.am.ActivityStack.ActivityState.PAUSING;
@@ -103,21 +112,11 @@ import static com.android.server.am.ActivityStack.LAUNCH_TICK;
 import static com.android.server.am.ActivityStack.LAUNCH_TICK_MSG;
 import static com.android.server.am.ActivityStack.PAUSE_TIMEOUT_MSG;
 import static com.android.server.am.ActivityStack.STOP_TIMEOUT_MSG;
-import static com.android.server.am.EventLogTags.AM_ACTIVITY_FULLY_DRAWN_TIME;
-import static com.android.server.am.EventLogTags.AM_ACTIVITY_LAUNCH_TIME;
 import static com.android.server.am.EventLogTags.AM_RELAUNCH_ACTIVITY;
 import static com.android.server.am.EventLogTags.AM_RELAUNCH_RESUME_ACTIVITY;
 import static com.android.server.am.TaskPersister.DEBUG;
 import static com.android.server.am.TaskPersister.IMAGE_EXTENSION;
 import static com.android.server.am.TaskRecord.INVALID_TASK_ID;
-import static com.android.server.am.ActivityRecordProto.CONFIGURATION_CONTAINER;
-import static com.android.server.am.ActivityRecordProto.FRONT_OF_TASK;
-import static com.android.server.am.ActivityRecordProto.IDENTIFIER;
-import static com.android.server.am.ActivityRecordProto.PROC_ID;
-import static com.android.server.am.ActivityRecordProto.STATE;
-import static com.android.server.am.ActivityRecordProto.TRANSLUCENT;
-import static com.android.server.am.ActivityRecordProto.VISIBLE;
-import static com.android.server.policy.WindowManagerPolicy.NAV_BAR_LEFT;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
 import static com.android.server.wm.IdentifierProto.TITLE;
 import static com.android.server.wm.IdentifierProto.USER_ID;
@@ -132,6 +131,7 @@ import android.app.ActivityOptions;
 import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
 import android.app.ResultInfo;
+import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.ActivityRelaunchItem;
 import android.app.servertransaction.ClientTransaction;
@@ -143,7 +143,6 @@ import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.PipModeChangeItem;
 import android.app.servertransaction.ResumeActivityItem;
 import android.app.servertransaction.WindowVisibilityItem;
-import android.app.servertransaction.ActivityConfigurationChangeItem;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -163,7 +162,6 @@ import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.Trace;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
 import android.service.voice.IVoiceInteractionSession;
@@ -186,6 +184,7 @@ import com.android.internal.content.ReferrerIntent;
 import com.android.internal.util.XmlUtils;
 import com.android.server.AttributeCache;
 import com.android.server.AttributeCache.Entry;
+import com.android.server.am.ActivityMetricsLogger.WindowingModeTransitionInfoSnapshot;
 import com.android.server.am.ActivityStack.ActivityState;
 import com.android.server.uri.UriPermissionOwner;
 import com.android.server.wm.AppWindowContainerController;
@@ -268,9 +267,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     int perfActivityBoostHandler = -1; //perflock handler when activity is created.
     private TaskRecord task;        // the task this is in.
     private long createTime = System.currentTimeMillis();
-    long displayStartTime;  // when we started launching this activity
-    long fullyDrawnStartTime; // when we started launching this activity
-    private long startTime;         // last time this activity was started
     long lastVisibleTime;   // last time this activity became visible
     long cpuTimeAtResume;   // the cpu time of host process at the time of resuming activity
     long pauseTime;         // last time we started pausing the activity
@@ -290,7 +286,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     ActivityOptions pendingOptions; // most recently given options
     ActivityOptions returningOptions; // options that are coming back via convertToTranslucent
     AppTimeTracker appTimeTracker; // set if we are tracking the time in this app/task/activity
-    HashSet<ConnectionRecord> connections; // All ConnectionRecord we hold
+    ActivityServiceConnectionsHolder mServiceConnectionsHolder; // Service connections.
     UriPermissionOwner uriPermissions; // current special URI access perms.
     WindowProcessController app;      // if non-null, hosting application
     private ActivityState mState;    // current state we are in
@@ -541,15 +537,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             pw.print("requestedVrComponent=");
             pw.println(requestedVrComponent);
         }
-        if (displayStartTime != 0 || startTime != 0) {
-            pw.print(prefix); pw.print("displayStartTime=");
-                    if (displayStartTime == 0) pw.print("0");
-                    else TimeUtils.formatDuration(displayStartTime, now, pw);
-                    pw.print(" startTime=");
-                    if (startTime == 0) pw.print("0");
-                    else TimeUtils.formatDuration(startTime, now, pw);
-                    pw.println();
-        }
         final boolean waitingVisible =
                 mStackSupervisor.mActivitiesWaitingForVisibleActivity.contains(this);
         if (lastVisibleTime != 0 || waitingVisible || nowVisible) {
@@ -568,8 +555,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     pw.print(" configChangeFlags=");
                     pw.println(Integer.toHexString(configChangeFlags));
         }
-        if (connections != null) {
-            pw.print(prefix); pw.print("connections="); pw.println(connections);
+        if (mServiceConnectionsHolder != null) {
+            pw.print(prefix); pw.print("connections="); pw.println(mServiceConnectionsHolder);
         }
         if (info != null) {
             pw.println(prefix + "resizeMode=" + ActivityInfo.resizeModeToString(info.resizeMode));
@@ -1288,20 +1275,14 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
     /**
      * Check whether this activity can be launched on the specified display.
+     *
      * @param displayId Target display id.
-     * @return {@code true} if either it is the default display or this activity is resizeable and
-     *         can be put a secondary screen.
+     * @return {@code true} if either it is the default display or this activity can be put on a
+     *         secondary screen.
      */
     boolean canBeLaunchedOnDisplay(int displayId) {
-        final TaskRecord task = getTask();
-
-        // The resizeability of an Activity's parent task takes precendence over the ActivityInfo.
-        // This allows for a non resizable activity to be launched into a resizeable task.
-        final boolean resizeable =
-                task != null ? task.isResizeable() : supportsResizeableMultiWindow();
-
-        return service.mStackSupervisor.canPlaceEntityOnDisplay(displayId,
-                resizeable, launchedFromPid, launchedFromUid, info);
+        return service.mStackSupervisor.canPlaceEntityOnDisplay(displayId, launchedFromPid,
+                launchedFromUid, info);
     }
 
     /**
@@ -2020,89 +2001,13 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     public void reportFullyDrawnLocked(boolean restoredFromBundle) {
-        final long curTime = SystemClock.uptimeMillis();
-        if (displayStartTime != 0) {
-            reportLaunchTimeLocked(curTime);
-        }
-        final LaunchTimeTracker.Entry entry = mStackSupervisor.getLaunchTimeTracker().getEntry(
-                getWindowingMode());
-        if (fullyDrawnStartTime != 0 && entry != null) {
-            final long thisTime = curTime - fullyDrawnStartTime;
-            final long totalTime = entry.mFullyDrawnStartTime != 0
-                    ? (curTime - entry.mFullyDrawnStartTime) : thisTime;
-            if (SHOW_ACTIVITY_START_TIME) {
-                Trace.asyncTraceEnd(TRACE_TAG_ACTIVITY_MANAGER, "drawing", 0);
-                EventLog.writeEvent(AM_ACTIVITY_FULLY_DRAWN_TIME,
-                        userId, System.identityHashCode(this), shortComponentName,
-                        thisTime, totalTime);
-                StringBuilder sb = service.mStringBuilder;
-                sb.setLength(0);
-                sb.append("Fully drawn ");
-                sb.append(shortComponentName);
-                sb.append(": ");
-                TimeUtils.formatDuration(thisTime, sb);
-                if (thisTime != totalTime) {
-                    sb.append(" (total ");
-                    TimeUtils.formatDuration(totalTime, sb);
-                    sb.append(")");
-                }
-                Log.i(TAG, sb.toString());
-            }
-            if (totalTime > 0) {
-                //service.mUsageStatsService.noteFullyDrawnTime(realActivity, (int) totalTime);
-            }
-            entry.mFullyDrawnStartTime = 0;
-        }
-        mStackSupervisor.getActivityMetricsLogger().logAppTransitionReportedDrawn(this,
-                restoredFromBundle);
-        fullyDrawnStartTime = 0;
-    }
-
-    private void reportLaunchTimeLocked(final long curTime) {
-        final LaunchTimeTracker.Entry entry = mStackSupervisor.getLaunchTimeTracker().getEntry(
-                getWindowingMode());
-        if (entry == null) {
-            return;
-        }
-        final long thisTime = curTime - displayStartTime;
-        final long totalTime = entry.mLaunchStartTime != 0
-                ? (curTime - entry.mLaunchStartTime) : thisTime;
-        if (SHOW_ACTIVITY_START_TIME) {
-            Trace.asyncTraceEnd(TRACE_TAG_ACTIVITY_MANAGER, "launching: " + packageName, 0);
-            EventLog.writeEvent(AM_ACTIVITY_LAUNCH_TIME,
-                    userId, System.identityHashCode(this), shortComponentName,
-                    thisTime, totalTime);
-            StringBuilder sb = service.mStringBuilder;
-            sb.setLength(0);
-            sb.append("Displayed ");
-            sb.append(shortComponentName);
-            sb.append(": ");
-            TimeUtils.formatDuration(thisTime, sb);
-            if (thisTime != totalTime) {
-                sb.append(" (total ");
-                TimeUtils.formatDuration(totalTime, sb);
-                sb.append(")");
-            }
-            Log.i(TAG, sb.toString());
-        }
-        mStackSupervisor.reportActivityLaunchedLocked(false, this, thisTime, totalTime);
-        if (mPerfFirstDraw == null) {
-            mPerfFirstDraw = new BoostFramework();
-        }
-        if (mPerfFirstDraw != null) {
-            mPerfFirstDraw.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName, (int)thisTime, BoostFramework.Draw.EVENT_TYPE_V1);
-        }
-        if (totalTime > 0) {
-            //service.mUsageStatsService.noteLaunchTime(realActivity, (int)totalTime);
-        }
-        displayStartTime = 0;
-        entry.mLaunchStartTime = 0;
-        if (mPerf != null && perfActivityBoostHandler > 0) {
-            mPerf.perfLockReleaseHandler(perfActivityBoostHandler);
-            perfActivityBoostHandler = -1;
+        final WindowingModeTransitionInfoSnapshot info = mStackSupervisor
+                .getActivityMetricsLogger().logAppTransitionReportedDrawn(this, restoredFromBundle);
+        if (info != null) {
+            mStackSupervisor.reportActivityLaunchedLocked(false /* timeout */, this,
+                    info.windowsFullyDrawnDelayMs);
         }
     }
-
     @Override
     public void onStartingWindowDrawn(long timestamp) {
         synchronized (service.mGlobalLock) {
@@ -2114,13 +2019,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     @Override
     public void onWindowsDrawn(long timestamp) {
         synchronized (service.mGlobalLock) {
-            mStackSupervisor.getActivityMetricsLogger().notifyWindowsDrawn(getWindowingMode(),
-                    timestamp);
-            if (displayStartTime != 0) {
-                reportLaunchTimeLocked(timestamp);
-            }
+            final WindowingModeTransitionInfoSnapshot info = mStackSupervisor
+                    .getActivityMetricsLogger().notifyWindowsDrawn(getWindowingMode(), timestamp);
+            final int windowsDrawnDelayMs = info != null ? info.windowsDrawnDelayMs : INVALID_DELAY;
+            mStackSupervisor.reportActivityLaunchedLocked(false /* timeout */, this,
+                    windowsDrawnDelayMs);
             mStackSupervisor.sendWaitingVisibleReportLocked(this);
-            startTime = 0;
             finishLaunchTickingLocked();
             if (task != null) {
                 task.hasBeenVisible = true;
@@ -2350,7 +2254,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         }
 
         final CompatibilityInfo compatInfo =
-                service.mAm.compatibilityInfoForPackageLocked(info.applicationInfo);
+                service.compatibilityInfoForPackageLocked(info.applicationInfo);
         final boolean shown = mWindowContainerController.addStartingWindow(packageName, theme,
                 compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
                 prev != null ? prev.appToken : null, newTask, taskSwitch, isProcessRunning(),
@@ -2512,6 +2416,14 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             outBounds.left = appBounds.right - maxActivityWidth;
             outBounds.right = appBounds.right;
         }
+    }
+
+    /**
+     * @return {@code true} if this activity was reparented to another display but
+     *         {@link #ensureActivityConfiguration} is not called.
+     */
+    boolean shouldUpdateConfigForDisplayChanged() {
+        return mLastReportedDisplayId != getDisplayId();
     }
 
     boolean ensureActivityConfiguration(int globalChanges, boolean preserveWindow) {

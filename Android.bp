@@ -77,6 +77,7 @@ java_defaults {
         "core/java/android/app/ISearchManager.aidl",
         "core/java/android/app/ISearchManagerCallback.aidl",
         "core/java/android/app/IServiceConnection.aidl",
+        "core/java/android/app/ISmsAppService.aidl",
         "core/java/android/app/IStopUserCallback.aidl",
         "core/java/android/app/job/IJobCallback.aidl",
         "core/java/android/app/job/IJobScheduler.aidl",
@@ -151,9 +152,10 @@ java_defaults {
         ":libcamera_client_framework_aidl",
         "core/java/android/hardware/IConsumerIrService.aidl",
         "core/java/android/hardware/ISerialManager.aidl",
-        "core/java/android/hardware/biometrics/IBiometricPromptService.aidl",
-        "core/java/android/hardware/biometrics/IBiometricPromptServiceReceiver.aidl",
+        "core/java/android/hardware/biometrics/IBiometricEnabledOnKeyguardCallback.aidl",
         "core/java/android/hardware/biometrics/IBiometricPromptReceiver.aidl",
+        "core/java/android/hardware/biometrics/IBiometricService.aidl",
+        "core/java/android/hardware/biometrics/IBiometricServiceReceiver.aidl",
         "core/java/android/hardware/biometrics/IBiometricServiceLockoutResetCallback.aidl",
         "core/java/android/hardware/display/IDisplayManager.aidl",
         "core/java/android/hardware/display/IDisplayManagerCallback.aidl",
@@ -368,6 +370,7 @@ java_defaults {
         "core/java/com/android/internal/app/IAppOpsService.aidl",
         "core/java/com/android/internal/app/IBatteryStats.aidl",
         "core/java/com/android/internal/app/ISoundTriggerService.aidl",
+        "core/java/com/android/internal/app/IVoiceActionCheckCallback.aidl",
         "core/java/com/android/internal/app/IVoiceInteractionManagerService.aidl",
         "core/java/com/android/internal/app/IVoiceInteractionSessionListener.aidl",
         "core/java/com/android/internal/app/IVoiceInteractionSessionShowCallback.aidl",
@@ -515,11 +518,14 @@ java_defaults {
         "telephony/java/android/telephony/ims/aidl/IImsSmsListener.aidl",
         "telephony/java/android/telephony/mbms/IMbmsDownloadSessionCallback.aidl",
         "telephony/java/android/telephony/mbms/IMbmsStreamingSessionCallback.aidl",
+        "telephony/java/android/telephony/mbms/IMbmsGroupCallSessionCallback.aidl",
         "telephony/java/android/telephony/mbms/IDownloadStatusListener.aidl",
         "telephony/java/android/telephony/mbms/IDownloadProgressListener.aidl",
         "telephony/java/android/telephony/mbms/IStreamingServiceCallback.aidl",
+        "telephony/java/android/telephony/mbms/IGroupCallCallback.aidl",
         "telephony/java/android/telephony/mbms/vendor/IMbmsDownloadService.aidl",
         "telephony/java/android/telephony/mbms/vendor/IMbmsStreamingService.aidl",
+        "telephony/java/android/telephony/mbms/vendor/IMbmsGroupCallService.aidl",
         "telephony/java/android/telephony/INetworkService.aidl",
         "telephony/java/android/telephony/INetworkServiceCallback.aidl",
         "telephony/java/com/android/ims/internal/IImsCallSession.aidl",
@@ -556,7 +562,7 @@ java_defaults {
         "telephony/java/com/android/internal/telephony/IPhoneSubInfo.aidl",
         "telephony/java/com/android/internal/telephony/ISms.aidl",
         "telephony/java/com/android/internal/telephony/ISub.aidl",
-        "telephony/java/com/android/internal/telephony/IAnas.aidl",
+        "telephony/java/com/android/internal/telephony/IAns.aidl",
         "telephony/java/com/android/internal/telephony/ITelephony.aidl",
         "telephony/java/com/android/internal/telephony/ITelephonyRegistry.aidl",
         "telephony/java/com/android/internal/telephony/IWapPushManager.aidl",
@@ -700,12 +706,12 @@ java_defaults {
         "android.hardware.vibrator-V1.2-java",
         "android.hardware.wifi-V1.0-java-constants",
         "android.hardware.radio-V1.0-java",
+        "android.hardware.radio-V1.3-java",
         "android.hardware.usb.gadget-V1.0-java",
     ],
 
     // Loaded with System.loadLibrary by android.view.textclassifier
     required: [
-        "libtextclassifier",
         "libmedia2_jni",
     ],
 
@@ -809,12 +815,16 @@ gensrcs {
 java_library {
     name: "ext",
     installable: true,
-    no_framework_libs: true,
+    sdk_version: "core_current",
     static_libs: [
         "libphonenumber-platform",
         "nist-sip",
         "tagsoup",
         "rappor",
+        "libtextclassifier-java",
+    ],
+    required: [
+        "libtextclassifier",
     ],
     dxflags: ["--core-library"],
 }
@@ -1169,7 +1179,7 @@ stubs_defaults {
     previous_api: ":last-released-public-api",
     merge_annotations_dirs: [
         "metalava-manual",
-        "ojluni-annotated-stubs",
+        "ojluni-annotated-sdk-stubs",
     ],
 }
 
@@ -1231,7 +1241,12 @@ stubs_defaults {
     previous_api: ":last-released-public-api",
     merge_annotations_dirs: [
         "metalava-manual",
-        "ojluni-annotated-stubs",
+        "ojluni-annotated-sdk-stubs",
+    ],
+    api_levels_annotations_enabled: true,
+    api_levels_annotations_dirs: [
+        "sdk-dir",
+        "api-versions-jars-dir",
     ],
 }
 
@@ -1279,6 +1294,9 @@ droiddoc {
 }
 
 droiddoc {
+    // Please sync with android-api-council@ before making any changes for the name property below.
+    // Since there's cron jobs that fetch offline-sdk-referenceonly-docs-docs.zip periodically.
+    // See b/116221385 for reference.
     name: "offline-sdk-referenceonly-docs",
     defaults: ["framework-docs-default"],
     srcs: [
@@ -1295,6 +1313,9 @@ droiddoc {
 }
 
 droiddoc {
+    // Please sync with android-api-council@ before making any changes for the name property below.
+    // Since there's cron jobs that fetch offline-system-sdk-referenceonly-docs-docs.zip periodically.
+    // See b/116221385 for reference.
     name: "offline-system-sdk-referenceonly-docs",
     defaults: ["framework-docs-default"],
     srcs: [
@@ -1502,7 +1523,7 @@ droidstubs {
     previous_api: ":last-released-public-api",
     merge_annotations_dirs: [
         "metalava-manual",
-        "ojluni-annotated-stubs",
+        "ojluni-annotated-sdk-stubs",
     ],
     args: " --show-annotation android.annotation.SystemApi",
 }
@@ -1588,6 +1609,7 @@ droidstubs {
             removed_api_file: "api/removed.txt",
         },
     },
+    jdiff_enabled: true,
 }
 
 droidstubs {
@@ -1612,6 +1634,7 @@ droidstubs {
             removed_api_file: "api/system-removed.txt",
         },
     },
+    jdiff_enabled: true,
 }
 
 droidstubs {

@@ -141,6 +141,8 @@ public final class Call {
      * The caller must specify the {@link #EXTRA_HANDOVER_PHONE_ACCOUNT_HANDLE} to indicate to
      * Telecom which {@link PhoneAccountHandle} the {@link Call} should be handed over to.
      * @hide
+     * @deprecated Use {@link Call#handoverTo(PhoneAccountHandle, int, Bundle)} and its associated
+     * APIs instead.
      */
     public static final String EVENT_REQUEST_HANDOVER =
             "android.telecom.event.REQUEST_HANDOVER";
@@ -149,6 +151,8 @@ public final class Call {
      * Extra key used with the {@link #EVENT_REQUEST_HANDOVER} call event.  Specifies the
      * {@link PhoneAccountHandle} to which a call should be handed over to.
      * @hide
+     * @deprecated Use {@link Call#handoverTo(PhoneAccountHandle, int, Bundle)} and its associated
+     * APIs instead.
      */
     public static final String EXTRA_HANDOVER_PHONE_ACCOUNT_HANDLE =
             "android.telecom.extra.HANDOVER_PHONE_ACCOUNT_HANDLE";
@@ -161,6 +165,8 @@ public final class Call {
      * {@link VideoProfile#STATE_BIDIRECTIONAL}, {@link VideoProfile#STATE_RX_ENABLED}, and
      * {@link VideoProfile#STATE_TX_ENABLED}.
      * @hide
+     * @deprecated Use {@link Call#handoverTo(PhoneAccountHandle, int, Bundle)} and its associated
+     * APIs instead.
      */
     public static final String EXTRA_HANDOVER_VIDEO_STATE =
             "android.telecom.extra.HANDOVER_VIDEO_STATE";
@@ -176,6 +182,8 @@ public final class Call {
      * {@link ConnectionService#onCreateOutgoingConnection(PhoneAccountHandle, ConnectionRequest)}
      * is called to initate the handover.
      * @hide
+     * @deprecated Use {@link Call#handoverTo(PhoneAccountHandle, int, Bundle)} and its associated
+     * APIs instead.
      */
     public static final String EXTRA_HANDOVER_EXTRAS = "android.telecom.extra.HANDOVER_EXTRAS";
 
@@ -186,6 +194,8 @@ public final class Call {
      * <p>
      * A handover is initiated with the {@link #EVENT_REQUEST_HANDOVER} call event.
      * @hide
+     * @deprecated Use {@link Call#handoverTo(PhoneAccountHandle, int, Bundle)} and its associated
+     * APIs instead.
      */
     public static final String EVENT_HANDOVER_COMPLETE =
             "android.telecom.event.HANDOVER_COMPLETE";
@@ -198,6 +208,8 @@ public final class Call {
      * <p>
      * A handover is initiated with the {@link #EVENT_REQUEST_HANDOVER} call event.
      * @hide
+     * @deprecated Use {@link Call#handoverTo(PhoneAccountHandle, int, Bundle)} and its associated
+     * APIs instead.
      */
     public static final String EVENT_HANDOVER_SOURCE_DISCONNECTED =
             "android.telecom.event.HANDOVER_SOURCE_DISCONNECTED";
@@ -209,6 +221,8 @@ public final class Call {
      * <p>
      * A handover is initiated with the {@link #EVENT_REQUEST_HANDOVER} call event.
      * @hide
+     * @deprecated Use {@link Call#handoverTo(PhoneAccountHandle, int, Bundle)} and its associated
+     * APIs instead.
      */
     public static final String EVENT_HANDOVER_FAILED =
             "android.telecom.event.HANDOVER_FAILED";
@@ -447,8 +461,15 @@ public final class Call {
          */
         public static final int PROPERTY_RTT = 0x00000400;
 
+        /**
+         * Indicates that the call has been identified as the network as an emergency call. This
+         * property may be set for both incoming and outgoing calls which the network identifies as
+         * emergency calls.
+         */
+        public static final int PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL = 0x00000800;
+
         //******************************************************************************************
-        // Next PROPERTY value: 0x00000800
+        // Next PROPERTY value: 0x00001000
         //******************************************************************************************
 
         private final String mTelecomCallId;
@@ -619,6 +640,9 @@ public final class Call {
             }
             if(hasProperty(properties, PROPERTY_ASSISTED_DIALING_USED)) {
                 builder.append(" PROPERTY_ASSISTED_DIALING_USED");
+            }
+            if (hasProperty(properties, PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL)) {
+                builder.append(" PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL");
             }
             builder.append("]");
             return builder.toString();

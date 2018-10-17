@@ -53,6 +53,8 @@ import android.hardware.ISerialManager;
 import android.hardware.SensorManager;
 import android.hardware.SerialManager;
 import android.hardware.SystemSensorManager;
+import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.IBiometricService;
 import android.hardware.camera2.CameraManager;
 import android.hardware.display.DisplayManager;
 import android.hardware.face.FaceManager;
@@ -132,6 +134,7 @@ import android.os.UserManager;
 import android.os.Vibrator;
 import android.os.health.SystemHealthManager;
 import android.os.storage.StorageManager;
+import android.permission.PermissionManager;
 import android.print.IPrintManager;
 import android.print.PrintManager;
 import android.service.oemlock.IOemLockService;
@@ -374,11 +377,15 @@ final class SystemServiceRegistry {
                 return new DisplayManager(ctx.getOuterContext());
             }});
 
+        // InputMethodManager has its own cache strategy based on display id to support apps that
+        // still assume InputMethodManager is a per-process singleton and it's safe to directly
+        // access internal fields via reflection.  Hence directly use ServiceFetcher instead of
+        // StaticServiceFetcher/CachedServiceFetcher.
         registerService(Context.INPUT_METHOD_SERVICE, InputMethodManager.class,
-                new StaticServiceFetcher<InputMethodManager>() {
+                new ServiceFetcher<InputMethodManager>() {
             @Override
-            public InputMethodManager createService() {
-                return InputMethodManager.getInstance();
+            public InputMethodManager getService(ContextImpl ctx) {
+                return InputMethodManager.forContext(ctx);
             }});
 
         registerService(Context.TEXT_SERVICES_MANAGER_SERVICE, TextServicesManager.class,
@@ -818,6 +825,19 @@ final class SystemServiceRegistry {
                     }
                 });
 
+        registerService(Context.BIOMETRIC_SERVICE, BiometricManager.class,
+                new CachedServiceFetcher<BiometricManager>() {
+                    @Override
+                    public BiometricManager createService(ContextImpl ctx)
+                            throws ServiceNotFoundException {
+                        final IBinder binder =
+                                ServiceManager.getServiceOrThrow(Context.BIOMETRIC_SERVICE);
+                        final IBiometricService service =
+                                IBiometricService.Stub.asInterface(binder);
+                        return new BiometricManager(ctx.getOuterContext(), service);
+                    }
+                });
+
         registerService(Context.TV_INPUT_SERVICE, TvInputManager.class,
                 new CachedServiceFetcher<TvInputManager>() {
             @Override
@@ -1048,6 +1068,13 @@ final class SystemServiceRegistry {
                     public TimeZoneDetector createService(ContextImpl ctx)
                             throws ServiceNotFoundException {
                         return new TimeZoneDetector();
+                    }});
+
+        registerService(Context.PERMISSION_SERVICE, PermissionManager.class,
+                new CachedServiceFetcher<PermissionManager>() {
+                    @Override
+                    public PermissionManager createService(ContextImpl ctx) {
+                        return new PermissionManager(ctx.getOuterContext());
                     }});
     }
 

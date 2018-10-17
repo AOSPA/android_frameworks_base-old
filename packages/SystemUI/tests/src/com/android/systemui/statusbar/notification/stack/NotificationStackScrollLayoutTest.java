@@ -15,10 +15,13 @@ package com.android.systemui.statusbar.notification.stack;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
+import static junit.framework.Assert.assertNull;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
@@ -31,14 +34,15 @@ import android.os.Handler;
 import android.os.IPowerManager;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.service.dreams.IDreamManager;
 import android.support.test.annotation.UiThreadTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
+import android.view.View;
 
 import com.android.systemui.ExpandHelper;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.recents.misc.SystemServicesProxy;
 import com.android.systemui.statusbar.EmptyShadeView;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.NotificationPresenter;
@@ -90,7 +94,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
     @Mock private NotificationData mNotificationData;
     @Mock private NotificationRemoteInputManager mRemoteInputManager;
     @Mock private RemoteInputController mRemoteInputController;
-    @Mock private SystemServicesProxy mSystemServicesProxy;
+    @Mock private IDreamManager mDreamManager;
     private PowerManager mPowerManager;
     private TestableNotificationEntryManager mEntryManager;
 
@@ -110,7 +114,7 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         mPowerManager = new PowerManager(mContext, powerManagerService,
                 Handler.createAsync(Looper.myLooper()));
 
-        mEntryManager = new TestableNotificationEntryManager(mSystemServicesProxy, mPowerManager,
+        mEntryManager = new TestableNotificationEntryManager(mDreamManager, mPowerManager,
                 mContext);
         mEntryManager.setUpForTest(mock(NotificationPresenter.class), null, null, mHeadsUpManager,
                 mNotificationData);
@@ -313,10 +317,40 @@ public class NotificationStackScrollLayoutTest extends SysuiTestCase {
         verify(mStackScroller).setEmptyShadeView(any());
     }
 
+    @Test
+    @UiThreadTest
+    public void testSetIsBeingDraggedResetsExposedMenu() {
+        NotificationSwipeHelper swipeActionHelper =
+                (NotificationSwipeHelper) mStackScroller.getSwipeActionHelper();
+        swipeActionHelper.setExposedMenuView(new View(mContext));
+        mStackScroller.setIsBeingDragged(true);
+        assertNull(swipeActionHelper.getExposedMenuView());
+    }
+
+    @Test
+    @UiThreadTest
+    public void testPanelTrackingStartResetsExposedMenu() {
+        NotificationSwipeHelper swipeActionHelper =
+                (NotificationSwipeHelper) mStackScroller.getSwipeActionHelper();
+        swipeActionHelper.setExposedMenuView(new View(mContext));
+        mStackScroller.onPanelTrackingStarted();
+        assertNull(swipeActionHelper.getExposedMenuView());
+    }
+
+    @Test
+    @UiThreadTest
+    public void testDarkModeResetsExposedMenu() {
+        NotificationSwipeHelper swipeActionHelper =
+                (NotificationSwipeHelper) mStackScroller.getSwipeActionHelper();
+        swipeActionHelper.setExposedMenuView(new View(mContext));
+        mStackScroller.setDarkAmount(0.1f, 0.1f);
+        assertNull(swipeActionHelper.getExposedMenuView());
+    }
+
     private void setBarStateForTest(int state) {
         ArgumentCaptor<StatusBarStateController.StateListener> captor =
                 ArgumentCaptor.forClass(StatusBarStateController.StateListener.class);
-        verify(mBarState).addListener(captor.capture());
+        verify(mBarState, atLeastOnce()).addListener(captor.capture());
         captor.getValue().onStateChanged(state);
     }
 }

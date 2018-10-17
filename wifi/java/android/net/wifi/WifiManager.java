@@ -1805,9 +1805,7 @@ public class WifiManager {
      * @return the list of access points found in the most recent scan. An app must hold
      * {@link android.Manifest.permission#ACCESS_COARSE_LOCATION ACCESS_COARSE_LOCATION} or
      * {@link android.Manifest.permission#ACCESS_FINE_LOCATION ACCESS_FINE_LOCATION} permission
-     * in order to get valid results.  If there is a remote exception (e.g., either a communication
-     * problem with the system service or an exception within the framework) an empty list will be
-     * returned.
+     * in order to get valid results.
      */
     public List<ScanResult> getScanResults() {
         android.util.SeempLog.record(55);

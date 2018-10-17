@@ -2431,6 +2431,7 @@
   <java-symbol type="string" name="face_error_timeout" />
   <java-symbol type="array" name="face_error_vendor" />
   <java-symbol type="string" name="face_error_canceled" />
+  <java-symbol type="string" name="face_error_user_canceled" />
   <java-symbol type="string" name="face_error_lockout" />
   <java-symbol type="string" name="face_error_lockout_permanent" />
   <java-symbol type="string" name="face_error_not_enrolled" />
@@ -2448,6 +2449,8 @@
   <java-symbol type="string" name="face_acquired_not_detected" />
   <java-symbol type="array" name="face_acquired_vendor" />
   <java-symbol type="string" name="face_name_template" />
+  <java-symbol type="string" name="face_authenticated_no_confirmation_required" />
+  <java-symbol type="string" name="face_authenticated_confirmation_required" />
 
   <!-- Face config -->
   <java-symbol type="integer" name="config_faceMaxTemplatesPerUser" />
@@ -3153,7 +3156,9 @@
   <java-symbol type="integer" name="autofill_max_visible_datasets" />
 
   <java-symbol type="style" name="Theme.DeviceDefault.Autofill" />
+  <java-symbol type="style" name="Theme.DeviceDefault.Light.Autofill" />
   <java-symbol type="style" name="Theme.DeviceDefault.Autofill.Save" />
+  <java-symbol type="style" name="Theme.DeviceDefault.Light.Autofill.Save" />
 
   <java-symbol type="dimen" name="notification_big_picture_max_height"/>
   <java-symbol type="dimen" name="notification_big_picture_max_width"/>
@@ -3276,7 +3281,7 @@
   <java-symbol type="array" name="config_hideWhenDisabled_packageNames" />
 
   <java-symbol type="string" name="config_dozeLongPressSensorType" />
-  <java-symbol type="string" name="config_dozeReachSensorType" />
+  <java-symbol type="string" name="config_dozeWakeLockScreenSensorType" />
 
   <java-symbol type="array" name="config_allowedGlobalInstantAppSettings" />
   <java-symbol type="array" name="config_allowedSystemInstantAppSettings" />
@@ -3475,4 +3480,11 @@
   <java-symbol type="integer" name="db_wal_truncate_size" />
   <java-symbol type="integer" name="config_wakeUpDelayDoze" />
   <java-symbol type="string" name="config_dozeWakeScreenSensorType" />
+
+  <!-- For Bluetooth AbsoluteVolume -->
+  <java-symbol type="fraction" name="config_prescaleAbsoluteVolume_index1" />
+  <java-symbol type="fraction" name="config_prescaleAbsoluteVolume_index2" />
+  <java-symbol type="fraction" name="config_prescaleAbsoluteVolume_index3" />
+
+  <java-symbol type="bool" name="config_useSmsAppService" />
 </resources>

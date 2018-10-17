@@ -30,6 +30,7 @@
 #include <media/stagefright/foundation/ByteUtils.h>  // for FOURCC definition
 #include <mediaplayer2/JAudioTrack.h>
 #include <mediaplayer2/JavaVMHelper.h>
+#include <mediaplayer2/JMedia2HTTPService.h>
 #include <mediaplayer2/mediaplayer2.h>
 #include <stdio.h>
 #include <assert.h>
@@ -45,7 +46,6 @@
 #include "utils/KeyedVector.h"
 #include "utils/String8.h"
 #include "android_media_BufferingParams.h"
-#include "android_media_Media2HTTPService.h"
 #include "android_media_Media2DataSource.h"
 #include "android_media_MediaMetricsJNI.h"
 #include "android_media_PlaybackParams.h"
@@ -1490,8 +1490,8 @@ static const JNINativeMethod gMethods[] = {
     {"_release",            "()V",                              (void *)android_media_MediaPlayer2_release},
     {"_reset",              "()V",                              (void *)android_media_MediaPlayer2_reset},
     {"_getAudioStreamType", "()I",                              (void *)android_media_MediaPlayer2_getAudioStreamType},
-    {"setParameter",        "(ILandroid/os/Parcel;)Z",          (void *)android_media_MediaPlayer2_setParameter},
-    {"getParameter",        "(I)Landroid/os/Parcel;",           (void *)android_media_MediaPlayer2_getParameter},
+    {"setParameter",        "(ILjava/lang/Object;)Z",          (void *)android_media_MediaPlayer2_setParameter},
+    {"getParameter",        "(I)Ljava/lang/Object;",           (void *)android_media_MediaPlayer2_getParameter},
     {"setLooping",          "(Z)V",                             (void *)android_media_MediaPlayer2_setLooping},
     {"isLooping",           "()Z",                              (void *)android_media_MediaPlayer2_isLooping},
     {"_setVolume",          "(FF)V",                            (void *)android_media_MediaPlayer2_setVolume},

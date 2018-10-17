@@ -645,12 +645,7 @@
     <dimen name="keyguard_affordance_height">56dp</dimen>
     <dimen name="keyguard_affordance_width">56dp</dimen>
 
-    <!-- The width/height of the phone/camera/unlock icon drawable on keyguard. -->
-    <dimen name="keyguard_affordance_icon_height">24dp</dimen>
-    <dimen name="keyguard_affordance_icon_width">24dp</dimen>
-
     <dimen name="keyguard_indication_margin_bottom">125dp</dimen>
-    <dimen name="keyguard_indication_margin_bottom_ambient">16dp</dimen>
 
     <!-- The text size for battery level -->
     <dimen name="battery_level_text_size">12sp</dimen>
@@ -939,9 +934,8 @@
          burn-in on AOD. -->
     <dimen name="burn_in_prevention_offset_y">50dp</dimen>
 
-    <!-- The maximum offset in either direction that the charging indication moves vertically
-         to prevent burn-in on AOD. -->
-    <dimen name="charging_indication_burn_in_prevention_offset_y">5dp</dimen>
+    <!-- The maximum offset in either direction that icons move to prevent burn-in on AOD. -->
+    <dimen name="default_burn_in_prevention_offset">5dp</dimen>
 
     <dimen name="corner_size">8dp</dimen>
     <dimen name="top_padding">0dp</dimen>
@@ -955,7 +949,7 @@
     <dimen name="nav_content_padding">0dp</dimen>
     <dimen name="nav_quick_scrub_track_edge_padding">24dp</dimen>
     <dimen name="nav_quick_scrub_track_thickness">10dp</dimen>
-    <dimen name="nav_home_back_gesture_drag_limit">60dp</dimen>
+    <dimen name="nav_home_back_gesture_drag_limit">40dp</dimen>
 
     <!-- Navigation bar shadow params. -->
     <dimen name="nav_key_button_shadow_offset_x">0dp</dimen>
@@ -982,10 +976,10 @@
          the regular notification, when we have remote input history texts present. -->
     <dimen name="remote_input_history_extra_height">60dp</dimen>
 
-    <!-- Fingerprint Dialog values -->
-    <dimen name="fingerprint_dialog_fp_icon_size">64dp</dimen>
-    <dimen name="fingerprint_dialog_animation_translation_offset">350dp</dimen>
-    <dimen name="fingerprint_dialog_corner_size">4dp</dimen>
+    <!-- Biometric Dialog values -->
+    <dimen name="biometric_dialog_biometric_icon_size">64dp</dimen>
+    <dimen name="biometric_dialog_corner_size">4dp</dimen>
+    <dimen name="biometric_dialog_animation_translation_offset">350dp</dimen>
 
     <!-- Wireless Charging Animation values -->
     <dimen name="wireless_charging_dots_radius_start">0dp</dimen>

@@ -36,8 +36,6 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
-import android.os.Parcel;
-import android.os.Parcelable;
 import android.os.PersistableBundle;
 import android.os.PowerManager;
 import android.os.Process;
@@ -55,12 +53,8 @@ import android.widget.VideoView;
 
 import com.android.framework.protobuf.InvalidProtocolBufferException;
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.util.Preconditions;
-
-import dalvik.system.CloseGuard;
 
 import libcore.io.IoBridge;
-import libcore.io.Streams;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -82,10 +76,10 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.Set;
 import java.util.UUID;
 import java.util.Vector;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -107,7 +101,6 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
     private boolean mScreenOnWhilePlaying;
     private boolean mStayAwake;
     private int mStreamType = AudioManager.USE_DEFAULT_STREAM_TYPE;
-    private final CloseGuard mGuard = CloseGuard.get();
 
     private final Object mSrcLock = new Object();
     //--- guarded by |mSrcLock| start
@@ -147,6 +140,9 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
     @GuardedBy("mTaskLock")
     private Task mCurrentTask;
 
+    @GuardedBy("this")
+    private boolean mReleased;
+
     /**
      * Default constructor.
      * <p>When done with the MediaPlayer2Impl, you should call  {@link #close()},
@@ -161,7 +157,6 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
 
         mTimeProvider = new TimeProvider(this);
         mOpenSubtitleSources = new Vector<InputStream>();
-        mGuard.open("close");
 
         /* Native setup requires a weak reference to our object.
          * It's easier to create it here than in C++.
@@ -199,9 +194,8 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
      */
     @Override
     public void close() {
-        synchronized (mGuard) {
-            release();
-        }
+        super.close();
+        release();
     }
 
     /**
@@ -253,21 +247,6 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
             void process() {
                 stayAwake(false);
 
-                // TODO: remove this block when native code allows prepared -> pause
-                // and sends MEDIA_INFO_DATA_SOURCE_START when pipeline is created.
-                if (getState() == PLAYER_STATE_PREPARED) {
-                    final DataSourceDesc dsd;
-                    synchronized (mSrcLock) {
-                        dsd = mCurrentDSD;
-                    }
-                    synchronized (mEventCbLock) {
-                        for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                            cb.first.execute(() -> cb.second.onInfo(
-                                    MediaPlayer2Impl.this, dsd, MEDIA_INFO_DATA_SOURCE_START, 0));
-                        }
-                    }
-                }
-
                 _pause();
             }
         });
@@ -285,7 +264,10 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         addTask(new Task(CALL_COMPLETED_SKIP_TO_NEXT, false) {
             @Override
             void process() {
-                // TODO: switch to next data source and play
+                if (getState() == PLAYER_STATE_PLAYING) {
+                    pause();
+                }
+                playNextDataSource();
             }
         });
     }
@@ -346,19 +328,14 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                     final String msg = "Cannot set AudioAttributes to null";
                     throw new IllegalArgumentException(msg);
                 }
-                Parcel pattributes = Parcel.obtain();
-                attributes.writeToParcel(pattributes, AudioAttributes.FLATTEN_TAGS);
-                setParameter(KEY_PARAMETER_AUDIO_ATTRIBUTES, pattributes);
-                pattributes.recycle();
+                setParameter(KEY_PARAMETER_AUDIO_ATTRIBUTES, attributes);
             }
         });
     }
 
     @Override
     public @NonNull AudioAttributes getAudioAttributes() {
-        Parcel pattributes = getParameter(KEY_PARAMETER_AUDIO_ATTRIBUTES);
-        AudioAttributes attributes = AudioAttributes.CREATOR.createFromParcel(pattributes);
-        pattributes.recycle();
+        AudioAttributes attributes = (AudioAttributes) getParameter(KEY_PARAMETER_AUDIO_ATTRIBUTES);
         return attributes;
     }
 
@@ -372,7 +349,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         addTask(new Task(CALL_COMPLETED_SET_DATA_SOURCE, false) {
             @Override
             void process() throws IOException {
-                Preconditions.checkArgument(dsd != null, "the DataSourceDesc cannot be null");
+                checkArgument(dsd != null, "the DataSourceDesc cannot be null");
                 int state = getState();
                 if (state != PLAYER_STATE_ERROR && state != PLAYER_STATE_IDLE) {
                     throw new IllegalStateException("called in wrong state " + state);
@@ -398,7 +375,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         addTask(new Task(CALL_COMPLETED_SET_NEXT_DATA_SOURCE, false) {
             @Override
             void process() {
-                Preconditions.checkArgument(dsd != null, "the DataSourceDesc cannot be null");
+                checkArgument(dsd != null, "the DataSourceDesc cannot be null");
                 synchronized (mSrcLock) {
                     mNextDSDs = new ArrayList<DataSourceDesc>(1);
                     mNextDSDs.add(dsd);
@@ -544,29 +521,11 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
     private static final int INVOKE_ID_GET_SELECTED_TRACK = 7;
 
     /**
-     * Create a request parcel which can be routed to the native media
-     * player using {@link #invoke(Parcel, Parcel)}. The Parcel
-     * returned has the proper InterfaceToken set. The caller should
-     * not overwrite that token, i.e it can only append data to the
-     * Parcel.
-     *
-     * @return A parcel suitable to hold a request for the native
-     * player.
-     * {@hide}
-     */
-    @Override
-    public Parcel newRequest() {
-        Parcel parcel = Parcel.obtain();
-        return parcel;
-    }
-
-    /**
      * Invoke a generic method on the native player using opaque protocol
      * buffer message for the request and reply. Both payloads' format is a
      * convention between the java caller and the native player.
      *
-     * @param request PlayerMessage for the extension. The
-     * caller must use {@link #newRequest()} to get one.
+     * @param msg PlayerMessage for the extension.
      *
      * @return PlayerMessage with the data returned by the
      * native player.
@@ -590,12 +549,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         addTask(new Task(CALL_COMPLETED_NOTIFY_WHEN_COMMAND_LABEL_REACHED, false) {
             @Override
             void process() {
-                synchronized (mEventCbLock) {
-                    for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                        cb.first.execute(() -> cb.second.onCommandLabelReached(
-                                MediaPlayer2Impl.this, label));
+                sendEvent(new EventNotifier() {
+                    @Override
+                    public void notify(EventCallback callback) {
+                        callback.onCommandLabelReached(
+                                MediaPlayer2Impl.this, label);
                     }
-                }
+                });
             }
         });
     }
@@ -729,7 +689,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
 
     private void handleDataSource(boolean isCurrent, @NonNull DataSourceDesc dsd, long srcId)
             throws IOException {
-        Preconditions.checkNotNull(dsd, "the DataSourceDesc cannot be null");
+        checkArgument(dsd != null, "the DataSourceDesc cannot be null");
 
         switch (dsd.getType()) {
             case DataSourceDesc.TYPE_CALLBACK:
@@ -1013,12 +973,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         }
 
         if (!hasNextDSD) {
-            synchronized (mEventCbLock) {
-                for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                    cb.first.execute(() -> cb.second.onInfo(
-                            MediaPlayer2Impl.this, null, MEDIA_INFO_DATA_SOURCE_LIST_END, 0));
+            sendEvent(new EventNotifier() {
+                @Override
+                public void notify(EventCallback callback) {
+                    callback.onInfo(
+                            MediaPlayer2Impl.this, null, MEDIA_INFO_DATA_SOURCE_LIST_END, 0);
                 }
-            }
+            });
         }
     }
 
@@ -1328,7 +1289,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         addTask(new Task(CALL_COMPLETED_SET_BUFFERING_PARAMS, false) {
             @Override
             void process() {
-                Preconditions.checkArgument(params != null, "the BufferingParams cannot be null");
+                checkArgument(params != null, "the BufferingParams cannot be null");
                 _setBufferingParams(params);
             }
         });
@@ -1392,7 +1353,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         addTask(new Task(CALL_COMPLETED_SET_PLAYBACK_PARAMS, false) {
             @Override
             void process() {
-                Preconditions.checkArgument(params != null, "the PlaybackParams cannot be null");
+                checkArgument(params != null, "the PlaybackParams cannot be null");
                 _setPlaybackParams(params);
             }
         });
@@ -1425,7 +1386,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         addTask(new Task(CALL_COMPLETED_SET_SYNC_PARAMS, false) {
             @Override
             void process() {
-                Preconditions.checkArgument(params != null, "the SyncParams cannot be null");
+                checkArgument(params != null, "the SyncParams cannot be null");
                 _setSyncParams(params);
             }
         });
@@ -1536,91 +1497,6 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
     }
 
     /**
-     * Gets the media metadata.
-     *
-     * @param update_only controls whether the full set of available
-     * metadata is returned or just the set that changed since the
-     * last call. See {@see #METADATA_UPDATE_ONLY} and {@see
-     * #METADATA_ALL}.
-     *
-     * @param apply_filter if true only metadata that matches the
-     * filter is returned. See {@see #APPLY_METADATA_FILTER} and {@see
-     * #BYPASS_METADATA_FILTER}.
-     *
-     * @return The metadata, possibly empty. null if an error occured.
-     // FIXME: unhide.
-     * {@hide}
-     */
-    @Override
-    public Metadata getMetadata(final boolean update_only,
-                                final boolean apply_filter) {
-        Parcel reply = Parcel.obtain();
-        Metadata data = new Metadata();
-
-        if (!native_getMetadata(update_only, apply_filter, reply)) {
-            reply.recycle();
-            return null;
-        }
-
-        // Metadata takes over the parcel, don't recycle it unless
-        // there is an error.
-        if (!data.parse(reply)) {
-            reply.recycle();
-            return null;
-        }
-        return data;
-    }
-
-    /**
-     * Set a filter for the metadata update notification and update
-     * retrieval. The caller provides 2 set of metadata keys, allowed
-     * and blocked. The blocked set always takes precedence over the
-     * allowed one.
-     * Metadata.MATCH_ALL and Metadata.MATCH_NONE are 2 sets available as
-     * shorthands to allow/block all or no metadata.
-     *
-     * By default, there is no filter set.
-     *
-     * @param allow Is the set of metadata the client is interested
-     *              in receiving new notifications for.
-     * @param block Is the set of metadata the client is not interested
-     *              in receiving new notifications for.
-     * @return The call status code.
-     *
-     // FIXME: unhide.
-     * {@hide}
-     */
-    @Override
-    public int setMetadataFilter(Set<Integer> allow, Set<Integer> block) {
-        // Do our serialization manually instead of calling
-        // Parcel.writeArray since the sets are made of the same type
-        // we avoid paying the price of calling writeValue (used by
-        // writeArray) which burns an extra int per element to encode
-        // the type.
-        Parcel request =  newRequest();
-
-        // The parcel starts already with an interface token. There
-        // are 2 filters. Each one starts with a 4bytes number to
-        // store the len followed by a number of int (4 bytes as well)
-        // representing the metadata type.
-        int capacity = request.dataSize() + 4 * (1 + allow.size() + 1 + block.size());
-
-        if (request.dataCapacity() < capacity) {
-            request.setDataCapacity(capacity);
-        }
-
-        request.writeInt(allow.size());
-        for(Integer t: allow) {
-            request.writeInt(t);
-        }
-        request.writeInt(block.size());
-        for(Integer t: block) {
-            request.writeInt(t);
-        }
-        return native_setMetadataFilter(request);
-    }
-
-    /**
      * Resets the MediaPlayer2 to its uninitialized state. After calling
      * this method, you will have to initialize it again by setting the
      * data source and calling prepare().
@@ -1700,9 +1576,9 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
      * @param value value of the parameter to be set.
      * @return true if the parameter is set successfully, false otherwise
      */
-    private native boolean setParameter(int key, Parcel value);
+    private native boolean setParameter(int key, Object value);
 
-    private native Parcel getParameter(int key);
+    private native Object getParameter(int key);
 
 
     /**
@@ -1802,32 +1678,6 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
 
     private native void _setAuxEffectSendLevel(float level);
 
-    /*
-     * @param update_only If true fetch only the set of metadata that have
-     *                    changed since the last invocation of getMetadata.
-     *                    The set is built using the unfiltered
-     *                    notifications the native player sent to the
-     *                    MediaPlayer2Manager during that period of
-     *                    time. If false, all the metadatas are considered.
-     * @param apply_filter  If true, once the metadata set has been built based on
-     *                     the value update_only, the current filter is applied.
-     * @param reply[out] On return contains the serialized
-     *                   metadata. Valid only if the call was successful.
-     * @return The status code.
-     */
-    private native final boolean native_getMetadata(boolean update_only,
-                                                    boolean apply_filter,
-                                                    Parcel reply);
-
-    /*
-     * @param request Parcel with the 2 serialized lists of allowed
-     *                metadata types followed by the one to be
-     *                dropped. Each list starts with an integer
-     *                indicating the number of metadata type elements.
-     * @return The status code.
-     */
-    private native final int native_setMetadataFilter(Parcel request);
-
     private static native final void native_init();
     private native final void native_setup(Object mediaplayer2_this);
     private native final void native_finalize();
@@ -1901,25 +1751,6 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         TrackInfoImpl(int type, MediaFormat format) {
             mTrackType = type;
             mFormat = format;
-        }
-
-        /**
-         * Flatten this object in to a Parcel.
-         *
-         * @param dest The Parcel in which the object should be written.
-         * @param flags Additional flags about how the object should be written.
-         * May be 0 or {@link android.os.Parcelable#PARCELABLE_WRITE_RETURN_VALUE}.
-         */
-        /* package private */ void writeToParcel(Parcel dest, int flags) {
-            dest.writeInt(mTrackType);
-            dest.writeString(getLanguage());
-
-            if (mTrackType == MEDIA_TRACK_TYPE_SUBTITLE) {
-                dest.writeString(mFormat.getString(MediaFormat.KEY_MIME));
-                dest.writeInt(mFormat.getInteger(MediaFormat.KEY_IS_AUTOSELECT));
-                dest.writeInt(mFormat.getInteger(MediaFormat.KEY_IS_DEFAULT));
-                dest.writeInt(mFormat.getInteger(MediaFormat.KEY_IS_FORCED_SUBTITLE));
-            }
         }
 
         @Override
@@ -2612,15 +2443,14 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
     // in the base class Object.
     @Override
     protected void finalize() throws Throwable {
-        if (mGuard != null) {
-            mGuard.warnIfOpen();
-        }
-
-        close();
+        super.finalize();
         native_finalize();
     }
 
-    private void release() {
+    private synchronized void release() {
+        if (mReleased) {
+            return;
+        }
         stayAwake(false);
         updateSurfaceScreenOn();
         synchronized (mEventCbLock) {
@@ -2643,6 +2473,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
         resetDrmState();
 
         _release();
+        mReleased = true;
     }
 
     private native void _release();
@@ -2731,12 +2562,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                 }
 
                 if (dsd != null) {
-                    synchronized (mEventCbLock) {
-                        for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                            cb.first.execute(() -> cb.second.onInfo(
-                                    mMediaPlayer, dsd, MEDIA_INFO_PREPARED, 0));
+                    sendEvent(new EventNotifier() {
+                        @Override
+                        public void notify(EventCallback callback) {
+                            callback.onInfo(
+                                    mMediaPlayer, dsd, MEDIA_INFO_PREPARED, 0);
                         }
-                    }
+                    });
                 }
 
                 synchronized (mSrcLock) {
@@ -2784,12 +2616,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
 
                     // notifying the client outside the lock
                     if (drmInfo != null) {
-                        synchronized (mEventCbLock) {
-                            for (Pair<Executor, DrmEventCallback> cb : mDrmEventCallbackRecords) {
-                                cb.first.execute(() -> cb.second.onDrmInfo(
-                                        mMediaPlayer, dsd, drmInfo));
+                        sendDrmEvent(new DrmEventNotifier() {
+                            @Override
+                            public void notify(DrmEventCallback callback) {
+                                callback.onDrmInfo(
+                                        mMediaPlayer, dsd, drmInfo);
                             }
-                        }
+                        });
                     }
                 } else {
                     Log.w(TAG, "MEDIA_DRM_INFO msg.obj of unexpected type " + msg.obj);
@@ -2800,12 +2633,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
             case MEDIA_PLAYBACK_COMPLETE:
             {
                 if (isCurrentSrcId) {
-                    synchronized (mEventCbLock) {
-                        for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                            cb.first.execute(() -> cb.second.onInfo(
-                                    mMediaPlayer, dsd, MEDIA_INFO_DATA_SOURCE_END, 0));
+                    sendEvent(new EventNotifier() {
+                        @Override
+                        public void notify(EventCallback callback) {
+                            callback.onInfo(
+                                    mMediaPlayer, dsd, MEDIA_INFO_DATA_SOURCE_END, 0);
                         }
-                    }
+                    });
                     stayAwake(false);
 
                     synchronized (mSrcLock) {
@@ -2843,13 +2677,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
             case MEDIA_BUFFERING_UPDATE:
             {
                 final int percent = msg.arg1;
-                synchronized (mEventCbLock) {
-                    for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                        cb.first.execute(() -> cb.second.onInfo(
-                                mMediaPlayer, dsd, MEDIA_INFO_BUFFERING_UPDATE,
-                                percent));
+                sendEvent(new EventNotifier() {
+                    @Override
+                    public void notify(EventCallback callback) {
+                        callback.onInfo(
+                                mMediaPlayer, dsd, MEDIA_INFO_BUFFERING_UPDATE, percent);
                     }
-                }
+                });
 
                 synchronized (mSrcLock) {
                     if (isCurrentSrcId) {
@@ -2888,26 +2722,33 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
             {
                 final int width = msg.arg1;
                 final int height = msg.arg2;
-                synchronized (mEventCbLock) {
-                    for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                        cb.first.execute(() -> cb.second.onVideoSizeChanged(
-                                mMediaPlayer, dsd, width, height));
+                sendEvent(new EventNotifier() {
+                    @Override
+                    public void notify(EventCallback callback) {
+                        callback.onVideoSizeChanged(
+                                mMediaPlayer, dsd, width, height);
                     }
-                }
+                });
                 return;
             }
 
             case MEDIA_ERROR:
             {
                 Log.e(TAG, "Error (" + msg.arg1 + "," + msg.arg2 + ")");
-                synchronized (mEventCbLock) {
-                    for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                        cb.first.execute(() -> cb.second.onError(
-                                mMediaPlayer, dsd, what, extra));
-                        cb.first.execute(() -> cb.second.onInfo(
-                                mMediaPlayer, dsd, MEDIA_INFO_DATA_SOURCE_END, 0));
+                sendEvent(new EventNotifier() {
+                    @Override
+                    public void notify(EventCallback callback) {
+                        callback.onError(
+                                mMediaPlayer, dsd, what, extra);
                     }
-                }
+                });
+                sendEvent(new EventNotifier() {
+                    @Override
+                    public void notify(EventCallback callback) {
+                        callback.onInfo(
+                                mMediaPlayer, dsd, MEDIA_INFO_DATA_SOURCE_END, 0);
+                    }
+                });
                 stayAwake(false);
                 return;
             }
@@ -2947,12 +2788,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                         break;
                 }
 
-                synchronized (mEventCbLock) {
-                    for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                        cb.first.execute(() -> cb.second.onInfo(
-                                mMediaPlayer, dsd, what, extra));
+                sendEvent(new EventNotifier() {
+                    @Override
+                    public void notify(EventCallback callback) {
+                        callback.onInfo(
+                                mMediaPlayer, dsd, what, extra);
                     }
-                }
+                });
 
                 if (msg.arg1 == MEDIA_INFO_DATA_SOURCE_START) {
                     if (isCurrentSrcId) {
@@ -2989,12 +2831,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                     text = null;
                 }
 
-                synchronized (mEventCbLock) {
-                    for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                        cb.first.execute(() -> cb.second.onTimedText(
-                                mMediaPlayer, dsd, text));
+                sendEvent(new EventNotifier() {
+                    @Override
+                    public void notify(EventCallback callback) {
+                        callback.onTimedText(
+                                mMediaPlayer, dsd, text);
                     }
-                }
+                });
                 return;
             }
 
@@ -3014,12 +2857,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                             in.next().getInt64Value(),  // startTimeUs
                             in.next().getInt64Value(),  // durationUs
                             in.next().getBytesValue().toByteArray());  // data
-                    synchronized (mEventCbLock) {
-                        for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                            cb.first.execute(() -> cb.second.onSubtitleData(
-                                    mMediaPlayer, dsd, data));
+                    sendEvent(new EventNotifier() {
+                        @Override
+                        public void notify(EventCallback callback) {
+                            callback.onSubtitleData(
+                                    mMediaPlayer, dsd, data);
                         }
-                    }
+                    });
                 }
                 return;
             }
@@ -3043,12 +2887,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                     data = null;
                 }
 
-                synchronized (mEventCbLock) {
-                    for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                        cb.first.execute(() -> cb.second.onTimedMetaDataAvailable(
-                                mMediaPlayer, dsd, data));
+                sendEvent(new EventNotifier() {
+                    @Override
+                    public void notify(EventCallback callback) {
+                        callback.onTimedMetaDataAvailable(
+                                mMediaPlayer, dsd, data);
                     }
-                }
+                });
                 return;
             }
 
@@ -3179,6 +3024,46 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                 }
             }
         }
+    }
+
+    public static void checkArgument(boolean expression, String errorMessage) {
+        if (!expression) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+    }
+
+    private void sendEvent(final EventNotifier notifier) {
+        synchronized (mEventCbLock) {
+            try {
+                for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
+                    cb.first.execute(() -> notifier.notify(cb.second));
+                }
+            } catch (RejectedExecutionException e) {
+                // The executor has been shut down.
+                Log.w(TAG, "The executor has been shut down. Ignoring event.");
+            }
+        }
+    }
+
+    private void sendDrmEvent(final DrmEventNotifier notifier) {
+        synchronized (mDrmEventCbLock) {
+            try {
+                for (Pair<Executor, DrmEventCallback> cb : mDrmEventCallbackRecords) {
+                    cb.first.execute(() -> notifier.notify(cb.second));
+                }
+            } catch (RejectedExecutionException e) {
+                // The executor has been shut down.
+                Log.w(TAG, "The executor has been shut down. Ignoring drm event.");
+            }
+        }
+    }
+
+    private interface EventNotifier {
+        void notify(EventCallback callback);
+    }
+
+    private interface DrmEventNotifier {
+        void notify(DrmEventCallback callback);
     }
 
     // Modular DRM begin
@@ -3431,12 +3316,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
 
         // if finished successfully without provisioning, call the callback outside the lock
         if (allDoneWithoutProvisioning) {
-            synchronized (mDrmEventCbLock) {
-                for (Pair<Executor, DrmEventCallback> cb : mDrmEventCallbackRecords) {
-                    cb.first.execute(() -> cb.second.onDrmPrepared(
-                            this, mCurrentDSD, PREPARE_DRM_STATUS_SUCCESS));
+            sendDrmEvent(new DrmEventNotifier() {
+                @Override
+                public void notify(DrmEventCallback callback) {
+                    callback.onDrmPrepared(
+                            MediaPlayer2Impl.this, mCurrentDSD, PREPARE_DRM_STATUS_SUCCESS);
                 }
-            }
+            });
         }
 
     }
@@ -3789,7 +3675,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
             supportedSchemes = new UUID[supportedDRMsCount];
             for (int i = 0; i < supportedDRMsCount; i++) {
                 byte[] uuid = new byte[16];
-                in.next().getBytesValue().copyTo(uuid, uuid.length);
+                in.next().getBytesValue().copyTo(uuid, 0);
 
                 supportedSchemes[i] = bytesToUUID(uuid);
 
@@ -3797,7 +3683,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                       supportedSchemes[i]);
             }
 
-            Log.v(TAG, "DrmInfoImpl() Parcel psshsize: " + pssh.length +
+            Log.v(TAG, "DrmInfoImpl() psshsize: " + pssh.length +
                   " supportedDRMsCount: " + supportedDRMsCount);
         }
 
@@ -3922,7 +3808,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
 
     private native void _prepareDrm(@NonNull byte[] uuid, @NonNull byte[] drmSessionId);
 
-        // Modular DRM helpers
+    // Modular DRM helpers
 
     private void prepareDrm_createDrmStep(@NonNull UUID uuid)
             throws UnsupportedSchemeException {
@@ -4062,7 +3948,7 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                     connection.setReadTimeout(TIMEOUT_MS);
 
                     connection.connect();
-                    response = Streams.readFully(connection.getInputStream());
+                    response = readInputStreamFully(connection.getInputStream());
 
                     Log.v(TAG, "HandleProvisioninig: Thread run: response " +
                             response.length + " " + response);
@@ -4116,12 +4002,13 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
                 } // synchronized
 
                 // calling the callback outside the lock
-                synchronized (mDrmEventCbLock) {
-                    for (Pair<Executor, DrmEventCallback> cb : mDrmEventCallbackRecords) {
-                        cb.first.execute(() -> cb.second.onDrmPrepared(
-                                mediaPlayer, mCurrentDSD, status));
+                sendDrmEvent(new DrmEventNotifier() {
+                    @Override
+                    public void notify(DrmEventCallback callback) {
+                        callback.onDrmPrepared(
+                                mediaPlayer, mCurrentDSD, status);
                     }
-                }
+                });
             } else {   // blocking mode already has the lock
 
                 // continuing with prepareDrm
@@ -4141,6 +4028,29 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
             finished = true;
         }   // run()
 
+        /**
+         * Returns a byte[] containing the remainder of 'in', closing it when done.
+         */
+        private byte[] readInputStreamFully(InputStream in) throws IOException {
+            try {
+                return readInputStreamFullyNoClose(in);
+            } finally {
+                in.close();
+            }
+        }
+
+        /**
+         * Returns a byte[] containing the remainder of 'in'.
+         */
+        private byte[] readInputStreamFullyNoClose(InputStream in) throws IOException {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            byte[] buffer = new byte[1024];
+            int count;
+            while ((count = in.read(buffer)) != -1) {
+                bytes.write(buffer, 0, count);
+            }
+            return bytes.toByteArray();
+        }
     }   // ProvisioningThread
 
     private int HandleProvisioninig(UUID uuid) {
@@ -4776,16 +4686,17 @@ public final class MediaPlayer2Impl extends MediaPlayer2 {
 
         private void sendCompleteNotification(int status) {
             // In {@link #notifyWhenCommandLabelReached} case, a separate callback
-            // {#link #onCommandLabelReached} is already called in {@code process()}.
+            // {@link #onCommandLabelReached} is already called in {@code process()}.
             if (mMediaCallType == CALL_COMPLETED_NOTIFY_WHEN_COMMAND_LABEL_REACHED) {
                 return;
             }
-            synchronized (mEventCbLock) {
-                for (Pair<Executor, EventCallback> cb : mEventCallbackRecords) {
-                    cb.first.execute(() -> cb.second.onCallCompleted(
-                            MediaPlayer2Impl.this, mDSD, mMediaCallType, status));
+            sendEvent(new EventNotifier() {
+                @Override
+                public void notify(EventCallback callback) {
+                    callback.onCallCompleted(
+                            MediaPlayer2Impl.this, mDSD, mMediaCallType, status);
                 }
-            }
+            });
         }
     };
 

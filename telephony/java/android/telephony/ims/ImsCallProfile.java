@@ -117,10 +117,14 @@ public final class ImsCallProfile implements Parcelable {
      * @hide
      */
     public static final String EXTRA_CONFERENCE = "conference";
+
     /**
-     * @hide
+     * Boolean extra property set on an {@link ImsCallProfile} to indicate that this call is an
+     * emergency call.  The {@link ImsService} sets this on a call to indicate that the network has
+     * identified the call as an emergency call.
      */
-    public static final String EXTRA_E_CALL = "e_call";
+    public static final String EXTRA_EMERGENCY_CALL = "e_call";
+
     /**
      * @hide
      */
@@ -245,7 +249,8 @@ public final class ImsCallProfile implements Parcelable {
      * constants, the values passed for the {@link #EXTRA_CALL_RAT_TYPE} should be strings (e.g.
      * "14" vs (int) 14).
      * Note: This is used by {@link com.android.internal.telephony.imsphone.ImsPhoneConnection#
-     *      updateWifiStateFromExtras(Bundle)} to determine whether to set the
+     *      updateImsCallRatFromExtras(Bundle)} to determine whether to set the
+     * {@link android.telecom.TelecomManager#EXTRA_CALL_NETWORK_TYPE} extra value and
      * {@link android.telecom.Connection#PROPERTY_WIFI} property on a connection.
      */
     public static final String EXTRA_CALL_RAT_TYPE = "CallRadioTech";

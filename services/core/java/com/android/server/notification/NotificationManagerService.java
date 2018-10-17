@@ -16,6 +16,7 @@
 
 package com.android.server.notification;
 
+import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
 import static android.app.Notification.FLAG_FOREGROUND_SERVICE;
 import static android.app.NotificationManager.ACTION_APP_BLOCK_STATE_CHANGED;
 import static android.app.NotificationManager.ACTION_NOTIFICATION_CHANNEL_BLOCK_STATE_CHANGED;
@@ -178,6 +179,7 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AtomicFile;
+import android.util.IntArray;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -1151,15 +1153,18 @@ public class NotificationManagerService extends SystemService {
                 // turn off LED when user passes through lock screen
                 mNotificationLight.turnOff();
             } else if (action.equals(Intent.ACTION_USER_SWITCHED)) {
-                final int user = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, USER_NULL);
-                // reload per-user settings
-                mSettingsObserver.update(null);
+                final int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, USER_NULL);
                 mUserProfiles.updateCache(context);
-                // Refresh managed services
-                mConditionProviders.onUserSwitched(user);
-                mListeners.onUserSwitched(user);
-                mAssistants.onUserSwitched(user);
-                mZenModeHelper.onUserSwitched(user);
+                if (!mUserProfiles.isManagedProfile(userId)) {
+                    // reload per-user settings
+                    mSettingsObserver.update(null);
+                    // Refresh managed services
+                    mConditionProviders.onUserSwitched(userId);
+                    mListeners.onUserSwitched(userId);
+                    mZenModeHelper.onUserSwitched(userId);
+                }
+                // assistant is the only thing that cares about managed profiles specifically
+                mAssistants.onUserSwitched(userId);
             } else if (action.equals(Intent.ACTION_USER_ADDED)) {
                 final int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, USER_NULL);
                 if (userId != USER_NULL) {
@@ -1169,20 +1174,23 @@ public class NotificationManagerService extends SystemService {
                     }
                 }
             } else if (action.equals(Intent.ACTION_USER_REMOVED)) {
-                final int user = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, USER_NULL);
+                final int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, USER_NULL);
                 mUserProfiles.updateCache(context);
-                mZenModeHelper.onUserRemoved(user);
-                mPreferencesHelper.onUserRemoved(user);
-                mListeners.onUserRemoved(user);
-                mConditionProviders.onUserRemoved(user);
-                mAssistants.onUserRemoved(user);
+                mZenModeHelper.onUserRemoved(userId);
+                mPreferencesHelper.onUserRemoved(userId);
+                mListeners.onUserRemoved(userId);
+                mConditionProviders.onUserRemoved(userId);
+                mAssistants.onUserRemoved(userId);
                 savePolicyFile();
             } else if (action.equals(Intent.ACTION_USER_UNLOCKED)) {
-                final int user = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, USER_NULL);
-                mConditionProviders.onUserUnlocked(user);
-                mListeners.onUserUnlocked(user);
-                mAssistants.onUserUnlocked(user);
-                mZenModeHelper.onUserUnlocked(user);
+                final int userId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, USER_NULL);
+                mUserProfiles.updateCache(context);
+                mAssistants.onUserUnlocked(userId);
+                if (!mUserProfiles.isManagedProfile(userId)) {
+                    mConditionProviders.onUserUnlocked(userId);
+                    mListeners.onUserUnlocked(userId);
+                    mZenModeHelper.onUserUnlocked(userId);
+                }
             }
         }
     };
@@ -1566,7 +1574,7 @@ public class NotificationManagerService extends SystemService {
         filter.addAction(Intent.ACTION_USER_REMOVED);
         filter.addAction(Intent.ACTION_USER_UNLOCKED);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
-        getContext().registerReceiver(mIntentReceiver, filter);
+        getContext().registerReceiverAsUser(mIntentReceiver, UserHandle.ALL, filter, null, null);
 
         IntentFilter pkgFilter = new IntentFilter();
         pkgFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
@@ -1698,10 +1706,10 @@ public class NotificationManagerService extends SystemService {
                     UserHandle.getUserId(uid), REASON_CHANNEL_BANNED,
                     null);
             if (isUidSystemOrPhone(uid)) {
-                int[] profileIds = mUserProfiles.getCurrentProfileIds();
-                int N = profileIds.length;
+                IntArray profileIds = mUserProfiles.getCurrentProfileIds();
+                int N = profileIds.size();
                 for (int i = 0; i < N; i++) {
-                    int profileId = profileIds[i];
+                    int profileId = profileIds.get(i);
                     cancelAllNotificationsInt(MY_UID, MY_PID, pkg, channel.getId(), 0, 0, true,
                             profileId, REASON_CHANNEL_BANNED,
                             null);
@@ -1994,7 +2002,8 @@ public class NotificationManagerService extends SystemService {
         return mInternalService;
     }
 
-    private final IBinder mService = new INotificationManager.Stub() {
+    @VisibleForTesting
+    final IBinder mService = new INotificationManager.Stub() {
         // Toasts
         // ============================================================================
 
@@ -2008,21 +2017,30 @@ public class NotificationManagerService extends SystemService {
             }
 
             if (pkg == null || callback == null) {
-                Slog.e(TAG, "Not doing toast. pkg=" + pkg + " callback=" + callback);
+                Slog.e(TAG, "Not enqueuing toast. pkg=" + pkg + " callback=" + callback);
                 return ;
             }
-            final boolean isSystemToast = isCallerSystemOrPhone() || ("android".equals(pkg));
-            final boolean isPackageSuspended =
-                    isPackageSuspendedForUser(pkg, Binder.getCallingUid());
 
-            if (ENABLE_BLOCKED_TOASTS && !isSystemToast &&
-                    (!areNotificationsEnabledForPackage(pkg, Binder.getCallingUid())
-                            || isPackageSuspended)) {
-                Slog.e(TAG, "Suppressing toast from package " + pkg
-                        + (isPackageSuspended
-                                ? " due to package suspended by administrator."
-                                : " by user request."));
-                return;
+            final int callingUid = Binder.getCallingUid();
+            final boolean isSystemToast = isCallerSystemOrPhone()
+                    || PackageManagerService.PLATFORM_PACKAGE_NAME.equals(pkg);
+            final boolean isPackageSuspended = isPackageSuspendedForUser(pkg, callingUid);
+            final boolean notificationsDisabledForPackage = !areNotificationsEnabledForPackage(pkg,
+                    callingUid);
+
+            long callingIdentity = Binder.clearCallingIdentity();
+            try {
+                final boolean appIsForeground = mActivityManager.getUidImportance(callingUid)
+                        == IMPORTANCE_FOREGROUND;
+                if (ENABLE_BLOCKED_TOASTS && !isSystemToast && ((notificationsDisabledForPackage
+                        && !appIsForeground) || isPackageSuspended)) {
+                    Slog.e(TAG, "Suppressing toast from package " + pkg
+                            + (isPackageSuspended ? " due to package suspended."
+                            : " by user request."));
+                    return;
+                }
+            } finally {
+                Binder.restoreCallingIdentity(callingIdentity);
             }
 
             synchronized (mToastQueue) {
@@ -2390,7 +2408,7 @@ public class NotificationManagerService extends SystemService {
                 String pkg) {
             checkCallerIsSystemOrSameApp(pkg);
             return mPreferencesHelper.getNotificationChannelGroups(
-                    pkg, Binder.getCallingUid(), false, false);
+                    pkg, Binder.getCallingUid(), false, false, true);
         }
 
         @Override
@@ -2466,7 +2484,8 @@ public class NotificationManagerService extends SystemService {
         public ParceledListSlice<NotificationChannelGroup> getNotificationChannelGroupsForPackage(
                 String pkg, int uid, boolean includeDeleted) {
             checkCallerIsSystem();
-            return mPreferencesHelper.getNotificationChannelGroups(pkg, uid, includeDeleted, true);
+            return mPreferencesHelper.getNotificationChannelGroups(
+                    pkg, uid, includeDeleted, true, false);
         }
 
         @Override
@@ -4276,8 +4295,13 @@ public class NotificationManagerService extends SystemService {
     @VisibleForTesting
     int resolveNotificationUid(String callingPkg, String targetPkg,
             int callingUid, int userId) {
+        if (userId == UserHandle.USER_ALL) {
+            userId = USER_SYSTEM;
+        }
         // posted from app A on behalf of app A
-        if (isCallerSameApp(targetPkg, callingUid) && TextUtils.equals(callingPkg, targetPkg)) {
+        if (isCallerSameApp(targetPkg, callingUid, userId)
+                && (TextUtils.equals(callingPkg, targetPkg)
+                || isCallerSameApp(callingPkg, callingUid, userId))) {
             return callingUid;
         }
 
@@ -4294,7 +4318,8 @@ public class NotificationManagerService extends SystemService {
             return targetUid;
         }
 
-        throw new SecurityException("Caller " + callingUid + " cannot post for pkg " + targetPkg);
+        throw new SecurityException("Caller " + callingPkg + ":" + callingUid
+                + " cannot post for pkg " + targetPkg + " in user " + userId);
     }
 
     /**
@@ -4314,7 +4339,7 @@ public class NotificationManagerService extends SystemService {
         if (!isSystemNotification && !isNotificationFromListener) {
             synchronized (mNotificationLock) {
                 if (mNotificationsByKey.get(r.sbn.getKey()) == null
-                        && isCallerInstantApp(pkg, callingUid)) {
+                        && isCallerInstantApp(pkg, Binder.getCallingUid(), userId)) {
                     // Ephemeral apps have some special constraints for notifications.
                     // They are not allowed to create new notifications however they are allowed to
                     // update notifications created by the system (e.g. a foreground service
@@ -4720,7 +4745,8 @@ public class NotificationManagerService extends SystemService {
                     if (notification.getSmallIcon() != null) {
                         StatusBarNotification oldSbn = (old != null) ? old.sbn : null;
                         mListeners.notifyPostedLocked(r, old);
-                        if (oldSbn == null || !Objects.equals(oldSbn.getGroup(), n.getGroup())) {
+                        if ((oldSbn == null || !Objects.equals(oldSbn.getGroup(), n.getGroup()))
+                                && !isCritical(r)) {
                             mHandler.post(new Runnable() {
                                 @Override
                                 public void run() {
@@ -4887,6 +4913,19 @@ public class NotificationManagerService extends SystemService {
         }
 
         return false;
+    }
+
+    /**
+     * Check if the notification is classified as critical.
+     *
+     * @param record the record to test for criticality
+     * @return {@code true} if notification is considered critical
+     *
+     * @see CriticalNotificationExtractor for criteria
+     */
+    private boolean isCritical(NotificationRecord record) {
+        // 0 is the most critical
+        return record.getCriticality() < CriticalNotificationExtractor.NORMAL;
     }
 
     /**
@@ -6408,7 +6447,8 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    private boolean isCallerInstantApp(String pkg, int callingUid) {
+    @VisibleForTesting
+    boolean isCallerInstantApp(String pkg, int callingUid, int userId) {
         // System is always allowed to act for ephemeral apps.
         if (isUidSystemOrPhone(callingUid)) {
             return false;
@@ -6417,8 +6457,7 @@ public class NotificationManagerService extends SystemService {
         mAppOps.checkPackage(callingUid, pkg);
 
         try {
-            ApplicationInfo ai = mPackageManager.getApplicationInfo(pkg, 0,
-                    UserHandle.getCallingUserId());
+            ApplicationInfo ai = mPackageManager.getApplicationInfo(pkg, 0, userId);
             if (ai == null) {
                 throw new SecurityException("Unknown package " + pkg);
             }
@@ -6430,13 +6469,13 @@ public class NotificationManagerService extends SystemService {
     }
 
     private void checkCallerIsSameApp(String pkg) {
-        checkCallerIsSameApp(pkg, Binder.getCallingUid());
+        checkCallerIsSameApp(pkg, Binder.getCallingUid(), UserHandle.getCallingUserId());
     }
 
-    private void checkCallerIsSameApp(String pkg, int uid) {
+    private void checkCallerIsSameApp(String pkg, int uid, int userId) {
         try {
             ApplicationInfo ai = mPackageManager.getApplicationInfo(
-                    pkg, 0, UserHandle.getCallingUserId());
+                    pkg, 0, userId);
             if (ai == null) {
                 throw new SecurityException("Unknown package " + pkg);
             }
@@ -6458,9 +6497,9 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    private boolean isCallerSameApp(String pkg, int uid) {
+    private boolean isCallerSameApp(String pkg, int uid, int userId) {
         try {
-            checkCallerIsSameApp(pkg, uid);
+            checkCallerIsSameApp(pkg, uid, userId);
             return true;
         } catch (SecurityException e) {
             return false;
@@ -6691,7 +6730,9 @@ public class NotificationManagerService extends SystemService {
         @Override
         public void onUserUnlocked(int user) {
             if (DEBUG) Slog.d(TAG, "onUserUnlocked u=" + user);
-            rebindServices(true);
+            // force rebind the assistant, as it might be keeping its own state in user locked
+            // storage
+            rebindServices(true, user);
         }
 
         protected void onNotificationsSeenLocked(ArrayList<NotificationRecord> records) {

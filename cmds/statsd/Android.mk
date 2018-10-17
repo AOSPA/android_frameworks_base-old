@@ -67,7 +67,9 @@ statsd_common_src := \
     src/subscriber/SubscriberReporter.cpp \
     src/HashableDimensionKey.cpp \
     src/guardrail/StatsdStats.cpp \
-    src/socket/StatsSocketListener.cpp
+    src/socket/StatsSocketListener.cpp \
+    src/shell/ShellSubscriber.cpp \
+    src/shell/shell_config.proto
 
 # TODO(b/110563449): Once statsd is using a blueprint file, migrate to the proper filegroups.
 statsd_common_src += \
@@ -97,6 +99,7 @@ statsd_common_shared_libraries := \
     libhidlbase \
     libhidltransport \
     libhwbinder \
+    android.frameworks.stats@1.0 \
     android.hardware.health@2.0 \
     android.hardware.power@1.0 \
     android.hardware.power@1.1 \
@@ -144,10 +147,10 @@ LOCAL_SHARED_LIBRARIES := $(statsd_common_shared_libraries) \
 LOCAL_MODULE_CLASS := EXECUTABLES
 
 # Enable sanitizer ONLY on eng builds.
-ifeq ($(TARGET_BUILD_VARIANT),eng)
-    LOCAL_CLANG := true
-    LOCAL_SANITIZE := address
-endif
+#ifeq ($(TARGET_BUILD_VARIANT),eng)
+#    LOCAL_CLANG := true
+#    LOCAL_SANITIZE := address
+#endif
 
 # Add a flag to enable stats log printing from statsd on debug builds.
 ifneq (,$(filter userdebug eng, $(TARGET_BUILD_VARIANT)))
@@ -225,7 +228,8 @@ LOCAL_SRC_FILES := \
     tests/e2e/Anomaly_count_e2e_test.cpp \
     tests/e2e/Anomaly_duration_sum_e2e_test.cpp \
     tests/e2e/ConfigTtl_e2e_test.cpp \
-    tests/e2e/PartialBucket_e2e_test.cpp
+    tests/e2e/PartialBucket_e2e_test.cpp \
+    tests/shell/ShellSubscriber_test.cpp
 
 LOCAL_STATIC_LIBRARIES := \
     $(statsd_common_static_libraries) \

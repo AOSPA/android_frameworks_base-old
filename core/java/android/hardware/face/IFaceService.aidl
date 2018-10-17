@@ -17,7 +17,7 @@ package android.hardware.face;
 
 import android.os.Bundle;
 import android.hardware.biometrics.IBiometricPromptReceiver;
-import android.hardware.biometrics.IBiometricPromptServiceReceiver;
+import android.hardware.biometrics.IBiometricServiceReceiver;
 import android.hardware.biometrics.IBiometricServiceLockoutResetCallback;
 import android.hardware.face.IFaceServiceReceiver;
 import android.hardware.face.Face;
@@ -34,8 +34,8 @@ interface IFaceService {
 
     // This method invokes the BiometricDialog. The arguments are almost the same as above,
     // but should only be called from (BiometricPromptService).
-    void authenticateFromService(IBinder token, long sessionId, int userId,
-            IBiometricPromptServiceReceiver receiver, int flags, String opPackageName,
+    void authenticateFromService(boolean requireConfirmation, IBinder token, long sessionId,
+            int userId, IBiometricServiceReceiver receiver, int flags, String opPackageName,
             in Bundle bundle, IBiometricPromptReceiver dialogReceiver,
             int callingUid, int callingPid, int callingUserId);
 
@@ -66,10 +66,10 @@ interface IFaceService {
     boolean isHardwareDetected(long deviceId, String opPackageName);
 
     // Get a pre-enrollment authentication token
-    long preEnroll(IBinder token);
+    long generateChallenge(IBinder token);
 
     // Finish an enrollment sequence and invalidate the authentication token
-    int postEnroll(IBinder token);
+    int revokeChallenge(IBinder token);
 
     // Determine if a user has at least one enrolled face
     boolean hasEnrolledFaces(int userId, String opPackageName);
@@ -94,4 +94,8 @@ interface IFaceService {
 
     // Enumerate all faces
     void enumerate(IBinder token, int userId, IFaceServiceReceiver receiver);
+
+    int setRequireAttention(boolean requireAttention, in byte [] token);
+
+    boolean getRequireAttention(in byte [] token);
 }

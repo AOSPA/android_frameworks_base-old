@@ -17,7 +17,7 @@
 #pragma once
 
 #include "hwui/AnimatedImageDrawable.h"
-#include "GLFunctorDrawable.h"
+#include "FunctorDrawable.h"
 #include "RecordingCanvas.h"
 #include "RenderNodeDrawable.h"
 #include "TreeInfo.h"
@@ -49,9 +49,6 @@ namespace skiapipeline {
  */
 class SkiaDisplayList {
 public:
-    // index of DisplayListOp restore, after which projected descendants should be drawn
-    int projectionReceiveIndex = -1;
-
     size_t getUsedSize() { return allocator.usedSize(); }
 
     ~SkiaDisplayList() {
@@ -77,7 +74,7 @@ public:
      * that creates them. Allocator dtor invokes all SkDrawable dtors.
      */
     template <class T, typename... Params>
-    SkDrawable* allocateDrawable(Params&&... params) {
+    T* allocateDrawable(Params&&... params) {
         return allocator.create<T>(std::forward<Params>(params)...);
     }
 
@@ -95,6 +92,8 @@ public:
      * Returns true if this list directly contains a VectorDrawable drawing command.
      */
     bool hasVectorDrawables() const { return !mVectorDrawables.empty(); }
+
+    bool hasText() const { return mDisplayList.hasText(); }
 
     /**
      * Attempts to reset and reuse this DisplayList.
@@ -155,7 +154,7 @@ public:
      * cannot relocate.
      */
     std::deque<RenderNodeDrawable> mChildNodes;
-    std::deque<GLFunctorDrawable> mChildFunctors;
+    std::deque<FunctorDrawable*> mChildFunctors;
     std::vector<SkImage*> mMutableImages;
     std::vector<VectorDrawableRoot*> mVectorDrawables;
     std::vector<AnimatedImageDrawable*> mAnimatedImages;

@@ -16,6 +16,8 @@
 
 package com.android.server.notification;
 
+import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
+import static android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_GONE;
 import static android.app.Notification.FLAG_FOREGROUND_SERVICE;
 import static android.app.NotificationManager.EXTRA_BLOCKED_STATE;
 import static android.app.NotificationManager.IMPORTANCE_HIGH;
@@ -74,6 +76,7 @@ import android.app.Notification.MessagingStyle.Message;
 import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
+import android.app.ITransientNotification;
 import android.app.IUriGrantsManager;
 import android.app.admin.DevicePolicyManagerInternal;
 import android.app.usage.UsageStatsManagerInternal;
@@ -97,6 +100,7 @@ import android.os.IBinder;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.MediaStore;
 import android.provider.Settings.Secure;
 import android.service.notification.Adjustment;
@@ -117,12 +121,14 @@ import android.util.Log;
 import com.android.internal.R;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.server.LocalServices;
+import com.android.server.SystemService;
 import com.android.server.UiServiceTestCase;
 import com.android.server.lights.Light;
 import com.android.server.lights.LightsManager;
 import com.android.server.notification.NotificationManagerService.NotificationAssistants;
 import com.android.server.notification.NotificationManagerService.NotificationListeners;
 import com.android.server.uri.UriGrantsManagerInternal;
+import com.android.server.wm.WindowManagerInternal;
 
 import org.junit.After;
 import org.junit.Before;
@@ -159,6 +165,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     private IPackageManager mPackageManager;
     @Mock
     private PackageManager mPackageManagerClient;
+    @Mock
+    private WindowManagerInternal mWindowManagerInternal;
     private TestableContext mContext = spy(getContext());
     private final String PKG = mContext.getPackageName();
     private TestableLooper mTestableLooper;
@@ -237,6 +245,16 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         }
     }
 
+    private class TestableToastCallback extends ITransientNotification.Stub {
+        @Override
+        public void show(IBinder windowToken) {
+        }
+
+        @Override
+        public void hide() {
+        }
+    }
+
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
@@ -248,6 +266,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         LocalServices.removeServiceForTest(UriGrantsManagerInternal.class);
         LocalServices.addService(UriGrantsManagerInternal.class, mUgmInternal);
+        LocalServices.removeServiceForTest(WindowManagerInternal.class);
+        LocalServices.addService(WindowManagerInternal.class, mWindowManagerInternal);
 
         mService = new TestableNotificationManagerService(mContext);
 
@@ -301,6 +321,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                     mGroupHelper, mAm, mAppUsageStats,
                     mock(DevicePolicyManagerInternal.class), mUgm, mUgmInternal,
                     mAppOpsManager);
+            mService.onBootPhase(SystemService.PHASE_SYSTEM_SERVICES_READY);
         } catch (SecurityException e) {
             if (!e.getMessage().contains("Permission Denial: not allowed to send broadcast")) {
                 throw e;
@@ -2191,6 +2212,26 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testDontAutogroupIfCritical() throws Exception {
+        NotificationRecord r = generateNotificationRecord(mTestNotificationChannel, 0, null, false);
+        r.setCriticality(CriticalNotificationExtractor.CRITICAL_LOW);
+        mService.addEnqueuedNotification(r);
+        NotificationManagerService.PostNotificationRunnable runnable =
+                mService.new PostNotificationRunnable(r.getKey());
+        runnable.run();
+
+        r = generateNotificationRecord(mTestNotificationChannel, 1, null, false);
+        r.setCriticality(CriticalNotificationExtractor.CRITICAL);
+        runnable = mService.new PostNotificationRunnable(r.getKey());
+        mService.addEnqueuedNotification(r);
+
+        runnable.run();
+        waitForIdle();
+
+        verify(mGroupHelper, never()).onNotificationPosted(any(), anyBoolean());
+    }
+
+    @Test
     public void testNoFakeColorizedPermission() throws Exception {
         when(mPackageManagerClient.checkPermission(any(), any())).thenReturn(PERMISSION_DENIED);
         Notification.Builder nb = new Notification.Builder(mContext,
@@ -3382,10 +3423,44 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testIsCallerInstantApp_primaryUser() throws Exception {
+        ApplicationInfo info = new ApplicationInfo();
+        info.privateFlags = ApplicationInfo.PRIVATE_FLAG_INSTANT;
+        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(0))).thenReturn(info);
+
+        assertTrue(mService.isCallerInstantApp("any", 45770, 0));
+
+        info.privateFlags = 0;
+        assertFalse(mService.isCallerInstantApp("any", 575370, 0));
+    }
+
+    @Test
+    public void testIsCallerInstantApp_secondaryUser() throws Exception {
+        ApplicationInfo info = new ApplicationInfo();
+        info.privateFlags = ApplicationInfo.PRIVATE_FLAG_INSTANT;
+        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(10))).thenReturn(info);
+        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(0))).thenReturn(null);
+
+        assertTrue(mService.isCallerInstantApp("any", 68638450, 10));
+    }
+
+    @Test
+    public void testResolveNotificationUid_sameApp_nonSystemUser() throws Exception {
+        ApplicationInfo info = new ApplicationInfo();
+        info.uid = Binder.getCallingUid();
+        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(10))).thenReturn(info);
+        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(0))).thenReturn(null);
+
+        int actualUid = mService.resolveNotificationUid("caller", "caller", info.uid, 10);
+
+        assertEquals(info.uid, actualUid);
+    }
+
+    @Test
     public void testResolveNotificationUid_sameApp() throws Exception {
         ApplicationInfo info = new ApplicationInfo();
         info.uid = Binder.getCallingUid();
-        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), anyInt())).thenReturn(info);
+        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(0))).thenReturn(info);
 
         int actualUid = mService.resolveNotificationUid("caller", "caller", info.uid, 0);
 
@@ -3393,17 +3468,14 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
-    public void testResolveNotificationUid_sameAppWrongPkg() throws Exception {
+    public void testResolveNotificationUid_sameAppDiffPackage() throws Exception {
         ApplicationInfo info = new ApplicationInfo();
         info.uid = Binder.getCallingUid();
-        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), anyInt())).thenReturn(info);
+        when(mPackageManager.getApplicationInfo(anyString(), anyInt(), eq(0))).thenReturn(info);
 
-        try {
-            mService.resolveNotificationUid("caller", "other", info.uid, 0);
-            fail("Incorrect pkg didn't throw security exception");
-        } catch (SecurityException e) {
-            // yay
-        }
+        int actualUid = mService.resolveNotificationUid("caller", "callerAlso", info.uid, 0);
+
+        assertEquals(info.uid, actualUid);
     }
 
     @Test
@@ -3495,5 +3567,94 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         verify(mListeners, times(1)).notifyPostedLocked(captor.capture(), any());
 
         assertEquals(0, captor.getValue().getNotification().flags);
+    }
+
+    @Test
+    public void testAllowForegroundToasts() throws Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        // notifications from this package are blocked by the user
+        mService.setPreferencesHelper(mPreferencesHelper);
+        when(mPreferencesHelper.getImportance(testPackage, mUid)).thenReturn(IMPORTANCE_NONE);
+
+        // this app is in the foreground
+        when(mActivityManager.getUidImportance(mUid)).thenReturn(IMPORTANCE_FOREGROUND);
+
+        // enqueue toast -> toast should still enqueue
+        ((INotificationManager)mService.mService).enqueueToast(testPackage,
+                new TestableToastCallback(), 2000, 0);
+        assertEquals(1, mService.mToastQueue.size());
+    }
+
+    @Test
+    public void testDisallowToastsFromSuspendedPackages() throws Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+
+        // package is suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(true);
+
+        // notifications from this package are NOT blocked by the user
+        mService.setPreferencesHelper(mPreferencesHelper);
+        when(mPreferencesHelper.getImportance(testPackage, mUid)).thenReturn(IMPORTANCE_LOW);
+
+        // enqueue toast -> no toasts enqueued
+        ((INotificationManager)mService.mService).enqueueToast(testPackage,
+                new TestableToastCallback(), 2000, 0);
+        assertEquals(0, mService.mToastQueue.size());
+    }
+
+    @Test
+    public void testDisallowToastsFromBlockedApps() throws Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = false;
+
+        // package is not suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(false);
+
+        // notifications from this package are blocked by the user
+        mService.setPreferencesHelper(mPreferencesHelper);
+        when(mPreferencesHelper.getImportance(testPackage, mUid)).thenReturn(IMPORTANCE_NONE);
+
+        // this app is NOT in the foreground
+        when(mActivityManager.getUidImportance(mUid)).thenReturn(IMPORTANCE_GONE);
+
+        // enqueue toast -> no toasts enqueued
+        ((INotificationManager)mService.mService).enqueueToast(testPackage,
+                new TestableToastCallback(), 2000, 0);
+        assertEquals(0, mService.mToastQueue.size());
+    }
+
+    @Test
+    public void testAlwaysAllowSystemToasts() throws Exception {
+        final String testPackage = "testPackageName";
+        assertEquals(0, mService.mToastQueue.size());
+        mService.isSystemUid = true;
+
+        // package is suspended
+        when(mPackageManager.isPackageSuspendedForUser(testPackage, UserHandle.getUserId(mUid)))
+                .thenReturn(true);
+
+        // notifications from this package ARE blocked by the user
+        mService.setPreferencesHelper(mPreferencesHelper);
+        when(mPreferencesHelper.getImportance(testPackage, mUid)).thenReturn(IMPORTANCE_NONE);
+
+        // this app is NOT in the foreground
+        when(mActivityManager.getUidImportance(mUid)).thenReturn(IMPORTANCE_GONE);
+
+        // enqueue toast -> system toast can still be enqueued
+        ((INotificationManager)mService.mService).enqueueToast(testPackage,
+                new TestableToastCallback(), 2000, 0);
+        assertEquals(1, mService.mToastQueue.size());
     }
 }

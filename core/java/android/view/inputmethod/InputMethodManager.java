@@ -48,6 +48,7 @@ import android.util.Pools.SimplePool;
 import android.util.PrintWriterPrinter;
 import android.util.Printer;
 import android.util.SparseArray;
+import android.view.Display;
 import android.view.InputChannel;
 import android.view.InputEvent;
 import android.view.InputEventSender;
@@ -57,7 +58,7 @@ import android.view.ViewRootImpl;
 import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.autofill.AutofillManager;
 
-import com.android.internal.inputmethod.InputMethodPrivilegedOperations;
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperationsRegistry;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.view.IInputConnectionWrapper;
@@ -70,6 +71,7 @@ import com.android.internal.view.InputMethodClient;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -226,8 +228,67 @@ public final class InputMethodManager {
 
     static final String PENDING_EVENT_COUNTER = "aq:imm";
 
+    /**
+     * Ensures that {@link #sInstance} becomes non-{@code null} for application that have directly
+     * or indirectly relied on {@link #sInstance} via reflection or something like that.
+     *
+     * <p>Here are scenarios we know and there could be more scenarios we are not
+     * aware of right know.</p>
+     *
+     * <ul>
+     *     <li>Apps that directly access {@link #sInstance} via reflection, which is currently
+     *     allowed because of {@link UnsupportedAppUsage} annotation.  Currently
+     *     {@link android.view.WindowManagerGlobal#getWindowSession()} is likely to guarantee that
+     *     {@link #sInstance} is not {@code null} when such an app is accessing it, but removing
+     *     that code from {@link android.view.WindowManagerGlobal#getWindowSession()} can reveal
+     *     untested code paths in their apps, which probably happen in an early startup time of that
+     *     app.</li>
+     *     <li>Apps that directly access {@link #peekInstance()} via reflection, which is currently
+     *     allowed because of {@link UnsupportedAppUsage} annotation.  Currently
+     *     {@link android.view.WindowManagerGlobal#getWindowSession()} is likely to guarantee that
+     *     {@link #peekInstance()} returns non-{@code null} object when such an app is calling
+     *     {@link #peekInstance()}, but removing that code from
+     *     {@link android.view.WindowManagerGlobal#getWindowSession()} can reveal untested code
+     *     paths in their apps, which probably happen in an early startup time of that app. The good
+     *     news is that unlike {@link #sInstance}'s case we can at least work around this scenario
+     *     by changing the semantics of {@link #peekInstance()}, which is currently defined as
+     *     "retrieve the global {@link InputMethodManager} instance, if it exists" to something that
+     *     always returns non-{@code null} {@link InputMethodManager}.  However, introducing such an
+     *     workaround can also trigger different compatibility issues if {@link #peekInstance()} was
+     *     called before {@link android.view.WindowManagerGlobal#getWindowSession()} and it expected
+     *     {@link #peekInstance()} to return {@code null} as written in the JavaDoc.</li>
+     * </ul>
+     *
+     * <p>Since this is purely a compatibility hack, this method must be used only from
+     * {@link android.view.WindowManagerGlobal#getWindowSession()} and {@link #getInstance()}.</p>
+     *
+     * <p>TODO(Bug 116157766): Remove this method once we clean up {@link UnsupportedAppUsage}.</p>
+     * @hide
+     */
+    public static void ensureDefaultInstanceForDefaultDisplayIfNecessary() {
+        forContextInternal(Display.DEFAULT_DISPLAY, Looper.getMainLooper());
+    }
+
+    private static final Object sLock = new Object();
+
+    /**
+     * @deprecated This cannot be compatible with multi-display. Please do not use this.
+     */
+    @Deprecated
+    @GuardedBy("sLock")
     @UnsupportedAppUsage
     static InputMethodManager sInstance;
+
+    /**
+     * Global map between display to {@link InputMethodManager}.
+     *
+     * <p>Currently this map works like a so-called leaky singleton.  Once an instance is registered
+     * for the associated display ID, that instance will never be garbage collected.</p>
+     *
+     * <p>TODO(Bug 116699479): Implement instance clean up mechanism.</p>
+     */
+    @GuardedBy("sLock")
+    private static final SparseArray<InputMethodManager> sInstanceMap = new SparseArray<>();
 
     /**
      * @hide Flag for IInputMethodManager.windowGainedFocus: a view in
@@ -285,6 +346,8 @@ public final class InputMethodManager {
 
     // Our generic input connection if the current target does not have its own.
     final IInputContext mIInputContext;
+
+    private final int mDisplayId;
 
     /**
      * True if this input method client is active, initially false.
@@ -387,9 +450,6 @@ public final class InputMethodManager {
     final Pool<PendingEvent> mPendingEventPool = new SimplePool<>(20);
     final SparseArray<PendingEvent> mPendingEvents = new SparseArray<>(20);
 
-    private final InputMethodPrivilegedOperationsRegistry mPrivOpsRegistry =
-            new InputMethodPrivilegedOperationsRegistry();
-
     // -----------------------------------------------------------
 
     static final int MSG_DUMP = 1;
@@ -404,6 +464,29 @@ public final class InputMethodManager {
     private static boolean isAutofillUIShowing(View servedView) {
         AutofillManager afm = servedView.getContext().getSystemService(AutofillManager.class);
         return afm != null && afm.isAutofillUiShowing();
+    }
+
+    /**
+     * Checks the consistency between {@link InputMethodManager} state and {@link View} state.
+     *
+     * @param view {@link View} to be checked
+     * @return {@code true} if {@code view} is not {@code null} and there is a {@link Context}
+     *         mismatch between {@link InputMethodManager} and {@code view}
+     */
+    private boolean shouldDispatchToViewContext(@Nullable View view) {
+        if (view == null) {
+            return false;
+        }
+        final int viewDisplayId = getDisplayId(view.getContext());
+        if (viewDisplayId != mDisplayId) {
+            Log.w(TAG, "b/117267690: Context mismatch found. view=" + view + " belongs to"
+                    + " displayId=" + viewDisplayId
+                    + " but InputMethodManager belongs to displayId=" + mDisplayId
+                    + ". Use the right InputMethodManager instance to avoid performance overhead.",
+                    new Throwable());
+            return true;
+        }
+        return false;
     }
 
     private static boolean canStartInput(View servedView) {
@@ -632,46 +715,152 @@ public final class InputMethodManager {
 
     final InputConnection mDummyInputConnection = new BaseInputConnection(this, false);
 
-    InputMethodManager(Looper looper) throws ServiceNotFoundException {
-        this(IInputMethodManager.Stub.asInterface(
-                ServiceManager.getServiceOrThrow(Context.INPUT_METHOD_SERVICE)), looper);
-    }
-
-    InputMethodManager(IInputMethodManager service, Looper looper) {
-        mService = service;
-        mMainLooper = looper;
-        mH = new H(looper);
-        mIInputContext = new ControlledInputConnectionWrapper(looper,
-                mDummyInputConnection, this);
-    }
-
     /**
-     * Retrieve the global InputMethodManager instance, creating it if it
-     * doesn't already exist.
-     * @hide
+     * For layoutlib to clean up static objects inside {@link InputMethodManager}.
      */
-    @UnsupportedAppUsage
-    public static InputMethodManager getInstance() {
-        synchronized (InputMethodManager.class) {
-            if (sInstance == null) {
-                try {
-                    sInstance = new InputMethodManager(Looper.getMainLooper());
-                } catch (ServiceNotFoundException e) {
-                    throw new IllegalStateException(e);
-                }
-            }
-            return sInstance;
+    static void tearDownEditMode() {
+        if (!isInEditMode()) {
+            throw new UnsupportedOperationException(
+                    "This method must be called only from layoutlib");
+        }
+        synchronized (sLock) {
+            sInstance = null;
         }
     }
 
     /**
-     * Private optimization: retrieve the global InputMethodManager instance,
-     * if it exists.
+     * For layoutlib to override this method to return {@code true}.
+     *
+     * @return {@code true} if the process is running for developer tools
+     * @see View#isInEditMode()
+     */
+    private static boolean isInEditMode() {
+        return false;
+    }
+
+    private static IInputMethodManager getIInputMethodManager() throws ServiceNotFoundException {
+        if (!isInEditMode()) {
+            return IInputMethodManager.Stub.asInterface(
+                    ServiceManager.getServiceOrThrow(Context.INPUT_METHOD_SERVICE));
+        }
+        // If InputMethodManager is running for layoutlib, stub out IPCs into IMMS.
+        final Class<IInputMethodManager> c = IInputMethodManager.class;
+        return (IInputMethodManager) Proxy.newProxyInstance(c.getClassLoader(),
+                new Class[]{c}, (proxy, method, args) -> {
+                    final Class<?> returnType = method.getReturnType();
+                    if (returnType == boolean.class) {
+                        return false;
+                    } else if (returnType == int.class) {
+                        return 0;
+                    } else if (returnType == long.class) {
+                        return 0L;
+                    } else if (returnType == short.class) {
+                        return 0;
+                    } else if (returnType == char.class) {
+                        return 0;
+                    } else if (returnType == byte.class) {
+                        return 0;
+                    } else if (returnType == float.class) {
+                        return 0f;
+                    } else if (returnType == double.class) {
+                        return 0.0;
+                    } else {
+                        return null;
+                    }
+                });
+    }
+
+    InputMethodManager(int displayId, Looper looper) throws ServiceNotFoundException {
+        mService = getIInputMethodManager();
+        mMainLooper = looper;
+        mH = new H(looper);
+        mDisplayId = displayId;
+        mIInputContext = new ControlledInputConnectionWrapper(looper,
+                mDummyInputConnection, this);
+    }
+
+    private static int getDisplayId(Context context) {
+        final Display display = context.getDisplay();
+        return display != null ? display.getDisplayId() : Display.DEFAULT_DISPLAY;
+    }
+
+    /**
+     * Retrieve an instance for the given {@link Context}, creating it if it doesn't already exist.
+     *
+     * @param context {@link Context} for which IME APIs need to work
+     * @return {@link InputMethodManager} instance
      * @hide
      */
+    @Nullable
+    public static InputMethodManager forContext(Context context) {
+        final int displayId = getDisplayId(context);
+        // For better backward compatibility, we always use Looper.getMainLooper() for the default
+        // display case.
+        final Looper looper = displayId == Display.DEFAULT_DISPLAY
+                ? Looper.getMainLooper() : context.getMainLooper();
+        return forContextInternal(displayId, looper);
+    }
+
+    @Nullable
+    private static InputMethodManager forContextInternal(int displayId, Looper looper) {
+        final boolean isDefaultDisplay = displayId == Display.DEFAULT_DISPLAY;
+        synchronized (sLock) {
+            InputMethodManager instance = sInstanceMap.get(displayId);
+            if (instance != null) {
+                return instance;
+            }
+            try {
+                instance = new InputMethodManager(displayId, looper);
+                instance.mService.addClient(instance.mClient, instance.mIInputContext, displayId);
+            } catch (ServiceNotFoundException | RemoteException e) {
+                throw new IllegalStateException(e);
+            }
+            // For backward compatibility, store the instance also to sInstance for default display.
+            if (sInstance == null && isDefaultDisplay) {
+                sInstance = instance;
+            }
+            sInstanceMap.put(displayId, instance);
+            return instance;
+        }
+    }
+
+    /**
+     * Deprecated. Do not use.
+     *
+     * @return global {@link InputMethodManager} instance
+     * @deprecated Use {@link Context#getSystemService(Class)} instead. This method cannot fully
+     *             support multi-display scenario.
+     * @hide
+     */
+    @Deprecated
+    @UnsupportedAppUsage
+    public static InputMethodManager getInstance() {
+        Log.w(TAG, "InputMethodManager.getInstance() is deprecated because it cannot be"
+                        + " compatible with multi-display."
+                        + " Use context.getSystemService(InputMethodManager.class) instead.",
+                new Throwable());
+        ensureDefaultInstanceForDefaultDisplayIfNecessary();
+        return peekInstance();
+    }
+
+    /**
+     * Deprecated. Do not use.
+     *
+     * @return {@link #sInstance}
+     * @deprecated Use {@link Context#getSystemService(Class)} instead. This method cannot fully
+     *             support multi-display scenario.
+     * @hide
+     */
+    @Deprecated
     @UnsupportedAppUsage
     public static InputMethodManager peekInstance() {
-        return sInstance;
+        Log.w(TAG, "InputMethodManager.peekInstance() is deprecated because it cannot be"
+                        + " compatible with multi-display."
+                        + " Use context.getSystemService(InputMethodManager.class) instead.",
+                new Throwable());
+        synchronized (sLock) {
+            return sInstance;
+        }
     }
 
     /** @hide */
@@ -739,7 +928,7 @@ public final class InputMethodManager {
      */
     @Deprecated
     public void showStatusIcon(IBinder imeToken, String packageName, @DrawableRes int iconId) {
-        mPrivOpsRegistry.get(imeToken).updateStatusIcon(packageName, iconId);
+        InputMethodPrivilegedOperationsRegistry.get(imeToken).updateStatusIcon(packageName, iconId);
     }
 
     /**
@@ -749,7 +938,7 @@ public final class InputMethodManager {
      */
     @Deprecated
     public void hideStatusIcon(IBinder imeToken) {
-        mPrivOpsRegistry.get(imeToken).updateStatusIcon(null, 0);
+        InputMethodPrivilegedOperationsRegistry.get(imeToken).updateStatusIcon(null, 0);
     }
 
     /** @hide */
@@ -788,6 +977,11 @@ public final class InputMethodManager {
      * input method.
      */
     public boolean isActive(View view) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            return view.getContext().getSystemService(InputMethodManager.class).isActive(view);
+        }
+
         checkFocus();
         synchronized (mH) {
             return (mServedView == view
@@ -878,6 +1072,13 @@ public final class InputMethodManager {
     }
 
     public void displayCompletions(View view, CompletionInfo[] completions) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            view.getContext().getSystemService(InputMethodManager.class)
+                    .displayCompletions(view, completions);
+            return;
+        }
+
         checkFocus();
         synchronized (mH) {
             if (mServedView != view && (mServedView == null
@@ -896,6 +1097,13 @@ public final class InputMethodManager {
     }
 
     public void updateExtractedText(View view, int token, ExtractedText text) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            view.getContext().getSystemService(InputMethodManager.class)
+                    .updateExtractedText(view, token, text);
+            return;
+        }
+
         checkFocus();
         synchronized (mH) {
             if (mServedView != view && (mServedView == null
@@ -937,6 +1145,12 @@ public final class InputMethodManager {
      * 0 or have the {@link #SHOW_IMPLICIT} bit set.
      */
     public boolean showSoftInput(View view, int flags) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            return view.getContext().getSystemService(InputMethodManager.class)
+                    .showSoftInput(view, flags);
+        }
+
         return showSoftInput(view, flags, null);
     }
 
@@ -999,6 +1213,12 @@ public final class InputMethodManager {
      * {@link #RESULT_HIDDEN}.
      */
     public boolean showSoftInput(View view, int flags, ResultReceiver resultReceiver) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            return view.getContext().getSystemService(InputMethodManager.class)
+                    .showSoftInput(view, flags, resultReceiver);
+        }
+
         checkFocus();
         synchronized (mH) {
             if (mServedView != view && (mServedView == null
@@ -1162,6 +1382,12 @@ public final class InputMethodManager {
      * @param view The view whose text has changed.
      */
     public void restartInput(View view) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            view.getContext().getSystemService(InputMethodManager.class).restartInput(view);
+            return;
+        }
+
         checkFocus();
         synchronized (mH) {
             if (mServedView != view && (mServedView == null
@@ -1349,6 +1575,10 @@ public final class InputMethodManager {
             if (mServedView != null &&
                     mServedView.getWindowToken() == appWindowToken) {
                 finishInputLocked();
+            }
+            if (mCurRootView != null &&
+                    mCurRootView.getWindowToken() == appWindowToken) {
+                mCurRootView = null;
             }
         }
     }
@@ -1582,6 +1812,13 @@ public final class InputMethodManager {
      */
     public void updateSelection(View view, int selStart, int selEnd,
             int candidatesStart, int candidatesEnd) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            view.getContext().getSystemService(InputMethodManager.class)
+                    .updateSelection(view, selStart, selEnd, candidatesStart, candidatesEnd);
+            return;
+        }
+
         checkFocus();
         synchronized (mH) {
             if ((mServedView != view && (mServedView == null
@@ -1619,6 +1856,12 @@ public final class InputMethodManager {
      * Notify the event when the user tapped or clicked the text view.
      */
     public void viewClicked(View view) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            view.getContext().getSystemService(InputMethodManager.class).viewClicked(view);
+            return;
+        }
+
         final boolean focusChanged = mServedView != mNextServedView;
         checkFocus();
         synchronized (mH) {
@@ -1683,6 +1926,13 @@ public final class InputMethodManager {
      */
     @Deprecated
     public void updateCursor(View view, int left, int top, int right, int bottom) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            view.getContext().getSystemService(InputMethodManager.class)
+                    .updateCursor(view, left, top, right, bottom);
+            return;
+        }
+
         checkFocus();
         synchronized (mH) {
             if ((mServedView != view && (mServedView == null
@@ -1714,6 +1964,13 @@ public final class InputMethodManager {
         if (view == null || cursorAnchorInfo == null) {
             return;
         }
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            view.getContext().getSystemService(InputMethodManager.class)
+                    .updateCursorAnchorInfo(view, cursorAnchorInfo);
+            return;
+        }
+
         checkFocus();
         synchronized (mH) {
             if ((mServedView != view &&
@@ -1759,6 +2016,13 @@ public final class InputMethodManager {
      * @param data Any data to include with the command.
      */
     public void sendAppPrivateCommand(View view, String action, Bundle data) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(view)) {
+            view.getContext().getSystemService(InputMethodManager.class)
+                    .sendAppPrivateCommand(view, action, data);
+            return;
+        }
+
         checkFocus();
         synchronized (mH) {
             if ((mServedView != view && (mServedView == null
@@ -1790,7 +2054,7 @@ public final class InputMethodManager {
     public void setInputMethod(IBinder token, String id) {
         if (token == null) {
             // Note: null token is allowed for callers that have WRITE_SECURE_SETTINGS permission.
-            // Thus we cannot always rely on mPrivOpsRegistry unfortunately.
+            // Thus we cannot always rely on InputMethodPrivilegedOperationsRegistry unfortunately.
             // TODO(Bug 114488811): Consider deprecating null token rule.
             try {
                 mService.setInputMethod(token, id);
@@ -1799,7 +2063,7 @@ public final class InputMethodManager {
             }
             return;
         }
-        mPrivOpsRegistry.get(token).setInputMethod(id);
+        InputMethodPrivilegedOperationsRegistry.get(token).setInputMethod(id);
     }
 
     /**
@@ -1819,7 +2083,7 @@ public final class InputMethodManager {
     public void setInputMethodAndSubtype(IBinder token, String id, InputMethodSubtype subtype) {
         if (token == null) {
             // Note: null token is allowed for callers that have WRITE_SECURE_SETTINGS permission.
-            // Thus we cannot always rely on mPrivOpsRegistry unfortunately.
+            // Thus we cannot always rely on InputMethodPrivilegedOperationsRegistry unfortunately.
             // TODO(Bug 114488811): Consider deprecating null token rule.
             try {
                 mService.setInputMethodAndSubtype(token, id, subtype);
@@ -1828,7 +2092,7 @@ public final class InputMethodManager {
             }
             return;
         }
-        mPrivOpsRegistry.get(token).setInputMethodAndSubtype(id, subtype);
+        InputMethodPrivilegedOperationsRegistry.get(token).setInputMethodAndSubtype(id, subtype);
     }
 
     /**
@@ -1848,7 +2112,7 @@ public final class InputMethodManager {
      */
     @Deprecated
     public void hideSoftInputFromInputMethod(IBinder token, int flags) {
-        mPrivOpsRegistry.get(token).hideMySoftInput(flags);
+        InputMethodPrivilegedOperationsRegistry.get(token).hideMySoftInput(flags);
     }
 
     /**
@@ -1869,7 +2133,7 @@ public final class InputMethodManager {
      */
     @Deprecated
     public void showSoftInputFromInputMethod(IBinder token, int flags) {
-        mPrivOpsRegistry.get(token).showMySoftInput(flags);
+        InputMethodPrivilegedOperationsRegistry.get(token).showMySoftInput(flags);
     }
 
     /**
@@ -1930,6 +2194,13 @@ public final class InputMethodManager {
      */
     public void dispatchKeyEventFromInputMethod(@Nullable View targetView,
             @NonNull KeyEvent event) {
+        // Re-dispatch if there is a context mismatch.
+        if (shouldDispatchToViewContext(targetView)) {
+            targetView.getContext().getSystemService(InputMethodManager.class)
+                    .dispatchKeyEventFromInputMethod(targetView, event);
+            return;
+        }
+
         synchronized (mH) {
             ViewRootImpl viewRootImpl = targetView != null ? targetView.getViewRootImpl() : null;
             if (viewRootImpl == null) {
@@ -2229,7 +2500,7 @@ public final class InputMethodManager {
     public boolean switchToLastInputMethod(IBinder imeToken) {
         if (imeToken == null) {
             // Note: null token is allowed for callers that have WRITE_SECURE_SETTINGS permission.
-            // Thus we cannot always rely on mPrivOpsRegistry unfortunately.
+            // Thus we cannot always rely on InputMethodPrivilegedOperationsRegistry unfortunately.
             // TODO(Bug 114488811): Consider deprecating null token rule.
             try {
                 return mService.switchToPreviousInputMethod(imeToken);
@@ -2237,7 +2508,7 @@ public final class InputMethodManager {
                 throw e.rethrowFromSystemServer();
             }
         }
-        return mPrivOpsRegistry.get(imeToken).switchToPreviousInputMethod();
+        return InputMethodPrivilegedOperationsRegistry.get(imeToken).switchToPreviousInputMethod();
     }
 
     /**
@@ -2257,7 +2528,7 @@ public final class InputMethodManager {
     public boolean switchToNextInputMethod(IBinder imeToken, boolean onlyCurrentIme) {
         if (imeToken == null) {
             // Note: null token is allowed for callers that have WRITE_SECURE_SETTINGS permission.
-            // Thus we cannot always rely on mPrivOpsRegistry unfortunately.
+            // Thus we cannot always rely on InputMethodPrivilegedOperationsRegistry unfortunately.
             // TODO(Bug 114488811): Consider deprecating null token rule.
             try {
                 return mService.switchToNextInputMethod(imeToken, onlyCurrentIme);
@@ -2265,7 +2536,8 @@ public final class InputMethodManager {
                 throw e.rethrowFromSystemServer();
             }
         }
-        return mPrivOpsRegistry.get(imeToken).switchToNextInputMethod(onlyCurrentIme);
+        return InputMethodPrivilegedOperationsRegistry.get(imeToken)
+                .switchToNextInputMethod(onlyCurrentIme);
     }
 
     /**
@@ -2284,7 +2556,8 @@ public final class InputMethodManager {
      */
     @Deprecated
     public boolean shouldOfferSwitchingToNextInputMethod(IBinder imeToken) {
-        return mPrivOpsRegistry.get(imeToken).shouldOfferSwitchingToNextInputMethod();
+        return InputMethodPrivilegedOperationsRegistry.get(imeToken)
+                .shouldOfferSwitchingToNextInputMethod();
     }
 
     /**
@@ -2417,37 +2690,8 @@ public final class InputMethodManager {
         sb.append(",windowFocus=" + view.hasWindowFocus());
         sb.append(",autofillUiShowing=" + isAutofillUIShowing(view));
         sb.append(",window=" + view.getWindowToken());
+        sb.append(",displayId=" + getDisplayId(view.getContext()));
         sb.append(",temporaryDetach=" + view.isTemporarilyDetached());
         return sb.toString();
-    }
-
-    /**
-     * Called by {@link InputMethodService} so that API calls to deprecated ones defined in this
-     * class can be forwarded to {@link InputMethodPrivilegedOperations}.
-     *
-     * <p>Note: this method does not hold strong references to {@code token} and {@code ops}. The
-     * registry entry will be automatically cleared after {@code token} is garbage collected.</p>
-     *
-     * @param token IME token that is associated with {@code ops}
-     * @param ops {@link InputMethodPrivilegedOperations} that is associated with {@code token}
-     * @hide
-     */
-    public void registerInputMethodPrivOps(IBinder token, InputMethodPrivilegedOperations ops) {
-        mPrivOpsRegistry.put(token, ops);
-    }
-
-    /**
-     * Called from {@link InputMethodService#onDestroy()} to make sure that deprecated IME APIs
-     * defined in this class can no longer access to {@link InputMethodPrivilegedOperations}.
-     *
-     * <p>Note: Calling this method is optional, but at least gives more explict error message in
-     * logcat when IME developers are doing something unsupported (e.g. trying to call IME APIs
-     * after {@link InputMethodService#onDestroy()}).</p>
-     *
-     * @param token IME token to be removed.
-     * @hide
-     */
-    public void unregisterInputMethodPrivOps(IBinder token) {
-        mPrivOpsRegistry.remove(token);
     }
 }

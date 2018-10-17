@@ -33,11 +33,7 @@ import android.os.Process;
 import android.os.UserHandle;
 import android.text.TextUtils;
 
-import libcore.io.Streams;
-
 import java.io.FileDescriptor;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 
 /**
  * This class is a command line utility for manipulating content. A client
@@ -470,7 +466,8 @@ public class Content {
                     onExecute(provider);
                 } finally {
                     if (provider != null) {
-                        activityManager.removeContentProviderExternal(providerName, token);
+                        activityManager.removeContentProviderExternalAsUser(
+                                providerName, token, mUserId);
                     }
                 }
             } catch (Exception e) {

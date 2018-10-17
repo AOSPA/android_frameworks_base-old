@@ -57,42 +57,23 @@ bool transferFunctionCloseToSRGB(const SkColorSpace* colorSpace) {
     return false;
 }
 
-SkColorType PixelFormatToColorType(android_pixel_format pixelFormat) {
-    switch (pixelFormat) {
-        case HAL_PIXEL_FORMAT_RGBA_8888:
-        case HAL_PIXEL_FORMAT_BGRA_8888:
-            return SkColorType::kN32_SkColorType;
-        case HAL_PIXEL_FORMAT_RGBA_FP16:
-            return SkColorType::kRGBA_F16_SkColorType;
-        case HAL_PIXEL_FORMAT_RGBA_1010102:
-            return SkColorType::kRGBA_1010102_SkColorType;
+android::PixelFormat ColorTypeToPixelFormat(SkColorType colorType) {
+    switch (colorType) {
+        case kRGBA_8888_SkColorType:
+            return PIXEL_FORMAT_RGBA_8888;
+        case kRGBA_F16_SkColorType:
+            return PIXEL_FORMAT_RGBA_FP16;
+        case kRGB_565_SkColorType:
+            return PIXEL_FORMAT_RGB_565;
+        case kRGB_888x_SkColorType:
+            return PIXEL_FORMAT_RGBX_8888;
+        case kRGBA_1010102_SkColorType:
+            return PIXEL_FORMAT_RGBA_1010102;
+        case kARGB_4444_SkColorType:
+            return PIXEL_FORMAT_RGBA_4444;
         default:
-            ALOGW("Unsupported pixel format: %d, return kN32 by default", pixelFormat);
-            return SkColorType::kN32_SkColorType;
-    }
-}
-
-SkColorSpace::Gamut DataSpaceToColorGamut(android_dataspace dataSpace) {
-    switch (dataSpace & HAL_DATASPACE_STANDARD_MASK) {
-        case HAL_DATASPACE_STANDARD_BT709:
-            return SkColorSpace::kSRGB_Gamut;
-        case HAL_DATASPACE_STANDARD_BT2020:
-            return SkColorSpace::kRec2020_Gamut;
-        case HAL_DATASPACE_STANDARD_DCI_P3:
-            return SkColorSpace::kDCIP3_D65_Gamut;
-        case HAL_DATASPACE_STANDARD_ADOBE_RGB:
-            return SkColorSpace::kAdobeRGB_Gamut;
-        case HAL_DATASPACE_STANDARD_UNSPECIFIED:
-        case HAL_DATASPACE_STANDARD_BT601_625:
-        case HAL_DATASPACE_STANDARD_BT601_625_UNADJUSTED:
-        case HAL_DATASPACE_STANDARD_BT601_525:
-        case HAL_DATASPACE_STANDARD_BT601_525_UNADJUSTED:
-        case HAL_DATASPACE_STANDARD_BT2020_CONSTANT_LUMINANCE:
-        case HAL_DATASPACE_STANDARD_BT470M:
-        case HAL_DATASPACE_STANDARD_FILM:
-        default:
-            ALOGW("Unsupported Gamut: %d, return SRGB gamut by default", dataSpace);
-            return SkColorSpace::kSRGB_Gamut;
+            ALOGW("Unsupported colorType: %d, return RGBA_8888 by default", (int)colorType);
+            return PIXEL_FORMAT_RGBA_8888;
     }
 }
 

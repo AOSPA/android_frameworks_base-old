@@ -87,7 +87,7 @@ public final class DunServerProfile implements LocalBluetoothProfile {
                 BluetoothProfile.DUN);
     }
 
-    public boolean isConnectable() {
+    public boolean accessProfileEnabled() {
         return true;
     }
 

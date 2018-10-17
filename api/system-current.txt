@@ -128,6 +128,7 @@ package android {
     field public static final java.lang.String PEERS_MAC_ADDRESS = "android.permission.PEERS_MAC_ADDRESS";
     field public static final java.lang.String PERFORM_CDMA_PROVISIONING = "android.permission.PERFORM_CDMA_PROVISIONING";
     field public static final java.lang.String PERFORM_SIM_ACTIVATION = "android.permission.PERFORM_SIM_ACTIVATION";
+    field public static final java.lang.String POWER_SAVER = "android.permission.POWER_SAVER";
     field public static final java.lang.String PROVIDE_RESOLVER_RANKER_SERVICE = "android.permission.PROVIDE_RESOLVER_RANKER_SERVICE";
     field public static final java.lang.String PROVIDE_TRUST_AGENT = "android.permission.PROVIDE_TRUST_AGENT";
     field public static final java.lang.String QUERY_TIME_ZONE_RULES = "android.permission.QUERY_TIME_ZONE_RULES";
@@ -217,6 +218,14 @@ package android {
 
   public static final class R.bool {
     field public static final int config_sendPackageName = 17891328; // 0x1110000
+  }
+
+  public static final class R.dimen {
+    field public static final int config_restricted_icon_size = 17104903; // 0x1050007
+  }
+
+  public static final class R.drawable {
+    field public static final int ic_info = 17301684; // 0x10800b4
   }
 
   public static final class R.raw {
@@ -355,11 +364,6 @@ package android.app {
     method public int getUid();
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.app.AppOpsManager.PackageOps> CREATOR;
-  }
-
-  public final class AutomaticZenRule implements android.os.Parcelable {
-    ctor public AutomaticZenRule(java.lang.String, android.content.ComponentName, android.net.Uri, int, boolean, long);
-    ctor public AutomaticZenRule(java.lang.String, android.content.ComponentName, android.net.Uri, int, boolean, long, android.service.notification.ZenPolicy);
   }
 
   public class BroadcastOptions {
@@ -947,6 +951,7 @@ package android.content {
     field public static final java.lang.String HDMI_CONTROL_SERVICE = "hdmi_control";
     field public static final java.lang.String NETWORK_SCORE_SERVICE = "network_score";
     field public static final java.lang.String OEM_LOCK_SERVICE = "oem_lock";
+    field public static final java.lang.String PERMISSION_SERVICE = "permission";
     field public static final java.lang.String PERSISTENT_DATA_BLOCK_SERVICE = "persistent_data_block";
     field public static final java.lang.String SECURE_ELEMENT_SERVICE = "secure_element";
     field public static final java.lang.String STATS_MANAGER = "stats";
@@ -1115,6 +1120,7 @@ package android.content.pm {
   public class PackageItemInfo {
     method public deprecated java.lang.CharSequence loadSafeLabel(android.content.pm.PackageManager);
     method public java.lang.CharSequence loadSafeLabel(android.content.pm.PackageManager, float, int);
+    method public static void setForceSafeLabels(boolean);
     field public static final int SAFE_LABEL_FLAG_FIRST_LINE = 4; // 0x4
     field public static final int SAFE_LABEL_FLAG_SINGLE_LINE = 2; // 0x2
     field public static final int SAFE_LABEL_FLAG_TRIM = 1; // 0x1
@@ -3990,6 +3996,7 @@ package android.os {
   }
 
   public final class PowerManager {
+    method public boolean setPowerSaveMode(boolean);
     method public void userActivity(long, int, int);
     field public static final int USER_ACTIVITY_EVENT_ACCESSIBILITY = 3; // 0x3
     field public static final int USER_ACTIVITY_EVENT_BUTTON = 1; // 0x1
@@ -4188,6 +4195,20 @@ package android.os.storage {
 
 }
 
+package android.permission {
+
+  public final class PermissionManager {
+    method public java.util.List<android.permission.PermissionManager.SplitPermissionInfo> getSplitPermissions();
+  }
+
+  public static final class PermissionManager.SplitPermissionInfo {
+    method public java.lang.String[] getNewPermissions();
+    method public java.lang.String getRootPermission();
+    method public int getTargetSdk();
+  }
+
+}
+
 package android.permissionpresenterservice {
 
   public abstract class RuntimePermissionPresenterService extends android.app.Service {
@@ -4195,6 +4216,7 @@ package android.permissionpresenterservice {
     method public final void attachBaseContext(android.content.Context);
     method public final android.os.IBinder onBind(android.content.Intent);
     method public abstract java.util.List<android.content.pm.permission.RuntimePermissionPresentationInfo> onGetAppPermissions(java.lang.String);
+    method public abstract void onRevokeRuntimePermission(java.lang.String, java.lang.String);
     field public static final java.lang.String SERVICE_INTERFACE = "android.permissionpresenterservice.RuntimePermissionPresenterService";
   }
 
@@ -4419,6 +4441,7 @@ package android.provider {
     field public static final java.lang.String INSTALL_CARRIER_APP_NOTIFICATION_PERSISTENT = "install_carrier_app_notification_persistent";
     field public static final java.lang.String INSTALL_CARRIER_APP_NOTIFICATION_SLEEP_MILLIS = "install_carrier_app_notification_sleep_millis";
     field public static final java.lang.String OTA_DISABLE_AUTOMATIC_UPDATE = "ota_disable_automatic_update";
+    field public static final java.lang.String SMS_ACCESS_RESTRICTION_ENABLED = "sms_access_restriction_enabled";
     field public static final java.lang.String THEATER_MODE_ON = "theater_mode_on";
     field public static final java.lang.String WEBVIEW_MULTIPROCESS = "webview_multiprocess";
     field public static final java.lang.String WIFI_BADGING_THRESHOLDS = "wifi_badging_thresholds";
@@ -5218,6 +5241,7 @@ package android.telecom {
     method public deprecated android.content.ComponentName getDefaultPhoneApp();
     method public java.util.List<android.telecom.PhoneAccountHandle> getPhoneAccountsForPackage();
     method public java.util.List<android.telecom.PhoneAccountHandle> getPhoneAccountsSupportingScheme(java.lang.String);
+    method public boolean isInEmergencyCall();
     method public boolean isRinging();
     method public boolean isTtySupported();
     field public static final java.lang.String EXTRA_CALL_BACK_INTENT = "android.telecom.extra.CALL_BACK_INTENT";
@@ -5242,6 +5266,10 @@ package android.telephony {
 
   public class MbmsDownloadSession implements java.lang.AutoCloseable {
     field public static final java.lang.String MBMS_DOWNLOAD_SERVICE_ACTION = "android.telephony.action.EmbmsDownload";
+  }
+
+  public class MbmsGroupCallSession implements java.lang.AutoCloseable {
+    field public static final java.lang.String MBMS_GROUP_CALL_SERVICE_ACTION = "android.telephony.action.EmbmsGroupCall";
   }
 
   public class MbmsStreamingSession implements java.lang.AutoCloseable {
@@ -5303,9 +5331,12 @@ package android.telephony {
   }
 
   public class ServiceState implements android.os.Parcelable {
+    method public android.telephony.NetworkRegistrationState getNetworkRegistrationState(int, int);
     method public java.util.List<android.telephony.NetworkRegistrationState> getNetworkRegistrationStates();
-    method public java.util.List<android.telephony.NetworkRegistrationState> getNetworkRegistrationStates(int);
-    method public android.telephony.NetworkRegistrationState getNetworkRegistrationStates(int, int);
+    method public deprecated java.util.List<android.telephony.NetworkRegistrationState> getNetworkRegistrationStates(int);
+    method public deprecated android.telephony.NetworkRegistrationState getNetworkRegistrationStates(int, int);
+    method public java.util.List<android.telephony.NetworkRegistrationState> getNetworkRegistrationStatesForDomain(int);
+    method public java.util.List<android.telephony.NetworkRegistrationState> getNetworkRegistrationStatesForTransportType(int);
   }
 
   public final class SmsManager {
@@ -5400,7 +5431,6 @@ package android.telephony {
   }
 
   public class TelephonyManager {
-    method public deprecated void answerRingingCall();
     method public deprecated void call(java.lang.String, java.lang.String);
     method public int checkCarrierPrivilegesForPackage(java.lang.String);
     method public int checkCarrierPrivilegesForPackageAnyPhone(java.lang.String);
@@ -5408,7 +5438,7 @@ package android.telephony {
     method public boolean disableDataConnectivity();
     method public boolean enableDataConnectivity();
     method public void enableVideoCalling(boolean);
-    method public deprecated boolean endCall();
+    method public java.lang.String getAidForAppType(int);
     method public java.util.List<android.service.carrier.CarrierIdentifier> getAllowedCarriers(int);
     method public java.util.List<java.lang.String> getCarrierPackageNamesForIntent(android.content.Intent);
     method public java.util.List<java.lang.String> getCarrierPackageNamesForIntentAndPhone(android.content.Intent, int);
@@ -5423,6 +5453,8 @@ package android.telephony {
     method public deprecated boolean getDataEnabled();
     method public deprecated boolean getDataEnabled(int);
     method public boolean getEmergencyCallbackMode();
+    method public java.lang.String getIsimDomain();
+    method public int getPreferredNetworkType(int);
     method public int getSimApplicationState();
     method public int getSimCardState();
     method public java.util.List<android.telephony.TelephonyHistogram> getTelephonyHistograms();
@@ -5432,10 +5464,7 @@ package android.telephony {
     method public boolean handlePinMmi(java.lang.String);
     method public boolean handlePinMmiForSubscriber(int, java.lang.String);
     method public boolean isDataConnectivityPossible();
-    method public deprecated boolean isIdle();
-    method public deprecated boolean isOffhook();
     method public deprecated boolean isRadioOn();
-    method public deprecated boolean isRinging();
     method public boolean isVideoCallingEnabled();
     method public deprecated boolean isVisualVoicemailEnabled(android.telecom.PhoneAccountHandle);
     method public boolean needsOtaServiceProvisioning();
@@ -5449,7 +5478,6 @@ package android.telephony {
     method public void setSimPowerStateForSlot(int, int);
     method public deprecated void setVisualVoicemailEnabled(android.telecom.PhoneAccountHandle, boolean);
     method public void setVoiceActivationState(int);
-    method public deprecated void silenceRinger();
     method public boolean supplyPin(java.lang.String);
     method public int[] supplyPinReportResult(java.lang.String);
     method public boolean supplyPuk(java.lang.String, java.lang.String);
@@ -5467,6 +5495,29 @@ package android.telephony {
     field public static final java.lang.String EXTRA_SIM_STATE = "android.telephony.extra.SIM_STATE";
     field public static final java.lang.String EXTRA_VISUAL_VOICEMAIL_ENABLED_BY_USER_BOOL = "android.telephony.extra.VISUAL_VOICEMAIL_ENABLED_BY_USER_BOOL";
     field public static final java.lang.String EXTRA_VOICEMAIL_SCRAMBLED_PIN_STRING = "android.telephony.extra.VOICEMAIL_SCRAMBLED_PIN_STRING";
+    field public static final int NETWORK_MODE_CDMA_EVDO = 4; // 0x4
+    field public static final int NETWORK_MODE_CDMA_NO_EVDO = 5; // 0x5
+    field public static final int NETWORK_MODE_EVDO_NO_CDMA = 6; // 0x6
+    field public static final int NETWORK_MODE_GLOBAL = 7; // 0x7
+    field public static final int NETWORK_MODE_GSM_ONLY = 1; // 0x1
+    field public static final int NETWORK_MODE_GSM_UMTS = 3; // 0x3
+    field public static final int NETWORK_MODE_LTE_CDMA_EVDO = 8; // 0x8
+    field public static final int NETWORK_MODE_LTE_CDMA_EVDO_GSM_WCDMA = 10; // 0xa
+    field public static final int NETWORK_MODE_LTE_GSM_WCDMA = 9; // 0x9
+    field public static final int NETWORK_MODE_LTE_ONLY = 11; // 0xb
+    field public static final int NETWORK_MODE_LTE_TDSCDMA = 15; // 0xf
+    field public static final int NETWORK_MODE_LTE_TDSCDMA_CDMA_EVDO_GSM_WCDMA = 22; // 0x16
+    field public static final int NETWORK_MODE_LTE_TDSCDMA_GSM = 17; // 0x11
+    field public static final int NETWORK_MODE_LTE_TDSCDMA_GSM_WCDMA = 20; // 0x14
+    field public static final int NETWORK_MODE_LTE_TDSCDMA_WCDMA = 19; // 0x13
+    field public static final int NETWORK_MODE_LTE_WCDMA = 12; // 0xc
+    field public static final int NETWORK_MODE_TDSCDMA_CDMA_EVDO_GSM_WCDMA = 21; // 0x15
+    field public static final int NETWORK_MODE_TDSCDMA_GSM = 16; // 0x10
+    field public static final int NETWORK_MODE_TDSCDMA_GSM_WCDMA = 18; // 0x12
+    field public static final int NETWORK_MODE_TDSCDMA_ONLY = 13; // 0xd
+    field public static final int NETWORK_MODE_TDSCDMA_WCDMA = 14; // 0xe
+    field public static final int NETWORK_MODE_WCDMA_ONLY = 2; // 0x2
+    field public static final int NETWORK_MODE_WCDMA_PREF = 0; // 0x0
     field public static final int SIM_ACTIVATION_STATE_ACTIVATED = 2; // 0x2
     field public static final int SIM_ACTIVATION_STATE_ACTIVATING = 1; // 0x1
     field public static final int SIM_ACTIVATION_STATE_DEACTIVATED = 3; // 0x3
@@ -5802,6 +5853,7 @@ package android.telephony.ims {
     field public static final java.lang.String EXTRA_CODEC = "Codec";
     field public static final java.lang.String EXTRA_DIALSTRING = "dialstring";
     field public static final java.lang.String EXTRA_DISPLAY_TEXT = "DisplayText";
+    field public static final java.lang.String EXTRA_EMERGENCY_CALL = "e_call";
     field public static final java.lang.String EXTRA_IS_CALL_PULL = "CallPull";
     field public static final java.lang.String EXTRA_OI = "oi";
     field public static final java.lang.String EXTRA_OIR = "oir";
@@ -6548,6 +6600,17 @@ package android.telephony.mbms.vendor {
     method public int setTempFileRootDirectory(int, java.lang.String) throws android.os.RemoteException;
   }
 
+  public class MbmsGroupCallServiceBase extends android.app.Service {
+    ctor public MbmsGroupCallServiceBase();
+    method public void dispose(int) throws android.os.RemoteException;
+    method public int initialize(android.telephony.mbms.MbmsGroupCallSessionCallback, int) throws android.os.RemoteException;
+    method public void onAppCallbackDied(int, int);
+    method public android.os.IBinder onBind(android.content.Intent);
+    method public int startGroupCall(int, long, int[], int[], android.telephony.mbms.GroupCallCallback);
+    method public void stopGroupCall(int, long);
+    method public void updateGroupCall(int, long, int[], int[]);
+  }
+
   public class MbmsStreamingServiceBase extends android.os.Binder {
     ctor public MbmsStreamingServiceBase();
     method public void dispose(int) throws android.os.RemoteException;
@@ -6592,6 +6655,10 @@ package android.util {
 
 package android.view {
 
+  public abstract class Window {
+    method public void addPrivateFlags(int);
+  }
+
   public abstract interface WindowManager implements android.view.ViewManager {
     method public abstract android.graphics.Region getCurrentImeTouchRegion();
   }
@@ -6599,6 +6666,7 @@ package android.view {
   public static class WindowManager.LayoutParams extends android.view.ViewGroup.LayoutParams implements android.os.Parcelable {
     method public final long getUserActivityTimeout();
     method public final void setUserActivityTimeout(long);
+    field public static final int PRIVATE_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS = 524288; // 0x80000
   }
 
 }

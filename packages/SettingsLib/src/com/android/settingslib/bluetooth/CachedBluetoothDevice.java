@@ -29,7 +29,6 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.Log;
 
-import androidx.annotation.VisibleForTesting;
 import android.os.SystemProperties;
 
 import com.android.settingslib.R;
@@ -37,8 +36,9 @@ import com.android.settingslib.R;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
+
+import androidx.annotation.VisibleForTesting;
 
 /**
  * CachedBluetoothDevice represents a remote Bluetooth device. It contains
@@ -49,6 +49,10 @@ import java.util.List;
 public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> {
     private static final String TAG = "CachedBluetoothDevice";
 
+    // See mConnectAttempted
+    private static final long MAX_UUID_DELAY_FOR_AUTO_CONNECT = 5000;
+    private static final long MAX_HOGP_DELAY_FOR_AUTO_CONNECT = 30000;
+
     private final Context mContext;
     private final BluetoothAdapter mLocalAdapter;
     private final LocalBluetoothProfileManager mProfileManager;
@@ -56,7 +60,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private long mHiSyncId;
     // Need this since there is no method for getting RSSI
     private short mRssi;
-    private HashMap<LocalBluetoothProfile, Integer> mProfileConnectionState;
 
     private final List<LocalBluetoothProfile> mProfiles =
             new ArrayList<LocalBluetoothProfile>();
@@ -79,17 +82,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
     private final static String MESSAGE_REJECTION_COUNT_PREFS_NAME = "bluetooth_message_reject";
 
-    public long getHiSyncId() {
-        return mHiSyncId;
-    }
-
-    public void setHiSyncId(long id) {
-        if (BluetoothUtils.D) {
-            Log.d(TAG, "setHiSyncId: mDevice " + mDevice + ", id " + id);
-        }
-        mHiSyncId = id;
-    }
-
     /**
      * Last time a bt profile auto-connect was attempted.
      * If an ACTION_UUID intent comes in within
@@ -98,14 +90,20 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
      */
     private long mConnectAttempted;
 
-    // See mConnectAttempted
-    private static final long MAX_UUID_DELAY_FOR_AUTO_CONNECT = 5000;
-    private static final long MAX_HOGP_DELAY_FOR_AUTO_CONNECT = 30000;
-
     // Active device state
     private boolean mIsActiveDeviceA2dp = false;
     private boolean mIsActiveDeviceHeadset = false;
     private boolean mIsActiveDeviceHearingAid = false;
+
+    CachedBluetoothDevice(Context context, LocalBluetoothProfileManager profileManager,
+            BluetoothDevice device) {
+        mContext = context;
+        mLocalAdapter = BluetoothAdapter.getDefaultAdapter();
+        mProfileManager = profileManager;
+        mDevice = device;
+        fillData();
+        mHiSyncId = BluetoothHearingAid.HI_SYNC_ID_INVALID;
+    }
 
     /* Gets Device for seondary TWS device
      * @param mDevice Primary TWS device  to get secondary
@@ -151,7 +149,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             }
             return;
         }
-        mProfileConnectionState.put(profile, newProfileState);
         if (newProfileState == BluetoothProfile.STATE_CONNECTED) {
             if (profile instanceof MapProfile) {
                 profile.setPreferred(mDevice, true);
@@ -177,18 +174,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             mLocalNapRoleConnected = false;
         }
         fetchActiveDevices();
-    }
-
-    CachedBluetoothDevice(Context context,
-                          LocalBluetoothProfileManager profileManager,
-                          BluetoothDevice device) {
-        mContext = context;
-        mLocalAdapter = BluetoothAdapter.getDefaultAdapter();
-        mProfileManager = profileManager;
-        mDevice = device;
-        mProfileConnectionState = new HashMap<LocalBluetoothProfile, Integer>();
-        fillData();
-        mHiSyncId = BluetoothHearingAid.HI_SYNC_ID_INVALID;
     }
 
     public void disconnect() {
@@ -222,6 +207,17 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         connectWithoutResettingTimer(connectAllProfiles);
     }
 
+    public long getHiSyncId() {
+        return mHiSyncId;
+    }
+
+    public void setHiSyncId(long id) {
+        if (BluetoothUtils.D) {
+            Log.d(TAG, "setHiSyncId: mDevice " + mDevice + ", id " + id);
+        }
+        mHiSyncId = id;
+    }
+
     void onBondingDockConnect() {
         // Attempt to connect if UUIDs are available. Otherwise,
         // we will connect when the ACTION_UUID intent arrives.
@@ -244,7 +240,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
 
         int preferredProfiles = 0;
         for (LocalBluetoothProfile profile : mProfiles) {
-            if (connectAllProfiles ? profile.isConnectable() : profile.isAutoConnectable()) {
+            if (connectAllProfiles ? profile.accessProfileEnabled() : profile.isAutoConnectable()) {
                 if (profile.isPreferred(mDevice)) {
                     ++preferredProfiles;
                     connectInt(profile);
@@ -318,14 +314,6 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         return true;
     }
 
-    /**
-     * Return true if user initiated pairing on this device. The message text is
-     * slightly different for local vs. remote initiated pairing dialogs.
-     */
-    boolean isUserInitiatedPairing() {
-        return mDevice.isBondingInitiatedLocally();
-    }
-
     public void unpair() {
         int state = getBondState();
 
@@ -361,22 +349,9 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     public int getProfileConnectionState(LocalBluetoothProfile profile) {
-        if (mProfileConnectionState.get(profile) == null) {
-            // If cache is empty make the binder call to get the state
-            int state = profile.getConnectionStatus(mDevice);
-            mProfileConnectionState.put(profile, state);
-        }
-        return mProfileConnectionState.get(profile);
-    }
-
-    public void clearProfileConnectionState ()
-    {
-        if (BluetoothUtils.D) {
-            Log.d(TAG," Clearing all connection state for dev:" + mDevice.getName());
-        }
-        for (LocalBluetoothProfile profile :getProfiles()) {
-            mProfileConnectionState.put(profile, BluetoothProfile.STATE_DISCONNECTED);
-        }
+        return profile != null
+                ? profile.getConnectionStatus(mDevice)
+                : BluetoothProfile.STATE_DISCONNECTED;
     }
 
     // TODO: do any of these need to run async on a background thread?
@@ -703,7 +678,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         List<LocalBluetoothProfile> connectableProfiles =
                 new ArrayList<LocalBluetoothProfile>();
         for (LocalBluetoothProfile profile : mProfiles) {
-            if (profile.isConnectable()) {
+            if (profile.accessProfileEnabled()) {
                 connectableProfiles.add(profile);
             }
         }

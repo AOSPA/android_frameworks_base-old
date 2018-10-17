@@ -38,6 +38,8 @@ import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.telephony.ServiceState;
+import android.telephony.TelephonyManager;
 import android.util.ArraySet;
 import android.view.Surface;
 
@@ -426,6 +428,13 @@ public abstract class Connection extends Conferenceable {
      */
     public static final int PROPERTY_ASSISTED_DIALING_USED = 1 << 9;
 
+    /**
+     * Set by the framework to indicate that the network has identified a Connection as an emergency
+     * call.
+     * @hide
+     */
+    public static final int PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL = 1 << 10;
+
     //**********************************************************************************************
     // Next PROPERTY value: 1<<10
     //**********************************************************************************************
@@ -607,6 +616,8 @@ public abstract class Connection extends Conferenceable {
      * {@link Call#EVENT_REQUEST_HANDOVER} that the handover from this {@link Connection} has
      * successfully completed.
      * @hide
+     * @deprecated Use {@link Call#handoverTo(PhoneAccountHandle, int, Bundle)} and its associated
+     * APIs instead.
      */
     public static final String EVENT_HANDOVER_COMPLETE =
             "android.telecom.event.HANDOVER_COMPLETE";
@@ -616,6 +627,8 @@ public abstract class Connection extends Conferenceable {
      * {@link Call#EVENT_REQUEST_HANDOVER} that the handover from this {@link Connection} has failed
      * to complete.
      * @hide
+     * @deprecated Use {@link Call#handoverTo(PhoneAccountHandle, int, Bundle)} and its associated
+     * APIs instead.
      */
     public static final String EVENT_HANDOVER_FAILED =
             "android.telecom.event.HANDOVER_FAILED";
@@ -839,6 +852,10 @@ public abstract class Connection extends Conferenceable {
 
         if (can(properties, PROPERTY_IS_RTT)) {
             builder.append(isLong ? " PROPERTY_IS_RTT" : " rtt");
+        }
+
+        if (can(properties, PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL)) {
+            builder.append(isLong ? " PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL" : " ecall");
         }
 
         builder.append("]");
@@ -1925,6 +1942,24 @@ public abstract class Connection extends Conferenceable {
     }
 
     /**
+     * Returns RIL voice radio technology used for current connection.
+     *
+     * @return the RIL voice radio technology used for current connection,
+     *         see {@code RIL_RADIO_TECHNOLOGY_*} in {@link android.telephony.ServiceState}.
+     *
+     * @hide
+     */
+    public final @ServiceState.RilRadioTechnology int getCallRadioTech() {
+        int voiceNetworkType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
+        Bundle extras = getExtras();
+        if (extras != null) {
+            voiceNetworkType = extras.getInt(TelecomManager.EXTRA_CALL_NETWORK_TYPE,
+                    TelephonyManager.NETWORK_TYPE_UNKNOWN);
+        }
+        return ServiceState.networkTypeToRilRadioTechnology(voiceNetworkType);
+    }
+
+    /**
      * @return The status hints for this connection.
      */
     public final StatusHints getStatusHints() {
@@ -2355,6 +2390,26 @@ public abstract class Connection extends Conferenceable {
      */
     public final void setConnectionStartElapsedRealTime(long connectElapsedTimeMillis) {
         mConnectElapsedTimeMillis = connectElapsedTimeMillis;
+    }
+
+    /**
+     * Sets RIL voice radio technology used for current connection.
+     *
+     * @param vrat the RIL Voice Radio Technology used for current connection,
+     *             see {@code RIL_RADIO_TECHNOLOGY_*} in {@link android.telephony.ServiceState}.
+     *
+     * @hide
+     */
+    public final void setCallRadioTech(@ServiceState.RilRadioTechnology int vrat) {
+        putExtra(TelecomManager.EXTRA_CALL_NETWORK_TYPE,
+                ServiceState.rilRadioTechnologyToNetworkType(vrat));
+        // Propagates the call radio technology to its parent {@link android.telecom.Conference}
+        // This action only covers non-IMS CS conference calls.
+        // For IMS PS call conference call, it can be updated via its host connection
+        // {@link #Listener.onExtrasChanged} event.
+        if (getConference() != null) {
+            getConference().setCallRadioTech(vrat);
+        }
     }
 
     /**

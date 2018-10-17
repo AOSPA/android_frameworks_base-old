@@ -50,6 +50,7 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.metrics.LogMaker;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -63,6 +64,7 @@ import android.service.autofill.AutofillService;
 import android.service.autofill.Dataset;
 import android.service.autofill.FieldClassification;
 import android.service.autofill.FieldClassification.Match;
+import android.text.TextUtils;
 import android.service.autofill.FillContext;
 import android.service.autofill.FillRequest;
 import android.service.autofill.FillResponse;
@@ -398,7 +400,9 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     @Nullable
     private AutofillValue findValueLocked(@NonNull AutofillId autofillId) {
         final AutofillValue value = findValueFromThisSessionOnlyLocked(autofillId);
-        if (value != null) return value;
+        if (value != null) {
+            return getSanitizedValue(createSanitizers(getSaveInfoLocked()), autofillId, value);
+        }
 
         // TODO(b/113281366): rather than explicitly look for previous session, it might be better
         // to merge the sessions when created (see note on mergePreviousSessionLocked())
@@ -413,7 +417,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 final AutofillValue previousValue = previousSession
                         .findValueFromThisSessionOnlyLocked(autofillId);
                 if (previousValue != null) {
-                    return previousValue;
+                    return getSanitizedValue(createSanitizers(previousSession.getSaveInfoLocked()),
+                            autofillId, previousValue);
                 }
             }
         }
@@ -744,11 +749,16 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
     private void onFillRequestFailureOrTimeout(int requestId, boolean timedOut,
             @Nullable CharSequence message) {
+        boolean showMessage = !TextUtils.isEmpty(message);
         synchronized (mLock) {
             if (mDestroyed) {
                 Slog.w(TAG, "Call to Session#onFillRequestFailureOrTimeout(req=" + requestId
                         + ") rejected - session: " + id + " destroyed");
                 return;
+            }
+            if (sDebug) {
+                Slog.d(TAG, "finishing session due to service "
+                        + (timedOut ? "timeout" : "failure"));
             }
             mService.resetLastResponse();
             final LogMaker requestLog = mRequestLogs.get(requestId);
@@ -757,8 +767,21 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             } else {
                 requestLog.setType(timedOut ? MetricsEvent.TYPE_CLOSE : MetricsEvent.TYPE_FAILURE);
             }
+            if (showMessage) {
+                final int targetSdk = mService.getTargedSdkLocked();
+                if (targetSdk >= Build.VERSION_CODES.Q) {
+                    showMessage = false;
+                    Slog.w(TAG, "onFillRequestFailureOrTimeout(): not showing '" + message
+                            + "' because service's targetting API " + targetSdk);
+                }
+                if (message != null) {
+                    requestLog.addTaggedData(MetricsEvent.FIELD_AUTOFILL_TEXT_LEN,
+                            message.length());
+                }
+            }
         }
-        if (message != null) {
+        notifyUnavailableToClient(AutofillManager.STATE_UNKNOWN_FAILED);
+        if (showMessage) {
             getUiForShowing().showError(message, this);
         }
         removeSelf();
@@ -793,6 +816,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
     @Override
     public void onSaveRequestFailure(@Nullable CharSequence message,
             @NonNull String servicePackageName) {
+        boolean showMessage = !TextUtils.isEmpty(message);
         synchronized (mLock) {
             mIsSaving = false;
 
@@ -801,12 +825,26 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                         + id + " destroyed");
                 return;
             }
+            if (showMessage) {
+                final int targetSdk = mService.getTargedSdkLocked();
+                if (targetSdk >= Build.VERSION_CODES.Q) {
+                    showMessage = false;
+                    Slog.w(TAG, "onSaveRequestFailure(): not showing '" + message
+                            + "' because service's targetting API " + targetSdk);
+                }
+            }
         }
-        LogMaker log = newLogMaker(MetricsEvent.AUTOFILL_DATA_SAVE_REQUEST, servicePackageName)
+        final LogMaker log =
+                newLogMaker(MetricsEvent.AUTOFILL_DATA_SAVE_REQUEST, servicePackageName)
                 .setType(MetricsEvent.TYPE_FAILURE);
+        if (message != null) {
+            log.addTaggedData(MetricsEvent.FIELD_AUTOFILL_TEXT_LEN, message.length());
+        }
         mMetricsLogger.write(log);
 
-        getUiForShowing().showError(message, this);
+        if (showMessage) {
+            getUiForShowing().showError(message, this);
+        }
         removeSelf();
     }
 
@@ -1206,7 +1244,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             // - not autofilled but matches a dataset value -> manuallyFilledIds
             if ((state & ViewState.STATE_CHANGED) != 0) {
                 // Check if autofilled value was changed
-                if ((state & ViewState.STATE_AUTOFILLED) != 0) {
+                if ((state & ViewState.STATE_AUTOFILLED_ONCE) != 0) {
                     final String datasetId = viewState.getDatasetId();
                     if (datasetId == null) {
                         // Sanity check - should never happen.
@@ -2181,12 +2219,28 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     // Must check if this update was caused by autofilling the view, in which
                     // case we just update the value, but not the UI.
                     final AutofillValue filledValue = viewState.getAutofilledValue();
-                    if (filledValue != null && filledValue.equals(value)) {
-                        if (sVerbose) {
-                            Slog.v(TAG, "ignoring autofilled change on id " + id);
+                    if (filledValue != null) {
+                        if (filledValue.equals(value)) {
+                            if (sVerbose) {
+                                Slog.v(TAG, "ignoring autofilled change on id " + id);
+                            }
+                            viewState.resetState(ViewState.STATE_CHANGED);
+                            return;
                         }
-                        return;
+                        else {
+                            if ((viewState.id.equals(this.mCurrentViewId)) &&
+                                    (viewState.getState() & ViewState.STATE_AUTOFILLED) != 0) {
+                                // Remove autofilled state once field is changed after autofilling.
+                                if (sVerbose) {
+                                    Slog.v(TAG, "field changed after autofill on id " + id);
+                                }
+                                viewState.resetState(ViewState.STATE_AUTOFILLED);
+                                final ViewState currentView = mViewStates.get(mCurrentViewId);
+                                currentView.maybeCallOnFillReady(flags);
+                            }
+                        }
                     }
+
                     // Update the internal state...
                     viewState.setState(ViewState.STATE_CHANGED);
 

@@ -328,6 +328,15 @@ public class TelecomManager {
             "android.telecom.extra.CALL_TECHNOLOGY_TYPE";
 
     /**
+     * Optional extra for communicating the call network technology used by a
+     * {@link android.telecom.Connection} to Telecom and InCallUI.
+     *
+     * @see {@code NETWORK_TYPE_*} in {@link android.telephony.TelephonyManager}.
+     */
+    public static final String EXTRA_CALL_NETWORK_TYPE =
+            "android.telecom.extra.CALL_NETWORK_TYPE";
+
+    /**
      *@hide  Extra value used to provide the call type for {@link #ACTION_CALL_TYPE}.
      */
     public static final String EXTRA_CALL_TYPE_CS =
@@ -1891,6 +1900,43 @@ public class TelecomManager {
         } catch (RemoteException e) {
             Log.e(TAG, "RemoteException acceptHandover: " + e);
         }
+    }
+
+    /**
+     * Determines if there is an ongoing emergency call.  This can be either an outgoing emergency
+     * call, as identified by the dialed number, or because a call was identified by the network
+     * as an emergency call.
+     * @return {@code true} if there is an ongoing emergency call, {@code false} otherwise.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public boolean isInEmergencyCall() {
+        try {
+            if (isServiceConnected()) {
+                return getTelecomService().isInEmergencyCall();
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "RemoteException isInEmergencyCall: " + e);
+            return false;
+        }
+        return false;
+    }
+
+    /**
+     * Handles {@link Intent#ACTION_CALL} intents trampolined from UserCallActivity.
+     * @param intent The {@link Intent#ACTION_CALL} intent to handle.
+     * @hide
+     */
+    public void handleCallIntent(Intent intent) {
+        try {
+            if (isServiceConnected()) {
+                getTelecomService().handleCallIntent(intent);
+            }
+        } catch (RemoteException e) {
+            Log.e(TAG, "RemoteException handleCallIntent: " + e);
+        }
+
     }
 
     private ITelecomService getTelecomService() {

@@ -69,6 +69,15 @@ public final class SmsApplication {
     private static final String SCHEME_MMSTO = "mmsto";
     private static final boolean DEBUG_MULTIUSER = false;
 
+    private static final int[] DEFAULT_APP_EXCLUSIVE_APPOPS = {
+            AppOpsManager.OP_READ_SMS,
+            AppOpsManager.OP_WRITE_SMS,
+            AppOpsManager.OP_RECEIVE_SMS,
+            AppOpsManager.OP_RECEIVE_WAP_PUSH,
+            AppOpsManager.OP_SEND_SMS,
+            AppOpsManager.OP_READ_CELL_BROADCASTS
+    };
+
     private static SmsPackageMonitor sSmsPackageMonitor = null;
 
     public static class SmsApplicationData {
@@ -209,7 +218,14 @@ public final class SmsApplication {
      * Support smsto Uri scheme.
      */
     public static Collection<SmsApplicationData> getApplicationCollection(Context context) {
-        int userId = getIncomingUserId(context);
+        return getApplicationCollectionAsUser(context, getIncomingUserId(context));
+    }
+
+    /**
+     * Same as {@link #getApplicationCollection} but it takes a target user ID.
+     */
+    public static Collection<SmsApplicationData> getApplicationCollectionAsUser(Context context,
+            int userId) {
         final long token = Binder.clearCallingIdentity();
         try {
             return getApplicationCollectionInternal(context, userId);
@@ -389,6 +405,8 @@ public final class SmsApplication {
             final SmsApplicationData smsApplicationData = receivers.get(packageName);
             if (smsApplicationData != null) {
                 if (!smsApplicationData.isComplete()) {
+                    Log.w(LOG_TAG, "Package " + packageName
+                            + " lacks required manifest declarations to be a default sms app");
                     receivers.remove(packageName);
                 }
             }
@@ -475,53 +493,27 @@ public final class SmsApplication {
 
         // If we found a package, make sure AppOps permissions are set up correctly
         if (applicationData != null) {
-            AppOpsManager appOps = (AppOpsManager)context.getSystemService(Context.APP_OPS_SERVICE);
-
             // We can only call checkOp if we are privileged (updateIfNeeded) or if the app we
             // are checking is for our current uid. Doing this check from the unprivileged current
             // SMS app allows us to tell the current SMS app that it is not in a good state and
             // needs to ask to be the current SMS app again to work properly.
             if (updateIfNeeded || applicationData.mUid == android.os.Process.myUid()) {
                 // Verify that the SMS app has permissions
-                int mode = appOps.checkOp(AppOpsManager.OP_WRITE_SMS, applicationData.mUid,
-                        applicationData.mPackageName);
-                if (mode != AppOpsManager.MODE_ALLOWED) {
-                    Rlog.e(LOG_TAG, applicationData.mPackageName + " lost OP_WRITE_SMS: " +
-                            (updateIfNeeded ? " (fixing)" : " (no permission to fix)"));
-                    if (updateIfNeeded) {
-                        appOps.setMode(AppOpsManager.OP_WRITE_SMS, applicationData.mUid,
-                                applicationData.mPackageName, AppOpsManager.MODE_ALLOWED);
-                    } else {
-                        // We can not return a package if permissions are not set up correctly
-                        applicationData = null;
-                    }
+                boolean appOpsFixed =
+                        tryFixExclusiveSmsAppops(context, applicationData, updateIfNeeded);
+                if (!appOpsFixed) {
+                    // We can not return a package if permissions are not set up correctly
+                    applicationData = null;
                 }
             }
 
             // We can only verify the phone and BT app's permissions from a privileged caller
-            if (updateIfNeeded) {
+            if (applicationData != null && updateIfNeeded) {
                 // Ensure this component is still configured as the preferred activity. Usually the
                 // current SMS app will already be the preferred activity - but checking whether or
                 // not this is true is just as expensive as reconfiguring the preferred activity so
                 // we just reconfigure every time.
-                PackageManager packageManager = context.getPackageManager();
-                configurePreferredActivity(packageManager, new ComponentName(
-                        applicationData.mPackageName, applicationData.mSendToClass),
-                        userId);
-                // Assign permission to special system apps
-                assignWriteSmsPermissionToSystemApp(context, packageManager, appOps,
-                        PHONE_PACKAGE_NAME);
-                assignWriteSmsPermissionToSystemApp(context, packageManager, appOps,
-                        BLUETOOTH_PACKAGE_NAME);
-                assignWriteSmsPermissionToSystemApp(context, packageManager, appOps,
-                        MMS_SERVICE_PACKAGE_NAME);
-                assignWriteSmsPermissionToSystemApp(context, packageManager, appOps,
-                        TELEPHONY_PROVIDER_PACKAGE_NAME);
-                // Give WRITE_SMS AppOps permission to UID 1001 which contains multiple
-                // apps, all of them should be able to write to telephony provider.
-                // This is to allow the proxy package permission check in telephony provider
-                // to pass.
-                assignWriteSmsPermissionToSystemUid(appOps, Process.PHONE_UID);
+                updateDefaultSmsApp(context, userId, applicationData);
             }
         }
         if (DEBUG_MULTIUSER) {
@@ -530,18 +522,75 @@ public final class SmsApplication {
         return applicationData;
     }
 
+    private static void updateDefaultSmsApp(Context context, int userId,
+            SmsApplicationData applicationData) {
+        PackageManager packageManager = context.getPackageManager();
+        AppOpsManager appOps = context.getSystemService(AppOpsManager.class);
+
+        // Configure this as the preferred activity for SENDTO sms/mms intents
+        configurePreferredActivity(packageManager, new ComponentName(
+                        applicationData.mPackageName, applicationData.mSendToClass),
+                userId);
+
+        // Assign permission to special system apps
+        assignExclusiveSmsPermissionsToSystemApp(context, packageManager, appOps,
+                PHONE_PACKAGE_NAME);
+        assignExclusiveSmsPermissionsToSystemApp(context, packageManager, appOps,
+                BLUETOOTH_PACKAGE_NAME);
+        assignExclusiveSmsPermissionsToSystemApp(context, packageManager, appOps,
+                MMS_SERVICE_PACKAGE_NAME);
+        assignExclusiveSmsPermissionsToSystemApp(context, packageManager, appOps,
+                TELEPHONY_PROVIDER_PACKAGE_NAME);
+
+        // Give AppOps permission to UID 1001 which contains multiple
+        // apps, all of them should be able to write to telephony provider.
+        // This is to allow the proxy package permission check in telephony provider
+        // to pass.
+        for (int appop : DEFAULT_APP_EXCLUSIVE_APPOPS) {
+            appOps.setUidMode(appop, Process.PHONE_UID, AppOpsManager.MODE_ALLOWED);
+        }
+    }
+
+    private static boolean tryFixExclusiveSmsAppops(Context context,
+            SmsApplicationData applicationData, boolean updateIfNeeded) {
+        AppOpsManager appOps = context.getSystemService(AppOpsManager.class);
+        for (int appOp : DEFAULT_APP_EXCLUSIVE_APPOPS) {
+            int mode = appOps.checkOp(appOp, applicationData.mUid,
+                    applicationData.mPackageName);
+            if (mode != AppOpsManager.MODE_ALLOWED) {
+                Rlog.e(LOG_TAG, applicationData.mPackageName + " lost "
+                        + AppOpsManager.modeToName(appOp) + ": "
+                        + (updateIfNeeded ? " (fixing)" : " (no permission to fix)"));
+                if (updateIfNeeded) {
+                    setExclusiveAppop(applicationData.mPackageName, appOps, appOp,
+                            AppOpsManager.MODE_ALLOWED, applicationData.mUid);
+                } else {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     /**
      * Sets the specified package as the default SMS/MMS application. The caller of this method
      * needs to have permission to set AppOps and write to secure settings.
      */
     public static void setDefaultApplication(String packageName, Context context) {
+        setDefaultApplicationAsUser(packageName, context, getIncomingUserId(context));
+    }
+
+    /**
+     * Same as {@link #setDefaultApplication} but takes a target user id.
+     */
+    public static void setDefaultApplicationAsUser(String packageName, Context context,
+            int userId) {
         TelephonyManager tm = (TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
         if (!tm.isSmsCapable()) {
             // No phone, no SMS
             return;
         }
 
-        final int userId = getIncomingUserId(context);
         final long token = Binder.clearCallingIdentity();
         try {
             setDefaultApplicationInternal(packageName, context, userId);
@@ -552,6 +601,8 @@ public final class SmsApplication {
 
     private static void setDefaultApplicationInternal(String packageName, Context context,
             int userId) {
+        final UserHandle userHandle = UserHandle.of(userId);
+
         // Get old package name
         String oldPackageName = Settings.Secure.getStringForUser(context.getContentResolver(),
                 Settings.Secure.SMS_DEFAULT_APPLICATION, userId);
@@ -568,19 +619,19 @@ public final class SmsApplication {
 
         // We only make the change if the new package is valid
         PackageManager packageManager = context.getPackageManager();
-        Collection<SmsApplicationData> applications = getApplicationCollection(context);
+        Collection<SmsApplicationData> applications = getApplicationCollectionInternal(
+                context, userId);
         SmsApplicationData oldAppData = oldPackageName != null ?
                 getApplicationForPackage(applications, oldPackageName) : null;
         SmsApplicationData applicationData = getApplicationForPackage(applications, packageName);
         if (applicationData != null) {
-            // Ignore OP_WRITE_SMS for the previously configured default SMS app.
+            // Ignore relevant appops for the previously configured default SMS app.
             AppOpsManager appOps = (AppOpsManager)context.getSystemService(Context.APP_OPS_SERVICE);
             if (oldPackageName != null) {
                 try {
-                    PackageInfo info = packageManager.getPackageInfoAsUser(oldPackageName,
-                            0, userId);
-                    appOps.setMode(AppOpsManager.OP_WRITE_SMS, info.applicationInfo.uid,
-                            oldPackageName, AppOpsManager.MODE_IGNORED);
+                    int uid = packageManager.getPackageInfoAsUser(
+                            oldPackageName, 0, userId).applicationInfo.uid;
+                    setExclusiveAppops(oldPackageName, appOps, uid, AppOpsManager.MODE_DEFAULT);
                 } catch (NameNotFoundException e) {
                     Rlog.w(LOG_TAG, "Old SMS package not found: " + oldPackageName);
                 }
@@ -591,28 +642,11 @@ public final class SmsApplication {
                     Settings.Secure.SMS_DEFAULT_APPLICATION, applicationData.mPackageName,
                     userId);
 
-            // Configure this as the preferred activity for SENDTO sms/mms intents
-            configurePreferredActivity(packageManager, new ComponentName(
-                    applicationData.mPackageName, applicationData.mSendToClass), userId);
+            // Allow relevant appops for the newly configured default SMS app.
+            setExclusiveAppops(applicationData.mPackageName, appOps, applicationData.mUid,
+                    AppOpsManager.MODE_ALLOWED);
 
-            // Allow OP_WRITE_SMS for the newly configured default SMS app.
-            appOps.setMode(AppOpsManager.OP_WRITE_SMS, applicationData.mUid,
-                    applicationData.mPackageName, AppOpsManager.MODE_ALLOWED);
-
-            // Assign permission to special system apps
-            assignWriteSmsPermissionToSystemApp(context, packageManager, appOps,
-                    PHONE_PACKAGE_NAME);
-            assignWriteSmsPermissionToSystemApp(context, packageManager, appOps,
-                    BLUETOOTH_PACKAGE_NAME);
-            assignWriteSmsPermissionToSystemApp(context, packageManager, appOps,
-                    MMS_SERVICE_PACKAGE_NAME);
-            assignWriteSmsPermissionToSystemApp(context, packageManager, appOps,
-                    TELEPHONY_PROVIDER_PACKAGE_NAME);
-            // Give WRITE_SMS AppOps permission to UID 1001 which contains multiple
-            // apps, all of them should be able to write to telephony provider.
-            // This is to allow the proxy package permission check in telephony provider
-            // to pass.
-            assignWriteSmsPermissionToSystemUid(appOps, Process.PHONE_UID);
+            updateDefaultSmsApp(context, userId, applicationData);
 
             if (DEBUG_MULTIUSER) {
                 Log.i(LOG_TAG, "setDefaultApplicationInternal oldAppData=" + oldAppData);
@@ -628,7 +662,7 @@ public final class SmsApplication {
                 if (DEBUG_MULTIUSER) {
                     Log.i(LOG_TAG, "setDefaultApplicationInternal old=" + oldAppData.mPackageName);
                 }
-                context.sendBroadcast(oldAppIntent);
+                context.sendBroadcastAsUser(oldAppIntent, userHandle);
             }
             // Notify the new sms app that it's now the default (if the new sms app has a receiver
             // to handle the changed default sms intent).
@@ -646,8 +680,16 @@ public final class SmsApplication {
                 if (DEBUG_MULTIUSER) {
                     Log.i(LOG_TAG, "setDefaultApplicationInternal new=" + packageName);
                 }
-                context.sendBroadcast(intent);
+                context.sendBroadcastAsUser(intent, userHandle);
             }
+
+            // Send an implicit broadcast for the system server.
+            // (or anyone with MONITOR_DEFAULT_SMS_PACKAGE, really.)
+            final Intent intent =
+                    new Intent(Telephony.Sms.Intents.ACTION_DEFAULT_SMS_PACKAGE_CHANGED_INTERNAL);
+            context.sendBroadcastAsUser(intent, userHandle,
+                    permission.MONITOR_DEFAULT_SMS_PACKAGE);
+
             MetricsLogger.action(context, MetricsEvent.ACTION_DEFAULT_SMS_APP_CHANGED,
                     applicationData.mPackageName);
         }
@@ -661,7 +703,7 @@ public final class SmsApplication {
      * @param appOps The AppOps manager instance
      * @param packageName The package name of the system app
      */
-    private static void assignWriteSmsPermissionToSystemApp(Context context,
+    private static void assignExclusiveSmsPermissionsToSystemApp(Context context,
             PackageManager packageManager, AppOpsManager appOps, String packageName) {
         // First check package signature matches the caller's package signature.
         // Since this class is only used internally by the system, this check makes sure
@@ -677,8 +719,8 @@ public final class SmsApplication {
                     packageName);
             if (mode != AppOpsManager.MODE_ALLOWED) {
                 Rlog.w(LOG_TAG, packageName + " does not have OP_WRITE_SMS:  (fixing)");
-                appOps.setMode(AppOpsManager.OP_WRITE_SMS, info.applicationInfo.uid,
-                        packageName, AppOpsManager.MODE_ALLOWED);
+                setExclusiveAppops(packageName, appOps, info.applicationInfo.uid,
+                        AppOpsManager.MODE_ALLOWED);
             }
         } catch (NameNotFoundException e) {
             // No whitelisted system app on this device
@@ -687,8 +729,19 @@ public final class SmsApplication {
 
     }
 
-    private static void assignWriteSmsPermissionToSystemUid(AppOpsManager appOps, int uid) {
-        appOps.setUidMode(AppOpsManager.OP_WRITE_SMS, uid, AppOpsManager.MODE_ALLOWED);
+    private static void setExclusiveAppops(String pkg, AppOpsManager appOpsManager, int uid,
+            int mode) {
+        for (int appop : DEFAULT_APP_EXCLUSIVE_APPOPS) {
+            setExclusiveAppop(pkg, appOpsManager, appop, mode, uid);
+        }
+    }
+
+    private static void setExclusiveAppop(String pkg, AppOpsManager appOpsManager, int appop,
+            int mode, int uid) {
+        // IGNORED means user explicitly revoked permission in settings, so avoid overriding it.
+        if (appOpsManager.checkOpNoThrow(appop, uid, pkg) != AppOpsManager.MODE_IGNORED) {
+            appOpsManager.setUidMode(appop, uid, mode);
+        }
     }
 
     /**
@@ -799,7 +852,18 @@ public final class SmsApplication {
      * @return component name of the app and class to deliver SMS messages to
      */
     public static ComponentName getDefaultSmsApplication(Context context, boolean updateIfNeeded) {
-        int userId = getIncomingUserId(context);
+        return getDefaultSmsApplicationAsUser(context, updateIfNeeded, getIncomingUserId(context));
+    }
+
+    /**
+     * Gets the default SMS application on a given user
+     * @param context context from the calling app
+     * @param updateIfNeeded update the default app if there is no valid default app configured.
+     * @param userId target user ID.
+     * @return component name of the app and class to deliver SMS messages to
+     */
+    public static ComponentName getDefaultSmsApplicationAsUser(Context context,
+            boolean updateIfNeeded, int userId) {
         final long token = Binder.clearCallingIdentity();
         try {
             ComponentName component = null;

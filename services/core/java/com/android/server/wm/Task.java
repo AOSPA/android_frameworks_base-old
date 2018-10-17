@@ -29,6 +29,8 @@ import static com.android.server.wm.TaskProto.BOUNDS;
 import static com.android.server.wm.TaskProto.DEFER_REMOVAL;
 import static com.android.server.wm.TaskProto.FILLS_PARENT;
 import static com.android.server.wm.TaskProto.ID;
+import static com.android.server.wm.TaskProto.SURFACE_HEIGHT;
+import static com.android.server.wm.TaskProto.SURFACE_WIDTH;
 import static com.android.server.wm.TaskProto.TEMP_INSET_BOUNDS;
 import static com.android.server.wm.TaskProto.WINDOW_CONTAINER;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
@@ -297,6 +299,12 @@ class Task extends WindowContainer<AppWindowToken> {
         return boundsChange;
     }
 
+    @Override
+    void onDisplayChanged(DisplayContent dc) {
+        updateSurfaceSize(dc);
+        super.onDisplayChanged(dc);
+    }
+
     /**
      * Sets the bounds used to calculate the insets. See
      * {@link android.app.IActivityTaskManager#resizeDockedStack} why this is needed.
@@ -553,9 +561,10 @@ class Task extends WindowContainer<AppWindowToken> {
 
     @Override
     public SurfaceControl getAnimationLeashParent() {
-        // Reparent to the animation layer so that we aren't clipped by the non-minimized
-        // stack bounds, currently we only animate the task for the recents animation
-        return getAppAnimationLayer(ANIMATION_LAYER_STANDARD);
+        // Currently, only the recents animation will create animation leashes for tasks. In this
+        // case, reparent the task to the home animation layer while it is being animated to allow
+        // the home activity to reorder the app windows relative to its own.
+        return getAppAnimationLayer(ANIMATION_LAYER_HOME);
     }
 
     boolean isTaskAnimating() {
@@ -703,6 +712,8 @@ class Task extends WindowContainer<AppWindowToken> {
         getBounds().writeToProto(proto, BOUNDS);
         mTempInsetBounds.writeToProto(proto, TEMP_INSET_BOUNDS);
         proto.write(DEFER_REMOVAL, mDeferRemoval);
+        proto.write(SURFACE_WIDTH, mSurfaceControl.getWidth());
+        proto.write(SURFACE_HEIGHT, mSurfaceControl.getHeight());
         proto.end(token);
     }
 

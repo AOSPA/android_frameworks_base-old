@@ -31,6 +31,7 @@ import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
 import "frameworks/base/proto/src/stats_enums.proto";
 import "frameworks/base/core/proto/android/service/procstats.proto";
+import "frameworks/base/core/proto/android/internal/powerprofile.proto";
 
 /**
  * The master atom class. This message defines all of the available
@@ -80,7 +81,8 @@ message Atom {
         BatteryLevelChanged battery_level_changed = 30;
         ChargingStateChanged charging_state_changed = 31;
         PluggedStateChanged plugged_state_changed = 32;
-        // 33 - 34 are available
+        InteractiveStateChanged interactive_state_changed = 33;
+        // 34 is available
         WakeupAlarmOccurred wakeup_alarm_occurred = 35;
         KernelWakeupReported kernel_wakeup_reported = 36;
         WifiLockStateChanged wifi_lock_state_changed = 37;
@@ -133,6 +135,13 @@ message Atom {
         VibratorStateChanged vibrator_state_changed = 84;
         DeferredJobStatsReported deferred_job_stats_reported = 85;
         ThermalThrottlingStateChanged thermal_throttling = 86;
+        FingerprintAcquired fingerprint_acquired = 87;
+        FingerprintAuthenticated fingerprint_authenticated = 88;
+        FingerprintErrorOccurred fingerprint_error_occurred = 89;
+        Notification notification = 90;
+        BatteryHealthSnapshot battery_health_snapshot = 91;
+        SlowIo slow_io = 92;
+        BatteryCausedShutdown battery_caused_shutdown = 93;
     }
 
     // Pulled events will start at field 10000.
@@ -167,12 +176,17 @@ message Atom {
         DirectoryUsage directory_usage = 10026;
         AppSize app_size = 10027;
         CategorySize category_size = 10028;
-        android.service.procstats.ProcessStatsSectionProto proc_stats = 10029;
+        ProcStats proc_stats = 10029;
         BatteryVoltage battery_voltage = 10030;
+        NumFingerprints num_fingerprints = 10031;
+        DiskIo disk_io = 10032;
+        PowerProfile power_profile = 10033;
+        ProcStats proc_stats_pkg_proc = 10034;
     }
 
-    // DO NOT USE field numbers above 100,000 in AOSP. Field numbers above
-    // 100,000 are reserved for non-AOSP (e.g. OEMs) to use.
+    // DO NOT USE field numbers above 100,000 in AOSP.
+    // Field numbers 100,000 - 199,999 are reserved for non-AOSP (e.g. OEMs) to use.
+    // Field numbers 200,000 and above are reserved for future use; do not use them at all.
 }
 
 /**
@@ -193,9 +207,10 @@ message AttributionNode {
 message KeyValuePair {
     optional int32 key = 1;
     oneof value {
-        int64 value_int = 2;
-        string value_str = 3;
-        float value_float = 4;
+        int32 value_int = 2;
+        int64 value_long = 3;
+        string value_str = 4;
+        float value_float = 5;
     }
 }
 
@@ -659,6 +674,20 @@ message LongPartialWakelockStateChanged {
 }
 
 /**
+ * Logs when the device is interactive, according to the PowerManager Notifier.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/power/Notifier.java
+ */
+message InteractiveStateChanged {
+    enum State {
+        OFF = 0;
+        ON = 1;
+    }
+    optional State state = 1;
+}
+
+/**
  * Logs Battery Saver state change.
  *
  * Logged from:
@@ -748,6 +777,9 @@ message WakeupAlarmOccurred {
 
     // Name of the wakeup alarm.
     optional string tag = 2;
+
+    // Name of source package (for historical reasons, since BatteryStats tracked it).
+    optional string package_name = 3;
 }
 
 /**
@@ -1285,6 +1317,68 @@ message ChargeCyclesReported {
     optional int32 cycle_bucket_6 = 6;
     optional int32 cycle_bucket_7 = 7;
     optional int32 cycle_bucket_8 = 8;
+}
+
+/**
+ * Log battery health snapshot.
+ *
+ * Resistance, Voltage, Open Circuit Voltage, Temperature, and Charge Level
+ * are snapshotted periodically over 24hrs.
+ */
+message BatteryHealthSnapshot {
+    enum BatterySnapshotType {
+        UNKNOWN = 0;
+        MIN_TEMP = 1;         // Snapshot at min batt temp over 24hrs.
+        MAX_TEMP = 2;         // Snapshot at max batt temp over 24hrs.
+        MIN_RESISTANCE = 3;   // Snapshot at min batt resistance over 24hrs.
+        MAX_RESISTANCE = 4;   // Snapshot at max batt resistance over 24hrs.
+        MIN_VOLTAGE = 5;      // Snapshot at min batt voltage over 24hrs.
+        MAX_VOLTAGE = 6;      // Snapshot at max batt voltage over 24hrs.
+        MIN_CURRENT = 7;      // Snapshot at min batt current over 24hrs.
+        MAX_CURRENT = 8;      // Snapshot at max batt current over 24hrs.
+        MIN_BATT_LEVEL = 9;   // Snapshot at min battery level (SoC) over 24hrs.
+        MAX_BATT_LEVEL = 10;  // Snapshot at max battery level (SoC) over 24hrs.
+        AVG_RESISTANCE = 11;  // Snapshot at average battery resistance over 24hrs.
+    }
+    optional BatterySnapshotType type = 1;
+    // Temperature, in 1/10ths of degree C.
+    optional int32 temperature_deci_celcius = 2;
+    // Voltage Battery Voltage, in microVolts.
+    optional int32 voltage_micro_volt = 3;
+    // Current Battery current, in microAmps.
+    optional int32 current_micro_amps = 4;
+    // OpenCircuitVoltage Battery Open Circuit Voltage, in microVolts.
+    optional int32 open_circuit_micro_volt = 5;
+    // Resistance Battery Resistance, in microOhms.
+    optional int32 resistance_micro_ohm = 6;
+    // Level Battery Level, as % of full.
+    optional int32 level_percent = 7;
+}
+
+/**
+ * Log slow I/O operations on the primary storage.
+ */
+message SlowIo {
+    // Classifications of IO Operations.
+    enum IoOperation {
+        UNKNOWN = 0;
+        READ = 1;
+        WRITE = 2;
+        UNMAP = 3;
+        SYNC = 4;
+    }
+    optional IoOperation operation = 1;
+
+    // The number of slow IO operations of this type over 24 hours.
+    optional int32 count = 2;
+}
+
+/**
+ * Log battery caused shutdown with the last recorded voltage.
+ */
+message BatteryCausedShutdown {
+    // The last recorded battery voltage prior to shutdown.
+    optional int32 last_recorded_micro_volt = 1;
 }
 
 /**
@@ -1832,6 +1926,123 @@ message GenericAtom {
     optional android.os.statsd.EventType event_id = 2;
 }
 
+/**
+ * Logs when a fingerprint acquire event occurs.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/biometrics/fingerprint/FingerprintService.java
+ */
+message FingerprintAcquired {
+    // The associated user. Eg: 0 for owners, 10+ for others.
+    // Defined in android/os/UserHandle.java
+    optional int32 user = 1;
+    // If this acquire is for a crypto fingerprint.
+    // e.g. Secure purchases, unlock password storage.
+    optional bool is_crypto = 2;
+}
+
+/**
+ * Logs when a fingerprint authentication event occurs.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/biometrics/fingerprint/FingerprintService.java
+ */
+message FingerprintAuthenticated {
+    // The associated user. Eg: 0 for owners, 10+ for others.
+    // Defined in android/os/UserHandle.java
+    optional int32 user = 1;
+    // If this authentication is for a crypto fingerprint.
+    // e.g. Secure purchases, unlock password storage.
+    optional bool is_crypto = 2;
+    // Whether or not this authentication was successful.
+    optional bool is_authenticated = 3;
+}
+
+/**
+ * Logs when a fingerprint error occurs.
+ *
+ * Logged from:
+ *   frameworks/base/services/core/java/com/android/server/biometrics/fingerprint/FingerprintService.java
+ */
+message FingerprintErrorOccurred {
+    // The associated user. Eg: 0 for owners, 10+ for others.
+    // Defined in android/os/UserHandle.java
+    optional int32 user = 1;
+    // If this error is for a crypto fingerprint.
+    // e.g. Secure purchases, unlock password storage.
+    optional bool is_crypto = 2;
+
+    enum Error {
+        UNKNOWN = 0;
+        LOCKOUT = 1;
+        PERMANENT_LOCKOUT = 2;
+    }
+    // The type of error.
+    optional Error error = 3;
+}
+
+message Notification {
+
+    // Type of notification event.
+    enum Type {
+        TYPE_UNKNOWN = 0;
+        // Notification became visible to the user.
+        TYPE_OPEN = 1;
+        // Notification became hidden.
+        TYPE_CLOSE = 2;
+        // Notification switched to detail mode.
+        TYPE_DETAIL = 3;
+        // Notification was clicked.
+        TYPE_ACTION = 4;
+        // Notification was dismissed.
+        TYPE_DISMISS = 5;
+        // Notification switched to summary mode. The enum value of 14 is to
+        // match that of metrics_constants.
+        TYPE_COLLAPSE = 14;
+    }
+    optional Type type = 1;
+
+    // Package name associated with the notification.
+    optional string package_name = 2;
+
+    // Tag associated with notification.
+    optional string tag = 3;
+
+    // Application-supplied ID associated with the notification.
+    optional int32 id = 4;
+
+    // Index of notification in the notification panel.
+    optional int32 shade_index = 5;
+
+    // The number of notifications in the notification panel.
+    optional int32 shade_count = 6;
+
+    // Importance for the notification.
+    optional int32 importance = 7;
+
+    // ID for the notification channel.
+    optional int32 channel_id = 8;
+
+    // Importance for the notification channel.
+    optional int32 channel_importance = 9;
+
+    // Whether notification was a group summary.
+    optional bool group_summary = 10;
+
+    // Time since notification was created in milliseconds.
+    optional int64 since_create_millis = 11;
+
+    // Time since notification was interrupted in milliseconds.
+    optional int64 since_interruption_millis = 12;
+
+    // Time since notification was updated in milliseconds.
+    optional int64 since_update_millis = 13;
+
+    // Time since notification was visible in milliseconds.
+    optional int64 since_visible_millis = 14;
+}
+
+
 //////////////////////////////////////////////////////////////////////
 // Pulled atoms below this line //
 //////////////////////////////////////////////////////////////////////
@@ -2097,6 +2308,11 @@ message ProcessMemoryState {
 
     // SWAP
     optional int64 swap_in_bytes = 8;
+
+    // RSS high watermark.
+    // Peak RSS usage of the process. Value is read from the VmHWM field in /proc/PID/status or
+    // from memory.max_usage_in_bytes under /dev/memcg if the device uses per-app memory cgroups.
+    optional int64 rss_high_watermark_in_bytes = 9;
 }
 
 /*
@@ -2281,7 +2497,7 @@ message BinderCallsExceptions {
  * Next tag: 11
  */
 message LooperStats {
-    // Currently not collected and always set to 0.
+    // The uid that made a call to the System Server and caused the message to be enqueued.
     optional int32 uid = 1 [(is_uid) = true];
 
     // Fully qualified class name of the handler target class.
@@ -2407,4 +2623,56 @@ message CategorySize {
     // Time that the cache file was produced.
     // Uses System.currentTimeMillis(), which is wall clock time.
     optional int64 cache_time_millis = 3;
+}
+
+/**
+ * Pulls per uid I/O stats. The stats are cumulative since boot.
+ *
+ * Read/write bytes are I/O events from a storage device
+ * Read/write chars are data requested by read/write syscalls, and can be
+ *   satisfied by caching.
+ *
+ * Pulled from StatsCompanionService, which reads proc/uid_io/stats.
+ */
+message DiskIo {
+    optional int32 uid = 1 [(is_uid) = true];
+    optional int64 fg_chars_read = 2;
+    optional int64 fg_chars_write = 3;
+    optional int64 fg_bytes_read = 4;
+    optional int64 fg_bytes_write = 5;
+    optional int64 bg_chars_read = 6;
+    optional int64 bg_chars_write = 7;
+    optional int64 bg_bytes_read = 8;
+    optional int64 bg_bytes_write = 9;
+    optional int64 fg_fsync = 10;
+    optional int64 bg_fsync= 11;
+}
+
+
+/**
+ * Pulls the number of fingerprints for each user.
+ *
+ * Pulled from StatsCompanionService, which queries FingerprintManager.
+ */
+message NumFingerprints {
+    // The associated user. Eg: 0 for owners, 10+ for others.
+    // Defined in android/os/UserHandle.java
+    optional int32 user = 1;
+    // Number of fingerprints registered to that user.
+    optional int32 num_fingerprints = 2;
+}
+
+/**
+ * Pulled from ProcessStatsService.java
+ */
+message ProcStats {
+    optional android.service.procstats.ProcessStatsSectionProto proc_stats_section = 1;
+}
+
+/**
+ * power_profile.xml and other constants for power model calculations.
+ * Pulled from PowerProfile.java
+ */
+message PowerProfile {
+    optional com.android.internal.os.PowerProfileProto power_profile_proto = 1;
 }

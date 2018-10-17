@@ -69,7 +69,6 @@ import org.mockito.invocation.InvocationOnMock;
 @Presubmit
 @RunWith(AndroidJUnit4.class)
 public class ActivityRecordTests extends ActivityTestsBase {
-    private ActivityTaskManagerService mService;
     private TestActivityStack mStack;
     private TaskRecord mTask;
     private ActivityRecord mActivity;
@@ -79,10 +78,10 @@ public class ActivityRecordTests extends ActivityTestsBase {
     public void setUp() throws Exception {
         super.setUp();
 
-        mService = createActivityTaskManagerService();
-        mStack = mService.mStackSupervisor.getDefaultDisplay().createStack(
+        setupActivityTaskManagerService();
+        mStack = mSupervisor.getDefaultDisplay().createStack(
                 WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, true /* onTop */);
-        mTask = new TaskBuilder(mService.mStackSupervisor).setStack(mStack).build();
+        mTask = new TaskBuilder(mSupervisor).setStack(mStack).build();
         mActivity = new ActivityBuilder(mService).setTask(mTask).build();
     }
 
@@ -189,17 +188,13 @@ public class ActivityRecordTests extends ActivityTestsBase {
 
     @Test
     public void testCanBeLaunchedOnDisplay() throws Exception {
-        testSupportsLaunchingResizeable(false /*taskPresent*/, true /*taskResizeable*/,
-                true /*activityResizeable*/, true /*expected*/);
+        mService.mSupportsMultiWindow = true;
+        final ActivityRecord activity = new ActivityBuilder(mService).build();
 
-        testSupportsLaunchingResizeable(false /*taskPresent*/, true /*taskResizeable*/,
-                false /*activityResizeable*/, false /*expected*/);
-
-        testSupportsLaunchingResizeable(true /*taskPresent*/, false /*taskResizeable*/,
-                true /*activityResizeable*/, false /*expected*/);
-
-        testSupportsLaunchingResizeable(true /*taskPresent*/, true /*taskResizeable*/,
-                false /*activityResizeable*/, true /*expected*/);
+        // An activity can be launched on default display.
+        assertTrue(activity.canBeLaunchedOnDisplay(DEFAULT_DISPLAY));
+        // An activity cannot be launched on a non-existent display.
+        assertFalse(activity.canBeLaunchedOnDisplay(DEFAULT_DISPLAY + 1));
     }
 
     @Test
@@ -229,27 +224,5 @@ public class ActivityRecordTests extends ActivityTestsBase {
         mActivity.applyOptionsLocked();
         assertNull(mActivity.pendingOptions);
         assertNotNull(activity2.pendingOptions);
-    }
-
-    private void testSupportsLaunchingResizeable(boolean taskPresent, boolean taskResizeable,
-            boolean activityResizeable, boolean expected) {
-        mService.mSupportsMultiWindow = true;
-
-        final TaskRecord task = taskPresent
-                ? new TaskBuilder(mService.mStackSupervisor).setStack(mStack).build() : null;
-
-        if (task != null) {
-            task.setResizeMode(taskResizeable ? RESIZE_MODE_RESIZEABLE : RESIZE_MODE_UNRESIZEABLE);
-        }
-
-        final ActivityRecord record = new ActivityBuilder(mService).setTask(task).build();
-        record.info.resizeMode = activityResizeable
-                ? RESIZE_MODE_RESIZEABLE : RESIZE_MODE_UNRESIZEABLE;
-
-        record.canBeLaunchedOnDisplay(DEFAULT_DISPLAY);
-
-
-        verify(mService.mStackSupervisor, times(1)).canPlaceEntityOnDisplay(anyInt(), eq(expected),
-                anyInt(), anyInt(), eq(record.info));
     }
 }

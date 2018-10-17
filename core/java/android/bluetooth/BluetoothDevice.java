@@ -1771,7 +1771,7 @@ public final class BluetoothDevice implements Parcelable {
      * For example, for Bluetooth 2.1 devices, if any of the devices does not
      * have an input and output capability or just has the ability to
      * display a numeric key, a secure socket connection is not possible.
-     * In such a case, use {#link createInsecureRfcommSocket}.
+     * In such a case, use {@link createInsecureRfcommSocket}.
      * For more details, refer to the Security Model section 5.2 (vol 3) of
      * Bluetooth Core Specification version 2.1 + EDR.
      * <p>Use {@link BluetoothSocket#connect} to initiate the outgoing
@@ -1806,7 +1806,7 @@ public final class BluetoothDevice implements Parcelable {
      * For example, for Bluetooth 2.1 devices, if any of the devices does not
      * have an input and output capability or just has the ability to
      * display a numeric key, a secure socket connection is not possible.
-     * In such a case, use {#link createInsecureRfcommSocket}.
+     * In such a case, use {@link createInsecureRfcommSocket}.
      * For more details, refer to the Security Model section 5.2 (vol 3) of
      * Bluetooth Core Specification version 2.1 + EDR.
      * <p>Use {@link BluetoothSocket#connect} to initiate the outgoing
@@ -1863,7 +1863,7 @@ public final class BluetoothDevice implements Parcelable {
      * For example, for Bluetooth 2.1 devices, if any of the devices does not
      * have an input and output capability or just has the ability to
      * display a numeric key, a secure socket connection is not possible.
-     * In such a case, use {#link createInsecureRfcommSocketToServiceRecord}.
+     * In such a case, use {@link #createInsecureRfcommSocketToServiceRecord}.
      * For more details, refer to the Security Model section 5.2 (vol 3) of
      * Bluetooth Core Specification version 2.1 + EDR.
      * <p>Hint: If you are connecting to a Bluetooth serial board then try
@@ -2138,8 +2138,8 @@ public final class BluetoothDevice implements Parcelable {
     /**
      * Create a Bluetooth L2CAP Connection-oriented Channel (CoC) {@link BluetoothSocket} that can
      * be used to start a secure outgoing connection to the remote device with the same dynamic
-     * protocol/service multiplexer (PSM) value.
-     * <p>This is designed to be used with {@link BluetoothAdapter#listenUsingL2capCoc(int)} for
+     * protocol/service multiplexer (PSM) value. The supported Bluetooth transport is LE only.
+     * <p>This is designed to be used with {@link BluetoothAdapter#listenUsingL2capChannel()} for
      * peer-peer Bluetooth applications.
      * <p>Use {@link BluetoothSocket#connect} to initiate the outgoing connection.
      * <p>Application using this API is responsible for obtaining PSM value from remote device.
@@ -2147,62 +2147,74 @@ public final class BluetoothDevice implements Parcelable {
      * encrypted.
      * <p> Use this socket if an authenticated socket link is possible. Authentication refers
      * to the authentication of the link key to prevent man-in-the-middle type of attacks. When a
-     * secure socket connection is not possible, use {#link createInsecureLeL2capCocSocket(int,
+     * secure socket connection is not possible, use {@link createInsecureLeL2capCocSocket(int,
      * int)}.
      *
-     * @param transport Bluetooth transport to use, must be {@link #TRANSPORT_LE}
      * @param psm dynamic PSM value from remote device
      * @return a CoC #BluetoothSocket ready for an outgoing connection
      * @throws IOException on error, for example Bluetooth not available, or insufficient
      * permissions
-     * @hide
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH)
-    public BluetoothSocket createL2capCocSocket(int transport, int psm) throws IOException {
+    public BluetoothSocket createL2capChannel(int psm) throws IOException {
         if (!isBluetoothEnabled()) {
-            Log.e(TAG, "createL2capCocSocket: Bluetooth is not enabled");
+            Log.e(TAG, "createL2capChannel: Bluetooth is not enabled");
             throw new IOException();
         }
-        if (transport != BluetoothDevice.TRANSPORT_LE) {
-            throw new IllegalArgumentException("Unsupported transport: " + transport);
-        }
-        if (DBG) Log.d(TAG, "createL2capCocSocket: transport=" + transport + ", psm=" + psm);
+        if (DBG) Log.d(TAG, "createL2capChannel: psm=" + psm);
         return new BluetoothSocket(BluetoothSocket.TYPE_L2CAP_LE, -1, true, true, this, psm,
                 null);
     }
 
     /**
+     * TODO: Remove this hidden method once all the SL4A and other tests are updated to use the new
+     * API name, createL2capChannel.
+     * @hide
+     */
+    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    public BluetoothSocket createL2capCocSocket(int transport, int psm) throws IOException {
+        Log.e(TAG, "createL2capCocSocket: PLEASE USE THE OFFICIAL API, createL2capChannel");
+        return createL2capChannel(psm);
+    }
+
+    /**
      * Create a Bluetooth L2CAP Connection-oriented Channel (CoC) {@link BluetoothSocket} that can
      * be used to start a secure outgoing connection to the remote device with the same dynamic
-     * protocol/service multiplexer (PSM) value.
-     * <p>This is designed to be used with {@link BluetoothAdapter#listenUsingInsecureL2capCoc(int)}
-     * for peer-peer Bluetooth applications.
+     * protocol/service multiplexer (PSM) value. The supported Bluetooth transport is LE only.
+     * <p>This is designed to be used with {@link
+     * BluetoothAdapter#listenUsingInsecureL2capChannel()} for peer-peer Bluetooth applications.
      * <p>Use {@link BluetoothSocket#connect} to initiate the outgoing connection.
      * <p>Application using this API is responsible for obtaining PSM value from remote device.
      * <p> The communication channel may not have an authenticated link key, i.e. it may be subject
-     * to man-in-the-middle attacks. Use {@link #createL2capCocSocket(int, int)} if an encrypted and
+     * to man-in-the-middle attacks. Use {@link #createL2capChannel(int)} if an encrypted and
      * authenticated communication channel is possible.
      *
-     * @param transport Bluetooth transport to use, must be {@link #TRANSPORT_LE}
      * @param psm dynamic PSM value from remote device
      * @return a CoC #BluetoothSocket ready for an outgoing connection
      * @throws IOException on error, for example Bluetooth not available, or insufficient
      * permissions
+     */
+    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    public BluetoothSocket createInsecureL2capChannel(int psm) throws IOException {
+        if (!isBluetoothEnabled()) {
+            Log.e(TAG, "createInsecureL2capChannel: Bluetooth is not enabled");
+            throw new IOException();
+        }
+        if (DBG) {
+            Log.d(TAG, "createInsecureL2capChannel: psm=" + psm);
+        }
+        return new BluetoothSocket(BluetoothSocket.TYPE_L2CAP_LE, -1, false, false, this, psm,
+                null);
+    }
+
+    /**
+     * TODO: Remove this hidden method once all the SL4A and other tests are updated to use the new
+     * API name, createInsecureL2capChannel.
      * @hide
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH)
     public BluetoothSocket createInsecureL2capCocSocket(int transport, int psm) throws IOException {
-        if (!isBluetoothEnabled()) {
-            Log.e(TAG, "createInsecureL2capCocSocket: Bluetooth is not enabled");
-            throw new IOException();
-        }
-        if (transport != BluetoothDevice.TRANSPORT_LE) {
-            throw new IllegalArgumentException("Unsupported transport: " + transport);
-        }
-        if (DBG) {
-            Log.d(TAG, "createInsecureL2capCocSocket: transport=" + transport + ", psm=" + psm);
-        }
-        return new BluetoothSocket(BluetoothSocket.TYPE_L2CAP_LE, -1, false, false, this, psm,
-                null);
+        Log.e(TAG, "createL2capCocSocket: PLEASE USE THE OFFICIAL API, createInsecureL2capChannel");
+        return createInsecureL2capChannel(psm);
     }
 }

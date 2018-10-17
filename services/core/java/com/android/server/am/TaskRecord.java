@@ -45,7 +45,6 @@ import static android.content.pm.ActivityInfo.RESIZE_MODE_RESIZEABLE_VIA_SDK_VER
 import static android.os.Trace.TRACE_TAG_ACTIVITY_MANAGER;
 import static android.provider.Settings.Secure.USER_SETUP_COMPLETE;
 import static android.view.Display.DEFAULT_DISPLAY;
-
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_ADD_REMOVE;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_LOCKTASK;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_RECENTS;
@@ -75,7 +74,6 @@ import static com.android.server.am.TaskRecordProto.ORIG_ACTIVITY;
 import static com.android.server.am.TaskRecordProto.REAL_ACTIVITY;
 import static com.android.server.am.TaskRecordProto.RESIZE_MODE;
 import static com.android.server.am.TaskRecordProto.STACK_ID;
-
 import static java.lang.Integer.MAX_VALUE;
 
 import android.annotation.IntDef;
@@ -129,7 +127,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Objects;
 
-class TaskRecord extends ConfigurationContainer implements TaskWindowContainerListener {
+// TODO: Make package private again once move to WM package is complete.
+public class TaskRecord extends ConfigurationContainer implements TaskWindowContainerListener {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "TaskRecord" : TAG_AM;
     private static final String TAG_ADD_REMOVE = TAG + POSTFIX_ADD_REMOVE;
     private static final String TAG_RECENTS = TAG + POSTFIX_RECENTS;
@@ -1521,14 +1520,14 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
 
     /**
      * Check whether this task can be launched on the specified display.
+     *
      * @param displayId Target display id.
-     * @return {@code true} if either it is the default display or this activity is resizeable and
-     *         can be put a secondary screen.
+     * @return {@code true} if either it is the default display or this activity can be put on a
+     *         secondary display.
      */
     boolean canBeLaunchedOnDisplay(int displayId) {
         return mService.mStackSupervisor.canPlaceEntityOnDisplay(displayId,
-                isResizeable(false /* checkSupportsPip */), -1 /* don't check PID */,
-                -1 /* don't check UID */, null /* activityInfo */);
+                -1 /* don't check PID */, -1 /* don't check UID */, null /* activityInfo */);
     }
 
     /**
@@ -1685,11 +1684,19 @@ class TaskRecord extends ConfigurationContainer implements TaskWindowContainerLi
         // so that the user can not render the task too small to manipulate. We don't need
         // to do this for the pinned stack as the bounds are controlled by the system.
         if (!inPinnedWindowingMode()) {
+            final int defaultMinSizeDp =
+                    mService.mStackSupervisor.mDefaultMinSizeOfResizeableTaskDp;
+            final ActivityDisplay display =
+                    mService.mStackSupervisor.getActivityDisplay(mStack.mDisplayId);
+            final float density =
+                    (float) display.getConfiguration().densityDpi / DisplayMetrics.DENSITY_DEFAULT;
+            final int defaultMinSize = (int) (defaultMinSizeDp * density);
+
             if (minWidth == INVALID_MIN_SIZE) {
-                minWidth = mService.mStackSupervisor.mDefaultMinSizeOfResizeableTask;
+                minWidth = defaultMinSize;
             }
             if (minHeight == INVALID_MIN_SIZE) {
-                minHeight = mService.mStackSupervisor.mDefaultMinSizeOfResizeableTask;
+                minHeight = defaultMinSize;
             }
         }
         final boolean adjustWidth = minWidth > bounds.width();

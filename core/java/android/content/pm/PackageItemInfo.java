@@ -22,7 +22,6 @@ import android.annotation.FloatRange;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.SystemApi;
-import android.annotation.UnsupportedAppUsage;
 import android.content.res.XmlResourceParser;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
@@ -103,8 +102,14 @@ public class PackageItemInfo {
 
     private static volatile boolean sForceSafeLabels = false;
 
-    /** {@hide} */
-    @UnsupportedAppUsage
+    /**
+     * Always use {@link #loadSafeLabel safe labels} when calling {@link #loadLabel}.
+     *
+     * @param forceSafeLabels {@code true} to enforce safe labels
+     *
+     * @hide
+     */
+    @SystemApi
     public static void setForceSafeLabels(boolean forceSafeLabels) {
         sForceSafeLabels = forceSafeLabels;
     }

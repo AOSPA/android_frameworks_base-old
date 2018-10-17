@@ -31,6 +31,7 @@ import android.bluetooth.BluetoothPan;
 import android.bluetooth.BluetoothPbap;
 import android.bluetooth.BluetoothPbapClient;
 import android.bluetooth.BluetoothDun;
+import android.bluetooth.BluetoothSap;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.content.Context;
@@ -101,6 +102,7 @@ public class LocalBluetoothProfileManager {
     private PbapServerProfile mPbapProfile;
     private DunServerProfile mDunProfile;
     private HearingAidProfile mHearingAidProfile;
+    private SapProfile mSapProfile;
 
     /**
      * Mapping from profile name, e.g. "HEADSET" to profile object.
@@ -213,6 +215,13 @@ public class LocalBluetoothProfileManager {
             addProfile(mPbapClientProfile, PbapClientProfile.NAME,
                     BluetoothPbapClient.ACTION_CONNECTION_STATE_CHANGED);
         }
+        if (mSapProfile == null && supportedList.contains(BluetoothProfile.SAP)) {
+            if (DEBUG) {
+                Log.d(TAG, "Adding local SAP profile");
+            }
+            mSapProfile = new SapProfile(mContext, mDeviceManager, this);
+            addProfile(mSapProfile, SapProfile.NAME, BluetoothSap.ACTION_CONNECTION_STATE_CHANGED);
+        }
         if (mDunProfile == null && supportedList.contains(BluetoothProfile.DUN)) {
             if(DEBUG) Log.d(TAG, "Adding local DUN profile");
             mDunProfile = new DunServerProfile(mContext);
@@ -304,10 +313,11 @@ public class LocalBluetoothProfileManager {
                 }
             }
 
-            mEventManager.dispatchProfileConnectionStateChanged(cachedDevice, newState,
-                    mProfile.getProfileId());
             cachedDevice.onProfileStateChanged(mProfile, newState);
             cachedDevice.refresh();
+            // Dispatch profile changed after device update
+            mEventManager.dispatchProfileConnectionStateChanged(cachedDevice, newState,
+                    mProfile.getProfileId());
         }
     }
 
@@ -564,6 +574,11 @@ public class LocalBluetoothProfileManager {
             mHearingAidProfile != null) {
             profiles.add(mHearingAidProfile);
             removedProfiles.remove(mHearingAidProfile);
+        }
+
+        if (mSapProfile != null && BluetoothUuid.isUuidPresent(uuids, BluetoothUuid.SAP)) {
+            profiles.add(mSapProfile);
+            removedProfiles.remove(mSapProfile);
         }
 
         if (DEBUG) {

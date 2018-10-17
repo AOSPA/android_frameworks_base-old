@@ -386,12 +386,12 @@ void UidMap::appendUidMap(const int64_t& timestamp, const ConfigKey& key,
     StatsdStats::getInstance().setUidMapChanges(mChanges.size());
 }
 
-void UidMap::printUidMap(FILE* out) const {
+void UidMap::printUidMap(int out) const {
     lock_guard<mutex> lock(mMutex);
 
     for (const auto& kv : mMap) {
         if (!kv.second.deleted) {
-            fprintf(out, "%s, v%" PRId64 " (%i)\n", kv.first.second.c_str(), kv.second.versionCode,
+            dprintf(out, "%s, v%" PRId64 " (%i)\n", kv.first.second.c_str(), kv.second.versionCode,
                     kv.first.first);
         }
     }
@@ -489,6 +489,9 @@ const std::map<string, uint32_t> UidMap::sAidToUidMapping = {{"AID_ROOT", 0},
                                                              {"AID_RESERVED_DISK", 1065},
                                                              {"AID_STATSD", 1066},
                                                              {"AID_INCIDENTD", 1067},
+                                                             {"AID_SECURE_ELEMENT", 1068},
+                                                             {"AID_LMKD", 1069},
+                                                             {"AID_LLKD", 1070},
                                                              {"AID_SHELL", 2000},
                                                              {"AID_CACHE", 2001},
                                                              {"AID_DIAG", 2002}};

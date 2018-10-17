@@ -22,6 +22,7 @@
 #include "SkiaProfileRenderer.h"
 #include "renderstate/RenderState.h"
 #include "renderthread/Frame.h"
+#include "VkFunctorDrawable.h"
 
 #include <SkSurface.h>
 #include <SkTypes.h>
@@ -122,8 +123,13 @@ bool SkiaVulkanPipeline::setSurface(Surface* surface, SwapBehavior swapBehavior,
     }
 
     if (surface) {
-        // TODO: handle color mode
-        mVkSurface = mVkManager.createSurface(surface);
+        mVkSurface = mVkManager.createSurface(surface, colorMode);
+    }
+
+    if (colorMode == ColorMode::SRGB) {
+        mSurfaceColorType = SkColorType::kN32_SkColorType;
+    } else if (colorMode == ColorMode::WideColorGamut) {
+        mSurfaceColorType = SkColorType::kRGBA_F16_SkColorType;
     }
 
     return mVkSurface != nullptr;
@@ -137,18 +143,8 @@ bool SkiaVulkanPipeline::isContextReady() {
     return CC_LIKELY(mVkManager.hasVkContext());
 }
 
-SkColorType SkiaVulkanPipeline::getSurfaceColorType() const {
-    return mVkManager.getSurfaceColorType();
-}
-
-sk_sp<SkColorSpace> SkiaVulkanPipeline::getSurfaceColorSpace() {
-    return mVkManager.getSurfaceColorSpace();
-}
-
 void SkiaVulkanPipeline::invokeFunctor(const RenderThread& thread, Functor* functor) {
-    // TODO: we currently don't support OpenGL WebView's
-    DrawGlInfo::Mode mode = DrawGlInfo::kModeProcessNoContext;
-    (*functor)(mode, nullptr);
+    VkFunctorDrawable::vkInvokeFunctor(functor);
 }
 
 sk_sp<Bitmap> SkiaVulkanPipeline::allocateHardwareBitmap(renderthread::RenderThread& renderThread,

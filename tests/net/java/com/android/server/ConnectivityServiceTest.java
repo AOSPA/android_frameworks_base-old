@@ -79,6 +79,7 @@ import static org.mockito.Mockito.when;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
+import android.content.ContentProvider;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
@@ -248,7 +249,7 @@ public class ConnectivityServiceTest {
         @Spy private Resources mResources;
         private final LinkedBlockingQueue<Intent> mStartedActivities = new LinkedBlockingQueue<>();
 
-        MockContext(Context base) {
+        MockContext(Context base, ContentProvider settingsProvider) {
             super(base);
 
             mResources = spy(base.getResources());
@@ -260,7 +261,7 @@ public class ConnectivityServiceTest {
                     });
 
             mContentResolver = new MockContentResolver();
-            mContentResolver.addProvider(Settings.AUTHORITY, new FakeSettingsProvider());
+            mContentResolver.addProvider(Settings.AUTHORITY, settingsProvider);
         }
 
         @Override
@@ -1048,7 +1049,9 @@ public class ConnectivityServiceTest {
             Looper.prepare();
         }
 
-        mServiceContext = new MockContext(InstrumentationRegistry.getContext());
+        FakeSettingsProvider.clearSettingsProvider();
+        mServiceContext = new MockContext(InstrumentationRegistry.getContext(),
+                new FakeSettingsProvider());
         LocalServices.removeServiceForTest(NetworkPolicyManagerInternal.class);
         LocalServices.addService(
                 NetworkPolicyManagerInternal.class, mock(NetworkPolicyManagerInternal.class));
@@ -1067,13 +1070,13 @@ public class ConnectivityServiceTest {
 
         // Ensure that the default setting for Captive Portals is used for most tests
         setCaptivePortalMode(Settings.Global.CAPTIVE_PORTAL_MODE_PROMPT);
-        setMobileDataAlwaysOn(false);
+        setAlwaysOnNetworks(false);
         setPrivateDnsSettings(PRIVATE_DNS_MODE_OFF, "ignored.example.com");
     }
 
     @After
     public void tearDown() throws Exception {
-        setMobileDataAlwaysOn(false);
+        setAlwaysOnNetworks(false);
         if (mCellNetworkAgent != null) {
             mCellNetworkAgent.disconnect();
             mCellNetworkAgent = null;
@@ -1086,6 +1089,7 @@ public class ConnectivityServiceTest {
             mEthernetNetworkAgent.disconnect();
             mEthernetNetworkAgent = null;
         }
+        FakeSettingsProvider.clearSettingsProvider();
     }
 
     private static int transportToLegacyType(int transport) {
@@ -2023,7 +2027,7 @@ public class ConnectivityServiceTest {
 
     @Test
     public void testNetworkGoesIntoBackgroundAfterLinger() {
-        setMobileDataAlwaysOn(true);
+        setAlwaysOnNetworks(true);
         NetworkRequest request = new NetworkRequest.Builder()
                 .clearCapabilities()
                 .build();
@@ -2768,10 +2772,10 @@ public class ConnectivityServiceTest {
         Settings.Global.putInt(cr, Settings.Global.CAPTIVE_PORTAL_MODE, mode);
     }
 
-    private void setMobileDataAlwaysOn(boolean enable) {
+    private void setAlwaysOnNetworks(boolean enable) {
         ContentResolver cr = mServiceContext.getContentResolver();
         Settings.Global.putInt(cr, Settings.Global.MOBILE_DATA_ALWAYS_ON, enable ? 1 : 0);
-        mService.updateMobileDataAlwaysOn();
+        mService.updateAlwaysOnNetworks();
         waitForIdle();
     }
 
@@ -2793,7 +2797,7 @@ public class ConnectivityServiceTest {
     public void testBackgroundNetworks() throws Exception {
         // Create a background request. We can't do this ourselves because ConnectivityService
         // doesn't have an API for it. So just turn on mobile data always on.
-        setMobileDataAlwaysOn(true);
+        setAlwaysOnNetworks(true);
         final NetworkRequest request = new NetworkRequest.Builder().build();
         final NetworkRequest fgRequest = new NetworkRequest.Builder()
                 .addCapability(NET_CAPABILITY_FOREGROUND).build();
@@ -2991,7 +2995,7 @@ public class ConnectivityServiceTest {
 
         // Turn on mobile data always on. The factory starts looking again.
         testFactory.expectAddRequests(1);
-        setMobileDataAlwaysOn(true);
+        setAlwaysOnNetworks(true);
         testFactory.waitForNetworkRequests(2);
         assertTrue(testFactory.getMyStartRequested());
 
@@ -3011,7 +3015,7 @@ public class ConnectivityServiceTest {
 
         // Turn off mobile data always on and expect the request to disappear...
         testFactory.expectRemoveRequests(1);
-        setMobileDataAlwaysOn(false);
+        setAlwaysOnNetworks(false);
         testFactory.waitForNetworkRequests(1);
 
         // ...  and cell data to be torn down.
@@ -4530,6 +4534,80 @@ public class ConnectivityServiceTest {
 
         // Clean up
         mCellNetworkAgent.disconnect();
+        mCm.unregisterNetworkCallback(networkCallback);
+    }
+
+    @Test
+    public void testDataActivityTracking() throws RemoteException {
+        final TestNetworkCallback networkCallback = new TestNetworkCallback();
+        final NetworkRequest networkRequest = new NetworkRequest.Builder()
+                .addCapability(NET_CAPABILITY_INTERNET)
+                .build();
+        mCm.registerNetworkCallback(networkRequest, networkCallback);
+
+        mCellNetworkAgent = new MockNetworkAgent(TRANSPORT_CELLULAR);
+        final LinkProperties cellLp = new LinkProperties();
+        cellLp.setInterfaceName(MOBILE_IFNAME);
+        mCellNetworkAgent.sendLinkProperties(cellLp);
+        reset(mNetworkManagementService);
+        mCellNetworkAgent.connect(true);
+        networkCallback.expectAvailableThenValidatedCallbacks(mCellNetworkAgent);
+        verify(mNetworkManagementService, times(1)).addIdleTimer(eq(MOBILE_IFNAME), anyInt(),
+                eq(ConnectivityManager.TYPE_MOBILE));
+
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+        final LinkProperties wifiLp = new LinkProperties();
+        wifiLp.setInterfaceName(WIFI_IFNAME);
+        mWiFiNetworkAgent.sendLinkProperties(wifiLp);
+
+        // Network switch
+        reset(mNetworkManagementService);
+        mWiFiNetworkAgent.connect(true);
+        networkCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        networkCallback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
+        networkCallback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
+        verify(mNetworkManagementService, times(1)).addIdleTimer(eq(WIFI_IFNAME), anyInt(),
+                eq(ConnectivityManager.TYPE_WIFI));
+        verify(mNetworkManagementService, times(1)).removeIdleTimer(eq(MOBILE_IFNAME));
+
+        // Disconnect wifi and switch back to cell
+        reset(mNetworkManagementService);
+        mWiFiNetworkAgent.disconnect();
+        networkCallback.expectCallback(CallbackState.LOST, mWiFiNetworkAgent);
+        assertNoCallbacks(networkCallback);
+        verify(mNetworkManagementService, times(1)).removeIdleTimer(eq(WIFI_IFNAME));
+        verify(mNetworkManagementService, times(1)).addIdleTimer(eq(MOBILE_IFNAME), anyInt(),
+                eq(ConnectivityManager.TYPE_MOBILE));
+
+        // reconnect wifi
+        mWiFiNetworkAgent = new MockNetworkAgent(TRANSPORT_WIFI);
+        wifiLp.setInterfaceName(WIFI_IFNAME);
+        mWiFiNetworkAgent.sendLinkProperties(wifiLp);
+        mWiFiNetworkAgent.connect(true);
+        networkCallback.expectAvailableCallbacksUnvalidated(mWiFiNetworkAgent);
+        networkCallback.expectCallback(CallbackState.LOSING, mCellNetworkAgent);
+        networkCallback.expectCapabilitiesWith(NET_CAPABILITY_VALIDATED, mWiFiNetworkAgent);
+
+        // Disconnect cell
+        reset(mNetworkManagementService);
+        mCellNetworkAgent.disconnect();
+        networkCallback.expectCallback(CallbackState.LOST, mCellNetworkAgent);
+        // LOST callback is triggered earlier than removing idle timer. Broadcast should also be
+        // sent as network being switched. Ensure rule removal for cell will not be triggered
+        // unexpectedly before network being removed.
+        waitForIdle();
+        verify(mNetworkManagementService, times(0)).removeIdleTimer(eq(MOBILE_IFNAME));
+        verify(mNetworkManagementService, times(1)).removeNetwork(
+                eq(mCellNetworkAgent.getNetwork().netId));
+
+        // Disconnect wifi
+        ConditionVariable cv = waitForConnectivityBroadcasts(1);
+        reset(mNetworkManagementService);
+        mWiFiNetworkAgent.disconnect();
+        waitFor(cv);
+        verify(mNetworkManagementService, times(1)).removeIdleTimer(eq(WIFI_IFNAME));
+
+        // Clean up
         mCm.unregisterNetworkCallback(networkCallback);
     }
 }
