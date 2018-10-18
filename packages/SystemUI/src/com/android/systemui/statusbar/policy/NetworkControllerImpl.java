@@ -287,6 +287,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         filter.addAction(ConnectivityManager.INET_CONDITION_ACTION);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         filter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
+        filter.addAction(TelephonyIntents.ACTION_ANY_DATA_CONNECTION_STATE_CHANGED);
         mContext.registerReceiver(this, filter, null, mReceiverHandler);
         mListening = true;
 
@@ -578,7 +579,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             public int compare(SubscriptionInfo lhs, SubscriptionInfo rhs) {
                 return lhs.getSimSlotIndex() == rhs.getSimSlotIndex()
                         ? lhs.getSubscriptionId() - rhs.getSubscriptionId()
-                        : lhs.getSimSlotIndex() - rhs.getSimSlotIndex();
+                        : rhs.getSimSlotIndex() - lhs.getSimSlotIndex();
             }
         });
         mCurrentSubscriptions = subscriptions;
@@ -1041,7 +1042,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         boolean alwaysShowDataRatIcon = false;
         boolean readIconsFromXml;
         boolean showRsrpSignalLevelforLTE;
-
+        boolean showVolteIcon;
 
         static Config readConfig(Context context) {
             Config config = new Config();
@@ -1066,6 +1067,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             config.readIconsFromXml = res.getBoolean(R.bool.config_read_icons_from_xml);
             config.showRsrpSignalLevelforLTE =
                     res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
+            config.showVolteIcon = res.getBoolean(R.bool.config_display_volte);
             return config;
         }
     }

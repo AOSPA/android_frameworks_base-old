@@ -1518,9 +1518,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             mActivityTrigger.activityPauseTrigger(prev.intent, prev.info, prev.appInfo);
         }
 
-        if (mActivityPluginDelegate != null) {
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
             mActivityPluginDelegate.activitySuspendNotification
-                (prev.appInfo.packageName, prev.fullscreen, true);
+                (prev.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, true);
         }
 
         mResumedActivity = null;
@@ -2513,10 +2513,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     next.fullscreen);
         }
 
-        if (mActivityPluginDelegate != null) {
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
             mActivityPluginDelegate.activityInvokeNotification
-                (next.appInfo.packageName, next.fullscreen);
+                (next.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN);
         }
+
         // If we are currently pausing an activity, then don't do anything
         // until that is done.
         if (!mStackSupervisor.allPausedActivitiesComplete()) {
@@ -2838,7 +2839,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     if (!next.hasBeenLaunched) {
                         next.hasBeenLaunched = true;
                     } else  if (SHOW_APP_STARTING_PREVIEW && lastStack != null
-                            && lastStack.isTopStackOnDisplay()) {
+                            && lastStack.getDisplay() != null && lastStack.isTopStackOnDisplay()) {
                         next.showStartingWindow(null /* prev */, false /* newTask */,
                                 false /* taskSwitch */);
                     }
@@ -3027,10 +3028,12 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         if (mActivityTrigger != null) {
             mActivityTrigger.activityStartTrigger(r.intent, r.info, r.appInfo, r.fullscreen);
         }
-        if (mActivityPluginDelegate != null) {
+
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
             mActivityPluginDelegate.activityInvokeNotification
-                (r.appInfo.packageName, r.fullscreen);
+                (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN);
         }
+
         if (!isActivityTypeHome() || numActivities() > 0) {
             // We want to show the starting preview window if we are
             // switching to a new task, or the next activity's process is
@@ -3606,9 +3609,9 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
                     mActivityTrigger.activityStopTrigger(r.intent, r.info, r.appInfo);
                 }
 
-                if (mActivityPluginDelegate != null) {
+                if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
                     mActivityPluginDelegate.activitySuspendNotification
-                        (r.appInfo.packageName, r.fullscreen, false);
+                        (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
                 }
 
                 if (!r.visible) {
@@ -3947,6 +3950,12 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
             }
             if (DEBUG_STATES) Slog.v(TAG_STATES,
                     "Moving to STOPPING: "+ r + " (finish requested)");
+
+            if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+                mActivityPluginDelegate.activitySuspendNotification
+                    (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
+            }
+
             r.setState(STOPPING, "finishCurrentActivityLocked");
             if (oomAdj) {
                 mService.updateOomAdj();
@@ -3960,6 +3969,11 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         mStackSupervisor.mActivitiesWaitingForVisibleActivity.remove(r);
         final ActivityState prevState = r.getState();
         if (DEBUG_STATES) Slog.v(TAG_STATES, "Moving to FINISHING: " + r);
+
+        if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
+            mActivityPluginDelegate.activitySuspendNotification
+                (r.appInfo.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, false);
+        }
 
         r.setState(FINISHING, "finishCurrentActivityLocked");
         final boolean finishingActivityInNonFocusedStack

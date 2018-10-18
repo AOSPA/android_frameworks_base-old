@@ -145,10 +145,11 @@ android_app {
     },
 
     libs: [
+        "telephony-ext",
         "telephony-common",
         "android.car",
         "android.car.user",
-        "qtiNetworkLib",
+	"ims-common",
     ],
 
     dxflags: ["--multi-dex"],

@@ -190,4 +190,5 @@ interface IStorageManager {
     void abortIdleMaintenance() = 80;
     String translateAppToSystem(String path, String packageName, int userId) = 81;
     String translateSystemToApp(String path, String packageName, int userId) = 82;
+    void clearUserKeyAuth(int userId, int serialNumber, in byte[] token, in byte[] secret) = 83;
 }

@@ -122,6 +122,8 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
 
     private static final String USB_STATE_MATCH =
             "DEVPATH=/devices/virtual/android_usb/android0";
+    private static final String USB_STATE_MATCH_SEC =
+            "DEVPATH=/devices/virtual/android_usb/android1";
     private static final String ACCESSORY_START_MATCH =
             "DEVPATH=/devices/virtual/misc/usb_accessory";
     private static final String FUNCTIONS_PATH =
@@ -364,6 +366,7 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
         // Watch for USB configuration changes
         mUEventObserver = new UsbUEventObserver();
         mUEventObserver.startObserving(USB_STATE_MATCH);
+        mUEventObserver.startObserving(USB_STATE_MATCH_SEC);
         mUEventObserver.startObserving(ACCESSORY_START_MATCH);
 
         // register observer to listen for settings changes

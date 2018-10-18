@@ -111,7 +111,6 @@ public class MediaFile {
         addFileType(MtpConstants.FORMAT_AVI, "video/avi");
         addFileType(MtpConstants.FORMAT_WMV, "video/x-ms-wmv");
         addFileType(MtpConstants.FORMAT_ASF, "video/x-ms-asf");
-        //addFileType(MtpConstants.FORMAT_MP4, "audio/mhas");
 
         addFileType(MtpConstants.FORMAT_EXIF_JPEG, "image/jpeg");
         addFileType(MtpConstants.FORMAT_GIF, "image/gif");
@@ -165,6 +164,7 @@ public class MediaFile {
         // addFileType(MtpConstants.FORMAT_DSD, "audio/x-dff");
         // addFileType(MtpConstants.FORMAT_DSD, "audio/dsd");
         // addFileType(MtpConstants.FORMAT_MHAS, "audio/mhas");
+        // addFileType(MtpConstants.FORMAT_MP4, "audio/mhas");
 
     }
 
