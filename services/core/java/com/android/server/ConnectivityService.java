@@ -26,6 +26,7 @@ import static android.net.ConnectivityManager.TYPE_VPN;
 import static android.net.ConnectivityManager.getNetworkTypeName;
 import static android.net.ConnectivityManager.isNetworkTypeValid;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_EIMS;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_FOREGROUND;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
@@ -52,6 +53,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.database.ContentObserver;
+import android.telephony.SubscriptionInfo;
 import android.net.ConnectionInfo;
 import android.net.ConnectivityManager;
 import android.net.ConnectivityManager.PacketKeepalive;
@@ -458,6 +460,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private List mProtectedNetworks;
 
     private TelephonyManager mTelephonyManager;
+    private SubscriptionManager mSubscriptionManager;
 
     private KeepaliveTracker mKeepaliveTracker;
     private NetworkNotificationManager mNotifier;
@@ -783,6 +786,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mNetd = NetdService.getInstance();
         mKeyStore = KeyStore.getInstance();
         mTelephonyManager = (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
+        mSubscriptionManager = SubscriptionManager.from(mContext);
 
         try {
             mPolicyManager.registerListener(mPolicyListener);
@@ -2756,8 +2760,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     // 2. Unvalidated WiFi will not be reaped when validated cellular
                     //    is currently satisfying the request.  This is desirable when
                     //    WiFi ends up validating and out scoring cellular.
-                    getNetworkForRequest(nri.request.requestId).getCurrentScore() <
-                            nai.getCurrentScoreAsValidated())) {
+                    ((getNetworkForRequest(nri.request.requestId) != null)
+                    && (getNetworkForRequest(nri.request.requestId).getCurrentScore() <
+                            nai.getCurrentScoreAsValidated())))) {
                 return false;
             }
         }
@@ -6040,8 +6045,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private boolean satisfiesMobileNetworkDataCheck(NetworkCapabilities agentNc) {
         if (agentNc != null && agentNc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-            if (getIntSpecifier(agentNc.getNetworkSpecifier()) == SubscriptionManager
-                                    .getDefaultDataSubscriptionId()) {
+            if((agentNc.hasCapability(NET_CAPABILITY_EIMS) &&
+                 (mSubscriptionManager != null && 
+                  (mSubscriptionManager.getActiveSubscriptionInfoList() == null ||
+                   mSubscriptionManager.getActiveSubscriptionInfoList().size()==0))) ||
+               (getIntSpecifier(agentNc.getNetworkSpecifier()) == SubscriptionManager
+                                    .getDefaultDataSubscriptionId())) {
                 return true;
             } else {
                 return false;
