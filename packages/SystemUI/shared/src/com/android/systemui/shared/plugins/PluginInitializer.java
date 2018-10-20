@@ -25,10 +25,16 @@ public interface PluginInitializer {
     Looper getBgLooper();
 
     /**
-     * This Runnable is run on the bg looper during initialization of {@link PluginManagerImpl}.
-     * It can be null.
+     * Called from the bg looper during initialization of {@link PluginManagerImpl}.
      */
-    Runnable getBgInitCallback();
+    void onPluginManagerInit();
 
     String[] getWhitelistedPlugins(Context context);
+
+    PluginEnabler getPluginEnabler(Context context);
+
+    /**
+     * Called from {@link PluginManagerImpl#handleWtfs()}.
+     */
+    void handleWtfs();
 }
