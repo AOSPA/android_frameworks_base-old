@@ -254,7 +254,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
     private final UserManager mUserManager;
 
-    private final UiAutomationManager mUiAutomationManager = new UiAutomationManager();
+    private final UiAutomationManager mUiAutomationManager = new UiAutomationManager(mLock);
 
     private int mCurrentUserId = UserHandle.USER_SYSTEM;
 
@@ -830,7 +830,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
 
         synchronized (mLock) {
             mUiAutomationManager.registerUiTestAutomationServiceLocked(owner, serviceClient,
-                    mContext, accessibilityServiceInfo, sIdCounter++, mMainHandler, mLock,
+                    mContext, accessibilityServiceInfo, sIdCounter++, mMainHandler,
                     mSecurityPolicy, this, mWindowManagerService, mGlobalActionPerformer, flags);
             onUserStateChangedLocked(getCurrentUserStateLocked());
         }
@@ -2630,7 +2630,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
         final List<Integer> outsideWindowsIds;
         final List<RemoteAccessibilityConnection> connectionList = new ArrayList<>();
         synchronized (mLock) {
-            outsideWindowsIds = mSecurityPolicy.getWatchOutsideTouchWindowId(targetWindowId);
+            outsideWindowsIds = mSecurityPolicy.getWatchOutsideTouchWindowIdLocked(targetWindowId);
             for (int i = 0; i < outsideWindowsIds.size(); i++) {
                 connectionList.add(getConnectionLocked(outsideWindowsIds.get(i)));
             }
@@ -2787,7 +2787,7 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
     }
 
     @Override
-    public void onClientChange(boolean serviceInfoChanged) {
+    public void onClientChangeLocked(boolean serviceInfoChanged) {
         AccessibilityManagerService.UserState userState = getUserStateLocked(mCurrentUserId);
         onUserStateChangedLocked(userState);
         if (serviceInfoChanged) {
@@ -3684,13 +3684,13 @@ public class AccessibilityManagerService extends IAccessibilityManager.Stub
             return mWindowInfoById.get(windowId);
         }
 
-        private List<Integer> getWatchOutsideTouchWindowId(int targetWindowId) {
-            if (mWindowInfoById != null && mHasWatchOutsideTouchWindow) {
+        private List<Integer> getWatchOutsideTouchWindowIdLocked(int targetWindowId) {
+            final WindowInfo targetWindow = mWindowInfoById.get(targetWindowId);
+            if (targetWindow != null && mWindowInfoById != null && mHasWatchOutsideTouchWindow) {
                 final List<Integer> outsideWindowsId = new ArrayList<>();
-                final WindowInfo targetWindow = mWindowInfoById.get(targetWindowId);
                 for (int i = 0; i < mWindowInfoById.size(); i++) {
                     WindowInfo window = mWindowInfoById.valueAt(i);
-                    if (window.layer < targetWindow.layer
+                    if (window != null && window.layer < targetWindow.layer
                             && window.hasFlagWatchOutsideTouch) {
                         outsideWindowsId.add(mWindowInfoById.keyAt(i));
                     }

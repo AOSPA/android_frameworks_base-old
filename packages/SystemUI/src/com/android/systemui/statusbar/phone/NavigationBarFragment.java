@@ -195,7 +195,7 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
         @Override
         public void onBackButtonAlphaChanged(float alpha, boolean animate) {
             final ButtonDispatcher backButton = mNavigationBarView.getBackButton();
-            if (QuickStepController.shouldhideBackButton()) {
+            if (QuickStepController.shouldhideBackButton(getContext())) {
                 // If property was changed to hide/show back button, going home will trigger
                 // launcher to to change the back button alpha to reflect property change
                 backButton.setVisibility(View.GONE);
@@ -641,11 +641,11 @@ public class NavigationBarFragment extends Fragment implements Callbacks {
     // Injected from StatusBar at creation.
     public void setCurrentSysuiVisibility(int systemUiVisibility) {
         mSystemUiVisibility = systemUiVisibility;
-        int nbMode = mStatusBar.computeBarMode(0, mSystemUiVisibility,
+        final int barMode = mStatusBar.computeBarMode(0, mSystemUiVisibility,
                 View.NAVIGATION_BAR_TRANSIENT, View.NAVIGATION_BAR_TRANSLUCENT,
                 View.NAVIGATION_BAR_TRANSPARENT);
-        if ( nbMode != -1 ) {
-            mNavigationBarMode = nbMode;
+        if (barMode != -1) {
+            mNavigationBarMode = barMode;
         }
         checkNavBarModes();
         mStatusBar.touchAutoHide();

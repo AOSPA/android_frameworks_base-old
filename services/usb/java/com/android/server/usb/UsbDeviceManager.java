@@ -20,8 +20,6 @@ import static com.android.internal.usb.DumpUtils.writeAccessory;
 import static com.android.internal.util.dump.DumpUtils.writeStringIfNotNull;
 
 import android.app.ActivityManager;
-
-import com.android.server.wm.ActivityTaskManagerInternal;
 import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -82,6 +80,7 @@ import com.android.internal.os.SomeArgs;
 import com.android.internal.util.dump.DualDumpOutputStream;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
+import com.android.server.wm.ActivityTaskManagerInternal;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -543,7 +542,8 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
             // We do not show the USB notification if the primary volume supports mass storage.
             // The legacy mass storage UI will be used instead.
             final StorageManager storageManager = StorageManager.from(mContext);
-            final StorageVolume primary = storageManager.getPrimaryVolume();
+            final StorageVolume primary =
+                    storageManager != null ? storageManager.getPrimaryVolume() : null;
 
             boolean massStorageSupported = primary != null && primary.allowMassStorage();
             mUseUsbNotification = !massStorageSupported && mContext.getResources().getBoolean(
@@ -661,7 +661,19 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                 // successfully entered accessory mode
                 String[] accessoryStrings = mUsbDeviceManager.getAccessoryStrings();
                 if (accessoryStrings != null) {
-                    mCurrentAccessory = new UsbAccessory(accessoryStrings);
+                    UsbSerialReader serialReader = new UsbSerialReader(mContext, mSettingsManager,
+                            accessoryStrings[UsbAccessory.SERIAL_STRING]);
+
+                    mCurrentAccessory = new UsbAccessory(
+                            accessoryStrings[UsbAccessory.MANUFACTURER_STRING],
+                            accessoryStrings[UsbAccessory.MODEL_STRING],
+                            accessoryStrings[UsbAccessory.DESCRIPTION_STRING],
+                            accessoryStrings[UsbAccessory.VERSION_STRING],
+                            accessoryStrings[UsbAccessory.URI_STRING],
+                            serialReader);
+
+                    serialReader.setDevice(mCurrentAccessory);
+
                     Slog.d(TAG, "entering USB accessory mode: " + mCurrentAccessory);
                     // defer accessoryAttached if system is not ready
                     if (mBootCompleted) {
@@ -1976,9 +1988,10 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
      * opens the currently attached USB accessory.
      *
      * @param accessory accessory to be openened.
+     * @param uid Uid of the caller
      */
     public ParcelFileDescriptor openAccessory(UsbAccessory accessory,
-            UsbUserSettingsManager settings) {
+            UsbUserSettingsManager settings, int uid) {
         UsbAccessory currentAccessory = mHandler.getCurrentAccessory();
         if (currentAccessory == null) {
             throw new IllegalArgumentException("no accessory attached");
@@ -1989,7 +2002,7 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                     + currentAccessory;
             throw new IllegalArgumentException(error);
         }
-        settings.checkPermission(accessory);
+        settings.checkPermission(accessory, uid);
         return nativeOpenAccessory();
     }
 

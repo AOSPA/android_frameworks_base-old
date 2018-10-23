@@ -523,11 +523,11 @@ package android.app.admin {
     method public android.content.ComponentName getDeviceOwnerComponentOnAnyUser();
     method public java.lang.String getDeviceOwnerNameOnAnyUser();
     method public java.lang.CharSequence getDeviceOwnerOrganizationName();
-    method public int getDeviceOwnerUserId();
+    method public android.os.UserHandle getDeviceOwnerUser();
     method public java.util.List<java.lang.String> getPermittedAccessibilityServices(int);
     method public java.util.List<java.lang.String> getPermittedInputMethodsForCurrentUser();
     method public android.content.ComponentName getProfileOwner() throws java.lang.IllegalArgumentException;
-    method public android.content.ComponentName getProfileOwnerAsUser(int);
+    method public android.content.ComponentName getProfileOwnerAsUser(android.os.UserHandle);
     method public java.lang.String getProfileOwnerNameAsUser(int) throws java.lang.IllegalArgumentException;
     method public int getUserProvisioningState();
     method public boolean isDeviceManaged();
@@ -1118,9 +1118,9 @@ package android.content.pm {
   }
 
   public class PackageItemInfo {
+    method public static void forceSafeLabels();
     method public deprecated java.lang.CharSequence loadSafeLabel(android.content.pm.PackageManager);
     method public java.lang.CharSequence loadSafeLabel(android.content.pm.PackageManager, float, int);
-    method public static void setForceSafeLabels(boolean);
     field public static final int SAFE_LABEL_FLAG_FIRST_LINE = 4; // 0x4
     field public static final int SAFE_LABEL_FLAG_SINGLE_LINE = 2; // 0x2
     field public static final int SAFE_LABEL_FLAG_TRIM = 1; // 0x1
@@ -4132,7 +4132,6 @@ package android.os {
     field public static final android.os.UserHandle ALL;
     field public static final android.os.UserHandle CURRENT;
     field public static final android.os.UserHandle SYSTEM;
-    field public static final int USER_NULL = -10000; // 0xffffd8f0
   }
 
   public class UserManager {

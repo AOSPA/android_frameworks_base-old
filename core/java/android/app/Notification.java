@@ -68,6 +68,7 @@ import android.text.style.RelativeSizeSpan;
 import android.text.style.TextAppearanceSpan;
 import android.util.ArraySet;
 import android.util.Log;
+import android.util.Pair;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 import android.view.Gravity;
@@ -3127,6 +3128,37 @@ public class Notification implements Parcelable
             return true;
         }
         return false;
+    }
+
+
+    /**
+     * Finds and returns a remote input and its corresponding action.
+     *
+     * @param requiresFreeform requires the remoteinput to allow freeform or not.
+     * @return the result pair, {@code null} if no result is found.
+     *
+     * @hide
+     */
+    @Nullable
+    public Pair<RemoteInput, Action> findRemoteInputActionPair(boolean requiresFreeform) {
+        if (actions == null) {
+            return null;
+        }
+        for (Notification.Action action : actions) {
+            if (action.getRemoteInputs() == null) {
+                continue;
+            }
+            RemoteInput resultRemoteInput = null;
+            for (RemoteInput remoteInput : action.getRemoteInputs()) {
+                if (remoteInput.getAllowFreeFormInput() || !requiresFreeform) {
+                    resultRemoteInput = remoteInput;
+                }
+            }
+            if (resultRemoteInput != null) {
+                return Pair.create(resultRemoteInput, action);
+            }
+        }
+        return null;
     }
 
     /**
@@ -6203,7 +6235,7 @@ public class Notification implements Parcelable
         public abstract boolean areNotificationsVisiblyDifferent(Style other);
 
         /**
-         * @return the the text that should be displayed in the statusBar when heads-upped.
+         * @return the text that should be displayed in the statusBar when heads-upped.
          * If {@code null} is returned, the default implementation will be used.
          *
          * @hide
@@ -6690,7 +6722,7 @@ public class Notification implements Parcelable
         }
 
         /**
-         * @return the the text that should be displayed in the statusBar when heads upped.
+         * @return the text that should be displayed in the statusBar when heads upped.
          * If {@code null} is returned, the default implementation will be used.
          *
          * @hide
@@ -7346,7 +7378,7 @@ public class Notification implements Parcelable
             }
 
             /**
-             * Get the the Uri pointing to the content of the message. Can be null, in which case
+             * Get the Uri pointing to the content of the message. Can be null, in which case
              * {@see #getText()} is used.
              */
             public Uri getDataUri() {
