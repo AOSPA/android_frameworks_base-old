@@ -409,6 +409,10 @@
     <!-- Content description of the data connection type CDMA. [CHAR LIMIT=NONE] -->
     <string name="data_connection_cdma">1X</string>
 
+    <string name="data_connection_5g_basic">5GBasic</string>
+
+    <string name="data_connection_5g_uwb">5GUWB</string>
+
     <!-- Content description of the roaming data connection type. [CHAR LIMIT=NONE] -->
     <string name="data_connection_roaming">Roaming</string>
 
