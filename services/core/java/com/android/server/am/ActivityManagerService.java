@@ -252,6 +252,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.Parcel;
 import android.os.ParcelFileDescriptor;
+import android.os.PowerManager;
 import android.os.PowerManager.ServiceType;
 import android.os.PowerManagerInternal;
 import android.os.Process;
@@ -1462,6 +1463,19 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
 
     long mLastMemUsageReportTime = 0;
+
+    // Min aging threshold in milliseconds to consider a B-service
+    int mMinBServiceAgingTime =
+            SystemProperties.getInt("ro.vendor.qti.sys.fw.bservice_age", 5000);
+    // Threshold for B-services when in memory pressure
+    int mBServiceAppThreshold =
+            SystemProperties.getInt("ro.vendor.qti.sys.fw.bservice_limit", 5);
+    // Enable B-service aging propagation on memory pressure.
+    boolean mEnableBServicePropagation =
+            SystemProperties.getBoolean("ro.vendor.qti.sys.fw.bservice_enable", false);
+   // Enable Net Opts
+    static final boolean mEnableNetOpts =
+            SystemProperties.getBoolean("persist.vendor.qti.netopts.enable",false);
 
     /**
      * Flag whether the current user is a "monkey", i.e. whether
@@ -4358,6 +4372,9 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 + ProcessList.makeOomAdjString(app.setAdj)
                                 + ProcessList.makeProcStateString(app.setProcState), app.info.uid);
                 mAllowLowerMemLevel = true;
+                if (mEnableNetOpts) {
+                    networkOptsCheck(1, app.processName);
+                }
             } else {
                 // Note that we always want to do oom adj to update our state with the
                 // new number of procs.
@@ -6095,6 +6112,43 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
         }, dumpheapFilter);
+
+        if (mEnableNetOpts) {
+            IntentFilter netInfoFilter = new IntentFilter();
+            netInfoFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+            netInfoFilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+            mContext.registerReceiver(new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    if (mConnectivityManager != null) {
+                        NetworkInfo netInfo = mConnectivityManager.getActiveNetworkInfo();
+                        synchronized(mNetLock) {
+                            mActiveNetType = (netInfo != null) ? netInfo.getType() : -1;
+                        }
+                    }
+                    ActivityStack stack = mStackSupervisor.getTopDisplayFocusedStack();
+                    if (stack != null) {
+                        ActivityRecord r = stack.topRunningActivityLocked();
+                        if (r != null) {
+                            PowerManager powerManager =
+                                (PowerManager)mContext.getSystemService(Context.POWER_SERVICE);
+                            if (powerManager != null && powerManager.isInteractive())
+                                    networkOptsCheck(0, r.processName);
+                        }
+                    }
+                }
+            }, netInfoFilter);
+            mConnectivityManager =
+                        (ConnectivityManager)mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (mConnectivityManager != null) {
+                NetworkInfo netInfo = mConnectivityManager.getActiveNetworkInfo();
+                if (netInfo != null) {
+                    synchronized (mNetLock) {
+                        mActiveNetType = netInfo.getType();
+                    }
+                }
+            }
+        }
 
         // Let system services know.
         mSystemServiceManager.startBootPhase(SystemService.PHASE_BOOT_COMPLETED);
@@ -19042,12 +19096,43 @@ public class ActivityManagerService extends IActivityManager.Stub
         int nextCachedAdj = curCachedAdj+1;
         int curEmptyAdj = ProcessList.CACHED_APP_MIN_ADJ;
         int nextEmptyAdj = curEmptyAdj+2;
+        ProcessRecord selectedAppRecord = null;
+        long serviceLastActivity = 0;
+        int numBServices = 0;
 
         boolean retryCycles = false;
 
         // need to reset cycle state before calling computeOomAdjLocked because of service connections
         for (int i=N-1; i>=0; i--) {
             ProcessRecord app = mLruProcesses.get(i);
+            if (mEnableBServicePropagation && app.serviceb
+                    && (app.curAdj == ProcessList.SERVICE_B_ADJ)) {
+                numBServices++;
+                for (int s = app.services.size() - 1; s >= 0; s--) {
+                    ServiceRecord sr = app.services.valueAt(s);
+                    if (DEBUG_OOM_ADJ) Slog.d(TAG,"app.processName = " + app.processName
+                            + " serviceb = " + app.serviceb + " s = " + s + " sr.lastActivity = "
+                            + sr.lastActivity + " packageName = " + sr.packageName
+                            + " processName = " + sr.processName);
+                    if (SystemClock.uptimeMillis() - sr.lastActivity
+                            < mMinBServiceAgingTime) {
+                        if (DEBUG_OOM_ADJ) {
+                            Slog.d(TAG,"Not aged enough!!!");
+                        }
+                        continue;
+                    }
+                    if (serviceLastActivity == 0) {
+                        serviceLastActivity = sr.lastActivity;
+                        selectedAppRecord = app;
+                    } else if (sr.lastActivity < serviceLastActivity) {
+                        serviceLastActivity = sr.lastActivity;
+                        selectedAppRecord = app;
+                    }
+                }
+            }
+            if (DEBUG_OOM_ADJ && selectedAppRecord != null) Slog.d(TAG,
+                    "Identified app.processName = " + selectedAppRecord.processName
+                    + " app.pid = " + selectedAppRecord.pid);
             if (!app.killedByAm && app.thread != null) {
                 app.procStateChanged = false;
                 computeOomAdjLocked(app, ProcessList.UNKNOWN_ADJ, TOP_APP, true, now);
@@ -19201,6 +19286,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                     numTrimming++;
                 }
             }
+        }
+        if ((numBServices > mBServiceAppThreshold) && (true == mAllowLowerMemLevel)
+                && (selectedAppRecord != null)) {
+            ProcessList.setOomAdj(selectedAppRecord.pid, selectedAppRecord.info.uid,
+                    ProcessList.CACHED_APP_MAX_ADJ);
+            selectedAppRecord.setAdj = selectedAppRecord.curAdj;
+            if (DEBUG_OOM_ADJ) Slog.d(TAG,"app.processName = " + selectedAppRecord.processName
+                        + " app.pid = " + selectedAppRecord.pid + " is moved to higher adj");
         }
 
         incrementProcStateSeqAndNotifyAppsLocked();
