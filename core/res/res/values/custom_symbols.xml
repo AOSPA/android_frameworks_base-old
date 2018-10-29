@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Copyright (C) 2018-2019 StatixOS
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+-->
+<resources>
+  <!-- App error dialog -->
+  <java-symbol type="id" name="aerr_copy" />
+  <java-symbol type="string" name="url_copy_success" />
+  <java-symbol type="string" name="url_copy_failed" />
+
+  <!-- Max visible notification icons -->
+  <java-symbol type="integer" name="config_maxVisibleNotificationIcons" />
+  <java-symbol type="integer" name="config_maxVisibleNotificationIconsWhenDark" />
+
+  <!-- Power menu reboot -->
+  <java-symbol name="reboot_to_bootloader_title" type="string" />
+  <java-symbol name="reboot_to_bootloader_message" type="string" />
+  <java-symbol name="reboot_to_recovery_title" type="string" />
+  <java-symbol name="reboot_to_recovery_message" type="string" />
+  <java-symbol name="reboot_system_title" type="string" />
+  <java-symbol name="reboot_system_message" type="string" />
+  <java-symbol type="array" name="config_rebootActionsList" />
+  <java-symbol type="array" name="values_globalActionsList" />
+
+  <!-- Device keyhandlers -->
+  <java-symbol type="array" name="config_deviceKeyHandlerLibs" />
+  <java-symbol type="array" name="config_deviceKeyHandlerClasses" />
+
+  <!-- Weather icons -->
+  <java-symbol type="drawable" name="weather_01" />
+  <java-symbol type="drawable" name="weather_01n" />
+  <java-symbol type="drawable" name="weather_02" />
+  <java-symbol type="drawable" name="weather_02n" />
+  <java-symbol type="drawable" name="weather_03" />
+  <java-symbol type="drawable" name="weather_03n" />
+  <java-symbol type="drawable" name="weather_04" />
+  <java-symbol type="drawable" name="weather_04n" />
+  <java-symbol type="drawable" name="weather_09" />
+  <java-symbol type="drawable" name="weather_10" />
+  <java-symbol type="drawable" name="weather_10n" />
+  <java-symbol type="drawable" name="weather_11" />
+  <java-symbol type="drawable" name="weather_13" />
+  <java-symbol type="drawable" name="weather_50" />
+
+</resources>
