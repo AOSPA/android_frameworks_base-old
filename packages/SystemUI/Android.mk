@@ -19,6 +19,17 @@ LOCAL_SRC_FILES := src/com/android/systemui/EventLogTags.logtags
 
 include $(BUILD_STATIC_JAVA_LIBRARY)
 
+include $(CLEAR_VARS)
+LOCAL_MODULE := qtiNetworkLib
+LOCAL_MODULE_OWNER := qcom
+LOCAL_SRC_FILES := prebuilts/qtiNetworkLib-classes.jar
+LOCAL_DEX_FILE := $(LOCAL_PATH)/prebuilts/qtiNetworkLib.jar
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_CLASS := JAVA_LIBRARIES
+LOCAL_MODULE_SUFFIX := .jar
+LOCAL_UNINSTALLABLE_MODULE := true
+include $(BUILD_PREBUILT)
+
 # ------------------
 
 include $(CLEAR_VARS)
