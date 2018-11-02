@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "key": {
+        "uuid": "23dbafbb_d0b38cde",
+        "filename": "packages/SystemUI/Android.mk",
+        "patchSetId": 1
+      },
+      "lineNbr": 31,
+      "author": {
+        "id": 1000126
+      },
+      "writtenOn": "2018-11-02T07:33:22Z",
+      "side": 1,
+      "message": "I can\u0027t build without this, and if I build with this, it builds, but qtiNetworkLib.jar is not copied to system/framework/",
+      "range": {
+        "startLine": 31,
+        "startChar": 0,
+        "endLine": 31,
+        "endChar": 34
+      },
+      "revId": "2baf673aef64c7ae6f2446618731079f915f6c70",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad",
+      "unresolved": false
+    }
+  ]
+}
