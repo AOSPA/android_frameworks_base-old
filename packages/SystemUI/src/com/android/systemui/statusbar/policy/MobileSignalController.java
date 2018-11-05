@@ -92,7 +92,7 @@ public class MobileSignalController extends SignalController<
 
     /****************************5G****************************/
     private FiveGStateListener mFiveGStateListener;
-    private MobileState mFiveGState;
+    private FiveGServiceState mFiveGState;
     private final int NUM_LEVELS_ON_5G;
     /**********************************************************/
 
@@ -134,7 +134,6 @@ public class MobileSignalController extends SignalController<
         // Get initial data sim state.
         updateDataSim();
 
-        mFiveGState = cleanState();
         NUM_LEVELS_ON_5G = FiveGServiceClient.getNumLevels(mContext);
 
         int phoneId = SubscriptionManager.getPhoneId(mSubscriptionInfo.getSubscriptionId());
@@ -306,7 +305,7 @@ public class MobileSignalController extends SignalController<
         if (mCurrentState.iconGroup == TelephonyIcons.CARRIER_NETWORK_CHANGE) {
             return SignalDrawable.getCarrierChangeState(getNumLevels());
         } else if (mCurrentState.connected) {
-            int level = mCurrentState.level;
+            int level = is5GConnected() ? mFiveGState.getSignalLevel() : mCurrentState.level;
             if (mConfig.inflateSignalStrengths) {
                 level++;
             }
@@ -323,23 +322,6 @@ public class MobileSignalController extends SignalController<
             return SignalDrawable.getEmptyState(getNumLevels());
         } else {
             return 0;
-        }
-    }
-
-    public int getCurrentFiveGIconId() {
-        if (mFiveGState.connected) {
-            int level = mFiveGState.level;
-            if (mConfig.inflateSignalStrengths) {
-                level++;
-            }
-
-            boolean dataDisabled = mCurrentState.userSetup
-                    && mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED;
-            boolean noInternet = mCurrentState.inetCondition == 0;
-            boolean cutOut = dataDisabled || noInternet;
-            return SignalDrawable.getState(level, NUM_LEVELS_ON_5G , cutOut);
-        } else{
-            return SignalDrawable.getEmptyState(NUM_LEVELS_ON_5G);
         }
     }
 
@@ -380,14 +362,18 @@ public class MobileSignalController extends SignalController<
     @Override
     public void notifyListeners(SignalCallback callback) {
         MobileIconGroup icons = getIcons();
+        final boolean dataDisabled = mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
+                && mCurrentState.userSetup;
+
+        if ( is5GConnected() && !dataDisabled) {
+            icons = mFiveGState.getIconGroup();
+        }
 
         String contentDescription = getStringIfExists(getContentDescription());
         String dataContentDescription = getStringIfExists(icons.mDataContentDescription);
         if (mCurrentState.inetCondition == 0) {
             dataContentDescription = mContext.getString(R.string.data_connection_no_internet);
         }
-        final boolean dataDisabled = mCurrentState.iconGroup == TelephonyIcons.DATA_DISABLED
-                && mCurrentState.userSetup;
 
         // Show icon in QS when we are connected or data is disabled.
         boolean showDataIcon = mCurrentState.dataConnected || dataDisabled;
@@ -415,8 +401,6 @@ public class MobileSignalController extends SignalController<
                 icons.mDataType : 0;
         int volteIcon = mConfig.showVolteIcon && isEnhanced4gLteModeSettingEnabled()
                 ? getVolteResId() : 0;
-        boolean show5GIcon = mFiveGState.connected && isDataRegisteredOnLte()
-                && mCurrentState.dataConnected;
         if (DEBUG) {
             Log.d(mTag, "notifyListeners mAlwasyShowTypeIcon=" + mAlwasyShowTypeIcon
                     + "  mDataNetType:" + mDataNetType +
@@ -428,14 +412,12 @@ public class MobileSignalController extends SignalController<
                     + " icons.mDataType=" + icons.mDataType
                     + " mConfig.showVolteIcon=" + mConfig.showVolteIcon
                     + " isEnhanced4gLteModeSettingEnabled=" + isEnhanced4gLteModeSettingEnabled()
-                    + " volteIcon=" + volteIcon + " show5GIcon=" + show5GIcon);
+                    + " volteIcon=" + volteIcon);
         }
         callback.setMobileDataIndicators(statusIcon, qsIcon, typeIcon, qsTypeIcon,
-                activityIn, activityOut, 0,
-                0, volteIcon,
+                activityIn, activityOut,volteIcon,
                 dataContentDescription, description, icons.mIsWide,
-                mSubscriptionInfo.getSubscriptionId(), mCurrentState.roaming,
-                show5GIcon, getCurrentFiveGIconId(), mFiveGState.dataConnected);
+                mSubscriptionInfo.getSubscriptionId(), mCurrentState.roaming);
     }
 
     @Override
@@ -738,7 +720,6 @@ public class MobileSignalController extends SignalController<
     public void unregisterFiveGStateListener(FiveGServiceClient client) {
         int phoneId = SubscriptionManager.getPhoneId(mSubscriptionInfo.getSubscriptionId());
         client.unregisterListener(phoneId);
-        mFiveGState = cleanState();
     }
 
     private boolean isDataRegisteredOnLte() {
@@ -749,6 +730,10 @@ public class MobileSignalController extends SignalController<
             registered = true;
         }
         return registered;
+    }
+
+    private boolean is5GConnected() {
+        return mFiveGState != null && mFiveGState.isConnected(isDataRegisteredOnLte());
     }
 
     @Override
@@ -842,14 +827,8 @@ public class MobileSignalController extends SignalController<
             if (DEBUG) {
                 Log.d(mTag, "onStateChanged: state=" + state);
             }
-
-            mFiveGState.connected = state.isServiceAvailable();
-            mFiveGState.level = state.getLevel();
-            mFiveGState.dataConnected = state.isDataConnected();
-            mFiveGState.time = System.currentTimeMillis();
-
+            mFiveGState = state;
             notifyListeners();
-
         }
     }
 
@@ -915,6 +894,7 @@ public class MobileSignalController extends SignalController<
         boolean userSetup;
         boolean roaming;
         boolean imsResitered;
+
 
         @Override
         public void copyFrom(State s) {
