@@ -74,6 +74,7 @@ import static com.android.server.am.ActivityStackSupervisorProto.KEYGUARD_CONTRO
 import static com.android.server.am.ActivityStackSupervisorProto.PENDING_ACTIVITIES;
 import static com.android.server.am.ActivityStackSupervisorProto.RESUMED_ACTIVITY;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_ALL;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_FOCUS;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_IDLE;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_PAUSE;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_RECENTS;
@@ -82,6 +83,7 @@ import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_STACK;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_STATES;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_TASKS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_FOCUS;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_IDLE;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_PAUSE;
 import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_RECENTS;
@@ -204,6 +206,7 @@ import java.util.Set;
 public class ActivityStackSupervisor extends ConfigurationContainer implements DisplayListener,
         RecentTasks.Callbacks, RootWindowContainerListener {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStackSupervisor" : TAG_ATM;
+    private static final String TAG_FOCUS = TAG + POSTFIX_FOCUS;
     private static final String TAG_IDLE = TAG + POSTFIX_IDLE;
     private static final String TAG_PAUSE = TAG + POSTFIX_PAUSE;
     private static final String TAG_RECENTS = TAG + POSTFIX_RECENTS;
@@ -3414,7 +3417,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         return true;
     }
 
-    void acquireAppLaunchPerfLock(String packageName) {
+    void acquireAppLaunchPerfLock(ActivityRecord r) {
        /* Acquire perf lock during new app launch */
        if (mPerfBoost == null) {
            mPerfBoost = new BoostFramework();

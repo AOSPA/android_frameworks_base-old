@@ -542,6 +542,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
     private Installer mInstaller;
 
+    /** Run all ActivityStacks through this */
+    ActivityStackSupervisor mStackSupervisor;
+
     final InstrumentationReporter mInstrumentationReporter = new InstrumentationReporter();
 
     final ArrayList<ActiveInstrumentation> mActiveInstrumentation = new ArrayList<>();
@@ -2255,6 +2258,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         mActivityTaskManager.setActivityManagerService(this, mHandlerThread.getLooper(),
                 mIntentFirewall, mPendingIntentController);
         mAtmInternal = LocalServices.getService(ActivityTaskManagerInternal.class);
+        mStackSupervisor = mActivityTaskManager.mStackSupervisor;
 
         mProcessCpuThread = new Thread("CpuTracker") {
             @Override
@@ -2583,6 +2587,10 @@ public class ActivityManagerService extends IActivityManager.Stub
             addServiceToMap(mAppBindArgs, "mount");
         }
         return mAppBindArgs;
+    }
+
+    public final void networkOptsCheck(int flag, String packageName) {
+        mHandler.sendMessage(mHandler.obtainMessage(NETWORK_OPTS_CHECK_MSG, flag, 0, packageName));
     }
 
     private static void addServiceToMap(ArrayMap<String, IBinder> map, String name) {
