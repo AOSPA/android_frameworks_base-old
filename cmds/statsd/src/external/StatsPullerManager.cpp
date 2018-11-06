@@ -170,6 +170,12 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
           {2, 3},
           1 * NS_PER_SEC,
           new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_STATE)}},
+        // native_process_memory_state
+        {android::util::NATIVE_PROCESS_MEMORY_STATE,
+         {{3, 4, 5, 6},
+          {2},
+          1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::NATIVE_PROCESS_MEMORY_STATE)}},
         // temperature
         {android::util::TEMPERATURE, {{}, {}, 1 * NS_PER_SEC, new ResourceThermalManagerPuller()}},
         // binder_calls
@@ -223,6 +229,9 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // PowerProfile constants for power model calculations.
         {android::util::POWER_PROFILE,
          {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::POWER_PROFILE)}},
+        // Process cpu stats. Min cool-down is 5 sec, inline with what AcitivityManagerService uses.
+        {android::util::PROCESS_CPU_TIME,
+         {{}, {}, 5 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::PROCESS_CPU_TIME)}},
 };
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {

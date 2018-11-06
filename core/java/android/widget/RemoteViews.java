@@ -42,6 +42,7 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
+import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Binder;
@@ -152,6 +153,7 @@ public class RemoteViews implements Parcelable, Filter {
     private static final int SET_REMOTE_INPUTS_ACTION_TAG = 18;
     private static final int LAYOUT_PARAM_ACTION_TAG = 19;
     private static final int OVERRIDE_TEXT_COLORS_TAG = 20;
+    private static final int SET_RIPPLE_DRAWABLE_COLOR_TAG = 21;
 
     /**
      * Application that hosts the remote views.
@@ -368,10 +370,12 @@ public class RemoteViews implements Parcelable, Filter {
                 // TODO: Unregister this handler if PendingIntent.FLAG_ONE_SHOT?
                 Context context = view.getContext();
                 ActivityOptions opts = getActivityOptions(context);
+                // The NEW_TASK flags are applied through the activity options and not as a part of
+                // the call to startIntentSender() to ensure that they are consistently applied to
+                // both mutable and immutable PendingIntents.
                 context.startIntentSender(
                         pendingIntent.getIntentSender(), fillInIntent,
-                        Intent.FLAG_ACTIVITY_NEW_TASK,
-                        Intent.FLAG_ACTIVITY_NEW_TASK, 0, opts.toBundle());
+                        0, 0, 0, opts.toBundle());
             } catch (IntentSender.SendIntentException e) {
                 android.util.Log.e(LOG_TAG, "Cannot send pending intent: ", e);
                 return false;
@@ -399,10 +403,15 @@ public class RemoteViews implements Parcelable, Filter {
                 windowAnimationStyle.recycle();
 
                 if (enterAnimationId != 0) {
-                    return ActivityOptions.makeCustomAnimation(context, enterAnimationId, 0);
+                    final ActivityOptions opts = ActivityOptions.makeCustomAnimation(context,
+                            enterAnimationId, 0);
+                    opts.setPendingIntentLaunchFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    return opts;
                 }
             }
-            return ActivityOptions.makeBasic();
+            final ActivityOptions opts = ActivityOptions.makeBasic();
+            opts.setPendingIntentLaunchFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            return opts;
         }
     }
 
@@ -1120,6 +1129,53 @@ public class RemoteViews implements Parcelable, Filter {
         boolean targetBackground;
         int colorFilter;
         PorterDuff.Mode filterMode;
+    }
+
+    /**
+     * Equivalent to calling
+     * {@link RippleDrawable#setColor(ColorStateList)},
+     * on the {@link Drawable} of a given view.
+     * <p>
+     * The operation will be performed on the {@link Drawable} returned by the
+     * target {@link View#getBackground()}.
+     * <p>
+     */
+    private class SetRippleDrawableColor extends Action {
+
+        ColorStateList mColorStateList;
+
+        SetRippleDrawableColor(int id, ColorStateList colorStateList) {
+            this.viewId = id;
+            this.mColorStateList = colorStateList;
+        }
+
+        SetRippleDrawableColor(Parcel parcel) {
+            viewId = parcel.readInt();
+            mColorStateList = parcel.readParcelable(null);
+        }
+
+        public void writeToParcel(Parcel dest, int flags) {
+            dest.writeInt(viewId);
+            dest.writeParcelable(mColorStateList, 0);
+        }
+
+        @Override
+        public void apply(View root, ViewGroup rootParent, OnClickHandler handler) {
+            final View target = root.findViewById(viewId);
+            if (target == null) return;
+
+            // Pick the correct drawable to modify for this view
+            Drawable targetDrawable = target.getBackground();
+
+            if (targetDrawable instanceof RippleDrawable) {
+                ((RippleDrawable) targetDrawable.mutate()).setColor(mColorStateList);
+            }
+        }
+
+        @Override
+        public int getActionTag() {
+            return SET_RIPPLE_DRAWABLE_COLOR_TAG;
+        }
     }
 
     private final class ViewContentNavigation extends Action {
@@ -2394,6 +2450,8 @@ public class RemoteViews implements Parcelable, Filter {
                 return new LayoutParamAction(parcel);
             case OVERRIDE_TEXT_COLORS_TAG:
                 return new OverrideTextColorsAction(parcel);
+            case SET_RIPPLE_DRAWABLE_COLOR_TAG:
+                return new SetRippleDrawableColor(parcel);
             default:
                 throw new ActionException("Tag " + tag + " not found");
         }
@@ -2851,6 +2909,22 @@ public class RemoteViews implements Parcelable, Filter {
     public void setDrawableTint(int viewId, boolean targetBackground,
             int colorFilter, @NonNull PorterDuff.Mode mode) {
         addAction(new SetDrawableTint(viewId, targetBackground, colorFilter, mode));
+    }
+
+    /**
+     * @hide
+     * Equivalent to calling
+     * {@link RippleDrawable#setColor(ColorStateList)} on the {@link Drawable} of a given view,
+     * assuming it's a {@link RippleDrawable}.
+     * <p>
+     *
+     * @param viewId The id of the view that contains the target
+     *            {@link RippleDrawable}
+     * @param colorStateList Specify a color for a
+     *            {@link ColorStateList} for this drawable.
+     */
+    public void setRippleDrawableColor(int viewId, ColorStateList colorStateList) {
+        addAction(new SetRippleDrawableColor(viewId, colorStateList));
     }
 
     /**

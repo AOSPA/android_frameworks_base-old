@@ -16,7 +16,7 @@
 
 package com.android.server.am;
 
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_METRICS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_METRICS;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 
@@ -37,6 +37,38 @@ import java.util.regex.Pattern;
  * Static utility methods related to {@link MemoryStat}.
  */
 final class MemoryStatUtil {
+    /**
+     * Which native processes to create {@link MemoryStat} for.
+     *
+     * <p>Processes are matched by their cmdline in procfs. Example: cat /proc/pid/cmdline returns
+     * /system/bin/statsd for the stats daemon.
+     */
+    static final String[] MEMORY_STAT_INTERESTING_NATIVE_PROCESSES = new String[]{
+            "/system/bin/statsd",  // Stats daemon.
+            "/system/bin/surfaceflinger",
+            "/system/bin/apexd",  // APEX daemon.
+            "/system/bin/audioserver",
+            "/system/bin/cameraserver",
+            "/system/bin/drmserver",
+            "/system/bin/healthd",
+            "/system/bin/incidentd",
+            "/system/bin/installd",
+            "/system/bin/lmkd",  // Low memory killer daemon.
+            "/system/bin/logd",
+            "media.codec",
+            "media.extractor",
+            "media.metrics",
+            "/system/bin/mediadrmserver",
+            "/system/bin/mediaserver",
+            "/system/bin/performanced",
+            "/system/bin/tombstoned",
+            "/system/bin/traced",  // Perfetto.
+            "/system/bin/traced_probes",  // Perfetto.
+            "webview_zygote",
+            "zygote",
+            "zygote64",
+    };
+
     static final int BYTES_IN_KILOBYTE = 1024;
     static final int PAGE_SIZE = 4096;
 
@@ -57,6 +89,8 @@ final class MemoryStatUtil {
     private static final String PROC_STAT_FILE_FMT = "/proc/%d/stat";
     /** Path to procfs status file for logging app memory state */
     private static final String PROC_STATUS_FILE_FMT = "/proc/%d/status";
+    /** Path to procfs cmdline file. Used with pid: /proc/pid/cmdline. */
+    private static final String PROC_CMDLINE_FILE_FMT = "/proc/%d/cmdline";
 
     private static final Pattern PGFAULT = Pattern.compile("total_pgfault (\\d+)");
     private static final Pattern PGMAJFAULT = Pattern.compile("total_pgmajfault (\\d+)");
@@ -117,6 +151,18 @@ final class MemoryStatUtil {
         final String statusPath = String.format(Locale.US, PROC_STATUS_FILE_FMT, pid);
         stat.rssHighWatermarkInBytes = parseVmHWMFromProcfs(readFileContents(statusPath));
         return stat;
+    }
+
+    /**
+     * Reads cmdline of a process from procfs.
+     *
+     * Returns content of /proc/pid/cmdline (e.g. /system/bin/statsd) or an empty string
+     * if the file is not available.
+     */
+    static String readCmdlineFromProcfs(int pid) {
+        String path = String.format(Locale.US, PROC_CMDLINE_FILE_FMT, pid);
+        String cmdline = readFileContents(path);
+        return cmdline != null ? cmdline : "";
     }
 
     private static String readFileContents(String path) {

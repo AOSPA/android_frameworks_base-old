@@ -45,8 +45,8 @@ import static android.view.WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHA
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.LAST_SUB_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY;
+import static android.view.WindowManager.LayoutParams.SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS;
 import static android.view.WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
@@ -763,8 +763,6 @@ public class WindowManagerService extends IWindowManager.Stub
     final ArrayMap<AnimationAdapter, SurfaceAnimator> mAnimationTransferMap = new ArrayMap<>();
     final BoundsAnimationController mBoundsAnimationController;
 
-    private final PointerEventDispatcher mPointerEventDispatcher;
-
     private WindowContentFrameStats mTempWindowRenderStats;
 
     private final LatencyTracker mLatencyTracker;
@@ -954,14 +952,6 @@ public class WindowManagerService extends IWindowManager.Stub
         mWindowTracing = WindowTracing.createDefaultAndStartLooper(context);
 
         LocalServices.addService(WindowManagerPolicy.class, mPolicy);
-
-        if(mInputManager != null) {
-            final InputChannel inputChannel = mInputManager.monitorInput(TAG_WM);
-            mPointerEventDispatcher = inputChannel != null
-                    ? new PointerEventDispatcher(inputChannel) : null;
-        } else {
-            mPointerEventDispatcher = null;
-        }
 
         mDisplayManager = (DisplayManager)context.getSystemService(Context.DISPLAY_SERVICE);
 
@@ -1940,7 +1930,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     mAccessibilityController.onSomeWindowResizedOrMovedLocked();
                 }
 
-                if ((flagChanges & PRIVATE_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS) != 0) {
+                if ((flagChanges & SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS) != 0) {
                     updateNonSystemOverlayWindowsVisibilityIfNeeded(
                             win, win.mWinAnimator.getShown());
                 }
@@ -2697,8 +2687,9 @@ public class WindowManagerService extends IWindowManager.Stub
     public void cleanupRecentsAnimation(@RecentsAnimationController.ReorderMode int reorderMode) {
         synchronized (mWindowMap) {
             if (mRecentsAnimationController != null) {
-                mRecentsAnimationController.cleanupAnimation(reorderMode);
+                final RecentsAnimationController controller = mRecentsAnimationController;
                 mRecentsAnimationController = null;
+                controller.cleanupAnimation(reorderMode);
                 mAppTransition.updateBooster();
             }
         }
@@ -3164,18 +3155,23 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void registerPointerEventListener(PointerEventListener listener) {
-        mPointerEventDispatcher.registerInputEventListener(listener);
+    public void registerPointerEventListener(PointerEventListener listener, int displayId) {
+        synchronized (mWindowMap) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            if (displayContent != null) {
+                displayContent.registerPointerEventListener(listener);
+            }
+        }
     }
 
     @Override
-    public void unregisterPointerEventListener(PointerEventListener listener) {
-        mPointerEventDispatcher.unregisterInputEventListener(listener);
-    }
-
-    /** Check if the service is set to dispatch pointer events. */
-    boolean canDispatchPointerEvents() {
-        return mPointerEventDispatcher != null;
+    public void unregisterPointerEventListener(PointerEventListener listener, int displayId) {
+        synchronized (mWindowMap) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            if (displayContent != null) {
+                displayContent.unregisterPointerEventListener(listener);
+            }
+        }
     }
 
     // Called by window manager policy. Not exposed externally.
@@ -4854,7 +4850,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     synchronized (mWindowMap) {
                         mLastANRState = null;
                     }
-                    mAmInternal.clearSavedANRState();
+                    mAtmInternal.clearSavedANRState();
                 }
                 break;
                 case WALLPAPER_DRAW_PENDING_TIMEOUT: {

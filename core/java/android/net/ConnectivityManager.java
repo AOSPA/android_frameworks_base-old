@@ -83,6 +83,7 @@ import java.util.Map;
 @SystemService(Context.CONNECTIVITY_SERVICE)
 public class ConnectivityManager {
     private static final String TAG = "ConnectivityManager";
+    private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     /**
      * A change in network connectivity has occurred. A default connection has either
@@ -2500,6 +2501,7 @@ public class ConnectivityManager {
      * {@hide}
      */
     public void reportInetCondition(int networkType, int percentage) {
+        printStackTrace();
         try {
             mService.reportInetCondition(networkType, percentage);
         } catch (RemoteException e) {
@@ -2520,6 +2522,7 @@ public class ConnectivityManager {
      */
     @Deprecated
     public void reportBadNetwork(Network network) {
+        printStackTrace();
         try {
             // One of these will be ignored because it matches system's current state.
             // The other will trigger the necessary reevaluation.
@@ -2542,6 +2545,7 @@ public class ConnectivityManager {
      *                        Internet using {@code network} or {@code false} if not.
      */
     public void reportNetworkConnectivity(Network network, boolean hasConnectivity) {
+        printStackTrace();
         try {
             mService.reportNetworkConnectivity(network, hasConnectivity);
         } catch (RemoteException e) {
@@ -2734,8 +2738,11 @@ public class ConnectivityManager {
      *
      * @hide
      */
-    @RequiresPermission(android.Manifest.permission.CONNECTIVITY_INTERNAL)
-    @UnsupportedAppUsage
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.NETWORK_SETTINGS,
+            android.Manifest.permission.NETWORK_SETUP_WIZARD,
+            android.Manifest.permission.NETWORK_STACK})
+    @SystemApi
     public void setAirplaneMode(boolean enable) {
         try {
             mService.setAirplaneMode(enable);
@@ -2816,10 +2823,11 @@ public class ConnectivityManager {
          * @param network The {@link Network} of the satisfying network.
          * @param networkCapabilities The {@link NetworkCapabilities} of the satisfying network.
          * @param linkProperties The {@link LinkProperties} of the satisfying network.
+         * @param blocked Whether access to the {@link Network} is blocked due to system policy.
          * @hide
          */
         public void onAvailable(Network network, NetworkCapabilities networkCapabilities,
-                LinkProperties linkProperties) {
+                LinkProperties linkProperties, boolean blocked) {
             // Internally only this method is called when a new network is available, and
             // it calls the callback in the same way and order that older versions used
             // to call so as not to change the behavior.
@@ -2830,6 +2838,7 @@ public class ConnectivityManager {
             }
             onCapabilitiesChanged(network, networkCapabilities);
             onLinkPropertiesChanged(network, linkProperties);
+            onBlockedStatusChanged(network, blocked);
         }
 
         /**
@@ -2837,7 +2846,8 @@ public class ConnectivityManager {
          * This callback may be called more than once if the {@link Network} that is
          * satisfying the request changes. This will always immediately be followed by a
          * call to {@link #onCapabilitiesChanged(Network, NetworkCapabilities)} then by a
-         * call to {@link #onLinkPropertiesChanged(Network, LinkProperties)}.
+         * call to {@link #onLinkPropertiesChanged(Network, LinkProperties)}, and a call to
+         * {@link #onBlockedStatusChanged(Network, boolean)}.
          *
          * @param network The {@link Network} of the satisfying network.
          */
@@ -2916,6 +2926,14 @@ public class ConnectivityManager {
          */
         public void onNetworkResumed(Network network) {}
 
+        /**
+         * Called when access to the specified network is blocked or unblocked.
+         *
+         * @param network The {@link Network} whose blocked status has changed.
+         * @param blocked The blocked status of this {@link Network}.
+         */
+        public void onBlockedStatusChanged(Network network, boolean blocked) {}
+
         private NetworkRequest networkRequest;
     }
 
@@ -2962,6 +2980,8 @@ public class ConnectivityManager {
     public static final int CALLBACK_SUSPENDED           = BASE + 9;
     /** @hide */
     public static final int CALLBACK_RESUMED             = BASE + 10;
+    /** @hide */
+    public static final int CALLBACK_BLK_CHANGED         = BASE + 11;
 
     /** @hide */
     public static String getCallbackName(int whichCallback) {
@@ -2976,6 +2996,7 @@ public class ConnectivityManager {
             case EXPIRE_LEGACY_REQUEST: return "EXPIRE_LEGACY_REQUEST";
             case CALLBACK_SUSPENDED:    return "CALLBACK_SUSPENDED";
             case CALLBACK_RESUMED:      return "CALLBACK_RESUMED";
+            case CALLBACK_BLK_CHANGED:  return "CALLBACK_BLK_CHANGED";
             default:
                 return Integer.toString(whichCallback);
         }
@@ -3022,7 +3043,7 @@ public class ConnectivityManager {
                 case CALLBACK_AVAILABLE: {
                     NetworkCapabilities cap = getObject(message, NetworkCapabilities.class);
                     LinkProperties lp = getObject(message, LinkProperties.class);
-                    callback.onAvailable(network, cap, lp);
+                    callback.onAvailable(network, cap, lp, message.arg1 != 0);
                     break;
                 }
                 case CALLBACK_LOSING: {
@@ -3055,6 +3076,10 @@ public class ConnectivityManager {
                     callback.onNetworkResumed(network);
                     break;
                 }
+                case CALLBACK_BLK_CHANGED: {
+                    boolean blocked = message.arg1 != 0;
+                    callback.onBlockedStatusChanged(network, blocked);
+                }
             }
         }
 
@@ -3080,6 +3105,7 @@ public class ConnectivityManager {
 
     private NetworkRequest sendRequestForNetwork(NetworkCapabilities need, NetworkCallback callback,
             int timeoutMs, int action, int legacyType, CallbackHandler handler) {
+        printStackTrace();
         checkCallbackNotNull(callback);
         Preconditions.checkArgument(action == REQUEST || need != null, "null NetworkCapabilities");
         final NetworkRequest request;
@@ -3339,6 +3365,7 @@ public class ConnectivityManager {
      *         {@link NetworkCapabilities#NET_CAPABILITY_CAPTIVE_PORTAL}.
      */
     public void requestNetwork(NetworkRequest request, PendingIntent operation) {
+        printStackTrace();
         checkPendingIntentNotNull(operation);
         try {
             mService.pendingRequestForNetwork(request.networkCapabilities, operation);
@@ -3362,6 +3389,7 @@ public class ConnectivityManager {
      *                  corresponding NetworkRequest you'd like to remove. Cannot be null.
      */
     public void releaseNetworkRequest(PendingIntent operation) {
+        printStackTrace();
         checkPendingIntentNotNull(operation);
         try {
             mService.releasePendingNetworkRequest(operation);
@@ -3446,6 +3474,7 @@ public class ConnectivityManager {
      */
     @RequiresPermission(android.Manifest.permission.ACCESS_NETWORK_STATE)
     public void registerNetworkCallback(NetworkRequest request, PendingIntent operation) {
+        printStackTrace();
         checkPendingIntentNotNull(operation);
         try {
             mService.pendingListenForNetwork(request.networkCapabilities, operation);
@@ -3527,6 +3556,7 @@ public class ConnectivityManager {
      * @param networkCallback The {@link NetworkCallback} used when making the request.
      */
     public void unregisterNetworkCallback(NetworkCallback networkCallback) {
+        printStackTrace();
         checkCallbackNotNull(networkCallback);
         final List<NetworkRequest> reqs = new ArrayList<>();
         // Find all requests associated to this callback and stop callback triggers immediately.
@@ -3953,6 +3983,21 @@ public class ConnectivityManager {
             return mService.getConnectionOwnerUid(connectionInfo);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    private void printStackTrace() {
+        if (DEBUG) {
+            final StackTraceElement[] callStack = Thread.currentThread().getStackTrace();
+            final StringBuffer sb = new StringBuffer();
+            for (int i = 3; i < callStack.length; i++) {
+                final String stackTrace = callStack[i].toString();
+                if (stackTrace == null || stackTrace.contains("android.os")) {
+                    break;
+                }
+                sb.append(" [").append(stackTrace).append("]");
+            }
+            Log.d(TAG, "StackLog:" + sb.toString());
         }
     }
 }

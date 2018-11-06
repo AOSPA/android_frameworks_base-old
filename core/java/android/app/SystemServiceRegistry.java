@@ -385,7 +385,7 @@ final class SystemServiceRegistry {
                 new ServiceFetcher<InputMethodManager>() {
             @Override
             public InputMethodManager getService(ContextImpl ctx) {
-                return InputMethodManager.forContext(ctx);
+                return InputMethodManager.forContext(ctx.getOuterContext());
             }});
 
         registerService(Context.TEXT_SERVICES_MANAGER_SERVICE, TextServicesManager.class,

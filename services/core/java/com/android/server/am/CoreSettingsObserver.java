@@ -56,6 +56,10 @@ final class CoreSettingsObserver extends ContentObserver {
 
         sGlobalSettingToTypeMap.put(Settings.Global.DEBUG_VIEW_ATTRIBUTES, int.class);
         sGlobalSettingToTypeMap.put(Settings.Global.ANGLE_ENABLED_APP, String.class);
+        sGlobalSettingToTypeMap.put(Settings.Global.ENABLE_GPU_DEBUG_LAYERS, int.class);
+        sGlobalSettingToTypeMap.put(Settings.Global.GPU_DEBUG_APP, String.class);
+        sGlobalSettingToTypeMap.put(Settings.Global.GPU_DEBUG_LAYERS, String.class);
+        sGlobalSettingToTypeMap.put(Settings.Global.GPU_DEBUG_LAYER_APP, String.class);
         // add other global settings here...
     }
 
@@ -122,6 +126,7 @@ final class CoreSettingsObserver extends ContentObserver {
                 value = Settings.Global.getString(context.getContentResolver(), setting);
             }
             if (value == null) {
+                snapshot.remove(setting);
                 continue;
             }
             Class<?> type = entry.getValue();

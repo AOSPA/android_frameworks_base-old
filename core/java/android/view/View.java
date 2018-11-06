@@ -7315,17 +7315,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         // Here we check whether we still need the default focus highlight, and switch it on/off.
         switchDefaultFocusHighlight();
 
-        InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
         if (!gainFocus) {
             if (isPressed()) {
                 setPressed(false);
             }
-            if (imm != null && mAttachInfo != null && mAttachInfo.mHasWindowFocus) {
-                imm.focusOut(this);
+            if (mAttachInfo != null && mAttachInfo.mHasWindowFocus) {
+                notifyFocusChangeToInputMethodManager(false /* hasFocus */);
             }
             onFocusLost();
-        } else if (imm != null && mAttachInfo != null && mAttachInfo.mHasWindowFocus) {
-            imm.focusIn(this);
+        } else if (mAttachInfo != null && mAttachInfo.mHasWindowFocus) {
+            notifyFocusChangeToInputMethodManager(true /* hasFocus */);
         }
 
         invalidate(true);
@@ -7339,6 +7338,26 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         notifyEnterOrExitForAutoFillIfNeeded(gainFocus);
+    }
+
+    /**
+     * Notify {@link InputMethodManager} about the focus change of the {@link View}.
+     *
+     * <p>Does nothing when {@link InputMethodManager} is not available.</p>
+     *
+     * @param hasFocus {@code true} when the {@link View} is being focused.
+     */
+    private void notifyFocusChangeToInputMethodManager(boolean hasFocus) {
+        final InputMethodManager imm =
+                getContext().getSystemService(InputMethodManager.class);
+        if (imm == null) {
+            return;
+        }
+        if (hasFocus) {
+            imm.focusIn(this);
+        } else {
+            imm.focusOut(this);
+        }
     }
 
     /** @hide */
@@ -8881,6 +8900,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         populateAccessibilityNodeInfoDrawingOrderInParent(info);
         info.setPaneTitle(mAccessibilityPaneTitle);
         info.setHeading(isAccessibilityHeading());
+
+        if (mTouchDelegate != null) {
+            info.setTouchDelegateInfo(mTouchDelegate.getTouchDelegateInfo());
+        }
     }
 
     /**
@@ -12481,7 +12504,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         mPrivateFlags3 &= ~PFLAG3_TEMPORARY_DETACH;
         onFinishTemporaryDetach();
         if (hasWindowFocus() && hasFocus()) {
-            getContext().getSystemService(InputMethodManager.class).focusIn(this);
+            notifyFocusChangeToInputMethodManager(true /* hasFocus */);
         }
         notifyEnterOrExitForAutoFillIfNeeded(true);
     }
@@ -12873,20 +12896,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *        focus, false otherwise.
      */
     public void onWindowFocusChanged(boolean hasWindowFocus) {
-        InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
         if (!hasWindowFocus) {
             if (isPressed()) {
                 setPressed(false);
             }
             mPrivateFlags3 &= ~PFLAG3_FINGER_DOWN;
-            if (imm != null && (mPrivateFlags & PFLAG_FOCUSED) != 0) {
-                imm.focusOut(this);
+            if ((mPrivateFlags & PFLAG_FOCUSED) != 0) {
+                notifyFocusChangeToInputMethodManager(false /* hasFocus */);
             }
             removeLongPressCallback();
             removeTapCallback();
             onFocusLost();
-        } else if (imm != null && (mPrivateFlags & PFLAG_FOCUSED) != 0) {
-            imm.focusIn(this);
+        } else if ((mPrivateFlags & PFLAG_FOCUSED) != 0) {
+            notifyFocusChangeToInputMethodManager(true /* hasFocus */);
         }
 
         refreshDrawableState();
@@ -14259,9 +14281,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             }
 
             if (mParent instanceof ViewGroup) {
-                ((ViewGroup) mParent).onChildVisibilityChanged(this,
-                        (changed & VISIBILITY_MASK), newVisibility);
-                ((View) mParent).invalidate(true);
+                ViewGroup parent = (ViewGroup) mParent;
+                parent.onChildVisibilityChanged(this, (changed & VISIBILITY_MASK),
+                        newVisibility);
+                parent.invalidate(true);
             } else if (mParent != null) {
                 mParent.invalidateChild(this, null);
             }
@@ -17980,10 +18003,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         rebuildOutline();
 
         if (isFocused()) {
-            InputMethodManager imm = getContext().getSystemService(InputMethodManager.class);
-            if (imm != null) {
-                imm.focusIn(this);
-            }
+            notifyFocusChangeToInputMethodManager(true /* hasFocus */);
         }
     }
 
@@ -24176,7 +24196,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *     </ul>
      * @return {@code true} if the method completes successfully, or
      * {@code false} if it fails anywhere. Returning {@code false} means the system was unable to
-     * do a drag, and so no drag operation is in progress.
+     * do a drag because of another ongoing operation or some other reasons.
      */
     public final boolean startDragAndDrop(ClipData data, DragShadowBuilder shadowBuilder,
             Object myLocalState, int flags) {
@@ -24219,51 +24239,51 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             Log.d(VIEW_LOG_TAG, "drag shadow: width=" + shadowSize.x + " height=" + shadowSize.y
                     + " shadowX=" + shadowTouchPoint.x + " shadowY=" + shadowTouchPoint.y);
         }
-        if (mAttachInfo.mDragSurface != null) {
-            mAttachInfo.mDragSurface.release();
-        }
-        mAttachInfo.mDragSurface = new Surface();
-        mAttachInfo.mDragToken = null;
 
         final ViewRootImpl root = mAttachInfo.mViewRootImpl;
         final SurfaceSession session = new SurfaceSession(root.mSurface);
-        final SurfaceControl surface = new SurfaceControl.Builder(session)
+        final SurfaceControl surfaceControl = new SurfaceControl.Builder(session)
                 .setName("drag surface")
                 .setSize(shadowSize.x, shadowSize.y)
                 .setFormat(PixelFormat.TRANSLUCENT)
                 .build();
+        final Surface surface = new Surface();
+        surface.copyFrom(surfaceControl);
+        IBinder token = null;
         try {
-            mAttachInfo.mDragSurface.copyFrom(surface);
-            final Canvas canvas = mAttachInfo.mDragSurface.lockCanvas(null);
+            final Canvas canvas = surface.lockCanvas(null);
             try {
                 canvas.drawColor(0, PorterDuff.Mode.CLEAR);
                 shadowBuilder.onDrawShadow(canvas);
             } finally {
-                mAttachInfo.mDragSurface.unlockCanvasAndPost(canvas);
+                surface.unlockCanvasAndPost(canvas);
             }
-
-            // Cache the local state object for delivery with DragEvents
-            root.setLocalDragState(myLocalState);
 
             // repurpose 'shadowSize' for the last touch point
             root.getLastTouchPoint(shadowSize);
 
-            mAttachInfo.mDragToken = mAttachInfo.mSession.performDrag(
-                    mAttachInfo.mWindow, flags, surface, root.getLastTouchSource(),
+            token = mAttachInfo.mSession.performDrag(
+                    mAttachInfo.mWindow, flags, surfaceControl, root.getLastTouchSource(),
                     shadowSize.x, shadowSize.y, shadowTouchPoint.x, shadowTouchPoint.y, data);
             if (ViewDebug.DEBUG_DRAG) {
-                Log.d(VIEW_LOG_TAG, "performDrag returned " + mAttachInfo.mDragToken);
+                Log.d(VIEW_LOG_TAG, "performDrag returned " + token);
             }
-
-            return mAttachInfo.mDragToken != null;
+            if (token != null) {
+                if (mAttachInfo.mDragSurface != null) {
+                    mAttachInfo.mDragSurface.release();
+                }
+                mAttachInfo.mDragSurface = surface;
+                mAttachInfo.mDragToken = token;
+                // Cache the local state object for delivery with DragEvents
+                root.setLocalDragState(myLocalState);
+            }
+            return token != null;
         } catch (Exception e) {
             Log.e(VIEW_LOG_TAG, "Unable to initiate drag", e);
             return false;
         } finally {
-            if (mAttachInfo.mDragToken == null) {
-                mAttachInfo.mDragSurface.destroy();
-                mAttachInfo.mDragSurface = null;
-                root.setLocalDragState(null);
+            if (token == null) {
+                surface.destroy();
             }
             session.kill();
         }

@@ -35,6 +35,12 @@ import android.database.ContentObserver;
 import android.database.CrossProcessCursorWrapper;
 import android.database.Cursor;
 import android.database.IContentObserver;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.ImageDecoder;
+import android.graphics.ImageDecoder.ImageInfo;
+import android.graphics.ImageDecoder.Source;
+import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -49,9 +55,11 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.provider.DocumentsContract;
 import android.text.TextUtils;
 import android.util.EventLog;
 import android.util.Log;
+import android.util.Size;
 
 import com.android.internal.util.MimeIconUtils;
 import com.android.internal.util.Preconditions;
@@ -68,6 +76,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -1880,7 +1889,7 @@ public abstract class ContentResolver {
      * that services the content at uri, starting the provider if necessary. Returns
      * null if there is no provider associated wih the uri. The caller must indicate that they are
      * done with the provider by calling {@link ContentProviderClient#release} which will allow
-     * the system to release the provider it it determines that there is no other reason for
+     * the system to release the provider if it determines that there is no other reason for
      * keeping it active.
      * @param uri specifies which provider should be acquired
      * @return a {@link ContentProviderClient} that is associated with the {@link ContentProvider}
@@ -1900,7 +1909,7 @@ public abstract class ContentResolver {
      * with the authority of name, starting the provider if necessary. Returns
      * null if there is no provider associated wih the uri. The caller must indicate that they are
      * done with the provider by calling {@link ContentProviderClient#release} which will allow
-     * the system to release the provider it it determines that there is no other reason for
+     * the system to release the provider if it determines that there is no other reason for
      * keeping it active.
      * @param name specifies which provider should be acquired
      * @return a {@link ContentProviderClient} that is associated with the {@link ContentProvider}
@@ -3190,5 +3199,63 @@ public abstract class ContentResolver {
             }
         }
         return query;
+    }
+
+    /**
+     * Convenience method that efficiently loads a visual thumbnail for the
+     * given {@link Uri}. Internally calls
+     * {@link ContentProvider#openTypedAssetFile} on the remote provider, but
+     * also defensively resizes any returned content to match the requested
+     * target size.
+     *
+     * @param uri The item that should be visualized as a thumbnail.
+     * @param size The target area on the screen where this thumbnail will be
+     *            shown. This is passed to the provider as {@link #EXTRA_SIZE}
+     *            to help it avoid downloading or generating heavy resources.
+     * @param signal A signal to cancel the operation in progress.
+     * @return Valid {@link Bitmap} which is a visual thumbnail.
+     * @throws IOException If any trouble was encountered while generating or
+     *             loading the thumbnail, or if
+     *             {@link CancellationSignal#cancel()} was invoked.
+     */
+    public @NonNull Bitmap loadThumbnail(@NonNull Uri uri, @NonNull Size size,
+            @Nullable CancellationSignal signal) throws IOException {
+        Objects.requireNonNull(uri);
+        Objects.requireNonNull(size);
+
+        try (ContentProviderClient client = acquireContentProviderClient(uri)) {
+            return loadThumbnail(client, uri, size, signal, ImageDecoder.ALLOCATOR_DEFAULT);
+        }
+    }
+
+    /** {@hide} */
+    public static Bitmap loadThumbnail(@NonNull ContentProviderClient client, @NonNull Uri uri,
+            @NonNull Size size, @Nullable CancellationSignal signal, int allocator)
+            throws IOException {
+        Objects.requireNonNull(client);
+        Objects.requireNonNull(uri);
+        Objects.requireNonNull(size);
+
+        // Convert to Point, since that's what the API is defined as
+        final Bundle opts = new Bundle();
+        opts.putParcelable(EXTRA_SIZE, Point.convert(size));
+
+        return ImageDecoder.decodeBitmap(ImageDecoder.createSource(() -> {
+            return client.openTypedAssetFileDescriptor(uri, "image/*", opts, signal);
+        }), (ImageDecoder decoder, ImageInfo info, Source source) -> {
+            decoder.setAllocator(allocator);
+
+            // One last-ditch check to see if we've been canceled.
+            if (signal != null) signal.throwIfCanceled();
+
+            // We requested a rough thumbnail size, but the remote size may have
+            // returned something giant, so defensively scale down as needed.
+            final int widthSample = info.getSize().getWidth() / size.getWidth();
+            final int heightSample = info.getSize().getHeight() / size.getHeight();
+            final int sample = Math.min(widthSample, heightSample);
+            if (sample > 1) {
+                decoder.setTargetSampleSize(sample);
+            }
+        });
     }
 }

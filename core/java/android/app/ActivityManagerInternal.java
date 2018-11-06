@@ -22,6 +22,7 @@ import android.content.ComponentName;
 import android.content.IIntentReceiver;
 import android.content.IIntentSender;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.UserInfo;
 import android.os.Bundle;
@@ -123,17 +124,6 @@ public abstract class ActivityManagerInternal {
     public abstract void notifyNetworkPolicyRulesUpdated(int uid, long procStateSeq);
 
     /**
-     * Saves the current activity manager state and includes the saved state in the next dump of
-     * activity manager.
-     */
-    public abstract void saveANRState(String reason);
-
-    /**
-     * Clears the previously saved activity manager ANR state.
-     */
-    public abstract void clearSavedANRState();
-
-    /**
      * @return true if runtime was restarted, false if it's normal boot
      */
     public abstract boolean isRuntimeRestarted();
@@ -165,8 +155,17 @@ public abstract class ActivityManagerInternal {
 
     /**
      * Returns a list that contains the memory stats for currently running processes.
+     *
+     * Only processes managed by ActivityManagerService are included.
      */
     public abstract List<ProcessMemoryState> getMemoryStateForProcesses();
+
+    /**
+     * Returns a list that contains the memory stats for monitored native processes.
+     *
+     * The list of the monitored processes is defined in MemoryStatUtil class.
+     */
+    public abstract List<ProcessMemoryState> getMemoryStateForNativeProcesses();
 
     /**
      * Checks to see if the calling pid is allowed to handle the user. Returns adjusted user id as
@@ -186,9 +185,6 @@ public abstract class ActivityManagerInternal {
 
     /** Trims memory usage in the system by removing/stopping unused application processes. */
     public abstract void trimApplications();
-
-    /** Closes all system dialogs. */
-    public abstract void closeSystemDialogs(String reason);
 
     /** Kill the processes in the list due to their tasks been removed. */
     public abstract void killProcessesForRemovedTask(ArrayList<Object> procsToKill);
@@ -242,4 +238,46 @@ public abstract class ActivityManagerInternal {
             throws TransactionTooLargeException;
 
     public abstract void disconnectActivityFromServices(Object connectionHolder);
+    public abstract void cleanUpServices(int userId, ComponentName component, Intent baseIntent);
+    public abstract ActivityInfo getActivityInfoForUser(ActivityInfo aInfo, int userId);
+    public abstract void ensureBootCompleted();
+    public abstract void updateOomLevelsForDisplay(int displayId);
+    public abstract boolean isActivityStartsLoggingEnabled();
+    public abstract void reportCurKeyguardUsageEvent(boolean keyguardShowing);
+
+    /** Input dispatch timeout to a window, start the ANR process. */
+    public abstract long inputDispatchingTimedOut(int pid, boolean aboveSystem, String reason);
+    public abstract boolean inputDispatchingTimedOut(Object proc, String activityShortComponentName,
+            ApplicationInfo aInfo, String parentShortComponentName, Object parentProc,
+            boolean aboveSystem, String reason);
+
+    /**
+     * Sends {@link android.content.Intent#ACTION_CONFIGURATION_CHANGED} with all the appropriate
+     * flags.
+     */
+    public abstract void broadcastGlobalConfigurationChanged(int changes, boolean initLocale);
+
+    /**
+     * Sends {@link android.content.Intent#ACTION_CLOSE_SYSTEM_DIALOGS} with all the appropriate
+     * flags.
+     */
+    public abstract void broadcastCloseSystemDialogs(String reason);
+
+    /**
+     * Kills all background processes, except those matching any of the specified properties.
+     *
+     * @param minTargetSdk the target SDK version at or above which to preserve processes,
+     *                     or {@code -1} to ignore the target SDK
+     * @param maxProcState the process state at or below which to preserve processes,
+     *                     or {@code -1} to ignore the process state
+     */
+    public abstract void killAllBackgroundProcessesExcept(int minTargetSdk, int maxProcState);
+
+    /** Starts a given process. */
+    public abstract void startProcess(String processName, ApplicationInfo info,
+            boolean knownToBeDead, String hostingType, ComponentName hostingName);
+
+    /** Starts up the starting activity process for debugging if needed. */
+    public abstract void setDebugFlagsForStartingActivity(ActivityInfo aInfo, int startFlags,
+            ProfilerInfo profilerInfo);
 }

@@ -3517,11 +3517,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         ColorStateList mTextColorHint = null;
         ColorStateList mTextColorLink = null;
         int mTextSize = -1;
+        LocaleList mTextLocales = null;
         String mFontFamily = null;
         Typeface mFontTypeface = null;
         boolean mFontFamilyExplicit = false;
         int mTypefaceIndex = -1;
-        int mStyleIndex = -1;
+        int mTextStyle = 0;
         int mFontWeight = -1;
         boolean mAllCaps = false;
         int mShadowColor = 0;
@@ -3543,11 +3544,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     + "    mTextColorHint:" + mTextColorHint + "\n"
                     + "    mTextColorLink:" + mTextColorLink + "\n"
                     + "    mTextSize:" + mTextSize + "\n"
+                    + "    mTextLocales:" + mTextLocales + "\n"
                     + "    mFontFamily:" + mFontFamily + "\n"
                     + "    mFontTypeface:" + mFontTypeface + "\n"
                     + "    mFontFamilyExplicit:" + mFontFamilyExplicit + "\n"
                     + "    mTypefaceIndex:" + mTypefaceIndex + "\n"
-                    + "    mStyleIndex:" + mStyleIndex + "\n"
+                    + "    mTextStyle:" + mTextStyle + "\n"
                     + "    mFontWeight:" + mFontWeight + "\n"
                     + "    mAllCaps:" + mAllCaps + "\n"
                     + "    mShadowColor:" + mShadowColor + "\n"
@@ -3579,6 +3581,8 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                 com.android.internal.R.styleable.TextAppearance_textColorLink);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_textSize,
                 com.android.internal.R.styleable.TextAppearance_textSize);
+        sAppearanceValues.put(com.android.internal.R.styleable.TextView_textLocale,
+                com.android.internal.R.styleable.TextAppearance_textLocale);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_typeface,
                 com.android.internal.R.styleable.TextAppearance_typeface);
         sAppearanceValues.put(com.android.internal.R.styleable.TextView_fontFamily,
@@ -3652,6 +3656,15 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     attributes.mTextSize =
                             appearance.getDimensionPixelSize(attr, attributes.mTextSize);
                     break;
+                case com.android.internal.R.styleable.TextAppearance_textLocale:
+                    final String localeString = appearance.getString(attr);
+                    if (localeString != null) {
+                        final LocaleList localeList = LocaleList.forLanguageTags(localeString);
+                        if (!localeList.isEmpty()) {
+                            attributes.mTextLocales = localeList;
+                        }
+                    }
+                    break;
                 case com.android.internal.R.styleable.TextAppearance_typeface:
                     attributes.mTypefaceIndex = appearance.getInt(attr, attributes.mTypefaceIndex);
                     if (attributes.mTypefaceIndex != -1 && !attributes.mFontFamilyExplicit) {
@@ -3672,7 +3685,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
                     attributes.mFontFamilyExplicit = true;
                     break;
                 case com.android.internal.R.styleable.TextAppearance_textStyle:
-                    attributes.mStyleIndex = appearance.getInt(attr, attributes.mStyleIndex);
+                    attributes.mTextStyle = appearance.getInt(attr, attributes.mTextStyle);
                     break;
                 case com.android.internal.R.styleable.TextAppearance_textFontWeight:
                     attributes.mFontWeight = appearance.getInt(attr, attributes.mFontWeight);
@@ -3738,11 +3751,15 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             setRawTextSize(attributes.mTextSize, true /* shouldRequestLayout */);
         }
 
+        if (attributes.mTextLocales != null) {
+            setTextLocales(attributes.mTextLocales);
+        }
+
         if (attributes.mTypefaceIndex != -1 && !attributes.mFontFamilyExplicit) {
             attributes.mFontFamily = null;
         }
         setTypefaceFromAttrs(attributes.mFontTypeface, attributes.mFontFamily,
-                attributes.mTypefaceIndex, attributes.mStyleIndex, attributes.mFontWeight);
+                attributes.mTypefaceIndex, attributes.mTextStyle, attributes.mFontWeight);
 
         if (attributes.mShadowColor != 0) {
             setShadowLayer(attributes.mShadowRadius, attributes.mShadowDx, attributes.mShadowDy,
