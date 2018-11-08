@@ -4360,6 +4360,13 @@ public final class Settings {
         public static final String GESTURE_TWO_FINGER_SWIPE = "gesture_two_finger_swipe";
 
         /**
+         * Whether to use black themes over dark ones
+         *
+         * @hide
+         */
+        public static final String PREFER_BLACK_THEMES = "prefer_black_themes";
+
+        /**
          * Settings to backup. This is here so that it's in the same place as the settings
          * keys and easy to update.
          *
