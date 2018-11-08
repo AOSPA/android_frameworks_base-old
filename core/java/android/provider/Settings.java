@@ -4360,6 +4360,13 @@ public final class Settings {
         public static final String GESTURE_TWO_FINGER_SWIPE = "gesture_two_finger_swipe";
 
         /**
+         * Whether to use black themes over dark ones
+         *
+         * @hide
+         */
+        public static final String PREFER_BLACK_THEMES = "prefer_black_themes";
+
+        /**
          * Whether user can swap the order of the Alert Slider.
          * * Whether user can invert the order of the Alert Slider.
          * 0: Default
