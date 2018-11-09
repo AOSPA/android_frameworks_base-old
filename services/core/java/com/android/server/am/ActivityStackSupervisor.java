@@ -3446,7 +3446,8 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
            mPerfSendTapHint = true;
            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
-           if (r.isAppInfoGame() == 1) {
+           if(mPerfBoost.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) == BoostFramework.WorkloadType.GAME)
+           {
                mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1,
                                                                                                BoostFramework.Launch.BOOST_GAME);
            } else {
@@ -4452,16 +4453,6 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
     private void removeSleepTokenLocked(SleepTokenImpl token) {
         mSleepTokens.remove(token);
-
-                    if (mService.mEnableNetOpts) {
-                        ActivityStack stack = getLastStack();
-                        if (stack != null) {
-                            ActivityRecord r = stack.topRunningActivityLocked();
-                            if (r != null) {
-                                mService.networkOptsCheck(0, r.processName);
-                            }
-                        }
-                    }
 
         ActivityDisplay display = mActivityDisplays.get(token.mDisplayId);
         if (display != null) {

@@ -314,8 +314,6 @@ import android.hardware.display.DisplayManagerInternal;
 import android.location.LocationManager;
 import android.media.audiofx.AudioEffect;
 import android.metrics.LogMaker;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.net.Proxy;
 import android.net.ProxyInfo;
 import android.net.Uri;
@@ -681,10 +679,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     private static final int MAX_BUGREPORT_TITLE_SIZE = 50;
 
     private static final int NATIVE_DUMP_TIMEOUT_MS = 2000; // 2 seconds;
-
-    int mActiveNetType = -1;
-    Object mNetLock = new Object();
-    ConnectivityManager mConnectivityManager;
 
     /* Freq Aggr boost objects */
     public static BoostFramework mPerfServiceStartHint = null;
@@ -1950,7 +1944,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     static final int PUSH_TEMP_WHITELIST_UI_MSG = 68;
     static final int SERVICE_FOREGROUND_CRASH_MSG = 69;
     static final int DISPATCH_OOM_ADJ_OBSERVER_MSG = 70;
-    static final int NETWORK_OPTS_CHECK_MSG = 88;
 
     static final int FIRST_ACTIVITY_STACK_MSG = 100;
     static final int FIRST_BROADCAST_QUEUE_MSG = 200;
@@ -1975,9 +1968,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     // Enable B-service aging propagation on memory pressure.
     boolean mEnableBServicePropagation =
             SystemProperties.getBoolean("ro.vendor.qti.sys.fw.bservice_enable", false);
-    static final boolean mEnableNetOpts =
-            SystemProperties.getBoolean("persist.vendor.qti.netopts.enable",false);
-
     // Process in same process Group keep in same cgroup
     boolean mEnableProcessGroupCgroupFollow =
             SystemProperties.getBoolean("ro.vendor.qti.cgroup_follow.enable",false);
@@ -2632,25 +2622,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                             }
                         }
                     }
-                }
-            } break;
-            case NETWORK_OPTS_CHECK_MSG: {
-                int flag = msg.arg1;
-                String packageName = (String)msg.obj;
-                if (flag == 0) {
-                    if (mActivityTrigger != null) {
-                        synchronized (mNetLock) {
-                            if (mActiveNetType >= 0) {
-                                mActivityTrigger.activityMiscTrigger(ActivityTrigger.NETWORK_OPTS,
-                                    packageName, mActiveNetType, 0);
-                                return;
-                            }
-                        }
-                    }
-                }
-                if (mActivityTrigger != null) {
-                    mActivityTrigger.activityMiscTrigger(ActivityTrigger.NETWORK_OPTS,
-                        packageName, ConnectivityManager.TYPE_NONE, 1);
                 }
             } break;
             }
@@ -3534,10 +3505,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             addServiceToMap(mAppBindArgs, "mount");
         }
         return mAppBindArgs;
-    }
-
-    public final void networkOptsCheck(int flag, String packageName) {
-        mHandler.sendMessage(mHandler.obtainMessage(NETWORK_OPTS_CHECK_MSG, flag, 0, packageName));
     }
 
     private static void addServiceToMap(ArrayMap<String, IBinder> map, String name) {
@@ -6169,9 +6136,6 @@ public class ActivityManagerService extends IActivityManager.Stub
                                 + ProcessList.makeOomAdjString(app.setAdj)
                                 + ProcessList.makeProcStateString(app.setProcState), app.info.uid);
                 mAllowLowerMemLevel = true;
-                if (mEnableNetOpts) {
-                    networkOptsCheck(1, app.processName);
-                }
             } else {
                 // Note that we always want to do oom adj to update our state with the
                 // new number of procs.
@@ -8167,43 +8131,6 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }, dumpheapFilter);
 
-        if (mEnableNetOpts) {
-            IntentFilter netInfoFilter = new IntentFilter();
-            netInfoFilter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
-            netInfoFilter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
-            mContext.registerReceiver(new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context context, Intent intent) {
-                    if (mConnectivityManager != null) {
-                        NetworkInfo netInfo = mConnectivityManager.getActiveNetworkInfo();
-                        synchronized(mNetLock) {
-                            mActiveNetType = (netInfo != null) ? netInfo.getType() : -1;
-                        }
-                    }
-                    ActivityStack stack = mStackSupervisor.getLastStack();
-                    if (stack != null) {
-                        ActivityRecord r = stack.topRunningActivityLocked();
-                        if (r != null) {
-                            PowerManager powerManager =
-                                (PowerManager)mContext.getSystemService(Context.POWER_SERVICE);
-                            if (powerManager != null && powerManager.isInteractive())
-                                    networkOptsCheck(0, r.processName);
-                        }
-                    }
-                }
-            }, netInfoFilter);
-            mConnectivityManager =
-                        (ConnectivityManager)mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
-            if (mConnectivityManager != null) {
-                NetworkInfo netInfo = mConnectivityManager.getActiveNetworkInfo();
-                if (netInfo != null) {
-                    synchronized (mNetLock) {
-                        mActiveNetType = netInfo.getType();
-                    }
-                }
-            }
-        }
-
         // Let system services know.
         mSystemServiceManager.startBootPhase(SystemService.PHASE_BOOT_COMPLETED);
 
@@ -9771,10 +9698,17 @@ public class ActivityManagerService extends IActivityManager.Stub
             }
         }
 
-        // If we're extending a persistable grant, then we always need to create
-        // the grant data structure so that take/release APIs work
+        // Figure out the value returned when access is allowed
+        final int allowedResult;
         if ((modeFlags & Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION) != 0) {
-            return targetUid;
+            // If we're extending a persistable grant, then we need to return
+            // "targetUid" so that we always create a grant data structure to
+            // support take/release APIs
+            allowedResult = targetUid;
+        } else {
+            // Otherwise, we can return "-1" to indicate that no grant data
+            // structures need to be created
+            allowedResult = -1;
         }
 
         if (targetUid >= 0) {
@@ -9783,7 +9717,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // No need to grant the target this permission.
                 if (DEBUG_URI_PERMISSION) Slog.v(TAG_URI_PERMISSION,
                         "Target " + targetPkg + " already has full permission to " + grantUri);
-                return -1;
+                return allowedResult;
             }
         } else {
             // First...  there is no target package, so can anyone access it?
@@ -9818,7 +9752,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
             }
             if (allowed) {
-                return -1;
+                return allowedResult;
             }
         }
 
@@ -16151,15 +16085,6 @@ public class ActivityManagerService extends IActivityManager.Stub
     SleepToken acquireSleepToken(String tag, int displayId) {
         synchronized (this) {
             final SleepToken token = mStackSupervisor.createSleepTokenLocked(tag, displayId);
-            if (mEnableNetOpts) {
-                ActivityStack stack = mStackSupervisor.getLastStack();
-                if (stack != null) {
-                    ActivityRecord r = stack.topRunningActivityLocked();
-                    if (r != null) {
-                        networkOptsCheck(1, r.processName);
-                    }
-                }
-            }
             updateSleepIfNeededLocked();
             return token;
         }
@@ -23193,6 +23118,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                 // The process is being computed, so there is a cycle. We cannot
                 // rely on this process's state.
                 app.containsCycle = true;
+
                 return false;
             }
         }
@@ -23217,6 +23143,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         final int logUid = mCurOomAdjUid;
 
         int prevAppAdj = app.curAdj;
+        int prevProcState = app.curProcState;
 
         if (app.maxAdj <= ProcessList.FOREGROUND_APP_ADJ) {
             // The max adjustment doesn't allow this app to be anything
@@ -23695,11 +23622,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                         ProcessRecord client = cr.binding.client;
                         computeOomAdjLocked(client, cachedAdj, TOP_APP, doingAll, now);
                         if (client.containsCycle) {
-                            // We've detected a cycle. We should ignore this connection and allow
-                            // this process to retry computeOomAdjLocked later in case a later-checked
-                            // connection from a client  would raise its priority legitimately.
+                            // We've detected a cycle. We should retry computeOomAdjLocked later in
+                            // case a later-checked connection from a client  would raise its
+                            // priority legitimately.
                             app.containsCycle = true;
-                            continue;
+                            // If the client has not been completely evaluated, skip using its
+                            // priority. Else use the conservative value for now and look for a
+                            // better state in the next iteration.
+                            if (client.completedAdjSeq < mAdjSeq) {
+                                continue;
+                            }
                         }
                         int clientAdj = client.curRawAdj;
                         int clientProcState = client.curProcState;
@@ -23922,11 +23854,16 @@ public class ActivityManagerService extends IActivityManager.Stub
                 }
                 computeOomAdjLocked(client, cachedAdj, TOP_APP, doingAll, now);
                 if (client.containsCycle) {
-                    // We've detected a cycle. We should ignore this connection and allow
-                    // this process to retry computeOomAdjLocked later in case a later-checked
-                    // connection from a client  would raise its priority legitimately.
+                    // We've detected a cycle. We should retry computeOomAdjLocked later in
+                    // case a later-checked connection from a client  would raise its
+                    // priority legitimately.
                     app.containsCycle = true;
-                    continue;
+                    // If the client has not been completely evaluated, skip using its
+                    // priority. Else use the conservative value for now and look for a
+                    // better state in the next iteration.
+                    if (client.completedAdjSeq < mAdjSeq) {
+                        continue;
+                    }
                 }
                 int clientAdj = client.curRawAdj;
                 int clientProcState = client.curProcState;
@@ -24158,8 +24095,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         app.foregroundActivities = foregroundActivities;
         app.completedAdjSeq = mAdjSeq;
 
-        // if curAdj is less than prevAppAdj, then this process was promoted
-        return app.curAdj < prevAppAdj;
+        // if curAdj or curProcState improved, then this process was promoted
+        return app.curAdj < prevAppAdj || app.curProcState < prevProcState;
     }
 
     /**
@@ -25259,7 +25196,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // - Continue retrying until no process was promoted.
         // - Iterate from least important to most important.
         int cycleCount = 0;
-        while (retryCycles) {
+        while (retryCycles && cycleCount < 10) {
             cycleCount++;
             retryCycles = false;
 
@@ -25274,12 +25211,14 @@ public class ActivityManagerService extends IActivityManager.Stub
             for (int i=0; i<N; i++) {
                 ProcessRecord app = mLruProcesses.get(i);
                 if (!app.killedByAm && app.thread != null && app.containsCycle == true) {
+
                     if (computeOomAdjLocked(app, ProcessList.UNKNOWN_ADJ, TOP_APP, true, now)) {
                         retryCycles = true;
                     }
                 }
             }
         }
+
         for (int i=N-1; i>=0; i--) {
             ProcessRecord app = mLruProcesses.get(i);
             if (!app.killedByAm && app.thread != null) {
