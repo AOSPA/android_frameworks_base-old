@@ -23,7 +23,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_UNDEFINED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.view.Display.INVALID_DISPLAY;
 
-import static com.android.server.am.TaskRecord.INVALID_TASK_ID;
+import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
@@ -481,12 +481,12 @@ final class ActivityManagerShellCommand extends ShellCommand {
                 options.setLockTaskEnabled(true);
             }
             if (mWaitOption) {
-                result = mTaskInterface.startActivityAndWait(null, null, intent, mimeType,
+                result = mInternal.startActivityAndWait(null, null, intent, mimeType,
                         null, null, 0, mStartFlags, profilerInfo,
                         options != null ? options.toBundle() : null, mUserId);
                 res = result.result;
             } else {
-                res = mTaskInterface.startActivityAsUser(null, null, intent, mimeType,
+                res = mInternal.startActivityAsUser(null, null, intent, mimeType,
                         null, null, 0, mStartFlags, profilerInfo,
                         options != null ? options.toBundle() : null, mUserId);
             }

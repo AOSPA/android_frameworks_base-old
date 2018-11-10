@@ -378,8 +378,8 @@
                    Values must be from NetworkCapabilities#NET_CAPABILITIES_* constants.
                [IP config] Optional. If empty or not specified - DHCP will be used, otherwise
                    use the following format to specify static IP configuration:
-		       ip=<ip-address/mask> gateway=<ip-address> dns=<comma-sep-ip-addresses>
-                       domains=<comma-sep-domains> 
+                       ip=<ip-address/mask> gateway=<ip-address> dns=<comma-sep-ip-addresses>
+                       domains=<comma-sep-domains>
          -->
     <string-array translatable="false" name="config_ethernet_interfaces">
         <!--
@@ -696,6 +696,10 @@
 
     <!-- Wifi driver supports IEEE80211AC for softap -->
     <bool translatable="false" name="config_wifi_softap_ieee80211ac_supported">false</bool>
+
+    <!-- Indicates that local-only hotspot should be brought up at 5GHz.  This option is
+         for automotive builds only (the one that have PackageManager#FEATURE_AUTOMOTIVE) -->
+    <bool translatable="false" name="config_wifi_local_only_hotspot_5ghz">false</bool>
 
     <!-- Flag indicating whether we should enable the automatic brightness.
          Software implementation will be used if config_hardware_auto_brightness_available is not set -->
@@ -2116,8 +2120,8 @@
     <!-- Type of the long press sensor. Empty if long press is not supported. -->
     <string name="config_dozeLongPressSensorType" translatable="false"></string>
 
-    <!-- Type of sensor that wakes up the lock screen. Empty if not supported. -->
-    <string name="config_dozeWakeLockScreenSensorType" translatable="false"></string>
+    <!-- If the sensor that wakes up the lock screen is available or not. -->
+    <bool name="config_dozeWakeLockScreenSensorAvailable">false</bool>
 
     <!-- Type of the wake up sensor. Empty if not supported. -->
     <string name="config_dozeWakeScreenSensorType" translatable="false"></string>
@@ -3373,22 +3377,22 @@
     <bool name="config_sendPackageName">false</bool>
 
     <!-- Name for the set of keys associating package names -->
-    <string name="config_help_package_name_key" translatable="false"></string>
+    <string name="config_helpPackageNameKey" translatable="false"></string>
 
     <!-- Name for the set of values of package names -->
-    <string name="config_help_package_name_value" translatable="false"></string>
+    <string name="config_helpPackageNameValue" translatable="false"></string>
 
     <!-- Intent key for the package name keys -->
-    <string name="config_help_intent_extra_key" translatable="false"></string>
+    <string name="config_helpIntentExtraKey" translatable="false"></string>
 
     <!-- Intent key for package name values -->
-    <string name="config_help_intent_name_key" translatable="false"></string>
+    <string name="config_helpIntentNameKey" translatable="false"></string>
 
     <!-- Intent key for the package name keys -->
-    <string name="config_feedback_intent_extra_key" translatable="false"></string>
+    <string name="config_feedbackIntentExtraKey" translatable="false"></string>
 
     <!-- Intent key for package name values -->
-    <string name="config_feedback_intent_name_key" translatable="false"></string>
+    <string name="config_feedbackIntentNameKey" translatable="false"></string>
 
     <!-- The apps that need to be hidden when they are disabled -->
     <string-array name="config_hideWhenDisabled_packageNames"></string-array>
@@ -3493,7 +3497,7 @@
     <string name="config_headlineFontFamilyMedium">@string/font_family_button_material</string>
 
     <!-- Size of icon shown beside a preference locked by admin -->
-    <dimen name="config_restricted_icon_size">@dimen/restricted_icon_size_material</dimen>
+    <dimen name="config_restrictedIconSize">@dimen/restricted_icon_size_material</dimen>
 
     <string translatable="false" name="config_batterySaverDeviceSpecificConfig"></string>
 
@@ -3568,8 +3572,12 @@
 
     <!-- Whether or not the "SMS app service" feature is enabled -->
     <bool name="config_useSmsAppService">true</bool>
-    
+
     <!-- List of names that represent dual SoftAp interfaces. -->
     <string-array translatable="false" name="config_wifi_dual_sap_interfaces">
     </string-array>
+
+    <!-- Component name for default assistant on this device -->
+    <string name="config_defaultAssistantComponentName">#+UNSET</string>
+
 </resources>

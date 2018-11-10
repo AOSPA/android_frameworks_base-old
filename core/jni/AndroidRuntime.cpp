@@ -77,6 +77,7 @@ extern int register_android_graphics_YuvImage(JNIEnv* env);
 extern int register_com_google_android_gles_jni_EGLImpl(JNIEnv* env);
 extern int register_com_google_android_gles_jni_GLImpl(JNIEnv* env);
 extern int register_android_opengl_jni_EGL14(JNIEnv* env);
+extern int register_android_opengl_jni_EGL15(JNIEnv* env);
 extern int register_android_opengl_jni_EGLExt(JNIEnv* env);
 extern int register_android_opengl_jni_GLES10(JNIEnv* env);
 extern int register_android_opengl_jni_GLES10Ext(JNIEnv* env);
@@ -146,6 +147,8 @@ extern int register_android_graphics_fonts_FontFamily(JNIEnv* env);
 extern int register_android_graphics_pdf_PdfDocument(JNIEnv* env);
 extern int register_android_graphics_pdf_PdfEditor(JNIEnv* env);
 extern int register_android_graphics_pdf_PdfRenderer(JNIEnv* env);
+extern int register_android_graphics_text_MeasuredText(JNIEnv* env);
+extern int register_android_graphics_text_LineBreaker(JNIEnv *env);
 extern int register_android_view_DisplayEventReceiver(JNIEnv* env);
 extern int register_android_view_DisplayListCanvas(JNIEnv* env);
 extern int register_android_view_TextureLayer(JNIEnv* env);
@@ -186,8 +189,6 @@ extern int register_android_net_LocalSocketImpl(JNIEnv* env);
 extern int register_android_net_NetworkUtils(JNIEnv* env);
 extern int register_android_text_AndroidCharacter(JNIEnv *env);
 extern int register_android_text_Hyphenator(JNIEnv *env);
-extern int register_android_text_MeasuredParagraph(JNIEnv* env);
-extern int register_android_text_LineBreaker(JNIEnv *env);
 extern int register_android_opengl_classes(JNIEnv *env);
 extern int register_android_ddm_DdmHandleNativeHeap(JNIEnv *env);
 extern int register_android_server_NetworkManagementSocketTagger(JNIEnv* env);
@@ -1339,8 +1340,6 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_content_res_ApkAssets),
     REG_JNI(register_android_text_AndroidCharacter),
     REG_JNI(register_android_text_Hyphenator),
-    REG_JNI(register_android_text_MeasuredParagraph),
-    REG_JNI(register_android_text_LineBreaker),
     REG_JNI(register_android_view_InputDevice),
     REG_JNI(register_android_view_KeyCharacterMap),
     REG_JNI(register_android_os_Process),
@@ -1372,6 +1371,7 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_com_google_android_gles_jni_EGLImpl),
     REG_JNI(register_com_google_android_gles_jni_GLImpl),
     REG_JNI(register_android_opengl_jni_EGL14),
+    REG_JNI(register_android_opengl_jni_EGL15),
     REG_JNI(register_android_opengl_jni_EGLExt),
     REG_JNI(register_android_opengl_jni_GLES10),
     REG_JNI(register_android_opengl_jni_GLES10Ext),
@@ -1418,6 +1418,8 @@ static const RegJNIRec gRegJNI[] = {
     REG_JNI(register_android_graphics_pdf_PdfDocument),
     REG_JNI(register_android_graphics_pdf_PdfEditor),
     REG_JNI(register_android_graphics_pdf_PdfRenderer),
+    REG_JNI(register_android_graphics_text_MeasuredText),
+    REG_JNI(register_android_graphics_text_LineBreaker),
 
     REG_JNI(register_android_database_CursorWindow),
     REG_JNI(register_android_database_SQLiteConnection),

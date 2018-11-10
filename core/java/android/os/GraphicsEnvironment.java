@@ -19,6 +19,8 @@ package android.os;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.res.AssetFileDescriptor;
+import android.content.res.AssetManager;
 import android.opengl.EGL14;
 import android.os.Build;
 import android.os.SystemProperties;
@@ -27,7 +29,14 @@ import android.util.Log;
 
 import dalvik.system.VMRuntime;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileDescriptor;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.util.HashSet;
+import java.util.Set;
 
 /** @hide */
 public class GraphicsEnvironment {
@@ -44,8 +53,10 @@ public class GraphicsEnvironment {
     private static final boolean DEBUG = false;
     private static final String TAG = "GraphicsEnvironment";
     private static final String PROPERTY_GFX_DRIVER = "ro.gfx.driver.0";
+    private static final String PROPERTY_GFX_DRIVER_WHITELIST = "ro.gfx.driver.whitelist.0";
     private static final String ANGLE_PACKAGE_NAME = "com.android.angle";
     private static final String GLES_MODE_METADATA_KEY = "com.android.angle.GLES_MODE";
+    private static final String ANGLE_RULES_FILE = "a4a_rules.json";
 
     private ClassLoader mClassLoader;
     private String mLayerPath;
@@ -55,7 +66,7 @@ public class GraphicsEnvironment {
      * Set up GraphicsEnvironment
      */
     public void setup(Context context, Bundle coreSettings) {
-        setupGpuLayers(context);
+        setupGpuLayers(context, coreSettings);
         setupAngle(context, coreSettings);
         chooseDriver(context);
     }
@@ -81,27 +92,54 @@ public class GraphicsEnvironment {
     }
 
     /**
+     * Return the debug layer app's on-disk and in-APK lib directories
+     */
+    private static String getDebugLayerAppPaths(Context context, String app) {
+        ApplicationInfo appInfo;
+        try {
+            appInfo = context.getPackageManager().getApplicationInfo(
+                    app, PackageManager.MATCH_ALL);
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.w(TAG, "Debug layer app '" + app + "' not installed");
+
+            return null;
+        }
+
+        String abi = chooseAbi(appInfo);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append(appInfo.nativeLibraryDir)
+            .append(File.pathSeparator);
+        sb.append(appInfo.sourceDir)
+            .append("!/lib/")
+            .append(abi);
+        String paths = sb.toString();
+
+        if (DEBUG) Log.v(TAG, "Debug layer app libs: " + paths);
+
+        return paths;
+    }
+
+    /**
      * Set up layer search paths for all apps
      * If debuggable, check for additional debug settings
      */
-    private void setupGpuLayers(Context context) {
+    private void setupGpuLayers(Context context, Bundle coreSettings) {
 
         String layerPaths = "";
 
         // Only enable additional debug functionality if the following conditions are met:
-        // 1. App is debuggable
+        // 1. App is debuggable or device is rooted
         // 2. ENABLE_GPU_DEBUG_LAYERS is true
         // 3. Package name is equal to GPU_DEBUG_APP
 
-        if (isDebuggable(context)) {
+        if (isDebuggable(context) || (getCanLoadSystemLibraries() == 1)) {
 
-            int enable = Settings.Global.getInt(context.getContentResolver(),
-                                                Settings.Global.ENABLE_GPU_DEBUG_LAYERS, 0);
+            int enable = coreSettings.getInt(Settings.Global.ENABLE_GPU_DEBUG_LAYERS, 0);
 
             if (enable != 0) {
 
-                String gpuDebugApp = Settings.Global.getString(context.getContentResolver(),
-                                                               Settings.Global.GPU_DEBUG_APP);
+                String gpuDebugApp = coreSettings.getString(Settings.Global.GPU_DEBUG_APP);
 
                 String packageName = context.getPackageName();
 
@@ -115,8 +153,22 @@ public class GraphicsEnvironment {
                     // the layers specified by the app.
                     layerPaths = mDebugLayerPath + ":";
 
-                    String layers = Settings.Global.getString(context.getContentResolver(),
-                                                              Settings.Global.GPU_DEBUG_LAYERS);
+
+                    // If there is a debug layer app specified, add its path.
+                    String gpuDebugLayerApp =
+                            coreSettings.getString(Settings.Global.GPU_DEBUG_LAYER_APP);
+
+                    if (gpuDebugLayerApp != null && !gpuDebugLayerApp.isEmpty()) {
+                        Log.i(TAG, "GPU debug layer app: " + gpuDebugLayerApp);
+                        String paths = getDebugLayerAppPaths(context, gpuDebugLayerApp);
+                        if (paths != null) {
+                            // Append the path so files placed in the app's base directory will
+                            // override the external path
+                            layerPaths += paths + ":";
+                        }
+                    }
+
+                    String layers = coreSettings.getString(Settings.Global.GPU_DEBUG_LAYERS);
 
                     Log.i(TAG, "Debug layer list: " + layers);
                     if (layers != null && !layers.isEmpty()) {
@@ -201,8 +253,40 @@ public class GraphicsEnvironment {
 
         if (DEBUG) Log.v(TAG, "ANGLE package libs: " + paths);
 
+        // Pass the rules file to loader for ANGLE decisions
+        AssetManager angleAssets = null;
+        try {
+            angleAssets =
+                context.getPackageManager().getResourcesForApplication(angleInfo).getAssets();
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.w(TAG, "Failed to get AssetManager for '" + ANGLE_PACKAGE_NAME + "'");
+            return;
+        }
+
+        AssetFileDescriptor assetsFd = null;
+        try {
+            assetsFd = angleAssets.openFd(ANGLE_RULES_FILE);
+        } catch (IOException e) {
+            Log.w(TAG, "Failed to get AssetFileDescriptor for " + ANGLE_RULES_FILE + " from "
+                       + "'" + ANGLE_PACKAGE_NAME + "'");
+            return;
+        }
+
+        FileDescriptor rulesFd = null;
+        long rulesOffset = 0;
+        long rulesLength = 0;
+        if (assetsFd != null) {
+            rulesFd = assetsFd.getFileDescriptor();
+            rulesOffset = assetsFd.getStartOffset();
+            rulesLength = assetsFd.getLength();
+        } else {
+            Log.w(TAG, "Failed to get file descriptor for " + ANGLE_RULES_FILE);
+            return;
+        }
+
         // Further opt-in logic is handled in native, so pass relevant info down
-        setAngleInfo(paths, packageName, appPref, devOptIn);
+        setAngleInfo(paths, packageName, appPref, devOptIn,
+                     rulesFd, rulesOffset, rulesLength);
     }
 
     /**
@@ -221,6 +305,15 @@ public class GraphicsEnvironment {
             if (DEBUG) Log.v(TAG, "ignoring driver package for privileged/non-updated system app");
             return;
         }
+        Set<String> whitelist = loadWhitelist(context, driverPackageName);
+
+        // Empty whitelist implies no updatable graphics driver. Typically, the pre-installed
+        // updatable graphics driver is supposed to be a place holder and contains no graphics
+        // driver and whitelist.
+        if (whitelist == null || whitelist.isEmpty()) {
+            return;
+        }
+
         ApplicationInfo driverInfo;
         try {
             driverInfo = context.getPackageManager().getApplicationInfo(driverPackageName,
@@ -229,6 +322,22 @@ public class GraphicsEnvironment {
             Log.w(TAG, "driver package '" + driverPackageName + "' not installed");
             return;
         }
+        if (!whitelist.contains(context.getPackageName())) {
+            if (DEBUG) {
+                Log.w(TAG, context.getPackageName() + " is not on the whitelist.");
+            }
+            return;
+        }
+
+        // O drivers are restricted to the sphal linker namespace, so don't try to use
+        // packages unless they declare they're compatible with that restriction.
+        if (driverInfo.targetSdkVersion < Build.VERSION_CODES.O) {
+            if (DEBUG) {
+                Log.w(TAG, "updated driver package is not known to be compatible with O");
+            }
+            return;
+        }
+
         String abi = chooseAbi(driverInfo);
         if (abi == null) {
             if (DEBUG) {
@@ -237,12 +346,6 @@ public class GraphicsEnvironment {
                     Log.w(TAG, "updated driver package has no compatible native libraries");
                 }
             }
-            return;
-        }
-        if (driverInfo.targetSdkVersion < Build.VERSION_CODES.O) {
-            // O drivers are restricted to the sphal linker namespace, so don't try to use
-            // packages unless they declare they're compatible with that restriction.
-            Log.w(TAG, "updated driver package is not known to be compatible with O");
             return;
         }
 
@@ -290,9 +393,39 @@ public class GraphicsEnvironment {
         return null;
     }
 
+    private static Set<String> loadWhitelist(Context context, String driverPackageName) {
+        String whitelistName = SystemProperties.get(PROPERTY_GFX_DRIVER_WHITELIST);
+        if (whitelistName == null || whitelistName.isEmpty()) {
+            return null;
+        }
+        try {
+            Context driverContext = context.createPackageContext(driverPackageName,
+                                                                 Context.CONTEXT_RESTRICTED);
+            AssetManager assets = driverContext.getAssets();
+            InputStream stream = assets.open(whitelistName);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(stream));
+            Set<String> whitelist = new HashSet<>();
+            for (String line; (line = reader.readLine()) != null; ) {
+                whitelist.add(line);
+            }
+            return whitelist;
+        } catch (PackageManager.NameNotFoundException e) {
+            if (DEBUG) {
+                Log.w(TAG, "driver package '" + driverPackageName + "' not installed");
+            }
+        } catch (IOException e) {
+            if (DEBUG) {
+                Log.w(TAG, "Failed to load whitelist driver package, abort.");
+            }
+        }
+        return null;
+    }
+
+    private static native int getCanLoadSystemLibraries();
     private static native void setLayerPaths(ClassLoader classLoader, String layerPaths);
     private static native void setDebugLayers(String layers);
     private static native void setDriverPath(String path);
     private static native void setAngleInfo(String path, String appPackage, String appPref,
-                                            boolean devOptIn);
+                                            boolean devOptIn, FileDescriptor rulesFd,
+                                            long rulesOffset, long rulesLength);
 }

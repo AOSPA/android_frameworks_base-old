@@ -15,7 +15,9 @@
  */
 package com.android.server.devicepolicy;
 
+import android.app.admin.DevicePolicyManager;
 import android.app.admin.IDevicePolicyManager;
+import android.content.ComponentName;
 
 import com.android.server.SystemService;
 
@@ -68,7 +70,22 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     }
 
     @Override
-    public boolean checkDeviceIdentifierAccess(String packageName, int userHandle) {
+    public boolean checkDeviceIdentifierAccess(String packageName, int userHandle, int pid,
+            int uid) {
         return false;
+    }
+
+    @Override
+    public void setGlobalPrivateDns(ComponentName who, int mode, String privateDnsHost) {
+    }
+
+    @Override
+    public int getGlobalPrivateDnsMode(ComponentName who) {
+        return DevicePolicyManager.PRIVATE_DNS_MODE_UNKNOWN;
+    }
+
+    @Override
+    public String getGlobalPrivateDnsHost(ComponentName who) {
+        return null;
     }
 }

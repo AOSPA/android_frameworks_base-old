@@ -2160,7 +2160,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 });
         mImmersiveModeConfirmation = new ImmersiveModeConfirmation(mContext);
-        mWindowManagerFuncs.registerPointerEventListener(mSystemGestures);
+        //TODO (b/111365687) : make system context per display.
+        mWindowManagerFuncs.registerPointerEventListener(mSystemGestures, DEFAULT_DISPLAY);
 
         mVibrator = (Vibrator)context.getSystemService(Context.VIBRATOR_SERVICE);
 
@@ -2362,13 +2363,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             WindowManager wm = (WindowManager) mContext.getSystemService(WINDOW_SERVICE);
             lp.inputFeatures |= WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL;
             wm.addView(mPointerLocationView, lp);
-            mWindowManagerFuncs.registerPointerEventListener(mPointerLocationView);
+            //TODO (b/111365687) : make system context per display.
+            mWindowManagerFuncs.registerPointerEventListener(mPointerLocationView, DEFAULT_DISPLAY);
         }
     }
 
     private void disablePointerLocation() {
         if (mPointerLocationView != null) {
-            mWindowManagerFuncs.unregisterPointerEventListener(mPointerLocationView);
+            //TODO (b/111365687) : make system context per display.
+            mWindowManagerFuncs.unregisterPointerEventListener(mPointerLocationView,
+                    DEFAULT_DISPLAY);
             WindowManager wm = (WindowManager) mContext.getSystemService(WINDOW_SERVICE);
             wm.removeView(mPointerLocationView);
             mPointerLocationView = null;
@@ -6143,6 +6147,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 case KeyEvent.KEYCODE_BACK: {
                     boolean handled = interceptAccessibilityGestureTv(keyCode, down);
                     if (handled) {
+                        result &= ~ACTION_PASS_TO_USER;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Intercept the Accessibility keychord (CTRL + ALT + Z) for keyboard users.
+        if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable(isKeyguardLocked())) {
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_Z: {
+                    if (down && event.isCtrlPressed() && event.isAltPressed()) {
+                        mHandler.sendMessage(mHandler.obtainMessage(MSG_ACCESSIBILITY_SHORTCUT));
                         result &= ~ACTION_PASS_TO_USER;
                     }
                     break;

@@ -80,24 +80,17 @@ public class RestrictedLockUtils {
             if (admin.component != null) {
                 intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin.component);
             }
-            int adminUserId = UserHandle.myUserId();
-            if (admin.user != null) {
-                adminUserId = admin.user.getIdentifier();
-            }
-            intent.putExtra(Intent.EXTRA_USER_ID, adminUserId);
+            final UserHandle adminUser = admin.user != null
+                    ? admin.user
+                    : UserHandle.of(UserHandle.myUserId());
+            intent.putExtra(Intent.EXTRA_USER, adminUser);
         }
         return intent;
     }
 
     public static boolean isCurrentUserOrProfile(Context context, int userId) {
         UserManager um = context.getSystemService(UserManager.class);
-        int[] userIds = um.getProfileIds(UserHandle.myUserId(), true);
-        for (int i = 0; i < userIds.length; i++) {
-            if (userIds[i] == userId) {
-                return true;
-            }
-        }
-        return false;
+        return um.getUserProfiles().contains(UserHandle.of(userId));
     }
 
     public static class EnforcedAdmin {

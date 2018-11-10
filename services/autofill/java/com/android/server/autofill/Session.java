@@ -48,6 +48,7 @@ import android.content.Intent;
 import android.content.IntentSender;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.metrics.LogMaker;
 import android.os.Binder;
 import android.os.Build;
@@ -311,8 +312,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                                 Slog.d(TAG, "Setting urlBar as id=" + urlBarId + " and domain "
                                         + mUrlBar.getWebDomain());
                             }
-                            final ViewState viewState = new ViewState(Session.this, urlBarId,
-                                    Session.this, ViewState.STATE_URL_BAR);
+                            final ViewState viewState = new ViewState(urlBarId, Session.this,
+                                    ViewState.STATE_URL_BAR);
                             mViewStates.put(urlBarId, viewState);
                         }
                     }
@@ -1749,7 +1750,18 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
                 final IAutoFillManagerClient client = getClient();
                 mPendingSaveUi = new PendingUi(mActivityToken, id, client);
-                getUiForShowing().showSaveUi(mService.getServiceLabel(), mService.getServiceIcon(),
+
+                final CharSequence serviceLabel;
+                final Drawable serviceIcon;
+                synchronized (mLock) {
+                    serviceLabel = mService.getServiceLabelLocked();
+                    serviceIcon = mService.getServiceIconLocked();
+                }
+                if (serviceLabel == null || serviceIcon == null) {
+                    wtf(null, "showSaveLocked(): no service label or icon");
+                    return true;
+                }
+                getUiForShowing().showSaveUi(serviceLabel, serviceIcon,
                         mService.getServicePackageName(), saveInfo, this,
                         mComponentName, this, mPendingSaveUi, isUpdate, mCompatMode);
                 if (client != null) {
@@ -1801,8 +1813,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         return sanitizers;
     }
 
-    // TODO: this method is called a few times in the save process, we should cache its results into
-    // ViewState.
     @Nullable
     private AutofillValue getSanitizedValue(
             @Nullable ArrayMap<AutofillId, InternalSanitizer> sanitizers,
@@ -1810,13 +1820,22 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             @Nullable AutofillValue value) {
         if (sanitizers == null || value == null) return value;
 
-        final InternalSanitizer sanitizer = sanitizers.get(id);
-        if (sanitizer == null) {
-            return value;
-        }
+        final ViewState state = mViewStates.get(id);
+        AutofillValue sanitized = state == null ? null : state.getSanitizedValue();
+        if (sanitized == null) {
+            final InternalSanitizer sanitizer = sanitizers.get(id);
+            if (sanitizer == null) {
+                return value;
+            }
 
-        final AutofillValue sanitized = sanitizer.sanitize(value);
-        if (sDebug) Slog.d(TAG, "Value for " + id + "(" + value + ") sanitized to " + sanitized);
+            sanitized = sanitizer.sanitize(value);
+            if (sDebug) {
+                Slog.d(TAG, "Value for " + id + "(" + value + ") sanitized to " + sanitized);
+            }
+            if (state != null) {
+                state.setSanitizedValue(sanitized);
+            }
+        }
         return sanitized;
     }
 
@@ -2137,7 +2156,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     || action == ACTION_VIEW_ENTERED) {
                 if (sVerbose) Slog.v(TAG, "Creating viewState for " + id);
                 boolean isIgnored = isIgnoredLocked(id);
-                viewState = new ViewState(this, id, this,
+                viewState = new ViewState(id, this,
                         isIgnored ? ViewState.STATE_IGNORED : ViewState.STATE_INITIAL);
                 mViewStates.put(id, viewState);
 
@@ -2318,9 +2337,19 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             filterText = value.getTextValue().toString();
         }
 
+        final CharSequence serviceLabel;
+        final Drawable serviceIcon;
+        synchronized (mLock) {
+            serviceLabel = mService.getServiceLabelLocked();
+            serviceIcon = mService.getServiceIconLocked();
+        }
+        if (serviceLabel == null || serviceIcon == null) {
+            wtf(null, "onFillReady(): no service label or icon");
+            return;
+        }
         getUiForShowing().showFillUi(filledId, response, filterText,
                 mService.getServicePackageName(), mComponentName,
-                mService.getServiceLabel(), mService.getServiceIcon(), this, id, mCompatMode);
+                serviceLabel, serviceIcon, this, id, mCompatMode);
 
         synchronized (mLock) {
             if (mUiShownTime == 0) {
@@ -2607,7 +2636,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         if (viewState != null)  {
             viewState.setState(state);
         } else {
-            viewState = new ViewState(this, id, this, state);
+            viewState = new ViewState(id, this, state);
             if (sVerbose) {
                 Slog.v(TAG, "Adding autofillable view with id " + id + " and state " + state);
             }
@@ -2652,12 +2681,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     datasetIndex);
             startAuthentication(authenticationId, dataset.getAuthentication(), fillInIntent);
 
-        }
-    }
-
-    CharSequence getServiceName() {
-        synchronized (mLock) {
-            return mService.getServiceName();
         }
     }
 

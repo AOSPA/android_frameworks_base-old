@@ -477,7 +477,7 @@ public final class InputMethodManager {
         if (view == null) {
             return false;
         }
-        final int viewDisplayId = getDisplayId(view.getContext());
+        final int viewDisplayId = view.getContext().getDisplayId();
         if (viewDisplayId != mDisplayId) {
             Log.w(TAG, "b/117267690: Context mismatch found. view=" + view + " belongs to"
                     + " displayId=" + viewDisplayId
@@ -779,11 +779,6 @@ public final class InputMethodManager {
                 mDummyInputConnection, this);
     }
 
-    private static int getDisplayId(Context context) {
-        final Display display = context.getDisplay();
-        return display != null ? display.getDisplayId() : Display.DEFAULT_DISPLAY;
-    }
-
     /**
      * Retrieve an instance for the given {@link Context}, creating it if it doesn't already exist.
      *
@@ -793,7 +788,7 @@ public final class InputMethodManager {
      */
     @Nullable
     public static InputMethodManager forContext(Context context) {
-        final int displayId = getDisplayId(context);
+        final int displayId = context.getDisplayId();
         // For better backward compatibility, we always use Looper.getMainLooper() for the default
         // display case.
         final Looper looper = displayId == Display.DEFAULT_DISPLAY
@@ -1057,13 +1052,6 @@ public final class InputMethodManager {
         mNextServedView = null;
         if (mServedView != null) {
             if (DEBUG) Log.v(TAG, "FINISH INPUT: mServedView=" + dumpViewInfo(mServedView));
-            if (mCurrentTextBoxAttribute != null) {
-                try {
-                    mService.finishInput(mClient);
-                } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
-                }
-            }
             mServedView = null;
             mCompletions = null;
             mServedConnecting = false;
@@ -2690,7 +2678,7 @@ public final class InputMethodManager {
         sb.append(",windowFocus=" + view.hasWindowFocus());
         sb.append(",autofillUiShowing=" + isAutofillUIShowing(view));
         sb.append(",window=" + view.getWindowToken());
-        sb.append(",displayId=" + getDisplayId(view.getContext()));
+        sb.append(",displayId=" + view.getContext().getDisplayId());
         sb.append(",temporaryDetach=" + view.isTemporarilyDetached());
         return sb.toString();
     }

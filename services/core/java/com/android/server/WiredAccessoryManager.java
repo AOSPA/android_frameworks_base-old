@@ -354,7 +354,8 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
                         Slog.w(TAG, uei.getSwitchStatePath() +
                                 " not found while attempting to determine initial switch state");
                     } catch (Exception e) {
-                        Slog.e(TAG, "" , e);
+                        Slog.e(TAG, "Error while attempting to determine initial switch state for "
+                                + uei.getDevName() , e);
                     }
                 }
             }
