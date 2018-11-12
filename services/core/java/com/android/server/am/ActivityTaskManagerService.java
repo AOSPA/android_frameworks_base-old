@@ -5042,15 +5042,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     ActivityTaskManagerInternal.SleepToken acquireSleepToken(String tag, int displayId) {
         synchronized (mGlobalLock) {
             final ActivityTaskManagerInternal.SleepToken token = mStackSupervisor.createSleepTokenLocked(tag, displayId);
-            if (mAm.mEnableNetOpts) {
-                ActivityStack stack = mStackSupervisor.getTopDisplayFocusedStack();
-                if (stack != null) {
-                    ActivityRecord r = stack.topRunningActivityLocked();
-                    if (r != null) {
-                        mAm.networkOptsCheck(1, r.processName);
-                    }
-                }
-            }
             updateSleepIfNeededLocked();
             return token;
         }
