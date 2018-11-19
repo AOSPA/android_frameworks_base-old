@@ -385,6 +385,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     BurnInProtectionHelper mBurnInProtectionHelper;
     private DisplayFoldController mDisplayFoldController;
     AppOpsManager mAppOpsManager;
+    AlertSliderHandler mAlertSliderHandler;
     AlertSliderObserver mAlertSliderObserver;
     private boolean mHasFeatureWatch;
     private boolean mHasFeatureLeanback;
@@ -1969,6 +1970,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (!mPowerManager.isInteractive()) {
             startedGoingToSleep(WindowManagerPolicy.OFF_BECAUSE_OF_USER);
             finishedGoingToSleep(WindowManagerPolicy.OFF_BECAUSE_OF_USER);
+        }
+
+        boolean hasAlertSlider = context.getResources().
+                getBoolean(com.android.internal.R.bool.config_hasAlertSlider);
+        if (hasAlertSlider) {
+            mAlertSliderHandler = new AlertSliderHandler(mContext);
         }
 
         mWindowManagerInternal.registerAppTransitionListener(new AppTransitionListener() {
@@ -3710,6 +3717,82 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     + " policyFlags=" + Integer.toHexString(policyFlags));
         }
 
+        if (mAlertSliderHandler != null) {
+            if (mAlertSliderHandler.handleKeyEvent(event)) {
+                return 0;
+            }
+        }
+
+        /**
+         * Handle gestures input earlier then anything when screen is off.
+         * @author Carlo Savignano
+         */
+        if (!interactive) {
+            if (mKeyHandler != null && mKeyHandler.handleKeyEvent(event)) {
+                return 0;
+            }
+        }
+
+        // Apply custom policy for supported key codes.
+        if (canApplyCustomPolicy(keyCode) && !isCustomSource) {
+            if (mNavBarEnabled && !navBarKey) {
+                // Case where key event is from neither hardware key nor nav bar key.
+                if (virtualKey && !virtualHardKey) {
+                    if (DEBUG_INPUT) {
+                        Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: key triggered by unknown source, allowing.");
+                    }
+                } else {
+                    if (DEBUG_INPUT) {
+                        Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: mNavBarEnabled, discard hw event.");
+                    }
+                    // Don't allow key events from hw keys when navbar is enabled.
+                    return 0;
+                }
+            } else if (!interactive) {
+                if (DEBUG_INPUT) {
+                    Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: screen not interactive, discard hw event.");
+                }
+                // Ensure nav keys are handled on full interactive screen only.
+                return 0;
+            } else if (interactive) {
+                if (!down) {
+                    // Make sure we consume hw key events properly. Discard them
+                    // here if the event is already been consumed. This case can
+                    // happen when we send virtual key events and the virtual
+                    // ACTION_UP is sent before the hw ACTION_UP resulting in
+                    // handling twice an action up event.
+                    final boolean consumed = isKeyConsumed(keyCode);
+                    if (consumed) {
+                        if (DEBUG_INPUT) {
+                            Log.d(TAG, "interceptKeyBeforeQueueing(): key policy: event already consumed, discard hw event.");
+                        }
+                        setKeyConsumed(keyCode, !consumed);
+                        return 0;
+                    }
+                } else {
+                    hapticFeedbackRequested = true;
+                }
+            }
+        }
+
+        // Pre-basic policy based on interactive and pocket lock state.
+        if (mIsDeviceInPocket && (!interactive || mPocketLockShowing)) {
+            if (keyCode != KeyEvent.KEYCODE_POWER &&
+                keyCode != KeyEvent.KEYCODE_VOLUME_UP &&
+                keyCode != KeyEvent.KEYCODE_VOLUME_DOWN &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_PLAY &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_PAUSE &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE &&
+                keyCode != KeyEvent.KEYCODE_HEADSETHOOK &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_STOP &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_NEXT &&
+                keyCode != KeyEvent.KEYCODE_MEDIA_PREVIOUS &&
+                keyCode != KeyEvent.KEYCODE_VOLUME_MUTE) {
+                return 0;
+            }
+>>>>>>> cd9f5bd8a06... policy: Add support for tri-state key events
+        }
+
         // Basic policy based on interactive state.
         int result;
         boolean isWakeKey = (policyFlags & WindowManagerPolicy.FLAG_WAKE) != 0
@@ -4884,6 +4967,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (mSystemBooted) {
                 mKeyguardDelegate.onBootCompleted();
             }
+        }
+
+        if (mAlertSliderHandler != null) {
+            mAlertSliderHandler.systemReady();
         }
 
         mAutofillManagerInternal = LocalServices.getService(AutofillManagerInternal.class);
