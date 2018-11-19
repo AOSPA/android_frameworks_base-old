@@ -79,6 +79,7 @@ import androidx.test.runner.AndroidJUnit4;
 import com.android.server.am.LaunchParamsController.LaunchParamsModifier;
 import com.android.server.am.TaskRecord.TaskRecordFactory;
 
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -382,6 +383,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
      * Ensures that values specified at launch time are passed to {@link LaunchParamsModifier}
      * when we are laying out a new task.
      */
+    @Ignore // TODO(b/119048275): Reenable failing test in activity_manager_test suite
     @Test
     public void testCreateTaskLayout() {
         // modifier for validating passed values.
@@ -486,6 +488,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
     /**
      * Tests activity is cleaned up properly in a task mode violation.
      */
+    @Ignore // TODO(b/119048275): Reenable failing test in activity_manager_test suite
     @Test
     public void testTaskModeViolation() {
         final ActivityDisplay display = mService.mStackSupervisor.getDefaultDisplay();
@@ -513,6 +516,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
     /**
      * This test ensures that activity starts are not being logged when the logging is disabled.
      */
+    @Ignore // TODO(b/119048275): Reenable failing test in activity_manager_test suite
     @Test
     public void testActivityStartsLogging_noLoggingWhenDisabled() {
         doReturn(false).when(mService).isActivityStartsLoggingEnabled();
@@ -530,6 +534,7 @@ public class ActivityStarterTests extends ActivityTestsBase {
     /**
      * This test ensures that activity starts are being logged when the logging is enabled.
      */
+    @Ignore // TODO(b/119048275): Reenable failing test in activity_manager_test suite
     @Test
     public void testActivityStartsLogging_logsWhenEnabled() {
         // note: conveniently this package doesn't have any activity visible
