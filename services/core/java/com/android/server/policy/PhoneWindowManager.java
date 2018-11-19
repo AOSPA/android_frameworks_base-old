@@ -385,6 +385,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     BurnInProtectionHelper mBurnInProtectionHelper;
     private DisplayFoldController mDisplayFoldController;
     AppOpsManager mAppOpsManager;
+    AlertSliderHandler mAlertSliderHandler;
     AlertSliderObserver mAlertSliderObserver;
     private boolean mHasFeatureWatch;
     private boolean mHasFeatureLeanback;
@@ -1969,6 +1970,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (!mPowerManager.isInteractive()) {
             startedGoingToSleep(WindowManagerPolicy.OFF_BECAUSE_OF_USER);
             finishedGoingToSleep(WindowManagerPolicy.OFF_BECAUSE_OF_USER);
+        }
+
+        boolean hasAlertSlider = context.getResources().
+                getBoolean(com.android.internal.R.bool.config_hasAlertSlider);
+        if (hasAlertSlider) {
+            mAlertSliderHandler = new AlertSliderHandler(mContext);
         }
 
         mWindowManagerInternal.registerAppTransitionListener(new AppTransitionListener() {
@@ -3710,6 +3717,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     + " policyFlags=" + Integer.toHexString(policyFlags));
         }
 
+        if (mAlertSliderHandler != null) {
+            if (mAlertSliderHandler.handleKeyEvent(event)) {
+                return 0;
+            }
+        }
+
         // Basic policy based on interactive state.
         int result;
         boolean isWakeKey = (policyFlags & WindowManagerPolicy.FLAG_WAKE) != 0
@@ -4884,6 +4897,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             if (mSystemBooted) {
                 mKeyguardDelegate.onBootCompleted();
             }
+        }
+
+        if (mAlertSliderHandler != null) {
+            mAlertSliderHandler.systemReady();
         }
 
         mAutofillManagerInternal = LocalServices.getService(AutofillManagerInternal.class);
