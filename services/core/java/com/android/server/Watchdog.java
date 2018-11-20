@@ -45,6 +45,7 @@ import android.util.Slog;
 
 import com.android.internal.os.ZygoteConnectionConstants;
 import com.android.server.am.ActivityManagerService;
+import com.android.server.wm.SurfaceAnimationThread;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -287,6 +288,12 @@ public class Watchdog extends Thread {
         // And the display thread.
         mHandlerCheckers.add(new HandlerChecker(DisplayThread.getHandler(),
                 "display thread", DEFAULT_TIMEOUT));
+        // And the animation thread.
+        mHandlerCheckers.add(new HandlerChecker(AnimationThread.getHandler(),
+                "animation thread", DEFAULT_TIMEOUT));
+        // And the surface animation thread.
+        mHandlerCheckers.add(new HandlerChecker(SurfaceAnimationThread.getHandler(),
+                "surface animation thread", DEFAULT_TIMEOUT));
 
         // Initialize monitor for Binder threads.
         addMonitor(new BinderThreadMonitor());

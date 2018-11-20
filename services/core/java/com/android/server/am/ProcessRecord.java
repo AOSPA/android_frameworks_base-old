@@ -28,12 +28,10 @@ import android.app.ActivityManager;
 import android.app.ApplicationErrorReport;
 import android.app.Dialog;
 import android.app.IApplicationThread;
-import android.app.ProfilerInfo;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.res.CompatibilityInfo;
-import android.content.res.Configuration;
 import android.os.Binder;
 import android.os.Debug;
 import android.os.IBinder;
@@ -59,10 +57,11 @@ import com.android.internal.app.procstats.ProcessState;
 import com.android.internal.app.procstats.ProcessStats;
 import com.android.internal.os.BatteryStatsImpl;
 import com.android.internal.os.ProcessCpuTracker;
-import com.android.server.Watchdog;
+import com.android.internal.os.Zygote;
+import com.android.server.wm.WindowProcessController;
+import com.android.server.wm.WindowProcessListener;
 
 import java.io.File;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -264,6 +263,7 @@ final class ProcessRecord implements WindowProcessListener {
     boolean pendingStart;       // Process start is pending.
     long startSeq;              // Seq no. indicating the latest process start associated with
                                 // this process record.
+    int mountMode;              // Indicates how the external storage was mounted for this process.
 
     // These reports are generated & stored when an app gets into an error condition.
     // They will be "null" when all is OK.
@@ -444,6 +444,8 @@ final class ProcessRecord implements WindowProcessListener {
             pw.print(prefix); pw.print("pendingStart="); pw.println(pendingStart);
         }
         pw.print(prefix); pw.print("startSeq="); pw.println(startSeq);
+        pw.print(prefix); pw.print("mountMode="); pw.println(
+                DebugUtils.valueToString(Zygote.class, "MOUNT_EXTERNAL_", mountMode));
         if (setProcState > ActivityManager.PROCESS_STATE_SERVICE) {
             pw.print(prefix); pw.print("lastCpuTime="); pw.print(lastCpuTime);
                     if (lastCpuTime > 0) {
@@ -536,7 +538,7 @@ final class ProcessRecord implements WindowProcessListener {
     }
 
     ProcessRecord(ActivityManagerService _service, ApplicationInfo _info, String _processName,
-            int _uid, Configuration config) {
+            int _uid) {
         mService = _service;
         info = _info;
         isolated = _info.uid != _uid;
@@ -550,7 +552,7 @@ final class ProcessRecord implements WindowProcessListener {
         removed = false;
         lastStateTime = lastPssTime = nextPssTime = SystemClock.uptimeMillis();
         mWindowProcessController = new WindowProcessController(
-                mService.mActivityTaskManager, info, processName, uid, userId, this, this, config);
+                mService.mActivityTaskManager, info, processName, uid, userId, this, this);
         pkgList.put(_info.packageName, new ProcessStats.ProcessStateHolder(_info.longVersionCode));
     }
 
@@ -1152,8 +1154,9 @@ final class ProcessRecord implements WindowProcessListener {
     @Override
     public void clearProfilerIfNeeded() {
         synchronized (mService) {
-            if (mService.mProfileProc == null || mService.mProfilerInfo == null
-                    || mService.mProfileProc != this) {
+            if (mService.mProfileData.getProfileProc() == null
+                    || mService.mProfileData.getProfilerInfo() == null
+                    || mService.mProfileData.getProfileProc() != this) {
                 return;
             }
             mService.clearProfilerLocked();
@@ -1227,32 +1230,15 @@ final class ProcessRecord implements WindowProcessListener {
     }
 
     @Override
-    public ProfilerInfo onStartActivity(int topProcessState) {
+    public void onStartActivity(int topProcessState, boolean setProfileProc) {
         synchronized (mService) {
-            ProfilerInfo profilerInfo = null;
-            if (mService.mProfileApp != null && mService.mProfileApp.equals(processName)) {
-                if (mService.mProfileProc == null || mService.mProfileProc == this) {
-                    mService.mProfileProc = this;
-                    final ProfilerInfo profilerInfoSvc = mService.mProfilerInfo;
-                    if (profilerInfoSvc != null && profilerInfoSvc.profileFile != null) {
-                        if (profilerInfoSvc.profileFd != null) {
-                            try {
-                                profilerInfoSvc.profileFd = profilerInfoSvc.profileFd.dup();
-                            } catch (IOException e) {
-                                profilerInfoSvc.closeFd();
-                            }
-                        }
-
-                        profilerInfo = new ProfilerInfo(profilerInfoSvc);
-                    }
-                }
+            if (setProfileProc) {
+                mService.mProfileData.setProfileProc(this);
             }
 
             hasShownUi = true;
             setPendingUiClean(true);
             forceProcessStateUpTo(topProcessState);
-
-            return profilerInfo;
         }
     }
 
@@ -1273,19 +1259,7 @@ final class ProcessRecord implements WindowProcessListener {
         ArrayList<Integer> firstPids = new ArrayList<>(5);
         SparseArray<Boolean> lastPids = new SparseArray<>(20);
 
-        if (mService.mActivityTaskManager.mController != null) {
-            try {
-                // 0 == continue, -1 = kill process immediately
-                int res = mService.mActivityTaskManager.mController.appEarlyNotResponding(
-                        processName, pid, annotation);
-                if (res < 0 && pid != MY_PID) {
-                    kill("anr", true);
-                }
-            } catch (RemoteException e) {
-                mService.mActivityTaskManager.mController = null;
-                Watchdog.getInstance().setActivityController(null);
-            }
-        }
+        mWindowProcessController.appEarlyNotResponding(annotation, () -> kill("anr", true));
 
         long anrTime = SystemClock.uptimeMillis();
         if (ActivityManagerService.MONITOR_CPU_USAGE) {
@@ -1300,7 +1274,7 @@ final class ProcessRecord implements WindowProcessListener {
 
         synchronized (mService) {
             // PowerManager.reboot() can block for a long time, so ignore ANRs while shutting down.
-            if (mService.mActivityTaskManager.mShuttingDown) {
+            if (mService.mAtmInternal.isShuttingDown()) {
                 Slog.i(TAG, "During shutdown skipping ANR: " + this + " " + annotation);
                 return;
             } else if (isNotResponding()) {
@@ -1441,25 +1415,13 @@ final class ProcessRecord implements WindowProcessListener {
         mService.addErrorToDropBox("anr", this, processName, activityShortComponentName,
                 parentShortComponentName, parentPr, annotation, cpuInfo, tracesFile, null);
 
-        if (mService.mActivityTaskManager.mController != null) {
-            try {
-                // 0 == show dialog, 1 = keep waiting, -1 = kill process immediately
-                int res = mService.mActivityTaskManager.mController.appNotResponding(
-                        processName, pid, info.toString());
-                if (res != 0) {
-                    if (res < 0 && pid != MY_PID) {
-                        kill("anr", true);
-                    } else {
-                        synchronized (mService) {
-                            mService.mServices.scheduleServiceTimeoutLocked(this);
-                        }
+        if (mWindowProcessController.appNotResponding(info.toString(), () -> kill("anr", true),
+                () -> {
+                    synchronized (mService) {
+                        mService.mServices.scheduleServiceTimeoutLocked(this);
                     }
-                    return;
-                }
-            } catch (RemoteException e) {
-                mService.mActivityTaskManager.mController = null;
-                Watchdog.getInstance().setActivityController(null);
-            }
+                })) {
+            return;
         }
 
         synchronized (mService) {

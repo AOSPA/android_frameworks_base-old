@@ -108,29 +108,31 @@ public final class FontFamily {
          * @return a font family
          */
         public @NonNull FontFamily build() {
-            return build("", FontConfig.Family.VARIANT_DEFAULT);
+            return build("", FontConfig.Family.VARIANT_DEFAULT, true /* isCustomFallback */);
         }
 
         /** @hide */
-        public @NonNull FontFamily build(@NonNull String langTags, int variant) {
+        public @NonNull FontFamily build(@NonNull String langTags, int variant,
+                boolean isCustomFallback) {
             final long builderPtr = nInitBuilder();
             for (int i = 0; i < mFonts.size(); ++i) {
                 nAddFont(builderPtr, mFonts.get(i).getNativePtr());
             }
-            final long ptr = nBuild(builderPtr, langTags, variant);
+            final long ptr = nBuild(builderPtr, langTags, variant, isCustomFallback);
             final FontFamily family = new FontFamily(mFonts, ptr);
             sFamilyRegistory.registerNativeAllocation(family, ptr);
             return family;
         }
 
         private static int makeStyleIdentifier(@NonNull Font font) {
-            return font.getWeight() | (font.isItalic() ? (1 << 16) : 0);
+            return font.getStyle().getWeight() | (font.getStyle().getSlant()  << 16);
         }
 
         private static native long nInitBuilder();
         @CriticalNative
         private static native void nAddFont(long builderPtr, long fontPtr);
-        private static native long nBuild(long builderPtr, String langTags, int variant);
+        private static native long nBuild(long builderPtr, String langTags, int variant,
+                boolean isCustomFallback);
         @CriticalNative
         private static native long nGetReleaseNativeFamily();
     }

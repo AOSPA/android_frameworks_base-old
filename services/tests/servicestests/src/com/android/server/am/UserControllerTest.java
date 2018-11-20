@@ -11,13 +11,15 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License
+ * limitations under the License.
  */
 
 package com.android.server.am;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.testing.DexmakerShareClassLoaderRule.runWithDexmakerShareClassLoader;
+
+import static androidx.test.platform.app.InstrumentationRegistry.getInstrumentation;
 
 import static com.android.server.am.UserController.CONTINUE_USER_SWITCH_MSG;
 import static com.android.server.am.UserController.REPORT_LOCKED_BOOT_COMPLETE_MSG;
@@ -49,8 +51,6 @@ import static org.mockito.Mockito.validateMockitoUsage;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import static androidx.test.InstrumentationRegistry.getTargetContext;
-
 import android.app.IUserSwitchObserver;
 import android.content.Context;
 import android.content.IIntentReceiver;
@@ -68,6 +68,9 @@ import android.os.UserManagerInternal;
 import android.platform.test.annotations.Presubmit;
 import android.util.Log;
 
+import androidx.test.filters.FlakyTest;
+import androidx.test.filters.SmallTest;
+
 import com.android.server.pm.UserManagerService;
 import com.android.server.wm.WindowManagerService;
 
@@ -81,20 +84,18 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import androidx.test.filters.SmallTest;
-
 /**
  * Tests for {@link UserController}.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:com.android.server.am.UserControllerTest
+ *  atest FrameworksServicesTests:UserControllerTest
  */
-@Presubmit
 @SmallTest
+@Presubmit
 public class UserControllerTest {
     private static final int TEST_USER_ID = 10;
     private static final int NONEXIST_USER_ID = 2;
-    private static String TAG = UserControllerTest.class.getSimpleName();
+    private static final String TAG = UserControllerTest.class.getSimpleName();
     private UserController mUserController;
     private TestInjector mInjector;
 
@@ -121,7 +122,7 @@ public class UserControllerTest {
     @Before
     public void setUp() throws Exception {
         runWithDexmakerShareClassLoader(() -> {
-            mInjector = spy(new TestInjector(getTargetContext()));
+            mInjector = spy(new TestInjector(getInstrumentation().getTargetContext()));
             doNothing().when(mInjector).clearAllLockedTasks(anyString());
             doNothing().when(mInjector).startHomeActivity(anyInt(), anyString());
             doReturn(false).when(mInjector).stackSupervisorSwitchUser(anyInt(), any());
@@ -133,7 +134,7 @@ public class UserControllerTest {
 
     @After
     public void tearDown() throws Exception {
-        mInjector.handlerThread.quit();
+        mInjector.mHandlerThread.quit();
         validateMockitoUsage();
     }
 
@@ -148,6 +149,7 @@ public class UserControllerTest {
         startForegroundUserAssertions();
     }
 
+    @FlakyTest(bugId = 118932054)
     @Test
     public void testStartUser_background() {
         mUserController.startUser(TEST_USER_ID, false /* foreground */);
@@ -169,8 +171,8 @@ public class UserControllerTest {
 
     private void startUserAssertions(
             List<String> expectedActions, Set<Integer> expectedMessageCodes) {
-        assertEquals(expectedActions, getActions(mInjector.sentIntents));
-        Set<Integer> actualCodes = mInjector.handler.getMessageCodes();
+        assertEquals(expectedActions, getActions(mInjector.mSentIntents));
+        Set<Integer> actualCodes = mInjector.mHandler.getMessageCodes();
         assertEquals("Unexpected message sent", expectedMessageCodes, actualCodes);
     }
 
@@ -180,7 +182,7 @@ public class UserControllerTest {
 
     private void startForegroundUserAssertions() {
         startUserAssertions(START_FOREGROUND_USER_ACTIONS, START_FOREGROUND_USER_MESSAGE_CODES);
-        Message reportMsg = mInjector.handler.getMessageForCode(REPORT_USER_SWITCH_MSG);
+        Message reportMsg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_MSG);
         assertNotNull(reportMsg);
         UserState userState = (UserState) reportMsg.obj;
         assertNotNull(userState);
@@ -211,19 +213,19 @@ public class UserControllerTest {
         mUserController.registerUserSwitchObserver(observer, "mock");
         // Start user -- this will update state of mUserController
         mUserController.startUser(TEST_USER_ID, true);
-        Message reportMsg = mInjector.handler.getMessageForCode(REPORT_USER_SWITCH_MSG);
+        Message reportMsg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_MSG);
         assertNotNull(reportMsg);
         UserState userState = (UserState) reportMsg.obj;
         int oldUserId = reportMsg.arg1;
         int newUserId = reportMsg.arg2;
         // Call dispatchUserSwitch and verify that observer was called only once
-        mInjector.handler.clearAllRecordedMessages();
+        mInjector.mHandler.clearAllRecordedMessages();
         mUserController.dispatchUserSwitch(userState, oldUserId, newUserId);
         verify(observer, times(1)).onUserSwitching(eq(TEST_USER_ID), any());
         Set<Integer> expectedCodes = Collections.singleton(CONTINUE_USER_SWITCH_MSG);
-        Set<Integer> actualCodes = mInjector.handler.getMessageCodes();
+        Set<Integer> actualCodes = mInjector.mHandler.getMessageCodes();
         assertEquals("Unexpected message sent", expectedCodes, actualCodes);
-        Message conMsg = mInjector.handler.getMessageForCode(CONTINUE_USER_SWITCH_MSG);
+        Message conMsg = mInjector.mHandler.getMessageForCode(CONTINUE_USER_SWITCH_MSG);
         assertNotNull(conMsg);
         userState = (UserState) conMsg.obj;
         assertNotNull(userState);
@@ -241,17 +243,17 @@ public class UserControllerTest {
         mUserController.registerUserSwitchObserver(observer, "mock");
         // Start user -- this will update state of mUserController
         mUserController.startUser(TEST_USER_ID, true);
-        Message reportMsg = mInjector.handler.getMessageForCode(REPORT_USER_SWITCH_MSG);
+        Message reportMsg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_MSG);
         assertNotNull(reportMsg);
         UserState userState = (UserState) reportMsg.obj;
         int oldUserId = reportMsg.arg1;
         int newUserId = reportMsg.arg2;
         // Call dispatchUserSwitch and verify that observer was called only once
-        mInjector.handler.clearAllRecordedMessages();
+        mInjector.mHandler.clearAllRecordedMessages();
         mUserController.dispatchUserSwitch(userState, oldUserId, newUserId);
         verify(observer, times(1)).onUserSwitching(eq(TEST_USER_ID), any());
         // Verify that CONTINUE_USER_SWITCH_MSG is not sent (triggers timeout)
-        Set<Integer> actualCodes = mInjector.handler.getMessageCodes();
+        Set<Integer> actualCodes = mInjector.mHandler.getMessageCodes();
         assertWithMessage("No messages should be sent").that(actualCodes).isEmpty();
     }
 
@@ -259,12 +261,12 @@ public class UserControllerTest {
     public void testContinueUserSwitch() {
         // Start user -- this will update state of mUserController
         mUserController.startUser(TEST_USER_ID, true);
-        Message reportMsg = mInjector.handler.getMessageForCode(REPORT_USER_SWITCH_MSG);
+        Message reportMsg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_MSG);
         assertNotNull(reportMsg);
         UserState userState = (UserState) reportMsg.obj;
         int oldUserId = reportMsg.arg1;
         int newUserId = reportMsg.arg2;
-        mInjector.handler.clearAllRecordedMessages();
+        mInjector.mHandler.clearAllRecordedMessages();
         // Verify that continueUserSwitch worked as expected
         mUserController.continueUserSwitch(userState, oldUserId, newUserId);
         verify(mInjector.getWindowManager(), times(1)).stopFreezingScreen();
@@ -276,12 +278,12 @@ public class UserControllerTest {
         mUserController.mUserSwitchUiEnabled = false;
         // Start user -- this will update state of mUserController
         mUserController.startUser(TEST_USER_ID, true);
-        Message reportMsg = mInjector.handler.getMessageForCode(REPORT_USER_SWITCH_MSG);
+        Message reportMsg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_MSG);
         assertNotNull(reportMsg);
         UserState userState = (UserState) reportMsg.obj;
         int oldUserId = reportMsg.arg1;
         int newUserId = reportMsg.arg2;
-        mInjector.handler.clearAllRecordedMessages();
+        mInjector.mHandler.clearAllRecordedMessages();
         // Verify that continueUserSwitch worked as expected
         mUserController.continueUserSwitch(userState, oldUserId, newUserId);
         verify(mInjector.getWindowManager(), never()).stopFreezingScreen();
@@ -290,9 +292,9 @@ public class UserControllerTest {
 
     private void continueUserSwitchAssertions() {
         Set<Integer> expectedCodes = Collections.singleton(REPORT_USER_SWITCH_COMPLETE_MSG);
-        Set<Integer> actualCodes = mInjector.handler.getMessageCodes();
+        Set<Integer> actualCodes = mInjector.mHandler.getMessageCodes();
         assertEquals("Unexpected message sent", expectedCodes, actualCodes);
-        Message msg = mInjector.handler.getMessageForCode(REPORT_USER_SWITCH_COMPLETE_MSG);
+        Message msg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_COMPLETE_MSG);
         assertNotNull(msg);
         assertEquals("Unexpected userId", TEST_USER_ID, msg.arg1);
     }
@@ -305,10 +307,10 @@ public class UserControllerTest {
         mUserController.registerUserSwitchObserver(observer, "mock");
         // Start user -- this will update state of mUserController
         mUserController.startUser(TEST_USER_ID, true);
-        Message reportMsg = mInjector.handler.getMessageForCode(REPORT_USER_SWITCH_MSG);
+        Message reportMsg = mInjector.mHandler.getMessageForCode(REPORT_USER_SWITCH_MSG);
         assertNotNull(reportMsg);
         int newUserId = reportMsg.arg2;
-        mInjector.handler.clearAllRecordedMessages();
+        mInjector.mHandler.clearAllRecordedMessages();
         // Mockito can't reset only interactions, so just verify that this hasn't been
         // called with 'false' until after dispatchUserSwitchComplete.
         verify(mInjector.getWindowManager(), never()).setSwitchingUser(false);
@@ -321,7 +323,7 @@ public class UserControllerTest {
 
     private void setUpUser(int userId, int flags) {
         UserInfo userInfo = new UserInfo(userId, "User" + userId, flags);
-        when(mInjector.userManagerMock.getUserInfo(eq(userId))).thenReturn(userInfo);
+        when(mInjector.mUserManagerMock.getUserInfo(eq(userId))).thenReturn(userInfo);
     }
 
     private static List<String> getActions(List<Intent> intents) {
@@ -334,45 +336,46 @@ public class UserControllerTest {
 
     // Should be public to allow mocking
     private static class TestInjector extends UserController.Injector {
-        TestHandler handler;
-        TestHandler uiHandler;
-        HandlerThread handlerThread;
-        UserManagerService userManagerMock;
-        UserManagerInternal userManagerInternalMock;
-        WindowManagerService windowManagerMock;
-        private Context mCtx;
-        List<Intent> sentIntents = new ArrayList<>();
+        public final TestHandler mHandler;
+        public final HandlerThread mHandlerThread;
+        public final UserManagerService mUserManagerMock;
+        public final List<Intent> mSentIntents = new ArrayList<>();
+
+        private final TestHandler mUiHandler;
+        private final UserManagerInternal mUserManagerInternalMock;
+        private final WindowManagerService mWindowManagerMock;
+        private final Context mCtx;
 
         TestInjector(Context ctx) {
             super(null);
             mCtx = ctx;
-            handlerThread = new HandlerThread(TAG);
-            handlerThread.start();
-            handler = new TestHandler(handlerThread.getLooper());
-            uiHandler = new TestHandler(handlerThread.getLooper());
-            userManagerMock = mock(UserManagerService.class);
-            userManagerInternalMock = mock(UserManagerInternal.class);
-            windowManagerMock = mock(WindowManagerService.class);
+            mHandlerThread = new HandlerThread(TAG);
+            mHandlerThread.start();
+            mHandler = new TestHandler(mHandlerThread.getLooper());
+            mUiHandler = new TestHandler(mHandlerThread.getLooper());
+            mUserManagerMock = mock(UserManagerService.class);
+            mUserManagerInternalMock = mock(UserManagerInternal.class);
+            mWindowManagerMock = mock(WindowManagerService.class);
         }
 
         @Override
         protected Handler getHandler(Handler.Callback callback) {
-            return handler;
+            return mHandler;
         }
 
         @Override
         protected Handler getUiHandler(Handler.Callback callback) {
-            return uiHandler;
+            return mUiHandler;
         }
 
         @Override
         protected UserManagerService getUserManager() {
-            return userManagerMock;
+            return mUserManagerMock;
         }
 
         @Override
         UserManagerInternal getUserManagerInternal() {
-            return userManagerInternalMock;
+            return mUserManagerInternalMock;
         }
 
         @Override
@@ -388,7 +391,7 @@ public class UserControllerTest {
 
         @Override
         WindowManagerService getWindowManager() {
-            return windowManagerMock;
+            return mWindowManagerMock;
         }
 
         @Override
@@ -402,7 +405,7 @@ public class UserControllerTest {
                 String[] requiredPermissions, int appOp, Bundle bOptions, boolean ordered,
                 boolean sticky, int callingPid, int callingUid, int userId) {
             Log.i(TAG, "broadcastIntentLocked " + intent);
-            sentIntents.add(intent);
+            mSentIntents.add(intent);
             return 0;
         }
 

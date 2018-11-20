@@ -19,25 +19,22 @@ import static com.android.server.autofill.Helper.paramsToString;
 import static com.android.server.autofill.Helper.sDebug;
 import static com.android.server.autofill.Helper.sFullScreenMode;
 import static com.android.server.autofill.Helper.sVerbose;
-import static com.android.server.autofill.Helper.sVisibleDatasetsMaxCount;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.app.PendingIntent;
 import android.content.Context;
-import android.graphics.drawable.Drawable;
-import android.view.ContextThemeWrapper;
-import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.service.autofill.Dataset;
 import android.service.autofill.Dataset.DatasetFieldFilter;
 import android.service.autofill.FillResponse;
 import android.text.TextUtils;
 import android.util.Slog;
 import android.util.TypedValue;
+import android.view.ContextThemeWrapper;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -60,6 +57,7 @@ import android.widget.TextView;
 
 import com.android.internal.R;
 import com.android.server.UiThread;
+import com.android.server.autofill.AutofillManagerService;
 import com.android.server.autofill.Helper;
 
 import java.io.PrintWriter;
@@ -193,8 +191,8 @@ final class FillUi {
             }
         });
 
-        if (sVisibleDatasetsMaxCount > 0) {
-            mVisibleDatasetsMaxCount = sVisibleDatasetsMaxCount;
+        if (AutofillManagerService.getVisibleDatasetsMaxCount() > 0) {
+            mVisibleDatasetsMaxCount = AutofillManagerService.getVisibleDatasetsMaxCount();
             if (sVerbose) {
                 Slog.v(TAG, "overriding maximum visible datasets to " + mVisibleDatasetsMaxCount);
             }
@@ -203,15 +201,11 @@ final class FillUi {
                     .getInteger(com.android.internal.R.integer.autofill_max_visible_datasets);
         }
 
-        final RemoteViews.OnClickHandler interceptionHandler = new RemoteViews.OnClickHandler() {
-            @Override
-            public boolean onClickHandler(View view, PendingIntent pendingIntent,
-                    Intent fillInIntent) {
-                if (pendingIntent != null) {
-                    mCallback.startIntentSender(pendingIntent.getIntentSender());
-                }
-                return true;
+        final RemoteViews.OnClickHandler interceptionHandler = (view, pendingIntent, r) -> {
+            if (pendingIntent != null) {
+                mCallback.startIntentSender(pendingIntent.getIntentSender());
             }
+            return true;
         };
 
         if (response.getAuthentication() != null) {
@@ -224,8 +218,8 @@ final class FillUi {
             ViewGroup container = decor.findViewById(R.id.autofill_dataset_picker);
             final View content;
             try {
-                response.getPresentation().setApplyTheme(mThemeId);
-                content = response.getPresentation().apply(mContext, decor, interceptionHandler);
+                content = response.getPresentation().applyWithTheme(
+                        mContext, decor, interceptionHandler, mThemeId);
                 container.addView(content);
             } catch (RuntimeException e) {
                 callback.onCanceled();
@@ -265,8 +259,7 @@ final class FillUi {
             RemoteViews.OnClickHandler clickBlocker = null;
             if (headerPresentation != null) {
                 clickBlocker = newClickBlocker();
-                headerPresentation.setApplyTheme(mThemeId);
-                mHeader = headerPresentation.apply(mContext, null, clickBlocker);
+                mHeader = headerPresentation.applyWithTheme(mContext, null, clickBlocker, mThemeId);
                 final LinearLayout headerContainer =
                         decor.findViewById(R.id.autofill_dataset_header);
                 if (sVerbose) Slog.v(TAG, "adding header");
@@ -283,8 +276,8 @@ final class FillUi {
                     if (clickBlocker == null) { // already set for header
                         clickBlocker = newClickBlocker();
                     }
-                    footerPresentation.setApplyTheme(mThemeId);
-                    mFooter = footerPresentation.apply(mContext, null, clickBlocker);
+                    mFooter = footerPresentation.applyWithTheme(
+                            mContext, null, clickBlocker, mThemeId);
                     // Footer not supported on some platform e.g. TV
                     if (sVerbose) Slog.v(TAG, "adding footer");
                     footerContainer.addView(mFooter);
@@ -310,8 +303,8 @@ final class FillUi {
                     final View view;
                     try {
                         if (sVerbose) Slog.v(TAG, "setting remote view for " + focusedViewId);
-                        presentation.setApplyTheme(mThemeId);
-                        view = presentation.apply(mContext, null, interceptionHandler);
+                        view = presentation.applyWithTheme(
+                                mContext, null, interceptionHandler, mThemeId);
                     } catch (RuntimeException e) {
                         Slog.e(TAG, "Error inflating remote views", e);
                         continue;
@@ -369,13 +362,9 @@ final class FillUi {
      * Creates a remoteview interceptor used to block clicks.
      */
     private RemoteViews.OnClickHandler newClickBlocker() {
-        return new RemoteViews.OnClickHandler() {
-            @Override
-            public boolean onClickHandler(View view, PendingIntent pendingIntent,
-                    Intent fillInIntent) {
-                if (sVerbose) Slog.v(TAG, "Ignoring click on " + view);
-                return true;
-            }
+        return (view, pendingIntent, response) -> {
+            if (sVerbose) Slog.v(TAG, "Ignoring click on " + view);
+            return true;
         };
     }
 

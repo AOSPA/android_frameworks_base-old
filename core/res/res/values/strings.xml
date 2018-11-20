@@ -248,6 +248,10 @@
         <item>@string/wfcSpnFormat_spn_wifi</item>
         <item>@string/wfcSpnFormat_wifi_calling_bar_spn</item>
         <item>@string/wfcSpnFormat_spn_vowifi</item>
+        <item>@string/wfcSpnFormat_wifi_calling</item>
+        <item>@string/wfcSpnFormat_wifi</item>
+        <item>@string/wfcSpnFormat_wifi_calling_wo_hyphen</item>
+        <item>@string/wfcSpnFormat_vowifi</item>
     </string-array>
 
     <!-- Spn during Wi-Fi Calling: "<operator>" -->
@@ -264,6 +268,14 @@
     <string name="wfcSpnFormat_wifi_calling_bar_spn">WiFi Calling | <xliff:g id="spn" example="Operator">%s</xliff:g></string>
     <!-- Spn during Wi-Fi Calling: "<operator> VoWifi" -->
     <string name="wfcSpnFormat_spn_vowifi"><xliff:g id="spn" example="Operator">%s</xliff:g> VoWifi</string>
+    <!-- Spn during Wi-Fi Calling: "Wi-Fi Calling" -->
+    <string name="wfcSpnFormat_wifi_calling">Wi-Fi Calling</string>
+    <!-- Spn during Wi-Fi Calling: "Wi-Fi" -->
+    <string name="wfcSpnFormat_wifi">Wi-Fi</string>
+    <!-- Spn during Wi-Fi Calling: "WiFi Calling" (without hyphen) -->
+    <string name="wfcSpnFormat_wifi_calling_wo_hyphen">WiFi Calling</string>
+    <!-- Spn during Wi-Fi Calling: "VoWifi" -->
+    <string name="wfcSpnFormat_vowifi">VoWifi</string>
 
     <!-- WFC, summary for Disabled -->
     <string name="wifi_calling_off_summary">Off</string>
@@ -1130,14 +1142,13 @@
     <string name="permdesc_accessFineLocation">This app can get your exact location only when it is in the foreground. These location services must be turned on and available on your phone for the app to be able to use them. This may increase battery consumption.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permlab_accessCoarseLocation">access approximate location
-      (network-based)</string>
+    <string name="permlab_accessCoarseLocation">access approximate location (network-based) only in the foreground</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_accessCoarseLocation" product="tablet">This app can get your location based on network sources such as cell towers and Wi-Fi networks. These location services must be turned on and available on your tablet for the app to be able to use them.</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet">This app can get your location based on network sources such as cell towers and Wi-Fi networks, but only when when the app is in the foreground. These location services must be turned on and available on your tablet for the app to be able to use them.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_accessCoarseLocation" product="tv">This app can get your location based on network sources such as cell towers and Wi-Fi networks. These location services must be turned on and available on your TV for the app to be able to use them.</string>
+    <string name="permdesc_accessCoarseLocation" product="tv">This app can get your location based on network sources such as cell towers and Wi-Fi networks, but only when when the app is in the foreground. These location services must be turned on and available on your TV for the app to be able to use them.</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
-    <string name="permdesc_accessCoarseLocation" product="default">This app can get your location based on network sources such as cell towers and Wi-Fi networks. These location services must be turned on and available on your phone for the app to be able to use them.</string>
+    <string name="permdesc_accessCoarseLocation" product="default">This app can get your location based on network sources such as cell towers and Wi-Fi networks, but only when the app is in the foreground. These location services must be turned on and available on your phone for the app to be able to use them.</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_accessBackgroundLocation">access location in the background</string>
@@ -2924,55 +2935,55 @@
     <!-- Title for EditText context menu [CHAR LIMIT=20] -->
     <string name="editTextMenuTitle">Text actions</string>
 
-    <!-- Label for item in the text selection menu to trigger an Email app. Should be a verb. [CHAR LIMIT=20] -->
+    <!-- Label for item in the text selection menu to trigger an Email app. Should be a verb. [CHAR LIMIT=30] -->
     <string name="email">Email</string>
 
     <!-- Accessibility description for an item in the text selection menu to trigger an Email app [CHAR LIMIT=NONE] -->
     <string name="email_desc">Email selected address</string>
 
-    <!-- Label for item in the text selection menu to trigger a Dialer app. Should be a verb. [CHAR LIMIT=20] -->
+    <!-- Label for item in the text selection menu to trigger a Dialer app. Should be a verb. [CHAR LIMIT=30] -->
     <string name="dial">Call</string>
 
     <!-- Accessibility description for an item in the text selection menu to call a phone number [CHAR LIMIT=NONE] -->
     <string name="dial_desc">Call selected phone number</string>
 
-    <!-- Label for item in the text selection menu to trigger a Map app. Should be a verb. [CHAR LIMIT=20] -->
+    <!-- Label for item in the text selection menu to trigger a Map app. Should be a verb. [CHAR LIMIT=30] -->
     <string name="map">Map</string>
 
     <!-- Accessibility description for an item in the text selection menu to open maps for an address [CHAR LIMIT=NONE] -->
     <string name="map_desc">Locate selected address</string>
 
-    <!-- Label for item in the text selection menu to trigger a Browser app. Should be a verb. [CHAR LIMIT=20] -->
+    <!-- Label for item in the text selection menu to trigger a Browser app. Should be a verb. [CHAR LIMIT=30] -->
     <string name="browse">Open</string>
 
     <!-- Accessibility description for an item in the text selection menu to open a URL in a browser [CHAR LIMIT=NONE] -->
     <string name="browse_desc">Open selected URL</string>
 
-    <!-- Label for item in the text selection menu to trigger an SMS app. Should be a verb. [CHAR LIMIT=20] -->
+    <!-- Label for item in the text selection menu to trigger an SMS app. Should be a verb. [CHAR LIMIT=30] -->
     <string name="sms">Message</string>
 
     <!-- Accessibility description for an item in the text selection menu to send an SMS to a phone number [CHAR LIMIT=NONE] -->
     <string name="sms_desc">Message selected phone number</string>
 
-    <!-- Label for item in the text selection menu to trigger adding a contact. Should be a verb. [CHAR LIMIT=20] -->
+    <!-- Label for item in the text selection menu to trigger adding a contact. Should be a verb. [CHAR LIMIT=30] -->
     <string name="add_contact">Add</string>
 
     <!-- Accessibility description for an item in the text selection menu to add the selected detail to contacts [CHAR LIMIT=NONE] -->
     <string name="add_contact_desc">Add to contacts</string>
 
-    <!-- Label for item in the text selection menu to view the calendar for the selected time/date. Should be a verb. [CHAR LIMIT=20] -->
+    <!-- Label for item in the text selection menu to view the calendar for the selected time/date. Should be a verb. [CHAR LIMIT=30] -->
     <string name="view_calendar">View</string>
 
     <!-- Accessibility description for an item in the text selection menu to view the calendar for a date [CHAR LIMIT=NONE]-->
     <string name="view_calendar_desc">View selected time in calendar</string>
 
-    <!-- Label for item in the text selection menu to create a calendar event at the selected time/date. Should be a verb. [CHAR LIMIT=20] -->
+    <!-- Label for item in the text selection menu to create a calendar event at the selected time/date. Should be a verb. [CHAR LIMIT=30] -->
     <string name="add_calendar_event">Schedule</string>
 
     <!-- Accessibility description for an item in the text selection menu to schedule an event for a date [CHAR LIMIT=NONE] -->
     <string name="add_calendar_event_desc">Schedule event for selected time</string>
 
-    <!-- Label for item in the text selection menu to track a selected flight number. Should be a verb. [CHAR LIMIT=20] -->
+    <!-- Label for item in the text selection menu to track a selected flight number. Should be a verb. [CHAR LIMIT=30] -->
     <string name="view_flight">Track</string>
 
     <!-- Accessibility description for an item in the text selection menu to track a flight [CHAR LIMIT=NONE] -->
@@ -4820,6 +4831,9 @@
 
     <!-- Content description of the work profile icon in the notification. -->
     <string name="notification_work_profile_content_description">Work profile</string>
+
+    <!-- Content description of the alerting icon in the notification. [CHAR_LIMIT=NONE] -->
+    <string name="notification_alerted_content_description">Alerted</string>
 
     <!-- Content description of the expand button icon in the notification when collaped.-->
     <string name="expand_button_content_description_collapsed">Expand</string>

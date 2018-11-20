@@ -35,7 +35,20 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.anyList;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.verifyZeroInteractions;
+import static org.mockito.Mockito.when;
 
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
@@ -43,6 +56,8 @@ import android.net.wifi.WifiManager.LocalOnlyHotspotCallback;
 import android.net.wifi.WifiManager.LocalOnlyHotspotObserver;
 import android.net.wifi.WifiManager.LocalOnlyHotspotReservation;
 import android.net.wifi.WifiManager.LocalOnlyHotspotSubscription;
+import android.net.wifi.WifiManager.NetworkRequestMatchCallback;
+import android.net.wifi.WifiManager.NetworkRequestUserSelectionCallback;
 import android.net.wifi.WifiManager.SoftApCallback;
 import android.net.wifi.WifiManager.TrafficStateCallback;
 import android.os.Handler;
@@ -59,6 +74,9 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Unit tests for {@link android.net.wifi.WifiManager}.
  */
@@ -67,16 +85,19 @@ public class WifiManagerTest {
 
     private static final int ERROR_NOT_SET = -1;
     private static final int ERROR_TEST_REASON = 5;
+    private static final int TEST_UID = 14553;
     private static final String TEST_PACKAGE_NAME = "TestPackage";
     private static final String TEST_COUNTRY_CODE = "US";
 
     @Mock Context mContext;
-    @Mock IWifiManager mWifiService;
+    @Mock
+    android.net.wifi.IWifiManager mWifiService;
     @Mock ApplicationInfo mApplicationInfo;
     @Mock WifiConfiguration mApConfig;
     @Mock IBinder mAppBinder;
     @Mock SoftApCallback mSoftApCallback;
     @Mock TrafficStateCallback mTrafficStateCallback;
+    @Mock NetworkRequestMatchCallback mNetworkRequestMatchCallback;
 
     private Handler mHandler;
     private TestLooper mLooper;
@@ -1162,5 +1183,128 @@ i     * Verify that a call to cancel WPS immediately returns a failure.
         callbackCaptor.getValue().onStateChanged(TrafficStateCallback.DATA_ACTIVITY_INOUT);
         assertEquals(1, altLooper.dispatchAll());
         verify(mTrafficStateCallback).onStateChanged(TrafficStateCallback.DATA_ACTIVITY_INOUT);
+    }
+
+    /**
+     * Verify the call to registerNetworkRequestMatchCallback goes to WifiServiceImpl.
+     */
+    @Test
+    public void registerNetworkRequestMatchCallbackCallGoesToWifiServiceImpl()
+            throws Exception {
+        when(mContext.getMainLooper()).thenReturn(mLooper.getLooper());
+        ArgumentCaptor<INetworkRequestMatchCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(INetworkRequestMatchCallback.Stub.class);
+        mWifiManager.registerNetworkRequestMatchCallback(mNetworkRequestMatchCallback, null);
+        verify(mWifiService).registerNetworkRequestMatchCallback(
+                any(IBinder.class), callbackCaptor.capture(), anyInt());
+
+        INetworkRequestUserSelectionCallback iUserSelectionCallback =
+                mock(INetworkRequestUserSelectionCallback.class);
+
+        assertEquals(0, mLooper.dispatchAll());
+
+        callbackCaptor.getValue().onAbort();
+        assertEquals(1, mLooper.dispatchAll());
+        verify(mNetworkRequestMatchCallback).onAbort();
+
+        callbackCaptor.getValue().onMatch(new ArrayList<ScanResult>());
+        assertEquals(1, mLooper.dispatchAll());
+        verify(mNetworkRequestMatchCallback).onMatch(anyList());
+
+        callbackCaptor.getValue().onUserSelectionConnectSuccess(new WifiConfiguration());
+        assertEquals(1, mLooper.dispatchAll());
+        verify(mNetworkRequestMatchCallback).onUserSelectionConnectSuccess(
+                any(WifiConfiguration.class));
+
+        callbackCaptor.getValue().onUserSelectionConnectFailure(new WifiConfiguration());
+        assertEquals(1, mLooper.dispatchAll());
+        verify(mNetworkRequestMatchCallback).onUserSelectionConnectFailure(
+                any(WifiConfiguration.class));
+    }
+
+    /**
+     * Verify the call to unregisterNetworkRequestMatchCallback goes to WifiServiceImpl.
+     */
+    @Test
+    public void unregisterNetworkRequestMatchCallbackCallGoesToWifiServiceImpl() throws Exception {
+        ArgumentCaptor<Integer> callbackIdentifier = ArgumentCaptor.forClass(Integer.class);
+        mWifiManager.registerNetworkRequestMatchCallback(mNetworkRequestMatchCallback, mHandler);
+        verify(mWifiService).registerNetworkRequestMatchCallback(
+                any(IBinder.class), any(INetworkRequestMatchCallback.class),
+                callbackIdentifier.capture());
+
+        mWifiManager.unregisterNetworkRequestMatchCallback(mNetworkRequestMatchCallback);
+        verify(mWifiService).unregisterNetworkRequestMatchCallback(
+                eq((int) callbackIdentifier.getValue()));
+    }
+
+    /**
+     * Verify the call to NetworkRequestUserSelectionCallback goes to
+     * WifiServiceImpl.
+     */
+    @Test
+    public void networkRequestUserSelectionCallbackCallGoesToWifiServiceImpl()
+            throws Exception {
+        when(mContext.getMainLooper()).thenReturn(mLooper.getLooper());
+        ArgumentCaptor<INetworkRequestMatchCallback.Stub> callbackCaptor =
+                ArgumentCaptor.forClass(INetworkRequestMatchCallback.Stub.class);
+        mWifiManager.registerNetworkRequestMatchCallback(mNetworkRequestMatchCallback, null);
+        verify(mWifiService).registerNetworkRequestMatchCallback(
+                any(IBinder.class), callbackCaptor.capture(), anyInt());
+
+        INetworkRequestUserSelectionCallback iUserSelectionCallback =
+                mock(INetworkRequestUserSelectionCallback.class);
+        ArgumentCaptor<NetworkRequestUserSelectionCallback> userSelectionCallbackCaptor =
+                ArgumentCaptor.forClass(NetworkRequestUserSelectionCallback.class);
+        callbackCaptor.getValue().onUserSelectionCallbackRegistration(
+                iUserSelectionCallback);
+        assertEquals(1, mLooper.dispatchAll());
+        verify(mNetworkRequestMatchCallback).onUserSelectionCallbackRegistration(
+                userSelectionCallbackCaptor.capture());
+
+        WifiConfiguration selected = new WifiConfiguration();
+        userSelectionCallbackCaptor.getValue().select(selected);
+        verify(iUserSelectionCallback).select(selected);
+
+        userSelectionCallbackCaptor.getValue().reject();
+        verify(iUserSelectionCallback).reject();
+    }
+
+    /**
+     * Check the call to getAllMatchingWifiConfigs calls getAllMatchingWifiConfigs of WifiService
+     * with the provided a list of ScanResult.
+     */
+    @Test
+    public void testGetAllMatchingWifiConfigs() throws Exception {
+        mWifiManager.getAllMatchingWifiConfigs(new ArrayList<>());
+
+        verify(mWifiService).getAllMatchingWifiConfigs(any(List.class));
+    }
+
+    /**
+     * Check the call to getMatchingOsuProviders calls getMatchingOsuProviders of WifiService
+     * with the provided a list of ScanResult.
+     */
+    @Test
+    public void testGetMatchingOsuProviders() throws Exception {
+        mWifiManager.getMatchingOsuProviders(new ArrayList<>());
+
+        verify(mWifiService).getMatchingOsuProviders(any(List.class));
+    }
+
+    /**
+     * Verify calls to {@link WifiManager#addNetworkSuggestions(List)} and
+     * {@link WifiManager#removeNetworkSuggestions(List)}.
+     */
+    @Test
+    public void addRemoveNetworkSuggestions() throws Exception {
+        when(mWifiService.addNetworkSuggestions(any(List.class), anyString())).thenReturn(true);
+        when(mWifiService.removeNetworkSuggestions(any(List.class), anyString())).thenReturn(true);
+
+        assertTrue(mWifiManager.addNetworkSuggestions(new ArrayList<>()));
+        verify(mWifiService).addNetworkSuggestions(anyList(), eq(TEST_PACKAGE_NAME));
+
+        assertTrue(mWifiManager.removeNetworkSuggestions(new ArrayList<>()));
+        verify(mWifiService).removeNetworkSuggestions(anyList(), eq(TEST_PACKAGE_NAME));
     }
 }

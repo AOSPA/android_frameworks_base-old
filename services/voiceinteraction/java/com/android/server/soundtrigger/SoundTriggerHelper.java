@@ -42,6 +42,7 @@ import android.os.RemoteException;
 import android.telephony.PhoneStateListener;
 import android.telephony.TelephonyManager;
 import android.util.Slog;
+
 import com.android.internal.logging.MetricsLogger;
 
 import java.io.FileDescriptor;
@@ -564,6 +565,36 @@ public class SoundTriggerHelper implements SoundTrigger.StatusListener {
             ModelData modelData = mModelDataMap.get(modelId);
             return modelData != null && modelData.isRequested();
         }
+    }
+
+    int getGenericModelState(UUID modelId) {
+        synchronized (mLock) {
+            MetricsLogger.count(mContext, "sth_get_generic_model_state", 1);
+            if (modelId == null || mModule == null) {
+                return STATUS_ERROR;
+            }
+            ModelData modelData = mModelDataMap.get(modelId);
+            if (modelData == null || !modelData.isGenericModel()) {
+                Slog.w(TAG, "GetGenericModelState error: Invalid generic model id:" +
+                        modelId);
+                return STATUS_ERROR;
+            }
+            if (!modelData.isModelLoaded()) {
+                Slog.i(TAG, "GetGenericModelState: Given generic model is not loaded:" + modelId);
+                return STATUS_ERROR;
+            }
+            if (!modelData.isModelStarted()) {
+                Slog.i(TAG, "GetGenericModelState: Given generic model is not started:" + modelId);
+                return STATUS_ERROR;
+            }
+
+            return mModule.getModelState(modelData.getHandle());
+        }
+    }
+
+    int getKeyphraseModelState(UUID modelId) {
+        Slog.w(TAG, "GetKeyphraseModelState error: Not implemented");
+        return STATUS_ERROR;
     }
 
     //---- SoundTrigger.StatusListener methods

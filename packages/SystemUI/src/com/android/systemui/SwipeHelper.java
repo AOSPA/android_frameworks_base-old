@@ -33,10 +33,11 @@ import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityEvent;
+
 import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
-import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.FlingAnimationUtils;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 
 public class SwipeHelper implements Gefingerpoken {
     static final String TAG = "com.android.systemui.SwipeHelper";
@@ -87,8 +88,6 @@ public class SwipeHelper implements Gefingerpoken {
     private Runnable mWatchLongPress;
     private final long mLongPressTimeout;
 
-    protected boolean mSwipingInProgress;
-
     final private int[] mTmpPos = new int[2];
     private final int mFalsingThreshold;
     private boolean mTouchAboveFalsingThreshold;
@@ -127,10 +126,6 @@ public class SwipeHelper implements Gefingerpoken {
 
     public void setDisableHardwareLayers(boolean disableHwLayers) {
         mDisableHwLayers = disableHwLayers;
-    }
-
-    public boolean isSwipingInProgress() {
-        return mSwipingInProgress;
     }
 
     private float getPos(MotionEvent ev) {
@@ -324,7 +319,6 @@ public class SwipeHelper implements Gefingerpoken {
                     if (Math.abs(delta) > mPagingTouchSlop
                             && Math.abs(delta) > Math.abs(deltaPerpendicular)) {
                         if (mCallback.canChildBeDragged(mCurrView)) {
-                            mSwipingInProgress = true;
                             mCallback.onBeginDrag(mCurrView);
                             mDragging = true;
                             mInitialTouchPos = getPos(ev);
@@ -444,7 +438,6 @@ public class SwipeHelper implements Gefingerpoken {
                     wasRemoved = row.isRemoved();
                 }
                 if (!mCancelled || wasRemoved) {
-                    mSwipingInProgress = false;
                     mCallback.onChildDismissed(animView);
                 }
                 if (endAction != null) {
@@ -604,13 +597,15 @@ public class SwipeHelper implements Gefingerpoken {
                     }
                     // don't let items that can't be dismissed be dragged more than
                     // maxScrollDistance
-                    if (CONSTRAIN_SWIPE && !mCallback.canChildBeDismissed(mCurrView)) {
+                    if (CONSTRAIN_SWIPE && !mCallback.canChildBeDismissedInDirection(mCurrView,
+                            delta > 0)) {
                         float size = getSize(mCurrView);
                         float maxScrollDistance = MAX_SCROLL_SIZE_FRACTION * size;
                         if (absDelta >= size) {
                             delta = delta > 0 ? maxScrollDistance : -maxScrollDistance;
                         } else {
-                            delta = maxScrollDistance * (float) Math.sin((delta/size)*(Math.PI/2));
+                            delta = maxScrollDistance * (float) Math.sin(
+                                    (delta / size) * (Math.PI / 2));
                         }
                     }
 
@@ -634,7 +629,6 @@ public class SwipeHelper implements Gefingerpoken {
                                 !swipedFastEnough() /* useAccelerateInterpolator */);
                     } else {
                         // snappity
-                        mSwipingInProgress = false;
                         mCallback.onDragCancelled(mCurrView);
                         snapChild(mCurrView, 0 /* leftTarget */, velocity);
                     }
@@ -674,9 +668,11 @@ public class SwipeHelper implements Gefingerpoken {
     }
 
     public boolean isDismissGesture(MotionEvent ev) {
+        float translation = getTranslation(mCurrView);
         return ev.getActionMasked() == MotionEvent.ACTION_UP
+                && !mFalsingManager.isUnlockingDisabled()
                 && !isFalseGesture(ev) && (swipedFastEnough() || swipedFarEnough())
-                && mCallback.canChildBeDismissed(mCurrView);
+                && mCallback.canChildBeDismissedInDirection(mCurrView, translation > 0);
     }
 
     public boolean isFalseGesture(MotionEvent ev) {
@@ -706,6 +702,16 @@ public class SwipeHelper implements Gefingerpoken {
         View getChildAtPosition(MotionEvent ev);
 
         boolean canChildBeDismissed(View v);
+
+        /**
+         * Returns true if the provided child can be dismissed by a swipe in the given direction.
+         *
+         * @param isRightOrDown {@code true} if the swipe direction is right or down,
+         *                      {@code false} if it is left or up.
+         */
+        default boolean canChildBeDismissedInDirection(View v, boolean isRightOrDown) {
+            return canChildBeDismissed(v);
+        }
 
         boolean isAntiFalsingNeeded();
 

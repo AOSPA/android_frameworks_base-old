@@ -13,10 +13,10 @@
  */
 package com.android.systemui.plugins;
 
-import com.android.systemui.plugins.annotations.ProvidesInterface;
-
 import android.graphics.Paint.Style;
 import android.view.View;
+
+import com.android.systemui.plugins.annotations.ProvidesInterface;
 
 /**
  * This plugin is used to replace main clock in keyguard.
@@ -44,4 +44,15 @@ public interface ClockPlugin extends Plugin {
      * @param color A color value.
      */
     void setTextColor(int color);
+
+    /**
+     * Notifies that time tick alarm from doze service fired.
+     */
+    default void dozeTimeTick() { }
+
+    /**
+     * Set the amount (ratio) that the device has transitioned to doze.
+     * @param darkAmount Amount of transition to doze: 1f for doze and 0f for awake.
+     */
+    default void setDarkAmount(float darkAmount) {}
 }

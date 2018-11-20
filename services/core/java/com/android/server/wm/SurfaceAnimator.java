@@ -16,12 +16,12 @@
 
 package com.android.server.wm;
 
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.SurfaceAnimatorProto.ANIMATION_ADAPTER;
 import static com.android.server.wm.SurfaceAnimatorProto.ANIMATION_START_DELAYED;
 import static com.android.server.wm.SurfaceAnimatorProto.LEASH;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -71,7 +71,7 @@ class SurfaceAnimator {
     private OnAnimationFinishedCallback getFinishedCallback(
             @Nullable Runnable animationFinishedCallback) {
         return anim -> {
-            synchronized (mService.mWindowMap) {
+            synchronized (mService.mGlobalLock) {
                 final SurfaceAnimator target = mService.mAnimationTransferMap.remove(anim);
                 if (target != null) {
                     target.mInnerAnimationFinishedCallback.onAnimationFinished(anim);
@@ -305,6 +305,7 @@ class SurfaceAnimator {
                 .setName(surface + " - animation-leash")
                 .setSize(width, height);
         final SurfaceControl leash = builder.build();
+        t.setWindowCrop(surface, width, height);
         if (!hidden) {
             t.show(leash);
         }

@@ -16,14 +16,22 @@
 
 package com.android.systemui.statusbar.notification.row;
 
-import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator.ExpandAnimationParameters;
-import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_AMBIENT;
-import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_HEADSUP;
+import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator
+        .ExpandAnimationParameters;
+import static com.android.systemui.statusbar.notification.row.NotificationContentView
+        .VISIBLE_TYPE_AMBIENT;
+import static com.android.systemui.statusbar.notification.row.NotificationContentView
+        .VISIBLE_TYPE_CONTRACTED;
+import static com.android.systemui.statusbar.notification.row.NotificationContentView
+        .VISIBLE_TYPE_HEADSUP;
 import static com.android.systemui.statusbar.notification.row.NotificationInflater
         .FLAG_CONTENT_VIEW_AMBIENT;
 import static com.android.systemui.statusbar.notification.row.NotificationInflater
         .FLAG_CONTENT_VIEW_HEADS_UP;
-import static com.android.systemui.statusbar.notification.row.NotificationInflater.InflationCallback;
+import static com.android.systemui.statusbar.notification.row.NotificationInflater
+        .FLAG_CONTENT_VIEW_PUBLIC;
+import static com.android.systemui.statusbar.notification.row.NotificationInflater
+        .InflationCallback;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -31,7 +39,6 @@ import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.content.Context;
 import android.content.pm.PackageInfo;
@@ -45,8 +52,8 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Build;
-import android.os.SystemClock;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.service.notification.StatusBarNotification;
 import android.util.ArraySet;
 import android.util.AttributeSet;
@@ -79,32 +86,30 @@ import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingManager;
 import com.android.systemui.plugins.PluginListener;
-import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.MenuItem;
-import com.android.systemui.statusbar.notification.NotificationData;
-import com.android.systemui.statusbar.NotificationShelf;
+import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.notification.AboveShelfChangedListener;
 import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
-import com.android.systemui.statusbar.notification.logging.NotificationCounters;
+import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.NotificationUtils;
+import com.android.systemui.statusbar.notification.VisualStabilityManager;
+import com.android.systemui.statusbar.notification.logging.NotificationCounters;
 import com.android.systemui.statusbar.notification.row.NotificationInflater.InflationFlag;
 import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewWrapper;
-import com.android.systemui.statusbar.notification.VisualStabilityManager;
-import com.android.systemui.statusbar.phone.NotificationGroupManager;
-import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
 import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
 import com.android.systemui.statusbar.notification.stack.NotificationChildrenContainer;
 import com.android.systemui.statusbar.notification.stack.StackScrollState;
+import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.policy.HeadsUpManager;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
@@ -214,6 +219,11 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
      */
     private boolean mIsAmbientPulsing;
 
+    /**
+     * Whether or not the notification should be redacted on the lock screen, i.e has sensitive
+     * content which should be redacted on the lock screen.
+     */
+    private boolean mNeedsRedaction;
     private boolean mLastChronometerRunning = true;
     private ViewStub mChildrenContainerStub;
     private NotificationGroupManager mGroupManager;
@@ -480,6 +490,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 getPublicLayout().performWhenContentInactive(VISIBLE_TYPE_AMBIENT,
                         freeViewRunnable);
                 break;
+            case FLAG_CONTENT_VIEW_PUBLIC:
+                getPublicLayout().performWhenContentInactive(VISIBLE_TYPE_CONTRACTED,
+                        freeViewRunnable);
             default:
                 break;
         }
@@ -557,6 +570,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (mIconAnimationRunning) {
             setIconAnimationRunning(true);
         }
+        if (mLastChronometerRunning) {
+            setChronometerRunning(true);
+        }
         if (mNotificationParent != null) {
             mNotificationParent.updateChildrenHeaderAppearance();
         }
@@ -615,7 +631,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     private void updateLimitsForView(NotificationContentView layout) {
-        boolean customView = layout.getContractedChild().getId()
+        boolean customView = layout.getContractedChild() != null
+                && layout.getContractedChild().getId()
                 != com.android.internal.R.id.status_bar_latest_event_content;
         boolean beforeN = mEntry.targetSdk < Build.VERSION_CODES.N;
         boolean beforeP = mEntry.targetSdk < Build.VERSION_CODES.P;
@@ -1489,9 +1506,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     private void updateIconVisibilities() {
-        boolean visible = isChildInGroup()
-                || (isBelowSpeedBump() && !NotificationShelf.SHOW_AMBIENT_ICONS)
-                || mIconsVisible;
+        boolean visible = isChildInGroup() || mIconsVisible;
         for (NotificationContentView l : mLayouts) {
             l.setIconsVisible(visible);
         }
@@ -1551,10 +1566,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mNotificationInflater.setUsesIncreasedHeight(use);
     }
 
-    public void setSmartActions(List<Notification.Action> smartActions) {
-        mNotificationInflater.setSmartActions(smartActions);
-    }
-
     public void setUseIncreasedHeadsUpHeight(boolean use) {
         mUseIncreasedHeadsUpHeight = use;
         mNotificationInflater.setUsesIncreasedHeadsUpHeight(use);
@@ -1569,7 +1580,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     }
 
     public void setNeedsRedaction(boolean needsRedaction) {
-        mNotificationInflater.setRedactAmbient(needsRedaction);
+        if (mNeedsRedaction != needsRedaction) {
+            mNeedsRedaction = needsRedaction;
+            updateInflationFlag(FLAG_CONTENT_VIEW_PUBLIC, needsRedaction /* shouldInflate */);
+            mNotificationInflater.updateNeedsRedaction(needsRedaction);
+            if (!needsRedaction) {
+                freeContentViewWhenSafe(FLAG_CONTENT_VIEW_PUBLIC);
+            }
+        }
     }
 
     @VisibleForTesting
@@ -1641,6 +1659,17 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         }
         mPrivateLayout.showAppOpsIcons(activeOps);
         mPublicLayout.showAppOpsIcons(activeOps);
+    }
+
+    /** Sets whether the notification being displayed audibly alerted the user. */
+    public void setAudiblyAlerted(boolean audiblyAlerted) {
+        if (NotificationUtils.useNewInterruptionModel(mContext)) {
+            if (mIsSummaryWithChildren && mChildrenContainer.getHeaderView() != null) {
+                mChildrenContainer.getHeaderView().setAudiblyAlerted(audiblyAlerted);
+            }
+            mPrivateLayout.setAudiblyAlerted(audiblyAlerted);
+            mPublicLayout.setAudiblyAlerted(audiblyAlerted);
+        }
     }
 
     public View.OnClickListener getAppOpsOnClickListener() {

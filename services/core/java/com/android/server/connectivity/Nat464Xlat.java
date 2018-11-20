@@ -95,15 +95,9 @@ public class Nat464Xlat extends BaseNetworkObserver {
         // We only run clat on networks that don't have a native IPv4 address.
         final boolean hasIPv4Address =
                 (nai.linkProperties != null) && nai.linkProperties.hasIPv4Address();
-        // Only support clat on mobile and wifi for now, because these are the only IPv6-only
-        // networks we can connect to.
-        boolean doXlat = SystemProperties.getBoolean("persist.vendor.net.doxlat", true);
-        if(!doXlat) {
-            Slog.i(TAG, "Android Xlat is disabled");
-        }
-        return supported && connected && !hasIPv4Address
-               && ArrayUtils.contains(NETWORK_TYPES, netType)
-               && ((netType == ConnectivityManager.TYPE_MOBILE) ? doXlat : true);
+        final boolean skip464xlat =
+                (nai.netMisc() != null) && nai.netMisc().skip464xlat;
+        return supported && connected && !hasIPv4Address && !skip464xlat;
     }
 
     /**

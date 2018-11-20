@@ -418,9 +418,6 @@ public final class MediaDrm implements AutoCloseable {
 
         /**
          * Returns the status code for the key
-         * @return one of {@link #STATUS_USABLE}, {@link #STATUS_EXPIRED},
-         * {@link #STATUS_OUTPUT_NOT_ALLOWED}, {@link #STATUS_PENDING}
-         * or {@link #STATUS_INTERNAL_ERROR}.
          */
         @KeyStatusCode
         public int getStatusCode() { return mStatusCode; }
@@ -654,13 +651,7 @@ public final class MediaDrm implements AutoCloseable {
      * can be queried using {@link #getSecurityLevel}. A session
      * ID is returned.
      *
-     * @param level the new security level, one of
-     * {@link #SECURITY_LEVEL_SW_SECURE_CRYPTO},
-     * {@link #SECURITY_LEVEL_SW_SECURE_DECODE},
-     * {@link #SECURITY_LEVEL_HW_SECURE_CRYPTO},
-     * {@link #SECURITY_LEVEL_HW_SECURE_DECODE} or
-     * {@link #SECURITY_LEVEL_HW_SECURE_ALL}.
-     *
+     * @param level the new security level
      * @throws NotProvisionedException if provisioning is needed
      * @throws ResourceBusyException if required resources are in use
      * @throws IllegalArgumentException if the requested security level is
@@ -790,9 +781,6 @@ public final class MediaDrm implements AutoCloseable {
 
         /**
          * Get the type of the request
-         * @return one of {@link #REQUEST_TYPE_INITIAL},
-         * {@link #REQUEST_TYPE_RENEWAL}, {@link #REQUEST_TYPE_RELEASE},
-         * {@link #REQUEST_TYPE_NONE} or {@link #REQUEST_TYPE_UPDATE}
          */
         @RequestType
         public int getRequestType() { return mRequestType; }
@@ -979,6 +967,86 @@ public final class MediaDrm implements AutoCloseable {
             throws DeniedByServerException;
 
     /**
+     * The keys in an offline license allow protected content to be played even
+     * if the device is not connected to a network. Offline licenses are stored
+     * on the device after a key request/response exchange when the key request
+     * KeyType is OFFLINE. Normally each app is responsible for keeping track of
+     * the keySetIds it has created. If an app loses the keySetId for any stored
+     * licenses that it created, however, it must be able to recover the stored
+     * keySetIds so those licenses can be removed when they expire or when the
+     * app is uninstalled.
+     * <p>
+     * This method returns a list of the keySetIds for all offline licenses.
+     * The offline license keySetId may be used to query the status of an
+     * offline license with {@link #getOfflineLicenseState} or remove it with
+     * {@link #removeOfflineLicense}.
+     *
+     * @return a list of offline license keySetIds
+     */
+    @NonNull
+    public native List<byte[]> getOfflineLicenseKeySetIds();
+
+    /**
+     * Normally offline licenses are released using a key request/response
+     * exchange using {@link #getKeyRequest} where the key type is
+     * KEY_TYPE_RELEASE, followed by {@link #provideKeyResponse}. This allows
+     * the server to cryptographically confirm that the license has been removed
+     * and then adjust the count of offline licenses allocated to the device.
+     * <p>
+     * In some exceptional situations it may be necessary to directly remove
+     * offline licenses without notifying the server, which may be performed
+     * using this method.
+     *
+     * @param keySetId the id of the offline license to remove
+     * @throws IllegalArgumentException if the keySetId does not refer to an
+     * offline license.
+     */
+    public native void removeOfflineLicense(@NonNull byte[] keySetId);
+
+    /**
+     * Offline license state is unknown, an error occurred while trying
+     * to access it.
+     */
+    public static final int OFFLINE_LICENSE_STATE_UNKNOWN = 0;
+
+    /**
+     * Offline license state is usable, the keys may be used for decryption.
+     */
+    public static final int OFFLINE_LICENSE_USABLE = 1;
+
+    /**
+     * Offline license state is inactive, the keys have been marked for
+     * release using {@link #getKeyRequest} with KEY_TYPE_RELEASE but the
+     * key response has not been received.
+     */
+    public static final int OFFLINE_LICENSE_INACTIVE = 2;
+
+    /** @hide */
+    @IntDef({
+        OFFLINE_LICENSE_STATE_UNKNOWN,
+        OFFLINE_LICENSE_USABLE,
+        OFFLINE_LICENSE_INACTIVE,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface OfflineLicenseState {}
+
+    /**
+     * Request the state of an offline license. An offline license may be usable
+     * or inactive. The keys in a usable offline license are available for
+     * decryption. When the offline license state is inactive, the keys have
+     * been marked for release using {@link #getKeyRequest} with
+     * KEY_TYPE_RELEASE but the key response has not been received. The keys in
+     * an inactive offline license are not usable for decryption.
+     *
+     * @param keySetId selects the offline license
+     * @return the offline license state
+     * @throws IllegalArgumentException if the keySetId does not refer to an
+     * offline license.
+     */
+    @OfflineLicenseState
+    public native int getOfflineLicenseState(@NonNull byte[] keySetId);
+
+    /**
      * Secure stops are a way to enforce limits on the number of concurrent
      * streams per subscriber across devices. They provide secure monitoring of
      * the lifetime of content decryption keys in MediaDrm sessions.
@@ -1110,9 +1178,7 @@ public final class MediaDrm implements AutoCloseable {
      * enforcing compliance with HDCP requirements. Trusted enforcement of
      * HDCP policies must be handled by the DRM system.
      * <p>
-     * @return one of {@link #HDCP_LEVEL_UNKNOWN}, {@link #HDCP_NONE},
-     * {@link #HDCP_V1}, {@link #HDCP_V2}, {@link #HDCP_V2_1}, {@link #HDCP_V2_2}
-     * or {@link #HDCP_NO_DIGITAL_OUTPUT}.
+     * @return the connected HDCP level
      */
     @HdcpLevel
     public native int getConnectedHdcpLevel();
@@ -1123,9 +1189,7 @@ public final class MediaDrm implements AutoCloseable {
      * that may be connected. If multiple HDCP-capable interfaces are present,
      * it indicates the highest of the maximum HDCP levels of all interfaces.
      * <p>
-     * @return one of {@link #HDCP_LEVEL_UNKNOWN}, {@link #HDCP_NONE},
-     * {@link #HDCP_V1}, {@link #HDCP_V2}, {@link #HDCP_V2_1}, {@link #HDCP_V2_2}
-     * or {@link #HDCP_NO_DIGITAL_OUTPUT}.
+     * @return the maximum supported HDCP level
      */
     @HdcpLevel
     public native int getMaxHdcpLevel();
@@ -1215,10 +1279,7 @@ public final class MediaDrm implements AutoCloseable {
      * time a session is opened using {@link #openSession}.
      * @param sessionId the session to query.
      * <p>
-     * @return one of {@link #SECURITY_LEVEL_UNKNOWN},
-     * {@link #SECURITY_LEVEL_SW_SECURE_CRYPTO}, {@link #SECURITY_LEVEL_SW_SECURE_DECODE},
-     * {@link #SECURITY_LEVEL_HW_SECURE_CRYPTO}, {@link #SECURITY_LEVEL_HW_SECURE_DECODE} or
-     * {@link #SECURITY_LEVEL_HW_SECURE_ALL}.
+     * @return the security level of the session
      */
     @SecurityLevel
     public native int getSecurityLevel(@NonNull byte[] sessionId);

@@ -30,6 +30,7 @@ import android.graphics.PixelFormat;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.Region;
+import android.graphics.RenderNode;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -597,6 +598,7 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
                         }
                         if (sizeChanged && !creating) {
                             mSurfaceControl.setSize(mSurfaceWidth, mSurfaceHeight);
+                            mSurfaceControl.setWindowCrop(mSurfaceWidth, mSurfaceHeight);
                         }
                     } finally {
                         SurfaceControl.closeTransaction();
@@ -1165,6 +1167,12 @@ public class SurfaceView extends View implements ViewRootImpl.WindowStoppedCallb
         public void setWindowCrop(Rect crop) {
             super.setWindowCrop(crop);
             mBackgroundControl.setWindowCrop(crop);
+        }
+
+        @Override
+        public void setWindowCrop(int width, int height) {
+            super.setWindowCrop(width, height);
+            mBackgroundControl.setWindowCrop(width, height);
         }
 
         @Override

@@ -16,6 +16,7 @@
 
 package com.android.server.location;
 
+import android.app.PendingIntent;
 import android.content.Context;
 import android.hardware.contexthub.V1_0.AsyncEventType;
 import android.hardware.contexthub.V1_0.ContextHub;
@@ -415,10 +416,12 @@ public class ContextHubService extends IContextHubService.Stub {
         checkPermissions();
 
         ArrayList<Integer> foundInstances = new ArrayList<>();
-        for (NanoAppInstanceInfo info : mNanoAppStateManager.getNanoAppInstanceInfoCollection()) {
-            if (filter.testMatch(info)) {
-                foundInstances.add(info.getHandle());
-            }
+        if (filter != null) {
+            mNanoAppStateManager.foreachNanoAppInstanceInfo((info) -> {
+                if (filter.testMatch(info)) {
+                    foundInstances.add(info.getHandle());
+                }
+            });
         }
 
         int[] retArray = new int[foundInstances.size()];
@@ -629,6 +632,29 @@ public class ContextHubService extends IContextHubService.Stub {
     }
 
     /**
+     * Creates and registers a PendingIntent client at the service for the specified Context Hub.
+     *
+     * @param contextHubId  the ID of the hub this client is attached to
+     * @param pendingIntent the PendingIntent associated with this client
+     * @param nanoAppId     the ID of the nanoapp PendingIntent events will be sent for
+     * @return the generated client interface
+     *
+     * @throws IllegalArgumentException if hubInfo does not represent a valid hub
+     * @throws IllegalStateException    if there were too many registered clients at the service
+     */
+    @Override
+    public IContextHubClient createPendingIntentClient(
+            int contextHubId, PendingIntent pendingIntent, long nanoAppId) throws RemoteException {
+        checkPermissions();
+        if (!isValidContextHubId(contextHubId)) {
+            throw new IllegalArgumentException("Invalid context hub ID " + contextHubId);
+        }
+
+        ContextHubInfo contextHubInfo = mContextHubIdToInfoMap.get(contextHubId);
+        return mClientManager.registerClient(contextHubInfo, pendingIntent, nanoAppId);
+    }
+
+    /**
      * Loads a nanoapp binary at the specified Context hub.
      *
      * @param contextHubId        the ID of the hub to load the binary
@@ -767,9 +793,7 @@ public class ContextHubService extends IContextHubService.Stub {
         pw.println("");
         pw.println("=================== NANOAPPS ====================");
         // Dump nanoAppHash
-        for (NanoAppInstanceInfo info : mNanoAppStateManager.getNanoAppInstanceInfoCollection()) {
-            pw.println(info);
-        }
+        mNanoAppStateManager.foreachNanoAppInstanceInfo((info) -> pw.println(info));
 
         // dump eventLog
     }

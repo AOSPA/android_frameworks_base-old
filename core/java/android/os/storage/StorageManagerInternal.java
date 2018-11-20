@@ -18,6 +18,7 @@ package android.os.storage;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.os.IVold;
 
 /**
  * Mount service local interface.
@@ -101,12 +102,34 @@ public abstract class StorageManagerInternal {
      * Delete storage sandbox for the given package.
      *
      * @param packageName The package for which the sandbox needs to be destroyed.
+     * @param sharedUserId The sharedUserId if specified by the package.
      * @param userId The userId in which the sandbox needs to be destroyed.
      */
-    public abstract void destroySandboxForApp(@NonNull String packageName, int userId);
+    public abstract void destroySandboxForApp(@NonNull String packageName,
+            @Nullable String sharedUserId, int userId);
 
     /**
      * @return Labels of storage volumes that are visible to the given userId.
      */
     public abstract String[] getVisibleVolumesForUser(int userId);
+
+    /**
+     * A listener for reset events in the StorageManagerService.
+     */
+    public interface ResetListener {
+        /**
+         * A method that should be triggered internally by StorageManagerInternal
+         * when StorageManagerService reset happens.
+         *
+         * @param vold The binder object to vold.
+         */
+        void onReset(IVold vold);
+    }
+
+    /**
+     * Add a listener to listen to reset event in StorageManagerService.
+     *
+     * @param listener The listener that will be notified on reset events.
+     */
+    public abstract void addResetListener(ResetListener listener);
 }

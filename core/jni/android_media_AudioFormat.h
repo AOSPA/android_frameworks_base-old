@@ -37,6 +37,7 @@
 #define ENCODING_AAC_XHE        16
 #define ENCODING_AC4            17
 #define ENCODING_E_AC3_JOC      18
+#define ENCODING_DOLBY_MAT      19
 
 #define ENCODING_AMR_NB     100
 #define ENCODING_AMR_WB     101
@@ -78,10 +79,10 @@ static inline audio_format_t audioFormatToNative(int audioFormat)
         return AUDIO_FORMAT_AAC_HE_V1;
     case ENCODING_AAC_HE_V2:
         return AUDIO_FORMAT_AAC_HE_V2;
-    case ENCODING_DOLBY_TRUEHD:
-        return AUDIO_FORMAT_DOLBY_TRUEHD;
     case ENCODING_IEC61937:
         return AUDIO_FORMAT_IEC61937;
+    case ENCODING_DOLBY_TRUEHD:
+        return AUDIO_FORMAT_DOLBY_TRUEHD;
     case ENCODING_AAC_ELD:
         return AUDIO_FORMAT_AAC_ELD;
     case ENCODING_AAC_XHE:
@@ -106,6 +107,8 @@ static inline audio_format_t audioFormatToNative(int audioFormat)
         return AUDIO_FORMAT_E_AC3_JOC;
     case ENCODING_DEFAULT:
         return AUDIO_FORMAT_DEFAULT;
+    case ENCODING_DOLBY_MAT:
+        return AUDIO_FORMAT_MAT;
     default:
         return AUDIO_FORMAT_INVALID;
     }
@@ -148,10 +151,9 @@ static inline int audioFormatFromNative(audio_format_t nativeFormat)
     case AUDIO_FORMAT_DOLBY_TRUEHD:
         return ENCODING_DOLBY_TRUEHD;
     case AUDIO_FORMAT_AAC_ELD:
-            return ENCODING_AAC_ELD;
-    // FIXME needs addition of AUDIO_FORMAT_AAC_XHE
-    //case AUDIO_FORMAT_AAC_XHE:
-    //    return ENCODING_AAC_XHE;
+        return ENCODING_AAC_ELD;
+    case AUDIO_FORMAT_AAC_XHE:
+        return ENCODING_AAC_XHE;
     case AUDIO_FORMAT_AC4:
         return ENCODING_AC4;
     // case AUDIO_FORMAT_E_AC3_JOC: // FIXME Not defined on the native side yet
@@ -170,6 +172,11 @@ static inline int audioFormatFromNative(audio_format_t nativeFormat)
         return ENCODING_EVRC_NW;
     case AUDIO_FORMAT_E_AC3_JOC:
         return ENCODING_E_AC3_JOC;
+    case AUDIO_FORMAT_MAT:
+    case AUDIO_FORMAT_MAT_1_0:
+    case AUDIO_FORMAT_MAT_2_0:
+    case AUDIO_FORMAT_MAT_2_1:
+        return ENCODING_DOLBY_MAT;
     case AUDIO_FORMAT_DEFAULT:
         return ENCODING_DEFAULT;
     default:

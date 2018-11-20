@@ -77,6 +77,8 @@ MetricsManager::MetricsManager(const ConfigKey& key, const StatsdConfig& config,
             mActivationAtomTrackerToMetricMap, mMetricIndexesWithActivation, mNoReportMetricIds);
 
     mHashStringsInReport = config.hash_strings_in_metric_report();
+    mVersionStringsInReport = config.version_strings_in_metric_report();
+    mInstallerInReport = config.installer_in_metric_report();
 
     if (config.allowed_log_source_size() == 0) {
         mConfigValid = false;
@@ -197,6 +199,7 @@ void MetricsManager::dropData(const int64_t dropTimeNs) {
 
 void MetricsManager::onDumpReport(const int64_t dumpTimeStampNs,
                                   const bool include_current_partial_bucket,
+                                  const bool erase_data,
                                   std::set<string> *str_set,
                                   ProtoOutputStream* protoOutput) {
     VLOG("=========================Metric Reports Start==========================");
@@ -206,11 +209,11 @@ void MetricsManager::onDumpReport(const int64_t dumpTimeStampNs,
             uint64_t token = protoOutput->start(
                     FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_METRICS);
             if (mHashStringsInReport) {
-                producer->onDumpReport(dumpTimeStampNs, include_current_partial_bucket, str_set,
-                                       protoOutput);
+                producer->onDumpReport(dumpTimeStampNs, include_current_partial_bucket, erase_data,
+                                       str_set, protoOutput);
             } else {
-                producer->onDumpReport(dumpTimeStampNs, include_current_partial_bucket, nullptr,
-                                       protoOutput);
+                producer->onDumpReport(dumpTimeStampNs, include_current_partial_bucket, erase_data,
+                                       nullptr, protoOutput);
             }
             protoOutput->end(token);
         } else {

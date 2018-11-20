@@ -48,6 +48,9 @@ import java.util.Set;
 
 /**
  * Interface for providing text classification related features.
+ * <p>
+ * The TextClassifier may be used to understand the meaning of text, as well as generating predicted
+ * next actions based on the text.
  *
  * <p><strong>NOTE: </strong>Unless otherwise stated, methods of this interface are blocking
  * operations. Call on a worker thread.
@@ -322,6 +325,17 @@ public interface TextClassifier {
         Preconditions.checkNotNull(request);
         Utils.checkMainThread();
         return TextLanguage.EMPTY;
+    }
+
+    /**
+     * Suggests and returns a list of actions according to the given conversation.
+     */
+    @WorkerThread
+    default ConversationActions suggestConversationActions(
+            @NonNull ConversationActions.Request request) {
+        Preconditions.checkNotNull(request);
+        Utils.checkMainThread();
+        return new ConversationActions(Collections.emptyList());
     }
 
     /**

@@ -21,6 +21,7 @@ import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.annotation.UnsupportedAppUsage;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.ParcelFileDescriptor;
@@ -322,8 +323,11 @@ public final class Call {
         /**
          * Call can be upgraded to a video call.
          * @hide
+         * @deprecated Use {@link #CAPABILITY_SUPPORTS_VT_LOCAL_BIDIRECTIONAL} and
+         * {@link #CAPABILITY_SUPPORTS_VT_REMOTE_BIDIRECTIONAL} to indicate for a call
+         * whether or not video calling is supported.
          */
-        @UnsupportedAppUsage
+        @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 119305590)
         public static final int CAPABILITY_CAN_UPGRADE_TO_VIDEO = 0x00080000;
 
         /**
@@ -480,8 +484,24 @@ public final class Call {
          */
         public static final int PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL = 0x00000800;
 
+        /**
+         * Indicates that the call is using VoIP audio mode.
+         * <p>
+         * When this property is set, the {@link android.media.AudioManager} audio mode for this
+         * call will be {@link android.media.AudioManager#MODE_IN_COMMUNICATION}.  When this
+         * property is not set, the audio mode for this call will be
+         * {@link android.media.AudioManager#MODE_IN_CALL}.
+         * <p>
+         * This property reflects changes made using {@link Connection#setAudioModeIsVoip(boolean)}.
+         * <p>
+         * You can use this property to determine whether an un-answered incoming call or a held
+         * call will use VoIP audio mode (if the call does not currently have focus, the system
+         * audio mode may not reflect the mode the call will use).
+         */
+        public static final int PROPERTY_VOIP_AUDIO_MODE = 0x00001000;
+
         //******************************************************************************************
-        // Next PROPERTY value: 0x00001000
+        // Next PROPERTY value: 0x00002000
         //******************************************************************************************
 
         private final String mTelecomCallId;
@@ -647,14 +667,20 @@ public final class Call {
             if (hasProperty(properties, PROPERTY_IS_EXTERNAL_CALL)) {
                 builder.append(" PROPERTY_IS_EXTERNAL_CALL");
             }
-            if(hasProperty(properties, PROPERTY_HAS_CDMA_VOICE_PRIVACY)) {
+            if (hasProperty(properties, PROPERTY_HAS_CDMA_VOICE_PRIVACY)) {
                 builder.append(" PROPERTY_HAS_CDMA_VOICE_PRIVACY");
             }
-            if(hasProperty(properties, PROPERTY_ASSISTED_DIALING_USED)) {
+            if (hasProperty(properties, PROPERTY_ASSISTED_DIALING_USED)) {
                 builder.append(" PROPERTY_ASSISTED_DIALING_USED");
             }
             if (hasProperty(properties, PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL)) {
                 builder.append(" PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL");
+            }
+            if (hasProperty(properties, PROPERTY_RTT)) {
+                builder.append(" PROPERTY_RTT");
+            }
+            if (hasProperty(properties, PROPERTY_VOIP_AUDIO_MODE)) {
+                builder.append(" PROPERTY_VOIP_AUDIO_MODE");
             }
             builder.append("]");
             return builder.toString();

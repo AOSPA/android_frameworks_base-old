@@ -108,11 +108,7 @@ public class KeyguardClockPositionAlgorithm {
      * Dozing and receiving a notification (AOD notification.)
      */
     private boolean mPulsing;
-
-    /**
-     * Distance in pixels between the top of the screen and the first view of the bouncer.
-     */
-    private int mBouncerTop;
+    private float mEmptyDragAmount;
 
     /**
      * Refreshes the dimension values.
@@ -131,9 +127,8 @@ public class KeyguardClockPositionAlgorithm {
     }
 
     public void setup(int minTopMargin, int maxShadeBottom, int notificationStackHeight,
-            float panelExpansion, int parentHeight,
-            int keyguardStatusHeight, float dark, boolean secure, boolean pulsing,
-            int bouncerTop) {
+            float panelExpansion, int parentHeight, int keyguardStatusHeight, float dark,
+            boolean secure, boolean pulsing, float emptyDragAmount) {
         mMinTopMargin = minTopMargin + mContainerTopPadding;
         mMaxShadeBottom = maxShadeBottom;
         mNotificationStackHeight = notificationStackHeight;
@@ -143,14 +138,14 @@ public class KeyguardClockPositionAlgorithm {
         mDarkAmount = dark;
         mCurrentlySecure = secure;
         mPulsing = pulsing;
-        mBouncerTop = bouncerTop;
+        mEmptyDragAmount = emptyDragAmount;
     }
 
     public void run(Result result) {
         final int y = getClockY();
         result.clockY = y;
         result.clockAlpha = getClockAlpha(y);
-        result.stackScrollerPadding = y + (mPulsing ? 0 : mKeyguardStatusHeight);
+        result.stackScrollerPadding = y + (mPulsing ? mPulsingPadding : mKeyguardStatusHeight);
         result.clockX = (int) interpolate(0, burnInPreventionOffsetX(), mDarkAmount);
     }
 
@@ -192,17 +187,17 @@ public class KeyguardClockPositionAlgorithm {
         if (mPulsing) {
             clockYDark -= mPulsingPadding;
         }
+        clockYDark = MathUtils.max(0, clockYDark);
 
         float clockYRegular = getExpandedClockPosition();
-        boolean hasEnoughSpace = mMinTopMargin + mKeyguardStatusHeight < mBouncerTop;
-        float clockYTarget = mCurrentlySecure && hasEnoughSpace ?
-                mMinTopMargin : -mKeyguardStatusHeight;
+        float clockYBouncer = -mKeyguardStatusHeight;
 
         // Move clock up while collapsing the shade
         float shadeExpansion = Interpolators.FAST_OUT_LINEAR_IN.getInterpolation(mPanelExpansion);
-        final float clockY = MathUtils.lerp(clockYTarget, clockYRegular, shadeExpansion);
+        float clockY = MathUtils.lerp(clockYBouncer, clockYRegular, shadeExpansion);
+        clockYDark = MathUtils.lerp(clockYBouncer, clockYDark, shadeExpansion);
 
-        return (int) MathUtils.lerp(clockY, clockYDark, mDarkAmount);
+        return (int) (MathUtils.lerp(clockY, clockYDark, mDarkAmount) + mEmptyDragAmount);
     }
 
     /**

@@ -16,13 +16,12 @@
 
 package com.android.server.usage;
 
-import static junit.framework.TestCase.assertNull;
 import static junit.framework.TestCase.fail;
 
 import static org.testng.Assert.assertEquals;
 
 import android.app.usage.EventList;
-import android.app.usage.UsageEvents;
+import android.app.usage.UsageEvents.Event;
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
@@ -50,6 +49,10 @@ public class UsageStatsDatabaseTest {
 
     private IntervalStats mIntervalStats = new IntervalStats();
     private long mEndTime = 0;
+
+    // Key under which the payload blob is stored
+    // same as UsageStatsBackupHelper.KEY_USAGE_STATS
+    static final String KEY_USAGE_STATS = "usage_stats";
 
     private static final UsageStatsDatabase.StatCombiner<IntervalStats> mIntervalStatsVerifier =
             new UsageStatsDatabase.StatCombiner<IntervalStats>() {
@@ -104,10 +107,13 @@ public class UsageStatsDatabaseTest {
 
     private void populateIntervalStats() {
         final int numberOfEvents = 3000;
-        long time = 1;
+        final int timeProgression = 23;
+        long time = System.currentTimeMillis() - (numberOfEvents*timeProgression);
         mIntervalStats = new IntervalStats();
 
-        mIntervalStats.beginTime = 1;
+        mIntervalStats.majorVersion = 7;
+        mIntervalStats.minorVersion = 8;
+        mIntervalStats.beginTime = time;
         mIntervalStats.interactiveTracker.count = 2;
         mIntervalStats.interactiveTracker.duration = 111111;
         mIntervalStats.nonInteractiveTracker.count = 3;
@@ -122,43 +128,41 @@ public class UsageStatsDatabaseTest {
         }
 
         for (int i = 0; i < numberOfEvents; i++) {
-            UsageEvents.Event event = new UsageEvents.Event();
+            Event event = new Event();
             final int packageInt = ((i / 3) % 7);
             event.mPackage = "fake.package.name" + packageInt; //clusters of 3 events from 7 "apps"
             if (packageInt == 3) {
                 // Third app is an instant app
-                event.mFlags |= UsageEvents.Event.FLAG_IS_PACKAGE_INSTANT_APP;
-            } else if (packageInt == 2 || packageInt == 4) {
-                event.mClass = ".fake.class.name" + i % 11;
+                event.mFlags |= Event.FLAG_IS_PACKAGE_INSTANT_APP;
             }
 
-
+            event.mClass = ".fake.class.name" + i % 11;
             event.mTimeStamp = time;
             event.mEventType = i % 19; //"random" event type
 
             switch (event.mEventType) {
-                case UsageEvents.Event.CONFIGURATION_CHANGE:
+                case Event.CONFIGURATION_CHANGE:
                     //empty config,
                     event.mConfiguration = new Configuration();
                     break;
-                case UsageEvents.Event.SHORTCUT_INVOCATION:
+                case Event.SHORTCUT_INVOCATION:
                     //"random" shortcut
                     event.mShortcutId = "shortcut" + (i % 8);
                     break;
-                case UsageEvents.Event.STANDBY_BUCKET_CHANGED:
+                case Event.STANDBY_BUCKET_CHANGED:
                     //"random" bucket and reason
                     event.mBucketAndReason = (((i % 5 + 1) * 10) << 16) & (i % 5 + 1) << 8;
                     break;
-                case UsageEvents.Event.NOTIFICATION_INTERRUPTION:
+                case Event.NOTIFICATION_INTERRUPTION:
                     //"random" channel
                     event.mNotificationChannelId = "channel" + (i % 5);
                     break;
             }
 
             mIntervalStats.events.insert(event);
-            mIntervalStats.update(event.mPackage, event.mTimeStamp, event.mEventType);
+            mIntervalStats.update(event.mPackage, event.mClass, event.mTimeStamp, event.mEventType);
 
-            time += 23; // Arbitrary progression of time
+            time += timeProgression; // Arbitrary progression of time
         }
         mEndTime = time;
 
@@ -216,29 +220,30 @@ public class UsageStatsDatabaseTest {
         // mEndTimeStamp is based on the enclosing IntervalStats, don't bother checking
         assertEquals(us1.mLastTimeUsed, us2.mLastTimeUsed);
         assertEquals(us1.mTotalTimeInForeground, us2.mTotalTimeInForeground);
+        assertEquals(us1.mLastTimeForegroundServiceUsed, us2.mLastTimeForegroundServiceUsed);
+        assertEquals(us1.mTotalTimeForegroundServiceUsed, us2.mTotalTimeForegroundServiceUsed);
         // mLaunchCount not persisted, so skipped
         assertEquals(us1.mAppLaunchCount, us2.mAppLaunchCount);
-        assertEquals(us1.mLastEvent, us2.mLastEvent);
         assertEquals(us1.mChooserCounts, us2.mChooserCounts);
     }
 
-    void compareUsageEvent(UsageEvents.Event e1, UsageEvents.Event e2, int debugId) {
+    void compareUsageEvent(Event e1, Event e2, int debugId) {
         assertEquals(e1.mPackage, e2.mPackage, "Usage event " + debugId);
         assertEquals(e1.mClass, e2.mClass, "Usage event " + debugId);
         assertEquals(e1.mTimeStamp, e2.mTimeStamp, "Usage event " + debugId);
         assertEquals(e1.mEventType, e2.mEventType, "Usage event " + debugId);
         switch (e1.mEventType) {
-            case UsageEvents.Event.CONFIGURATION_CHANGE:
+            case Event.CONFIGURATION_CHANGE:
                 assertEquals(e1.mConfiguration, e2.mConfiguration,
                         "Usage event " + debugId + e2.mConfiguration.toString());
                 break;
-            case UsageEvents.Event.SHORTCUT_INVOCATION:
+            case Event.SHORTCUT_INVOCATION:
                 assertEquals(e1.mShortcutId, e2.mShortcutId, "Usage event " + debugId);
                 break;
-            case UsageEvents.Event.STANDBY_BUCKET_CHANGED:
+            case Event.STANDBY_BUCKET_CHANGED:
                 assertEquals(e1.mBucketAndReason, e2.mBucketAndReason, "Usage event " + debugId);
                 break;
-            case UsageEvents.Event.NOTIFICATION_INTERRUPTION:
+            case Event.NOTIFICATION_INTERRUPTION:
                 assertEquals(e1.mNotificationChannelId, e2.mNotificationChannelId,
                         "Usage event " + debugId);
                 break;
@@ -247,6 +252,8 @@ public class UsageStatsDatabaseTest {
     }
 
     void compareIntervalStats(IntervalStats stats1, IntervalStats stats2) {
+        assertEquals(stats1.majorVersion, stats2.majorVersion);
+        assertEquals(stats1.minorVersion, stats2.minorVersion);
         assertEquals(stats1.beginTime, stats2.beginTime);
         assertEquals(stats1.endTime, stats2.endTime);
         assertEquals(stats1.interactiveTracker.count, stats2.interactiveTracker.count);
@@ -286,9 +293,19 @@ public class UsageStatsDatabaseTest {
         }
         assertEquals(stats1.activeConfiguration, stats2.activeConfiguration);
 
-        assertEquals(stats1.events.size(), stats2.events.size());
-        for (int i = 0; i < stats1.events.size(); i++) {
-            compareUsageEvent(stats1.events.get(i), stats2.events.get(i), i);
+        if (stats1.events == null) {
+            // If stats1 events are null, stats2 should be null or empty
+            if (stats2.events != null) {
+                assertEquals(stats2.events.size(), 0);
+            }
+        } else if (stats2.events == null) {
+            // If stats2 events are null, stats1 should be null or empty
+            assertEquals(stats1.events.size(), 0);
+        } else {
+            assertEquals(stats1.events.size(), stats2.events.size());
+            for (int i = 0; i < stats1.events.size(); i++) {
+                compareUsageEvent(stats1.events.get(i), stats2.events.get(i), i);
+            }
         }
     }
 
@@ -340,6 +357,47 @@ public class UsageStatsDatabaseTest {
     }
 
     /**
+     * Runs the Backup and Restore tests.
+     * Will write the generated IntervalStat to a database and create a backup in the specified
+     * version's format. The database will then be restored from the blob and the restored
+     * interval stats will be compared to the generated stats.
+     */
+    void runBackupRestoreTest(int version) throws IOException {
+        UsageStatsDatabase prevDB = new UsageStatsDatabase(mTestDir);
+        prevDB.init(1);
+        prevDB.putUsageStats(UsageStatsManager.INTERVAL_DAILY, mIntervalStats);
+        // Create a backup with a specific version
+        byte[] blob = prevDB.getBackupPayload(KEY_USAGE_STATS, version);
+
+        clearUsageStatsFiles();
+
+        UsageStatsDatabase newDB = new UsageStatsDatabase(mTestDir);
+        newDB.init(1);
+        // Attempt to restore the usage stats from the backup
+        newDB.applyRestoredPayload(KEY_USAGE_STATS, blob);
+        List<IntervalStats> stats = newDB.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, 0, mEndTime,
+                mIntervalStatsVerifier);
+
+
+        if (version > newDB.BACKUP_VERSION || version < 1) {
+            if (stats != null && stats.size() != 0) {
+                fail("UsageStatsDatabase should ne be able to restore from unknown data versions");
+            }
+            return;
+        }
+
+        assertEquals(1, stats.size());
+
+        // Clear non backed up data from expected IntervalStats
+        mIntervalStats.activeConfiguration = null;
+        mIntervalStats.configurations.clear();
+        if (mIntervalStats.events != null) mIntervalStats.events.clear();
+
+        // The written and read IntervalStats should match
+        compareIntervalStats(mIntervalStats, stats.get(0));
+    }
+
+    /**
      * Test the version upgrade from 3 to 4
      */
     @Test
@@ -348,5 +406,19 @@ public class UsageStatsDatabaseTest {
         runVersionChangeTest(3, 4, UsageStatsManager.INTERVAL_WEEKLY);
         runVersionChangeTest(3, 4, UsageStatsManager.INTERVAL_MONTHLY);
         runVersionChangeTest(3, 4, UsageStatsManager.INTERVAL_YEARLY);
+    }
+
+
+    /**
+     * Test the version upgrade from 3 to 4
+     */
+    @Test
+    public void testBackupRestore() throws IOException {
+        runBackupRestoreTest(1);
+        runBackupRestoreTest(4);
+
+        // test invalid backup versions as well
+        runBackupRestoreTest(0);
+        runBackupRestoreTest(99999);
     }
 }

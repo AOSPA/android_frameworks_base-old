@@ -71,6 +71,9 @@ const int FIELD_ID_STRINGS = 9;
 
 #define STATS_DATA_DIR "/data/misc/stats-data"
 
+// Cool down period for writing data to disk to avoid overwriting files.
+#define WRITE_DATA_COOL_DOWN_SEC 5
+
 StatsLogProcessor::StatsLogProcessor(const sp<UidMap>& uidMap,
                                      const sp<StatsPullerManager>& pullerManager,
                                      const sp<AlarmMonitor>& anomalyAlarmMonitor,
@@ -272,26 +275,25 @@ void StatsLogProcessor::dumpStates(int out, bool verbose) {
 }
 
 /*
- * onDumpReport dumps serialized ConfigMetricsReportList into outData.
+ * onDumpReport dumps serialized ConfigMetricsReportList into proto.
  */
 void StatsLogProcessor::onDumpReport(const ConfigKey& key, const int64_t dumpTimeStampNs,
                                      const bool include_current_partial_bucket,
+                                     const bool erase_data,
                                      const DumpReportReason dumpReportReason,
-                                     vector<uint8_t>* outData) {
+                                     ProtoOutputStream* proto) {
     std::lock_guard<std::mutex> lock(mMetricsMutex);
 
-    ProtoOutputStream proto;
-
     // Start of ConfigKey.
-    uint64_t configKeyToken = proto.start(FIELD_TYPE_MESSAGE | FIELD_ID_CONFIG_KEY);
-    proto.write(FIELD_TYPE_INT32 | FIELD_ID_UID, key.GetUid());
-    proto.write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)key.GetId());
-    proto.end(configKeyToken);
+    uint64_t configKeyToken = proto->start(FIELD_TYPE_MESSAGE | FIELD_ID_CONFIG_KEY);
+    proto->write(FIELD_TYPE_INT32 | FIELD_ID_UID, key.GetUid());
+    proto->write(FIELD_TYPE_INT64 | FIELD_ID_ID, (long long)key.GetId());
+    proto->end(configKeyToken);
     // End of ConfigKey.
 
     // Then, check stats-data directory to see there's any file containing
     // ConfigMetricsReport from previous shutdowns to concatenate to reports.
-    StorageManager::appendConfigMetricsReport(key, &proto);
+    StorageManager::appendConfigMetricsReport(key, proto);
 
     auto it = mMetricsManagers.find(key);
     if (it != mMetricsManagers.end()) {
@@ -301,14 +303,27 @@ void StatsLogProcessor::onDumpReport(const ConfigKey& key, const int64_t dumpTim
 
         // Start of ConfigMetricsReport (reports).
         uint64_t reportsToken =
-                proto.start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_REPORTS);
+                proto->start(FIELD_TYPE_MESSAGE | FIELD_COUNT_REPEATED | FIELD_ID_REPORTS);
         onConfigMetricsReportLocked(key, dumpTimeStampNs, include_current_partial_bucket,
-                                    dumpReportReason, &proto);
-        proto.end(reportsToken);
+                                    erase_data, dumpReportReason, proto);
+        proto->end(reportsToken);
         // End of ConfigMetricsReport (reports).
     } else {
         ALOGW("Config source %s does not exist", key.ToString().c_str());
     }
+}
+
+/*
+ * onDumpReport dumps serialized ConfigMetricsReportList into outData.
+ */
+void StatsLogProcessor::onDumpReport(const ConfigKey& key, const int64_t dumpTimeStampNs,
+                                     const bool include_current_partial_bucket,
+                                     const bool erase_data,
+                                     const DumpReportReason dumpReportReason,
+                                     vector<uint8_t>* outData) {
+    ProtoOutputStream proto;
+    onDumpReport(key, dumpTimeStampNs, include_current_partial_bucket, erase_data,
+                 dumpReportReason, &proto);
 
     if (outData != nullptr) {
         outData->clear();
@@ -332,6 +347,7 @@ void StatsLogProcessor::onDumpReport(const ConfigKey& key, const int64_t dumpTim
 void StatsLogProcessor::onConfigMetricsReportLocked(const ConfigKey& key,
                                                     const int64_t dumpTimeStampNs,
                                                     const bool include_current_partial_bucket,
+                                                    const bool erase_data,
                                                     const DumpReportReason dumpReportReason,
                                                     ProtoOutputStream* proto) {
     // We already checked whether key exists in mMetricsManagers in
@@ -348,17 +364,15 @@ void StatsLogProcessor::onConfigMetricsReportLocked(const ConfigKey& key,
     // First, fill in ConfigMetricsReport using current data on memory, which
     // starts from filling in StatsLogReport's.
     it->second->onDumpReport(dumpTimeStampNs, include_current_partial_bucket,
-                             &str_set, proto);
+                             erase_data, &str_set, proto);
 
     // Fill in UidMap if there is at least one metric to report.
     // This skips the uid map if it's an empty config.
     if (it->second->getNumMetrics() > 0) {
         uint64_t uidMapToken = proto->start(FIELD_TYPE_MESSAGE | FIELD_ID_UID_MAP);
-        if (it->second->hashStringInReport()) {
-            mUidMap->appendUidMap(dumpTimeStampNs, key, &str_set, proto);
-        } else {
-            mUidMap->appendUidMap(dumpTimeStampNs, key, nullptr, proto);
-        }
+        mUidMap->appendUidMap(
+                dumpTimeStampNs, key, it->second->hashStringInReport() ? &str_set : nullptr,
+                it->second->versionStringsInReport(), it->second->installerInReport(), proto);
         proto->end(uidMapToken);
     }
 
@@ -442,7 +456,7 @@ void StatsLogProcessor::flushIfNecessaryLocked(
     if (totalBytes >
         StatsdStats::kMaxMetricsBytesPerConfig) {  // Too late. We need to start clearing data.
         metricsManager.dropData(timestampNs);
-        StatsdStats::getInstance().noteDataDropped(key);
+        StatsdStats::getInstance().noteDataDropped(key, totalBytes);
         VLOG("StatsD had to toss out metrics for %s", key.ToString().c_str());
     } else if ((totalBytes > StatsdStats::kBytesPerConfigTriggerGetData) ||
                (mOnDiskDataConfigs.find(key) != mOnDiskDataConfigs.end())) {
@@ -479,7 +493,7 @@ void StatsLogProcessor::WriteDataToDiskLocked(const ConfigKey& key,
     }
     ProtoOutputStream proto;
     onConfigMetricsReportLocked(key, timestampNs, true /* include_current_partial_bucket*/,
-                                dumpReportReason, &proto);
+                                true /* erase_data */, dumpReportReason, &proto);
     string file_name = StringPrintf("%s/%ld_%d_%lld", STATS_DATA_DIR,
          (long)getWallClockSec(), key.GetUid(), (long long)key.GetId());
     android::base::unique_fd fd(open(file_name.c_str(),
@@ -495,6 +509,16 @@ void StatsLogProcessor::WriteDataToDiskLocked(const ConfigKey& key,
 
 void StatsLogProcessor::WriteDataToDiskLocked(const DumpReportReason dumpReportReason) {
     const int64_t timeNs = getElapsedRealtimeNs();
+    // Do not write to disk if we already have in the last few seconds.
+    // This is to avoid overwriting files that would have the same name if we
+    //   write twice in the same second.
+    if (static_cast<unsigned long long> (timeNs) <
+            mLastWriteTimeNs + WRITE_DATA_COOL_DOWN_SEC * NS_PER_SEC) {
+        ALOGI("Statsd skipping writing data to disk. Already wrote data in last %d seconds",
+                WRITE_DATA_COOL_DOWN_SEC);
+        return;
+    }
+    mLastWriteTimeNs = timeNs;
     for (auto& pair : mMetricsManagers) {
         WriteDataToDiskLocked(pair.first, timeNs, dumpReportReason);
     }

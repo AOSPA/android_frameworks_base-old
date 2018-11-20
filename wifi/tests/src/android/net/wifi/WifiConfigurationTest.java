@@ -23,12 +23,16 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.net.MacAddress;
+import android.net.wifi.WifiConfiguration.KeyMgmt;
 import android.net.wifi.WifiConfiguration.NetworkSelectionStatus;
 import android.os.Parcel;
 import android.support.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 
 /**
  * Unit tests for {@link android.net.wifi.WifiConfiguration}.
@@ -53,6 +57,7 @@ public class WifiConfigurationTest {
         String cookie = "C O.o |<IE";
         WifiConfiguration config = new WifiConfiguration();
         config.setPasspointManagementObjectTree(cookie);
+        config.trusted = false;
         MacAddress macBeforeParcel = config.getOrCreateRandomizedMacAddress();
         Parcel parcelW = Parcel.obtain();
         config.writeToParcel(parcelW, 0);
@@ -67,6 +72,7 @@ public class WifiConfigurationTest {
         // lacking a useful config.equals, check two fields near the end.
         assertEquals(cookie, reconfig.getMoTree());
         assertEquals(macBeforeParcel, reconfig.getOrCreateRandomizedMacAddress());
+        assertFalse(reconfig.trusted);
 
         Parcel parcelWW = Parcel.obtain();
         reconfig.writeToParcel(parcelWW, 0);
@@ -155,7 +161,10 @@ public class WifiConfigurationTest {
     @Test
     public void testIsOpenNetwork_NotOpen_HasAuthType() {
         for (int keyMgmt = 0; keyMgmt < WifiConfiguration.KeyMgmt.strings.length; keyMgmt++) {
-            if (keyMgmt == WifiConfiguration.KeyMgmt.NONE) continue;
+            if (keyMgmt == WifiConfiguration.KeyMgmt.NONE
+                    || keyMgmt == WifiConfiguration.KeyMgmt.OWE) {
+                continue;
+            }
             WifiConfiguration config = new WifiConfiguration();
             config.allowedKeyManagement.clear();
             config.allowedKeyManagement.set(keyMgmt);
@@ -238,5 +247,31 @@ public class WifiConfigurationTest {
         MacAddress defaultMac = MacAddress.fromString(WifiInfo.DEFAULT_MAC_ADDRESS);
         config.setRandomizedMacAddress(null);
         assertEquals(defaultMac, config.getRandomizedMacAddress());
+    }
+
+    /**
+     * Verifies that the serialization/de-serialization for softap config works.
+     */
+    @Test
+    public void testSoftApConfigBackupAndRestore() throws Exception {
+        WifiConfiguration config = new WifiConfiguration();
+        config.SSID = "TestAP";
+        config.apBand = WifiConfiguration.AP_BAND_5GHZ;
+        config.apChannel = 40;
+        config.allowedKeyManagement.set(KeyMgmt.WPA2_PSK);
+        config.preSharedKey = "TestPsk";
+        config.hiddenSSID = true;
+
+        byte[] data = config.getBytesForBackup();
+        ByteArrayInputStream bais = new ByteArrayInputStream(data);
+        DataInputStream in = new DataInputStream(bais);
+        WifiConfiguration restoredConfig = WifiConfiguration.getWifiConfigFromBackup(in);
+
+        assertEquals(config.SSID, restoredConfig.SSID);
+        assertEquals(config.preSharedKey, restoredConfig.preSharedKey);
+        assertEquals(config.getAuthType(), restoredConfig.getAuthType());
+        assertEquals(config.apBand, restoredConfig.apBand);
+        assertEquals(config.apChannel, restoredConfig.apChannel);
+        assertEquals(config.hiddenSSID, restoredConfig.hiddenSSID);
     }
 }

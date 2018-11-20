@@ -20,6 +20,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN_OR_SPLIT
 import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.app.RemoteInput;
@@ -34,6 +35,7 @@ import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import android.util.Log;
+import android.util.Pair;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -49,6 +51,7 @@ import com.android.systemui.Dumpable;
 import com.android.systemui.statusbar.notification.NotificationData;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
+import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.policy.RemoteInputView;
 
 import java.io.FileDescriptor;
@@ -97,13 +100,18 @@ public class NotificationRemoteInputManager implements Dumpable {
             Dependency.get(NotificationLockscreenUserManager.class);
     protected final SmartReplyController mSmartReplyController =
             Dependency.get(SmartReplyController.class);
+    private final NotificationEntryManager mEntryManager
+            = Dependency.get(NotificationEntryManager.class);
+
+    // Lazy
+    private ShadeController mShadeController;
 
     protected final Context mContext;
     private final UserManager mUserManager;
+    private final KeyguardManager mKeyguardManager;
 
     protected RemoteInputController mRemoteInputController;
     protected NotificationPresenter mPresenter;
-    protected NotificationEntryManager mEntryManager;
     protected NotificationLifetimeExtender.NotificationSafeToRemoveCallback
             mNotificationLifetimeFinishedCallback;
     protected IStatusBarService mBarService;
@@ -114,8 +122,8 @@ public class NotificationRemoteInputManager implements Dumpable {
 
         @Override
         public boolean onClickHandler(
-                final View view, final PendingIntent pendingIntent, final Intent fillInIntent) {
-            mPresenter.wakeUpIfDozing(SystemClock.uptimeMillis(), view);
+                View view, PendingIntent pendingIntent, RemoteViews.RemoteResponse response) {
+            getShadeController().wakeUpIfDozing(SystemClock.uptimeMillis(), view);
 
             if (handleRemoteInput(view, pendingIntent)) {
                 return true;
@@ -133,8 +141,12 @@ public class NotificationRemoteInputManager implements Dumpable {
                 ActivityManager.getService().resumeAppSwitches();
             } catch (RemoteException e) {
             }
-            return mCallback.handleRemoteViewClick(view, pendingIntent, fillInIntent,
-                    () -> super.onClickHandler(view, pendingIntent, fillInIntent));
+            return mCallback.handleRemoteViewClick(pendingIntent, () -> {
+                Pair<Intent, ActivityOptions> options = response.getLaunchOptions(view);
+                options.second.setLaunchWindowingMode(
+                        WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY);
+                return RemoteViews.startPendingIntent(view, pendingIntent, options);
+            });
         }
 
         private void logActionClick(View view) {
@@ -170,13 +182,6 @@ public class NotificationRemoteInputManager implements Dumpable {
                 parent = parent.getParent();
             }
             return null;
-        }
-
-        @Override
-        protected ActivityOptions getActivityOptions(Context context) {
-            ActivityOptions options = super.getActivityOptions(context);
-            options.setLaunchWindowingMode(WINDOWING_MODE_FULLSCREEN_OR_SPLIT_SCREEN_SECONDARY);
-            return options;
         }
 
         private boolean handleRemoteInput(View view, PendingIntent pendingIntent) {
@@ -240,7 +245,7 @@ public class NotificationRemoteInputManager implements Dumpable {
                     return true;
                 }
                 if (mUserManager.getUserInfo(userId).isManagedProfile()
-                        && mPresenter.isDeviceLocked(userId)) {
+                        && mKeyguardManager.isDeviceLocked(userId)) {
                     mCallback.onLockedWorkRemoteInput(userId, row, view);
                     return true;
                 }
@@ -291,20 +296,26 @@ public class NotificationRemoteInputManager implements Dumpable {
         }
     };
 
+    private ShadeController getShadeController() {
+        if (mShadeController == null) {
+            mShadeController = Dependency.get(ShadeController.class);
+        }
+        return mShadeController;
+    }
+
     public NotificationRemoteInputManager(Context context) {
         mContext = context;
         mBarService = IStatusBarService.Stub.asInterface(
                 ServiceManager.getService(Context.STATUS_BAR_SERVICE));
         mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         addLifetimeExtenders();
+        mKeyguardManager = context.getSystemService(KeyguardManager.class);
     }
 
     public void setUpWithPresenter(NotificationPresenter presenter,
-            NotificationEntryManager entryManager,
             Callback callback,
             RemoteInputController.Delegate delegate) {
         mPresenter = presenter;
-        mEntryManager = entryManager;
         mCallback = callback;
         mRemoteInputController = new RemoteInputController(delegate);
         mRemoteInputController.addCallback(new RemoteInputController.Callback() {
@@ -318,7 +329,7 @@ public class NotificationRemoteInputManager implements Dumpable {
                     // view it is already canceled, so we'll need to cancel it on the apps behalf
                     // after sending - unless the app posts an update in the mean time, so wait a
                     // bit.
-                    mPresenter.getHandler().postDelayed(() -> {
+                    Dependency.get(Dependency.MAIN_HANDLER).postDelayed(() -> {
                         if (mEntriesKeptForRemoteInputActive.remove(entry)) {
                             mNotificationLifetimeFinishedCallback.onSafeToRemove(entry.key);
                         }
@@ -647,14 +658,11 @@ public class NotificationRemoteInputManager implements Dumpable {
          * Performs any special handling for a remote view click. The default behaviour can be
          * called through the defaultHandler parameter.
          *
-         * @param view
          * @param pendingIntent
-         * @param fillInIntent
          * @param defaultHandler
          * @return  true iff the click was handled
          */
-        boolean handleRemoteViewClick(View view, PendingIntent pendingIntent, Intent fillInIntent,
-                ClickHandler defaultHandler);
+        boolean handleRemoteViewClick(PendingIntent pendingIntent, ClickHandler defaultHandler);
     }
 
     /**

@@ -43,6 +43,7 @@ import android.util.Slog;
 import android.util.SparseBooleanArray;
 import android.util.SparseIntArray;
 import android.util.proto.ProtoOutputStream;
+import android.view.InputWindowHandle;
 import android.view.IRecentsAnimationController;
 import android.view.IRecentsAnimationRunner;
 import android.view.RemoteAnimationTarget;
@@ -50,7 +51,6 @@ import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.LocalServices;
-import com.android.server.input.InputWindowHandle;
 import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 import com.android.server.wm.utils.InsetUtils;
@@ -467,7 +467,8 @@ public class RecentsAnimationController implements DeathRecipient {
         // so if we are actually transitioning there, notify again here
         if (mTargetAppToken != null) {
             if (reorderMode == REORDER_MOVE_TO_TOP || reorderMode == REORDER_KEEP_IN_PLACE) {
-                mService.mAppTransition.notifyAppTransitionFinishedLocked(mTargetAppToken.token);
+                mService.mRoot.getDisplayContent(mDisplayId)
+                        .mAppTransition.notifyAppTransitionFinishedLocked(mTargetAppToken.token);
             }
         }
     }

@@ -788,6 +788,20 @@ android_hardware_SoundTrigger_stopRecognition(JNIEnv *env, jobject thiz,
     return status;
 }
 
+static jint
+android_hardware_SoundTrigger_getModelState(JNIEnv *env, jobject thiz,
+                                            jint jHandle)
+{
+    jint status = SOUNDTRIGGER_STATUS_OK;
+    ALOGV("getModelState");
+    sp<SoundTrigger> module = getSoundTrigger(env, thiz);
+    if (module == NULL) {
+        return SOUNDTRIGGER_STATUS_ERROR;
+    }
+    status = module->getModelState(jHandle);
+    return status;
+}
+
 static const JNINativeMethod gMethods[] = {
     {"listModules",
         "(Ljava/util/ArrayList;)I",
@@ -817,6 +831,9 @@ static const JNINativeMethod gModuleMethods[] = {
     {"stopRecognition",
         "(I)I",
         (void *)android_hardware_SoundTrigger_stopRecognition},
+    {"getModelState",
+        "(I)I",
+        (void *)android_hardware_SoundTrigger_getModelState},
 };
 
 int register_android_hardware_SoundTrigger(JNIEnv *env)

@@ -22,7 +22,7 @@
 #include "SkiaProfileRenderer.h"
 #include "renderstate/RenderState.h"
 #include "renderthread/Frame.h"
-#include "VkFunctorDrawable.h"
+#include "VkInteropFunctorDrawable.h"
 
 #include <SkSurface.h>
 #include <SkTypes.h>
@@ -51,7 +51,7 @@ Frame SkiaVulkanPipeline::getFrame() {
     LOG_ALWAYS_FATAL_IF(mVkSurface == nullptr,
                         "drawRenderNode called on a context with no surface!");
 
-    SkSurface* backBuffer = mVkManager.getBackbufferSurface(mVkSurface);
+    SkSurface* backBuffer = mVkManager.getBackbufferSurface(&mVkSurface);
     if (backBuffer == nullptr) {
         SkDebugf("failed to get backbuffer");
         return Frame(-1, -1, 0);
@@ -144,7 +144,7 @@ bool SkiaVulkanPipeline::isContextReady() {
 }
 
 void SkiaVulkanPipeline::invokeFunctor(const RenderThread& thread, Functor* functor) {
-    VkFunctorDrawable::vkInvokeFunctor(functor);
+    VkInteropFunctorDrawable::vkInvokeFunctor(functor);
 }
 
 sk_sp<Bitmap> SkiaVulkanPipeline::allocateHardwareBitmap(renderthread::RenderThread& renderThread,

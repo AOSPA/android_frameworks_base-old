@@ -819,6 +819,15 @@ public final class Settings {
             "android.settings.action.MANAGE_WRITE_SETTINGS";
 
     /**
+     * Activity Action: Show screen for controlling app usage properties for an app.
+     * Input: Intent's extra EXTRA_PACKAGE_NAME must specify the application package name.
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_APP_USAGE_SETTINGS =
+            "android.settings.action.APP_USAGE_SETTINGS";
+
+    /**
      * Activity Action: Show screen of details about a particular application.
      * <p>
      * In some cases, a matching Activity may not exist, so ensure you
@@ -1591,8 +1600,11 @@ public final class Settings {
      * Applications typically use this action to ask the user to revert the "Do not ask again"
      * status of directory access requests made by
      * {@link android.os.storage.StorageVolume#createAccessIntent(String)}.
+     * @deprecated use {@link #ACTION_APPLICATION_DETAILS_SETTINGS} to manage storage permissions
+     *             for a specific application
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @Deprecated
     public static final String ACTION_STORAGE_VOLUME_ACCESS_SETTINGS =
             "android.settings.STORAGE_VOLUME_ACCESS_SETTINGS";
 
@@ -1812,41 +1824,6 @@ public final class Settings {
             RESET_MODE_TRUSTED_DEFAULTS
     })
     public @interface ResetMode{}
-
-
-    /**
-     * User has not started setup personalization.
-     * @hide
-     */
-    public static final int USER_SETUP_PERSONALIZATION_NOT_STARTED = 0;
-
-    /**
-     * User has not yet completed setup personalization.
-     * @hide
-     */
-    public static final int USER_SETUP_PERSONALIZATION_STARTED = 1;
-
-    /**
-     * User has snoozed personalization and will complete it later.
-     * @hide
-     */
-    public static final int USER_SETUP_PERSONALIZATION_PAUSED = 2;
-
-    /**
-     * User has completed setup personalization.
-     * @hide
-     */
-    public static final int USER_SETUP_PERSONALIZATION_COMPLETE = 10;
-
-    /** @hide */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef({
-            USER_SETUP_PERSONALIZATION_NOT_STARTED,
-            USER_SETUP_PERSONALIZATION_STARTED,
-            USER_SETUP_PERSONALIZATION_PAUSED,
-            USER_SETUP_PERSONALIZATION_COMPLETE
-    })
-    public @interface UserSetupPersonalization {}
 
     /**
      * Activity Extra: Number of certificates
@@ -4875,6 +4852,7 @@ public final class Settings {
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_NETWORK_SHOW_RSSI);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_WATCHDOG_ON);
             MOVED_TO_GLOBAL.add(Settings.Global.WIFI_WATCHDOG_POOR_NETWORK_TEST_ENABLED);
+            MOVED_TO_GLOBAL.add(Settings.Global.WIFI_P2P_PENDING_FACTORY_RESET);
             MOVED_TO_GLOBAL.add(Settings.Global.WIMAX_NETWORKS_AVAILABLE_NOTIFICATION_ON);
             MOVED_TO_GLOBAL.add(Settings.Global.PACKAGE_VERIFIER_ENABLE);
             MOVED_TO_GLOBAL.add(Settings.Global.PACKAGE_VERIFIER_TIMEOUT);
@@ -5618,18 +5596,69 @@ public final class Settings {
         public static final String DEVICE_PROVISIONED = Global.DEVICE_PROVISIONED;
 
         /**
-         * Whether the current user has been set up via setup wizard (0 = false, 1 = true)
+         * Indicates whether the current user has completed setup via the setup wizard.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
          * @hide
          */
+        @SystemApi
         @TestApi
         public static final String USER_SETUP_COMPLETE = "user_setup_complete";
 
         /**
-         * The current state of device personalization.
+         * Indicates that the user has not started setup personalization.
+         * One of the possible states for {@link #USER_SETUP_PERSONALIZATION_STATE}.
          *
          * @hide
-         * @see UserSetupPersonalization
          */
+        @SystemApi
+        public static final int USER_SETUP_PERSONALIZATION_NOT_STARTED = 0;
+
+        /**
+         * Indicates that the user has not yet completed setup personalization.
+         * One of the possible states for {@link #USER_SETUP_PERSONALIZATION_STATE}.
+         *
+         * @hide
+         */
+        @SystemApi
+        public static final int USER_SETUP_PERSONALIZATION_STARTED = 1;
+
+        /**
+         * Indicates that the user has snoozed personalization and will complete it later.
+         * One of the possible states for {@link #USER_SETUP_PERSONALIZATION_STATE}.
+         *
+         * @hide
+         */
+        @SystemApi
+        public static final int USER_SETUP_PERSONALIZATION_PAUSED = 2;
+
+        /**
+         * Indicates that the user has completed setup personalization.
+         * One of the possible states for {@link #USER_SETUP_PERSONALIZATION_STATE}.
+         *
+         * @hide
+         */
+        @SystemApi
+        public static final int USER_SETUP_PERSONALIZATION_COMPLETE = 10;
+
+        /** @hide */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef({
+                USER_SETUP_PERSONALIZATION_NOT_STARTED,
+                USER_SETUP_PERSONALIZATION_STARTED,
+                USER_SETUP_PERSONALIZATION_PAUSED,
+                USER_SETUP_PERSONALIZATION_COMPLETE
+        })
+        public @interface UserSetupPersonalization {}
+
+        /**
+         * Defines the user's current state of device personalization.
+         * The possible states are defined in {@link UserSetupPersonalization}.
+         *
+         * @hide
+         */
+        @SystemApi
         public static final String USER_SETUP_PERSONALIZATION_STATE =
                 "user_setup_personalization_state";
 
@@ -5643,10 +5672,14 @@ public final class Settings {
         public static final String TV_USER_SETUP_COMPLETE = "tv_user_setup_complete";
 
         /**
-         * Prefix for category name that marks whether a suggested action from that category was
-         * completed.
+         * The prefix for a category name that indicates whether a suggested action from that
+         * category was marked as completed.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
          * @hide
          */
+        @SystemApi
         public static final String COMPLETED_CATEGORY_PREFIX = "suggested.completed_category.";
 
         /**
@@ -5928,11 +5961,14 @@ public final class Settings {
             "lock_screen_owner_info_enabled";
 
         /**
-         * When set by a user, allows notifications to be shown atop a securely locked screen
-         * in their full "private" form (same as when the device is unlocked).
+         * Indicates whether the user has allowed notifications to be shown atop a securely locked
+         * screen in their full "private" form (same as when the device is unlocked).
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
          * @hide
          */
-        @UnsupportedAppUsage
+        @SystemApi
         public static final String LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS =
                 "lock_screen_allow_private_notifications";
 
@@ -6052,6 +6088,7 @@ public final class Settings {
          * shortcut. Must be its flattened {@link ComponentName}.
          * @hide
          */
+        @TestApi
         public static final String ACCESSIBILITY_SHORTCUT_TARGET_SERVICE =
                 "accessibility_shortcut_target_service";
 
@@ -6544,23 +6581,22 @@ public final class Settings {
         public static final String MULTI_PRESS_TIMEOUT = "multi_press_timeout";
 
         /**
-         * Whether the user specifies a minimum ui timeout to override minimum ui timeout of
-         * accessibility service
+         * Setting that specifies recommended timeout in milliseconds for controls
+         * which don't need user's interactions.
          *
-         * Type: int (0 for false, 1 for true)
          * @hide
          */
-        public static final String ACCESSIBILITY_MINIMUM_UI_TIMEOUT_ENABLED =
-                "accessibility_minimum_ui_timeout_enabled";
+        public static final String ACCESSIBILITY_NON_INTERACTIVE_UI_TIMEOUT_MS =
+                "accessibility_non_interactive_ui_timeout_ms";
 
         /**
-         * Setting that specifies ui minimum timeout in milliseconds.
+         * Setting that specifies recommended timeout in milliseconds for controls
+         * which need user's interactions.
          *
-         * @see #ACCESSIBILITY_MINIMUM_UI_TIMEOUT_ENABLED
          * @hide
          */
-        public static final String ACCESSIBILITY_MINIMUM_UI_TIMEOUT_MS =
-                "accessibility_minimum_ui_timeout_ms";
+        public static final String ACCESSIBILITY_INTERACTIVE_UI_TIMEOUT_MS =
+                "accessibility_interactive_ui_timeout_ms";
 
         /**
          * List of the enabled print services.
@@ -6957,10 +6993,12 @@ public final class Settings {
         public static final String BACKUP_TRANSPORT = "backup_transport";
 
         /**
-         * Version for which the setup wizard was last shown.  Bumped for
-         * each release when there is new setup information to show.
+         * Indicates the version for which the setup wizard was last shown. The version gets
+         * bumped for each release when there is new setup information to show.
+         *
          * @hide
          */
+        @SystemApi
         public static final String LAST_SETUP_SHOWN = "last_setup_shown";
 
         /**
@@ -7273,9 +7311,13 @@ public final class Settings {
         private static final Validator DOZE_ENABLED_VALIDATOR = BOOLEAN_VALIDATOR;
 
         /**
-         * Whether doze should be always on.
+         * Indicates whether doze should be always on.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
          * @hide
          */
+        @SystemApi
         public static final String DOZE_ALWAYS_ON = "doze_always_on";
 
         private static final Validator DOZE_ALWAYS_ON_VALIDATOR = BOOLEAN_VALIDATOR;
@@ -7401,8 +7443,16 @@ public final class Settings {
         public static final String DIALER_DEFAULT_APPLICATION = "dialer_default_application";
 
         /**
-         * Specifies the package name currently configured to be the default application to perform
-         * the user-defined call redirection service with Telecom.
+         * Specifies the component name currently configured to be the default call screening
+         * application
+         * @hide
+         */
+        public static final String CALL_SCREENING_DEFAULT_COMPONENT =
+                "call_screening_default_component";
+
+        /**
+         * Specifies the component name currently configured to be the default application to
+         * perform the user-defined call redirection service with Telecom.
          * @hide
          */
         @UnsupportedAppUsage
@@ -7585,10 +7635,13 @@ public final class Settings {
         public static final String UNSAFE_VOLUME_MUSIC_ACTIVE_MS = "unsafe_volume_music_active_ms";
 
         /**
-         * This preference enables notification display on the lockscreen.
+         * Indicates whether notification display on the lock screen is enabled.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
          * @hide
          */
-        @UnsupportedAppUsage
+        @SystemApi
         public static final String LOCK_SCREEN_SHOW_NOTIFICATIONS =
                 "lock_screen_show_notifications";
 
@@ -7782,10 +7835,13 @@ public final class Settings {
                 BOOLEAN_VALIDATOR;
 
         /**
-         * Whether Assist Gesture Deferred Setup has been completed
+         * Indicates whether the Assist Gesture Deferred Setup has been completed.
+         * <p>
+         * Type: int (0 for false, 1 for true)
          *
          * @hide
          */
+        @SystemApi
         public static final String ASSIST_GESTURE_SETUP_COMPLETE = "assist_gesture_setup_complete";
 
         /**
@@ -8158,6 +8214,12 @@ public final class Settings {
                 "packages_to_clear_data_before_full_restore";
 
         /**
+         * Setting to determine whether to use the new notification priority handling features.
+         * @hide
+         */
+        public static final String NOTIFICATION_NEW_INTERRUPTION_MODEL = "new_interruption_model";
+
+        /**
          * This are the settings to be backed up.
          *
          * NOTE: Settings are backed up and restored in the order they appear
@@ -8269,9 +8331,10 @@ public final class Settings {
             ZEN_SETTINGS_SUGGESTION_VIEWED,
             CHARGING_SOUNDS_ENABLED,
             CHARGING_VIBRATION_ENABLED,
-            ACCESSIBILITY_MINIMUM_UI_TIMEOUT_ENABLED,
-            ACCESSIBILITY_MINIMUM_UI_TIMEOUT_MS,
             WIFI_DISCONNECT_DELAY_DURATION,
+            ACCESSIBILITY_NON_INTERACTIVE_UI_TIMEOUT_MS,
+            ACCESSIBILITY_INTERACTIVE_UI_TIMEOUT_MS,
+            NOTIFICATION_NEW_INTERRUPTION_MODEL,
         };
 
         /**
@@ -8427,9 +8490,13 @@ public final class Settings {
             VALIDATORS.put(ZEN_SETTINGS_SUGGESTION_VIEWED, BOOLEAN_VALIDATOR);
             VALIDATORS.put(CHARGING_SOUNDS_ENABLED, BOOLEAN_VALIDATOR);
             VALIDATORS.put(CHARGING_VIBRATION_ENABLED, BOOLEAN_VALIDATOR);
-            VALIDATORS.put(ACCESSIBILITY_MINIMUM_UI_TIMEOUT_ENABLED, BOOLEAN_VALIDATOR);
-            VALIDATORS.put(ACCESSIBILITY_MINIMUM_UI_TIMEOUT_MS, NON_NEGATIVE_INTEGER_VALIDATOR);
             VALIDATORS.put(WIFI_DISCONNECT_DELAY_DURATION, WIFI_DISCONNECT_DELAY_DURATION_VALIDATOR);
+            VALIDATORS.put(ACCESSIBILITY_NON_INTERACTIVE_UI_TIMEOUT_MS,
+                    NON_NEGATIVE_INTEGER_VALIDATOR);
+            VALIDATORS.put(ACCESSIBILITY_INTERACTIVE_UI_TIMEOUT_MS, NON_NEGATIVE_INTEGER_VALIDATOR);
+            VALIDATORS.put(USER_SETUP_COMPLETE, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(ASSIST_GESTURE_SETUP_COMPLETE, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(NOTIFICATION_NEW_INTERRUPTION_MODEL, BOOLEAN_VALIDATOR);
         }
 
         /**
@@ -9122,6 +9189,13 @@ public final class Settings {
         public static final String DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT
                 = "enable_freeform_support";
 
+        /**
+         * Whether to enable experimental desktop mode on secondary displays.
+         * @hide
+         */
+        public static final String DEVELOPMENT_FORCE_DESKTOP_MODE_ON_EXTERNAL_DISPLAYS =
+                "force_desktop_mode_on_external_displays";
+
        /**
         * Whether user has enabled development settings.
         */
@@ -9135,16 +9209,19 @@ public final class Settings {
         */
        public static final String DEVICE_PROVISIONED = "device_provisioned";
 
-       /**
-        * Whether mobile data should be allowed while the device is being provisioned.
-        * This allows the provisioning process to turn off mobile data before the user
-        * has an opportunity to set things up, preventing other processes from burning
-        * precious bytes before wifi is setup.
-        * (0 = false, 1 = true)
-        * @hide
-        */
-       public static final String DEVICE_PROVISIONING_MOBILE_DATA_ENABLED =
-               "device_provisioning_mobile_data";
+        /**
+         * Indicates whether mobile data should be allowed while the device is being provisioned.
+         * This allows the provisioning process to turn off mobile data before the user
+         * has an opportunity to set things up, preventing other processes from burning
+         * precious bytes before wifi is setup.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        @SystemApi
+        public static final String DEVICE_PROVISIONING_MOBILE_DATA_ENABLED =
+                "device_provisioning_mobile_data";
 
        /**
         * The saved value for WindowManagerService.setForcedDisplaySize().
@@ -9943,6 +10020,15 @@ public final class Settings {
                 "wifi_rtt_background_exec_gap_ms";
 
         /**
+         * Indicate whether factory reset request is pending.
+         *
+         * Type: int (0 for false, 1 for true)
+         * @hide
+         */
+        public static final String WIFI_P2P_PENDING_FACTORY_RESET =
+                "wifi_p2p_pending_factory_reset";
+
+        /**
          * Whether soft AP will shut down after a timeout period when no devices are connected.
          *
          * Type: int (0 for false, 1 for true)
@@ -10251,6 +10337,30 @@ public final class Settings {
          */
         public static final String WIFI_LINK_SPEED_METRICS_ENABLED =
                 "wifi_link_speed_metrics_enabled";
+
+        /**
+         * Setting to enable the PNO frequency culling optimization.
+         * Disabled by default, and setting it to 1 will enable it.
+         * The value is boolean (0 or 1).
+         * @hide
+         */
+        public static final String WIFI_PNO_FREQUENCY_CULLING_ENABLED =
+                "wifi_pno_frequency_culling_enabled";
+
+        private static final Validator WIFI_PNO_FREQUENCY_CULLING_ENABLED_VALIDATOR =
+                BOOLEAN_VALIDATOR;
+
+        /**
+         * Setting to enable including recency information when determining pno network priorities.
+         * Disabled by default, and setting it to 1 will enable it.
+         * The value is boolean (0 or 1).
+         * @hide
+         */
+        public static final String WIFI_PNO_RECENCY_SORTING_ENABLED =
+                "wifi_pno_recency_sorting_enabled";
+
+        private static final Validator WIFI_PNO_RECENCY_SORTING_ENABLED_VALIDATOR =
+                BOOLEAN_VALIDATOR;
 
        /**
         * The maximum number of times we will retry a connection to an access
@@ -10933,6 +11043,7 @@ public final class Settings {
          * idle_pending_to                  (long)
          * max_idle_pending_to              (long)
          * idle_pending_factor              (float)
+         * quick_doze_delay_to              (long)
          * idle_to                          (long)
          * max_idle_to                      (long)
          * idle_factor                      (float)
@@ -10966,6 +11077,11 @@ public final class Settings {
          * gps_mode                          (int)
          * adjust_brightness_disabled        (boolean)
          * adjust_brightness_factor          (float)
+         * force_all_apps_standby            (boolean)
+         * force_background_check            (boolean)
+         * optional_sensors_disabled         (boolean)
+         * aod_disabled                      (boolean)
+         * quick_doze_enabled                (boolean)
          * </pre>
          * @hide
          * @see com.android.server.power.BatterySaverPolicy
@@ -11448,6 +11564,24 @@ public final class Settings {
         public static final String NETWORK_WATCHLIST_ENABLED = "network_watchlist_enabled";
 
         /**
+         * Whether or not show hidden launcher icon apps feature is enabled.
+         * Type: int (0 for false, 1 for true)
+         * Default: 0
+         * @hide
+         */
+        public static final String SHOW_HIDDEN_LAUNCHER_ICON_APPS_ENABLED =
+                "show_hidden_icon_apps_enabled";
+
+        /**
+         * Whether or not show new app installed notification is enabled.
+         * Type: int (0 for false, 1 for true)
+         * Default: 0
+         * @hide
+         */
+        public static final String SHOW_NEW_APP_INSTALLED_NOTIFICATION_ENABLED =
+                "show_new_app_installed_notification_enabled";
+
+        /**
          * Flag to keep background restricted profiles running after exiting. If disabled,
          * the restricted profile can be put into stopped state as soon as the user leaves it.
          * Type: int (0 for false, 1 for true)
@@ -11662,11 +11796,25 @@ public final class Settings {
         public static final String ANGLE_ENABLED_APP = "angle_enabled_app";
 
         /**
-         * Ordered GPU debug layer list
+         * App that is selected to use updated graphics driver.
+         * @hide
+         */
+        public static final String UPDATED_GFX_DRIVER_DEV_OPT_IN_APP =
+                "updated_gfx_driver_dev_opt_in_app";
+
+        /**
+         * Ordered GPU debug layer list for Vulkan
          * i.e. <layer1>:<layer2>:...:<layerN>
          * @hide
          */
         public static final String GPU_DEBUG_LAYERS = "gpu_debug_layers";
+
+        /**
+         * Ordered GPU debug layer list for GLES
+         * i.e. <layer1>:<layer2>:...:<layerN>
+         * @hide
+         */
+        public static final String GPU_DEBUG_LAYERS_GLES = "gpu_debug_layers_gles";
 
         /**
          * Addition app for GPU layer discovery
@@ -11700,14 +11848,54 @@ public final class Settings {
 
         /**
          * Battery level [1-100] at which low power mode automatically turns on.
-         * If 0, it will not automatically turn on.
+         * Pre-Q If 0, it will not automatically turn on. Q and newer it will only automatically
+         * turn on if the {@link #AUTOMATIC_POWER_SAVER_MODE} setting is also set to
+         * {@link android.os.PowerManager.AutoPowerSaverMode#POWER_SAVER_MODE_PERCENTAGE}.
+         *
+         * @see #AUTOMATIC_POWER_SAVER_MODE
+         * @see android.os.PowerManager#getPowerSaveMode()
          * @hide
          */
         public static final String LOW_POWER_MODE_TRIGGER_LEVEL = "low_power_trigger_level";
 
+
         private static final Validator LOW_POWER_MODE_TRIGGER_LEVEL_VALIDATOR =
                 new SettingsValidators.InclusiveIntegerRangeValidator(0, 100);
 
+        /**
+         * Whether battery saver is currently set to trigger based on percentage, dynamic power
+         * savings trigger, or none. See {@link android.os.PowerManager.AutoPowerSaverMode} for
+         * accepted values.
+         *
+         *  @hide
+         */
+        @TestApi
+        public static final String AUTOMATIC_POWER_SAVER_MODE = "automatic_power_saver_mode";
+
+        private static final Validator AUTOMATIC_POWER_SAVER_MODE_VALIDATOR =
+                new SettingsValidators.DiscreteValueValidator(new String[] {"0", "1"});
+
+        /**
+         * The setting that backs the disable threshold for the setPowerSavingsWarning api in
+         * PowerManager
+         *
+         * @see android.os.PowerManager#setDynamicPowerSavings(boolean, int)
+         * @hide
+         */
+        @TestApi
+        public static final String DYNAMIC_POWER_SAVINGS_DISABLE_THRESHOLD =
+                "dynamic_power_savings_disable_threshold";
+        private static final Validator DYNAMIC_POWER_SAVINGS_VALIDATOR =
+                new SettingsValidators.InclusiveIntegerRangeValidator(0, 100);
+
+        /**
+         * The setting which backs the setDynamicPowerSavings api in PowerManager.
+         *
+         * @see android.os.PowerManager#setDynamicPowerSavings(boolean, int)
+         * @hide
+         */
+        @TestApi
+        public static final String DYNAMIC_POWER_SAVINGS_ENABLED = "dynamic_power_savings_enabled";
 
         /**
          * The max value for {@link #LOW_POWER_MODE_TRIGGER_LEVEL}. If this setting is not set
@@ -12123,13 +12311,14 @@ public final class Settings {
         public static final String NETWORK_SCORING_PROVISIONED = "network_scoring_provisioned";
 
         /**
-         * Whether the user wants to be prompted for password to decrypt the device on boot.
-         * This only matters if the storage is encrypted.
+         * Indicates whether the user wants to be prompted for password to decrypt the device on
+         * boot. This only matters if the storage is encrypted.
          * <p>
          * Type: int (0 for false, 1 for true)
+         *
          * @hide
          */
-        @UnsupportedAppUsage
+        @SystemApi
         public static final String REQUIRE_PASSWORD_TO_DECRYPT = "require_password_to_decrypt";
 
         /**
@@ -12313,12 +12502,14 @@ public final class Settings {
         public static final String SAFE_BOOT_DISALLOWED = "safe_boot_disallowed";
 
         /**
-         * Whether this device is currently in retail demo mode. If true, device
+         * Indicates whether this device is currently in retail demo mode. If true, the device
          * usage is severely limited.
          * <p>
          * Type: int (0 for false, 1 for true)
+         *
          * @hide
          */
+        @SystemApi
         public static final String DEVICE_DEMO_MODE = "device_demo_mode";
 
         /**
@@ -12429,6 +12620,17 @@ public final class Settings {
                 "privileged_device_identifier_target_q_behavior_enabled";
 
         /**
+         * If set to 1, the device identifier check will be relaxed to the previous READ_PHONE_STATE
+         * permission check for 3P apps.
+         *
+         * STOPSHIP: Remove this once we ship with the new device identifier check enabled.
+         *
+         * @hide
+         */
+        public static final String PRIVILEGED_DEVICE_IDENTIFIER_3P_CHECK_RELAXED =
+                "privileged_device_identifier_3p_check_relaxed";
+
+        /**
          * If set to 1, SettingsProvider's restoreAnyVersion="true" attribute will be ignored
          * and restoring to lower version of platform API will be skipped.
          *
@@ -12511,27 +12713,14 @@ public final class Settings {
                 "hidden_api_access_log_sampling_rate";
 
         /**
-         * Hidden API enforcement policy for apps targeting SDK versions prior to the latest
-         * version.
+         * Hidden API enforcement policy for apps.
          *
          * Values correspond to @{@link
          * android.content.pm.ApplicationInfo.HiddenApiEnforcementPolicy}
          *
          * @hide
          */
-        public static final String HIDDEN_API_POLICY_PRE_P_APPS =
-                "hidden_api_policy_pre_p_apps";
-
-        /**
-         * Hidden API enforcement policy for apps targeting the current SDK version.
-         *
-         * Values correspond to @{@link
-         * android.content.pm.ApplicationInfo.HiddenApiEnforcementPolicy}
-         *
-         * @hide
-         */
-        public static final String HIDDEN_API_POLICY_P_APPS =
-                "hidden_api_policy_p_apps";
+        public static final String HIDDEN_API_POLICY = "hidden_api_policy";
 
         /**
          * Timeout for a single {@link android.media.soundtrigger.SoundTriggerDetectionService}
@@ -12630,6 +12819,9 @@ public final class Settings {
             VALIDATORS.put(LOW_POWER_MODE_TRIGGER_LEVEL, LOW_POWER_MODE_TRIGGER_LEVEL_VALIDATOR);
             VALIDATORS.put(LOW_POWER_MODE_TRIGGER_LEVEL_MAX,
                     LOW_POWER_MODE_TRIGGER_LEVEL_VALIDATOR);
+            VALIDATORS.put(AUTOMATIC_POWER_SAVER_MODE, AUTOMATIC_POWER_SAVER_MODE_VALIDATOR);
+            VALIDATORS.put(DYNAMIC_POWER_SAVINGS_DISABLE_THRESHOLD,
+                    DYNAMIC_POWER_SAVINGS_VALIDATOR);
             VALIDATORS.put(BLUETOOTH_ON, BLUETOOTH_ON_VALIDATOR);
             VALIDATORS.put(PRIVATE_DNS_MODE, PRIVATE_DNS_MODE_VALIDATOR);
             VALIDATORS.put(PRIVATE_DNS_SPECIFIER, PRIVATE_DNS_SPECIFIER_VALIDATOR);
@@ -12640,6 +12832,13 @@ public final class Settings {
             VALIDATORS.put(APP_AUTO_RESTRICTION_ENABLED, APP_AUTO_RESTRICTION_ENABLED_VALIDATOR);
             VALIDATORS.put(ZEN_DURATION, ZEN_DURATION_VALIDATOR);
             VALIDATORS.put(CHARGING_VIBRATION_ENABLED, CHARGING_VIBRATION_ENABLED_VALIDATOR);
+            VALIDATORS.put(DEVICE_PROVISIONING_MOBILE_DATA_ENABLED, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(REQUIRE_PASSWORD_TO_DECRYPT, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(DEVICE_DEMO_MODE, BOOLEAN_VALIDATOR);
+            VALIDATORS.put(WIFI_PNO_FREQUENCY_CULLING_ENABLED,
+                    WIFI_PNO_FREQUENCY_CULLING_ENABLED_VALIDATOR);
+            VALIDATORS.put(WIFI_PNO_RECENCY_SORTING_ENABLED,
+                    WIFI_PNO_RECENCY_SORTING_ENABLED_VALIDATOR);
         }
 
         /**

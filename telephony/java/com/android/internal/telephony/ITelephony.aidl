@@ -22,6 +22,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Messenger;
 import android.os.ResultReceiver;
+import android.os.WorkSource;
 import android.net.NetworkStats;
 import android.net.Uri;
 import android.service.carrier.CarrierIdentifier;
@@ -30,6 +31,7 @@ import android.telecom.PhoneAccountHandle;
 import android.telephony.CellInfo;
 import android.telephony.ClientRequestStats;
 import android.telephony.IccOpenLogicalChannelResponse;
+import android.telephony.ICellInfoCallback;
 import android.telephony.ModemActivityInfo;
 import android.telephony.NeighboringCellInfo;
 import android.telephony.NetworkScanRequest;
@@ -40,6 +42,7 @@ import android.telephony.TelephonyHistogram;
 import android.telephony.VisualVoicemailSmsFilterSettings;
 import android.telephony.ims.aidl.IImsCapabilityCallback;
 import android.telephony.ims.aidl.IImsConfig;
+import android.telephony.ims.aidl.IImsConfigCallback;
 import android.telephony.ims.aidl.IImsMmTelFeature;
 import android.telephony.ims.aidl.IImsRcsFeature;
 import android.telephony.ims.aidl.IImsRegistration;
@@ -49,6 +52,7 @@ import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.OperatorInfo;
 
 import java.util.List;
+import java.util.Map;
 
 import android.telephony.UiccSlotInfo;
 
@@ -505,9 +509,24 @@ interface ITelephony {
     int getLteOnCdmaModeForSubscriber(int subId, String callingPackage);
 
     /**
-     * Returns the all observed cell information of the device.
+     * Returns all observed cell information of the device.
      */
     List<CellInfo> getAllCellInfo(String callingPkg);
+
+    /**
+     * Request a cell information update for the specified subscription,
+     * reported via the CellInfoCallback.
+     */
+    void requestCellInfoUpdate(int subId, in ICellInfoCallback cb, String callingPkg);
+
+    /**
+     * Request a cell information update for the specified subscription,
+     * reported via the CellInfoCallback.
+     *
+     * @param workSource the requestor to whom the power consumption for this should be attributed.
+     */
+    void requestCellInfoUpdateWithWorkSource(
+            int subId, in ICellInfoCallback cb, in String callingPkg, in WorkSource ws);
 
     /**
      * Sets minimum time in milli-seconds between onCellInfoChanged
@@ -638,15 +657,30 @@ interface ITelephony {
     boolean nvWriteCdmaPrl(in byte[] preferredRoamingList);
 
     /**
-     * Perform the specified type of NV config reset. The radio will be taken offline
-     * and the device must be rebooted after the operation. Used for device
-     * configuration by some CDMA operators.
+     * Rollback modem configurations to factory default except some config which are in whitelist.
+     * Used for device configuration by some CDMA operators.
      *
-     * @param resetType the type of reset to perform (1 == factory reset; 2 == NV-only reset).
-     * @return true on success; false on any failure.
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} or that the calling
+     * app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     *
+     * @param slotIndex - device slot.
+     * @return {@code true} on success; {@code false} on any failure.
      */
-    boolean nvResetConfig(int resetType);
+    boolean resetModemConfig(int slotIndex);
 
+    /**
+     * Generate a radio modem reset. Used for device configuration by some CDMA operators.
+     * Different than {@link #setRadioPower(boolean)}, modem reboot will power down sim card.
+     *
+     * <p>Requires Permission:
+     * {@link android.Manifest.permission#MODIFY_PHONE_STATE MODIFY_PHONE_STATE} or that the calling
+     * app has carrier privileges (see {@link #hasCarrierPrivileges}).
+     *
+     * @param slotIndex - device slot.
+     * @return {@code true} on success; {@code false} on any failure.
+     */
+    boolean rebootModem(int slotIndex);
     /*
      * Get the calculated preferred network type.
      * Used for device configuration by some CDMA operators.
@@ -667,7 +701,7 @@ interface ITelephony {
 
     /**
      * Check TETHER_DUN_REQUIRED and TETHER_DUN_APN settings, net.tethering.noprovisioning
-     * SystemProperty, and config_tether_apndata to decide whether DUN APN is required for
+     * SystemProperty to decide whether DUN APN is required for
      * tethering.
      *
      * @return 0: Not required. 1: required. 2: Not set.
@@ -1038,6 +1072,8 @@ interface ITelephony {
      */
     boolean isTtyModeSupported();
 
+    boolean isRttSupported(int subscriptionId);
+
     /**
      * Whether the phone supports hearing aid compatibility.
      *
@@ -1293,6 +1329,49 @@ interface ITelephony {
     String getSubscriptionCarrierName(int subId);
 
     /**
+     * Returns MNO carrier id of the current subscription’s MCCMNC.
+     * <p>MNO carrier id can be solely identified by subscription mccmnc. This is mainly used
+     * for MNO fallback when exact carrier id {@link #getSimCarrierId()}
+     * configurations are not found.
+     *
+     * @return MNO carrier id of the current subscription. Return the value same as carrier id
+     * {@link #getSimCarrierId()}, if MNO carrier id cannot be identified.
+     * @hide
+     */
+    int getSubscriptionMNOCarrierId(int subId);
+
+    /**
+     * Returns fine-grained carrier id of the current subscription.
+     *
+     * <p>The precise carrier id can be used to further differentiate a carrier by different
+     * networks, by prepaid v.s.postpaid or even by 4G v.s.3G plan. Each carrier has a unique
+     * carrier id {@link #getSimCarrierId()} but can have multiple precise carrier id. e.g,
+     * {@link #getSimCarrierId()} will always return Tracfone (id 2022) for a Tracfone SIM, while
+     * {@link #getSimPreciseCarrierId()} can return Tracfone AT&T or Tracfone T-Mobile based on the
+     * current underlying network.
+     *
+     * <p>For carriers without any fine-grained carrier ids, return {@link #getSimCarrierId()}
+     *
+     * @return Returns fine-grained carrier id of the current subscription.
+     * Return {@link #UNKNOWN_CARRIER_ID} if the subscription is unavailable or the carrier cannot
+     * be identified.
+     * @hide
+     */
+    int getSubscriptionPreciseCarrierId(int subId);
+
+    /**
+     * Similar like {@link #getSimCarrierIdName()}, returns user-facing name of the
+     * precise carrier id {@link #getSimPreciseCarrierId()}
+     *
+     * <p>The returned name is unlocalized.
+     *
+     * @return user-facing name of the subscription precise carrier id. Return {@code null} if the
+     * subscription is unavailable or the carrier cannot be identified.
+     * @hide
+     */
+    String getSubscriptionPreciseCarrierName(int subId);
+
+    /**
      * Action set from carrier signalling broadcast receivers to enable/disable metered apns
      * Permissions android.Manifest.permission.MODIFY_PHONE_STATE is required
      * @param subId the subscription ID that this action applies to.
@@ -1508,24 +1587,24 @@ interface ITelephony {
     /**
      * Adds an IMS registration status callback for the subscription id specified.
      */
-    oneway void addImsRegistrationCallback(int subId, IImsRegistrationCallback c,
+    void addImsRegistrationCallback(int subId, IImsRegistrationCallback c,
             String callingPackage);
      /**
       * Removes an existing IMS registration status callback for the subscription specified.
       */
-    oneway void removeImsRegistrationCallback(int subId, IImsRegistrationCallback c,
+    void removeImsRegistrationCallback(int subId, IImsRegistrationCallback c,
             String callingPackage);
 
     /**
      * Adds an IMS MmTel capabilities callback for the subscription specified.
      */
-    oneway void addMmTelCapabilityCallback(int subId, IImsCapabilityCallback c,
+    void addMmTelCapabilityCallback(int subId, IImsCapabilityCallback c,
             String callingPackage);
 
     /**
      * Removes an existing IMS MmTel capabilities callback for the subscription specified.
      */
-    oneway void removeMmTelCapabilityCallback(int subId, IImsCapabilityCallback c,
+    void removeMmTelCapabilityCallback(int subId, IImsCapabilityCallback c,
             String callingPackage);
 
     /**
@@ -1615,4 +1694,49 @@ interface ITelephony {
      * return true if TTY over VoLTE is enabled for the subscription specified.
      */
     boolean isTtyOverVolteEnabled(int subId);
+
+    /**
+     * Return the emergency number list from all the active subscriptions.
+     */
+    Map getCurrentEmergencyNumberList(String callingPackage);
+
+    /**
+     * Identify if the number is emergency number, based on all the active subscriptions.
+     */
+    boolean isCurrentEmergencyNumber(String number);
+    
+    /**
+     * Return a list of certs in hex string from loaded carrier privileges access rules.
+     */
+    List<String> getCertsFromCarrierPrivilegeAccessRules(int subId);
+
+    /**
+     * Register an IMS provisioning change callback with Telephony.
+     */
+    void registerImsProvisioningChangedCallback(int subId, IImsConfigCallback callback);
+
+    /**
+     * unregister an existing IMS provisioning change callback.
+     */
+    void unregisterImsProvisioningChangedCallback(int subId, IImsConfigCallback callback);
+
+    /**
+     * Return an integer containing the provisioning value for the specified provisioning key.
+     */
+    int getImsProvisioningInt(int subId, int key);
+
+    /**
+     * return a String containing the provisioning value for the provisioning key specified.
+     */
+    String getImsProvisioningString(int subId, int key);
+
+    /**
+     * Set the integer provisioning value for the provisioning key specified.
+     */
+    int setImsProvisioningInt(int subId, int key, int value);
+
+    /**
+     * Set the String provisioning value for the provisioning key specified.
+     */
+    int setImsProvisioningString(int subId, int key, String value);
 }

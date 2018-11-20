@@ -61,6 +61,7 @@ public class NotificationHeaderView extends ViewGroup {
     private View mCameraIcon;
     private View mMicIcon;
     private View mAppOps;
+    private View mAudiblyAlertedIcon;
     private int mIconColor;
     private int mOriginalNotificationColor;
     private boolean mExpanded;
@@ -121,6 +122,7 @@ public class NotificationHeaderView extends ViewGroup {
         mMicIcon = findViewById(com.android.internal.R.id.mic);
         mOverlayIcon = findViewById(com.android.internal.R.id.overlay);
         mAppOps = findViewById(com.android.internal.R.id.app_ops);
+        mAudiblyAlertedIcon = findViewById(com.android.internal.R.id.alerted_icon);
     }
 
     @Override
@@ -335,6 +337,11 @@ public class NotificationHeaderView extends ViewGroup {
                 ? View.VISIBLE : View.GONE);
         mMicIcon.setVisibility(appOps.contains(AppOpsManager.OP_RECORD_AUDIO)
                 ? View.VISIBLE : View.GONE);
+    }
+
+    /** Updates icon visibility based on the noisiness of the notification. */
+    public void setAudiblyAlerted(boolean audiblyAlerted) {
+        mAudiblyAlertedIcon.setVisibility(audiblyAlerted ? View.VISIBLE : View.GONE);
     }
 
     private void updateExpandButton() {

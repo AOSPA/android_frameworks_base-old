@@ -26,6 +26,7 @@
 #include "../logd/LogEvent.h"
 #include "../stats_log_util.h"
 #include "../statscompanion_util.h"
+#include "PowerStatsPuller.h"
 #include "ResourceHealthManagerPuller.h"
 #include "ResourceThermalManagerPuller.h"
 #include "StatsCompanionServicePuller.h"
@@ -86,6 +87,9 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // subsystem_sleep_state
         {android::util::SUBSYSTEM_SLEEP_STATE,
          {{}, {}, 1 * NS_PER_SEC, new SubsystemSleepStatePuller()}},
+        // on_device_power_measurement
+        {android::util::ON_DEVICE_POWER_MEASUREMENT,
+         {{}, {}, 1 * NS_PER_SEC, new PowerStatsPuller()}},
         // cpu_time_per_freq
         {android::util::CPU_TIME_PER_FREQ,
          {{3},
@@ -167,13 +171,13 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
         // process_memory_state
         {android::util::PROCESS_MEMORY_STATE,
          {{4, 5, 6, 7, 8, 9},
-          {2, 3},
+          {2, 3, 10},
           1 * NS_PER_SEC,
           new StatsCompanionServicePuller(android::util::PROCESS_MEMORY_STATE)}},
         // native_process_memory_state
         {android::util::NATIVE_PROCESS_MEMORY_STATE,
          {{3, 4, 5, 6},
-          {2},
+          {2, 7},
           1 * NS_PER_SEC,
           new StatsCompanionServicePuller(android::util::NATIVE_PROCESS_MEMORY_STATE)}},
         // temperature
@@ -231,7 +235,28 @@ const std::map<int, PullAtomInfo> StatsPullerManager::kAllPullAtomInfo = {
          {{}, {}, 1 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::POWER_PROFILE)}},
         // Process cpu stats. Min cool-down is 5 sec, inline with what AcitivityManagerService uses.
         {android::util::PROCESS_CPU_TIME,
-         {{}, {}, 5 * NS_PER_SEC, new StatsCompanionServicePuller(android::util::PROCESS_CPU_TIME)}},
+            {{} /* additive fields */, {} /* non additive fields */,
+             5 * NS_PER_SEC /* min cool-down in seconds*/,
+             new StatsCompanionServicePuller(android::util::PROCESS_CPU_TIME)}},
+        {android::util::CPU_TIME_PER_THREAD_FREQ,
+         {{7},
+          {2, 3, 4, 5, 6},
+          1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::CPU_TIME_PER_THREAD_FREQ)}},
+        // DeviceCalculatedPowerUse.
+        {android::util::DEVICE_CALCULATED_POWER_USE,
+         {{}, {}, 1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::DEVICE_CALCULATED_POWER_USE)}},
+        // DeviceCalculatedPowerBlameUid.
+        {android::util::DEVICE_CALCULATED_POWER_BLAME_UID,
+         {{}, {}, // BatteryStats already merged isolated with host ids so it's unnecessary here.
+          1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::DEVICE_CALCULATED_POWER_BLAME_UID)}},
+        // DeviceCalculatedPowerBlameOther.
+        {android::util::DEVICE_CALCULATED_POWER_BLAME_OTHER,
+         {{}, {},
+          1 * NS_PER_SEC,
+          new StatsCompanionServicePuller(android::util::DEVICE_CALCULATED_POWER_BLAME_OTHER)}},
 };
 
 StatsPullerManager::StatsPullerManager() : mNextPullTimeNs(NO_ALARM_UPDATE) {

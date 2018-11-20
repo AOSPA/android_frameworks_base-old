@@ -390,6 +390,12 @@ public class DisconnectCause {
     public static final int HO_NOT_FEASIBLE = 119;
     public static final int NON_SELECTED_USER_CLEARING = 120;
 
+    /**
+     * Indicates that a new outgoing call cannot be placed because OTASP provisioning is currently
+     * in process.
+     */
+    public static final int OTASP_PROVISIONING_IN_PROCESS = 76;
+
     //*********************************************************************************************
     // When adding a disconnect type:
     // 1) Please assign the new type the next id value below.
@@ -654,6 +660,8 @@ public class DisconnectCause {
             return "HO_NOT_FEASIBLE";
         case NON_SELECTED_USER_CLEARING:
             return "NON_SELECTED_USER_CLEARING";
+        case OTASP_PROVISIONING_IN_PROCESS:
+            return "OTASP_PROVISIONING_IN_PROCESS";
         default:
             return "INVALID: " + cause;
         }

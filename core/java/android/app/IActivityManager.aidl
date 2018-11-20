@@ -133,9 +133,13 @@ interface IActivityManager {
             in String resolvedType, boolean requireForeground, in String callingPackage, int userId);
     int stopService(in IApplicationThread caller, in Intent service,
             in String resolvedType, int userId);
+    // Currently keeping old bindService because it is on the greylist
     int bindService(in IApplicationThread caller, in IBinder token, in Intent service,
             in String resolvedType, in IServiceConnection connection, int flags,
             in String callingPackage, int userId);
+    int bindIsolatedService(in IApplicationThread caller, in IBinder token, in Intent service,
+            in String resolvedType, in IServiceConnection connection, int flags,
+            in String instanceName, in String callingPackage, int userId);
     boolean unbindService(in IServiceConnection connection);
     void publishService(in IBinder token, in Intent intent, in IBinder service);
     void setDebugApp(in String packageName, boolean waitForDebugger, boolean persistent);
@@ -265,17 +269,6 @@ interface IActivityManager {
     void getMyMemoryState(out ActivityManager.RunningAppProcessInfo outInfo);
     boolean killProcessesBelowForeground(in String reason);
     UserInfo getCurrentUser();
-    /**
-     * Informs ActivityManagerService that the keyguard is showing.
-     *
-     * @param showingKeyguard True if the keyguard is showing, false otherwise.
-     * @param showingAod True if AOD is showing, false otherwise.
-     * @param secondaryDisplayShowing The displayId of the secondary display on which the keyguard
-     *        is showing, or INVALID_DISPLAY if there is no such display. Only meaningful if
-     *        showing is true.
-     */
-    void setLockScreenShown(boolean showingKeyguard, boolean showingAod,
-            int secondaryDisplayShowing);
     // This is not public because you need to be very careful in how you
     // manage your activity to make sure it is always the uid you expect.
     int getLaunchedFromUid(in IBinder activityToken);
@@ -486,7 +479,7 @@ interface IActivityManager {
      * instrumentation at a time. An active instrumentation is one running and
      * started from the shell.
      */
-    void startDelegateShellPermissionIdentity(int uid);
+    void startDelegateShellPermissionIdentity(int uid, in String[] permissions);
 
     /**
      * Method for the shell UID to stop deletating its permission identity to an

@@ -210,6 +210,10 @@ public class PluginManagerImpl extends BroadcastReceiver implements PluginManage
             Uri uri = intent.getData();
             ComponentName component = ComponentName.unflattenFromString(
                     uri.toString().substring(10));
+            if (mWhitelistedPlugins.contains(component.getPackageName())) {
+                // Don't disable whitelisted plugins as they are a part of the OS.
+                return;
+            }
             getPluginEnabler().setEnabled(component, false);
             mContext.getSystemService(NotificationManager.class).cancel(component.getClassName(),
                     SystemMessage.NOTE_PLUGIN);
@@ -246,7 +250,11 @@ public class PluginManagerImpl extends BroadcastReceiver implements PluginManage
                         SystemMessage.NOTE_PLUGIN, nb.build(), UserHandle.ALL);
             }
             if (clearClassLoader(pkg)) {
-                Toast.makeText(mContext, "Reloading " + pkg, Toast.LENGTH_LONG).show();
+                if (Build.IS_ENG) {
+                    Toast.makeText(mContext, "Reloading " + pkg, Toast.LENGTH_LONG).show();
+                } else {
+                    Log.v(TAG, "Reloading " + pkg);
+                }
             }
             if (!Intent.ACTION_PACKAGE_REMOVED.equals(intent.getAction())) {
                 for (PluginInstanceManager manager : mPluginMap.values()) {

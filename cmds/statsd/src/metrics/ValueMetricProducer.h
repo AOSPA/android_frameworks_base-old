@@ -23,6 +23,7 @@
 #include "../condition/ConditionTracker.h"
 #include "../external/PullDataReceiver.h"
 #include "../external/StatsPullerManager.h"
+#include "../matchers/EventMatcherWizard.h"
 #include "../stats_log_util.h"
 #include "MetricProducer.h"
 #include "frameworks/base/cmds/statsd/src/statsd_config.pb.h"
@@ -34,14 +35,16 @@ namespace statsd {
 struct ValueBucket {
     int64_t mBucketStartNs;
     int64_t mBucketEndNs;
-    int64_t mValueLong;
-    double mValueDouble;
+    std::vector<int> valueIndex;
+    std::vector<Value> values;
 };
 
 class ValueMetricProducer : public virtual MetricProducer, public virtual PullDataReceiver {
 public:
     ValueMetricProducer(const ConfigKey& key, const ValueMetric& valueMetric,
-                        const int conditionIndex, const sp<ConditionWizard>& wizard,
+                        const int conditionIndex, const sp<ConditionWizard>& conditionWizard,
+                        const int whatMatcherIndex,
+                        const sp<EventMatcherWizard>& matcherWizard,
                         const int pullTagId, const int64_t timeBaseNs, const int64_t startTimeNs,
                         const sp<StatsPullerManager>& pullerManager);
 
@@ -54,35 +57,11 @@ public:
     void notifyAppUpgrade(const int64_t& eventTimeNs, const string& apk, const int uid,
                           const int64_t version) override {
         std::lock_guard<std::mutex> lock(mMutex);
-
-        if (mIsPulled && (mCondition == true || mConditionTrackerIndex < 0)) {
-            vector<shared_ptr<LogEvent>> allData;
-            mPullerManager->Pull(mPullTagId, eventTimeNs, &allData);
-            if (allData.size() == 0) {
-                // This shouldn't happen since this valuemetric is not useful now.
-            }
-
-            // Pretend the pulled data occurs right before the app upgrade event.
-            mCondition = false;
-            for (const auto& data : allData) {
-                data->setElapsedTimestampNs(eventTimeNs - 1);
-                onMatchedLogEventLocked(0, *data);
-            }
-
-            flushCurrentBucketLocked(eventTimeNs);
-            mCurrentBucketStartTimeNs = eventTimeNs;
-
-            mCondition = true;
-            for (const auto& data : allData) {
-                data->setElapsedTimestampNs(eventTimeNs);
-                onMatchedLogEventLocked(0, *data);
-            }
-        } else {
-            // For pushed value metric or pulled metric where condition is not true,
-            // we simply flush and reset the current bucket start.
-            flushCurrentBucketLocked(eventTimeNs);
-            mCurrentBucketStartTimeNs = eventTimeNs;
+        if (mIsPulled && mCondition) {
+            pullAndMatchEventsLocked(eventTimeNs - 1);
         }
+        flushCurrentBucketLocked(eventTimeNs);
+        mCurrentBucketStartTimeNs = eventTimeNs;
     };
 
 protected:
@@ -94,6 +73,7 @@ protected:
 private:
     void onDumpReportLocked(const int64_t dumpTimeNs,
                             const bool include_current_partial_bucket,
+                            const bool erase_data,
                             std::set<string> *str_set,
                             android::util::ProtoOutputStream* protoOutput) override;
     void clearPastBucketsLocked(const int64_t dumpTimeNs) override;
@@ -116,9 +96,17 @@ private:
 
     void dropDataLocked(const int64_t dropTimeNs) override;
 
+    // Calculate previous bucket end time based on current time.
+    int64_t calcPreviousBucketEndTime(const int64_t currentTimeNs);
+
+    const int mWhatMatcherIndex;
+
+    sp<EventMatcherWizard> mEventMatcherWizard;
+
     sp<StatsPullerManager> mPullerManager;
 
-    const FieldMatcher mValueField;
+    // Value fields for matching.
+    std::vector<Matcher> mFieldMatchers;
 
     // tagId for pulled data. -1 if this is not pulled
     const int mPullTagId;
@@ -126,15 +114,14 @@ private:
     // if this is pulled metric
     const bool mIsPulled;
 
-    int mField;
-
-    // internal state of a bucket.
+    // internal state of an ongoing aggregation bucket.
     typedef struct {
-        // Pulled data always come in pair of <start, end>. This holds the value
-        // for start. The diff (end - start) is taken as the real value.
-        Value start;
-        // Whether the start data point is updated
-        bool startUpdated;
+        // Index in multi value aggregation.
+        int valueIndex;
+        // Holds current base value of the dimension. Take diff and update if necessary.
+        Value base;
+        // Whether there is a base to diff to.
+        bool hasBase;
         // Current value, depending on the aggregation type.
         Value value;
         // Number of samples collected.
@@ -144,7 +131,7 @@ private:
         bool hasValue;
     } Interval;
 
-    std::unordered_map<MetricDimensionKey, Interval> mCurrentSlicedBucket;
+    std::unordered_map<MetricDimensionKey, std::vector<Interval>> mCurrentSlicedBucket;
 
     std::unordered_map<MetricDimensionKey, int64_t> mCurrentFullBucket;
 
@@ -159,7 +146,7 @@ private:
     // Util function to check whether the specified dimension hits the guardrail.
     bool hitGuardRailLocked(const MetricDimensionKey& newKey);
 
-    void pullLocked(const int64_t timestampNs);
+    void pullAndMatchEventsLocked(const int64_t timestampNs);
 
     static const size_t kBucketSize = sizeof(ValueBucket{});
 
@@ -171,9 +158,14 @@ private:
 
     const ValueMetric::AggregationType mAggregationType;
 
-    const Type mValueType;
+    const bool mUseDiff;
+
+    const ValueMetric::ValueDirection mValueDirection;
+
+    const bool mSkipZeroDiffOutput;
 
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsNoCondition);
+  FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsWithFiltering);
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsTakeAbsoluteValueOnReset);
     FRIEND_TEST(ValueMetricProducerTest, TestPulledEventsTakeZeroOnReset);
     FRIEND_TEST(ValueMetricProducerTest, TestEventsWithNonSlicedCondition);
@@ -186,13 +178,13 @@ private:
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryNoCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition);
     FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition2);
-    FRIEND_TEST(ValueMetricProducerTest, TestBucketBoundaryWithCondition3);
     FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateMin);
     FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateMax);
     FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateAvg);
     FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateSum);
-    FRIEND_TEST(ValueMetricProducerTest, TestPushedAggregateSumSliced);
     FRIEND_TEST(ValueMetricProducerTest, TestFirstBucket);
+    FRIEND_TEST(ValueMetricProducerTest, TestCalcPreviousBucketEndTime);
+    FRIEND_TEST(ValueMetricProducerTest, TestSkipZeroDiffOutput);
 };
 
 }  // namespace statsd

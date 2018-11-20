@@ -118,7 +118,7 @@ interface IActivityTaskManager {
     int startActivityAsCaller(in IApplicationThread caller, in String callingPackage,
             in Intent intent, in String resolvedType, in IBinder resultTo, in String resultWho,
             int requestCode, int flags, in ProfilerInfo profilerInfo, in Bundle options,
-            boolean ignoreTargetSecurity, int userId);
+            IBinder permissionToken, boolean ignoreTargetSecurity, int userId);
 
     void unhandledBack();
     boolean finishActivity(in IBinder token, int code, in Intent data, int finishTask);
@@ -177,6 +177,7 @@ interface IActivityTaskManager {
     void cancelRecentsAnimation(boolean restoreHomeStackPosition);
     void startLockTaskModeByToken(in IBinder token);
     void stopLockTaskModeByToken(in IBinder token);
+    void updateLockTaskPackages(int userId, in String[] packages);
     boolean isInLockTaskMode();
     int getLockTaskModeState();
     void setTaskDescription(in IBinder token, in ActivityManager.TaskDescription values);
@@ -192,6 +193,20 @@ interface IActivityTaskManager {
             in ActivityManager.TaskDescription description, in Bitmap thumbnail);
     Point getAppTaskThumbnailSize();
     boolean releaseActivityInstance(in IBinder token);
+    /**
+     * Only callable from the system. This token grants a temporary permission to call
+     * #startActivityAsCallerWithToken. The token will time out after
+     * START_AS_CALLER_TOKEN_TIMEOUT if it is not used.
+     *
+     * @param delegatorToken The Binder token referencing the system Activity that wants to delegate
+     *        the #startActivityAsCaller to another app. The "caller" will be the caller of this
+     *        activity's token, not the delegate's caller (which is probably the delegator itself).
+     *
+     * @return Returns a token that can be given to a "delegate" app that may call
+     *         #startActivityAsCaller
+     */
+    IBinder requestStartActivityPermissionToken(in IBinder delegatorToken);
+
     void releaseSomeActivities(in IApplicationThread app);
     Bitmap getTaskDescriptionIcon(in String filename, int userId);
     void startInPlaceAnimationOnFrontMostApplication(in Bundle opts);
@@ -244,16 +259,16 @@ interface IActivityTaskManager {
     ActivityManager.StackInfo getStackInfo(int windowingMode, int activityType);
 
     /**
-     * Informs ActivityManagerService that the keyguard is showing.
+     * Informs ActivityTaskManagerService that the keyguard is showing.
      *
      * @param showingKeyguard True if the keyguard is showing, false otherwise.
      * @param showingAod True if AOD is showing, false otherwise.
-     * @param secondaryDisplayShowing The displayId of the secondary display on which the keyguard
-     *        is showing, or INVALID_DISPLAY if there is no such display. Only meaningful if
-     *        showing is true.
+     * @param secondaryDisplaysShowing The displayId's of the secondary displays on which the
+     * keyguard is showing, or {@code null} if there is no such display. Only meaningful if showing
+     * is {@code true}.
      */
     void setLockScreenShown(boolean showingKeyguard, boolean showingAod,
-            int secondaryDisplayShowing);
+            in int[] secondaryDisplaysShowing);
     Bundle getAssistContextExtras(int requestType);
     boolean launchAssistIntent(in Intent intent, int requestType, in String hint, int userHandle,
             in Bundle args);

@@ -128,10 +128,11 @@ public class DragDownHelper implements Gefingerpoken {
                 }
                 return true;
             case MotionEvent.ACTION_UP:
-                if (!isFalseTouch() && mDragDownCallback.onDraggedDown(mStartingChild,
+                if (!mFalsingManager.isUnlockingDisabled() && !isFalseTouch()
+                        && mDragDownCallback.onDraggedDown(mStartingChild,
                         (int) (y - mInitialTouchY))) {
                     if (mStartingChild == null) {
-                        mDragDownCallback.setEmptyDragAmount(0f);
+                        cancelExpansion();
                     } else {
                         mCallback.setUserLockedChild(mStartingChild, false);
                         mStartingChild = null;
@@ -206,11 +207,8 @@ public class DragDownHelper implements Gefingerpoken {
         ValueAnimator anim = ValueAnimator.ofFloat(mLastHeight, 0);
         anim.setInterpolator(Interpolators.FAST_OUT_SLOW_IN);
         anim.setDuration(SPRING_BACK_ANIMATION_LENGTH_MS);
-        anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
-            @Override
-            public void onAnimationUpdate(ValueAnimator animation) {
-                mDragDownCallback.setEmptyDragAmount((Float) animation.getAnimatedValue());
-            }
+        anim.addUpdateListener(animation -> {
+            mDragDownCallback.setEmptyDragAmount((Float) animation.getAnimatedValue());
         });
         anim.start();
     }

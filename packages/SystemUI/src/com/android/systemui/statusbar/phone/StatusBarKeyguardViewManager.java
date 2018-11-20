@@ -16,7 +16,7 @@
 
 package com.android.systemui.statusbar.phone;
 
-import static com.android.keyguard.KeyguardHostView.OnDismissAction;
+import static com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 import static com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_WAKE_AND_UNLOCK;
 import static com.android.systemui.statusbar.phone.BiometricUnlockController.MODE_WAKE_AND_UNLOCK_PULSING;
 
@@ -43,10 +43,12 @@ import com.android.systemui.Dependency;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.statusbar.CommandQueue;
+import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.KeyguardBouncer.BouncerExpansionCallback;
 import com.android.systemui.statusbar.policy.KeyguardMonitor;
+import com.android.systemui.statusbar.policy.KeyguardMonitorImpl;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -57,7 +59,8 @@ import java.util.ArrayList;
  * which is in turn, reported to this class by the current
  * {@link com.android.keyguard.KeyguardViewBase}.
  */
-public class StatusBarKeyguardViewManager implements RemoteInputController.Callback {
+public class StatusBarKeyguardViewManager implements RemoteInputController.Callback,
+        StatusBarStateController.StateListener {
 
     // When hiding the Keyguard with timing supplied from WindowManager, better be early than late.
     private static final long HIDE_TIMING_CORRECTION_MS = - 16 * 3;
@@ -123,7 +126,10 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
     // Dismiss action to be launched when we stop dozing or the keyguard is gone.
     private DismissWithActionRequest mPendingWakeupAction;
-    private final KeyguardMonitor mKeyguardMonitor = Dependency.get(KeyguardMonitor.class);
+    private final KeyguardMonitorImpl mKeyguardMonitor =
+            (KeyguardMonitorImpl) Dependency.get(KeyguardMonitor.class);
+    private final NotificationMediaManager mMediaManager =
+            Dependency.get(NotificationMediaManager.class);
 
     private final KeyguardUpdateMonitorCallback mUpdateMonitorCallback =
             new KeyguardUpdateMonitorCallback() {
@@ -145,6 +151,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         mLockPatternUtils = lockPatternUtils;
         mStatusBarWindowController = Dependency.get(StatusBarWindowController.class);
         KeyguardUpdateMonitor.getInstance(context).registerCallback(mUpdateMonitorCallback);
+        Dependency.get(StatusBarStateController.class).addListener(this);
     }
 
     public void registerStatusBar(StatusBar statusBar,
@@ -199,6 +206,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     public void show(Bundle options) {
         mShowing = true;
         mStatusBarWindowController.setKeyguardShowing(true);
+        mKeyguardMonitor.notifyKeyguardState(
+                mShowing, mKeyguardMonitor.isSecure(), mKeyguardMonitor.isOccluded());
         reset(true /* hideBouncerWhenShowing */);
         StatsLog.write(StatsLog.KEYGUARD_STATE_CHANGED,
             StatsLog.KEYGUARD_STATE_CHANGED__STATE__SHOWN);
@@ -327,7 +336,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         updateStates();
     }
 
-    public void setDozing(boolean dozing) {
+    private void setDozing(boolean dozing) {
         if (mDozing != dozing) {
             mDozing = dozing;
             if (dozing || mBouncer.needsFullscreenBouncer() || mOccluded) {
@@ -381,7 +390,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         boolean isOccluding = !mOccluded && occluded;
         mOccluded = occluded;
         if (mShowing) {
-            mStatusBar.updateMediaMetaData(false, animate && !occluded);
+            mMediaManager.updateMediaMetaData(false, animate && !occluded);
         }
         mStatusBarWindowController.setKeyguardOccluded(occluded);
 
@@ -421,6 +430,8 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
      */
     public void hide(long startTime, long fadeoutDuration) {
         mShowing = false;
+        mKeyguardMonitor.notifyKeyguardState(
+                mShowing, mKeyguardMonitor.isSecure(), mKeyguardMonitor.isOccluded());
         launchPendingWakeupAction();
 
         if (KeyguardUpdateMonitor.getInstance(mContext).needsSlowUnlockTransition()) {
@@ -770,6 +781,16 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         if (mBouncer != null) {
             mBouncer.dump(pw);
         }
+    }
+
+    @Override
+    public void onStateChanged(int newState) {
+        // Nothing
+    }
+
+    @Override
+    public void onDozingChanged(boolean isDozing) {
+        setDozing(isDozing);
     }
 
     private static class DismissWithActionRequest {

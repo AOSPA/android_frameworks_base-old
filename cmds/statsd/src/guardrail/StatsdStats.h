@@ -43,6 +43,8 @@ struct ConfigStats {
 
     std::list<int32_t> broadcast_sent_time_sec;
     std::list<int32_t> data_drop_time_sec;
+    // Number of bytes dropped at corresponding time.
+    std::list<int64_t> data_drop_bytes;
     std::list<std::pair<int32_t, int64_t>> dump_report_stats;
 
     // Stores how many times a matcher have been matched. The map size is capped by kMaxConfigCount.
@@ -169,7 +171,7 @@ public:
     /**
      * Report a config's metrics data has been dropped.
      */
-    void noteDataDropped(const ConfigKey& key);
+    void noteDataDropped(const ConfigKey& key, const size_t totalBytes);
 
     /**
      * Report metrics data report has been sent.
@@ -261,14 +263,37 @@ public:
     void setUidMapChanges(int changes);
     void setCurrentUidMapMemory(int bytes);
 
-    // Update minimum interval between pulls for an pulled atom
+    /*
+     * Updates minimum interval between pulls for an pulled atom.
+     */
     void updateMinPullIntervalSec(int pullAtomId, long intervalSec);
 
-    // Notify pull request for an atom
+    /*
+     * Notes an atom is pulled.
+     */
     void notePull(int pullAtomId);
 
-    // Notify pull request for an atom served from cached data
+    /*
+     * Notes an atom is served from puller cache.
+     */
     void notePullFromCache(int pullAtomId);
+
+    /*
+     * Notify data error for pulled atom.
+     */
+    void notePullDataError(int pullAtomId);
+
+    /*
+     * Records time for actual pulling, not including those served from cache and not including
+     * statsd processing delays.
+     */
+    void notePullTime(int pullAtomId, int64_t pullTimeNs);
+
+    /*
+     * Records pull delay for a pulled atom, including those served from cache and including statsd
+     * processing delays.
+     */
+    void notePullDelay(int pullAtomId, int64_t pullDelayNs);
 
     /*
      * Records when system server restarts.
@@ -278,7 +303,7 @@ public:
     /**
      * Records statsd skipped an event.
      */
-    void noteLogLost(int32_t wallClockTimeSec, int32_t count);
+    void noteLogLost(int32_t wallClockTimeSec, int32_t count, int lastError);
 
     /**
      * Reset the historical stats. Including all stats in icebox, and the tracked stats about
@@ -300,9 +325,16 @@ public:
     void dumpStats(int outFd) const;
 
     typedef struct {
-        long totalPull;
-        long totalPullFromCache;
-        long minPullIntervalSec;
+        long totalPull = 0;
+        long totalPullFromCache = 0;
+        long minPullIntervalSec = LONG_MAX;
+        int64_t avgPullTimeNs = 0;
+        int64_t maxPullTimeNs = 0;
+        long numPullTime = 0;
+        int64_t avgPullDelayNs = 0;
+        int64_t maxPullDelayNs = 0;
+        long numPullDelay = 0;
+        long dataError = 0;
     } PulledAtomStats;
 
 private:
@@ -332,8 +364,18 @@ private:
     // Maps PullAtomId to its stats. The size is capped by the puller atom counts.
     std::map<int, PulledAtomStats> mPulledAtomStats;
 
+    struct LogLossStats {
+        LogLossStats(int32_t sec, int32_t count, int32_t error)
+            : mWallClockSec(sec), mCount(count), mLastError(error) {
+        }
+        int32_t mWallClockSec;
+        int32_t mCount;
+        // error code defined in linux/errno.h
+        int32_t mLastError;
+    };
+
     // Timestamps when we detect log loss, and the number of logs lost.
-    std::list<std::pair<int32_t, int32_t>> mLogLossStats;
+    std::list<LogLossStats> mLogLossStats;
 
     std::list<int32_t> mSystemServerRestartSec;
 
@@ -350,7 +392,7 @@ private:
 
     void resetInternalLocked();
 
-    void noteDataDropped(const ConfigKey& key, int32_t timeSec);
+    void noteDataDropped(const ConfigKey& key, const size_t totalBytes, int32_t timeSec);
 
     void noteMetricsReportSent(const ConfigKey& key, const size_t num_bytes, int32_t timeSec);
 
@@ -366,6 +408,7 @@ private:
     FRIEND_TEST(StatsdStatsTest, TestTimestampThreshold);
     FRIEND_TEST(StatsdStatsTest, TestAnomalyMonitor);
     FRIEND_TEST(StatsdStatsTest, TestSystemServerCrash);
+    FRIEND_TEST(StatsdStatsTest, TestPullAtomStats);
 };
 
 }  // namespace statsd

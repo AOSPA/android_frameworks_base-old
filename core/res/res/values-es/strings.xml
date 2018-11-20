@@ -136,6 +136,14 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"Wi‑Fi de <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"Llamada por Wi‑Fi | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"VoWiFi de <xliff:g id="SPN">%s</xliff:g>"</string>
+    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
+    <skip />
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"Desactivado"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"Dar preferencia a Wi-Fi"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"Preferir datos móviles"</string>
@@ -292,6 +300,9 @@
     <string name="permgrouplab_microphone" msgid="171539900250043464">"Micrófono"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"grabar audio"</string>
     <string name="permgrouprequest_microphone" msgid="9167492350681916038">"¿Quieres permitir que &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; grabe audio?"</string>
+    <string name="permgrouplab_activityRecognition" msgid="2838596644535616493">"reconocimiento de actividad"</string>
+    <string name="permgroupdesc_activityRecognition" msgid="7672248027571522602">"reconocer actividad"</string>
+    <string name="permgrouprequest_activityRecognition" msgid="8121253142311250055">"¿Quieres permitir que &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; reconozca tu actividad física?"</string>
     <string name="permgrouplab_camera" msgid="4820372495894586615">"Cámara"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"hacer fotos y grabar vídeos"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"¿Quieres permitir que &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; haga fotos y grabe vídeos?"</string>
@@ -414,18 +425,20 @@
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"Permite que la aplicación acceda a otros comandos del proveedor de ubicación. De esta forma, la aplicación podrá interferir en el funcionamiento del GPS o de otras fuentes de ubicación."</string>
     <string name="permlab_accessFineLocation" msgid="6265109654698562427">"acceder a la ubicación exacta solo en primer plano"</string>
     <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"Esta aplicación solo puede obtener tu ubicación exacta cuando está en primer plano. Estos servicios de ubicación deben estar activados y disponibles en tu teléfono para que la aplicación pueda utilizarlos. Es posible que aumente el consumo de batería."</string>
-    <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"acceder a tu ubicación aproximada (basada en red)"</string>
-    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"Esta aplicación puede obtener tu ubicación a partir de fuentes de red como las antenas de telefonía móvil y las redes Wi-Fi. Estos servicios de ubicación deben estar activados y disponibles en tu tablet para que la aplicación pueda usarlos."</string>
-    <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"Esta aplicación puede obtener tu ubicación a partir de fuentes de red como las antenas de telefonía móvil y las redes Wi-Fi. Estos servicios de ubicación deben estar activados y disponibles en tu TV para que la aplicación pueda usarlos."</string>
-    <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"Esta aplicación puede obtener tu ubicación a partir de fuentes de red como las antenas de telefonía móvil y las redes Wi-Fi. Estos servicios de ubicación deben estar activados y disponibles en tu teléfono para que la aplicación pueda usarlos."</string>
-    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"acceder a la ubicación exacta en segundo plano"</string>
-    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"Esta aplicación puede obtener tu ubicación exacta en cualquier momento cuando está en segundo plano. Estos servicios de ubicación deben estar activados y disponibles en tu teléfono para que la aplicación pueda utilizarlos. Es posible que aumente el consumo de batería."</string>
+    <string name="permlab_accessCoarseLocation" msgid="3707180371693213469">"acceder a la ubicación aproximada (a partir de la red) solo en primer plano"</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="8594719010575779120">"Esta aplicación puede obtener tu ubicación a partir de fuentes de red como las antenas de telefonía móvil y las redes Wi‑Fi, pero únicamente si la aplicación está en primer plano. Estos servicios de ubicación deben estar activados y disponibles en el tablet para que la aplicación pueda usarlos."</string>
+    <string name="permdesc_accessCoarseLocation" product="tv" msgid="3027871910200890806">"Esta aplicación puede obtener tu ubicación a partir de fuentes de red como las antenas de telefonía móvil y las redes Wi‑Fi, pero únicamente si la aplicación está en primer plano. Estos servicios de ubicación deben estar activados y disponibles en la TV para que la aplicación pueda usarlos."</string>
+    <string name="permdesc_accessCoarseLocation" product="default" msgid="854896049371048754">"Esta aplicación puede obtener tu ubicación a partir de fuentes de red como las antenas de telefonía móvil y las redes Wi‑Fi, pero únicamente si la aplicación está en primer plano. Estos servicios de ubicación deben estar activados y disponibles en el teléfono para que la aplicación pueda usarlos."</string>
+    <string name="permlab_accessBackgroundLocation" msgid="3965397804300661062">"acceder a la ubicación en segundo plano"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="1096394429579210251">"Si se concede este permiso además del acceso a la ubicación exacta o aproximada, la aplicación podrá acceder a la ubicación mientras se ejecuta en segundo plano."</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"cambiar la configuración de audio"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"Permite que la aplicación modifique la configuración de audio global (por ejemplo, el volumen y el altavoz de salida)."</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"grabar sonido"</string>
     <string name="permdesc_recordAudio" msgid="4245930455135321433">"Esta aplicación puede grabar audio con el micrófono en cualquier momento."</string>
     <string name="permlab_sim_communication" msgid="2935852302216852065">"enviar comandos a la tarjeta SIM"</string>
     <string name="permdesc_sim_communication" msgid="5725159654279639498">"Permite que la aplicación envíe comandos a la tarjeta SIM. Este permiso es muy peligroso."</string>
+    <string name="permlab_activityRecognition" msgid="3634590230567608356">"reconocer actividad física"</string>
+    <string name="permdesc_activityRecognition" msgid="3143453925156552894">"Esta aplicación puede reconocer tu actividad física."</string>
     <string name="permlab_camera" msgid="3616391919559751192">"realizar fotografías y vídeos"</string>
     <string name="permdesc_camera" msgid="5392231870049240670">"Esta aplicación puede hacer fotografías y grabar vídeos con la cámara en cualquier momento."</string>
     <string name="permlab_vibrate" msgid="7696427026057705834">"controlar la vibración"</string>
@@ -518,6 +531,7 @@
     <string name="permdesc_imagesWrite" msgid="7073662756617474375">"Permite que la aplicación modifique tu colección de fotos."</string>
     <string name="permlab_mediaLocation" msgid="8675148183726247864">"leer las ubicaciones de tu colección de contenido multimedia"</string>
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Permite que la aplicación lea las ubicaciones de tu colección de contenido multimedia."</string>
+    <string name="biometric_dialog_default_title" msgid="4229778503907743328">"<xliff:g id="APP">%s</xliff:g> solicita tu autenticación."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"Hardware biométrico no disponible"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Se ha detectado una huella digital parcial. Vuelve a intentarlo."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"No se ha podido procesar la huella digital. Vuelve a intentarlo."</string>
@@ -645,14 +659,14 @@
     <string name="policydesc_watchLogin_secondaryUser" product="tablet" msgid="4280246270601044505">"Controla el número de contraseñas incorrectas introducidas para desbloquear la pantalla y bloquea el tablet o borra todos los datos del usuario si se introducen demasiadas contraseñas incorrectas."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="TV" msgid="3484832653564483250">"Controla el número de contraseñas incorrectas introducidas para desbloquear la pantalla y bloquea la TV o borra todos los datos del usuario si se introducen demasiadas contraseñas incorrectas."</string>
     <string name="policydesc_watchLogin_secondaryUser" product="default" msgid="2185480427217127147">"Controla el número de contraseñas incorrectas introducidas para desbloquear la pantalla y bloquea el teléfono o borra todos los datos del usuario si se introducen demasiadas contraseñas incorrectas."</string>
-    <string name="policylab_resetPassword" msgid="4934707632423915395">"Cambiar el bloqueo de pantalla"</string>
-    <string name="policydesc_resetPassword" msgid="1278323891710619128">"Cambiar el bloqueo de pantalla"</string>
+    <string name="policylab_resetPassword" msgid="4934707632423915395">"Cambia el bloqueo de pantalla"</string>
+    <string name="policydesc_resetPassword" msgid="1278323891710619128">"Cambia el bloqueo de pantalla"</string>
     <string name="policylab_forceLock" msgid="2274085384704248431">"Bloquear la pantalla"</string>
-    <string name="policydesc_forceLock" msgid="1141797588403827138">"Controlar cómo y cuándo se bloquea la pantalla"</string>
+    <string name="policydesc_forceLock" msgid="1141797588403827138">"Controla cómo y cuándo se bloquea la pantalla"</string>
     <string name="policylab_wipeData" msgid="3910545446758639713">"Borrar todos los datos"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="4306184096067756876">"Borrar los datos del tablet sin avisar restableciendo el estado de fábrica"</string>
     <string name="policydesc_wipeData" product="tv" msgid="5816221315214527028">"Borra los datos de la TV sin advertencia previa restableciendo la TV a los valores predeterminados de fábrica."</string>
-    <string name="policydesc_wipeData" product="default" msgid="5096895604574188391">"Borrar los datos del teléfono sin avisar restableciendo el estado de fábrica"</string>
+    <string name="policydesc_wipeData" product="default" msgid="5096895604574188391">"Borra los datos del teléfono sin avisar restableciendo el estado de fábrica"</string>
     <string name="policylab_wipeData_secondaryUser" msgid="8362863289455531813">"Borrar datos del usuario"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="6336255514635308054">"Borra los datos del usuario en este tablet sin avisar."</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2086473496848351810">"Borra los datos del usuario en esta TV sin avisar."</string>
@@ -664,7 +678,7 @@
     <string name="policylab_encryptedStorage" msgid="8901326199909132915">"Cifrado del almacenamiento"</string>
     <string name="policydesc_encryptedStorage" msgid="2637732115325316992">"Exige que se cifren los datos de la aplicación almacenados."</string>
     <string name="policylab_disableCamera" msgid="6395301023152297826">"Inhabilitar cámaras"</string>
-    <string name="policydesc_disableCamera" msgid="2306349042834754597">"Evitar el uso de las cámaras del dispositivo"</string>
+    <string name="policydesc_disableCamera" msgid="2306349042834754597">"Evita el uso de las cámaras del dispositivo"</string>
     <string name="policylab_disableKeyguardFeatures" msgid="8552277871075367771">"Inhabilitar algunas funciones del bloqueo de pantalla"</string>
     <string name="policydesc_disableKeyguardFeatures" msgid="2044755691354158439">"Evitar el uso de algunas funciones del bloqueo de pantalla"</string>
   <string-array name="phoneTypes">
@@ -1819,6 +1833,8 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"Se ha cambiado la solicitud de SS a una solicitud de USSD"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"Se ha cambiado a una nueva solicitud de SS"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Perfil de trabajo"</string>
+    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
+    <skip />
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"Mostrar"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"Ocultar"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"alternar mostrar y ocultar"</string>
@@ -1897,14 +1913,14 @@
       <item quantity="other"><xliff:g id="COUNT">%1$s</xliff:g> sugerencias de Autocompletar</item>
       <item quantity="one">1 sugerencia de Autocompletar</item>
     </plurals>
-    <string name="autofill_save_title" msgid="3345527308992082601">"¿Guardar en &lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_save_title_with_type" msgid="8637809388029313305">"¿Guardar <xliff:g id="TYPE">%1$s</xliff:g> en &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"¿Guardar <xliff:g id="TYPE_0">%1$s</xliff:g> y <xliff:g id="TYPE_1">%2$s</xliff:g> en &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"¿Guardar <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> y <xliff:g id="TYPE_2">%3$s</xliff:g> en &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title" msgid="4879673117448810818">"¿Quieres actualizar a &lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title_with_type" msgid="339733442087186755">"¿Quieres actualizar <xliff:g id="TYPE">%1$s</xliff:g> a &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title_with_2types" msgid="6321714204167424745">"¿Quieres actualizar <xliff:g id="TYPE_0">%1$s</xliff:g> y <xliff:g id="TYPE_1">%2$s</xliff:g> a &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title_with_3types" msgid="5866735124066629287">"¿Quieres actualizar <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> y <xliff:g id="TYPE_2">%3$s</xliff:g> a &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;?"</string>
+    <string name="autofill_save_title" msgid="327541108460384555">"¿Guardar en "<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_save_title_with_type" msgid="2339135393607143594">"¿Guardar <xliff:g id="TYPE">%1$s</xliff:g> en "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_save_title_with_2types" msgid="87616102361154432">"¿Guardar <xliff:g id="TYPE_0">%1$s</xliff:g> y <xliff:g id="TYPE_1">%2$s</xliff:g> en "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_save_title_with_3types" msgid="4108978552969604555">"¿Guardar <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> y <xliff:g id="TYPE_2">%3$s</xliff:g> en "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title" msgid="5305781141104585279">"¿Actualizar en "<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title_with_type" msgid="4624181147422762233">"¿Actualizar <xliff:g id="TYPE">%1$s</xliff:g> en "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title_with_2types" msgid="2300113827053626484">"¿Actualizar <xliff:g id="TYPE_0">%1$s</xliff:g> y <xliff:g id="TYPE_1">%2$s</xliff:g> en "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title_with_3types" msgid="9089824354296211922">"¿Actualizar estos elementos en "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>" (<xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> y <xliff:g id="TYPE_2">%3$s</xliff:g>)?"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"Guardar"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"No, gracias"</string>
     <string name="autofill_update_yes" msgid="310358413273276958">"Actualizar"</string>

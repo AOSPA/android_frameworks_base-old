@@ -16,9 +16,9 @@
 
 package com.android.systemui.statusbar.notification.row.wrapper;
 
+import static com.android.systemui.statusbar.notification.TransformState.TRANSFORM_Y;
 import static com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
         .DEFAULT_HEADER_VISIBLE_AMOUNT;
-import static com.android.systemui.statusbar.notification.TransformState.TRANSFORM_Y;
 
 import android.app.Notification;
 import android.content.Context;
@@ -34,12 +34,13 @@ import android.widget.TextView;
 import com.android.internal.widget.NotificationExpandButton;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.notification.CustomInterpolatorTransformation;
-import com.android.systemui.statusbar.notification.ImageTransformState;
-import com.android.systemui.statusbar.notification.TransformState;
-import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.TransformableView;
 import com.android.systemui.statusbar.ViewTransformationHelper;
+import com.android.systemui.statusbar.notification.CustomInterpolatorTransformation;
+import com.android.systemui.statusbar.notification.ImageTransformState;
+import com.android.systemui.statusbar.notification.NotificationUtils;
+import com.android.systemui.statusbar.notification.TransformState;
+import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 
 import java.util.Stack;
 
@@ -69,7 +70,8 @@ public class NotificationHeaderViewWrapper extends NotificationViewWrapper {
     protected NotificationHeaderViewWrapper(Context ctx, View view, ExpandableNotificationRow row) {
         super(ctx, view, row);
         mShowExpandButtonAtEnd = ctx.getResources().getBoolean(
-                R.bool.config_showNotificationExpandButtonAtEnd);
+                R.bool.config_showNotificationExpandButtonAtEnd)
+                || NotificationUtils.useNewInterruptionModel(ctx);
         mTransformationHelper = new ViewTransformationHelper();
 
         // we want to avoid that the header clashes with the other text when transforming

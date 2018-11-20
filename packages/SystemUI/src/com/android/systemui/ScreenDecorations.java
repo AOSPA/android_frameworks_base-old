@@ -63,6 +63,8 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.android.internal.util.Preconditions;
 import com.android.systemui.RegionInterceptingFrameLayout.RegionInterceptableView;
 import com.android.systemui.fragments.FragmentHostManager;
@@ -78,8 +80,6 @@ import com.android.systemui.util.leak.RotationUtils;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import androidx.annotation.VisibleForTesting;
 
 /**
  * An overlay that draws screen decorations in software (e.g for rounded corners or display cutout)
@@ -207,11 +207,11 @@ public class ScreenDecorations extends SystemUI implements Tunable {
 
         mOverlay.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         mOverlay.setAlpha(0);
-        mOverlay.setAllowForceDark(false);
+        mOverlay.setForceDarkAllowed(false);
 
         mBottomOverlay.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         mBottomOverlay.setAlpha(0);
-        mBottomOverlay.setAllowForceDark(false);
+        mBottomOverlay.setForceDarkAllowed(false);
 
         updateViews();
 

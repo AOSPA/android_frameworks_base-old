@@ -34,6 +34,7 @@ import android.view.ViewTreeObserver;
 import android.view.WindowInsets;
 import android.view.accessibility.AccessibilityNodeInfo;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
@@ -42,13 +43,13 @@ import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.notification.row.ExpandableView;
-import com.android.systemui.statusbar.phone.NotificationIconContainer;
 import com.android.systemui.statusbar.notification.stack.AmbientState;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
 import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayout;
 import com.android.systemui.statusbar.notification.stack.StackScrollState;
 import com.android.systemui.statusbar.notification.stack.ViewState;
+import com.android.systemui.statusbar.phone.NotificationIconContainer;
 
 /**
  * A notification shelf view that is placed inside the notification scroller. It manages the
@@ -57,7 +58,6 @@ import com.android.systemui.statusbar.notification.stack.ViewState;
 public class NotificationShelf extends ActivatableNotificationView implements
         View.OnLayoutChangeListener {
 
-    public static final boolean SHOW_AMBIENT_ICONS = true;
     private static final boolean USE_ANIMATIONS_WHEN_OPENING =
             SystemProperties.getBoolean("debug.icon_opening_animations", true);
     private static final boolean ICON_ANMATIONS_WHILE_SCROLLING
@@ -95,6 +95,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
     private float mFirstElementRoundness;
     private Rect mClipRect = new Rect();
     private int mCutoutHeight;
+    private int mGapHeight;
 
     private final StateListener mStateListener = this::setStatusBarState;
 
@@ -103,7 +104,8 @@ public class NotificationShelf extends ActivatableNotificationView implements
     }
 
     @Override
-    protected void onFinishInflate() {
+    @VisibleForTesting
+    public void onFinishInflate() {
         super.onFinishInflate();
         mShelfIcons = findViewById(R.id.content);
         mShelfIcons.setClipChildren(false);
@@ -153,6 +155,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
         mScrollFastThreshold = res.getDimensionPixelOffset(R.dimen.scroll_fast_threshold);
         mShowNotificationShelf = res.getBoolean(R.bool.config_showNotificationShelf);
         mIconSize = res.getDimensionPixelSize(com.android.internal.R.dimen.status_bar_icon_size);
+        mGapHeight = res.getDimensionPixelSize(R.dimen.qs_notification_padding);
 
         if (!mShowNotificationShelf) {
             setVisibility(GONE);
@@ -172,21 +175,6 @@ public class NotificationShelf extends ActivatableNotificationView implements
         mDark = dark;
         mShelfIcons.setDark(dark, fade, delay);
         updateInteractiveness();
-    }
-
-    public void fadeInTranslating() {
-        mShelfIcons.setTranslationY(-mShelfAppearTranslation);
-        mShelfIcons.setAlpha(0);
-        mShelfIcons.animate()
-                .setInterpolator(Interpolators.DECELERATE_QUINT)
-                .translationY(0)
-                .setDuration(SHELF_IN_TRANSLATION_DURATION)
-                .start();
-        mShelfIcons.animate()
-                .alpha(1)
-                .setInterpolator(Interpolators.LINEAR)
-                .setDuration(SHELF_IN_TRANSLATION_DURATION)
-                .start();
     }
 
     @Override
@@ -290,6 +278,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
         int baseZHeight = mAmbientState.getBaseZHeight();
         int backgroundTop = 0;
         float firstElementRoundness = 0.0f;
+        ExpandableNotificationRow previousRow = null;
 
         for (int i = 0; i < mHostLayout.getChildCount(); i++) {
             ExpandableView child = (ExpandableView) mHostLayout.getChildAt(i);
@@ -357,8 +346,27 @@ public class NotificationShelf extends ActivatableNotificationView implements
                             + " \n number of notifications: " + mHostLayout.getChildCount() );
                 }
             }
+            if (row.isFirstInSection() && previousRow != null && previousRow.isLastInSection()) {
+                // If the top of the shelf is between the view before a gap and the view after a gap
+                // then we need to adjust the shelf's top roundness.
+                float distanceToGapBottom = row.getTranslationY() - getTranslationY();
+                float distanceToGapTop = getTranslationY()
+                        - (previousRow.getTranslationY() + previousRow.getActualHeight());
+                if (distanceToGapTop > 0) {
+                    // We interpolate our top roundness so that it's fully rounded if we're at the
+                    // bottom of the gap, and not rounded at all if we're at the top of the gap
+                    // (directly up against the bottom of previousRow)
+                    // Then we apply the same roundness to the bottom of previousRow so that the
+                    // corners join together as the shelf approaches previousRow.
+                    firstElementRoundness = (float) Math.min(1.0, distanceToGapTop / mGapHeight);
+                    previousRow.setBottomRoundness(firstElementRoundness,
+                            false /* don't animate */);
+                    backgroundTop = (int) distanceToGapBottom;
+                }
+            }
             notGoneIndex++;
             previousColor = ownColorUntinted;
+            previousRow = row;
         }
 
         clipTransientViews();
@@ -415,7 +423,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
         float maxTop = row.getTranslationY();
         StatusBarIconView icon = row.getEntry().expandedIcon;
         float shelfIconPosition = getTranslationY() + icon.getTop() + icon.getTranslationY();
-        if (shelfIconPosition < maxTop && !mAmbientState.isDark()) {
+        if (shelfIconPosition < maxTop) {
             int top = (int) (maxTop - shelfIconPosition);
             Rect clipRect = new Rect(0, top, icon.getWidth(), Math.max(top, icon.getHeight()));
             icon.setClipBounds(clipRect);
@@ -426,7 +434,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
 
     private void updateContinuousClipping(final ExpandableNotificationRow row) {
         StatusBarIconView icon = row.getEntry().expandedIcon;
-        boolean needsContinuousClipping = ViewState.isAnimatingY(icon) && !mAmbientState.isDark();
+        boolean needsContinuousClipping = ViewState.isAnimatingY(icon);
         boolean isContinuousClipping = icon.getTag(TAG_CONTINUOUS_CLIPPING) != null;
         if (needsContinuousClipping && !isContinuousClipping) {
             final ViewTreeObserver observer = icon.getViewTreeObserver();
@@ -617,9 +625,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
             iconState.translateContent = false;
         }
         float transitionAmount;
-        if (mAmbientState.getDarkAmount() > 0 && !row.isInShelf()) {
-            transitionAmount = mAmbientState.isFullyDark() ? 1 : 0;
-        } else if (isLastChild || !USE_ANIMATIONS_WHEN_OPENING || iconState.useFullTransitionAmount
+        if (isLastChild || !USE_ANIMATIONS_WHEN_OPENING || iconState.useFullTransitionAmount
                 || iconState.useLinearTransitionAmount) {
             transitionAmount = iconTransitionAmount;
         } else {
@@ -793,7 +799,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
     private void setOpenedAmount(float openedAmount) {
         mNoAnimationsInThisFrame = openedAmount == 1.0f && mOpenedAmount == 0.0f;
         mOpenedAmount = openedAmount;
-        if (!mAmbientState.isPanelFullWidth()) {
+        if (!mAmbientState.isPanelFullWidth() || mAmbientState.isDark()) {
             // We don't do a transformation at all, lets just assume we are fully opened
             openedAmount = 1.0f;
         }

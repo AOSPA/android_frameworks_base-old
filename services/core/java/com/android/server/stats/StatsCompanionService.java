@@ -15,7 +15,13 @@
  */
 package com.android.server.stats;
 
+import static android.os.Process.getPidsForCommands;
+import static android.os.Process.getUidForPid;
+
 import static com.android.internal.util.Preconditions.checkNotNull;
+import static com.android.server.am.MemoryStatUtil.MEMORY_STAT_INTERESTING_NATIVE_PROCESSES;
+import static com.android.server.am.MemoryStatUtil.readCmdlineFromProcfs;
+import static com.android.server.am.MemoryStatUtil.readMemoryStatFromProcfs;
 
 import android.annotation.Nullable;
 import android.app.ActivityManagerInternal;
@@ -35,9 +41,13 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.hardware.fingerprint.FingerprintManager;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkRequest;
 import android.net.NetworkStats;
 import android.net.wifi.IWifiManager;
 import android.net.wifi.WifiActivityEnergyInfo;
+import android.os.BatteryStats;
 import android.os.BatteryStatsInternal;
 import android.os.Binder;
 import android.os.Bundle;
@@ -78,8 +88,11 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.procstats.IProcessStats;
 import com.android.internal.app.procstats.ProcessStats;
 import com.android.internal.net.NetworkStatsFactory;
+import com.android.internal.os.BatterySipper;
+import com.android.internal.os.BatteryStatsHelper;
 import com.android.internal.os.BinderCallsStats.ExportedCallStat;
 import com.android.internal.os.KernelCpuSpeedReader;
+import com.android.internal.os.KernelCpuThreadReader;
 import com.android.internal.os.KernelUidCpuActiveTimeReader;
 import com.android.internal.os.KernelUidCpuClusterTimeReader;
 import com.android.internal.os.KernelUidCpuFreqTimeReader;
@@ -95,6 +108,7 @@ import com.android.server.BinderCallsStatsService;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
+import com.android.server.am.MemoryStatUtil.MemoryStat;
 import com.android.server.storage.DiskStatsFileLogger;
 import com.android.server.storage.DiskStatsLoggingService;
 
@@ -191,6 +205,12 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             new KernelUidCpuClusterTimeReader();
     private StoragedUidIoStatsReader mStoragedUidIoStatsReader =
             new StoragedUidIoStatsReader();
+    @Nullable
+    private final KernelCpuThreadReader mKernelCpuThreadReader;
+
+    private BatteryStatsHelper mBatteryStatsHelper = null;
+    private static final int MAX_BATTERY_STATS_HELPER_FREQUENCY_MS = 1000;
+    private long mBatteryStatsHelperTimestampMs = -MAX_BATTERY_STATS_HELPER_FREQUENCY_MS;
 
     private static IThermalService sThermalService;
     private File mBaseDir =
@@ -250,8 +270,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         if (b != null) {
             sThermalService = IThermalService.Stub.asInterface(b);
             try {
-                sThermalService.registerThermalEventListener(
-                        new ThermalEventListener());
+                sThermalService.registerThermalEventListenerWithType(
+                        new ThermalEventListener(), Temperature.TYPE_SKIN);
                 Slog.i(TAG, "register thermal listener successfully");
             } catch (RemoteException e) {
                 // Should never happen.
@@ -261,10 +281,17 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             Slog.e(TAG, "cannot find thermalservice, no throttling push notifications");
         }
 
+        // Default NetworkRequest should cover all transport types.
+        final NetworkRequest request = new NetworkRequest.Builder().build();
+        final ConnectivityManager connectivityManager =
+                (ConnectivityManager) mContext.getSystemService(Context.CONNECTIVITY_SERVICE);
+        connectivityManager.registerNetworkCallback(request, new ConnectivityStatsCallback());
+
         HandlerThread handlerThread = new HandlerThread(TAG);
         handlerThread.start();
         mHandler = new CompanionHandler(handlerThread.getLooper());
 
+        mKernelCpuThreadReader = KernelCpuThreadReader.create();
     }
 
     @Override
@@ -346,6 +373,8 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         List<Integer> uids = new ArrayList<>();
         List<Long> versions = new ArrayList<>();
         List<String> apps = new ArrayList<>();
+        List<String> versionStrings = new ArrayList<>();
+        List<String> installers = new ArrayList<>();
 
         // Add in all the apps for every user/profile.
         for (UserInfo profile : users) {
@@ -353,14 +382,24 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                     pm.getInstalledPackagesAsUser(PackageManager.MATCH_KNOWN_PACKAGES, profile.id);
             for (int j = 0; j < pi.size(); j++) {
                 if (pi.get(j).applicationInfo != null) {
+                    String installer;
+                    try {
+                        installer = pm.getInstallerPackageName(pi.get(j).packageName);
+                    } catch (IllegalArgumentException e) {
+                        installer = "";
+                    }
+                    installers.add(installer == null ? "" : installer);
                     uids.add(pi.get(j).applicationInfo.uid);
                     versions.add(pi.get(j).getLongVersionCode());
+                    versionStrings.add(pi.get(j).versionName);
                     apps.add(pi.get(j).packageName);
                 }
             }
         }
-        sStatsd.informAllUidData(toIntArray(uids), toLongArray(versions), apps.toArray(new
-                String[apps.size()]));
+        sStatsd.informAllUidData(toIntArray(uids), toLongArray(versions),
+                versionStrings.toArray(new String[versionStrings.size()]),
+                apps.toArray(new String[apps.size()]),
+                installers.toArray(new String[installers.size()]));
         if (DEBUG) {
             Slog.d(TAG, "Sent data for " + uids.size() + " apps");
         }
@@ -402,7 +441,14 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                         int uid = b.getInt(Intent.EXTRA_UID);
                         String app = intent.getData().getSchemeSpecificPart();
                         PackageInfo pi = pm.getPackageInfo(app, PackageManager.MATCH_ANY_USER);
-                        sStatsd.informOnePackage(app, uid, pi.getLongVersionCode());
+                        String installer;
+                        try {
+                            installer = pm.getInstallerPackageName(app);
+                        } catch (IllegalArgumentException e) {
+                            installer = "";
+                        }
+                        sStatsd.informOnePackage(app, uid, pi.getLongVersionCode(), pi.versionName,
+                                installer == null ? "" : installer);
                     }
                 } catch (Exception e) {
                     Slog.w(TAG, "Failed to inform statsd of an app update", e);
@@ -1000,6 +1046,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             e.writeLong(processMemoryState.cacheInBytes);
             e.writeLong(processMemoryState.swapInBytes);
             e.writeLong(processMemoryState.rssHighWatermarkInBytes);
+            e.writeLong(processMemoryState.startTimeNanos);
             pulledData.add(e);
         }
     }
@@ -1007,16 +1054,23 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     private void pullNativeProcessMemoryState(
             int tagId, long elapsedNanos, long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
-        List<ProcessMemoryState> processMemoryStates = LocalServices.getService(
-                ActivityManagerInternal.class).getMemoryStateForNativeProcesses();
-        for (ProcessMemoryState processMemoryState : processMemoryStates) {
+        int[] pids = getPidsForCommands(MEMORY_STAT_INTERESTING_NATIVE_PROCESSES);
+        for (int i = 0; i < pids.length; i++) {
+            int pid = pids[i];
+            MemoryStat memoryStat = readMemoryStatFromProcfs(pid);
+            if (memoryStat == null) {
+                continue;
+            }
+            int uid = getUidForPid(pid);
+            String processName = readCmdlineFromProcfs(pid);
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
-            e.writeInt(processMemoryState.uid);
-            e.writeString(processMemoryState.processName);
-            e.writeLong(processMemoryState.pgfault);
-            e.writeLong(processMemoryState.pgmajfault);
-            e.writeLong(processMemoryState.rssInBytes);
-            e.writeLong(processMemoryState.rssHighWatermarkInBytes);
+            e.writeInt(uid);
+            e.writeString(processName);
+            e.writeLong(memoryStat.pgfault);
+            e.writeLong(memoryStat.pgmajfault);
+            e.writeLong(memoryStat.rssInBytes);
+            e.writeLong(memoryStat.rssHighWatermarkInBytes);
+            e.writeLong(memoryStat.startTimeNanos);
             pulledData.add(e);
         }
     }
@@ -1034,7 +1088,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         binderStats.reset();
         for (ExportedCallStat callStat : callStats) {
             StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
-            e.writeInt(callStat.uid);
+            e.writeInt(callStat.workSourceUid);
             e.writeString(callStat.className);
             e.writeString(callStat.methodName);
             e.writeLong(callStat.callCount);
@@ -1047,6 +1101,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             e.writeLong(callStat.maxRequestSizeBytes);
             e.writeLong(callStat.recordedCallCount);
             e.writeInt(callStat.screenInteractive ? 1 : 0);
+            e.writeInt(callStat.callingUid);
             pulledData.add(e);
         }
     }
@@ -1401,6 +1456,73 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         pulledData.add(e);
     }
 
+    private BatteryStatsHelper getBatteryStatsHelper() {
+        if (mBatteryStatsHelper == null) {
+            final long callingToken = Binder.clearCallingIdentity();
+            try {
+                // clearCallingIdentity required for BatteryStatsHelper.checkWifiOnly().
+                mBatteryStatsHelper = new BatteryStatsHelper(mContext, false);
+            } finally {
+                Binder.restoreCallingIdentity(callingToken);
+            }
+            mBatteryStatsHelper.create((Bundle) null);
+        }
+        long currentTime = SystemClock.elapsedRealtime();
+        if (currentTime - mBatteryStatsHelperTimestampMs >= MAX_BATTERY_STATS_HELPER_FREQUENCY_MS) {
+            // Load BatteryStats and do all the calculations.
+            mBatteryStatsHelper.refreshStats(BatteryStats.STATS_SINCE_CHARGED, UserHandle.USER_ALL);
+            // Calculations are done so we don't need to save the raw BatteryStats data in RAM.
+            mBatteryStatsHelper.clearStats();
+            mBatteryStatsHelperTimestampMs = currentTime;
+        }
+        return mBatteryStatsHelper;
+    }
+
+    private void pullDeviceCalculatedPowerUse(int tagId,
+            long elapsedNanos, final long wallClockNanos, List<StatsLogEventWrapper> pulledData) {
+        BatteryStatsHelper bsHelper = getBatteryStatsHelper();
+        StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+        e.writeFloat((float) bsHelper.getComputedPower());
+        pulledData.add(e);
+    }
+
+    private void pullDeviceCalculatedPowerBlameUid(int tagId,
+            long elapsedNanos, final long wallClockNanos, List<StatsLogEventWrapper> pulledData) {
+        final List<BatterySipper> sippers = getBatteryStatsHelper().getUsageList();
+        if (sippers == null) {
+            return;
+        }
+        for (BatterySipper bs : sippers) {
+            if (bs.drainType != bs.drainType.APP) {
+                continue;
+            }
+            StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+            e.writeInt(bs.uidObj.getUid());
+            e.writeFloat((float) bs.totalPowerMah);
+            pulledData.add(e);
+        }
+    }
+
+    private void pullDeviceCalculatedPowerBlameOther(int tagId,
+            long elapsedNanos, final long wallClockNanos, List<StatsLogEventWrapper> pulledData) {
+        final List<BatterySipper> sippers = getBatteryStatsHelper().getUsageList();
+        if (sippers == null) {
+            return;
+        }
+        for (BatterySipper bs : sippers) {
+            if (bs.drainType == bs.drainType.APP) {
+                continue; // This is a separate atom; see pullDeviceCalculatedPowerBlameUid().
+            }
+            if (bs.drainType == bs.drainType.USER) {
+                continue; // This is not supported. We purposefully calculate over USER_ALL.
+            }
+            StatsLogEventWrapper e = new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+            e.writeInt(bs.drainType.ordinal());
+            e.writeFloat((float) bs.totalPowerMah);
+            pulledData.add(e);
+        }
+    }
+
     private void pullDiskIo(int tagId, long elapsedNanos, final long wallClockNanos,
             List<StatsLogEventWrapper> pulledData) {
         mStoragedUidIoStatsReader.readAbsolute((uid, fgCharsRead, fgCharsWrite, fgBytesRead,
@@ -1444,13 +1566,52 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
         }
     }
 
+    private void pullCpuTimePerThreadFreq(int tagId, long elapsedNanos, long wallClockNanos,
+            List<StatsLogEventWrapper> pulledData) {
+        if (this.mKernelCpuThreadReader == null) {
+            return;
+        }
+        KernelCpuThreadReader.ProcessCpuUsage processCpuUsage = this.mKernelCpuThreadReader
+                .getCurrentProcessCpuUsage();
+        if (processCpuUsage == null) {
+            return;
+        }
+        int[] cpuFrequencies = mKernelCpuThreadReader.getCpuFrequenciesKhz();
+        for (KernelCpuThreadReader.ThreadCpuUsage threadCpuUsage
+                : processCpuUsage.threadCpuUsages) {
+            if (threadCpuUsage.usageTimesMillis.length != cpuFrequencies.length) {
+                Slog.w(TAG, "Unexpected number of usage times,"
+                        + " expected " + cpuFrequencies.length
+                        + " but got " + threadCpuUsage.usageTimesMillis.length);
+                continue;
+            }
+
+            for (int i = 0; i < threadCpuUsage.usageTimesMillis.length; i++) {
+                // Do not report CPU usage at a frequency when it's zero
+                if (threadCpuUsage.usageTimesMillis[i] == 0) {
+                    continue;
+                }
+
+                StatsLogEventWrapper e =
+                        new StatsLogEventWrapper(tagId, elapsedNanos, wallClockNanos);
+                e.writeInt(processCpuUsage.uid);
+                e.writeInt(processCpuUsage.processId);
+                e.writeInt(threadCpuUsage.threadId);
+                e.writeString(processCpuUsage.processName);
+                e.writeString(threadCpuUsage.threadName);
+                e.writeInt(cpuFrequencies[i]);
+                e.writeInt(threadCpuUsage.usageTimesMillis[i]);
+                pulledData.add(e);
+            }
+        }
+    }
+
     /**
      * Pulls various data.
      */
     @Override // Binder call
     public StatsLogEventWrapper[] pullData(int tagId) {
         enforceCallingPermission();
-
         if (DEBUG) {
             Slog.d(TAG, "Pulling " + tagId);
         }
@@ -1563,8 +1724,7 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
                 break;
             }
             case StatsLog.PROC_STATS: {
-                pullProcessStats(ProcessStats.REPORT_ALL, tagId, elapsedNanos, wallClockNanos,
-                        ret);
+                pullProcessStats(ProcessStats.REPORT_ALL, tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
             case StatsLog.PROC_STATS_PKG_PROC: {
@@ -1582,6 +1742,22 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
             }
             case StatsLog.PROCESS_CPU_TIME: {
                 pullProcessCpuTime(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.CPU_TIME_PER_THREAD_FREQ: {
+                pullCpuTimePerThreadFreq(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.DEVICE_CALCULATED_POWER_USE: {
+                pullDeviceCalculatedPowerUse(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.DEVICE_CALCULATED_POWER_BLAME_UID: {
+                pullDeviceCalculatedPowerBlameUid(tagId, elapsedNanos, wallClockNanos, ret);
+                break;
+            }
+            case StatsLog.DEVICE_CALCULATED_POWER_BLAME_OTHER: {
+                pullDeviceCalculatedPowerBlameOther(tagId, elapsedNanos, wallClockNanos, ret);
                 break;
             }
             default:
@@ -1804,9 +1980,28 @@ public class StatsCompanionService extends IStatsCompanionService.Stub {
     // Thermal event received from vendor thermal management subsystem
     private static final class ThermalEventListener extends IThermalEventListener.Stub {
         @Override
-        public void notifyThrottling(boolean isThrottling, Temperature temp) {
+        public void notifyThrottling(Temperature temp) {
+            boolean isThrottling = temp.getStatus() >= Temperature.THROTTLING_SEVERE;
             StatsLog.write(StatsLog.THERMAL_THROTTLING, temp.getType(),
-                    isThrottling ? 1 : 0, temp.getValue());
+                    isThrottling ?
+                            StatsLog.THERMAL_THROTTLING_STATE_CHANGED__STATE__START :
+                            StatsLog.THERMAL_THROTTLING_STATE_CHANGED__STATE__STOP,
+                    temp.getValue());
+        }
+    }
+
+    private static final class ConnectivityStatsCallback extends
+            ConnectivityManager.NetworkCallback {
+        @Override
+        public void onAvailable(Network network) {
+            StatsLog.write(StatsLog.CONNECTIVITY_STATE_CHANGED, network.netId,
+                    StatsLog.CONNECTIVITY_STATE_CHANGED__STATE__CONNECTED);
+        }
+
+        @Override
+        public void onLost(Network network) {
+            StatsLog.write(StatsLog.CONNECTIVITY_STATE_CHANGED, network.netId,
+                    StatsLog.CONNECTIVITY_STATE_CHANGED__STATE__DISCONNECTED);
         }
     }
 }

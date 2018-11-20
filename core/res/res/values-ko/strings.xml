@@ -136,6 +136,14 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g> Wi-Fi"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"Wi-Fi 통화 | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"<xliff:g id="SPN">%s</xliff:g> VoWifi"</string>
+    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
+    <skip />
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"꺼짐"</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"Wi-Fi를 기본으로 설정"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"모바일에 최적화됨"</string>
@@ -292,6 +300,9 @@
     <string name="permgrouplab_microphone" msgid="171539900250043464">"마이크"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"오디오 녹음"</string>
     <string name="permgrouprequest_microphone" msgid="9167492350681916038">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;에서 오디오를 녹음하도록 허용하시겠습니까?"</string>
+    <string name="permgrouplab_activityRecognition" msgid="2838596644535616493">"활동 감지"</string>
+    <string name="permgroupdesc_activityRecognition" msgid="7672248027571522602">"활동 확인"</string>
+    <string name="permgrouprequest_activityRecognition" msgid="8121253142311250055">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;에서 내 신체 활동을 확인하도록 허용하시겠습니까?"</string>
     <string name="permgrouplab_camera" msgid="4820372495894586615">"카메라"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"사진 및 동영상 촬영"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;에서 사진을 촬영하고 동영상을 녹화하도록 허용하시겠습니까?"</string>
@@ -414,18 +425,20 @@
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"앱이 추가 위치 정보 제공 기능의 명령에 접근하도록 허용합니다. 이 경우 앱이 GPS 또는 기타 위치 소스의 작동을 방해할 수 있습니다."</string>
     <string name="permlab_accessFineLocation" msgid="6265109654698562427">"포그라운드에서만 정확한 위치에 액세스"</string>
     <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"이 앱은 포그라운드에 있을 때만 나의 정확한 위치를 알 수 있습니다. 앱에서 위치 서비스를 사용하려면 휴대전화에서 위치 서비스가 사용 설정되어 있으며 사용할 수 있어야 합니다. 배터리 사용량이 늘어날 수 있습니다."</string>
-    <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"대략적인 위치(네트워크 기반)에 액세스"</string>
-    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"이 앱은 기지국 및 Wi-Fi 네트워크와 같은 네트워크 소스를 통해 내 위치를 알 수 있습니다. 앱에서 위치 서비스를 사용하려면 태블릿에서 위치 서비스가 사용 설정되어 있으며 사용 가능해야 합니다."</string>
-    <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"이 앱은 기지국 및 Wi-Fi 네트워크와 같은 네트워크 소스를 통해 내 위치를 알 수 있습니다. 앱에서 위치 서비스를 사용하려면 TV에서 위치 서비스가 사용 설정되어 있으며 사용 가능해야 합니다."</string>
-    <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"이 앱은 기지국 및 Wi-Fi 네트워크와 같은 네트워크 소스를 통해 내 위치를 알 수 있습니다. 앱에서 위치 서비스를 사용하려면 휴대전화에서 위치 서비스가 사용 설정되어 있으며 사용 가능해야 합니다."</string>
-    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"백그라운드에서 정확한 위치에 액세스"</string>
-    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"이 앱은 백그라운드에서 언제든지 나의 정확한 위치를 알 수 있습니다. 앱에서 위치 서비스를 사용하려면 휴대전화에서 위치 서비스가 사용 설정되어 있으며 사용할 수 있어야 합니다. 배터리 사용량이 늘어날 수 있습니다."</string>
+    <string name="permlab_accessCoarseLocation" msgid="3707180371693213469">"포그라운드에서만 대략적인 위치(네트워크 기반)에 액세스"</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="8594719010575779120">"앱이 포그라운드에 있을 때만 휴대전화 기지국과 Wi-Fi 네트워크 등의 네트워크 소스를 바탕으로 사용자의 위치를 파악할 수 있습니다. 앱에서 위치 서비스를 사용하려면 태블릿에서 위치 서비스가 켜져 있으며 사용 가능해야 합니다."</string>
+    <string name="permdesc_accessCoarseLocation" product="tv" msgid="3027871910200890806">"앱이 포그라운드에 있을 때만 휴대전화 기지국과 Wi-Fi 네트워크 등의 네트워크 소스를 바탕으로 사용자의 위치를 파악할 수 있습니다. 앱에서 위치 서비스를 사용하려면 TV에서 위치 서비스가 켜져 있으며 사용 가능해야 합니다."</string>
+    <string name="permdesc_accessCoarseLocation" product="default" msgid="854896049371048754">"앱이 포그라운드에 있을 때만 휴대전화 기지국과 Wi-Fi 네트워크 등의 네트워크 소스를 바탕으로 사용자의 위치를 파악할 수 있습니다. 앱에서 위치 서비스를 사용하려면 휴대전화에서 위치 서비스가 켜져 있으며 사용 가능해야 합니다."</string>
+    <string name="permlab_accessBackgroundLocation" msgid="3965397804300661062">"백그라운드에서 위치 정보 액세스"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="1096394429579210251">"이 권한이 대략적인 위치 정보 또는 정확한 위치 정보 액세스 권한에 추가적으로 부여되면 앱이 백그라운드에서 실행되는 동안 위치에 액세스할 수 있습니다."</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"오디오 설정 변경"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"앱이 음량이나 출력을 위해 사용하는 스피커 등 전체 오디오 설정을 변경할 수 있도록 허용합니다."</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"오디오 녹음"</string>
     <string name="permdesc_recordAudio" msgid="4245930455135321433">"이 앱은 언제든지 마이크를 사용하여 오디오를 녹음할 수 있습니다."</string>
     <string name="permlab_sim_communication" msgid="2935852302216852065">"SIM 카드로 명령 전송"</string>
     <string name="permdesc_sim_communication" msgid="5725159654279639498">"앱이 SIM에 명령어를 전송할 수 있도록 허용합니다. 이 기능은 매우 신중히 허용해야 합니다."</string>
+    <string name="permlab_activityRecognition" msgid="3634590230567608356">"신체 활동 확인"</string>
+    <string name="permdesc_activityRecognition" msgid="3143453925156552894">"이 앱에서 내 신체 활동을 확인할 수 있습니다."</string>
     <string name="permlab_camera" msgid="3616391919559751192">"사진과 동영상 찍기"</string>
     <string name="permdesc_camera" msgid="5392231870049240670">"이 앱은 언제든지 카메라를 사용하여 사진을 촬영하고 동영상을 녹화할 수 있습니다."</string>
     <string name="permlab_vibrate" msgid="7696427026057705834">"진동 제어"</string>
@@ -518,6 +531,7 @@
     <string name="permdesc_imagesWrite" msgid="7073662756617474375">"앱에서 사진 컬렉션을 수정하도록 허용합니다."</string>
     <string name="permlab_mediaLocation" msgid="8675148183726247864">"미디어 컬렉션에서 위치 읽기"</string>
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"앱에서 미디어 컬렉션의 위치를 읽도록 허용합니다."</string>
+    <string name="biometric_dialog_default_title" msgid="4229778503907743328">"<xliff:g id="APP">%s</xliff:g> 애플리케이션에서 인증을 요청합니다"</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"생체 인식 하드웨어를 사용할 수 없음"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"지문이 일부만 인식되었습니다. 다시 시도해 주세요."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"지문을 인식할 수 없습니다. 다시 시도해 주세요."</string>
@@ -1819,6 +1833,8 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"SS 요청이 USSD 요청으로 변경됨"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"새 SS 요청으로 변경됨"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"직장 프로필"</string>
+    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
+    <skip />
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"펼치기"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"접기"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"확장 전환"</string>
@@ -1897,14 +1913,14 @@
       <item quantity="other">자동완성 추천 <xliff:g id="COUNT">%1$s</xliff:g>개</item>
       <item quantity="one">자동완성 추천 1개</item>
     </plurals>
-    <string name="autofill_save_title" msgid="3345527308992082601">"&lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;에 저장하시겠습니까?"</string>
-    <string name="autofill_save_title_with_type" msgid="8637809388029313305">"<xliff:g id="TYPE">%1$s</xliff:g>을(를) &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;에 저장하시겠습니까?"</string>
-    <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"<xliff:g id="TYPE_0">%1$s</xliff:g> 및 <xliff:g id="TYPE_1">%2$s</xliff:g>을(를) &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;에 저장하시겠습니까?"</string>
-    <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"<xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g>, <xliff:g id="TYPE_2">%3$s</xliff:g>을(를) &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;에 저장하시겠습니까?"</string>
-    <string name="autofill_update_title" msgid="4879673117448810818">"&lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;(으)로 업데이트하시겠습니까?"</string>
-    <string name="autofill_update_title_with_type" msgid="339733442087186755">"<xliff:g id="TYPE">%1$s</xliff:g>을(를) &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;(으)로 업데이트하시겠습니까?"</string>
-    <string name="autofill_update_title_with_2types" msgid="6321714204167424745">"<xliff:g id="TYPE_0">%1$s</xliff:g> 및 <xliff:g id="TYPE_1">%2$s</xliff:g>을(를) &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;(으)로 업데이트하시겠습니까?"</string>
-    <string name="autofill_update_title_with_3types" msgid="5866735124066629287">"<xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g>, <xliff:g id="TYPE_2">%3$s</xliff:g>을(를) &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;(으)로 업데이트하시겠습니까?"</string>
+    <string name="autofill_save_title" msgid="327541108460384555"><b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"에 저장하시겠습니까?"</string>
+    <string name="autofill_save_title_with_type" msgid="2339135393607143594">"<xliff:g id="TYPE">%1$s</xliff:g>을(를) "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"에 저장하시겠습니까?"</string>
+    <string name="autofill_save_title_with_2types" msgid="87616102361154432">"<xliff:g id="TYPE_0">%1$s</xliff:g> 및 <xliff:g id="TYPE_1">%2$s</xliff:g>을(를) "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"에 저장하시겠습니까?"</string>
+    <string name="autofill_save_title_with_3types" msgid="4108978552969604555">"<xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> 및 <xliff:g id="TYPE_2">%3$s</xliff:g>을(를) "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"에 저장하시겠습니까?"</string>
+    <string name="autofill_update_title" msgid="5305781141104585279"><b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"에서 업데이트하시겠습니까?"</string>
+    <string name="autofill_update_title_with_type" msgid="4624181147422762233"><b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"에서 <xliff:g id="TYPE">%1$s</xliff:g>을(를) 업데이트하시겠습니까?"</string>
+    <string name="autofill_update_title_with_2types" msgid="2300113827053626484"><b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"에서 <xliff:g id="TYPE_0">%1$s</xliff:g> 및 <xliff:g id="TYPE_1">%2$s</xliff:g>을(를) 업데이트하시겠습니까?"</string>
+    <string name="autofill_update_title_with_3types" msgid="9089824354296211922"><b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"에서 <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> 및 <xliff:g id="TYPE_2">%3$s</xliff:g> 업데이트"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"저장"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"사용 안함"</string>
     <string name="autofill_update_yes" msgid="310358413273276958">"업데이트"</string>

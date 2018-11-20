@@ -215,6 +215,7 @@
   <java-symbol type="id" name="pin_error_message" />
   <java-symbol type="id" name="timePickerLayout" />
   <java-symbol type="id" name="profile_badge" />
+  <java-symbol type="id" name="alerted_icon" />
   <java-symbol type="id" name="transitionPosition" />
   <java-symbol type="id" name="selection_start_handle" />
   <java-symbol type="id" name="selection_end_handle" />
@@ -1112,6 +1113,7 @@
   <java-symbol type="string" name="owner_name" />
   <java-symbol type="string" name="config_chooseAccountActivity" />
   <java-symbol type="string" name="config_chooseTypeAndAccountActivity" />
+  <java-symbol type="string" name="config_chooserActivity" />
   <java-symbol type="string" name="config_customResolverActivity" />
   <java-symbol type="string" name="config_appsAuthorizedForSharedAccounts" />
   <java-symbol type="string" name="error_message_title" />
@@ -1681,6 +1683,8 @@
   <java-symbol type="dimen" name="navigation_bar_height" />
   <java-symbol type="dimen" name="navigation_bar_height_landscape" />
   <java-symbol type="dimen" name="navigation_bar_width" />
+  <java-symbol type="dimen" name="navigation_bar_frame_height" />
+  <java-symbol type="dimen" name="navigation_bar_frame_width" />
   <java-symbol type="dimen" name="navigation_bar_height_car_mode" />
   <java-symbol type="dimen" name="navigation_bar_height_landscape_car_mode" />
   <java-symbol type="dimen" name="navigation_bar_width_car_mode" />
@@ -1829,7 +1833,6 @@
   <java-symbol type="array" name="config_tether_dhcp_range" />
   <java-symbol type="array" name="config_tether_upstream_types" />
   <java-symbol type="bool" name="config_tether_upstream_automatic" />
-  <java-symbol type="array" name="config_tether_apndata" />
   <java-symbol type="array" name="config_tether_usb_regexs" />
   <java-symbol type="array" name="config_tether_wifi_regexs" />
   <java-symbol type="array" name="config_usbHostBlacklist" />
@@ -2807,6 +2810,8 @@
   <java-symbol type="string" name="status_bar_mobile" />
   <java-symbol type="string" name="status_bar_ethernet" />
   <java-symbol type="string" name="status_bar_vpn" />
+  <java-symbol type="string" name="status_bar_microphone" />
+  <java-symbol type="string" name="status_bar_camera" />
 
   <!-- Locale picker -->
   <java-symbol type="id" name="locale_search_menu" />
@@ -3435,6 +3440,7 @@
 
   <java-symbol type="integer" name="config_lowBatteryAutoTriggerDefaultLevel" />
   <java-symbol type="bool" name="config_batterySaverStickyBehaviourDisabled" />
+  <java-symbol type="integer" name="config_dynamicPowerSavingsDefaultDisableThreshold" />
 
   <!-- For car devices -->
   <java-symbol type="string" name="car_loading_profile" />
@@ -3493,4 +3499,6 @@
   <java-symbol type="bool" name="config_useSmsAppService" />
 
   <java-symbol type="string" name="config_defaultAssistantComponentName" />
+
+  <java-symbol type="id" name="transition_overlay_view_tag" />
 </resources>

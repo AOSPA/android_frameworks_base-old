@@ -132,6 +132,15 @@ public class StorageManager {
     public static final String PROP_ISOLATED_STORAGE = "persist.sys.isolated_storage";
 
     /** {@hide} */
+    public static final String PROP_FORCE_AUDIO = "persist.fw.force_audio";
+    /** {@hide} */
+    public static final String PROP_FORCE_VIDEO = "persist.fw.force_video";
+    /** {@hide} */
+    public static final String PROP_FORCE_IMAGES = "persist.fw.force_images";
+    /** {@hide} */
+    public static final String PROP_FORCE_LEGACY = "persist.fw.force_legacy";
+
+    /** {@hide} */
     public static final String UUID_PRIVATE_INTERNAL = null;
     /** {@hide} */
     public static final String UUID_PRIMARY_PHYSICAL = "primary_physical";
@@ -216,6 +225,8 @@ public class StorageManager {
     public static final int DEBUG_SDCARDFS_FORCE_OFF = 1 << 4;
     /** {@hide} */
     public static final int DEBUG_VIRTUAL_DISK = 1 << 5;
+    /** {@hide} */
+    public static final int DEBUG_ISOLATED_STORAGE = 1 << 6;
 
     /** {@hide} */
     public static final int FLAG_STORAGE_DE = IInstalld.FLAG_STORAGE_DE;
@@ -256,6 +267,9 @@ public class StorageManager {
     /** @hide Underlying data is corrupt */
     public static final int ENCRYPTION_STATE_ERROR_CORRUPT =
             IVold.ENCRYPTION_STATE_ERROR_CORRUPT;
+
+    /** @hide Prefix used in sandboxIds for apps with sharedUserIds */
+    public static final String SHARED_SANDBOX_PREFIX = "shared-";
 
     private static volatile IStorageManager sStorageManager = null;
 
@@ -790,7 +804,7 @@ public class StorageManager {
         try {
             for (VolumeInfo vol : mStorageManager.getVolumes(0)) {
                 if (vol.path != null && FileUtils.contains(vol.path, pathString)
-                        && vol.type != VolumeInfo.TYPE_PUBLIC) {
+                        && vol.type != VolumeInfo.TYPE_PUBLIC && vol.type != VolumeInfo.TYPE_STUB) {
                     // TODO: verify that emulated adopted devices have UUID of
                     // underlying volume
                     try {
@@ -1537,13 +1551,13 @@ public class StorageManager {
      *
      * @hide
      */
-    public File translateAppToSystem(File file, String packageName) {
+    public File translateAppToSystem(File file, int pid, int uid) {
         // We can only translate absolute paths
         if (!file.isAbsolute()) return file;
 
         try {
             return new File(mStorageManager.translateAppToSystem(file.getAbsolutePath(),
-                    packageName, mContext.getUserId()));
+                    pid, uid));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1555,13 +1569,13 @@ public class StorageManager {
      *
      * @hide
      */
-    public File translateSystemToApp(File file, String packageName) {
+    public File translateSystemToApp(File file, int pid, int uid) {
         // We can only translate absolute paths
         if (!file.isAbsolute()) return file;
 
         try {
             return new File(mStorageManager.translateSystemToApp(file.getAbsolutePath(),
-                    packageName, mContext.getUserId()));
+                    pid, uid));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

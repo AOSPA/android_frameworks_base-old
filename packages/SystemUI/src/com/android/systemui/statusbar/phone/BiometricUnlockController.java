@@ -16,22 +16,23 @@
 
 package com.android.systemui.statusbar.phone;
 
-import android.hardware.biometrics.BiometricSourceType;
 import android.content.Context;
+import android.hardware.biometrics.BiometricSourceType;
 import android.os.Handler;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.util.Log;
 
+import com.android.internal.util.LatencyTracker;
 import com.android.keyguard.KeyguardConstants;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
-import com.android.internal.util.LatencyTracker;
 import com.android.systemui.Dependency;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
+import com.android.systemui.statusbar.NotificationMediaManager;
 
 import java.io.PrintWriter;
 
@@ -95,6 +96,8 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback {
      */
     private static final float BIOMETRIC_COLLAPSE_SPEEDUP_FACTOR = 1.1f;
 
+    private final NotificationMediaManager mMediaManager =
+            Dependency.get(NotificationMediaManager.class);
     private PowerManager mPowerManager;
     private Handler mHandler = new Handler();
     private PowerManager.WakeLock mWakeLock;
@@ -264,7 +267,7 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback {
             case MODE_WAKE_AND_UNLOCK:
                 if (mMode == MODE_WAKE_AND_UNLOCK_PULSING) {
                     Trace.beginSection("MODE_WAKE_AND_UNLOCK_PULSING");
-                    mStatusBar.updateMediaMetaData(false /* metaDataChanged */,
+                    mMediaManager.updateMediaMetaData(false /* metaDataChanged */,
                             true /* allowEnterAnimation */);
                 } else if (mMode == MODE_WAKE_AND_UNLOCK){
                     Trace.beginSection("MODE_WAKE_AND_UNLOCK");

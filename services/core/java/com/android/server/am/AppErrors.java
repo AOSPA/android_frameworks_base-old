@@ -17,12 +17,13 @@
 package com.android.server.am;
 
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
+import static android.content.pm.ApplicationInfo.FLAG_SYSTEM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityManagerService.MY_PID;
 import static com.android.server.am.ActivityManagerService.SYSTEM_DEBUGGABLE;
-import static com.android.server.am.ActivityTaskManagerService.RELAUNCH_REASON_FREE_RESIZE;
-import static com.android.server.am.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
+import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_FREE_RESIZE;
+import static com.android.server.wm.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
 
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
@@ -37,7 +38,6 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Message;
 import android.os.Process;
-import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -54,12 +54,11 @@ import com.android.internal.app.ProcessMap;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
 import com.android.server.RescueParty;
-import com.android.server.Watchdog;
+import com.android.server.wm.WindowProcessController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.Collections;
-import java.util.Set;
 
 /**
  * Controls error conditions in applications.
@@ -474,7 +473,7 @@ class AppErrors {
                 mService.mProcessList.removeProcessLocked(r, false, true, "crash");
                 if (taskId != INVALID_TASK_ID) {
                     try {
-                        mService.mActivityTaskManager.startActivityFromRecents(taskId,
+                        mService.startActivityFromRecents(taskId,
                                 ActivityOptions.makeBasic().toBundle());
                     } catch (IllegalArgumentException e) {
                         // Hmm...that didn't work. Task should either be in recents or associated
@@ -526,41 +525,29 @@ class AppErrors {
                                                        String shortMsg, String longMsg,
                                                        String stackTrace, long timeMillis,
                                                        int callingPid, int callingUid) {
-        if (mService.mActivityTaskManager.mController == null) {
-            return false;
-        }
+        String name = r != null ? r.processName : null;
+        int pid = r != null ? r.pid : callingPid;
+        int uid = r != null ? r.info.uid : callingUid;
 
-        try {
-            String name = r != null ? r.processName : null;
-            int pid = r != null ? r.pid : callingPid;
-            int uid = r != null ? r.info.uid : callingUid;
-            if (!mService.mActivityTaskManager.mController.appCrashed(name, pid,
-                    shortMsg, longMsg, timeMillis, crashInfo.stackTrace)) {
-                if ("1".equals(SystemProperties.get(SYSTEM_DEBUGGABLE, "0"))
-                        && "Native crash".equals(crashInfo.exceptionClassName)) {
-                    Slog.w(TAG, "Skip killing native crashed app " + name
-                            + "(" + pid + ") during testing");
-                } else {
-                    Slog.w(TAG, "Force-killing crashed app " + name
-                            + " at watcher's request");
-                    if (r != null) {
-                        if (!makeAppCrashingLocked(r, shortMsg, longMsg, stackTrace, null))
-                        {
-                            r.kill("crash", true);
-                        }
-                    } else {
-                        // Huh.
-                        Process.killProcess(pid);
-                        ProcessList.killProcessGroup(uid, pid);
+        return mService.mAtmInternal.handleAppCrashInActivityController(
+                name, pid, shortMsg, longMsg, timeMillis, crashInfo.stackTrace, () -> {
+            if ("1".equals(SystemProperties.get(SYSTEM_DEBUGGABLE, "0"))
+                    && "Native crash".equals(crashInfo.exceptionClassName)) {
+                Slog.w(TAG, "Skip killing native crashed app " + name
+                        + "(" + pid + ") during testing");
+            } else {
+                Slog.w(TAG, "Force-killing crashed app " + name + " at watcher's request");
+                if (r != null) {
+                    if (!makeAppCrashingLocked(r, shortMsg, longMsg, stackTrace, null)) {
+                        r.kill("crash", true);
                     }
+                } else {
+                    // Huh.
+                    Process.killProcess(pid);
+                    ProcessList.killProcessGroup(uid, pid);
                 }
-                return true;
             }
-        } catch (RemoteException e) {
-            mService.mActivityTaskManager.mController = null;
-            Watchdog.getInstance().setActivityController(null);
-        }
-        return false;
+        });
     }
 
     private boolean makeAppCrashingLocked(ProcessRecord app,
@@ -631,7 +618,7 @@ class AppErrors {
         report.installerPackageName = r.errorReportReceiver.getPackageName();
         report.processName = r.processName;
         report.time = timeMillis;
-        report.systemApp = (r.info.flags & ApplicationInfo.FLAG_SYSTEM) != 0;
+        report.systemApp = (r.info.flags & FLAG_SYSTEM) != 0;
 
         if (r.isCrashing() || r.forceCrashReport) {
             report.type = ApplicationErrorReport.TYPE_CRASH;
@@ -742,9 +729,9 @@ class AppErrors {
         // with a home activity running in the process to prevent a repeatedly crashing app
         // from blocking the user to manually clear the list.
         final WindowProcessController proc = app.getWindowProcessController();
-        final WindowProcessController homeProc = mService.mActivityTaskManager.mHomeProcess;
+        final WindowProcessController homeProc = mService.mAtmInternal.getHomeProcess();
         if (proc == homeProc && proc.hasActivities()
-                && (homeProc.mInfo.flags & ApplicationInfo.FLAG_SYSTEM) == 0) {
+                && (((ProcessRecord) homeProc.mOwner).info.flags & FLAG_SYSTEM) == 0) {
             proc.clearPackagePreferredForHomeActivities();
         }
 
@@ -806,7 +793,7 @@ class AppErrors {
                     mService.mUserController.getCurrentUserId()) != 0;
             final boolean crashSilenced = mAppsNotReportingCrashes != null &&
                     mAppsNotReportingCrashes.contains(proc.info.packageName);
-            if ((mService.mActivityTaskManager.canShowErrorDialogs() || showBackground)
+            if ((mService.mAtmInternal.canShowErrorDialogs() || showBackground)
                     && !crashSilenced
                     && (showFirstCrash || showFirstCrashDevOption || data.repeating)) {
                 proc.crashDialog = dialogToShow = new AppErrorDialog(mContext, mService, data);
@@ -859,7 +846,7 @@ class AppErrors {
 
             boolean showBackground = Settings.Secure.getInt(mContext.getContentResolver(),
                     Settings.Secure.ANR_SHOW_BACKGROUND, 0) != 0;
-            if (mService.mActivityTaskManager.canShowErrorDialogs() || showBackground) {
+            if (mService.mAtmInternal.canShowErrorDialogs() || showBackground) {
                 dialogToShow = new AppNotRespondingDialog(mService, mContext, data);
                 proc.anrDialog = dialogToShow;
             } else {

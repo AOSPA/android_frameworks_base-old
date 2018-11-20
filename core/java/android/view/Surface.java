@@ -22,7 +22,9 @@ import android.content.res.CompatibilityInfo.Translator;
 import android.graphics.Canvas;
 import android.graphics.GraphicBuffer;
 import android.graphics.Matrix;
+import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
+import android.graphics.RenderNode;
 import android.graphics.SurfaceTexture;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -889,13 +891,13 @@ public class Surface implements Parcelable {
     private final class HwuiContext {
         private final RenderNode mRenderNode;
         private long mHwuiRenderer;
-        private DisplayListCanvas mCanvas;
+        private RecordingCanvas mCanvas;
         private final boolean mIsWideColorGamut;
 
         HwuiContext(boolean isWideColorGamut) {
             mRenderNode = RenderNode.create("HwuiCanvas", null);
             mRenderNode.setClipToBounds(false);
-            mRenderNode.setAllowForceDark(false);
+            mRenderNode.setForceDarkAllowed(false);
             mIsWideColorGamut = isWideColorGamut;
             mHwuiRenderer = nHwuiCreate(mRenderNode.mNativeRenderNode, mNativeObject,
                     isWideColorGamut);

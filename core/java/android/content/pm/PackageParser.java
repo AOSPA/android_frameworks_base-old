@@ -228,6 +228,24 @@ public class PackageParser {
         CHILD_PACKAGE_TAGS.add(TAG_EAT_COMMENT);
     }
 
+    // STOPSHIP(b/112545973): remove once feature enabled by default
+    private static final Set<String> FORCE_AUDIO_PACKAGES;
+    private static final Set<String> FORCE_VIDEO_PACKAGES;
+    private static final Set<String> FORCE_IMAGES_PACKAGES;
+    static {
+        FORCE_AUDIO_PACKAGES = parsePackageList(
+                SystemProperties.get(StorageManager.PROP_FORCE_AUDIO));
+        FORCE_VIDEO_PACKAGES = parsePackageList(
+                SystemProperties.get(StorageManager.PROP_FORCE_VIDEO));
+        FORCE_IMAGES_PACKAGES = parsePackageList(
+                SystemProperties.get(StorageManager.PROP_FORCE_IMAGES));
+    }
+
+    private static Set<String> parsePackageList(String pkgs) {
+        if (TextUtils.isEmpty(pkgs)) return Collections.emptySet();
+        return new ArraySet<String>(Arrays.asList(pkgs.split(",")));
+    }
+
     private static final boolean LOG_UNSAFE_BROADCASTS = false;
 
     /**
@@ -2417,7 +2435,7 @@ public class PackageParser {
         }
 
         final int NP = PackageParser.NEW_PERMISSIONS.length;
-        StringBuilder implicitPerms = null;
+        StringBuilder newPermsMsg = null;
         for (int ip=0; ip<NP; ip++) {
             final PackageParser.NewPermissionInfo npi
                     = PackageParser.NEW_PERMISSIONS[ip];
@@ -2425,19 +2443,20 @@ public class PackageParser {
                 break;
             }
             if (!pkg.requestedPermissions.contains(npi.name)) {
-                if (implicitPerms == null) {
-                    implicitPerms = new StringBuilder(128);
-                    implicitPerms.append(pkg.packageName);
-                    implicitPerms.append(": compat added ");
+                if (newPermsMsg == null) {
+                    newPermsMsg = new StringBuilder(128);
+                    newPermsMsg.append(pkg.packageName);
+                    newPermsMsg.append(": compat added ");
                 } else {
-                    implicitPerms.append(' ');
+                    newPermsMsg.append(' ');
                 }
-                implicitPerms.append(npi.name);
+                newPermsMsg.append(npi.name);
                 pkg.requestedPermissions.add(npi.name);
+                pkg.implicitPermissions.add(npi.name);
             }
         }
-        if (implicitPerms != null) {
-            Slog.i(TAG, implicitPerms.toString());
+        if (newPermsMsg != null) {
+            Slog.i(TAG, newPermsMsg.toString());
         }
 
 
@@ -2454,6 +2473,7 @@ public class PackageParser {
                 final String perm = newPerms.get(in);
                 if (!pkg.requestedPermissions.contains(perm)) {
                     pkg.requestedPermissions.add(perm);
+                    pkg.implicitPermissions.add(perm);
                 }
             }
         }
@@ -2532,6 +2552,34 @@ public class PackageParser {
                         p.info.protectionLevel &= ~PermissionInfo.PROTECTION_MASK_BASE;
                         p.info.protectionLevel |= PermissionInfo.PROTECTION_DANGEROUS;
                     }
+                }
+            }
+        } else {
+            if (FORCE_AUDIO_PACKAGES.contains(pkg.packageName)) {
+                pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_AUDIO);
+                pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_AUDIO);
+            }
+            if (FORCE_VIDEO_PACKAGES.contains(pkg.packageName)) {
+                pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_VIDEO);
+                pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_VIDEO);
+            }
+            if (FORCE_IMAGES_PACKAGES.contains(pkg.packageName)) {
+                pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_IMAGES);
+                pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_IMAGES);
+            }
+
+            if (SystemProperties.getBoolean(StorageManager.PROP_FORCE_LEGACY, false)) {
+                if (pkg.requestedPermissions
+                        .contains(android.Manifest.permission.READ_EXTERNAL_STORAGE)) {
+                    pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_AUDIO);
+                    pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_VIDEO);
+                    pkg.requestedPermissions.add(android.Manifest.permission.READ_MEDIA_IMAGES);
+                }
+                if (pkg.requestedPermissions
+                        .contains(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                    pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_AUDIO);
+                    pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_VIDEO);
+                    pkg.requestedPermissions.add(android.Manifest.permission.WRITE_MEDIA_IMAGES);
                 }
             }
         }
@@ -3501,6 +3549,8 @@ public class PackageParser {
                 com.android.internal.R.styleable.AndroidManifestApplication_debuggable,
                 false)) {
             ai.flags |= ApplicationInfo.FLAG_DEBUGGABLE;
+            // Debuggable implies profileable
+            ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL;
         }
 
         if (sa.getBoolean(
@@ -3867,6 +3917,14 @@ public class PackageParser {
                 // Dependencies for app installers; we don't currently try to
                 // enforce this.
                 XmlUtils.skipCurrentTag(parser);
+            } else if (tagName.equals("profileable")) {
+                sa = res.obtainAttributes(parser,
+                        com.android.internal.R.styleable.AndroidManifestProfileable);
+                if (sa.getBoolean(
+                        com.android.internal.R.styleable.AndroidManifestProfileable_shell, false)) {
+                    ai.privateFlags |= ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL;
+                }
+                XmlUtils.skipCurrentTag(parser);
 
             } else {
                 if (!RIGID_PARSER) {
@@ -3883,10 +3941,13 @@ public class PackageParser {
             }
         }
 
-        // Add a hidden app detail activity which forwards user to App Details page.
-        Activity a = generateAppDetailsHiddenActivity(owner, flags, outError,
-                owner.baseHardwareAccelerated);
-        owner.activities.add(a);
+        if (TextUtils.isEmpty(owner.staticSharedLibName)) {
+            // Add a hidden app detail activity to normal apps which forwards user to App Details
+            // page.
+            Activity a = generateAppDetailsHiddenActivity(owner, flags, outError,
+                    owner.baseHardwareAccelerated);
+            owner.activities.add(a);
+        }
 
         if (hasActivityOrder) {
             Collections.sort(owner.activities, (a1, a2) -> Integer.compare(a2.order, a1.order));
@@ -6335,6 +6396,9 @@ public class PackageParser {
         @UnsupportedAppUsage
         public final ArrayList<String> requestedPermissions = new ArrayList<String>();
 
+        /** Permissions requested but not in the manifest. */
+        public final ArrayList<String> implicitPermissions = new ArrayList<>();
+
         @UnsupportedAppUsage
         public ArrayList<String> protectedBroadcasts;
 
@@ -6353,6 +6417,7 @@ public class PackageParser {
         public ArrayList<String> usesOptionalLibraries = null;
         @UnsupportedAppUsage
         public String[] usesLibraryFiles = null;
+        public ArrayList<SharedLibraryInfo> usesLibraryInfos = null;
 
         public ArrayList<ActivityIntentInfo> preferredActivityFilters = null;
 
@@ -6863,6 +6928,8 @@ public class PackageParser {
 
             dest.readStringList(requestedPermissions);
             internStringArrayList(requestedPermissions);
+            dest.readStringList(implicitPermissions);
+            internStringArrayList(implicitPermissions);
             protectedBroadcasts = dest.createStringArrayList();
             internStringArrayList(protectedBroadcasts);
 
@@ -6886,6 +6953,8 @@ public class PackageParser {
             usesOptionalLibraries = dest.createStringArrayList();
             internStringArrayList(usesOptionalLibraries);
             usesLibraryFiles = dest.readStringArray();
+
+            usesLibraryInfos = dest.createTypedArrayList(SharedLibraryInfo.CREATOR);
 
             final int libCount = dest.readInt();
             if (libCount > 0) {
@@ -7025,6 +7094,7 @@ public class PackageParser {
             dest.writeParcelableList(instrumentation, flags);
 
             dest.writeStringList(requestedPermissions);
+            dest.writeStringList(implicitPermissions);
             dest.writeStringList(protectedBroadcasts);
 
             // TODO: This doesn't work: b/64295061
@@ -7037,6 +7107,7 @@ public class PackageParser {
             dest.writeStringList(usesLibraries);
             dest.writeStringList(usesOptionalLibraries);
             dest.writeStringArray(usesLibraryFiles);
+            dest.writeTypedList(usesLibraryInfos);
 
             if (ArrayUtils.isEmpty(usesStaticLibraries)) {
                 dest.writeInt(-1);
@@ -7501,6 +7572,10 @@ public class PackageParser {
         }
         if ((flags & PackageManager.GET_SHARED_LIBRARY_FILES) != 0
                 && p.usesLibraryFiles != null) {
+            return true;
+        }
+        if ((flags & PackageManager.GET_SHARED_LIBRARY_FILES) != 0
+                && p.usesLibraryInfos != null) {
             return true;
         }
         if (p.staticSharedLibName != null) {

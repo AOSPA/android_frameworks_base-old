@@ -138,6 +138,14 @@
     <string name="wfcSpnFormat_spn_wifi" msgid="6546481665561961938">"<xliff:g id="SPN">%s</xliff:g>, Wi-Fi"</string>
     <string name="wfcSpnFormat_wifi_calling_bar_spn" msgid="1726178784338466265">"Połączenia przez Wi-Fi | <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="wfcSpnFormat_spn_vowifi" msgid="4444638298656953681">"<xliff:g id="SPN">%s</xliff:g>, VoWifi"</string>
+    <!-- no translation found for wfcSpnFormat_wifi_calling (4990486735013125329) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi (1892673884655959773) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_wifi_calling_wo_hyphen (1336669776254502831) -->
+    <skip />
+    <!-- no translation found for wfcSpnFormat_vowifi (1765176406171272629) -->
+    <skip />
     <string name="wifi_calling_off_summary" msgid="8720659586041656098">"Wył."</string>
     <string name="wfc_mode_wifi_preferred_summary" msgid="1994113411286935263">"Preferuj Wi-Fi"</string>
     <string name="wfc_mode_cellular_preferred_summary" msgid="1988279625335345908">"Preferowane komórkowe"</string>
@@ -298,6 +306,9 @@
     <string name="permgrouplab_microphone" msgid="171539900250043464">"Mikrofon"</string>
     <string name="permgroupdesc_microphone" msgid="4988812113943554584">"nagrywanie dźwięku"</string>
     <string name="permgrouprequest_microphone" msgid="9167492350681916038">"Zezwolić aplikacji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; na nagrywanie dźwięku?"</string>
+    <string name="permgrouplab_activityRecognition" msgid="2838596644535616493">"Rozpoznawanie aktywności"</string>
+    <string name="permgroupdesc_activityRecognition" msgid="7672248027571522602">"rozpoznawanie aktywności"</string>
+    <string name="permgrouprequest_activityRecognition" msgid="8121253142311250055">"Zezwolić aplikacji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; na rozpoznawanie Twojej aktywności fizycznej?"</string>
     <string name="permgrouplab_camera" msgid="4820372495894586615">"Aparat"</string>
     <string name="permgroupdesc_camera" msgid="3250611594678347720">"robienie zdjęć i nagrywanie filmów"</string>
     <string name="permgrouprequest_camera" msgid="1299833592069671756">"Zezwolić aplikacji &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; na robienie zdjęć i nagrywanie filmów?"</string>
@@ -420,18 +431,20 @@
     <string name="permdesc_accessLocationExtraCommands" msgid="6078307221056649927">"Pozwala aplikacji na dostęp do dodatkowych poleceń dostawcy informacji o lokalizacji. Aplikacje z tym uprawnieniem mogą wpływać na działanie GPS-a lub innych źródeł lokalizacji."</string>
     <string name="permlab_accessFineLocation" msgid="6265109654698562427">"dostęp do dokładnej lokalizacji tylko na pierwszym planie"</string>
     <string name="permdesc_accessFineLocation" msgid="3520508381065331098">"Ta aplikacja może określić Twoją dokładną lokalizację tylko wtedy, gdy działa na pierwszym planie. Te usługi lokalizacyjne muszą być włączone i dostępne na telefonie, by aplikacja mogła z nich korzystać. Może to zwiększyć zużycie baterii."</string>
-    <string name="permlab_accessCoarseLocation" msgid="7715277613928539434">"dostęp do przybliżonej lokalizacji (na podstawie sieci)"</string>
-    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="3373266766487862426">"Ta aplikacja może określać Twoją lokalizację na podstawie źródeł sieciowych, takich jak stacje bazowe i sieci Wi-Fi. Te usługi lokalizacyjne muszą być włączone i dostępne na tablecie, by aplikacja mogła z nich korzystać."</string>
-    <string name="permdesc_accessCoarseLocation" product="tv" msgid="1884022719818788511">"Ta aplikacja może określać Twoją lokalizację na podstawie źródeł sieciowych, takich jak stacje bazowe i sieci Wi-Fi. Te usługi lokalizacyjne muszą być włączone i dostępne na telewizorze, by aplikacja mogła z nich korzystać."</string>
-    <string name="permdesc_accessCoarseLocation" product="default" msgid="7788009094906196995">"Ta aplikacja może określać Twoją lokalizację na podstawie źródeł sieciowych, takich jak stacje bazowe i sieci Wi-Fi. Te usługi lokalizacyjne muszą być włączone i dostępne na telefonie, by aplikacja mogła z nich korzystać."</string>
-    <string name="permlab_accessBackgroundLocation" msgid="5742466381902568536">"dostęp do dokładnej lokalizacji w tle"</string>
-    <string name="permdesc_accessBackgroundLocation" msgid="6371533283380774135">"Ta aplikacja może określić Twoją dokładną lokalizację w dowolnym momencie, działając w tle. Te usługi lokalizacyjne muszą być włączone i dostępne na telefonie, by aplikacja mogła z nich korzystać. Może to zwiększyć zużycie baterii."</string>
+    <string name="permlab_accessCoarseLocation" msgid="3707180371693213469">"dostęp do przybliżonej lokalizacji (na podstawie sieci) tylko na pierwszym planie"</string>
+    <string name="permdesc_accessCoarseLocation" product="tablet" msgid="8594719010575779120">"Ta aplikacja może określać Twoją lokalizację na podstawie źródeł sieciowych takich jak stacje bazowe i sieci Wi-Fi, ale tylko wtedy, gdy działa na pierwszym planie. Wymienione usługi lokalizacyjne muszą być włączone i dostępne na tablecie, by aplikacja mogła z nich korzystać."</string>
+    <string name="permdesc_accessCoarseLocation" product="tv" msgid="3027871910200890806">"Ta aplikacja może określać Twoją lokalizację na podstawie źródeł sieciowych takich jak stacje bazowe i sieci Wi-Fi, ale tylko wtedy, gdy działa na pierwszym planie. Wymienione usługi lokalizacyjne muszą być włączone i dostępne na telewizorze, by aplikacja mogła z nich korzystać."</string>
+    <string name="permdesc_accessCoarseLocation" product="default" msgid="854896049371048754">"Ta aplikacja może określać Twoją lokalizację na podstawie źródeł sieciowych takich jak stacje bazowe i sieci Wi-Fi, ale tylko wtedy, gdy działa na pierwszym planie. Wymienione usługi lokalizacyjne muszą być włączone i dostępne na telefonie, by aplikacja mogła z nich korzystać."</string>
+    <string name="permlab_accessBackgroundLocation" msgid="3965397804300661062">"dostęp do lokalizacji w tle"</string>
+    <string name="permdesc_accessBackgroundLocation" msgid="1096394429579210251">"Jeśli te uprawnienia zostaną przyznane wraz z dostępem do dokładnej lub przybliżonej lokalizacji, aplikacja będzie mogła uzyskiwać dostęp do lokalizacji podczas działania w tle."</string>
     <string name="permlab_modifyAudioSettings" msgid="6095859937069146086">"zmienianie ustawień audio"</string>
     <string name="permdesc_modifyAudioSettings" msgid="3522565366806248517">"Pozwala aplikacji na modyfikowanie globalnych ustawień dźwięku, takich jak głośność oraz urządzenie wyjściowe."</string>
     <string name="permlab_recordAudio" msgid="3876049771427466323">"nagrywanie dźwięku"</string>
     <string name="permdesc_recordAudio" msgid="4245930455135321433">"Ta aplikacja może w dowolnym momencie nagrać dźwięk przez mikrofon."</string>
     <string name="permlab_sim_communication" msgid="2935852302216852065">"wysyłanie poleceń do karty SIM"</string>
     <string name="permdesc_sim_communication" msgid="5725159654279639498">"Pozwala aplikacji na wysyłanie poleceń do karty SIM. To bardzo niebezpieczne."</string>
+    <string name="permlab_activityRecognition" msgid="3634590230567608356">"rozpoznawanie aktywności fizycznej"</string>
+    <string name="permdesc_activityRecognition" msgid="3143453925156552894">"Ta aplikacja może rozpoznawać Twoją aktywność fizyczną."</string>
     <string name="permlab_camera" msgid="3616391919559751192">"wykonywanie zdjęć i filmów wideo"</string>
     <string name="permdesc_camera" msgid="5392231870049240670">"Ta aplikacja może w dowolnym momencie robić zdjęcia i nagrywać filmy przy użyciu aparatu."</string>
     <string name="permlab_vibrate" msgid="7696427026057705834">"sterowanie wibracjami"</string>
@@ -524,6 +537,7 @@
     <string name="permdesc_imagesWrite" msgid="7073662756617474375">"Zezwala aplikacji na modyfikowanie kolekcji zdjęć."</string>
     <string name="permlab_mediaLocation" msgid="8675148183726247864">"odczytywanie lokalizacji z kolekcji multimediów"</string>
     <string name="permdesc_mediaLocation" msgid="2237023389178865130">"Zezwala aplikacji na odczytywanie lokalizacji z kolekcji multimediów."</string>
+    <string name="biometric_dialog_default_title" msgid="4229778503907743328">"Aplikacja <xliff:g id="APP">%s</xliff:g> wymaga uwierzytelnienia."</string>
     <string name="biometric_error_hw_unavailable" msgid="645781226537551036">"Sprzęt biometryczny niedostępny"</string>
     <string name="fingerprint_acquired_partial" msgid="735082772341716043">"Odcisk palca został odczytany tylko częściowo. Spróbuj ponownie."</string>
     <string name="fingerprint_acquired_insufficient" msgid="4596546021310923214">"Nie udało się przetworzyć odcisku palca. Spróbuj ponownie."</string>
@@ -644,7 +658,7 @@
     <string name="permdesc_access_notification_policy" msgid="3296832375218749580">"Pozwala aplikacji na odczyt i zmianę konfiguracji trybu Nie przeszkadzać."</string>
     <string name="policylab_limitPassword" msgid="4497420728857585791">"Określ reguły hasła"</string>
     <string name="policydesc_limitPassword" msgid="2502021457917874968">"Kontrolowanie długości haseł blokady ekranu i kodów PIN oraz dozwolonych w nich znaków."</string>
-    <string name="policylab_watchLogin" msgid="5091404125971980158">"Monitoruj próby odblokowania ekranu"</string>
+    <string name="policylab_watchLogin" msgid="5091404125971980158">"Monitorowanie prób odblokowania ekranu"</string>
     <string name="policydesc_watchLogin" product="tablet" msgid="3215729294215070072">"Przy odblokowywaniu ekranu monitoruj, ile razy wpisano nieprawidłowe hasło i blokuj tablet lub usuń z niego wszystkie dane, jeśli nieprawidłowe hasło podano zbyt wiele razy."</string>
     <string name="policydesc_watchLogin" product="TV" msgid="2707817988309890256">"Monitorowanie, ile razy wpisano niepoprawne hasło podczas odblokowywania ekranu, oraz blokowanie telewizora albo kasowanie na nim wszystkich danych, gdy zbyt wiele razy wpisano niepoprawne hasło."</string>
     <string name="policydesc_watchLogin" product="default" msgid="5712323091846761073">"Przy odblokowywaniu ekranu monitoruje, ile razy wpisano nieprawidłowe hasło, i blokuje telefon lub usuwa z niego wszystkie dane, jeśli nieprawidłowe hasło podano zbyt wiele razy"</string>
@@ -665,11 +679,11 @@
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="6787904546711590238">"Kasowanie danych tego użytkownika na tym telefonie bez ostrzeżenia."</string>
     <string name="policylab_setGlobalProxy" msgid="2784828293747791446">"Ustaw globalny serwer proxy urządzenia"</string>
     <string name="policydesc_setGlobalProxy" msgid="8459859731153370499">"Ustawianie globalnego serwera proxy urządzenia do użycia przy włączonych zasadach. Tylko właściciel urządzenia może ustawić globalny serwer proxy."</string>
-    <string name="policylab_expirePassword" msgid="5610055012328825874">"Ustaw czas ważności hasła blokady ekranu"</string>
+    <string name="policylab_expirePassword" msgid="5610055012328825874">"Ustawianie czasu ważności hasła blokady ekranu"</string>
     <string name="policydesc_expirePassword" msgid="5367525762204416046">"Zmiana częstotliwości, z jaką należy zmieniać hasło blokady ekranu, kod PIN lub wzór."</string>
-    <string name="policylab_encryptedStorage" msgid="8901326199909132915">"Ustaw szyfrowanie pamięci"</string>
+    <string name="policylab_encryptedStorage" msgid="8901326199909132915">"Ustawianie szyfrowania pamięci"</string>
     <string name="policydesc_encryptedStorage" msgid="2637732115325316992">"Wymaganie szyfrowania przechowywanych danych aplikacji"</string>
-    <string name="policylab_disableCamera" msgid="6395301023152297826">"Wyłącz aparaty"</string>
+    <string name="policylab_disableCamera" msgid="6395301023152297826">"Wyłączanie aparatów"</string>
     <string name="policydesc_disableCamera" msgid="2306349042834754597">"Zapobieganie używaniu wszystkich aparatów w urządzeniu"</string>
     <string name="policylab_disableKeyguardFeatures" msgid="8552277871075367771">"Wył. funkcji blokady ekranu"</string>
     <string name="policydesc_disableKeyguardFeatures" msgid="2044755691354158439">"Zapobieganie użyciu niektórych funkcji blokady ekranu."</string>
@@ -1885,6 +1899,8 @@
     <string name="stk_cc_ss_to_ussd" msgid="5614626512855868785">"Żądanie SS zmienione na żądanie USSD"</string>
     <string name="stk_cc_ss_to_ss" msgid="7716729801537709054">"Zmieniono na nowe żądanie SS"</string>
     <string name="notification_work_profile_content_description" msgid="4600554564103770764">"Profil służbowy"</string>
+    <!-- no translation found for notification_alerted_content_description (1296617716556420585) -->
+    <skip />
     <string name="expand_button_content_description_collapsed" msgid="3609784019345534652">"Rozwiń"</string>
     <string name="expand_button_content_description_expanded" msgid="8520652707158554895">"Zwiń"</string>
     <string name="expand_action_accessibility" msgid="5307730695723718254">"przełącz rozwijanie"</string>
@@ -1967,14 +1983,14 @@
       <item quantity="other"><xliff:g id="COUNT">%1$s</xliff:g> sugestii autouzupełniania</item>
       <item quantity="one">Jedna sugestia autouzupełniania</item>
     </plurals>
-    <string name="autofill_save_title" msgid="3345527308992082601">"Zapisać w: &lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_save_title_with_type" msgid="8637809388029313305">"<xliff:g id="TYPE">%1$s</xliff:g> – zapisać w: &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_save_title_with_2types" msgid="5214035651838265325">"<xliff:g id="TYPE_0">%1$s</xliff:g> i <xliff:g id="TYPE_1">%2$s</xliff:g> – zapisać w: &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_save_title_with_3types" msgid="6943161834231458441">"<xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> i <xliff:g id="TYPE_2">%3$s</xliff:g> – zapisać w: &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title" msgid="4879673117448810818">"Zaktualizować do &lt;b&gt;<xliff:g id="LABEL">%1$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title_with_type" msgid="339733442087186755">"Zaktualizować <xliff:g id="TYPE">%1$s</xliff:g> do &lt;b&gt;<xliff:g id="LABEL">%2$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title_with_2types" msgid="6321714204167424745">"Zaktualizować <xliff:g id="TYPE_0">%1$s</xliff:g> i <xliff:g id="TYPE_1">%2$s</xliff:g> do &lt;b&gt;<xliff:g id="LABEL">%3$s</xliff:g>&lt;/b&gt;?"</string>
-    <string name="autofill_update_title_with_3types" msgid="5866735124066629287">"Zaktualizować <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g>, i <xliff:g id="TYPE_2">%3$s</xliff:g> do &lt;b&gt;<xliff:g id="LABEL">%4$s</xliff:g>&lt;/b&gt;?"</string>
+    <string name="autofill_save_title" msgid="327541108460384555">"Zapisać w: "<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_save_title_with_type" msgid="2339135393607143594">"Zapisać: <xliff:g id="TYPE">%1$s</xliff:g> w "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_save_title_with_2types" msgid="87616102361154432">"Zapisać: <xliff:g id="TYPE_0">%1$s</xliff:g> i <xliff:g id="TYPE_1">%2$s</xliff:g> w: "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_save_title_with_3types" msgid="4108978552969604555">"Zapisać: <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> i <xliff:g id="TYPE_2">%3$s</xliff:g> w: "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title" msgid="5305781141104585279">"Zaktualizować w: "<b>"<xliff:g id="LABEL">%1$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title_with_type" msgid="4624181147422762233">"Zaktualizować: <xliff:g id="TYPE">%1$s</xliff:g> w: "<b>"<xliff:g id="LABEL">%2$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title_with_2types" msgid="2300113827053626484">"Zaktualizować: <xliff:g id="TYPE_0">%1$s</xliff:g> i <xliff:g id="TYPE_1">%2$s</xliff:g> w: "<b>"<xliff:g id="LABEL">%3$s</xliff:g>"</b>"?"</string>
+    <string name="autofill_update_title_with_3types" msgid="9089824354296211922">"Zaktualizować w: "<b>"<xliff:g id="LABEL">%4$s</xliff:g>"</b>" te elementy: <xliff:g id="TYPE_0">%1$s</xliff:g>, <xliff:g id="TYPE_1">%2$s</xliff:g> i <xliff:g id="TYPE_2">%3$s</xliff:g>?"</string>
     <string name="autofill_save_yes" msgid="6398026094049005921">"Zapisz"</string>
     <string name="autofill_save_no" msgid="2625132258725581787">"Nie, dziękuję"</string>
     <string name="autofill_update_yes" msgid="310358413273276958">"Zaktualizuj"</string>

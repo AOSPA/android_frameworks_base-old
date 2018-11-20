@@ -481,6 +481,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.EMULATE_DISPLAY_CUTOUT,
                 GlobalSettingsProto.Development.EMULATE_DISPLAY_CUTOUT);
+        dumpSetting(s, p,
+                Settings.Global.DEVELOPMENT_FORCE_DESKTOP_MODE_ON_EXTERNAL_DISPLAYS,
+                GlobalSettingsProto.Development.FORCE_DESKTOP_MODE_ON_EXTERNAL_DISPLAYS);
         p.end(developmentToken);
 
         final long deviceToken = p.start(GlobalSettingsProto.DEVICE);
@@ -568,6 +571,15 @@ class SettingsProtoDumpUtil {
                 Settings.Global.DROPBOX_TAG_PREFIX,
                 GlobalSettingsProto.Dropbox.SETTINGS);
         p.end(dropboxToken);
+
+        final long dynamicPowerSavingsToken = p.start(GlobalSettingsProto.DYNAMIC_POWER_SAVINGS);
+        dumpSetting(s, p,
+                Settings.Global.DYNAMIC_POWER_SAVINGS_DISABLE_THRESHOLD,
+                GlobalSettingsProto.DynamicPowerSavings.DISABLE_THRESHOLD);
+        dumpSetting(s, p,
+                Settings.Global.DYNAMIC_POWER_SAVINGS_ENABLED,
+                GlobalSettingsProto.DynamicPowerSavings.ENABLED);
+        p.end(dynamicPowerSavingsToken);
 
         final long emergencyToken = p.start(GlobalSettingsProto.EMERGENCY);
         dumpSetting(s, p,
@@ -672,6 +684,12 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.GPU_DEBUG_LAYER_APP,
                 GlobalSettingsProto.Gpu.DEBUG_LAYER_APP);
+        dumpSetting(s, p,
+                Settings.Global.GPU_DEBUG_LAYERS_GLES,
+                GlobalSettingsProto.Gpu.DEBUG_LAYERS_GLES);
+        dumpSetting(s, p,
+                Settings.Global.UPDATED_GFX_DRIVER_DEV_OPT_IN_APP,
+                GlobalSettingsProto.Gpu.UPDATED_GFX_DRIVER_DEV_OPT_IN_APP);
         p.end(gpuToken);
 
         final long hdmiToken = p.start(GlobalSettingsProto.HDMI);
@@ -785,6 +803,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.LOW_POWER_MODE_TRIGGER_LEVEL_MAX,
                 GlobalSettingsProto.LowPowerMode.TRIGGER_LEVEL_MAX);
+        dumpSetting(s, p,
+                Settings.Global.AUTOMATIC_POWER_SAVER_MODE,
+                GlobalSettingsProto.LowPowerMode.AUTOMATIC_POWER_SAVER_MODE);
         p.end(lpmToken);
 
         dumpSetting(s, p,
@@ -1120,6 +1141,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.SHOW_FIRST_CRASH_DIALOG,
                 GlobalSettingsProto.SHOW_FIRST_CRASH_DIALOG);
+        dumpSetting(s, p,
+                Settings.Global.SHOW_HIDDEN_LAUNCHER_ICON_APPS_ENABLED,
+                GlobalSettingsProto.SHOW_HIDDEN_LAUNCHER_ICON_APPS_ENABLED);
         // Settings.Global.SHOW_PROCESSES intentionally excluded since it's deprecated.
         dumpSetting(s, p,
                 Settings.Global.SHOW_RESTART_IN_CRASH_DIALOG,
@@ -1127,6 +1151,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Global.SHOW_MUTE_IN_CRASH_DIALOG,
                 GlobalSettingsProto.SHOW_MUTE_IN_CRASH_DIALOG);
+        dumpSetting(s, p,
+                Settings.Global.SHOW_NEW_APP_INSTALLED_NOTIFICATION_ENABLED,
+                GlobalSettingsProto.SHOW_NEW_APP_INSTALLED_NOTIFICATION_ENABLED);
 
         final long smartSelectToken = p.start(GlobalSettingsProto.SMART_SELECTION);
         dumpSetting(s, p,
@@ -1636,12 +1663,6 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES,
                 SecureSettingsProto.Accessibility.TOUCH_EXPLORATION_GRANTED_ACCESSIBILITY_SERVICES);
-        dumpSetting(s, p,
-                Settings.Secure.ACCESSIBILITY_MINIMUM_UI_TIMEOUT_ENABLED,
-                SecureSettingsProto.Accessibility.MINIMUM_UI_TIMEOUT_ENABLED);
-        dumpSetting(s, p,
-                Settings.Secure.ACCESSIBILITY_MINIMUM_UI_TIMEOUT_MS,
-                SecureSettingsProto.Accessibility.MINIMUM_UI_TIMEOUT_MS);
         p.end(accessibilityToken);
 
         dumpSetting(s, p,

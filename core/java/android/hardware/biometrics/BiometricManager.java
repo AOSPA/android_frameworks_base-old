@@ -22,6 +22,7 @@ import static android.Manifest.permission.USE_BIOMETRIC_INTERNAL;
 import android.annotation.IntDef;
 import android.annotation.RequiresPermission;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.RemoteException;
 import android.util.Slog;
 
@@ -35,28 +36,48 @@ public class BiometricManager {
     /**
      * No error detected.
      */
-    public static final int ERROR_NONE = BiometricConstants.BIOMETRIC_ERROR_NONE;
+    public static final int BIOMETRIC_SUCCESS =
+            BiometricConstants.BIOMETRIC_SUCCESS;
 
     /**
      * The hardware is unavailable. Try again later.
      */
-    public static final int ERROR_UNAVAILABLE = BiometricConstants.BIOMETRIC_ERROR_HW_UNAVAILABLE;
+    public static final int BIOMETRIC_ERROR_UNAVAILABLE =
+            BiometricConstants.BIOMETRIC_ERROR_HW_UNAVAILABLE;
 
     /**
      * The user does not have any biometrics enrolled.
      */
-    public static final int ERROR_NO_BIOMETRICS = BiometricConstants.BIOMETRIC_ERROR_NO_BIOMETRICS;
+    public static final int BIOMETRIC_ERROR_NO_BIOMETRICS =
+            BiometricConstants.BIOMETRIC_ERROR_NO_BIOMETRICS;
 
     /**
      * There is no biometric hardware.
      */
-    public static final int ERROR_NO_HARDWARE = BiometricConstants.BIOMETRIC_ERROR_HW_NOT_PRESENT;
+    public static final int BIOMETRIC_ERROR_NO_HARDWARE =
+            BiometricConstants.BIOMETRIC_ERROR_HW_NOT_PRESENT;
 
-    @IntDef({ERROR_NONE, ERROR_UNAVAILABLE, ERROR_NO_BIOMETRICS, ERROR_NO_HARDWARE})
+    @IntDef({BIOMETRIC_SUCCESS,
+            BIOMETRIC_ERROR_UNAVAILABLE,
+            BIOMETRIC_ERROR_NO_BIOMETRICS,
+            BIOMETRIC_ERROR_NO_HARDWARE})
     @interface BiometricError {}
 
     private final Context mContext;
     private final IBiometricService mService;
+    private final boolean mHasHardware;
+
+    /**
+     * @param context
+     * @return
+     * @hide
+     */
+    public static boolean hasBiometrics(Context context) {
+        final PackageManager pm = context.getPackageManager();
+        return pm.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)
+                || pm.hasSystemFeature(PackageManager.FEATURE_IRIS)
+                || pm.hasSystemFeature(PackageManager.FEATURE_FACE);
+    }
 
     /**
      * @hide
@@ -66,15 +87,18 @@ public class BiometricManager {
     public BiometricManager(Context context, IBiometricService service) {
         mContext = context;
         mService = service;
+
+        mHasHardware = hasBiometrics(context);
     }
 
     /**
      * Determine if biometrics can be used. In other words, determine if {@link BiometricPrompt}
      * can be expected to be shown (hardware available, templates enrolled, user-enabled).
      *
-     * @return Returns {@link #ERROR_NO_BIOMETRICS} if the user does not have any enrolled, or
-     *     {@link #ERROR_UNAVAILABLE} if none are currently supported/enabled. Returns
-     *     {@link #ERROR_NONE} if a biometric can currently be used (enrolled and available).
+     * @return Returns {@link #BIOMETRIC_ERROR_NO_BIOMETRICS} if the user does not have any
+     *     enrolled, or {@link #BIOMETRIC_ERROR_UNAVAILABLE} if none are currently
+     *     supported/enabled. Returns {@link #BIOMETRIC_SUCCESS} if a biometric can currently be
+     *     used (enrolled and available).
      */
     @RequiresPermission(USE_BIOMETRIC)
     public @BiometricError int canAuthenticate() {
@@ -85,8 +109,12 @@ public class BiometricManager {
                 throw e.rethrowFromSystemServer();
             }
         } else {
-            Slog.w(TAG, "hasEnrolledBiometrics(): Service not connected");
-            return ERROR_UNAVAILABLE;
+            if (!mHasHardware) {
+                return BIOMETRIC_ERROR_NO_HARDWARE;
+            } else {
+                Slog.w(TAG, "hasEnrolledBiometrics(): Service not connected");
+                return BIOMETRIC_ERROR_UNAVAILABLE;
+            }
         }
     }
 

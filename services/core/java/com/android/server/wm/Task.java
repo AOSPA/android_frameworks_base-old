@@ -45,6 +45,7 @@ import android.graphics.Rect;
 import android.util.EventLog;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
+import android.view.Display;
 import android.view.Surface;
 import android.view.SurfaceControl;
 
@@ -68,7 +69,12 @@ class Task extends WindowContainer<AppWindowToken> {
     // Bounds used to calculate the insets.
     private final Rect mTempInsetBounds = new Rect();
 
-    // Device rotation as of the last time {@link #mBounds} was set.
+    /** ID of the display which rotation {@link #mRotation} has. */
+    private int mLastRotationDisplayId = Display.INVALID_DISPLAY;
+    /**
+     * Display rotation as of the last time {@link #setBounds(Rect)} was called or this task was
+     * moved to a new display.
+     */
     private int mRotation;
 
     // For comparison with DisplayContent bounds.
@@ -221,7 +227,7 @@ class Task extends WindowContainer<AppWindowToken> {
         }
     }
 
-    /** @see com.android.server.am.ActivityTaskManagerService#positionTaskInStack(int, int, int). */
+    /** @see ActivityTaskManagerService#positionTaskInStack(int, int, int). */
     void positionAt(int position) {
         mStack.positionChildAt(position, this, false /* includingParents */);
     }
@@ -231,7 +237,7 @@ class Task extends WindowContainer<AppWindowToken> {
         super.onParentSet();
 
         // Update task bounds if needed.
-        updateDisplayInfo(getDisplayContent());
+        adjustBoundsForDisplayChangeIfNeeded(getDisplayContent());
 
         if (getWindowConfiguration().windowsAreScaleable()) {
             // We force windows out of SCALING_MODE_FREEZE so that we can continue to animate them
@@ -284,12 +290,7 @@ class Task extends WindowContainer<AppWindowToken> {
         if (displayContent != null) {
             rotation = displayContent.getDisplayInfo().rotation;
         } else if (bounds == null) {
-            // Can't set to fullscreen if we don't have a display to get bounds from...
-            return BOUNDS_CHANGE_NONE;
-        }
-
-        if (equivalentOverrideBounds(bounds)) {
-            return BOUNDS_CHANGE_NONE;
+            return super.setBounds(bounds);
         }
 
         final int boundsChange = super.setBounds(bounds);
@@ -302,6 +303,7 @@ class Task extends WindowContainer<AppWindowToken> {
     @Override
     void onDisplayChanged(DisplayContent dc) {
         updateSurfaceSize(dc);
+        adjustBoundsForDisplayChangeIfNeeded(dc);
         super.onDisplayChanged(dc);
     }
 
@@ -500,7 +502,7 @@ class Task extends WindowContainer<AppWindowToken> {
         return mDragResizeMode;
     }
 
-    void updateDisplayInfo(final DisplayContent displayContent) {
+    private void adjustBoundsForDisplayChangeIfNeeded(final DisplayContent displayContent) {
         if (displayContent == null) {
             return;
         }
@@ -510,8 +512,20 @@ class Task extends WindowContainer<AppWindowToken> {
             setBounds(null);
             return;
         }
+        final int displayId = displayContent.getDisplayId();
         final int newRotation = displayContent.getDisplayInfo().rotation;
+        if (displayId != mLastRotationDisplayId) {
+            // This task is on a display that it wasn't on. There is no point to keep the relative
+            // position if display rotations for old and new displays are different. Just keep these
+            // values.
+            mLastRotationDisplayId = displayId;
+            mRotation = newRotation;
+            return;
+        }
+
         if (mRotation == newRotation) {
+            // Rotation didn't change. We don't need to adjust the bounds to keep the relative
+            // position.
             return;
         }
 

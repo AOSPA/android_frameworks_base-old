@@ -31,6 +31,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.StyleRes;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.annotation.UnsupportedAppUsage;
 import android.app.VoiceInteractor.Request;
 import android.app.admin.DevicePolicyManager;
@@ -120,6 +121,8 @@ import android.view.autofill.AutofillManager;
 import android.view.autofill.AutofillManager.AutofillClient;
 import android.view.autofill.AutofillPopupWindow;
 import android.view.autofill.IAutofillWindowPresenter;
+import android.view.intelligence.ContentCaptureEvent;
+import android.view.intelligence.IntelligenceManager;
 import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
@@ -130,8 +133,6 @@ import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.app.ToolbarActionBar;
 import com.android.internal.app.WindowDecorActionBar;
 import com.android.internal.policy.PhoneWindow;
-
-import dalvik.system.VMRuntime;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -823,6 +824,10 @@ public class Activity extends ContextThemeWrapper
     /** The autofill manager. Always access via {@link #getAutofillManager()}. */
     @Nullable private AutofillManager mAutofillManager;
 
+    /** The screen observation manager. Always access via {@link #getIntelligenceManager()}. */
+    @Nullable private IntelligenceManager mIntelligenceManager;
+
+
     static final class NonConfigurationInstances {
         Object activity;
         HashMap<String, Object> children;
@@ -996,7 +1001,7 @@ public class Activity extends ContextThemeWrapper
     }
 
     /**
-     * (Create and) return the autofill manager
+     * (Creates, sets and) returns the autofill manager
      *
      * @return The autofill manager
      */
@@ -1006,6 +1011,43 @@ public class Activity extends ContextThemeWrapper
         }
 
         return mAutofillManager;
+    }
+
+    /**
+     * (Creates, sets, and ) returns the intelligence manager
+     *
+     * @return The intelligence manager
+     */
+    @NonNull private IntelligenceManager getIntelligenceManager() {
+        if (mIntelligenceManager == null) {
+            mIntelligenceManager = getSystemService(IntelligenceManager.class);
+        }
+        return mIntelligenceManager;
+    }
+
+    private void notifyIntelligenceManagerIfNeeded(@ContentCaptureEvent.EventType int event) {
+        final IntelligenceManager im = getIntelligenceManager();
+        if (im == null || !im.isContentCaptureEnabled()) {
+            return;
+        }
+        switch (event) {
+            case ContentCaptureEvent.TYPE_ACTIVITY_CREATED:
+                //TODO(b/111276913): decide whether the InteractionSessionId should be
+                // saved / restored in the activity bundle.
+                im.onActivityCreated(mToken, getComponentName());
+                break;
+            case ContentCaptureEvent.TYPE_ACTIVITY_DESTROYED:
+                im.onActivityDestroyed();
+                break;
+            case ContentCaptureEvent.TYPE_ACTIVITY_STARTED:
+            case ContentCaptureEvent.TYPE_ACTIVITY_RESUMED:
+            case ContentCaptureEvent.TYPE_ACTIVITY_PAUSED:
+            case ContentCaptureEvent.TYPE_ACTIVITY_STOPPED:
+                im.onActivityLifecycleEvent(event);
+                break;
+            default:
+                Log.w(TAG, "notifyIntelligenceManagerIfNeeded(): invalid type " + event);
+        }
     }
 
     @Override
@@ -1083,6 +1125,8 @@ public class Activity extends ContextThemeWrapper
         }
         mRestoredFromBundle = savedInstanceState != null;
         mCalled = true;
+
+        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_CREATED);
     }
 
     /**
@@ -1316,6 +1360,7 @@ public class Activity extends ContextThemeWrapper
         if (mAutoFillResetNeeded) {
             getAutofillManager().onVisibleForAutofill();
         }
+        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_STARTED);
     }
 
     /**
@@ -1398,6 +1443,7 @@ public class Activity extends ContextThemeWrapper
                 }
             }
         }
+        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_RESUMED);
         mCalled = true;
     }
 
@@ -1791,6 +1837,7 @@ public class Activity extends ContextThemeWrapper
                 mAutoFillIgnoreFirstResumePause = false;
             }
         }
+        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_PAUSED);
         mCalled = true;
     }
 
@@ -1979,6 +2026,7 @@ public class Activity extends ContextThemeWrapper
                 getAutofillManager().onPendingSaveUi(AutofillManager.PENDING_UI_OPERATION_CANCEL,
                         mIntent.getIBinderExtra(AutofillManager.EXTRA_RESTORE_SESSION_TOKEN));
             }
+            notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_STOPPED);
         }
     }
 
@@ -2049,6 +2097,9 @@ public class Activity extends ContextThemeWrapper
         }
 
         getApplication().dispatchActivityDestroyed(this);
+
+        notifyIntelligenceManagerIfNeeded(ContentCaptureEvent.TYPE_ACTIVITY_DESTROYED);
+
     }
 
     /**
@@ -2296,6 +2347,7 @@ public class Activity extends ContextThemeWrapper
      * @see View#onMovedToDisplay(int, Configuration)
      * @hide
      */
+    @TestApi
     public void onMovedToDisplay(int displayId, Configuration config) {
     }
 
@@ -4788,6 +4840,7 @@ public class Activity extends ContextThemeWrapper
      * their launch had come from the original activity.
      * @param intent The Intent to start.
      * @param options ActivityOptions or null.
+     * @param permissionToken Token received from the system that permits this call to be made.
      * @param ignoreTargetSecurity If true, the activity manager will not check whether the
      * caller it is doing the start is, is actually allowed to start the target activity.
      * If you set this to true, you must set an explicit component in the Intent and do any
@@ -4796,7 +4849,7 @@ public class Activity extends ContextThemeWrapper
      * @hide
      */
     public void startActivityAsCaller(Intent intent, @Nullable Bundle options,
-            boolean ignoreTargetSecurity, int userId) {
+            IBinder permissionToken, boolean ignoreTargetSecurity, int userId) {
         if (mParent != null) {
             throw new RuntimeException("Can't be called from a child");
         }
@@ -4804,7 +4857,7 @@ public class Activity extends ContextThemeWrapper
         Instrumentation.ActivityResult ar =
                 mInstrumentation.execStartActivityAsCaller(
                         this, mMainThread.getApplicationThread(), mToken, this,
-                        intent, -1, options, ignoreTargetSecurity, userId);
+                        intent, -1, options, permissionToken, ignoreTargetSecurity, userId);
         if (ar != null) {
             mMainThread.sendActivityResult(
                 mToken, mEmbeddedID, -1, ar.getResultCode(),
@@ -6405,9 +6458,16 @@ public class Activity extends ContextThemeWrapper
 
     void dumpInner(@NonNull String prefix, @Nullable FileDescriptor fd,
             @NonNull PrintWriter writer, @Nullable String[] args) {
-        if (args != null && args.length > 0 && args[0].equals("--autofill")) {
-            dumpAutofillManager(prefix, writer);
-            return;
+        if (args != null && args.length > 0) {
+            // Handle special cases
+            switch (args[0]) {
+                case "--autofill":
+                    dumpAutofillManager(prefix, writer);
+                    return;
+                case "--intelligence":
+                    dumpIntelligenceManager(prefix, writer);
+                    return;
+            }
         }
         writer.print(prefix); writer.print("Local Activity ");
                 writer.print(Integer.toHexString(System.identityHashCode(this)));
@@ -6437,6 +6497,7 @@ public class Activity extends ContextThemeWrapper
         mHandler.getLooper().dump(new PrintWriterPrinter(writer), prefix);
 
         dumpAutofillManager(prefix, writer);
+        dumpIntelligenceManager(prefix, writer);
 
         ResourcesManager.getInstance().dump(prefix, writer);
     }
@@ -6449,6 +6510,15 @@ public class Activity extends ContextThemeWrapper
             writer.println(isAutofillCompatibilityEnabled());
         } else {
             writer.print(prefix); writer.println("No AutofillManager");
+        }
+    }
+
+    void dumpIntelligenceManager(String prefix, PrintWriter writer) {
+        final IntelligenceManager im = getIntelligenceManager();
+        if (im != null) {
+            im.dump(prefix, writer);
+        } else {
+            writer.print(prefix); writer.println("No IntelligenceManager");
         }
     }
 
@@ -7266,31 +7336,6 @@ public class Activity extends ContextThemeWrapper
                           setPositiveButton(android.R.string.ok, null).
                           setCancelable(false).
                           show();
-                } else {
-                    Toast.makeText(this, appName + "\n" + warning, Toast.LENGTH_LONG).show();
-                }
-            }
-        }
-
-        // This property is set for all non-user builds except final release
-        boolean isApiWarningEnabled = SystemProperties.getInt("ro.art.hiddenapi.warning", 0) == 1;
-
-        if (isAppDebuggable || isApiWarningEnabled) {
-            if (!mMainThread.mHiddenApiWarningShown && VMRuntime.getRuntime().hasUsedHiddenApi()) {
-                // Only show the warning once per process.
-                mMainThread.mHiddenApiWarningShown = true;
-
-                String appName = getApplicationInfo().loadLabel(getPackageManager())
-                        .toString();
-                String warning = "Detected problems with API compatibility\n"
-                                 + "(visit g.co/dev/appcompat for more info)";
-                if (isAppDebuggable) {
-                    new AlertDialog.Builder(this)
-                        .setTitle(appName)
-                        .setMessage(warning)
-                        .setPositiveButton(android.R.string.ok, null)
-                        .setCancelable(false)
-                        .show();
                 } else {
                     Toast.makeText(this, appName + "\n" + warning, Toast.LENGTH_LONG).show();
                 }

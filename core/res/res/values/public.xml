@@ -2908,14 +2908,18 @@
         <public name="opticalInsetTop" />
         <public name="opticalInsetRight" />
         <public name="opticalInsetBottom" />
-        <public name="allowForceDark" />
+        <public name="forceDarkAllowed" />
         <public name="supportsAmbientMode" />
         <!-- @hide For use by platform and tools only. Developers should not specify this value. -->
         <public name="usesNonSdkApi" />
-        <public name="minimumUiTimeout" />
+        <public name="nonInteractiveUiTimeout" />
         <public name="isLightTheme" />
         <public name="isSplitRequired" />
         <public name="textLocale" />
+        <public name="settingsSliceUri" />
+        <public name="shell" />
+        <public name="interactiveUiTimeout" />
+        <public name="importantForContentCapture" />
     </public-group>
 
     <public-group type="drawable" first-id="0x010800b4">
@@ -2927,6 +2931,10 @@
     </public-group>
 
     <public-group type="id" first-id="0x01020046">
+      <public name="accessibilityActionPageUp" />
+      <public name="accessibilityActionPageDown" />
+      <public name="accessibilityActionPageLeft" />
+      <public name="accessibilityActionPageRight" />
     </public-group>
 
     <public-group type="string" first-id="0x0104001b">

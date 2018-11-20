@@ -42,10 +42,13 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Point;
 import android.graphics.PointF;
+import android.graphics.RecordingCanvas;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.RenderNode;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.LocaleList;
 import android.os.Parcel;
@@ -83,7 +86,6 @@ import android.view.ActionMode;
 import android.view.ActionMode.Callback;
 import android.view.ContextMenu;
 import android.view.ContextThemeWrapper;
-import android.view.DisplayListCanvas;
 import android.view.DragAndDropPermissions;
 import android.view.DragEvent;
 import android.view.Gravity;
@@ -93,7 +95,6 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
-import android.view.RenderNode;
 import android.view.SubMenu;
 import android.view.View;
 import android.view.View.DragShadowBuilder;
@@ -257,7 +258,7 @@ public class Editor {
             needsToBeShifted = true;
         }
         boolean needsRecord() {
-            return isDirty || !renderNode.isValid();
+            return isDirty || !renderNode.hasDisplayList();
         }
     }
     private TextRenderNode[] mTextRenderNodes;
@@ -310,12 +311,12 @@ public class Editor {
 
     Drawable mDrawableForCursor = null;
 
-    @UnsupportedAppUsage
-    private Drawable mSelectHandleLeft;
-    @UnsupportedAppUsage
-    private Drawable mSelectHandleRight;
-    @UnsupportedAppUsage
-    private Drawable mSelectHandleCenter;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+    Drawable mSelectHandleLeft;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+    Drawable mSelectHandleRight;
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
+    Drawable mSelectHandleCenter;
 
     // Global listener that detects changes in the global position of the TextView
     private PositionListener mPositionListener;
@@ -542,7 +543,7 @@ public class Editor {
             for (int i = 0; i < mTextRenderNodes.length; i++) {
                 RenderNode displayList = mTextRenderNodes[i] != null
                         ? mTextRenderNodes[i].renderNode : null;
-                if (displayList != null && displayList.isValid()) {
+                if (displayList != null && displayList.hasDisplayList()) {
                     displayList.discardDisplayList();
                 }
             }
@@ -1941,18 +1942,18 @@ public class Editor {
 
             // Rebuild display list if it is invalid
             if (blockDisplayListIsInvalid) {
-                final DisplayListCanvas displayListCanvas = blockDisplayList.start(
+                final RecordingCanvas recordingCanvas = blockDisplayList.start(
                         right - left, bottom - top);
                 try {
                     // drawText is always relative to TextView's origin, this translation
                     // brings this range of text back to the top left corner of the viewport
-                    displayListCanvas.translate(-left, -top);
-                    layout.drawText(displayListCanvas, blockBeginLine, blockEndLine);
+                    recordingCanvas.translate(-left, -top);
+                    layout.drawText(recordingCanvas, blockBeginLine, blockEndLine);
                     mTextRenderNodes[blockIndex].isDirty = false;
                     // No need to untranslate, previous context is popped after
                     // drawDisplayList
                 } finally {
-                    blockDisplayList.end(displayListCanvas);
+                    blockDisplayList.end(recordingCanvas);
                     // Same as drawDisplayList below, handled by our TextView's parent
                     blockDisplayList.setClipToBounds(false);
                 }
@@ -1962,7 +1963,7 @@ public class Editor {
             blockDisplayList.setLeftTopRightBottom(left, top, right, bottom);
             mTextRenderNodes[blockIndex].needsToBeShifted = false;
         }
-        ((DisplayListCanvas) canvas).drawRenderNode(blockDisplayList);
+        ((RecordingCanvas) canvas).drawRenderNode(blockDisplayList);
         return startIndexToFindAvailableRenderNode;
     }
 
@@ -3927,7 +3928,7 @@ public class Editor {
                 SelectionModifierCursorController selectionController = getSelectionController();
                 if (selectionController.mStartHandle == null) {
                     // As these are for initializing selectionController, hide() must be called.
-                    selectionController.initDrawables();
+                    loadHandleDrawables(false /* overwrite */);
                     selectionController.initHandles();
                     selectionController.hide();
                 }
@@ -4495,12 +4496,10 @@ public class Editor {
             mContainer.setHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
             mContainer.setContentView(this);
 
-            mDrawableLtr = drawableLtr;
-            mDrawableRtl = drawableRtl;
+            setDrawables(drawableLtr, drawableRtl);
+
             mMinSize = mTextView.getContext().getResources().getDimensionPixelSize(
                     com.android.internal.R.dimen.text_handle_min_size);
-
-            updateDrawable();
 
             final int handleHeight = getPreferredHeight();
             mTouchOffsetY = -0.3f * handleHeight;
@@ -4511,9 +4510,14 @@ public class Editor {
             return mIdealVerticalOffset;
         }
 
-        protected void updateDrawable() {
-            if (mIsDragging) {
-                // Don't update drawable during dragging.
+        void setDrawables(final Drawable drawableLtr, final Drawable drawableRtl) {
+            mDrawableLtr = drawableLtr;
+            mDrawableRtl = drawableRtl;
+            updateDrawable(true /* updateDrawableWhenDragging */);
+        }
+
+        protected void updateDrawable(final boolean updateDrawableWhenDragging) {
+            if (!updateDrawableWhenDragging && mIsDragging) {
                 return;
             }
             final Layout layout = mTextView.getLayout();
@@ -5030,7 +5034,7 @@ public class Editor {
                     // Fall through.
                 case MotionEvent.ACTION_CANCEL:
                     mIsDragging = false;
-                    updateDrawable();
+                    updateDrawable(false /* updateDrawableWhenDragging */);
                     break;
             }
             return true;
@@ -5315,7 +5319,7 @@ public class Editor {
                 Selection.setSelection((Spannable) mTextView.getText(),
                         mTextView.getSelectionStart(), offset);
             }
-            updateDrawable();
+            updateDrawable(false /* updateDrawableWhenDragging */);
             if (mTextActionMode != null) {
                 invalidateActionMode();
             }
@@ -5717,14 +5721,20 @@ public class Editor {
         }
 
         private InsertionHandleView getHandle() {
-            if (mSelectHandleCenter == null) {
-                mSelectHandleCenter = mTextView.getContext().getDrawable(
-                        mTextView.mTextSelectHandleRes);
-            }
             if (mHandle == null) {
+                loadHandleDrawables(false /* overwrite */);
                 mHandle = new InsertionHandleView(mSelectHandleCenter);
             }
             return mHandle;
+        }
+
+        private void reloadHandleDrawable() {
+            if (mHandle == null) {
+                // No need to reload, the potentially new drawable will
+                // be used when the handle is created.
+                return;
+            }
+            mHandle.setDrawables(mSelectHandleCenter, mSelectHandleCenter);
         }
 
         @Override
@@ -5790,19 +5800,8 @@ public class Editor {
             if (mTextView.isInBatchEditMode()) {
                 return;
             }
-            initDrawables();
+            loadHandleDrawables(false /* overwrite */);
             initHandles();
-        }
-
-        private void initDrawables() {
-            if (mSelectHandleLeft == null) {
-                mSelectHandleLeft = mTextView.getContext().getDrawable(
-                        mTextView.mTextSelectHandleLeftRes);
-            }
-            if (mSelectHandleRight == null) {
-                mSelectHandleRight = mTextView.getContext().getDrawable(
-                        mTextView.mTextSelectHandleRightRes);
-            }
         }
 
         private void initHandles() {
@@ -5822,6 +5821,16 @@ public class Editor {
             mEndHandle.show();
 
             hideInsertionPointCursorController();
+        }
+
+        private void reloadHandleDrawables() {
+            if (mStartHandle == null) {
+                // No need to reload, the potentially new drawables will
+                // be used when the handles are created.
+                return;
+            }
+            mStartHandle.setDrawables(mSelectHandleLeft, mSelectHandleRight);
+            mEndHandle.setDrawables(mSelectHandleRight, mSelectHandleLeft);
         }
 
         public void hide() {
@@ -6180,6 +6189,32 @@ public class Editor {
             }
             if (mEndHandle != null) {
                 mEndHandle.invalidate();
+            }
+        }
+    }
+
+    /**
+     * Loads the insertion and selection handle Drawables from TextView. If the handle
+     * drawables are already loaded, do not overwrite them unless the method parameter
+     * is set to true. This logic is required to avoid overwriting Drawables assigned
+     * to mSelectHandle[Center/Left/Right] by developers using reflection, unless they
+     * explicitly call the setters in TextView.
+     *
+     * @param overwrite whether to overwrite already existing nonnull Drawables
+     */
+    void loadHandleDrawables(final boolean overwrite) {
+        if (mSelectHandleCenter == null || overwrite) {
+            mSelectHandleCenter = mTextView.getTextSelectHandle();
+            if (hasInsertionController()) {
+                getInsertionController().reloadHandleDrawable();
+            }
+        }
+
+        if (mSelectHandleLeft == null || mSelectHandleRight == null || overwrite) {
+            mSelectHandleLeft = mTextView.getTextSelectHandleLeft();
+            mSelectHandleRight = mTextView.getTextSelectHandleRight();
+            if (hasSelectionController()) {
+                getSelectionController().reloadHandleDrawables();
             }
         }
     }

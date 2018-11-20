@@ -210,9 +210,8 @@ public class AccessPointPreference extends Preference {
         }
         if (mAccessPoint.getSecurity() == AccessPoint.SECURITY_SAE) {
             mFrictionSld.setState(STATE_SECURED_SAE);
-        } else if (mAccessPoint.getSecurity() == AccessPoint.SECURITY_OWE) {
-            mFrictionSld.setState(STATE_SECURED_OWE);
-        } else if (mAccessPoint.getSecurity() != AccessPoint.SECURITY_NONE) {
+        } else if ((mAccessPoint.getSecurity() != AccessPoint.SECURITY_NONE)
+                && (mAccessPoint.getSecurity() != AccessPoint.SECURITY_OWE)) {
             mFrictionSld.setState(STATE_SECURED);
         } else if (mAccessPoint.isMetered()) {
             mFrictionSld.setState(STATE_METERED);

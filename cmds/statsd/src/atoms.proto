@@ -22,12 +22,15 @@ option java_outer_classname = "AtomsProto";
 
 import "frameworks/base/cmds/statsd/src/atom_field_options.proto";
 import "frameworks/base/core/proto/android/app/enums.proto";
+import "frameworks/base/core/proto/android/app/settings_enums.proto";
 import "frameworks/base/core/proto/android/app/job/enums.proto";
 import "frameworks/base/core/proto/android/bluetooth/enums.proto";
 import "frameworks/base/core/proto/android/os/enums.proto";
 import "frameworks/base/core/proto/android/server/enums.proto";
+import "frameworks/base/core/proto/android/server/location/enums.proto";
 import "frameworks/base/core/proto/android/service/procstats_enum.proto";
 import "frameworks/base/core/proto/android/stats/enums.proto";
+import "frameworks/base/core/proto/android/stats/launcher/launcher.proto";
 import "frameworks/base/core/proto/android/telecomm/enums.proto";
 import "frameworks/base/core/proto/android/telephony/enums.proto";
 import "frameworks/base/core/proto/android/view/enums.proto";
@@ -66,7 +69,7 @@ message Atom {
         ExcessiveCpuUsageReported excessive_cpu_usage_reported = 16;
         CachedKillReported cached_kill_reported = 17;
         ProcessMemoryStatReported process_memory_stat_reported = 18;
-        // 19 is available
+        LauncherUIChanged launcher_event = 19;
         BatterySaverModeStateChanged battery_saver_mode_state_changed = 20;
         DeviceIdleModeStateChanged device_idle_mode_state_changed = 21;
         DeviceIdlingModeStateChanged device_idling_mode_state_changed = 22;
@@ -116,7 +119,7 @@ message Atom {
         ResourceConfigurationChanged resource_configuration_changed = 66;
         BluetoothEnabledStateChanged bluetooth_enabled_state_changed = 67;
         BluetoothConnectionStateChanged bluetooth_connection_state_changed = 68;
-        // 69 is blank but need not be.
+        GpsSignalQualityChanged gps_signal_quality_changed = 69;
         UsbConnectorStateChanged usb_connector_state_changed = 70;
         SpeakerImpedanceReported speaker_impedance_reported = 71;
         HardwareFailed hardware_failed = 72;
@@ -143,10 +146,20 @@ message Atom {
         BatteryCausedShutdown battery_caused_shutdown = 93;
         PhoneServiceStateChanged phone_service_state_changed = 94;
         PhoneStateChanged phone_state_changed = 95;
+        UserRestrictionChanged user_restriction_changed = 96;
+        SettingsUIChanged settings_ui_changed = 97;
+        ConnectivityStateChanged connectivity_state_changed = 98;
+        // TODO: service state change is very noisy shortly after boot, as well
+        // as at other transitions - coming out of doze, device plugged in, etc.
+        // Consider removing this if it becomes a problem
+        ServiceStateChanged service_state_changed = 99;
+        ServiceLaunchReported service_launch_reported = 100;
+        PhenotypeFlagStateChanged phenotype_flag_state_changed = 101;
+        BinaryPushStateChanged binary_push_state_changed = 102;
     }
 
     // Pulled events will start at field 10000.
-    // Next: 10037
+    // Next: 10038
     oneof pulled {
         WifiBytesTransfer wifi_bytes_transfer = 10000;
         WifiBytesTransferByFgBg wifi_bytes_transfer_by_fg_bg = 10001;
@@ -185,6 +198,11 @@ message Atom {
         ProcStats proc_stats_pkg_proc = 10034;
         ProcessCpuTime process_cpu_time = 10035;
         NativeProcessMemoryState native_process_memory_state = 10036;
+        CpuTimePerThreadFreq cpu_time_per_thread_freq = 10037;
+        OnDevicePowerMeasurement on_device_power_measurement = 10038;
+        DeviceCalculatedPowerUse device_calculated_power_use = 10039;
+        DeviceCalculatedPowerBlameUid device_calculated_power_blame_uid = 10040;
+        DeviceCalculatedPowerBlameOther device_calculated_power_blame_other = 10041;
     }
 
     // DO NOT USE field numbers above 100,000 in AOSP.
@@ -479,7 +497,6 @@ message SensorStateChanged {
     optional State state = 3;
 }
 
-
 /**
  * Logs when GPS state changes.
  *
@@ -494,6 +511,16 @@ message GpsScanStateChanged {
         ON = 1;
     }
     optional State state = 2;
+}
+
+/**
+ * Logs when GPS signal quality.
+ *
+ * Logged from:
+ *   /frameworks/base/location/java/com/android/internal/location/gnssmetrics/GnssMetrics.java
+ */
+message GpsSignalQualityChanged {
+    optional android.server.location.GpsSignalQualityEnum level = 1;
 }
 
 
@@ -1436,6 +1463,48 @@ message PhoneStateChanged {
     optional State state = 1;
 }
 
+message LauncherUIChanged {
+    optional android.stats.launcher.LauncherAction action = 1;
+    optional android.stats.launcher.LauncherState src_state = 2;
+    optional android.stats.launcher.LauncherState dst_state = 3;
+    optional android.stats.launcher.LauncherExtension extension = 4 [(log_mode) = MODE_BYTES];
+    optional bool is_swipe_up_enabled = 5;
+}
+
+/**
+ * Logs when Settings UI has changed.
+ *
+ * Logged from:
+ *   packages/apps/Settings
+ */
+message SettingsUIChanged {
+    /**
+     * Where this SettingsUIChange event comes from. For example, if
+     * it's a PAGE_VISIBLE event, where the page is opened from.
+     */
+    optional android.app.settings.PageId attribution = 1;
+
+    /**
+     * What the UI action is.
+     */
+    optional android.app.settings.Action action = 2;
+
+    /**
+     * Where the action is happening
+     */
+    optional android.app.settings.PageId pageId = 3;
+
+    /**
+     * What preference changed in this event.
+     */
+    optional string changedPreferenceKey = 4;
+
+    /**
+     * The new value of the changed preference.
+     */
+    optional int64 changedPreferenceIntValue = 5;
+}
+
 /**
  * Logs that a setting was updated.
  * Logged from:
@@ -2051,27 +2120,124 @@ message Notification {
     optional int32 importance = 7;
 
     // ID for the notification channel.
-    optional int32 channel_id = 8;
+    optional string channel_id = 8;
 
     // Importance for the notification channel.
     optional int32 channel_importance = 9;
 
+    // Application-supplied ID associated with the notifications group.
+    optional string group_id = 10;
+
     // Whether notification was a group summary.
-    optional bool group_summary = 10;
+    optional bool group_summary = 11;
 
-    // Time since notification was created in milliseconds.
-    optional int64 since_create_millis = 11;
+    // Reason for dismissal of a notification. This field is only meaningful for
+    // TYPE_DISMISS events.
+    optional int32 dismiss_reason = 12;
 
-    // Time since notification was interrupted in milliseconds.
-    optional int64 since_interruption_millis = 12;
+    // The first post time of notification, stable across updates.
+    optional int64 creation_millis = 13;
 
-    // Time since notification was updated in milliseconds.
-    optional int64 since_update_millis = 13;
+    // The most recent interruption time, or the creation time if no updates.
+    // Differs from update_millis because updates are filtered based on whether
+    // they actually interrupted the user.
+    optional int64 interruption_millis = 14;
 
-    // Time since notification was visible in milliseconds.
-    optional int64 since_visible_millis = 14;
+    // The most recent update time, or the creation time if no updates.
+    optional int64 update_millis = 15;
+
+    // The most recent visibility event.
+    optional int64 visible_millis = 16;
 }
 
+/*
+ * Logs when a flag flip state changes.
+ * Logged in P/h.
+ */
+message PhenotypeFlagStateChanged {
+    // Mendel configuration name.
+    optional string mendel_config_name = 1;
+    // State
+    enum State {
+        STATE_UNKNOWN = 0;
+        COMMITTED = 1;
+    }
+    optional State state = 2;
+}
+
+/*
+ * Logs when a binary push state changes.
+ * Logged in Play store
+ */
+message BinaryPushStateChanged {
+    // Binary package name.
+    optional string binary_name = 1;
+    // Version code.
+    optional int64 version = 2;
+    // State
+    enum State {
+        STATE_UNKNOWN = 0;
+        DOWNLOAD_START = 1;
+        DOWNLOAD_DONE = 2;
+        INSTALL_START = 3;
+        INSTALL_DONE = 4;
+        REBOOT_START = 5;
+        REBOOT_DONE = 6;
+    }
+    optional State state = 3;
+}
+
+/*
+ * Logs when a connection becomes available and lost.
+ * Logged in StatsCompanionService.java
+ */
+message ConnectivityStateChanged {
+  // Id of the network.
+  optional int32 net_id = 1;
+
+  enum State {
+    UNKNOWN = 0;
+    CONNECTED = 1;
+    DISCONNECTED = 2;
+  }
+  // Connected state of a network.
+  optional State state = 2;
+}
+
+/**
+ * Logs when a service starts and stops.
+ * Logged from:
+ *   services/core/java/com/android/server/am/ActiveServices.java
+ */
+message ServiceStateChanged {
+
+    optional int32 uid = 1 [(is_uid) = true];
+
+    optional string package_name = 2;
+
+    optional string service_name = 3;
+
+    enum State {
+        START = 1;
+        STOP = 2;
+    }
+
+    optional State state = 4;
+}
+
+/**
+ * Logs when a service is launched.
+ * Logged from:
+ *   services/core/java/com/android/server/am/ActiveServices.java
+ */
+message ServiceLaunchReported {
+
+    optional int32 uid = 1 [(is_uid) = true];
+
+    optional string package_name = 2;
+
+    optional string service_name = 3;
+}
 
 //////////////////////////////////////////////////////////////////////
 // Pulled atoms below this line //
@@ -2203,6 +2369,27 @@ message SubsystemSleepState {
     optional uint64 count = 3;
     // The length of time spent in, or spent voting for, the sleep state
     optional uint64 time_millis = 4;
+}
+
+/**
+ * Pulls on-device power measurement information.
+ * Data defined by hardware/interfaces/power/stats/1.0/types.hal.
+ * Pulled from:
+ *   frameworks/base/cmds/statsd/src/external/PowerStatsPuller.cpp
+ */
+message OnDevicePowerMeasurement {
+    // Name of the subsystem (to which the rail belongs).
+    optional string subsystem_name = 1;
+
+    // Rail name. The rail lies within the subsystem.
+    optional string rail_name = 2;
+
+    // Time (in ms since boot) at which the rail energy value was measured.
+    // This may differ slightly from the time that statsd logs this information.
+    optional uint64 measurement_timestamp_millis = 3;
+
+    // Accumulated energy used via the rail since device boot in uWs.
+    optional uint64 energy_microwatt_secs = 4;
 }
 
 /**
@@ -2343,31 +2530,38 @@ message ProcessMemoryState {
     // Peak RSS usage of the process. Value is read from the VmHWM field in /proc/PID/status or
     // from memory.max_usage_in_bytes under /dev/memcg if the device uses per-app memory cgroups.
     optional int64 rss_high_watermark_in_bytes = 9;
+
+    // Elapsed real time when the process started.
+    // Value is read from /proc/PID/stat, field 22. 0 if read from per-app memory cgroups.
+    optional int64 start_time_nanos = 10;
 }
 
 /*
  * Logs the memory stats for a native process (from procfs).
  */
 message NativeProcessMemoryState {
-  // The uid if available. -1 means not available.
-  optional int32 uid = 1 [(is_uid) = true];
+    // The uid if available. -1 means not available.
+    optional int32 uid = 1 [(is_uid) = true];
 
-  // The process name.
-  optional string process_name = 2;
+    // The process name.
+    optional string process_name = 2;
 
-  // # of page-faults
-  optional int64 page_fault = 3;
+    // # of page-faults
+    optional int64 page_fault = 3;
 
-  // # of major page-faults
-  optional int64 page_major_fault = 4;
+    // # of major page-faults
+    optional int64 page_major_fault = 4;
 
-  // RSS
-  optional int64 rss_in_bytes = 5;
+    // RSS
+    optional int64 rss_in_bytes = 5;
 
-  // RSS high watermark.
-  // Peak RSS usage of the process. Value is read from the VmHWM field in /proc/PID/status or
-  // from memory.max_usage_in_bytes under /dev/memcg if the device uses per-app memory cgroups.
-  optional int64 rss_high_watermark_in_bytes = 6;
+    // RSS high watermark.
+    // Peak RSS usage of the process. Value is read from the VmHWM field in /proc/PID/status.
+    optional int64 rss_high_watermark_in_bytes = 6;
+
+    // Elapsed real time when the process started.
+    // Value is read from /proc/PID/stat, field 22.
+    optional int64 start_time_nanos = 7;
 }
 
 /*
@@ -2481,10 +2675,17 @@ message Temperature {
  * Binder stats will be reset every time the data is pulled. It means it can only be pulled by one
  * config on the device.
  *
- * Next tag: 14
+ * Next tag: 15
  */
 message BinderCalls {
+    // UID of the process responsible for the binder transaction. It will be set if the process
+    // executing the binder transaction attribute the transaction to another uid using
+    // Binder.setThreadWorkSource().
+    //
+    // If not set, the value will be -1.
     optional int32 uid = 1 [(is_uid) = true];
+    // UID of the process executing the binder transaction.
+    optional int32 direct_caller_uid = 14;
     // Fully qualified class name of the API call.
     //
     // This is a system server class name.
@@ -3035,6 +3236,20 @@ message PowerProfile {
 }
 
 /**
+ * Logs when a user restriction was added or removed.
+ *
+ * Logged from:
+ *   frameworks/base/services/devicepolicy/java/com/android/server/devicepolicy/DevicePolicyManagerService.java
+ */
+message UserRestrictionChanged {
+    // The raw string of the user restriction as defined in UserManager.
+    // Allowed values are defined in UserRestrictionsUtils#USER_RESTRICTIONS.
+    optional string restriction = 1;
+    // Whether the restriction is enabled or disabled.
+    optional bool enabled = 2;
+}
+
+/**
  * Pulls process user time and system time. Puller takes a snapshot of all pids
  * in the system and returns cpu stats for those that are working at the time.
  * Dead pids will be dropped. Kernel processes are excluded.
@@ -3048,4 +3263,90 @@ message ProcessCpuTime {
     optional int64 user_time_millis = 3;
     // Process cpu time in system space, cumulative from boot/process start
     optional int64 system_time_millis = 4;
+}
+
+/**
+ * Pulls the CPU usage for each thread.
+ *
+ * Read from /proc/$PID/task/$TID/time_in_state files.
+ *
+ * TODO(mishaw): This is an experimental atom. Issues with big/little CPU frequencies, and
+ * time_in_state files not being present on some phones, have not been addressed. These should be
+ * considered before a public release.
+ */
+message CpuTimePerThreadFreq {
+    // UID that owns the process.
+    optional int32 uid = 1 [(is_uid) = true];
+    // ID of the process.
+    optional uint32 process_id = 2;
+    // ID of the thread.
+    optional uint32 thread_id = 3;
+    // Name of the process taken from `/proc/$PID/cmdline`.
+    optional string process_name = 4;
+    // Name of the thread taken from `/proc/$PID/task/$TID/comm`
+    optional string thread_name = 5;
+    // What frequency the CPU was running at, in KHz
+    optional uint32 frequency_khz = 6;
+    // Time spent in frequency in milliseconds, since thread start.
+    optional uint32 time_millis = 7;
+}
+
+/**
+ * Pulls on-device BatteryStats power use calculations for the overall device.
+ */
+message DeviceCalculatedPowerUse {
+    // Power used by the device in mAh, as computed by BatteryStats, since BatteryStats last reset
+    // (i.e. roughly since device was last significantly charged).
+    // Currently, this is BatteryStatsHelper.getComputedPower() (not getTotalPower()).
+    optional float computed_power_milli_amp_hours = 1;
+}
+
+/**
+ * Pulls on-device BatteryStats power use calculations broken down by uid.
+ * This atom should be complemented by DeviceCalculatedPowerBlameOther, which contains the power use
+ * that is attributed to non-uid items. They must all be included to get the total power use.
+ */
+message DeviceCalculatedPowerBlameUid {
+    // Uid being blamed. Note: isolated uids have already been mapped to host uid.
+    optional int32 uid = 1 [(is_uid) = true];
+
+    // Power used by this uid in mAh, as computed by BatteryStats, since BatteryStats last reset
+    // (i.e. roughly since device was last significantly charged).
+    optional float power_milli_amp_hours = 2;
+}
+
+/**
+ * Pulls on-device BatteryStats power use calculations that are not due to a uid, broken down by
+ * drain type.
+ * This atom should be complemented by DeviceCalculatedPowerBlameUid, which contains the blame that
+ * is attributed uids. They must all be included to get the total power use.
+ */
+message DeviceCalculatedPowerBlameOther {
+    // The type of item whose power use is being reported.
+    enum DrainType {
+        AMBIENT_DISPLAY = 0;
+        // reserved 1; reserved "APP"; // Logged instead in DeviceCalculatedPowerBlameUid.
+        BLUETOOTH = 2;
+        CAMERA = 3;
+        // Cell-standby
+        CELL = 4;
+        FLASHLIGHT = 5;
+        IDLE = 6;
+        MEMORY = 7;
+        // Amount that total computed drain exceeded the drain estimated using the
+        // battery level changes and capacity.
+        OVERCOUNTED = 8;
+        PHONE = 9;
+        SCREEN = 10;
+        // Amount that total computed drain was below the drain estimated using the
+        // battery level changes and capacity.
+        UNACCOUNTED = 11;
+        // reserved 12; reserved "USER"; // Entire drain for a user. This is NOT supported.
+        WIFI = 13;
+    }
+    optional DrainType drain_type = 1;
+
+    // Power used by this item in mAh, as computed by BatteryStats, since BatteryStats last reset
+    // (i.e. roughly since device was last significantly charged).
+    optional float power_milli_amp_hours = 2;
 }

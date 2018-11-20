@@ -103,6 +103,8 @@ java_defaults {
         "core/java/android/app/backup/IRestoreObserver.aidl",
         "core/java/android/app/backup/IRestoreSession.aidl",
         "core/java/android/app/backup/ISelectBackupTransportCallback.aidl",
+        "core/java/android/app/role/IRoleManager.aidl",
+        "core/java/android/app/role/IRoleManagerCallback.aidl",
         "core/java/android/app/slice/ISliceManager.aidl",
         "core/java/android/app/slice/ISliceListener.aidl",
         "core/java/android/app/timedetector/ITimeDetectorService.aidl",
@@ -148,6 +150,8 @@ java_defaults {
         "core/java/android/content/pm/dex/ISnapshotRuntimeProfileCallback.aidl",
         "core/java/android/content/pm/permission/IRuntimePermissionPresenter.aidl",
         "core/java/android/database/IContentObserver.aidl",
+        "core/java/android/debug/IAdbManager.aidl",
+        "core/java/android/debug/IAdbTransport.aidl",
         ":libcamera_client_aidl",
         ":libcamera_client_framework_aidl",
         "core/java/android/hardware/IConsumerIrService.aidl",
@@ -177,6 +181,7 @@ java_defaults {
         "core/java/android/hardware/input/IInputManager.aidl",
         "core/java/android/hardware/input/IInputDevicesChangedListener.aidl",
         "core/java/android/hardware/input/ITabletModeChangedListener.aidl",
+        "core/java/android/hardware/iris/IIrisService.aidl",
         "core/java/android/hardware/location/IActivityRecognitionHardware.aidl",
         "core/java/android/hardware/location/IActivityRecognitionHardwareClient.aidl",
         "core/java/android/hardware/location/IActivityRecognitionHardwareSink.aidl",
@@ -233,8 +238,7 @@ java_defaults {
         "core/java/android/os/IDeviceIdentifiersPolicyService.aidl",
         "core/java/android/os/IDeviceIdleController.aidl",
         "core/java/android/os/IHardwarePropertiesManager.aidl",
-        "core/java/android/os/IIncidentManager.aidl",
-        "core/java/android/os/IIncidentReportStatusListener.aidl",
+        ":libincident_aidl",
         "core/java/android/os/IMaintenanceActivityListener.aidl",
         "core/java/android/os/IMessenger.aidl",
         "core/java/android/os/INetworkActivityListener.aidl",
@@ -247,8 +251,7 @@ java_defaults {
         "core/java/android/os/IRecoverySystemProgressListener.aidl",
         "core/java/android/os/IRemoteCallback.aidl",
         "core/java/android/os/ISchedulingPolicyService.aidl",
-        "core/java/android/os/IStatsCompanionService.aidl",
-        "core/java/android/os/IStatsManager.aidl",
+        ":statsd_aidl",
         "core/java/android/os/ISystemUpdateManager.aidl",
         "core/java/android/os/IThermalEventListener.aidl",
         "core/java/android/os/IThermalService.aidl",
@@ -259,6 +262,7 @@ java_defaults {
         "core/java/android/os/storage/IStorageEventListener.aidl",
         "core/java/android/os/storage/IStorageShutdownObserver.aidl",
         "core/java/android/os/storage/IObbActionListener.aidl",
+        "core/java/android/rolecontrollerservice/IRoleControllerService.aidl",
         ":keystore_aidl",
         "core/java/android/security/keymaster/IKeyAttestationApplicationIdProvider.aidl",
         "core/java/android/service/autofill/IAutoFillService.aidl",
@@ -283,6 +287,8 @@ java_defaults {
         "core/java/android/service/euicc/ISwitchToSubscriptionCallback.aidl",
         "core/java/android/service/euicc/IUpdateSubscriptionNicknameCallback.aidl",
         "core/java/android/service/gatekeeper/IGateKeeperService.aidl",
+        "core/java/android/service/intelligence/IIntelligenceService.aidl",
+
         "core/java/android/service/notification/INotificationListener.aidl",
         "core/java/android/service/notification/IStatusBarNotificationHolder.aidl",
         "core/java/android/service/notification/IConditionListener.aidl",
@@ -339,6 +345,7 @@ java_defaults {
         "core/java/android/view/autofill/IAutoFillManager.aidl",
         "core/java/android/view/autofill/IAutoFillManagerClient.aidl",
         "core/java/android/view/autofill/IAutofillWindowPresenter.aidl",
+        "core/java/android/view/intelligence/IIntelligenceManager.aidl",
         "core/java/android/view/IApplicationToken.aidl",
         "core/java/android/view/IAppTransitionAnimationSpecsFuture.aidl",
         "core/java/android/view/IDockedStackListener.aidl",
@@ -386,6 +393,9 @@ java_defaults {
         "core/java/com/android/internal/backup/IObbBackupService.aidl",
         "core/java/com/android/internal/inputmethod/IInputContentUriToken.aidl",
         "core/java/com/android/internal/inputmethod/IInputMethodPrivilegedOperations.aidl",
+        "core/java/com/android/internal/inputmethod/IMultiClientInputMethod.aidl",
+        "core/java/com/android/internal/inputmethod/IMultiClientInputMethodPrivilegedOperations.aidl",
+        "core/java/com/android/internal/inputmethod/IMultiClientInputMethodSession.aidl",
         "core/java/com/android/internal/net/INetworkWatchlistManager.aidl",
         "core/java/com/android/internal/policy/IKeyguardDrawnCallback.aidl",
         "core/java/com/android/internal/policy/IKeyguardDismissCallback.aidl",
@@ -527,6 +537,7 @@ java_defaults {
         "telephony/java/android/telephony/mbms/vendor/IMbmsDownloadService.aidl",
         "telephony/java/android/telephony/mbms/vendor/IMbmsStreamingService.aidl",
         "telephony/java/android/telephony/mbms/vendor/IMbmsGroupCallService.aidl",
+        "telephony/java/android/telephony/ICellInfoCallback.aidl",
         "telephony/java/android/telephony/INetworkService.aidl",
         "telephony/java/android/telephony/INetworkServiceCallback.aidl",
         "telephony/java/com/android/ims/internal/IImsCallSession.aidl",
@@ -561,7 +572,6 @@ java_defaults {
         "telephony/java/com/android/internal/telephony/IOnSubscriptionsChangedListener.aidl",
         "telephony/java/com/android/internal/telephony/IPhoneStateListener.aidl",
         "telephony/java/com/android/internal/telephony/IPhoneSubInfo.aidl",
-        "telephony/java/com/android/internal/telephony/IRcs.aidl",
         "telephony/java/com/android/internal/telephony/ISms.aidl",
         "telephony/java/com/android/internal/telephony/ISub.aidl",
         "telephony/java/com/android/internal/telephony/IAns.aidl",
@@ -592,6 +602,9 @@ java_defaults {
         "telephony/java/com/android/internal/telephony/euicc/ISetDefaultSmdpAddressCallback.aidl",
         "telephony/java/com/android/internal/telephony/euicc/ISetNicknameCallback.aidl",
         "telephony/java/com/android/internal/telephony/euicc/ISwitchToProfileCallback.aidl",
+        "telephony/java/com/android/internal/telephony/rcs/IRcs.aidl",
+        "wifi/java/android/net/wifi/INetworkRequestMatchCallback.aidl",
+        "wifi/java/android/net/wifi/INetworkRequestUserSelectionCallback.aidl",
         "wifi/java/android/net/wifi/ISoftApCallback.aidl",
         "wifi/java/android/net/wifi/ITrafficStateCallback.aidl",
         "wifi/java/android/net/wifi/IWifiManager.aidl",
@@ -692,6 +705,7 @@ java_defaults {
     ],
 
     static_libs: [
+        "apex_aidl_interface-java",
         "framework-protos",
         "mediaplayer2-protos",
         "android.hidl.base-V1.0-java",
@@ -699,6 +713,8 @@ java_defaults {
         "android.hardware.contexthub-V1.0-java",
         "android.hardware.health-V1.0-java-constants",
         "android.hardware.thermal-V1.0-java-constants",
+        "android.hardware.thermal-V1.1-java",
+        "android.hardware.thermal-V2.0-java",
         "android.hardware.tv.input-V1.0-java-constants",
         "android.hardware.usb-V1.0-java-constants",
         "android.hardware.usb-V1.1-java-constants",
@@ -724,6 +740,22 @@ java_defaults {
 
 }
 
+filegroup {
+    name: "libincident_aidl",
+    srcs: [
+        "core/java/android/os/IIncidentManager.aidl",
+        "core/java/android/os/IIncidentReportStatusListener.aidl",
+    ],
+}
+
+filegroup {
+    name: "statsd_aidl",
+    srcs: [
+        "core/java/android/os/IStatsCompanionService.aidl",
+        "core/java/android/os/IStatsManager.aidl",
+    ],
+}
+
 java_library {
     name: "framework",
     defaults: ["framework-defaults"],
@@ -738,6 +770,16 @@ java_library {
     // b/25860419: annotation processors must be explicitly specified for grok
     annotation_processor_classes: [
         "android.processor.unsupportedappusage.UsedByAppsProcessor",
+    ],
+}
+
+// A host library containing the inspector annotations for inspector-annotation-processor.
+java_library_host {
+    name: "inspector-annotation",
+    srcs: [
+        "core/java/android/view/inspector/InspectableChildren.java",
+        "core/java/android/view/inspector/InspectableNodeName.java",
+        "core/java/android/view/inspector/InspectableProperty.java",
     ],
 }
 
@@ -934,12 +976,14 @@ gensrcs {
         "core/proto/android/os/batterytype.proto",
         "core/proto/android/os/cpufreq.proto",
         "core/proto/android/os/cpuinfo.proto",
+        "core/proto/android/os/data.proto",
         "core/proto/android/os/kernelwake.proto",
         "core/proto/android/os/pagetypeinfo.proto",
         "core/proto/android/os/procrank.proto",
         "core/proto/android/os/ps.proto",
         "core/proto/android/os/system_properties.proto",
         "core/proto/android/util/event_log_tags.proto",
+        "core/proto/android/util/log.proto",
     ],
 
     // Append protoc-gen-cppstream tool's PATH otherwise aprotoc can't find the plugin tool
@@ -1159,6 +1203,7 @@ stubs_defaults {
         ":openjdk_javadoc_files",
         ":non_openjdk_javadoc_files",
         ":android_icu4j_src_files_for_docs",
+        ":conscrypt_public_api_files",
         "test-mock/src/**/*.java",
         "test-runner/src/**/*.java",
     ],
@@ -1219,6 +1264,7 @@ stubs_defaults {
         ":openjdk_javadoc_files",
         ":non_openjdk_javadoc_files",
         ":android_icu4j_src_files_for_docs",
+        ":conscrypt_public_api_files",
     ],
     srcs_lib: "framework",
     srcs_lib_whitelist_dirs: frameworks_base_subdirs,
@@ -1549,6 +1595,10 @@ droidstubs {
 droidstubs {
     name: "hiddenapi-mappings",
     defaults: ["metalava-api-stubs-default"],
+    srcs: [
+        ":openjdk_java_files",
+        ":non_openjdk_java_files",
+    ],
     arg_files: [
         "core/res/AndroidManifest.xml",
     ],

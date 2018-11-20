@@ -67,11 +67,14 @@ interface IAccessibilityManager {
 
     void notifyAccessibilityButtonVisibilityChanged(boolean available);
 
-    // Requires WRITE_SECURE_SETTINGS
+    // Requires Manifest.permission.MANAGE_ACCESSIBILITY
     void performAccessibilityShortcut();
+
+    // Requires Manifest.permission.MANAGE_ACCESSIBILITY
+    String getAccessibilityShortcutService();
 
     // System process only
     boolean sendFingerprintGesture(int gestureKeyCode);
 
-    int getMinimumUiTimeout();
+    long getRecommendedTimeoutMillis();
 }

@@ -21,14 +21,6 @@
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <string name="app_label" msgid="7164937344850004466">"Gränssnitt"</string>
     <string name="status_bar_clear_all_button" msgid="7774721344716731603">"Ta bort"</string>
-    <string name="status_bar_recent_remove_item_title" msgid="6026395868129852968">"Ta bort från listan"</string>
-    <string name="status_bar_recent_inspect_item_title" msgid="7793624864528818569">"Info om appen"</string>
-    <string name="status_bar_no_recent_apps" msgid="7374907845131203189">"Dina senaste skärmar visas här"</string>
-    <string name="status_bar_accessibility_dismiss_recents" msgid="4576076075226540105">"Avvisa nya appar"</string>
-    <plurals name="status_bar_accessibility_recent_apps" formatted="false" msgid="9138535907802238759">
-      <item quantity="other">%d skärmar i översikten</item>
-      <item quantity="one">En skärm i översikten</item>
-    </plurals>
     <string name="status_bar_no_notifications_title" msgid="4755261167193833213">"Inga aviseringar"</string>
     <string name="status_bar_ongoing_events_title" msgid="1682504513316879202">"Pågående"</string>
     <string name="status_bar_latest_events_title" msgid="6594767438577593172">"Aviseringar"</string>
@@ -78,6 +70,22 @@
     <string name="screenshot_failed_to_save_unknown_text" msgid="3637758096565605541">"Testa att ta en skärmdump igen"</string>
     <string name="screenshot_failed_to_save_text" msgid="3041612585107107310">"Det går inte att spara skärmdumpen eftersom lagringsutrymmet inte räcker"</string>
     <string name="screenshot_failed_to_capture_text" msgid="173674476457581486">"Appen eller organisationen tillåter inte att du tar skärmdumpar"</string>
+    <string name="screenrecord_name" msgid="4196719243134204796">"Skärminspelning"</string>
+    <string name="screenrecord_channel_description" msgid="4630777331970993858">"Avisering om att skärminspelning pågår"</string>
+    <string name="screenrecord_start_label" msgid="5177739269492196055">"Börja spela in"</string>
+    <string name="screenrecord_mic_label" msgid="4522870600914810019">"Spela in med mikrofondubbning"</string>
+    <string name="screenrecord_taps_label" msgid="1776467076607964790">"Visa tryck"</string>
+    <string name="screenrecord_stop_label" msgid="2544887572381260038">"Stoppa"</string>
+    <string name="screenrecord_pause_label" msgid="7162476078856786227">"Pausa"</string>
+    <string name="screenrecord_resume_label" msgid="3605818317015993314">"Återuppta"</string>
+    <string name="screenrecord_cancel_label" msgid="3385204992871088609">"Avbryt"</string>
+    <string name="screenrecord_share_label" msgid="4197867360204019389">"Dela"</string>
+    <string name="screenrecord_delete_label" msgid="7893716870917824013">"Radera"</string>
+    <string name="screenrecord_cancel_success" msgid="7768976011702614782">"Skärminspelningen har avbrutits"</string>
+    <string name="screenrecord_save_message" msgid="4733982661301846778">"Skärminspelningen har sparats, tryck här om du vill titta på den"</string>
+    <string name="screenrecord_delete_description" msgid="5743190456090354585">"Skärminspelningen har raderats"</string>
+    <string name="screenrecord_delete_error" msgid="8154904464563560282">"Det gick inte att radera skärminspelningen"</string>
+    <string name="screenrecord_permission_error" msgid="1526755299469001000">"Behörighet saknas"</string>
     <string name="usb_preference_title" msgid="6551050377388882787">"Överföringsalternativ"</string>
     <string name="use_mtp_button_title" msgid="4333504413563023626">"Montera som mediaspelare (MTP)"</string>
     <string name="use_ptp_button_title" msgid="7517127540301625751">"Montera som kamera (PTP)"</string>
@@ -101,7 +109,6 @@
     <string name="phone_label" msgid="2320074140205331708">"öppna mobilen"</string>
     <string name="voice_assist_label" msgid="3956854378310019854">"öppna röstassistenten"</string>
     <string name="camera_label" msgid="7261107956054836961">"öppna kameran"</string>
-    <string name="recents_caption_resize" msgid="3517056471774958200">"Välj en ny layout för uppgiften"</string>
     <string name="cancel" msgid="6442560571259935130">"Avbryt"</string>
     <string name="accessibility_biometric_dialog_help_area" msgid="8953787076940186847">"Område för hjälpmeddelande"</string>
     <string name="biometric_dialog_confirm" msgid="6468457350041712674">"Bekräfta"</string>
@@ -188,11 +195,6 @@
     <skip />
     <!-- no translation found for accessibility_work_mode (702887484664647430) -->
     <skip />
-    <string name="accessibility_recents_item_will_be_dismissed" msgid="395770242498031481">"Ta bort <xliff:g id="APP">%s</xliff:g> från listan."</string>
-    <string name="accessibility_recents_item_dismissed" msgid="6803574935084867070">"<xliff:g id="APP">%s</xliff:g> togs bort permanent."</string>
-    <string name="accessibility_recents_all_items_dismissed" msgid="4464697366179168836">"Alla appar har tagits bort från listan Senaste."</string>
-    <string name="accessibility_recents_item_open_app_info" msgid="5107479759905883540">"Öppna appinformation för <xliff:g id="APP">%s</xliff:g>."</string>
-    <string name="accessibility_recents_item_launched" msgid="7616039892382525203">"Startar <xliff:g id="APP">%s</xliff:g>."</string>
     <string name="accessibility_notification_dismissed" msgid="854211387186306927">"Meddelandet ignorerades."</string>
     <string name="accessibility_desc_notification_shade" msgid="4690274844447504208">"Meddelandepanel."</string>
     <string name="accessibility_desc_quick_settings" msgid="6186378411582437046">"Snabbinställningar."</string>
@@ -319,6 +321,7 @@
     <string name="quick_settings_cast_device_default_name" msgid="5367253104742382945">"Namnlös enhet"</string>
     <string name="quick_settings_cast_device_default_description" msgid="2484573682378634413">"Redo att casta"</string>
     <string name="quick_settings_cast_detail_empty_text" msgid="311785821261640623">"Inga tillgängliga enheter"</string>
+    <string name="quick_settings_cast_no_wifi" msgid="2696477881905521882">"Inte ansluten till Wi-Fi"</string>
     <string name="quick_settings_brightness_dialog_title" msgid="8599674057673605368">"Ljusstyrka"</string>
     <string name="quick_settings_brightness_dialog_auto_brightness_label" msgid="5064982743784071218">"AUTO"</string>
     <string name="quick_settings_inversion_label" msgid="8790919884718619648">"Invertera färger"</string>
@@ -354,23 +357,8 @@
     <string name="quick_settings_nfc_label" msgid="9012153754816969325">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="6883274004315134333">"NFC är inaktiverat"</string>
     <string name="quick_settings_nfc_on" msgid="6680317193676884311">"NFC är aktiverat"</string>
-    <string name="recents_empty_message" msgid="808480104164008572">"Listan med de senaste åtgärderna är tom"</string>
-    <string name="recents_empty_message_dismissed_all" msgid="2791312568666558651">"Du har tömt listan"</string>
-    <string name="recents_app_info_button_label" msgid="2890317189376000030">"Appinformation"</string>
-    <string name="recents_lock_to_app_button_label" msgid="6942899049072506044">"fästa skärmen"</string>
-    <string name="recents_search_bar_label" msgid="8074997400187836677">"sök"</string>
-    <string name="recents_launch_error_message" msgid="2969287838120550506">"Det gick inte att starta appen <xliff:g id="APP">%s</xliff:g>."</string>
-    <string name="recents_launch_disabled_message" msgid="1624523193008871793">"<xliff:g id="APP">%s</xliff:g> är inaktiverad i säkert läge."</string>
-    <string name="recents_stack_action_button_label" msgid="6593727103310426253">"Rensa alla"</string>
-    <string name="recents_drag_hint_message" msgid="2649739267073203985">"Dra hit för att dela upp skärmen"</string>
     <string name="recents_swipe_up_onboarding" msgid="3824607135920170001">"Byt appar genom att svepa uppåt"</string>
     <string name="recents_quick_scrub_onboarding" msgid="2778062804333285789">"Tryck och dra åt höger för att snabbt byta mellan appar"</string>
-    <string name="recents_multistack_add_stack_dialog_split_horizontal" msgid="8848514474543427332">"Dela horisontellt"</string>
-    <string name="recents_multistack_add_stack_dialog_split_vertical" msgid="9075292233696180813">"Dela vertikalt"</string>
-    <string name="recents_multistack_add_stack_dialog_split_custom" msgid="4177837597513701943">"Dela anpassad"</string>
-    <string name="recents_accessibility_split_screen_top" msgid="9056056469282256287">"Delad skärm till överkanten"</string>
-    <string name="recents_accessibility_split_screen_left" msgid="8987144699630620019">"Delad skärm åt vänster"</string>
-    <string name="recents_accessibility_split_screen_right" msgid="275069779299592867">"Delad skärm åt höger"</string>
     <string name="quick_step_accessibility_toggle_overview" msgid="7171470775439860480">"Aktivera och inaktivera översikten"</string>
     <string name="expanded_header_battery_charged" msgid="5945855970267657951">"Laddat"</string>
     <string name="expanded_header_battery_charging" msgid="205623198487189724">"Laddar"</string>
@@ -610,11 +598,19 @@
     <string name="notification_header_default_channel" msgid="7506845022070889909">"Aviseringar"</string>
     <string name="notification_channel_disabled" msgid="344536703863700565">"De här aviseringarna visas inte längre"</string>
     <string name="notification_channel_minimized" msgid="1664411570378910931">"Dessa aviseringar minimeras"</string>
+    <!-- no translation found for notification_channel_silenced (2877199534497961942) -->
+    <skip />
+    <!-- no translation found for notification_channel_unsilenced (4790904571552394137) -->
+    <skip />
     <string name="inline_blocking_helper" msgid="3055064577771478591">"Du brukar avvisa de här aviseringarna. \nVill du fortsätta att visa dem?"</string>
     <string name="inline_keep_showing" msgid="8945102997083836858">"Vill du fortsätta visa de här aviseringarna?"</string>
     <string name="inline_stop_button" msgid="4172980096860941033">"Stoppa aviseringar"</string>
     <string name="inline_keep_button" msgid="6665940297019018232">"Fortsätt visa"</string>
     <string name="inline_minimize_button" msgid="966233327974702195">"Minimera"</string>
+    <!-- no translation found for inline_silent_button_silent (4411510650503783646) -->
+    <skip />
+    <!-- no translation found for inline_silent_button_alert (2967599358027208807) -->
+    <skip />
     <string name="inline_keep_showing_app" msgid="1723113469580031041">"Vill du fortsätta visa aviseringar för den här appen?"</string>
     <string name="notification_unblockable_desc" msgid="1037434112919403708">"De här aviseringarna kan inte inaktiveras"</string>
     <string name="appops_camera" msgid="8100147441602585776">"Kameran används av appen."</string>
@@ -751,6 +747,7 @@
     <item msgid="2139628951880142927">"Visa procent under laddning (standard)"</item>
     <item msgid="3327323682209964956">"Visa inte den här ikonen"</item>
   </string-array>
+    <string name="tuner_low_priority" msgid="1325884786608312358">"Visa ikoner för aviseringar med låg prioritet"</string>
     <string name="other" msgid="4060683095962566764">"Annat"</string>
     <string name="accessibility_divider" msgid="5903423481953635044">"Avdelare för delad skärm"</string>
     <string name="accessibility_action_divider_left_full" msgid="2801570521881574972">"Helskärm på vänster skärm"</string>
@@ -782,6 +779,7 @@
     <string name="accessibility_quick_settings_user" msgid="1567445362870421770">"Inloggad som <xliff:g id="ID_1">%s</xliff:g>"</string>
     <string name="data_connection_no_internet" msgid="4503302451650972989">"Inget internet"</string>
     <string name="accessibility_quick_settings_open_details" msgid="4230931801728005194">"Visa information."</string>
+    <string name="accessibility_quick_settings_not_available" msgid="4190068184294019846">"Inte tillgänglig på grund av <xliff:g id="REASON">%s</xliff:g>"</string>
     <string name="accessibility_quick_settings_open_settings" msgid="7806613775728380737">"Öppna <xliff:g id="ID_1">%s</xliff:g>-inställningarna."</string>
     <string name="accessibility_quick_settings_edit" msgid="7839992848995240393">"Ändra ordning på inställningarna."</string>
     <string name="accessibility_quick_settings_page" msgid="5032979051755200721">"Sida <xliff:g id="ID_1">%1$d</xliff:g> av <xliff:g id="ID_2">%2$d</xliff:g>"</string>
@@ -829,7 +827,7 @@
     <string name="instant_apps_message" msgid="1183313016396018086">"Appen öppnades utan installation."</string>
     <string name="instant_apps_message_with_help" msgid="6179830437630729747">"Appen öppnades utan installation. Tryck om du vill veta mer."</string>
     <string name="app_info" msgid="6856026610594615344">"Info om appen"</string>
-    <string name="go_to_web" msgid="1106022723459948514">"Öppna webbplatsen"</string>
+    <string name="go_to_web" msgid="2650669128861626071">"Öppna webbläsaren"</string>
     <string name="mobile_data" msgid="7094582042819250762">"Mobildata"</string>
     <string name="mobile_data_text_format" msgid="3526214522670876454">"<xliff:g id="ID_1">%1$s</xliff:g> — <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="wifi_is_off" msgid="1838559392210456893">"Wi-Fi är inaktiverat"</string>
@@ -861,4 +859,16 @@
     <string name="open_saver_setting_action" msgid="8314624730997322529">"Inställningar"</string>
     <string name="auto_saver_okay_action" msgid="2701221740227683650">"OK"</string>
     <string name="heap_dump_tile_name" msgid="9141031328971226374">"Dumpa SysUI-heap"</string>
+    <string name="ongoing_privacy_chip_content_single_app" msgid="4479560741898690064">"<xliff:g id="TYPES_LIST">%2$s</xliff:g> används av <xliff:g id="APP">%1$s</xliff:g>."</string>
+    <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8640691753867990511">"<xliff:g id="TYPES_LIST">%s</xliff:g> används av appar."</string>
+    <string name="ongoing_privacy_dialog_open_app" msgid="2483886665314567948">"Öppna app"</string>
+    <string name="ongoing_privacy_dialog_cancel" msgid="5479124524931216790">"Avbryt"</string>
+    <string name="ongoing_privacy_dialog_okay" msgid="5823914553907253532">"OK"</string>
+    <string name="ongoing_privacy_dialog_open_settings" msgid="6382622467527049074">"Inställn."</string>
+    <string name="ongoing_privacy_dialog_app_item" msgid="486085465491760739">"<xliff:g id="TYPE">%2$s</xliff:g> har använts av <xliff:g id="APP">%1$s</xliff:g> under de senaste <xliff:g id="TIME">%3$d</xliff:g> minuterna"</string>
+    <string name="ongoing_privacy_dialog_apps_item" msgid="9207187236823950491">"<xliff:g id="TYPE">%2$s</xliff:g> används av <xliff:g id="APPS">%1$s</xliff:g>"</string>
+    <string name="ongoing_privacy_dialog_single_app" msgid="3884812469179810924">"<xliff:g id="TYPES_LIST">%2$s</xliff:g> används av <xliff:g id="APP">%1$s</xliff:g>"</string>
+    <string name="privacy_type_camera" msgid="1676604631892420333">"kamera"</string>
+    <string name="privacy_type_location" msgid="6435497989657286700">"plats"</string>
+    <string name="privacy_type_microphone" msgid="4153045784928554506">"mikrofon"</string>
 </resources>

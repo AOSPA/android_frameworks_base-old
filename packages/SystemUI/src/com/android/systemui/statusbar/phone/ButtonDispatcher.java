@@ -21,8 +21,8 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.view.View;
-
 import android.view.View.AccessibilityDelegate;
+
 import com.android.systemui.plugins.statusbar.phone.NavBarButtonProvider.ButtonInterface;
 import com.android.systemui.statusbar.policy.KeyButtonDrawable;
 
@@ -263,6 +263,16 @@ public class ButtonDispatcher {
         }
     }
 
+    public void setTranslation(int x, int y, int z) {
+        final int N = mViews.size();
+        for (int i = 0; i < N; i++) {
+            final View view = mViews.get(i);
+            view.setTranslationX(x);
+            view.setTranslationY(y);
+            view.setTranslationZ(z);
+        }
+    }
+
     public ArrayList<View> getViews() {
         return mViews;
     }
@@ -276,6 +286,11 @@ public class ButtonDispatcher {
         if (mImageDrawable != null) {
             mImageDrawable.setCallback(mCurrentView);
         }
+        if (mCurrentView != null) {
+            mCurrentView.setTranslationX(0);
+            mCurrentView.setTranslationY(0);
+            mCurrentView.setTranslationZ(0);
+        }
     }
 
     public void setVertical(boolean vertical) {
@@ -287,5 +302,11 @@ public class ButtonDispatcher {
                 ((ButtonInterface) view).setVertical(vertical);
             }
         }
+    }
+
+    /**
+     * Executes when button is detached from window.
+     */
+    protected void onDestroy() {
     }
 }

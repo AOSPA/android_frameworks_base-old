@@ -18,6 +18,7 @@ package com.android.systemui.biometrics;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.IBiometricPromptReceiver;
@@ -53,6 +54,7 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
     private static final int MSG_BUTTON_POSITIVE = 8;
 
     private Map<Integer, BiometricDialogView> mDialogs; // BiometricAuthenticator type, view
+    private SomeArgs mCurrentDialogArgs;
     private BiometricDialogView mCurrentDialog;
     private WindowManager mWindowManager;
     private IBiometricPromptReceiver mReceiver;
@@ -64,7 +66,7 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
         public void handleMessage(Message msg) {
             switch(msg.what) {
                 case MSG_SHOW_DIALOG:
-                    handleShowDialog((SomeArgs) msg.obj);
+                    handleShowDialog((SomeArgs) msg.obj, false /* skipAnimation */);
                     break;
                 case MSG_BIOMETRIC_AUTHENTICATED:
                     handleBiometricAuthenticated();
@@ -116,6 +118,15 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
 
     @Override
     public void start() {
+        createDialogs();
+
+        if (!mDialogs.isEmpty()) {
+            getComponent(CommandQueue.class).addCallbacks(this);
+            mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
+        }
+    }
+
+    private void createDialogs() {
         final PackageManager pm = mContext.getPackageManager();
         mDialogs = new HashMap<>();
         if (pm.hasSystemFeature(PackageManager.FEATURE_FACE)) {
@@ -125,16 +136,11 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
             mDialogs.put(BiometricAuthenticator.TYPE_FINGERPRINT,
                     new FingerprintDialogView(mContext, mCallback));
         }
-
-        if (!mDialogs.isEmpty()) {
-            getComponent(CommandQueue.class).addCallbacks(this);
-            mWindowManager = (WindowManager) mContext.getSystemService(Context.WINDOW_SERVICE);
-        }
     }
 
     @Override
     public void showBiometricDialog(Bundle bundle, IBiometricPromptReceiver receiver, int type,
-            boolean requireConfirmation) {
+            boolean requireConfirmation, int userId) {
         if (DEBUG) Log.d(TAG, "showBiometricDialog, type: " + type);
         // Remove these messages as they are part of the previous client
         mHandler.removeMessages(MSG_BIOMETRIC_ERROR);
@@ -145,6 +151,7 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
         args.arg2 = receiver;
         args.argi1 = type;
         args.arg3 = requireConfirmation;
+        args.argi2 = userId;
         mHandler.obtainMessage(MSG_SHOW_DIALOG, args).sendToTarget();
     }
 
@@ -172,7 +179,8 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
         mHandler.obtainMessage(MSG_HIDE_DIALOG, false /* userCanceled */).sendToTarget();
     }
 
-    private void handleShowDialog(SomeArgs args) {
+    private void handleShowDialog(SomeArgs args, boolean skipAnimation) {
+        mCurrentDialogArgs = args;
         final int type = args.argi1;
         mCurrentDialog = mDialogs.get(type);
 
@@ -187,7 +195,9 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
         }
         mReceiver = (IBiometricPromptReceiver) args.arg2;
         mCurrentDialog.setBundle((Bundle)args.arg1);
-        mCurrentDialog.setRequireConfirmation((boolean)args.arg3);
+        mCurrentDialog.setRequireConfirmation((boolean) args.arg3);
+        mCurrentDialog.setUserId(args.argi2);
+        mCurrentDialog.setSkipIntro(skipAnimation);
         mWindowManager.addView(mCurrentDialog, mCurrentDialog.getLayoutParams());
         mDialogShowing = true;
     }
@@ -267,5 +277,19 @@ public class BiometricDialogImpl extends SystemUI implements CommandQueue.Callba
 
     private void handleUserCanceled() {
         handleHideDialog(true /* userCanceled */);
+    }
+
+    @Override
+    protected void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        final boolean wasShowing = mDialogShowing;
+        if (mDialogShowing) {
+            mCurrentDialog.forceRemove();
+            mDialogShowing = false;
+        }
+        createDialogs();
+        if (wasShowing) {
+            handleShowDialog(mCurrentDialogArgs, true /* skipAnimation */);
+        }
     }
 }

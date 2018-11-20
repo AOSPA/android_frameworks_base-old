@@ -54,6 +54,7 @@ import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Log;
+import android.util.MathUtils;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -63,6 +64,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.EmergencyButton;
@@ -229,6 +231,11 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
             return super.performAccessibilityAction(host, action, args);
         }
     };
+
+    public void initFrom(KeyguardBottomAreaView oldBottomArea) {
+        setKeyguardIndicationController(oldBottomArea.mIndicationController);
+        setStatusBar(oldBottomArea.mStatusBar);
+    }
 
     @Override
     protected void onFinishInflate() {
@@ -567,6 +574,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mDarkAmount = darkAmount;
         mIndicationController.setDarkAmount(darkAmount);
         mLockIcon.setDarkAmount(darkAmount);
+        dozeTimeTick();
     }
 
     private static boolean isSuccessfulLaunch(int result) {
@@ -583,7 +591,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         }
     }
 
-    private void launchVoiceAssist() {
+    @VisibleForTesting
+    void launchVoiceAssist() {
         Runnable runnable = new Runnable() {
             @Override
             public void run() {
@@ -792,6 +801,10 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mIndicationController = keyguardIndicationController;
     }
 
+    public void showTransientIndication(int id) {
+        mIndicationController.showTransientIndication(id);
+    }
+
     public void updateLeftAffordance() {
         updateLeftAffordanceIcon();
         updateLeftPreview();
@@ -834,12 +847,10 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     }
 
     public void dozeTimeTick() {
-        if (mDarkAmount == 1) {
-            // Move views every minute to avoid burn-in
-            int burnInYOffset = getBurnInOffset(mBurnInYOffset * 2, false /* xAxis */)
-                    - mBurnInYOffset;
-            mLockIcon.setTranslationY(burnInYOffset);
-        }
+        // Move views every minute to avoid burn-in
+        int burnInYOffset = -getBurnInOffset(mBurnInYOffset, false /* xAxis */);
+        burnInYOffset = (int) MathUtils.lerp(0, burnInYOffset, mDarkAmount);
+        mLockIcon.setTranslationY(burnInYOffset);
     }
 
     public void setBurnInXOffset(int burnInXOffset) {

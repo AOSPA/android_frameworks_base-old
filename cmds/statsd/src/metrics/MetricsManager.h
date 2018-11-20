@@ -83,6 +83,14 @@ public:
         return mHashStringsInReport;
     };
 
+    inline bool versionStringsInReport() const {
+        return mVersionStringsInReport;
+    };
+
+    inline bool installerInReport() const {
+        return mInstallerInReport;
+    };
+
     void refreshTtl(const int64_t currentTimestampNs) {
         if (mTtlNs > 0) {
             mTtlEndNs = currentTimestampNs + mTtlNs;
@@ -107,6 +115,7 @@ public:
 
     virtual void onDumpReport(const int64_t dumpTimeNs,
                               const bool include_current_partial_bucket,
+                              const bool erase_data,
                               std::set<string> *str_set,
                               android::util::ProtoOutputStream* protoOutput);
 
@@ -125,6 +134,8 @@ private:
     bool mConfigValid = false;
 
     bool mHashStringsInReport = false;
+    bool mVersionStringsInReport = false;
+    bool mInstallerInReport = false;
 
     const int64_t mTtlNs;
     int64_t mTtlEndNs;

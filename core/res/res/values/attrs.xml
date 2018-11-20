@@ -1141,6 +1141,15 @@
 
         <!-- Alpha value of the spot shadow projected by elevated views, between 0 and 1. -->
         <attr name="spotShadowAlpha" format="float" />
+
+        <!-- <p>Whether or not the force dark feature is allowed to be applied to this theme.
+             <p>Setting this to false will disable the auto-dark feature on everything this
+             theme is applied to along with anything drawn by any children of views using
+             this theme.
+             <p>Setting this to true will allow this view to be automatically made dark, however
+             a value of 'true' will not override any 'false' value in its parent chain nor will
+             it prevent any 'false' in any of its children. -->
+        <attr name="forceDarkAllowed" format="boolean" />
     </declare-styleable>
 
     <!-- **************************************************************** -->
@@ -2439,6 +2448,25 @@
             <flag name="noExcludeDescendants" value="0x8" />
         </attr>
 
+        <!-- Hints the Android System whether the view node associated with this View should be
+             use for content capture purposes. -->
+        <attr name="importantForContentCapture">
+            <!-- Let the Android System use its heuristics to determine if the view is important for content capture. -->
+            <flag name="auto" value="0" />
+            <!-- Hint the Android System that this view is important for content capture,
+                  and its children (if any) will be traversed.. -->
+            <flag name="yes" value="0x1" />
+            <!-- Hint the Android System that this view is *not* important for content capture,
+                  but its children (if any) will be traversed.. -->
+            <flag name="no" value="0x2" />
+            <!-- Hint the Android System that this view is important for content capture,
+                 but its children (if any) will not be traversed. -->
+            <flag name="yesExcludeDescendants" value="0x4" />
+            <!-- Hint the Android System that this view is *not* important for content capture,
+                 and its children (if any) will not be traversed. -->
+            <flag name="noExcludeDescendants" value="0x8" />
+        </attr>
+
         <!-- Boolean that controls whether a view can take focus while in touch mode.
              If this is true for a view, that view can gain focus when clicked on, and can keep
              focus if another view is clicked on that doesn't have this attribute set to true. -->
@@ -3116,8 +3144,13 @@
              {@link android.R.attr#ambientShadowAlpha} theme attribute. -->
         <attr name="outlineAmbientShadowColor" format="color" />
 
-        <!-- Whether to allow the rendering system to force this View to render as light-on-dark. -->
-        <attr name="allowForceDark" format="boolean" />
+        <!-- <p>Whether or not the force dark feature is allowed to be applied to this View.
+             <p>Setting this to false will disable the auto-dark feature on this View draws
+             including any descendants.
+             <p>Setting this to true will allow this view to be automatically made dark, however
+             a value of 'true' will not override any 'false' value in its parent chain nor will
+             it prevent any 'false' in any of its children. -->
+        <attr name="forceDarkAllowed" format="boolean" />
     </declare-styleable>
 
     <!-- Attributes that can be assigned to a tag for a particular View. -->
@@ -3573,11 +3606,22 @@
              {@link android.accessibilityservice.AccessibilityService#setServiceInfo(android.accessibilityservice.AccessibilityServiceInfo)
              android.accessibilityservice.AccessibilityService.setServiceInfo(android.accessibilityservice.AccessibilityServiceInfo)}. -->
         <attr name="notificationTimeout" format="integer" />
-        <!-- The minimum timeout in milliseconds that UI controls need to remain on the screen.
+        <!-- A recommended timeout in milliseconds used in
+             {@link android.view.accessibility.AccessibilityManager#getRecommendedTimeoutMillis(int, int)
+             android.view.accessibility.AccessibilityManager.getRecommendedTimeoutMillis(int, int)}
+             to return a suitable value for UIs that do not include interactive controls.
              This setting can be changed at runtime by calling
              {@link android.accessibilityservice.AccessibilityService#setServiceInfo(android.accessibilityservice.AccessibilityServiceInfo)
              android.accessibilityservice.AccessibilityService.setServiceInfo(android.accessibilityservice.AccessibilityServiceInfo)}. -->
-        <attr name="minimumUiTimeout" format="integer" />
+        <attr name="nonInteractiveUiTimeout" format="integer" />
+        <!-- A recommended timeout in milliseconds used in
+             {@link android.view.accessibility.AccessibilityManager#getRecommendedTimeoutMillis(int, int)
+             android.view.accessibility.AccessibilityManager.getRecommendedTimeoutMillis(int, int)}
+             to return a suitable value for interactive controls.
+             This setting can be changed at runtime by calling
+             {@link android.accessibilityservice.AccessibilityService#setServiceInfo(android.accessibilityservice.AccessibilityServiceInfo)
+             android.accessibilityservice.AccessibilityService.setServiceInfo(android.accessibilityservice.AccessibilityServiceInfo)}. -->
+        <attr name="interactiveUiTimeout" format="integer" />
         <!-- Additional flags as specified in
              {@link android.accessibilityservice.AccessibilityServiceInfo}.
              This setting can be changed at runtime by calling
@@ -7893,6 +7937,9 @@
 
         <!-- Wallpapers optimized and capable of drawing in ambient mode will return true. -->
         <attr name="supportsAmbientMode" format="boolean" />
+
+        <!-- Uri that specifies a settings Slice for this wallpaper. -->
+        <attr name="settingsSliceUri" />
 
     </declare-styleable>
 

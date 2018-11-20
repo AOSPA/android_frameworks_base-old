@@ -103,7 +103,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
-import static com.android.server.wm.WindowManagerService.H.SEND_NEW_CONFIGURATION;
 import static com.android.server.wm.WindowManagerService.MAX_ANIMATION_DURATION;
 import static com.android.server.wm.WindowManagerService.TYPE_LAYER_MULTIPLIER;
 import static com.android.server.wm.WindowManagerService.TYPE_LAYER_OFFSET;
@@ -192,7 +191,7 @@ import android.view.animation.Interpolator;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ToBooleanFunction;
-import com.android.server.input.InputWindowHandle;
+import android.view.InputWindowHandle;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.LocalAnimationAdapter.AnimationSpec;
 import com.android.server.wm.utils.InsetUtils;
@@ -719,7 +718,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mLastRequestedHeight = 0;
         mLayer = 0;
         mInputWindowHandle = new InputWindowHandle(
-                mAppToken != null ? mAppToken.mInputApplicationHandle : null, this, c,
+                mAppToken != null ? mAppToken.mInputApplicationHandle : null, c,
                     getDisplayId());
     }
 
@@ -1364,7 +1363,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     @Override
     boolean hasContentToDisplay() {
         if (!mAppFreezing && isDrawnLw() && (mViewVisibility == View.VISIBLE
-                || (isAnimating() && !mService.mAppTransition.isTransitionSet()))) {
+                || (isAnimating() && !getDisplayContent().mAppTransition.isTransitionSet()))) {
             return true;
         }
 
@@ -1473,7 +1472,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * of a transition that has not yet been started.
      */
     boolean isReadyForDisplay() {
-        if (mToken.waitingToShow && mService.mAppTransition.isTransitionSet()) {
+        if (mToken.waitingToShow && getDisplayContent().mAppTransition.isTransitionSet()) {
             return false;
         }
         final boolean parentAndClientVisible = !isParentWindowHidden()
@@ -1942,8 +1941,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             removeImmediately();
             // Removing a visible window will effect the computed orientation
             // So just update orientation if needed.
-            if (wasVisible && mService.updateOrientationFromAppTokensLocked(displayId)) {
-                mService.mH.obtainMessage(SEND_NEW_CONFIGURATION, displayId).sendToTarget();
+            if (wasVisible) {
+                final DisplayContent displayContent = getDisplayContent();
+                if (displayContent.updateOrientationFromAppTokens()) {
+                    displayContent.sendNewConfiguration();
+                }
             }
             mService.updateFocusedWindowLocked(isFocused()
                             ? UPDATE_FOCUS_REMOVING_FOCUS
@@ -2045,7 +2047,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // Create dummy event receiver that simply reports all events as handled.
             mDeadWindowEventReceiver = new DeadWindowEventReceiver(mClientChannel);
         }
-        mService.mInputManager.registerInputChannel(mInputChannel, mInputWindowHandle);
+        mService.mInputManager.registerInputChannel(mInputChannel, mClient.asBinder());
     }
 
     void disposeInputChannel() {
@@ -2057,6 +2059,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // unregister server channel first otherwise it complains about broken channel
         if (mInputChannel != null) {
             mService.mInputManager.unregisterInputChannel(mInputChannel);
+
             mInputChannel.dispose();
             mInputChannel = null;
         }
@@ -2256,7 +2259,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private Configuration getProcessGlobalConfiguration() {
         // For child windows we want to use the pid for the parent window in case the the child
         // window was added from another process.
-        final int pid = isChildWindow() ? getParentWindow().mSession.mPid : mSession.mPid;
+        final int pid = getParentWindow() != null ? getParentWindow().mSession.mPid : mSession.mPid;
         mTempConfiguration.setTo(mService.mProcessConfigurations.get(
                 pid, mService.mRoot.getConfiguration()));
         return mTempConfiguration;
@@ -2314,7 +2317,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         public void binderDied() {
             try {
                 boolean resetSplitScreenResizing = false;
-                synchronized(mService.mWindowMap) {
+                synchronized (mService.mGlobalLock) {
                     final WindowState win = mService.windowForClientLocked(mSession, mClient, false);
                     Slog.i(TAG, "WIN DEATH: " + win);
                     if (win != null) {
@@ -2839,12 +2842,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * Report a focus change.  Must be called with no locks held, and consistently
      * from the same serialized thread (such as dispatched from a handler).
      */
-    void reportFocusChangedSerialized(boolean focused, boolean inTouchMode) {
+    void reportFocusChangedSerialized(boolean focused, boolean inTouchMode,
+            boolean reportToClient) {
         try {
-            mClient.windowFocusChanged(focused, inTouchMode);
+            mClient.windowFocusChanged(focused, inTouchMode, reportToClient);
         } catch (RemoteException e) {
         }
-        if (mFocusCallbacks != null) {
+        if (mFocusCallbacks != null && reportToClient) {
             final int N = mFocusCallbacks.beginBroadcast();
             for (int i=0; i<N; i++) {
                 IWindowFocusObserver obs = mFocusCallbacks.getBroadcastItem(i);
@@ -2949,7 +2953,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // isDragResizing() or isDragResizeChanged() is true.
         boolean resizing = isDragResizing() || isDragResizeChanged();
         if (getWindowConfiguration().useWindowFrameForBackdrop() || !resizing) {
-            return frame;
+            // Surface position is now inherited from parent, and BackdropFrameRenderer uses
+            // backdrop frame to position content. Thus we just keep the size of backdrop frame, and
+            // remove the offset to avoid double offset from display origin.
+            mTmpRect.set(frame);
+            mTmpRect.offsetTo(0, 0);
+            return mTmpRect;
         }
         final DisplayInfo displayInfo = getDisplayInfo();
         mTmpRect.set(0, 0, displayInfo.logicalWidth, displayInfo.logicalHeight);
@@ -2979,7 +2988,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     public void registerFocusObserver(IWindowFocusObserver observer) {
-        synchronized(mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             if (mFocusCallbacks == null) {
                 mFocusCallbacks = new RemoteCallbackList<IWindowFocusObserver>();
             }
@@ -2988,7 +2997,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     public void unregisterFocusObserver(IWindowFocusObserver observer) {
-        synchronized(mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             if (mFocusCallbacks != null) {
                 mFocusCallbacks.unregister(observer);
             }
@@ -4435,7 +4444,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         public boolean isFocused() {
             final WindowState outer = mOuter.get();
             if (outer != null) {
-                synchronized (outer.mService.mWindowMap) {
+                synchronized (outer.mService.mGlobalLock) {
                     return outer.isFocused();
                 }
             }
@@ -4469,8 +4478,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     boolean needsZBoost() {
-        if (mIsImWindow && mService.mInputMethodTarget != null) {
-            final AppWindowToken appToken = mService.mInputMethodTarget.mAppToken;
+        final WindowState inputMethodTarget = getDisplayContent().mInputMethodTarget;
+        if (mIsImWindow && inputMethodTarget != null) {
+            final AppWindowToken appToken = inputMethodTarget.mAppToken;
             if (appToken != null) {
                 return appToken.needsZBoost();
             }
@@ -4600,7 +4610,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // Likewise if we share a token with the Input method target and are ordered
             // above it but not necessarily a child (e.g. a Dialog) then we also need
             // this promotion.
-            final WindowState imeTarget = mService.mInputMethodTarget;
+            final WindowState imeTarget = getDisplayContent().mInputMethodTarget;
             boolean inTokenWithAndAboveImeTarget = imeTarget != null && imeTarget != this
                     && imeTarget.mToken == mToken && imeTarget.compareTo(this) <= 0;
             return inTokenWithAndAboveImeTarget;
@@ -4677,7 +4687,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     public boolean isInputMethodTarget() {
-        return mService.mInputMethodTarget == this;
+        return getDisplayContent().mInputMethodTarget == this;
     }
 
     long getFrameNumber() {

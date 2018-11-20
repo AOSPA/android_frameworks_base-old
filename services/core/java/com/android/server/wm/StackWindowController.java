@@ -16,6 +16,11 @@
 
 package com.android.server.wm;
 
+import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
+import static com.android.server.wm.WindowContainer.POSITION_TOP;
+import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
+import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
+
 import android.app.WindowConfiguration;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -30,11 +35,6 @@ import android.view.DisplayInfo;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.lang.ref.WeakReference;
-
-import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
-import static com.android.server.wm.WindowContainer.POSITION_TOP;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STACK;
-import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
 /**
  * Controller for the stack container. This is created by activity manager to link activity stacks
@@ -67,7 +67,7 @@ public class StackWindowController
         mStackId = stackId;
         mHandler = new H(new WeakReference<>(this), service.mH.getLooper());
 
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             final DisplayContent dc = mRoot.getDisplayContent(displayId);
             if (dc == null) {
                 throw new IllegalArgumentException("Trying to add stackId=" + stackId
@@ -81,7 +81,7 @@ public class StackWindowController
 
     @Override
     public void removeContainer() {
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             if (mContainer != null) {
                 mContainer.removeIfPossible();
                 super.removeContainer();
@@ -90,7 +90,7 @@ public class StackWindowController
     }
 
     public void reparent(int displayId, Rect outStackBounds, boolean onTop) {
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             if (mContainer == null) {
                 throw new IllegalArgumentException("Trying to move unknown stackId=" + mStackId
                         + " to displayId=" + displayId);
@@ -108,7 +108,7 @@ public class StackWindowController
     }
 
     public void positionChildAt(TaskWindowContainerController child, int position) {
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             if (DEBUG_STACK) Slog.i(TAG_WM, "positionChildAt: positioning task=" + child
                     + " at " + position);
             if (child.mContainer == null) {
@@ -132,7 +132,7 @@ public class StackWindowController
             return;
         }
 
-        synchronized(mWindowMap) {
+        synchronized (mGlobalLock) {
             final Task childTask = child.mContainer;
             if (childTask == null) {
                 Slog.e(TAG_WM, "positionChildAtTop: task=" + child + " not found");
@@ -140,10 +140,11 @@ public class StackWindowController
             }
             mContainer.positionChildAt(POSITION_TOP, childTask, includingParents);
 
-            if (mService.mAppTransition.isTransitionSet()) {
+            final DisplayContent displayContent = mContainer.getDisplayContent();
+            if (displayContent.mAppTransition.isTransitionSet()) {
                 childTask.setSendingToBottom(false);
             }
-            mContainer.getDisplayContent().layoutAndAssignWindowLayersIfNeeded();
+            displayContent.layoutAndAssignWindowLayersIfNeeded();
         }
     }
 
@@ -154,7 +155,7 @@ public class StackWindowController
             return;
         }
 
-        synchronized(mWindowMap) {
+        synchronized (mGlobalLock) {
             final Task childTask = child.mContainer;
             if (childTask == null) {
                 Slog.e(TAG_WM, "positionChildAtBottom: task=" + child + " not found");
@@ -162,7 +163,7 @@ public class StackWindowController
             }
             mContainer.positionChildAt(POSITION_BOTTOM, childTask, includingParents);
 
-            if (mService.mAppTransition.isTransitionSet()) {
+            if (mContainer.getDisplayContent().mAppTransition.isTransitionSet()) {
                 childTask.setSendingToBottom(true);
             }
             mContainer.getDisplayContent().layoutAndAssignWindowLayersIfNeeded();
@@ -178,7 +179,7 @@ public class StackWindowController
      */
     public void resize(Rect bounds, SparseArray<Rect> taskBounds,
             SparseArray<Rect> taskTempInsetBounds) {
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             if (mContainer == null) {
                 throw new IllegalArgumentException("resizeStack: stack " + this + " not found.");
             }
@@ -193,7 +194,7 @@ public class StackWindowController
     }
 
     public void onPipAnimationEndResize() {
-        synchronized (mService.mWindowMap) {
+        synchronized (mService.mGlobalLock) {
             mContainer.onPipAnimationEndResize();
         }
     }
@@ -203,7 +204,7 @@ public class StackWindowController
      */
    public void getStackDockedModeBounds(Rect currentTempTaskBounds, Rect outStackBounds,
            Rect outTempTaskBounds, boolean ignoreVisibility) {
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             if (mContainer != null) {
                 mContainer.getStackDockedModeBoundsLocked(currentTempTaskBounds, outStackBounds,
                         outTempTaskBounds, ignoreVisibility);
@@ -215,7 +216,7 @@ public class StackWindowController
     }
 
     public void prepareFreezingTaskBounds() {
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             if (mContainer == null) {
                 throw new IllegalArgumentException("prepareFreezingTaskBounds: stack " + this
                         + " not found.");
@@ -225,7 +226,7 @@ public class StackWindowController
     }
 
     public void getRawBounds(Rect outBounds) {
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             if (mContainer.matchParentBounds()) {
                 outBounds.setEmpty();
             } else {
@@ -235,18 +236,12 @@ public class StackWindowController
     }
 
     public void getBounds(Rect outBounds) {
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             if (mContainer != null) {
                 mContainer.getBounds(outBounds);
                 return;
             }
             outBounds.setEmpty();
-        }
-    }
-
-    public void getBoundsForNewConfiguration(Rect outBounds) {
-        synchronized(mWindowMap) {
-            mContainer.getBoundsForNewConfiguration(outBounds);
         }
     }
 
@@ -260,7 +255,7 @@ public class StackWindowController
             Rect nonDecorBounds, Rect stableBounds, boolean overrideWidth,
             boolean overrideHeight, float density, Configuration config,
             Configuration parentConfig, int windowingMode) {
-        synchronized (mWindowMap) {
+        synchronized (mGlobalLock) {
             final TaskStack stack = mContainer;
             final DisplayContent displayContent = stack.getDisplayContent();
             final DisplayInfo di = displayContent.getDisplayInfo();
@@ -375,6 +370,14 @@ public class StackWindowController
 
     void requestResize(Rect bounds) {
         mHandler.obtainMessage(H.REQUEST_RESIZE, bounds).sendToTarget();
+    }
+
+    /** @see TaskStack.updateBoundsForConfigChange(Configuration, Configuration, Rect) */
+    public boolean updateBoundsForConfigChange(
+            Configuration parentConfig, Configuration prevConfig, Rect outBounds) {
+        synchronized (mGlobalLock) {
+            return mContainer.updateBoundsForConfigChange(parentConfig, prevConfig, outBounds);
+        }
     }
 
     @Override

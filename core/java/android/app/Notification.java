@@ -207,7 +207,8 @@ public class Notification implements Parcelable
     private static final int MAX_REPLY_HISTORY = 5;
 
     /**
-     * Maximum numbers of action buttons in a notification.
+     * Maximum number of (generic) action buttons in a notification (contextual action buttons are
+     * handled separately).
      * @hide
      */
     public static final int MAX_ACTION_BUTTONS = 3;
@@ -1275,6 +1276,8 @@ public class Notification implements Parcelable
     private String mShortcutId;
     private CharSequence mSettingsText;
 
+    private PendingIntent mAppOverlayIntent;
+
     /** @hide */
     @IntDef(prefix = { "GROUP_ALERT_" }, value = {
             GROUP_ALERT_ALL, GROUP_ALERT_CHILDREN, GROUP_ALERT_SUMMARY
@@ -1418,6 +1421,12 @@ public class Notification implements Parcelable
          * {@code SemanticAction}: Call a contact, group, etc.
          */
         public static final int SEMANTIC_ACTION_CALL = 10;
+
+        /**
+         * {@code SemanticAction}: Contextual action - dependent on the current notification. E.g.
+         * open a Map application with an address shown in the notification.
+         */
+        public static final int SEMANTIC_ACTION_CONTEXTUAL_SUGGESTION = 11;
 
         private final Bundle mExtras;
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -2040,7 +2049,8 @@ public class Notification implements Parcelable
                 SEMANTIC_ACTION_UNMUTE,
                 SEMANTIC_ACTION_THUMBS_UP,
                 SEMANTIC_ACTION_THUMBS_DOWN,
-                SEMANTIC_ACTION_CALL
+                SEMANTIC_ACTION_CALL,
+                SEMANTIC_ACTION_CONTEXTUAL_SUGGESTION
         })
         @Retention(RetentionPolicy.SOURCE)
         public @interface SemanticAction {}
@@ -2225,6 +2235,9 @@ public class Notification implements Parcelable
         }
 
         mGroupAlertBehavior = parcel.readInt();
+        if (parcel.readInt() != 0) {
+            mAppOverlayIntent = PendingIntent.CREATOR.createFromParcel(parcel);
+        }
     }
 
     @Override
@@ -2339,6 +2352,7 @@ public class Notification implements Parcelable
         that.mBadgeIcon = this.mBadgeIcon;
         that.mSettingsText = this.mSettingsText;
         that.mGroupAlertBehavior = this.mGroupAlertBehavior;
+        that.mAppOverlayIntent = this.mAppOverlayIntent;
 
         if (!heavy) {
             that.lightenPayload(); // will clean out extras
@@ -2659,6 +2673,13 @@ public class Notification implements Parcelable
         }
 
         parcel.writeInt(mGroupAlertBehavior);
+
+        if (mAppOverlayIntent != null) {
+            parcel.writeInt(1);
+            mAppOverlayIntent.writeToParcel(parcel, 0);
+        } else {
+            parcel.writeInt(0);
+        }
 
         // mUsesStandardHeader is not written because it should be recomputed in listeners
     }
@@ -3073,6 +3094,14 @@ public class Notification implements Parcelable
     }
 
     /**
+     * Returns the intent that will be used to display app content in a floating window over the
+     * existing foreground activity.
+     */
+    public PendingIntent getAppOverlayIntent() {
+        return mAppOverlayIntent;
+    }
+
+    /**
      * The small icon representing this notification in the status bar and content view.
      *
      * @return the small icon representing this notification.
@@ -3403,6 +3432,23 @@ public class Notification implements Parcelable
          */
         public Builder setGroupAlertBehavior(@GroupAlertBehavior int groupAlertBehavior) {
             mN.mGroupAlertBehavior = groupAlertBehavior;
+            return this;
+        }
+
+        /**
+         * Sets the intent that will be used to display app content in a floating window
+         * over the existing foreground activity.
+         *
+         * <p>This intent will be ignored unless this notification is posted to a channel that
+         * allows {@link NotificationChannel#canOverlayApps() app overlays}.</p>
+         *
+         * <p>Notifications with a valid and allowed app overlay intent will be displayed as
+         * floating windows outside of the notification shade on unlocked devices. When a user
+         * interacts with one of these windows, this app overlay intent will be invoked and
+         * displayed.</p>
+         */
+        public Builder setAppOverlayIntent(PendingIntent intent) {
+            mN.mAppOverlayIntent = intent;
             return this;
         }
 
@@ -4419,6 +4465,7 @@ public class Notification implements Parcelable
             contentView.setViewVisibility(R.id.time, View.GONE);
             contentView.setImageViewIcon(R.id.profile_badge, null);
             contentView.setViewVisibility(R.id.profile_badge, View.GONE);
+            contentView.setViewVisibility(R.id.alerted_icon, View.GONE);
             mN.mUsesStandardHeader = false;
         }
 
@@ -4923,6 +4970,18 @@ public class Notification implements Parcelable
                     result);
         }
 
+        private static List<Notification.Action> filterOutContextualActions(
+                List<Notification.Action> actions) {
+            List<Notification.Action> nonContextualActions = new ArrayList<>();
+            for (Notification.Action action : actions) {
+                if (action.getSemanticAction()
+                        != Action.SEMANTIC_ACTION_CONTEXTUAL_SUGGESTION) {
+                    nonContextualActions.add(action);
+                }
+            }
+            return nonContextualActions;
+        }
+
         private RemoteViews applyStandardTemplateWithActions(int layoutId,
                 StandardTemplateParams p, TemplateBindResult result) {
             RemoteViews big = applyStandardTemplate(layoutId, p, result);
@@ -4931,7 +4990,11 @@ public class Notification implements Parcelable
 
             boolean validRemoteInput = false;
 
-            int N = mActions.size();
+            // In the UI contextual actions appear separately from the standard actions, so we
+            // filter them out here.
+            List<Notification.Action> nonContextualActions = filterOutContextualActions(mActions);
+
+            int N = nonContextualActions.size();
             boolean emphazisedMode = mN.fullScreenIntent != null && !p.ambient;
             big.setBoolean(R.id.actions, "setEmphasizedMode", emphazisedMode);
             if (N > 0) {
@@ -4940,7 +5003,8 @@ public class Notification implements Parcelable
                 big.setViewLayoutMarginBottomDimen(R.id.notification_action_list_margin_target, 0);
                 if (N>MAX_ACTION_BUTTONS) N=MAX_ACTION_BUTTONS;
                 for (int i=0; i<N; i++) {
-                    Action action = mActions.get(i);
+                    Action action = nonContextualActions.get(i);
+
                     boolean actionHasValidInput = hasValidRemoteInput(action);
                     validRemoteInput |= actionHasValidInput;
 
@@ -5898,8 +5962,9 @@ public class Notification implements Parcelable
 
     /**
      * @return whether this notification is a foreground service notification
+     * @hide
      */
-    private boolean isForegroundService() {
+    public boolean isForegroundService() {
         return (flags & Notification.FLAG_FOREGROUND_SERVICE) != 0;
     }
 

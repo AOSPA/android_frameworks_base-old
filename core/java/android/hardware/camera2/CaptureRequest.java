@@ -24,8 +24,8 @@ import android.hardware.camera2.impl.PublicKey;
 import android.hardware.camera2.impl.SyntheticKey;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.utils.HashCodeHelpers;
-import android.hardware.camera2.utils.TypeReference;
 import android.hardware.camera2.utils.SurfaceUtils;
+import android.hardware.camera2.utils.TypeReference;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.ArraySet;
@@ -2947,8 +2947,8 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * of points can be less than max (that is, the request doesn't have to
      * always provide a curve with number of points equivalent to
      * {@link CameraCharacteristics#TONEMAP_MAX_CURVE_POINTS android.tonemap.maxCurvePoints}).</p>
-     * <p>For devices with MONOCHROME capability, only red channel is used. Green and blue channels
-     * are ignored.</p>
+     * <p>For devices with MONOCHROME capability, all three channels must have the same set of
+     * control points.</p>
      * <p>A few examples, and their corresponding graphical mappings; these
      * only specify the red channel and the precision is limited to 4
      * digits, for conciseness.</p>
@@ -3011,8 +3011,8 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * of points can be less than max (that is, the request doesn't have to
      * always provide a curve with number of points equivalent to
      * {@link CameraCharacteristics#TONEMAP_MAX_CURVE_POINTS android.tonemap.maxCurvePoints}).</p>
-     * <p>For devices with MONOCHROME capability, only red channel is used. Green and blue channels
-     * are ignored.</p>
+     * <p>For devices with MONOCHROME capability, all three channels must have the same set of
+     * control points.</p>
      * <p>A few examples, and their corresponding graphical mappings; these
      * only specify the red channel and the precision is limited to 4
      * digits, for conciseness.</p>
@@ -3277,8 +3277,8 @@ public final class CaptureRequest extends CameraMetadata<CaptureRequest.Key<?>>
      * will not slow down capture rate when applying correction. FAST may be the same as OFF if
      * any correction at all would slow down capture rate.  Every output stream will have a
      * similar amount of enhancement applied.</p>
-     * <p>The correction only applies to processed outputs such as YUV, JPEG, or DEPTH16; it is not
-     * applied to any RAW output.</p>
+     * <p>The correction only applies to processed outputs such as YUV, Y8, JPEG, or DEPTH16; it is
+     * not applied to any RAW output.</p>
      * <p>This control will be on by default on devices that support this control. Applications
      * disabling distortion correction need to pay extra attention with the coordinate system of
      * metering regions, crop region, and face rectangles. When distortion correction is OFF,

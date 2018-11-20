@@ -55,13 +55,16 @@ import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
 import android.util.ArraySet;
 
+import com.android.systemui.Dependency;
 import com.android.systemui.ForegroundServiceController;
+import com.android.systemui.InitController;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.NotificationTestHelper;
+import com.android.systemui.statusbar.notification.NotificationData.KeyguardEnvironment;
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
+import com.android.systemui.statusbar.phone.ShadeController;
 
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -69,6 +72,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -87,7 +92,7 @@ public class NotificationDataTest extends SysuiTestCase {
     @Mock
     ForegroundServiceController mFsc;
     @Mock
-    NotificationData.Environment mEnvironment;
+    NotificationData.KeyguardEnvironment mEnvironment;
 
     private final IPackageManager mMockPackageManager = mock(IPackageManager.class);
     private NotificationData mNotificationData;
@@ -108,10 +113,14 @@ public class NotificationDataTest extends SysuiTestCase {
                 .thenReturn(PackageManager.PERMISSION_GRANTED);
 
         mDependency.injectTestDependency(ForegroundServiceController.class, mFsc);
-        when(mEnvironment.getGroupManager()).thenReturn(new NotificationGroupManager());
+        mDependency.injectTestDependency(NotificationGroupManager.class,
+                new NotificationGroupManager());
+        mDependency.injectMockDependency(ShadeController.class);
+        mDependency.injectTestDependency(KeyguardEnvironment.class, mEnvironment);
         when(mEnvironment.isDeviceProvisioned()).thenReturn(true);
         when(mEnvironment.isNotificationForCurrentProfiles(any())).thenReturn(true);
-        mNotificationData = new TestableNotificationData(mEnvironment);
+        mNotificationData = new TestableNotificationData();
+        Dependency.get(InitController.class).executePostInitTasks();
         mNotificationData.updateRanking(mock(NotificationListenerService.RankingMap.class));
         mRow = new NotificationTestHelper(getContext()).createRow();
     }
@@ -298,11 +307,11 @@ public class NotificationDataTest extends SysuiTestCase {
                 mRow.getEntry().notification)).thenReturn(false);
         when(mEnvironment.isNotificationForCurrentProfiles(
                 row2.getEntry().notification)).thenReturn(true);
-        ArrayList<NotificationData.Entry> reuslt =
+        ArrayList<NotificationData.Entry> result =
                 mNotificationData.getNotificationsForCurrentUser();
 
-        assertEquals(reuslt.size(), 1);
-        junit.framework.Assert.assertEquals(reuslt.get(0), row2.getEntry());
+        assertEquals(result.size(), 1);
+        junit.framework.Assert.assertEquals(result.get(0), row2.getEntry());
     }
 
     @Test
@@ -383,10 +392,16 @@ public class NotificationDataTest extends SysuiTestCase {
     @Test
     public void testCreateNotificationDataEntry_RankingUpdate() {
         Ranking ranking = mock(Ranking.class);
+        initStatusBarNotification(false);
 
-        ArrayList<Notification.Action> smartActions = new ArrayList<>();
-        smartActions.add(createAction());
-        when(ranking.getSmartActions()).thenReturn(smartActions);
+        List<Notification.Action> appGeneratedSmartActions =
+                Collections.singletonList(createContextualAction("appGeneratedAction"));
+        mMockStatusBarNotification.getNotification().actions =
+                appGeneratedSmartActions.toArray(new Notification.Action[0]);
+
+        List<Notification.Action> systemGeneratedSmartActions =
+                Collections.singletonList(createAction("systemGeneratedAction"));
+        when(ranking.getSmartActions()).thenReturn(systemGeneratedSmartActions);
 
         when(ranking.getChannel()).thenReturn(NOTIFICATION_CHANNEL);
 
@@ -400,7 +415,7 @@ public class NotificationDataTest extends SysuiTestCase {
         NotificationData.Entry entry =
                 new NotificationData.Entry(mMockStatusBarNotification, ranking);
 
-        assertEquals(smartActions, entry.smartActions);
+        assertEquals(systemGeneratedSmartActions, entry.systemGeneratedSmartActions);
         assertEquals(NOTIFICATION_CHANNEL, entry.channel);
         assertEquals(Ranking.USER_SENTIMENT_NEGATIVE, entry.userSentiment);
         assertEquals(snoozeCriterions, entry.snoozeCriteria);
@@ -416,8 +431,8 @@ public class NotificationDataTest extends SysuiTestCase {
     }
 
     private class TestableNotificationData extends NotificationData {
-        public TestableNotificationData(Environment environment) {
-            super(environment);
+        public TestableNotificationData() {
+            super();
         }
 
         @Override
@@ -430,31 +445,42 @@ public class NotificationDataTest extends SysuiTestCase {
                         outRanking.getImportance(), outRanking.getImportanceExplanation(),
                         outRanking.getOverrideGroupKey(), outRanking.getChannel(), null, null,
                         outRanking.canShowBadge(), outRanking.getUserSentiment(), true,
-                        null, null);
+                        false, false, null, null);
             } else if (key.equals(TEST_EXEMPT_DND_VISUAL_SUPPRESSION_KEY)) {
                 outRanking.populate(key, outRanking.getRank(),
                         outRanking.matchesInterruptionFilter(),
                         outRanking.getVisibilityOverride(), 255,
                         outRanking.getImportance(), outRanking.getImportanceExplanation(),
                         outRanking.getOverrideGroupKey(), outRanking.getChannel(), null, null,
-                        outRanking.canShowBadge(), outRanking.getUserSentiment(), true, null, null);
+                        outRanking.canShowBadge(), outRanking.getUserSentiment(), true, false,
+                        false, null, null);
             } else {
                 outRanking.populate(key, outRanking.getRank(),
                         outRanking.matchesInterruptionFilter(),
                         outRanking.getVisibilityOverride(), outRanking.getSuppressedVisualEffects(),
                         outRanking.getImportance(), outRanking.getImportanceExplanation(),
                         outRanking.getOverrideGroupKey(), NOTIFICATION_CHANNEL, null, null,
-                        outRanking.canShowBadge(), outRanking.getUserSentiment(), false, null,
-                        null);
+                        outRanking.canShowBadge(), outRanking.getUserSentiment(), false, false,
+                        false, null, null);
             }
             return true;
         }
     }
 
-    private Notification.Action createAction() {
+    private Notification.Action createContextualAction(String title) {
         return new Notification.Action.Builder(
                 Icon.createWithResource(getContext(), android.R.drawable.sym_def_app_icon),
-                "action",
+                title,
+                PendingIntent.getBroadcast(getContext(), 0, new Intent("Action"), 0))
+                        .setSemanticAction(
+                                Notification.Action.SEMANTIC_ACTION_CONTEXTUAL_SUGGESTION)
+                        .build();
+    }
+
+    private Notification.Action createAction(String title) {
+        return new Notification.Action.Builder(
+                Icon.createWithResource(getContext(), android.R.drawable.sym_def_app_icon),
+                title,
                 PendingIntent.getBroadcast(getContext(), 0, new Intent("Action"), 0)).build();
     }
 }

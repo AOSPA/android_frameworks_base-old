@@ -17,6 +17,7 @@
 package android.hardware.location;
 
 // Declare any non-default types here with import statements
+import android.app.PendingIntent;
 import android.hardware.location.ContextHubInfo;
 import android.hardware.location.ContextHubMessage;
 import android.hardware.location.NanoApp;
@@ -59,6 +60,10 @@ interface IContextHubService {
 
     // Creates a client to send and receive messages
     IContextHubClient createClient(in IContextHubClientCallback client, int contextHubId);
+
+    // Creates a PendingIntent-based client to send and receive messages
+    IContextHubClient createPendingIntentClient(
+            int contextHubId, in PendingIntent pendingIntent, long nanoAppId);
 
     // Returns a list of ContextHub objects of available hubs
     List<ContextHubInfo> getContextHubs();

@@ -27,7 +27,6 @@ import android.content.Context;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.os.Environment;
 import android.os.SystemProperties;
 import android.util.DisplayMetrics;
@@ -637,6 +636,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      */
     public static final int PRIVATE_FLAG_USES_NON_SDK_API = 1 << 22;
 
+    /**
+     * Indicates whether this application can be profiled by the shell user,
+     * even when running on a device that is running in user mode.
+     * @hide
+     */
+    public static final int PRIVATE_FLAG_PROFILEABLE_BY_SHELL = 1 << 23;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "PRIVATE_FLAG_" }, value = {
             PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE,
@@ -656,6 +662,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             PRIVATE_FLAG_PRIVILEGED,
             PRIVATE_FLAG_PRODUCT,
             PRIVATE_FLAG_PRODUCT_SERVICES,
+            PRIVATE_FLAG_PROFILEABLE_BY_SHELL,
             PRIVATE_FLAG_REQUIRED_FOR_SYSTEM_USER,
             PRIVATE_FLAG_SIGNED_WITH_PLATFORM_KEY,
             PRIVATE_FLAG_STATIC_SHARED_LIBRARY,
@@ -1178,11 +1185,11 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * system apps.
      * @hide
      */
-    public static final int HIDDEN_API_ENFORCEMENT_NONE = 0;
+    public static final int HIDDEN_API_ENFORCEMENT_DISABLED = 0;
     /**
      * No API enforcement, but enable the detection logic and warnings. Observed behaviour is the
-     * same as {@link #HIDDEN_API_ENFORCEMENT_NONE} but you may see warnings in the log when APIs
-     * are accessed.
+     * same as {@link #HIDDEN_API_ENFORCEMENT_DISABLED} but you may see warnings in the log when
+     * APIs are accessed.
      * @hide
      * */
     public static final int HIDDEN_API_ENFORCEMENT_JUST_WARN = 1;
@@ -1190,14 +1197,10 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * Dark grey list enforcement. Enforces the dark grey and black lists
      * @hide
      */
-    public static final int HIDDEN_API_ENFORCEMENT_DARK_GREY_AND_BLACK = 2;
-    /**
-     * Blacklist enforcement only.
-     * @hide
-     */
-    public static final int HIDDEN_API_ENFORCEMENT_BLACK = 3;
+    public static final int HIDDEN_API_ENFORCEMENT_ENABLED = 2;
 
-    private static final int HIDDEN_API_ENFORCEMENT_MAX = HIDDEN_API_ENFORCEMENT_BLACK;
+    private static final int HIDDEN_API_ENFORCEMENT_MIN = HIDDEN_API_ENFORCEMENT_DEFAULT;
+    private static final int HIDDEN_API_ENFORCEMENT_MAX = HIDDEN_API_ENFORCEMENT_ENABLED;
 
     /**
      * Values in this IntDef MUST be kept in sync with enum hiddenapi::EnforcementPolicy in
@@ -1206,17 +1209,16 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      */
     @IntDef(prefix = { "HIDDEN_API_ENFORCEMENT_" }, value = {
             HIDDEN_API_ENFORCEMENT_DEFAULT,
-            HIDDEN_API_ENFORCEMENT_NONE,
+            HIDDEN_API_ENFORCEMENT_DISABLED,
             HIDDEN_API_ENFORCEMENT_JUST_WARN,
-            HIDDEN_API_ENFORCEMENT_DARK_GREY_AND_BLACK,
-            HIDDEN_API_ENFORCEMENT_BLACK,
+            HIDDEN_API_ENFORCEMENT_ENABLED,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface HiddenApiEnforcementPolicy {}
 
     /** @hide */
     public static boolean isValidHiddenApiEnforcementPolicy(int policy) {
-        return policy >= HIDDEN_API_ENFORCEMENT_DEFAULT && policy <= HIDDEN_API_ENFORCEMENT_MAX;
+        return policy >= HIDDEN_API_ENFORCEMENT_MIN && policy <= HIDDEN_API_ENFORCEMENT_MAX;
     }
 
     private int mHiddenApiPolicy = HIDDEN_API_ENFORCEMENT_DEFAULT;
@@ -1762,16 +1764,12 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      */
     public @HiddenApiEnforcementPolicy int getHiddenApiEnforcementPolicy() {
         if (isAllowedToUseHiddenApis()) {
-            return HIDDEN_API_ENFORCEMENT_NONE;
+            return HIDDEN_API_ENFORCEMENT_DISABLED;
         }
         if (mHiddenApiPolicy != HIDDEN_API_ENFORCEMENT_DEFAULT) {
             return mHiddenApiPolicy;
         }
-        if (targetSdkVersion < Build.VERSION_CODES.P) {
-            return HIDDEN_API_ENFORCEMENT_BLACK;
-        } else {
-            return HIDDEN_API_ENFORCEMENT_DARK_GREY_AND_BLACK;
-        }
+        return HIDDEN_API_ENFORCEMENT_ENABLED;
     }
 
     /**
@@ -1790,23 +1788,15 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * This will have no effect if this app is not subject to hidden API enforcement, i.e. if it
      * is on the package whitelist.
      *
-     * @param policyPreP configured policy for pre-P apps, or {@link
-     *        #HIDDEN_API_ENFORCEMENT_DEFAULT} if nothing configured.
-     * @param policyP configured policy for apps targeting P or later, or {@link
-     *        #HIDDEN_API_ENFORCEMENT_DEFAULT} if nothing configured.
+     * @param policy configured policy for this app, or {@link #HIDDEN_API_ENFORCEMENT_DEFAULT}
+     *               if nothing configured.
      * @hide
      */
-    public void maybeUpdateHiddenApiEnforcementPolicy(
-            @HiddenApiEnforcementPolicy int policyPreP, @HiddenApiEnforcementPolicy int policyP) {
+    public void maybeUpdateHiddenApiEnforcementPolicy(@HiddenApiEnforcementPolicy int policy) {
         if (isPackageWhitelistedForHiddenApis()) {
             return;
         }
-        if (targetSdkVersion < Build.VERSION_CODES.P) {
-            setHiddenApiEnforcementPolicy(policyPreP);
-        } else if (targetSdkVersion >= Build.VERSION_CODES.P) {
-            setHiddenApiEnforcementPolicy(policyP);
-        }
-
+        setHiddenApiEnforcementPolicy(policy);
     }
 
     /**
@@ -1947,6 +1937,14 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      */
     public boolean isVirtualPreload() {
         return (privateFlags & PRIVATE_FLAG_VIRTUAL_PRELOAD) != 0;
+    }
+
+    /**
+     * Returns whether or not this application can be profiled by the shell user,
+     * even when running on a device that is running in user mode.
+     */
+    public boolean isProfileableByShell() {
+        return (privateFlags & PRIVATE_FLAG_PROFILEABLE_BY_SHELL) != 0;
     }
 
     /**

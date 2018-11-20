@@ -47,11 +47,9 @@ const int FIELD_ID_CONFIG_STATS = 3;
 const int FIELD_ID_ATOM_STATS = 7;
 const int FIELD_ID_UIDMAP_STATS = 8;
 const int FIELD_ID_ANOMALY_ALARM_STATS = 9;
-// const int FIELD_ID_PULLED_ATOM_STATS = 10; // The proto is written in stats_log_util.cpp
-const int FIELD_ID_LOGGER_ERROR_STATS = 11;
 const int FIELD_ID_PERIODIC_ALARM_STATS = 12;
-// const int FIELD_ID_LOG_LOSS_STATS = 14;
 const int FIELD_ID_SYSTEM_SERVER_RESTART = 15;
+const int FIELD_ID_LOGGER_ERROR_STATS = 16;
 
 const int FIELD_ID_ATOM_STATS_TAG = 1;
 const int FIELD_ID_ATOM_STATS_COUNT = 2;
@@ -59,8 +57,9 @@ const int FIELD_ID_ATOM_STATS_COUNT = 2;
 const int FIELD_ID_ANOMALY_ALARMS_REGISTERED = 1;
 const int FIELD_ID_PERIODIC_ALARMS_REGISTERED = 1;
 
-const int FIELD_ID_LOGGER_STATS_TIME = 1;
-const int FIELD_ID_LOGGER_STATS_ERROR_CODE = 2;
+const int FIELD_ID_LOG_LOSS_STATS_TIME = 1;
+const int FIELD_ID_LOG_LOSS_STATS_COUNT = 2;
+const int FIELD_ID_LOG_LOSS_STATS_ERROR = 3;
 
 const int FIELD_ID_CONFIG_STATS_UID = 1;
 const int FIELD_ID_CONFIG_STATS_ID = 2;
@@ -73,7 +72,8 @@ const int FIELD_ID_CONFIG_STATS_MATCHER_COUNT = 7;
 const int FIELD_ID_CONFIG_STATS_ALERT_COUNT = 8;
 const int FIELD_ID_CONFIG_STATS_VALID = 9;
 const int FIELD_ID_CONFIG_STATS_BROADCAST = 10;
-const int FIELD_ID_CONFIG_STATS_DATA_DROP = 11;
+const int FIELD_ID_CONFIG_STATS_DATA_DROP_TIME = 11;
+const int FIELD_ID_CONFIG_STATS_DATA_DROP_BYTES = 21;
 const int FIELD_ID_CONFIG_STATS_DUMP_REPORT_TIME = 12;
 const int FIELD_ID_CONFIG_STATS_DUMP_REPORT_BYTES = 20;
 const int FIELD_ID_CONFIG_STATS_MATCHER_STATS = 13;
@@ -180,12 +180,12 @@ void StatsdStats::noteConfigReset(const ConfigKey& key) {
     noteConfigResetInternalLocked(key);
 }
 
-void StatsdStats::noteLogLost(int32_t wallClockTimeSec, int32_t count) {
+void StatsdStats::noteLogLost(int32_t wallClockTimeSec, int32_t count, int32_t lastError) {
     lock_guard<std::mutex> lock(mLock);
     if (mLogLossStats.size() == kMaxLoggerErrors) {
         mLogLossStats.pop_front();
     }
-    mLogLossStats.push_back(std::make_pair(wallClockTimeSec, count));
+    mLogLossStats.emplace_back(wallClockTimeSec, count, lastError);
 }
 
 void StatsdStats::noteBroadcastSent(const ConfigKey& key) {
@@ -205,11 +205,11 @@ void StatsdStats::noteBroadcastSent(const ConfigKey& key, int32_t timeSec) {
     it->second->broadcast_sent_time_sec.push_back(timeSec);
 }
 
-void StatsdStats::noteDataDropped(const ConfigKey& key) {
-    noteDataDropped(key, getWallClockSec());
+void StatsdStats::noteDataDropped(const ConfigKey& key, const size_t totalBytes) {
+    noteDataDropped(key, totalBytes, getWallClockSec());
 }
 
-void StatsdStats::noteDataDropped(const ConfigKey& key, int32_t timeSec) {
+void StatsdStats::noteDataDropped(const ConfigKey& key, const size_t totalBytes, int32_t timeSec) {
     lock_guard<std::mutex> lock(mLock);
     auto it = mConfigStats.find(key);
     if (it == mConfigStats.end()) {
@@ -218,8 +218,10 @@ void StatsdStats::noteDataDropped(const ConfigKey& key, int32_t timeSec) {
     }
     if (it->second->data_drop_time_sec.size() == kMaxTimestampCount) {
         it->second->data_drop_time_sec.pop_front();
+        it->second->data_drop_bytes.pop_front();
     }
     it->second->data_drop_time_sec.push_back(timeSec);
+    it->second->data_drop_bytes.push_back(totalBytes);
 }
 
 void StatsdStats::noteMetricsReportSent(const ConfigKey& key, const size_t num_bytes) {
@@ -332,7 +334,8 @@ void StatsdStats::noteRegisteredPeriodicAlarmChanged() {
 
 void StatsdStats::updateMinPullIntervalSec(int pullAtomId, long intervalSec) {
     lock_guard<std::mutex> lock(mLock);
-    mPulledAtomStats[pullAtomId].minPullIntervalSec = intervalSec;
+    mPulledAtomStats[pullAtomId].minPullIntervalSec =
+            std::min(mPulledAtomStats[pullAtomId].minPullIntervalSec, intervalSec);
 }
 
 void StatsdStats::notePull(int pullAtomId) {
@@ -343,6 +346,30 @@ void StatsdStats::notePull(int pullAtomId) {
 void StatsdStats::notePullFromCache(int pullAtomId) {
     lock_guard<std::mutex> lock(mLock);
     mPulledAtomStats[pullAtomId].totalPullFromCache++;
+}
+
+void StatsdStats::notePullTime(int pullAtomId, int64_t pullTimeNs) {
+    lock_guard<std::mutex> lock(mLock);
+    auto& pullStats = mPulledAtomStats[pullAtomId];
+    pullStats.maxPullTimeNs = std::max(pullStats.maxPullTimeNs, pullTimeNs);
+    pullStats.avgPullTimeNs = (pullStats.avgPullTimeNs * pullStats.numPullTime + pullTimeNs) /
+                              (pullStats.numPullTime + 1);
+    pullStats.numPullTime += 1;
+}
+
+void StatsdStats::notePullDelay(int pullAtomId, int64_t pullDelayNs) {
+    lock_guard<std::mutex> lock(mLock);
+    auto& pullStats = mPulledAtomStats[pullAtomId];
+    pullStats.maxPullDelayNs = std::max(pullStats.maxPullDelayNs, pullDelayNs);
+    pullStats.avgPullDelayNs =
+        (pullStats.avgPullDelayNs * pullStats.numPullDelay + pullDelayNs) /
+            (pullStats.numPullDelay + 1);
+    pullStats.numPullDelay += 1;
+}
+
+void StatsdStats::notePullDataError(int pullAtomId) {
+    lock_guard<std::mutex> lock(mLock);
+    mPulledAtomStats[pullAtomId].dataError++;
 }
 
 void StatsdStats::noteAtomLogged(int atomId, int32_t timeSec) {
@@ -382,6 +409,7 @@ void StatsdStats::resetInternalLocked() {
     for (auto& config : mConfigStats) {
         config.second->broadcast_sent_time_sec.clear();
         config.second->data_drop_time_sec.clear();
+        config.second->data_drop_bytes.clear();
         config.second->dump_report_stats.clear();
         config.second->annotations.clear();
         config.second->matcher_stats.clear();
@@ -389,6 +417,17 @@ void StatsdStats::resetInternalLocked() {
         config.second->metric_stats.clear();
         config.second->metric_dimension_in_condition_stats.clear();
         config.second->alert_stats.clear();
+    }
+    for (auto& pullStats : mPulledAtomStats) {
+        pullStats.second.totalPull = 0;
+        pullStats.second.totalPullFromCache = 0;
+        pullStats.second.avgPullTimeNs = 0;
+        pullStats.second.maxPullTimeNs = 0;
+        pullStats.second.numPullTime = 0;
+        pullStats.second.avgPullDelayNs = 0;
+        pullStats.second.maxPullDelayNs = 0;
+        pullStats.second.numPullDelay = 0;
+        pullStats.second.dataError = 0;
     }
 }
 
@@ -421,8 +460,12 @@ void StatsdStats::dumpStats(int out) const {
             dprintf(out, "\tbroadcast time: %d\n", broadcastTime);
         }
 
-        for (const auto& dataDropTime : configStats->data_drop_time_sec) {
-            dprintf(out, "\tdata drop time: %d\n", dataDropTime);
+        auto dropTimePtr = configStats->data_drop_time_sec.begin();
+        auto dropBytesPtr = configStats->data_drop_bytes.begin();
+        for (int i = 0; i < (int)configStats->data_drop_time_sec.size();
+             i++, dropTimePtr++, dropBytesPtr++) {
+            dprintf(out, "\tdata drop time: %d with size %lld", *dropTimePtr,
+                    (long long)*dropBytesPtr);
         }
     }
     dprintf(out, "%lu Active Configs\n", (unsigned long)mConfigStats.size());
@@ -445,9 +488,13 @@ void StatsdStats::dumpStats(int out) const {
                     (long long)broadcastTime);
         }
 
-        for (const auto& dataDropTime : configStats->data_drop_time_sec) {
-            dprintf(out, "\tdata drop time: %s(%lld)\n", buildTimeString(dataDropTime).c_str(),
-                    (long long)dataDropTime);
+        auto dropTimePtr = configStats->data_drop_time_sec.begin();
+        auto dropBytesPtr = configStats->data_drop_bytes.begin();
+        for (int i = 0; i < (int)configStats->data_drop_time_sec.size();
+             i++, dropTimePtr++, dropBytesPtr++) {
+            dprintf(out, "\tdata drop time: %s(%lld) with %lld bytes\n",
+                    buildTimeString(*dropTimePtr).c_str(), (long long)*dropTimePtr,
+                    (long long)*dropBytesPtr);
         }
 
         for (const auto& dump : configStats->dump_report_stats) {
@@ -486,8 +533,14 @@ void StatsdStats::dumpStats(int out) const {
 
     dprintf(out, "********Pulled Atom stats***********\n");
     for (const auto& pair : mPulledAtomStats) {
-        dprintf(out, "Atom %d->%ld, %ld, %ld\n", (int)pair.first, (long)pair.second.totalPull,
-                (long)pair.second.totalPullFromCache, (long)pair.second.minPullIntervalSec);
+        dprintf(out,
+                "Atom %d->(total pull)%ld, (pull from cache)%ld, (min pull interval)%ld, (average "
+                "pull time nanos)%lld, (max pull time nanos)%lld, (average pull delay nanos)%lld, "
+                "(max pull delay nanos)%lld, (data error)%ld\n",
+                (int)pair.first, (long)pair.second.totalPull, (long)pair.second.totalPullFromCache,
+                (long)pair.second.minPullIntervalSec, (long long)pair.second.avgPullTimeNs,
+                (long long)pair.second.maxPullTimeNs, (long long)pair.second.avgPullDelayNs,
+                (long long)pair.second.maxPullDelayNs, pair.second.dataError);
     }
 
     if (mAnomalyAlarmRegisteredStats > 0) {
@@ -510,8 +563,8 @@ void StatsdStats::dumpStats(int out) const {
     }
 
     for (const auto& loss : mLogLossStats) {
-        dprintf(out, "Log loss: %lld (wall clock sec) - %d (count)\n", (long long)loss.first,
-                loss.second);
+        dprintf(out, "Log loss: %lld (wall clock sec) - %d (count) %d (last error)\n",
+                (long long)loss.mWallClockSec, loss.mCount, loss.mLastError);
     }
 }
 
@@ -540,9 +593,15 @@ void addConfigStatsToProto(const ConfigStats& configStats, ProtoOutputStream* pr
                      broadcast);
     }
 
-    for (const auto& drop : configStats.data_drop_time_sec) {
-        proto->write(FIELD_TYPE_INT32 | FIELD_ID_CONFIG_STATS_DATA_DROP | FIELD_COUNT_REPEATED,
-                     drop);
+    for (const auto& drop_time : configStats.data_drop_time_sec) {
+        proto->write(FIELD_TYPE_INT32 | FIELD_ID_CONFIG_STATS_DATA_DROP_TIME | FIELD_COUNT_REPEATED,
+                     drop_time);
+    }
+
+    for (const auto& drop_bytes : configStats.data_drop_bytes) {
+        proto->write(
+                FIELD_TYPE_INT64 | FIELD_ID_CONFIG_STATS_DATA_DROP_BYTES | FIELD_COUNT_REPEATED,
+                (long long)drop_bytes);
     }
 
     for (const auto& dump : configStats.dump_report_stats) {
@@ -660,13 +719,11 @@ void StatsdStats::dumpStats(std::vector<uint8_t>* output, bool reset) {
     proto.end(uidMapToken);
 
     for (const auto& error : mLogLossStats) {
-        // The logger error stats are not used anymore since we move away from logd.
-        // Temporarily use this field to log the log loss timestamp and count
-        // TODO(b/80538532) Add a dedicated field in stats_log for this.
         uint64_t token = proto.start(FIELD_TYPE_MESSAGE | FIELD_ID_LOGGER_ERROR_STATS |
                                       FIELD_COUNT_REPEATED);
-        proto.write(FIELD_TYPE_INT32 | FIELD_ID_LOGGER_STATS_TIME, error.first);
-        proto.write(FIELD_TYPE_INT32 | FIELD_ID_LOGGER_STATS_ERROR_CODE, error.second);
+        proto.write(FIELD_TYPE_INT32 | FIELD_ID_LOG_LOSS_STATS_TIME, error.mWallClockSec);
+        proto.write(FIELD_TYPE_INT32 | FIELD_ID_LOG_LOSS_STATS_COUNT, error.mCount);
+        proto.write(FIELD_TYPE_INT32 | FIELD_ID_LOG_LOSS_STATS_ERROR, error.mLastError);
         proto.end(token);
     }
 

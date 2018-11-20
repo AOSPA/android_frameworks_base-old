@@ -16,32 +16,15 @@
 
 package android.text;
 
-import static android.text.TextDirectionHeuristics.LTR;
-
-import android.perftests.utils.BenchmarkState;
-import android.perftests.utils.PerfStatusReporter;
-
-import android.support.test.filters.LargeTest;
-import android.support.test.runner.AndroidJUnit4;
-
 import android.content.res.ColorStateList;
-import android.graphics.Canvas;
 import android.graphics.Typeface;
 import android.icu.text.UnicodeSet;
 import android.icu.text.UnicodeSetIterator;
-import android.text.Layout;
 import android.text.style.TextAppearanceSpan;
-import android.view.DisplayListCanvas;
-import android.view.RenderNode;
-
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.runner.RunWith;
 
 import java.nio.CharBuffer;
-import java.util.Random;
 import java.util.ArrayList;
+import java.util.Random;
 
 public class TextPerfUtils {
 
@@ -82,18 +65,23 @@ public class TextPerfUtils {
     }
 
     public CharSequence nextRandomParagraph(int wordLen, boolean applyRandomStyle, String setStr) {
-        return nextRandomParagraph(wordLen, applyRandomStyle, UnicodeSetToArray(setStr));
+        return nextRandomParagraph(wordLen, PARA_LENGTH, applyRandomStyle,
+                UnicodeSetToArray(setStr));
     }
 
     public CharSequence nextRandomParagraph(int wordLen, boolean applyRandomStyle) {
-        return nextRandomParagraph(wordLen, applyRandomStyle, ALPHABET);
+        return nextRandomParagraph(wordLen, PARA_LENGTH, applyRandomStyle, ALPHABET);
     }
 
-    public CharSequence nextRandomParagraph(int wordLen, boolean applyRandomStyle,
+    public CharSequence nextRandomParagraph(int wordLen, int paraLength) {
+        return nextRandomParagraph(wordLen, paraLength, false /* no style */, ALPHABET);
+    }
+
+    public CharSequence nextRandomParagraph(int wordLen, int paraLength, boolean applyRandomStyle,
             String[] charSet) {
         ArrayList<Character> chars = new ArrayList<>();
         ArrayList<Integer> wordOffsets = new ArrayList<>();
-        for (int i = 0; i < PARA_LENGTH; i++) {
+        for (int i = 0; i < paraLength; i++) {
             if (i % (wordLen + 1) == wordLen) {
                 chars.add(' ');
                 wordOffsets.add(chars.size());

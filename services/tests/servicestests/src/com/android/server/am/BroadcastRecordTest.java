@@ -27,10 +27,8 @@ import android.os.UserHandle;
 import android.platform.test.annotations.Presubmit;
 
 import androidx.test.filters.SmallTest;
-import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,12 +38,11 @@ import java.util.List;
  * Test class for {@link BroadcastRecord}.
  *
  * Build/Install/Run:
- *  atest FrameworksServicesTests:com.android.server.am.BroadcastRecordTest
+ *  atest FrameworksServicesTests:BroadcastRecordTest
  */
 @SmallTest
 @Presubmit
-@RunWith(AndroidJUnit4.class)
-public class BroadcastRecordTest extends ActivityTestsBase {
+public class BroadcastRecordTest {
 
     @Test
     public void testCleanupDisabledPackageReceivers() {

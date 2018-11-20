@@ -11,12 +11,28 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
- * limitations under the License
+ * limitations under the License.
  */
 
 package com.android.server.wm;
 
+import static android.app.AppOpsManager.OP_NONE;
+import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+
+import static com.android.server.wm.WindowContainer.POSITION_TOP;
+
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyBoolean;
+import static org.mockito.Mockito.anyFloat;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import android.app.ActivityManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Rect;
@@ -26,22 +42,8 @@ import android.view.Display;
 import android.view.IApplicationToken;
 import android.view.IWindow;
 import android.view.Surface;
-import android.view.SurfaceControl;
 import android.view.SurfaceControl.Transaction;
 import android.view.WindowManager;
-
-import static android.app.AppOpsManager.OP_NONE;
-import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
-import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-
-import static com.android.server.wm.WindowContainer.POSITION_TOP;
-import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.anyBoolean;
-import static org.mockito.Mockito.anyFloat;
-import static org.mockito.Mockito.anyInt;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import org.mockito.invocation.InvocationOnMock;
 
@@ -50,17 +52,7 @@ import org.mockito.invocation.InvocationOnMock;
  * to WindowManager related test functionality.
  */
 public class WindowTestUtils {
-    public static int sNextTaskId = 0;
-
-    /**
-     * Retrieves an instance of a mock {@link WindowManagerService}.
-     */
-    public static WindowManagerService getMockWindowManagerService() {
-        final WindowManagerService service = mock(WindowManagerService.class);
-        final WindowHashMap windowMap = new WindowHashMap();
-        when(service.getWindowManagerLock()).thenReturn(windowMap);
-        return service;
-    }
+    private static int sNextTaskId = 0;
 
     /** An extension of {@link DisplayContent} to gain package scoped access. */
     public static class TestDisplayContent extends DisplayContent {
@@ -116,7 +108,7 @@ public class WindowTestUtils {
     /** Creates a {@link Task} and adds it to the specified {@link TaskStack}. */
     public static Task createTaskInStack(WindowManagerService service, TaskStack stack,
             int userId) {
-        synchronized (service.mWindowMap) {
+        synchronized (service.mGlobalLock) {
             final Task newTask = new Task(sNextTaskId++, stack, userId, service, 0, false,
                     new ActivityManager.TaskDescription(), null);
             stack.addTask(newTask, POSITION_TOP);
@@ -140,7 +132,7 @@ public class WindowTestUtils {
     }
 
     static TestAppWindowToken createTestAppWindowToken(DisplayContent dc) {
-        synchronized (dc.mService.mWindowMap) {
+        synchronized (dc.mService.mGlobalLock) {
             return new TestAppWindowToken(dc);
         }
     }
@@ -153,17 +145,19 @@ public class WindowTestUtils {
         private TestAppWindowToken(DisplayContent dc) {
             super(dc.mService, new IApplicationToken.Stub() {
                 public String getName() {return null;}
-                }, false, dc, true /* fillsParent */);
+                }, new ComponentName("", ""), false, dc, true /* fillsParent */);
         }
 
         TestAppWindowToken(WindowManagerService service, IApplicationToken token,
-                boolean voiceInteraction, DisplayContent dc, long inputDispatchingTimeoutNanos,
-                boolean fullscreen, boolean showForAllUsers, int targetSdk, int orientation,
-                int rotationAnimationHint, int configChanges, boolean launchTaskBehind,
-                boolean alwaysFocusable, AppWindowContainerController controller) {
-            super(service, token, voiceInteraction, dc, inputDispatchingTimeoutNanos, fullscreen,
-                    showForAllUsers, targetSdk, orientation, rotationAnimationHint, configChanges,
-                    launchTaskBehind, alwaysFocusable, controller);
+                ComponentName activityComponent, boolean voiceInteraction, DisplayContent dc,
+                long inputDispatchingTimeoutNanos, boolean fullscreen, boolean showForAllUsers,
+                int targetSdk, int orientation, int rotationAnimationHint, int configChanges,
+                boolean launchTaskBehind, boolean alwaysFocusable,
+                AppWindowContainerController controller) {
+            super(service, token, activityComponent, voiceInteraction, dc,
+                    inputDispatchingTimeoutNanos, fullscreen, showForAllUsers, targetSdk,
+                    orientation, rotationAnimationHint, configChanges, launchTaskBehind,
+                    alwaysFocusable, controller);
         }
 
         int getWindowsCount() {
@@ -213,7 +207,7 @@ public class WindowTestUtils {
 
     static TestWindowToken createTestWindowToken(int type, DisplayContent dc,
             boolean persistOnEmpty) {
-        synchronized (dc.mService.mWindowMap) {
+        synchronized (dc.mService.mGlobalLock) {
             return new TestWindowToken(type, dc, persistOnEmpty);
         }
     }
@@ -278,35 +272,33 @@ public class WindowTestUtils {
      */
     public static class TestTaskWindowContainerController extends TaskWindowContainerController {
 
+        static final TaskWindowContainerListener NOP_LISTENER = new TaskWindowContainerListener() {
+            @Override
+            public void registerConfigurationChangeListener(
+                    ConfigurationContainerListener listener) {
+            }
+
+            @Override
+            public void unregisterConfigurationChangeListener(
+                    ConfigurationContainerListener listener) {
+            }
+
+            @Override
+            public void onSnapshotChanged(ActivityManager.TaskSnapshot snapshot) {
+            }
+
+            @Override
+            public void requestResize(Rect bounds, int resizeMode) {
+            }
+        };
+
         TestTaskWindowContainerController(WindowTestsBase testsBase) {
             this(testsBase.createStackControllerOnDisplay(testsBase.mDisplayContent));
         }
 
         TestTaskWindowContainerController(StackWindowController stackController) {
-            super(sNextTaskId++, new TaskWindowContainerListener() {
-                        @Override
-                        public void registerConfigurationChangeListener(
-                                ConfigurationContainerListener listener) {
-
-                        }
-
-                        @Override
-                        public void unregisterConfigurationChangeListener(
-                                ConfigurationContainerListener listener) {
-
-                        }
-
-                        @Override
-                        public void onSnapshotChanged(ActivityManager.TaskSnapshot snapshot) {
-
-                        }
-
-                        @Override
-                        public void requestResize(Rect bounds, int resizeMode) {
-
-                        }
-                    }, stackController, 0 /* userId */, null /* bounds */, RESIZE_MODE_UNRESIZEABLE,
-                    false /* supportsPictureInPicture */, true /* toTop*/,
+            super(sNextTaskId++, NOP_LISTENER, stackController, 0 /* userId */, null /* bounds */,
+                    RESIZE_MODE_UNRESIZEABLE, false /* supportsPictureInPicture */, true /* toTop*/,
                     true /* showForAllUsers */, new ActivityManager.TaskDescription(),
                     stackController.mService);
         }
@@ -329,22 +321,24 @@ public class WindowTestUtils {
 
         TestAppWindowContainerController(TestTaskWindowContainerController taskController,
                 IApplicationToken token) {
-            super(taskController, token, null /* listener */, 0 /* index */,
-                    SCREEN_ORIENTATION_UNSPECIFIED, true /* fullscreen */,
-                    true /* showForAllUsers */, 0 /* configChanges */, false /* voiceInteraction */,
-                    false /* launchTaskBehind */, false /* alwaysFocusable */,
-                    0 /* targetSdkVersion */, 0 /* rotationAnimationHint */,
-                    0 /* inputDispatchingTimeoutNanos */, taskController.mService);
+            super(taskController, token, new ComponentName("", "") /* activityComponent */,
+                    null /* listener */, 0 /* index */, SCREEN_ORIENTATION_UNSPECIFIED,
+                    true /* fullscreen */, true /* showForAllUsers */, 0 /* configChanges */,
+                    false /* voiceInteraction */, false /* launchTaskBehind */,
+                    false /* alwaysFocusable */, 0 /* targetSdkVersion */,
+                    0 /* rotationAnimationHint */, 0 /* inputDispatchingTimeoutNanos */,
+                    taskController.mService);
             mToken = token;
         }
 
         @Override
         AppWindowToken createAppWindow(WindowManagerService service, IApplicationToken token,
-                boolean voiceInteraction, DisplayContent dc, long inputDispatchingTimeoutNanos,
+                ComponentName activityComponent, boolean voiceInteraction, DisplayContent dc,
+                long inputDispatchingTimeoutNanos,
                 boolean fullscreen, boolean showForAllUsers, int targetSdk, int orientation,
                 int rotationAnimationHint, int configChanges, boolean launchTaskBehind,
                 boolean alwaysFocusable, AppWindowContainerController controller) {
-            return new TestAppWindowToken(service, token, voiceInteraction, dc,
+            return new TestAppWindowToken(service, token, activityComponent, voiceInteraction, dc,
                     inputDispatchingTimeoutNanos, fullscreen, showForAllUsers, targetSdk,
                     orientation,
                     rotationAnimationHint, configChanges, launchTaskBehind, alwaysFocusable,
