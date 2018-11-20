@@ -67,7 +67,8 @@ android_library {
         "telephony-common",
         "android.car",
         "android.car.user",
-        "qtiNetworkLib",
+        "telephony-ext",
+        "ims-common",
     ],
 
     aaptflags: [
@@ -123,6 +124,8 @@ android_library {
         "android.car",
         "android.car.user",
         "android.test.base",
+        "telephony-ext",
+        "ims-common",
     ],
     aaptflags: [
         "--extra-packages",
@@ -145,11 +148,11 @@ android_app {
     },
 
     libs: [
-        "telephony-ext",
         "telephony-common",
         "android.car",
         "android.car.user",
-	"ims-common",
+        "telephony-ext",
+        "ims-common",
     ],
 
     dxflags: ["--multi-dex"],
