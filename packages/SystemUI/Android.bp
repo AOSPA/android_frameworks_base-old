@@ -58,7 +58,6 @@ android_library {
         "androidx.slice_slice-builders",
         "androidx.arch.core_core-runtime",
         "androidx.lifecycle_lifecycle-extensions",
-        "qtiNetworkLib",
         "SystemUI-tags",
         "SystemUI-proto",
     ],
@@ -68,7 +67,7 @@ android_library {
         "telephony-common",
         "android.car",
         "android.car.user",
-        "ims-common",
+        "qtiNetworkLib",
     ],
 
     aaptflags: [
@@ -146,10 +145,11 @@ android_app {
     },
 
     libs: [
+        "telephony-ext",
         "telephony-common",
         "android.car",
         "android.car.user",
-        "ims-common",
+	"ims-common",
     ],
 
     dxflags: ["--multi-dex"],
