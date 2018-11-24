@@ -78,7 +78,6 @@ public class FiveGServiceClient {
     private static final int MAX_RETRY = 4;
     private static final int DELAY_MILLISECOND = 3000;
     private static final int DELAY_INCREMENT = 2000;
-    private static final int PRIMARY_SLOT = 0;
     private final int NUM_LEVELS;
     private final int mRsrpThresholds[];
     private final int mSnrThresholds[];
@@ -366,9 +365,8 @@ public class FiveGServiceClient {
                 Log.d(TAG, "addUri:" +basicUri);
             }
         }else {
-            Uri uwbUri = Settings.Global.getUriFor(FIVEG_UWB_INDICATOR_CONFIG + PRIMARY_SLOT);
-            Uri basicUri = Settings.Global.getUriFor(
-                    FIVEG_BASIC_INDICATOR_CONFIG + PRIMARY_SLOT);
+            Uri uwbUri = Settings.Global.getUriFor(FIVEG_UWB_INDICATOR_CONFIG);
+            Uri basicUri = Settings.Global.getUriFor(FIVEG_BASIC_INDICATOR_CONFIG);
             mResolver.registerContentObserver(uwbUri, false, mConfigObserver);
             mResolver.registerContentObserver(basicUri, false, mConfigObserver);
             Log.d(TAG, "addUri:" +uwbUri);
@@ -433,12 +431,10 @@ public class FiveGServiceClient {
     }
 
     private void loadConfg(IndicatorConfig config) {
-        String uwb = Settings.Global.getString(mResolver,
-                FIVEG_UWB_INDICATOR_CONFIG + PRIMARY_SLOT);
+        String uwb = Settings.Global.getString(mResolver,   FIVEG_UWB_INDICATOR_CONFIG);
         config.uwb = uwb != null ? uwb : INDICATOR_CONFIG_UNKNOWN;
 
-        String basic  = Settings.Global.getString(mResolver,
-                FIVEG_BASIC_INDICATOR_CONFIG + PRIMARY_SLOT);
+        String basic  = Settings.Global.getString(mResolver, FIVEG_BASIC_INDICATOR_CONFIG);
         config.basic = basic != null ? basic : INDICATOR_CONFIG_UNKNOWN;
     }
 
