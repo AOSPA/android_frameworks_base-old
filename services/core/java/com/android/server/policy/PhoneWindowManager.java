@@ -1972,9 +1972,13 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             finishedGoingToSleep(WindowManagerPolicy.OFF_BECAUSE_OF_USER);
         }
 
-        boolean hasAlertSlider = context.getResources().
-                getBoolean(com.android.internal.R.bool.config_hasAlertSlider);
-        if (hasAlertSlider) {
+
+        boolean hasAlertSliderKeycode = context.getResources().
+                getBoolean(com.android.internal.R.bool.config_hasAlertSlider)
+                && context.getResources().getInteger(com.android.internal.R.integer.config_sliderTopCode) != 0
+                && context.getResources().getInteger(com.android.internal.R.integer.config_sliderMiddleCode) != 0
+                && context.getResources().getInteger(com.android.internal.R.integer.config_sliderBottomCode) != 0;
+        if (hasAlertSliderKeycode) {
             mAlertSliderHandler = new AlertSliderHandler(mContext);
         }
 
