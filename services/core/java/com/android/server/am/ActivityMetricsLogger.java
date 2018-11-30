@@ -699,11 +699,6 @@ class ActivityMetricsLogger {
         if (mPerfFirstDraw != null) {
             mPerfFirstDraw.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName, info.windowsDrawnDelayMs, BoostFramework.Draw.EVENT_TYPE_V1);
         }
-
-        if (mLaunchedActivity.mPerf != null && mLaunchedActivity.perfActivityBoostHandler > 0) {
-            mLaunchedActivity.mPerf.perfLockReleaseHandler(mLaunchedActivity.perfActivityBoostHandler);
-            mLaunchedActivity.perfActivityBoostHandler = -1;
-        }
     }
 
     private int convertAppStartTransitionType(int tronType) {

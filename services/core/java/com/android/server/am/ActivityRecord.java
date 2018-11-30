@@ -275,7 +275,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     private int theme;              // resource identifier of activity's theme.
     private int realTheme;          // actual theme resource we will use, never 0.
     private int windowFlags;        // custom window flags for preview window.
-    public int perfActivityBoostHandler = -1; //perflock handler when activity is created.
+    int perfActivityBoostHandler = -1; //perflock handler when activity is created.
     private TaskRecord task;        // the task this is in.
     private long createTime = System.currentTimeMillis();
     long lastVisibleTime;   // last time this activity became visible
@@ -369,7 +369,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     boolean pendingVoiceInteractionStart;   // Waiting for activity-invoked voice session
     IVoiceInteractionSession voiceSession;  // Voice interaction session for this activity
 
-    public BoostFramework mPerf = null;
+    private BoostFramework mPerf = null;
     public BoostFramework mUxPerf = new BoostFramework();
     public BoostFramework mPerf_iop = null;
 
@@ -1021,9 +1021,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 lockTaskLaunchMode = LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED;
             }
         }
-
-        if (mPerf == null)
-            mPerf = new BoostFramework();
     }
 
     void setProcess(WindowProcessController proc) {
