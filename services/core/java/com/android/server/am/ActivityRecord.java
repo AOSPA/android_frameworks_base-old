@@ -1021,6 +1021,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                 lockTaskLaunchMode = LOCK_TASK_LAUNCH_MODE_IF_WHITELISTED;
             }
         }
+
+        if (mPerf == null)
+            mPerf = new BoostFramework();
     }
 
     void setProcess(WindowProcessController proc) {
@@ -2075,16 +2078,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     info.windowsFullyDrawnDelayMs);
         }
     }
-
-    public int isAppInfoGame() {
-        int isGame = 0;
-        if (appInfo != null) {
-            isGame = (appInfo.category == ApplicationInfo.CATEGORY_GAME ||
-                      (appInfo.flags & ApplicationInfo.FLAG_IS_GAME) == ApplicationInfo.FLAG_IS_GAME) ? 1 : 0;
-        }
-        return isGame;
-    }
-
     @Override
     public void onStartingWindowDrawn(long timestamp) {
         synchronized (service.mGlobalLock) {
