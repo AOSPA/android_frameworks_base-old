@@ -738,6 +738,7 @@ public class MobileSignalController extends SignalController<
         pw.println("  mSignalStrength=" + mSignalStrength + ",");
         pw.println("  mDataState=" + mDataState + ",");
         pw.println("  mDataNetType=" + mDataNetType + ",");
+        pw.println("  mFiveGState=" + mFiveGState + ",");
     }
 
     class MobilePhoneStateListener extends PhoneStateListener {
