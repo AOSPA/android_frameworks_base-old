@@ -233,8 +233,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
     public static boolean mPerfSendTapHint = false;
     public BoostFramework mPerfBoost = null;
-    public BoostFramework mPerfPack = null;
-
+    public BoostFramework mUxPerf = null;
     static final int HANDLE_DISPLAY_ADDED = FIRST_SUPERVISOR_STACK_MSG + 5;
     static final int HANDLE_DISPLAY_CHANGED = FIRST_SUPERVISOR_STACK_MSG + 6;
     static final int HANDLE_DISPLAY_REMOVED = FIRST_SUPERVISOR_STACK_MSG + 7;
@@ -2290,7 +2289,7 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         //top_activity = task.stack.topRunningActivityLocked();
         /* App is launching from recent apps and it's a new process */
         if(top_activity != null && top_activity.getState() == ActivityState.DESTROYED) {
-            acquireAppLaunchPerfLock(top_activity.packageName);
+            acquireAppLaunchPerfLock(top_activity);
         }
 
         if (currentStack == null) {
@@ -3416,21 +3415,26 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
         return true;
     }
 
-    void acquireAppLaunchPerfLock(String packageName) {
+    void acquireAppLaunchPerfLock(ActivityRecord r) {
        /* Acquire perf lock during new app launch */
        if (mPerfBoost == null) {
            mPerfBoost = new BoostFramework();
        }
        if (mPerfBoost != null) {
-           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName, -1, BoostFramework.Launch.BOOST_V1);
+           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
            mPerfSendTapHint = true;
+           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
        }
-       if (mPerfPack == null) {
-           mPerfPack = new BoostFramework();
-       }
-       if (mPerfPack != null) {
-           mPerfPack.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, packageName, -1, BoostFramework.Launch.BOOST_V2);
-       }
+       // Start IOP
+       mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
+               r.appInfo.sourceDir.substring(0, r.appInfo.sourceDir.lastIndexOf('/')));
+    }
+
+    void acquireUxPerfLock(int opcode, String packageName) {
+        mUxPerf = new BoostFramework();
+        if (mUxPerf != null) {
+            mUxPerf.perfUXEngine_events(opcode, 0, packageName, 0);
+        }
     }
 
     ActivityRecord findTaskLocked(ActivityRecord r, int preferredDisplayId) {
@@ -3454,13 +3458,22 @@ public class ActivityStackSupervisor extends ConfigurationContainer implements D
 
             display.findTaskLocked(r, false /* isPreferredDisplay */, mTmpFindTaskResult);
             if (mTmpFindTaskResult.mIdealMatch) {
+                if(mTmpFindTaskResult.mRecord.getState() == ActivityState.DESTROYED ) {
+                    /*It's a new app launch */
+                    acquireAppLaunchPerfLock(r);
+                }
+
+                if(mTmpFindTaskResult.mRecord.getState() == ActivityState.STOPPED) {
+                    /*Warm launch */
+                    acquireUxPerfLock(BoostFramework.UXE_EVENT_SUB_LAUNCH, r.packageName);
+                }
                 return mTmpFindTaskResult.mRecord;
             }
         }
 
         /* Acquire perf lock *only* during new app launch */
         if (mTmpFindTaskResult.mRecord == null || mTmpFindTaskResult.mRecord.getState() == ActivityState.DESTROYED) {
-            acquireAppLaunchPerfLock(r.packageName);
+            acquireAppLaunchPerfLock(r);
         }
 
         if (DEBUG_TASKS && mTmpFindTaskResult.mRecord == null) Slog.d(TAG_TASKS, "No task found");

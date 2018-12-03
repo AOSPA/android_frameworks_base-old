@@ -116,6 +116,7 @@ import android.security.NetworkSecurityPolicy;
 import android.security.net.config.NetworkSecurityConfigProvider;
 import android.util.AndroidRuntimeException;
 import android.util.ArrayMap;
+import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.EventLog;
 import android.util.Log;
@@ -5729,6 +5730,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     @UnsupportedAppUsage
     private void handleBindApplication(AppBindData data) {
+        long st_bindApp = SystemClock.uptimeMillis();
+        BoostFramework ux_perf = null;
         // Register the UI Thread as a sensitive thread to the runtime.
         VMRuntime.registerSensitiveThread();
         if (data.trackAllocation) {
@@ -5955,7 +5958,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         if (!Process.isIsolated()) {
             final int old_mask = StrictMode.allowThreadDiskWritesMask();
             try {
-            //    ux_perf = new BoostFramework(appContext);
+                ux_perf = new BoostFramework(appContext);
             } finally {
                  StrictMode.setThreadPolicyMask(old_mask);
             }
@@ -6115,6 +6118,15 @@ public final class ActivityThread extends ClientTransactionHandler {
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
+        }
+        long end_bindApp = SystemClock.uptimeMillis();
+        int bindApp_dur = (int) (end_bindApp - st_bindApp);
+        String pkg_name = null;
+        if (appContext != null) {
+            pkg_name = appContext.getPackageName();
+        }
+        if (ux_perf != null && !Process.isIsolated() && pkg_name != null) {
+            ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_BINDAPP, 0, pkg_name, bindApp_dur);
         }
     }
 
