@@ -29,12 +29,10 @@
 
 package android.util;
 
-import android.content.Context;
-import android.os.SystemProperties;
 import android.util.Log;
-
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import android.content.Context;
 
 /** @hide */
 public class BoostFramework {
@@ -42,9 +40,6 @@ public class BoostFramework {
     private static final String TAG = "BoostFramework";
     private static final String PERFORMANCE_JAR = "/system/framework/QPerformance.jar";
     private static final String PERFORMANCE_CLASS = "com.qualcomm.qti.Performance";
-
-    private static final String UXPERFORMANCE_JAR = "/system/framework/UxPerformance.jar";
-    private static final String UXPERFORMANCE_CLASS = "com.qualcomm.qti.UxPerformance";
 
 /** @hide */
     private static boolean sIsLoaded = false;
@@ -54,19 +49,8 @@ public class BoostFramework {
     private static Method sReleaseFunc = null;
     private static Method sReleaseHandlerFunc = null;
 
-    private static int sIopv2 = -1;
-    private static Method sIOPStart = null;
-    private static Method sIOPStop  = null;
-    private static Method sUXEngineEvents  = null;
-    private static Method sUXEngineTrigger  = null;
-
-    private static boolean sUxIsLoaded = false;
-    private static Class<?> sUxPerfClass = null;
-    private static Method sUxIOPStart = null;
-
 /** @hide */
     private Object mPerf = null;
-    private Object mUxPerf = null;
 
     //perf hints
     public static final int VENDOR_HINT_SCROLL_BOOST = 0x00001080;
@@ -83,16 +67,6 @@ public class BoostFramework {
     //perf events
     public static final int VENDOR_HINT_FIRST_DRAW = 0x00001042;
     public static final int VENDOR_HINT_TAP_EVENT = 0x00001043;
-
-    //UXE Events and Triggers
-    public static final int UXE_TRIGGER = 1;
-    public static final int UXE_EVENT_BINDAPP = 2;
-    public static final int UXE_EVENT_DISPLAYED_ACT = 3;
-    public static final int UXE_EVENT_KILL = 4;
-    public static final int UXE_EVENT_WAKELOCK  = 5;
-    public static final int UXE_EVENT_SUB_LAUNCH = 6;
-    public static final int UXE_EVENT_PKG_UNINSTALL = 7;
-    public static final int UXE_EVENT_PKG_INSTALL = 8;
 
     public class Scroll {
         public static final int VERTICAL = 1;
@@ -120,9 +94,6 @@ public class BoostFramework {
             if (sPerfClass != null) {
                 mPerf = sPerfClass.newInstance();
             }
-            if (sUxPerfClass != null) {
-                mUxPerf = sUxPerfClass.newInstance();
-            }
         }
         catch(Exception e) {
             Log.e(TAG,"BoostFramework() : Exception_2 = " + e);
@@ -138,9 +109,6 @@ public class BoostFramework {
                 Constructor cons = sPerfClass.getConstructor(Context.class);
                 if (cons != null)
                     mPerf = cons.newInstance(context);
-            }
-            if (sUxPerfClass != null) {
-                mUxPerf = sUxPerfClass.newInstance();
             }
         }
         catch(Exception e) {
@@ -166,41 +134,10 @@ public class BoostFramework {
                     argClasses = new Class[] {int.class};
                     sReleaseHandlerFunc = sPerfClass.getDeclaredMethod("perfLockReleaseHandler", argClasses);
 
-                    argClasses = new Class[] {int.class, String.class, String.class};
-                    sIOPStart =   sPerfClass.getDeclaredMethod("perfIOPrefetchStart", argClasses);
-
-                    argClasses = new Class[] {};
-                    sIOPStop =  sPerfClass.getDeclaredMethod("perfIOPrefetchStop", argClasses);
-
-                    try {
-                        argClasses = new Class[] {int.class, int.class, String.class, int.class};
-                        sUXEngineEvents =  sPerfClass.getDeclaredMethod("perfUXEngine_events",
-                                                                          argClasses);
-
-                        argClasses = new Class[] {int.class};
-                        sUXEngineTrigger =  sPerfClass.getDeclaredMethod("perfUXEngine_trigger",
-                                                                           argClasses);
-                    } catch (Exception e) {
-                        Log.i(TAG, "BoostFramework() : Exception_4 = PreferredApps not supported");
-                    }
-
                     sIsLoaded = true;
                 }
                 catch(Exception e) {
                     Log.e(TAG,"BoostFramework() : Exception_1 = " + e);
-                }
-                // Load UXE Class now Adding new try/catch block to avoid
-                // any interference with Qperformance
-                try {
-                    sUxPerfClass = Class.forName(UXPERFORMANCE_CLASS);
-
-                    Class[] argUxClasses = new Class[] {int.class, String.class, String.class};
-                    sUxIOPStart =   sUxPerfClass.getDeclaredMethod("perfIOPrefetchStart", argUxClasses);
-
-                    sUxIsLoaded = true;
-                }
-                catch(Exception e) {
-                    Log.e(TAG,"BoostFramework() Ux Perf: Exception = " + e);
                 }
             }
         }
@@ -268,75 +205,6 @@ public class BoostFramework {
             }
         } catch(Exception e) {
             Log.e(TAG,"Exception " + e);
-        }
-        return ret;
-    }
-
-/** @hide */
-    public int perfIOPrefetchStart(int pid, String pkgName, String codePath) {
-        int ret = -1;
-        try {
-            Object retVal = sIOPStart.invoke(mPerf, pid, pkgName, codePath);
-            ret = (int) retVal;
-        } catch (Exception e) {
-            Log.e(TAG, "Exception " + e);
-        }
-        try {
-            Object retVal = sUxIOPStart.invoke(mUxPerf, pid, pkgName, codePath);
-            ret = (int) retVal;
-        } catch (Exception e) {
-            Log.e(TAG, "Ux Perf Exception " + e);
-        }
-
-        return ret;
-    }
-
-/** @hide */
-    public int perfIOPrefetchStop() {
-        int ret = -1;
-        try {
-            Object retVal = sIOPStop.invoke(mPerf);
-            ret = (int) retVal;
-        } catch (Exception e) {
-            Log.e(TAG, "Exception " + e);
-        }
-        return ret;
-    }
-
-/** @hide */
-    public int perfUXEngine_events(int opcode, int pid, String pkgName, int lat) {
-        int ret = -1;
-        if (sIopv2 == -1) {
-            sIopv2 = SystemProperties.getInt("vendor.iop.enable_uxe", 0);
-        }
-
-        try {
-            if (sIopv2 == 0 || sUXEngineEvents == null) {
-                return ret;
-            }
-            Object retVal = sUXEngineEvents.invoke(mPerf, opcode, pid, pkgName, lat);
-            ret = (int) retVal;
-        } catch (Exception e) {
-            Log.e(TAG, "Exception " + e);
-        }
-        return ret;
-    }
-
-
-/** @hide */
-    public String perfUXEngine_trigger(int opcode) {
-        String ret = null;
-        if (sIopv2 == -1) {
-            sIopv2 = SystemProperties.getInt("vendor.iop.enable_uxe", 0);
-        }
-        try {
-            if (sIopv2 == 0 || sUXEngineTrigger == null) {
-                return ret;
-            }
-            Object retVal = sUXEngineTrigger.invoke(mPerf, opcode);
-            ret = (String) retVal;
-        } catch (Exception e) {
-            Log.e(TAG, "Exception " + e);
         }
         return ret;
     }

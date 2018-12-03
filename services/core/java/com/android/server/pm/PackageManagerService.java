@@ -268,7 +268,6 @@ import android.util.TimingsTraceLog;
 import android.util.Xml;
 import android.util.jar.StrictJarFile;
 import android.util.proto.ProtoOutputStream;
-import android.util.BoostFramework;
 import android.view.Display;
 
 import com.android.internal.R;
@@ -14949,8 +14948,6 @@ public class PackageManagerService extends IPackageManager.Stub
         final String pkgName = pkg.packageName;
 
         if (DEBUG_INSTALL) Slog.d(TAG, "New package installed in " + pkg.codePath);
-        if (pkgName != null)
-            acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_INSTALL, pkgName, 0);
         synchronized (mPackages) {
 // NOTE: This changes slightly to include UPDATE_PERMISSIONS_ALL regardless of the size of pkg.permissions
             mPermissionManager.updatePermissions(pkg.packageName, pkg, true, mPackages.values(),
@@ -15889,7 +15886,6 @@ public class PackageManagerService extends IPackageManager.Stub
                     // on the device; we should replace it.
                     replace = true;
                     if (DEBUG_INSTALL) Slog.d(TAG, "Replace existing pacakge: " + pkgName);
-                    acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_INSTALL, pkgName, 1);
                 }
 
                 // Child packages are installed through the parent package
@@ -17104,17 +17100,7 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
 
-        if (res && packageName != null) {
-            acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_UNINSTALL, packageName, userId);
-        }
         return res ? PackageManager.DELETE_SUCCEEDED : PackageManager.DELETE_FAILED_INTERNAL_ERROR;
-    }
-
-    private void acquireUxPerfLock(int opcode, String pkgName, int dat) {
-        BoostFramework ux_perf = new BoostFramework();
-        if (ux_perf != null) {
-            ux_perf.perfUXEngine_events(opcode, 0, pkgName, dat);
-        }
     }
 
     static class PackageRemovedInfo {
