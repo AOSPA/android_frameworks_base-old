@@ -527,9 +527,7 @@ public class ActivityManagerService extends IActivityManager.Stub
     private static final int NATIVE_DUMP_TIMEOUT_MS = 2000; // 2 seconds;
 
     /* Freq Aggr boost objects */
-    public static BoostFramework mPerf = null;
     public static BoostFramework mPerfServiceStartHint = null;
-    public static boolean mIsPerfLockAcquired = false;
     /* UX perf event object */
     public static BoostFramework mUxPerf = new BoostFramework();
 

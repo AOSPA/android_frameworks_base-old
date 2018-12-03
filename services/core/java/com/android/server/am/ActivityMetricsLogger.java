@@ -687,6 +687,11 @@ class ActivityMetricsLogger {
 
         Log.i(TAG, sb.toString());
 
+        int isGame = mLaunchedActivity.isAppInfoGame();
+        if (mLaunchedActivity.mUxPerf !=  null) {
+            mLaunchedActivity.mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_GAME, 0, info.packageName, isGame);
+        }
+
         if (mPerfFirstDraw == null) {
             mPerfFirstDraw = new BoostFramework();
         }
