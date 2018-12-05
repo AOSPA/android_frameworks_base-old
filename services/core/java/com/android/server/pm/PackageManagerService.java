@@ -121,6 +121,7 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
+import android.app.AppDetailsActivity;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.ResourcesManager;
@@ -187,6 +188,7 @@ import android.content.pm.SELinuxUtil;
 import android.content.pm.ServiceInfo;
 import android.content.pm.SharedLibraryInfo;
 import android.content.pm.Signature;
+import android.content.pm.SuspendDialogInfo;
 import android.content.pm.UserInfo;
 import android.content.pm.VerifierDeviceIdentity;
 import android.content.pm.VerifierInfo;
@@ -266,6 +268,7 @@ import android.util.TimingsTraceLog;
 import android.util.Xml;
 import android.util.jar.StrictJarFile;
 import android.util.proto.ProtoOutputStream;
+import android.util.BoostFramework;
 import android.view.Display;
 
 import com.android.internal.R;
@@ -2945,7 +2948,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 for (int splitPermNum = 0; splitPermNum < numSplitPerms; splitPermNum++) {
                     final PermissionManager.SplitPermissionInfo splitPerm =
                             splitPermissions.get(splitPermNum);
-                    final String rootPerm = splitPerm.getRootPermission();
+                    final String rootPerm = splitPerm.getSplitPermission();
 
                     if (preUpgradeSdkVersion >= splitPerm.getTargetSdk()) {
                         continue;
@@ -2967,11 +2970,11 @@ public class PackageManagerService extends IPackageManager.Stub
                             continue;
                         }
 
-                        final String[] newPerms = splitPerm.getNewPermissions();
+                        final List<String> newPerms = splitPerm.getNewPermissions();
 
-                        final int numNewPerms = newPerms.length;
+                        final int numNewPerms = newPerms.size();
                         for (int newPermNum = 0; newPermNum < numNewPerms; newPermNum++) {
-                            final String newPerm = newPerms[newPermNum];
+                            final String newPerm = newPerms.get(newPermNum);
                             if (checkPermission(newPerm, pkgName, userId) == PERMISSION_GRANTED) {
                                 continue;
                             }
@@ -7923,10 +7926,16 @@ public class PackageManagerService extends IPackageManager.Stub
     @Override
     public ParceledListSlice<ApplicationInfo> getInstalledApplications(int flags, int userId) {
         final int callingUid = Binder.getCallingUid();
+        return new ParceledListSlice<>(
+                getInstalledApplicationsListInternal(flags, userId, callingUid));
+    }
+
+    private List<ApplicationInfo> getInstalledApplicationsListInternal(int flags, int userId,
+            int callingUid) {
         if (getInstantAppPackageName(callingUid) != null) {
-            return ParceledListSlice.emptyList();
+            return Collections.emptyList();
         }
-        if (!sUserManager.exists(userId)) return ParceledListSlice.emptyList();
+        if (!sUserManager.exists(userId)) return Collections.emptyList();
         flags = updateFlagsForApplication(flags, userId, null);
         final boolean listUninstalled = (flags & MATCH_KNOWN_PACKAGES) != 0;
 
@@ -7991,7 +8000,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
             }
 
-            return new ParceledListSlice<>(list);
+            return list;
         }
     }
 
@@ -12211,7 +12220,9 @@ public class PackageManagerService extends IPackageManager.Stub
             if (mPackageListObservers.size() == 0) {
                 return;
             }
-            observers = (PackageListObserver[]) mPackageListObservers.toArray();
+            final PackageListObserver[] observerArray =
+                    new PackageListObserver[mPackageListObservers.size()];
+            observers = mPackageListObservers.toArray(observerArray);
         }
         for (int i = observers.length - 1; i >= 0; --i) {
             observers[i].onPackageAdded(packageName);
@@ -12231,7 +12242,9 @@ public class PackageManagerService extends IPackageManager.Stub
             if (mPackageListObservers.size() == 0) {
                 return;
             }
-            observers = (PackageListObserver[]) mPackageListObservers.toArray();
+            final PackageListObserver[] observerArray =
+                    new PackageListObserver[mPackageListObservers.size()];
+            observers = mPackageListObservers.toArray(observerArray);
         }
         for (int i = observers.length - 1; i >= 0; --i) {
             observers[i].onPackageRemoved(packageName);
@@ -12766,8 +12779,8 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public String[] setPackagesSuspendedAsUser(String[] packageNames, boolean suspended,
-            PersistableBundle appExtras, PersistableBundle launcherExtras, String dialogMessage,
-            String callingPackage, int userId) {
+            PersistableBundle appExtras, PersistableBundle launcherExtras,
+            SuspendDialogInfo dialogInfo, String callingPackage, int userId) {
         mContext.enforceCallingOrSelfPermission(android.Manifest.permission.SUSPEND_APPS,
                 "setPackagesSuspendedAsUser");
 
@@ -12812,7 +12825,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         unactionedPackages.add(packageName);
                         continue;
                     }
-                    pkgSetting.setSuspended(suspended, callingPackage, dialogMessage, appExtras,
+                    pkgSetting.setSuspended(suspended, callingPackage, dialogInfo, appExtras,
                             launcherExtras, userId);
                     changedPackagesList.add(packageName);
                     changedUids.add(UserHandle.getUid(userId, pkgSetting.appId));
@@ -14936,6 +14949,8 @@ public class PackageManagerService extends IPackageManager.Stub
         final String pkgName = pkg.packageName;
 
         if (DEBUG_INSTALL) Slog.d(TAG, "New package installed in " + pkg.codePath);
+        if (pkgName != null)
+            acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_INSTALL, pkgName, 0);
         synchronized (mPackages) {
 // NOTE: This changes slightly to include UPDATE_PERMISSIONS_ALL regardless of the size of pkg.permissions
             mPermissionManager.updatePermissions(pkg.packageName, pkg, true, mPackages.values(),
@@ -15874,6 +15889,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     // on the device; we should replace it.
                     replace = true;
                     if (DEBUG_INSTALL) Slog.d(TAG, "Replace existing pacakge: " + pkgName);
+                    acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_INSTALL, pkgName, 1);
                 }
 
                 // Child packages are installed through the parent package
@@ -17088,7 +17104,17 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
 
+        if (res && packageName != null) {
+            acquireUxPerfLock(BoostFramework.UXE_EVENT_PKG_UNINSTALL, packageName, userId);
+        }
         return res ? PackageManager.DELETE_SUCCEEDED : PackageManager.DELETE_FAILED_INTERNAL_ERROR;
+    }
+
+    private void acquireUxPerfLock(int opcode, String pkgName, int dat) {
+        BoostFramework ux_perf = new BoostFramework();
+        if (ux_perf != null) {
+            ux_perf.perfUXEngine_events(opcode, 0, pkgName, dat);
+        }
     }
 
     static class PackageRemovedInfo {
@@ -17895,7 +17921,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     false /*hidden*/,
                     false /*suspended*/,
                     null /*suspendingPackage*/,
-                    null /*dialogMessage*/,
+                    null /*dialogInfo*/,
                     null /*suspendedAppExtras*/,
                     null /*suspendedLauncherExtras*/,
                     false /*instantApp*/,
@@ -19476,6 +19502,16 @@ public class PackageManagerService extends IPackageManager.Stub
             // Don't allow changing protected packages.
             if (mProtectedPackages.isPackageStateProtected(userId, packageName)) {
                 throw new SecurityException("Cannot disable a protected package: " + packageName);
+            }
+        }
+        // Only allow apps with CHANGE_COMPONENT_ENABLED_STATE permission to change hidden
+        // app details activity
+        if (AppDetailsActivity.class.getName().equals(className)) {
+            if (mContext.checkCallingOrSelfPermission(
+                    android.Manifest.permission.CHANGE_COMPONENT_ENABLED_STATE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                Slog.e(TAG, "Cannot disable a protected component: " + packageName);
+                return;
             }
         }
 
@@ -22373,6 +22409,14 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
+        public List<ApplicationInfo> getInstalledApplications(int flags, int userId,
+                int callingUid) {
+            return PackageManagerService.this.getInstalledApplicationsListInternal(flags, userId,
+                    callingUid);
+        }
+
+
+        @Override
         public boolean isPlatformSigned(String packageName) {
             PackageSetting packageSetting = mSettings.mPackages.get(packageName);
             if (packageSetting == null) {
@@ -22646,10 +22690,10 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
-        public String getSuspendedDialogMessage(String suspendedPackage, int userId) {
+        public SuspendDialogInfo getSuspendedDialogInfo(String suspendedPackage, int userId) {
             synchronized (mPackages) {
                 final PackageSetting ps = mSettings.mPackages.get(suspendedPackage);
-                return (ps != null) ? ps.readUserState(userId).dialogMessage : null;
+                return (ps != null) ? ps.readUserState(userId).dialogInfo : null;
             }
         }
 

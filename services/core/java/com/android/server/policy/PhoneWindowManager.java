@@ -22,6 +22,7 @@ import static android.app.AppOpsManager.OP_SYSTEM_ALERT_WINDOW;
 import static android.app.AppOpsManager.OP_TOAST_WINDOW;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
@@ -1847,6 +1848,24 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mDefaultOrientationListener = mDefaultDisplayRotation.getOrientationListener();
     }
 
+    private boolean isTopAppGame() {
+        boolean isGame = false;
+        try {
+            ActivityManager.RunningTaskInfo rti = ActivityManager.getService().getFilteredTasks(1,
+                                    ACTIVITY_TYPE_RECENTS, WINDOWING_MODE_UNDEFINED).get(0);
+            ApplicationInfo ai = mContext.getPackageManager().getApplicationInfo(
+                        rti.topActivity.getPackageName(), 0);
+            if(ai != null) {
+                isGame = (ai.category == ApplicationInfo.CATEGORY_GAME) ||
+                        ((ai.flags & ApplicationInfo.FLAG_IS_GAME) ==
+                            ApplicationInfo.FLAG_IS_GAME);
+            }
+        } catch (Exception e) {
+            return false;
+        }
+        return isGame;
+    }
+
     /** {@inheritDoc} */
     @Override
     public void init(Context context, IWindowManager windowManager,
@@ -2050,12 +2069,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                     @Override
                     public void onFling(int duration) {
-                        String currentPackage = mContext.getPackageName();
                         if (mPowerManagerInternal != null) {
                             mPowerManagerInternal.powerHint(
                                     PowerHint.INTERACTION, duration);
                         }
-                        if (SCROLL_BOOST_SS_ENABLE) {
+                    }
+                    @Override
+                    public void onVerticalFling(int duration) {
+                        String currentPackage = mContext.getPackageName();
+                        boolean isGame = isTopAppGame();
+                        if (SCROLL_BOOST_SS_ENABLE && !isGame) {
                             if (mPerfBoostFling == null) {
                                 mPerfBoostFling = new BoostFramework();
                                 mIsPerfBoostFlingAcquired = false;
@@ -2073,6 +2096,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     @Override
                     public void onScroll(boolean started) {
                         String currentPackage = mContext.getPackageName();
+                        boolean isGame = isTopAppGame();
                         if (mPerfBoostDrag == null) {
                             mPerfBoostDrag = new BoostFramework();
                         }
@@ -2080,7 +2104,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             Slog.e(TAG, "Error: boost object null");
                             return;
                         }
-                        if (SCROLL_BOOST_SS_ENABLE) {
+                        if (SCROLL_BOOST_SS_ENABLE && !isGame) {
                             if (mPerfBoostPrefling == null) {
                                 mPerfBoostPrefling = new BoostFramework();
                             }
@@ -2091,7 +2115,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                             mPerfBoostPrefling.perfHint(BoostFramework.VENDOR_HINT_SCROLL_BOOST,
                                     currentPackage, -1, BoostFramework.Scroll.PREFILING);
                         }
-                        if (started) {
+                        if (!isGame && started) {
                             mPerfBoostDrag.perfHint(BoostFramework.VENDOR_HINT_DRAG_BOOST,
                                             currentPackage, -1, 1);
                         } else {
@@ -2136,7 +2160,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 });
         mImmersiveModeConfirmation = new ImmersiveModeConfirmation(mContext);
-        mWindowManagerFuncs.registerPointerEventListener(mSystemGestures);
+        //TODO (b/111365687) : make system context per display.
+        mWindowManagerFuncs.registerPointerEventListener(mSystemGestures, DEFAULT_DISPLAY);
 
         mVibrator = (Vibrator)context.getSystemService(Context.VIBRATOR_SERVICE);
 
@@ -2338,13 +2363,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             WindowManager wm = (WindowManager) mContext.getSystemService(WINDOW_SERVICE);
             lp.inputFeatures |= WindowManager.LayoutParams.INPUT_FEATURE_NO_INPUT_CHANNEL;
             wm.addView(mPointerLocationView, lp);
-            mWindowManagerFuncs.registerPointerEventListener(mPointerLocationView);
+            //TODO (b/111365687) : make system context per display.
+            mWindowManagerFuncs.registerPointerEventListener(mPointerLocationView, DEFAULT_DISPLAY);
         }
     }
 
     private void disablePointerLocation() {
         if (mPointerLocationView != null) {
-            mWindowManagerFuncs.unregisterPointerEventListener(mPointerLocationView);
+            //TODO (b/111365687) : make system context per display.
+            mWindowManagerFuncs.unregisterPointerEventListener(mPointerLocationView,
+                    DEFAULT_DISPLAY);
             WindowManager wm = (WindowManager) mContext.getSystemService(WINDOW_SERVICE);
             wm.removeView(mPointerLocationView);
             mPointerLocationView = null;
@@ -6119,6 +6147,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 case KeyEvent.KEYCODE_BACK: {
                     boolean handled = interceptAccessibilityGestureTv(keyCode, down);
                     if (handled) {
+                        result &= ~ACTION_PASS_TO_USER;
+                    }
+                    break;
+                }
+            }
+        }
+
+        // Intercept the Accessibility keychord (CTRL + ALT + Z) for keyboard users.
+        if (mAccessibilityShortcutController.isAccessibilityShortcutAvailable(isKeyguardLocked())) {
+            switch (keyCode) {
+                case KeyEvent.KEYCODE_Z: {
+                    if (down && event.isCtrlPressed() && event.isAltPressed()) {
+                        mHandler.sendMessage(mHandler.obtainMessage(MSG_ACCESSIBILITY_SHORTCUT));
                         result &= ~ACTION_PASS_TO_USER;
                     }
                     break;

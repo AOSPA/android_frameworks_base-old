@@ -17,12 +17,19 @@
 package com.android.systemui.statusbar.notification.row;
 
 import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator.ExpandAnimationParameters;
+import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_AMBIENT;
+import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_HEADSUP;
+import static com.android.systemui.statusbar.notification.row.NotificationInflater
+        .FLAG_CONTENT_VIEW_AMBIENT;
+import static com.android.systemui.statusbar.notification.row.NotificationInflater
+        .FLAG_CONTENT_VIEW_HEADS_UP;
 import static com.android.systemui.statusbar.notification.row.NotificationInflater.InflationCallback;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator.AnimatorUpdateListener;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -83,6 +90,7 @@ import com.android.systemui.statusbar.notification.AboveShelfChangedListener;
 import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
 import com.android.systemui.statusbar.notification.logging.NotificationCounters;
 import com.android.systemui.statusbar.notification.NotificationUtils;
+import com.android.systemui.statusbar.notification.row.NotificationInflater.InflationFlag;
 import com.android.systemui.statusbar.notification.row.wrapper.NotificationViewWrapper;
 import com.android.systemui.statusbar.notification.VisualStabilityManager;
 import com.android.systemui.statusbar.phone.NotificationGroupManager;
@@ -94,6 +102,9 @@ import com.android.systemui.statusbar.notification.stack.ExpandableViewState;
 import com.android.systemui.statusbar.notification.stack.NotificationChildrenContainer;
 import com.android.systemui.statusbar.notification.stack.StackScrollState;
 
+import java.io.FileDescriptor;
+import java.io.PrintWriter;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
@@ -429,12 +440,59 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         }
     }
 
-    public void updateNotification(NotificationData.Entry entry) {
+    /**
+     * Set the entry for the row.
+     *
+     * @param entry the entry this row is tied to
+     */
+    public void setEntry(@NonNull NotificationData.Entry entry) {
         mEntry = entry;
         mStatusBarNotification = entry.notification;
-        mNotificationInflater.inflateNotificationViews();
-
         cacheIsSystemNotification();
+    }
+
+    /**
+     * Inflate views based off the inflation flags set.  Inflation happens asynchronously.
+     */
+    public void inflateViews() {
+        mNotificationInflater.inflateNotificationViews();
+    }
+
+    /**
+     * Marks a content view as freeable, setting it so that future inflations do not reinflate
+     * and ensuring that the view is freed when it is safe to remove.
+     *
+     * @param inflationFlag flag corresponding to the content view to be freed
+     */
+    public void freeContentViewWhenSafe(@InflationFlag int inflationFlag) {
+        // View should not be reinflated in the future
+        updateInflationFlag(inflationFlag, false);
+        Runnable freeViewRunnable = () ->
+                mNotificationInflater.freeNotificationView(inflationFlag);
+        switch (inflationFlag) {
+            case FLAG_CONTENT_VIEW_HEADS_UP:
+                getPrivateLayout().performWhenContentInactive(VISIBLE_TYPE_HEADSUP,
+                        freeViewRunnable);
+                break;
+            case FLAG_CONTENT_VIEW_AMBIENT:
+                getPrivateLayout().performWhenContentInactive(VISIBLE_TYPE_AMBIENT,
+                        freeViewRunnable);
+                getPublicLayout().performWhenContentInactive(VISIBLE_TYPE_AMBIENT,
+                        freeViewRunnable);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Update whether or not a content view should be inflated.
+     *
+     * @param flag the flag corresponding to the content view
+     * @param shouldInflate true if it should be inflated, false if it should not
+     */
+    public void updateInflationFlag(@InflationFlag int flag, boolean shouldInflate) {
+        mNotificationInflater.updateInflationFlag(flag, shouldInflate);
     }
 
     /**
@@ -581,7 +639,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             headsUpHeight = mMaxHeadsUpHeight;
         }
         NotificationViewWrapper headsUpWrapper = layout.getVisibleWrapper(
-                NotificationContentView.VISIBLE_TYPE_HEADSUP);
+                VISIBLE_TYPE_HEADSUP);
         if (headsUpWrapper != null) {
             headsUpHeight = Math.max(headsUpHeight, headsUpWrapper.getMinLayoutHeight());
         }
@@ -2616,6 +2674,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return shouldShowPublic() ? mPublicLayout : mPrivateLayout;
     }
 
+    public View getExpandedContentView() {
+        return getPrivateLayout().getExpandedChild();
+    }
+
     public void setLegacy(boolean legacy) {
         for (NotificationContentView l : mLayouts) {
             l.setLegacy(legacy);
@@ -3015,6 +3077,36 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
          * @return whether the click was handled
          */
         boolean onClick(View v, int x, int y, MenuItem item);
+    }
+
+    @Override
+    public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+        super.dump(fd, pw, args);
+        pw.println("  Notification: " + getStatusBarNotification().getKey());
+        pw.print("    visibility: " + getVisibility());
+        pw.print(", alpha: " + getAlpha());
+        pw.print(", translation: " + getTranslation());
+        pw.print(", removed: " + isRemoved());
+        pw.print(", privateShowing: " + (getShowingLayout() == mPrivateLayout));
+        pw.println();
+        pw.print("    ");
+        if (mNotificationViewState != null) {
+            mNotificationViewState.dump(fd, pw, args);
+        } else {
+            pw.print("no viewState!!!");
+        }
+        pw.println();
+        pw.println();
+        if (mIsSummaryWithChildren) {
+            List<ExpandableNotificationRow> notificationChildren = getNotificationChildren();
+            pw.println("  Children: " + notificationChildren.size());
+            pw.println("  {");
+            for(ExpandableNotificationRow child : notificationChildren) {
+                child.dump(fd, pw, args);
+            }
+            pw.println("  }");
+            pw.println();
+        }
     }
 
     /**

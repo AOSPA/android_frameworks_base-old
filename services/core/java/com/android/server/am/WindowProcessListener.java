@@ -16,6 +16,10 @@
 
 package com.android.server.am;
 
+import android.app.ProfilerInfo;
+import android.content.pm.ApplicationInfo;
+import android.util.proto.ProtoOutputStream;
+
 /**
  * Interface used by the owner/creator of a process that owns windows to listen to changes from the
  * WM side.
@@ -47,4 +51,17 @@ public interface WindowProcessListener {
 
     /** Returns the total time (in milliseconds) spent executing in both user and system code. */
     long getCpuTime();
+
+    /** Clears the waiting to kill reason for this process. */
+    void clearWaitingToKill();
+
+    /** Adds the package to the process. */
+    void addPackage(String pkg, long versionCode);
+
+    /** Called when we are in the process on starting an activity. */
+    ProfilerInfo onStartActivity(int topProcessState);
+
+    /** App died :(...oh well */
+    void appDied();
+    void writeToProto(ProtoOutputStream proto, long fieldId);
 }

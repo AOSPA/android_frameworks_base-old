@@ -37,16 +37,16 @@ import static com.android.server.am.ActivityDisplayProto.FOCUSED_STACK_ID;
 import static com.android.server.am.ActivityDisplayProto.ID;
 import static com.android.server.am.ActivityDisplayProto.RESUMED_ACTIVITY;
 import static com.android.server.am.ActivityDisplayProto.STACKS;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STACK;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STATES;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_TASKS;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_STACK;
-import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
-import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.am.ActivityStackSupervisor.FindTaskResult;
 import static com.android.server.am.ActivityStackSupervisor.TAG_STATES;
 import static com.android.server.am.ActivityStackSupervisor.TAG_TASKS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_STACK;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_STATES;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_TASKS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_STACK;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.TAG_ATM;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 
 import android.annotation.Nullable;
 import android.app.ActivityOptions;
@@ -73,7 +73,7 @@ import java.util.ArrayList;
  */
 class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         implements WindowContainerListener {
-    private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityDisplay" : TAG_AM;
+    private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityDisplay" : TAG_ATM;
     private static final String TAG_STACK = TAG + POSTFIX_STACK;
 
     static final int POSITION_TOP = Integer.MAX_VALUE;
@@ -998,7 +998,10 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
      * @see Display#FLAG_SHOULD_SHOW_SYSTEM_DECORATIONS
      */
     boolean supportsSystemDecorations() {
-        return mDisplay.supportsSystemDecorations();
+        return mDisplay.supportsSystemDecorations()
+                // TODO (b/111363427): Remove this and set the new FLAG_SHOULD_SHOW_LAUNCHER flag
+                // (b/114338689) whenever vr 2d display id is set.
+                || mDisplayId == mSupervisor.mService.mVr2dDisplayId;
     }
 
     private boolean shouldDestroyContentOnRemove() {
@@ -1087,7 +1090,7 @@ class ActivityDisplay extends ConfigurationContainer<ActivityStack>
         if (top == null) {
             return false;
         }
-        mSupervisor.moveFocusableActivityToTop(top, reason);
+        top.moveFocusableActivityToTop(reason);
         return true;
     }
 

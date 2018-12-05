@@ -41,6 +41,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import android.content.Context;
 import android.os.FileUtils.MemoryPipe;
@@ -48,7 +49,6 @@ import android.provider.DocumentsContract.Document;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.runner.AndroidJUnit4;
 
-import libcore.io.IoUtils;
 import libcore.io.Streams;
 
 import com.google.android.collect.Sets;
@@ -95,7 +95,7 @@ public class FileUtilsTest {
 
     @After
     public void tearDown() throws Exception {
-        IoUtils.deleteContents(mDir);
+        FileUtils.deleteContents(mDir);
         FileUtils.deleteContents(mTarget);
     }
 
@@ -509,6 +509,20 @@ public class FileUtilsTest {
                 MODE_WRITE_ONLY | MODE_CREATE | MODE_TRUNCATE);
         assertTranslate("wa", O_WRONLY | O_CREAT | O_APPEND,
                 MODE_WRITE_ONLY | MODE_CREATE | MODE_APPEND);
+    }
+
+    @Test
+    public void testTranslateMode_Invalid() throws Exception {
+        try {
+            translateModeStringToPosix("rwx");
+            fail();
+        } catch (IllegalArgumentException expected) {
+        }
+        try {
+            translateModeStringToPosix("");
+            fail();
+        } catch (IllegalArgumentException expected) {
+        }
     }
 
     private static void assertTranslate(String string, int posix, int pfd) {

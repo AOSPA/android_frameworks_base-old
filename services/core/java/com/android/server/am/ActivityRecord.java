@@ -81,20 +81,23 @@ import static android.content.res.Configuration.UI_MODE_TYPE_VR_HEADSET;
 import static android.os.Build.VERSION_CODES.HONEYCOMB;
 import static android.os.Build.VERSION_CODES.O;
 import static android.os.Process.SYSTEM_UID;
+import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_LEFT;
 
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_CONFIGURATION;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SAVED_STATE;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STATES;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_SWITCH;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_VISIBILITY;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_CONFIGURATION;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_SAVED_STATE;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_STATES;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_SWITCH;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_VISIBILITY;
-import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
-import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_CONFIGURATION;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_FOCUS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_SAVED_STATE;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_STATES;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_VISIBILITY;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_CONFIGURATION;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_FOCUS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_SAVED_STATE;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_STATES;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_SWITCH;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_VISIBILITY;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.TAG_ATM;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.am.ActivityRecordProto.CONFIGURATION_CONTAINER;
 import static com.android.server.am.ActivityRecordProto.FRONT_OF_TASK;
 import static com.android.server.am.ActivityRecordProto.IDENTIFIER;
@@ -112,11 +115,14 @@ import static com.android.server.am.ActivityStack.LAUNCH_TICK;
 import static com.android.server.am.ActivityStack.LAUNCH_TICK_MSG;
 import static com.android.server.am.ActivityStack.PAUSE_TIMEOUT_MSG;
 import static com.android.server.am.ActivityStack.STOP_TIMEOUT_MSG;
+import static com.android.server.am.ActivityTaskManagerService.RELAUNCH_REASON_FREE_RESIZE;
+import static com.android.server.am.ActivityTaskManagerService.RELAUNCH_REASON_NONE;
+import static com.android.server.am.ActivityTaskManagerService.RELAUNCH_REASON_WINDOWING_MODE_RESIZE;
 import static com.android.server.am.EventLogTags.AM_RELAUNCH_ACTIVITY;
 import static com.android.server.am.EventLogTags.AM_RELAUNCH_RESUME_ACTIVITY;
 import static com.android.server.am.TaskPersister.DEBUG;
 import static com.android.server.am.TaskPersister.IMAGE_EXTENSION;
-import static com.android.server.am.TaskRecord.INVALID_TASK_ID;
+import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static com.android.server.wm.IdentifierProto.HASH_CODE;
 import static com.android.server.wm.IdentifierProto.TITLE;
 import static com.android.server.wm.IdentifierProto.USER_ID;
@@ -195,6 +201,7 @@ import com.android.server.wm.TaskWindowContainerController;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlSerializer;
+import android.util.BoostFramework;
 
 import java.io.File;
 import java.io.IOException;
@@ -207,16 +214,20 @@ import java.util.List;
 import java.util.Objects;
 import android.util.BoostFramework;
 
+import android.os.AsyncTask;
+import android.util.BoostFramework;
+
 /**
  * An entry in the history stack, representing an activity.
  */
 final class ActivityRecord extends ConfigurationContainer implements AppWindowContainerListener {
-    private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityRecord" : TAG_AM;
+    private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityRecord" : TAG_ATM;
     private static final String TAG_CONFIGURATION = TAG + POSTFIX_CONFIGURATION;
     private static final String TAG_SAVED_STATE = TAG + POSTFIX_SAVED_STATE;
     private static final String TAG_STATES = TAG + POSTFIX_STATES;
     private static final String TAG_SWITCH = TAG + POSTFIX_SWITCH;
     private static final String TAG_VISIBILITY = TAG + POSTFIX_VISIBILITY;
+    private static final String TAG_FOCUS = TAG + POSTFIX_FOCUS;
     // TODO(b/67864419): Remove once recents component is overridden
     private static final String LEGACY_RECENTS_PACKAGE_NAME = "com.android.systemui.recents";
 
@@ -264,7 +275,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     private int theme;              // resource identifier of activity's theme.
     private int realTheme;          // actual theme resource we will use, never 0.
     private int windowFlags;        // custom window flags for preview window.
-    int perfActivityBoostHandler = -1; //perflock handler when activity is created.
+    public int perfActivityBoostHandler = -1; //perflock handler when activity is created.
     private TaskRecord task;        // the task this is in.
     private long createTime = System.currentTimeMillis();
     long lastVisibleTime;   // last time this activity became visible
@@ -312,6 +323,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     private boolean mDeferHidingClient; // If true we told WM to defer reporting to the client
                                         // process that it is hidden.
     boolean sleeping;       // have we told the activity to sleep?
+    boolean launching;      // is activity launch in progress?
     boolean nowVisible;     // is this activity's window visible?
     boolean mClientVisibilityDeferred;// was the visibility change message to client deferred?
     boolean idle;           // has the activity gone idle?
@@ -338,12 +350,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     int mStartingWindowState = STARTING_WINDOW_NOT_SHOWN;
     boolean mTaskOverlay = false; // Task is always on-top of other activities in the task.
 
-    // This activity is not being relaunched, or being relaunched for a non-resize reason.
-    static final int RELAUNCH_REASON_NONE = 0;
-    // This activity is being relaunched due to windowing mode change.
-    static final int RELAUNCH_REASON_WINDOWING_MODE_RESIZE = 1;
-    // This activity is being relaunched due to a free-resize operation.
-    static final int RELAUNCH_REASON_FREE_RESIZE = 2;
     // Marking the reason why this activity is being relaunched. Mainly used to track that this
     // activity is being relaunched to fulfill a resize request due to compatibility issues, e.g. in
     // pre-NYC apps that don't have a sense of being resized.
@@ -363,7 +369,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     boolean pendingVoiceInteractionStart;   // Waiting for activity-invoked voice session
     IVoiceInteractionSession voiceSession;  // Voice interaction session for this activity
 
-    private BoostFramework mPerf = null;
+    public BoostFramework mPerf = null;
+    public BoostFramework mUxPerf = new BoostFramework();
+    public BoostFramework mPerf_iop = null;
 
     // A hint to override the window specified rotation animation, or -1
     // to use the window specified value. We use this so that
@@ -793,7 +801,30 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         getWindowContainerController().setWillCloseOrEnterPip(willCloseOrEnterPip);
     }
 
-      static class Token extends IApplicationToken.Stub {
+    private class PreferredAppsTask extends AsyncTask<Void, Void, Void> {
+        @Override
+        protected Void doInBackground(Void... params) {
+            String res = null;
+            if (mUxPerf != null) {
+                res = mUxPerf.perfUXEngine_trigger(BoostFramework.UXE_TRIGGER);
+                if (res == null)
+                    return null;
+                String[] p_apps = res.split("/");
+                if (p_apps.length != 0) {
+                    ArrayList<String> apps_l = new ArrayList(Arrays.asList(p_apps));
+                    Bundle bParams = new Bundle();
+                    if (bParams == null)
+                        return null;
+                    bParams.putStringArrayList("start_empty_apps", apps_l);
+                    service.mAm.startActivityAsUserEmpty(null, null, intent, null,
+                                  null, null, 0, 0, null, bParams, 0);
+                }
+            }
+            return null;
+        }
+    }
+
+    static class Token extends IApplicationToken.Stub {
         private final WeakReference<ActivityRecord> weakActivity;
         private final String name;
 
@@ -855,13 +886,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         }
     }
 
-    ActivityRecord(ActivityTaskManagerService _service, ProcessRecord _caller, int _launchedFromPid,
-            int _launchedFromUid, String _launchedFromPackage, Intent _intent, String _resolvedType,
-            ActivityInfo aInfo, Configuration _configuration,
-            ActivityRecord _resultTo, String _resultWho, int _reqCode,
-            boolean _componentSpecified, boolean _rootVoiceInteraction,
-            ActivityStackSupervisor supervisor, ActivityOptions options,
-            ActivityRecord sourceRecord) {
+    ActivityRecord(ActivityTaskManagerService _service, WindowProcessController _caller,
+            int _launchedFromPid, int _launchedFromUid, String _launchedFromPackage, Intent _intent,
+            String _resolvedType, ActivityInfo aInfo, Configuration _configuration,
+            ActivityRecord _resultTo, String _resultWho, int _reqCode, boolean _componentSpecified,
+            boolean _rootVoiceInteraction, ActivityStackSupervisor supervisor,
+            ActivityOptions options, ActivityRecord sourceRecord) {
         service = _service;
         appToken = new Token(this, _intent);
         info = aInfo;
@@ -931,8 +961,8 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         }
         if ((aInfo.flags & FLAG_MULTIPROCESS) != 0 && _caller != null
                 && (aInfo.applicationInfo.uid == SYSTEM_UID
-                    || aInfo.applicationInfo.uid == _caller.info.uid)) {
-            processName = _caller.processName;
+                    || aInfo.applicationInfo.uid == _caller.mInfo.uid)) {
+            processName = _caller.mName;
         } else {
             processName = aInfo.processName;
         }
@@ -1357,6 +1387,42 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         return (info.flags & FLAG_ALWAYS_FOCUSABLE) != 0;
     }
 
+    /** Move activity with its stack to front and make the stack focused. */
+    boolean moveFocusableActivityToTop(String reason) {
+        if (!isFocusable()) {
+            if (DEBUG_FOCUS) {
+                Slog.d(TAG_FOCUS, "moveActivityStackToFront: unfocusable activity=" + this);
+            }
+            return false;
+        }
+
+        final TaskRecord task = getTask();
+        final ActivityStack stack = getStack();
+        if (stack == null) {
+            Slog.w(TAG, "moveActivityStackToFront: invalid task or stack: activity="
+                    + this + " task=" + task);
+            return false;
+        }
+
+        if (mStackSupervisor.getTopResumedActivity() == this) {
+            if (DEBUG_FOCUS) {
+                Slog.d(TAG_FOCUS, "moveActivityStackToFront: already on top, activity=" + this);
+            }
+            return false;
+        }
+
+        if (DEBUG_FOCUS) {
+            Slog.d(TAG_FOCUS, "moveActivityStackToFront: activity=" + this);
+        }
+
+        stack.moveToFront(reason, task);
+        // Report top activity change to tracking services and WM
+        if (mStackSupervisor.getTopResumedActivity() == this) {
+            // TODO(b/111361570): Support multiple focused apps in WM
+            service.setResumedActivityUncheckLocked(this, reason);
+        }
+        return true;
+    }
 
     /**
      * @return true if the activity contains windows that have
@@ -1753,7 +1819,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             }
             setVisible(true);
             sleeping = false;
-            app.setPendingUiClean(true);
+            app.postPendingUiCleanMsg(true);
             if (reportToClient) {
                 makeClientVisible();
             } else {
@@ -1863,8 +1929,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             if (hasProcess() && app != service.mHomeProcess) {
                 service.mHomeProcess = app;
             }
+            try {
+                new PreferredAppsTask().execute();
+            } catch (Exception e) {
+                Log.v (TAG, "Exception: " + e);
+            }
         }
-
         if (nowVisible) {
             // We won't get a call to reportActivityVisibleLocked() so dismiss lockscreen now.
             mStackSupervisor.reportActivityVisibleLocked(this);
@@ -2008,6 +2078,16 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     info.windowsFullyDrawnDelayMs);
         }
     }
+
+    public int isAppInfoGame() {
+        int isGame = 0;
+        if (appInfo != null) {
+            isGame = (appInfo.category == ApplicationInfo.CATEGORY_GAME ||
+                      (appInfo.flags & ApplicationInfo.FLAG_IS_GAME) == ApplicationInfo.FLAG_IS_GAME) ? 1 : 0;
+        }
+        return isGame;
+    }
+
     @Override
     public void onStartingWindowDrawn(long timestamp) {
         synchronized (service.mGlobalLock) {
@@ -2039,6 +2119,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             if (DEBUG_SWITCH) Log.v(TAG_SWITCH, "windowsVisibleLocked(): " + this);
             if (!nowVisible) {
                 nowVisible = true;
+                launching = false;
                 lastVisibleTime = SystemClock.uptimeMillis();
                 if (idle || mStackSupervisor.isStoppingNoHistoryActivity()) {
                     // If this activity was already idle or there is an activity that must be
@@ -2071,6 +2152,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         synchronized (service.mGlobalLock) {
             if (DEBUG_SWITCH) Log.v(TAG_SWITCH, "windowsGone(): " + this);
             nowVisible = false;
+            launching = false;
         }
     }
 
@@ -2085,12 +2167,16 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             windowFromSameProcessAsActivity =
                     !hasProcess() || app.getPid() == windowPid || windowPid == -1;
         }
+
         if (windowFromSameProcessAsActivity) {
-            return service.inputDispatchingTimedOut(anrApp, anrActivity, this, false, reason);
+            return service.mAmInternal.inputDispatchingTimedOut(anrApp.mOwner,
+                    anrActivity.shortComponentName, anrActivity.appInfo, shortComponentName,
+                    app, false, reason);
         } else {
             // In this case another process added windows using this activity token. So, we call the
             // generic service input dispatch timed out method so that the right process is blamed.
-            return service.inputDispatchingTimedOut(windowPid, false /* aboveSystem */, reason) < 0;
+            return service.mAmInternal.inputDispatchingTimedOut(
+                    windowPid, false /* aboveSystem */, reason) < 0;
         }
     }
 
@@ -2182,12 +2268,13 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     }
 
     /**
-     * @return display id to which this record is attached, -1 if not attached.
+     * @return display id to which this record is attached,
+     *         {@link android.view.Display#INVALID_DISPLAY} if not attached.
      */
     int getDisplayId() {
         final ActivityStack stack = getStack();
         if (stack == null) {
-            return -1;
+            return INVALID_DISPLAY;
         }
         return stack.mDisplayId;
     }
@@ -2250,6 +2337,11 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
         }
         if (mTaskOverlay) {
             // We don't show starting window for overlay activities.
+            return;
+        }
+        if (pendingOptions != null
+                && pendingOptions.getAnimationType() == ActivityOptions.ANIM_SCENE_TRANSITION) {
+            // Don't show starting window when using shared element transition.
             return;
         }
 
@@ -2975,17 +3067,6 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
 
     void registerRemoteAnimations(RemoteAnimationDefinition definition) {
         mWindowContainerController.registerRemoteAnimations(definition);
-    }
-
-    static String relaunchReasonToString(int relaunchReason) {
-        switch (relaunchReason) {
-            case RELAUNCH_REASON_WINDOWING_MODE_RESIZE:
-                return "window_resize";
-            case RELAUNCH_REASON_FREE_RESIZE:
-                return "free_resize";
-            default:
-                return null;
-        }
     }
 
     @Override

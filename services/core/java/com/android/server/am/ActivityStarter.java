@@ -53,25 +53,25 @@ import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_TOP;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_CONFIGURATION;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_FOCUS;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_PERMISSIONS_REVIEW;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_RESULTS;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_STACK;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_TASKS;
-import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_USER_LEAVING;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_CONFIGURATION;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_FOCUS;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_RESULTS;
-import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_USER_LEAVING;
-import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
-import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
-import static com.android.server.am.ActivityManagerService.ANIMATE;
 import static com.android.server.am.ActivityStack.ActivityState.RESUMED;
 import static com.android.server.am.ActivityStackSupervisor.DEFER_RESUME;
 import static com.android.server.am.ActivityStackSupervisor.ON_TOP;
 import static com.android.server.am.ActivityStackSupervisor.PRESERVE_WINDOWS;
 import static com.android.server.am.ActivityStackSupervisor.TAG_TASKS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_CONFIGURATION;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_FOCUS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_PERMISSIONS_REVIEW;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_RESULTS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_STACK;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_TASKS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.DEBUG_USER_LEAVING;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_CONFIGURATION;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_FOCUS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_RESULTS;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.POSTFIX_USER_LEAVING;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.TAG_ATM;
+import static com.android.server.am.ActivityTaskManagerDebugConfig.TAG_WITH_CLASS_NAME;
+import static com.android.server.am.ActivityTaskManagerService.ANIMATE;
 import static com.android.server.am.EventLogTags.AM_NEW_INTENT;
 import static com.android.server.am.TaskRecord.REPARENT_KEEP_STACK_AT_FRONT;
 import static com.android.server.am.TaskRecord.REPARENT_MOVE_STACK_TO_FRONT;
@@ -128,7 +128,7 @@ import java.util.Date;
  * an activity and associated task and stack.
  */
 class ActivityStarter {
-    private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStarter" : TAG_AM;
+    private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStarter" : TAG_ATM;
     private static final String TAG_RESULTS = TAG + POSTFIX_RESULTS;
     private static final String TAG_FOCUS = TAG + POSTFIX_FOCUS;
     private static final String TAG_CONFIGURATION = TAG + POSTFIX_CONFIGURATION;
@@ -594,12 +594,12 @@ class ActivityStarter {
         final Bundle verificationBundle
                 = options != null ? options.popAppVerificationBundle() : null;
 
-        ProcessRecord callerApp = null;
+        WindowProcessController callerApp = null;
         if (caller != null) {
-            callerApp = mService.mAm.getRecordForAppLocked(caller);
+            callerApp = mService.getProcessController(caller);
             if (callerApp != null) {
-                callingPid = callerApp.pid;
-                callingUid = callerApp.info.uid;
+                callingPid = callerApp.getPid();
+                callingUid = callerApp.mInfo.uid;
             } else {
                 Slog.w(TAG, "Unable to find app for caller " + caller
                         + " (pid=" + callingPid + ") when starting: "
@@ -730,14 +730,12 @@ class ActivityStarter {
         boolean abort = !mSupervisor.checkStartAnyActivityPermission(intent, aInfo, resultWho,
                 requestCode, callingPid, callingUid, callingPackage, ignoreTargetSecurity,
                 inTask != null, callerApp, resultRecord, resultStack);
-        abort |= !mService.mAm.mIntentFirewall.checkStartActivity(intent, callingUid,
+        abort |= !mService.mIntentFirewall.checkStartActivity(intent, callingUid,
                 callingPid, resolvedType, aInfo.applicationInfo);
 
-        final WindowProcessController callerWpc =
-                callerApp != null ? callerApp.getWindowProcessController() : null;
         // Merge the two options bundles, while realCallerOptions takes precedence.
         ActivityOptions checkedOptions = options != null
-                ? options.getOptions(intent, aInfo, callerWpc, mSupervisor) : null;
+                ? options.getOptions(intent, aInfo, callerApp, mSupervisor) : null;
         if (allowPendingRemoteAnimationRegistryLookup) {
             checkedOptions = mService.getActivityStartController()
                     .getPendingRemoteAnimationRegistry()
@@ -837,8 +835,7 @@ class ActivityStarter {
             aInfo = mSupervisor.resolveActivity(intent, rInfo, startFlags, null /*profilerInfo*/);
         }
 
-        ActivityRecord r = new ActivityRecord(mService, callerApp, callingPid,
-                callingUid,
+        ActivityRecord r = new ActivityRecord(mService, callerApp, callingPid, callingUid,
                 callingPackage, intent, resolvedType, aInfo, mService.getGlobalConfiguration(),
                 resultRecord, resultWho, requestCode, componentSpecified, voiceSession != null,
                 mSupervisor, checkedOptions, sourceRecord);
@@ -861,7 +858,7 @@ class ActivityStarter {
             if (!mService.checkAppSwitchAllowedLocked(callingPid, callingUid,
                     realCallingPid, realCallingUid, "Activity start")) {
                 mController.addPendingActivityLaunch(new PendingActivityLaunch(r,
-                        sourceRecord, startFlags, stack, callerWpc));
+                        sourceRecord, startFlags, stack, callerApp));
                 ActivityOptions.abort(checkedOptions);
                 return ActivityManager.START_SWITCHES_CANCELED;
             }
@@ -878,12 +875,11 @@ class ActivityStarter {
     }
 
     private void maybeLogActivityStart(int callingUid, String callingPackage, int realCallingUid,
-            Intent intent, ProcessRecord callerApp, ActivityRecord r,
+            Intent intent, WindowProcessController callerApp, ActivityRecord r,
             PendingIntentRecord originatingPendingIntent) {
-        boolean callerAppHasForegroundActivity = (callerApp != null)
-                ? callerApp.foregroundActivities
-                : false;
-        if (!mService.mAm.isActivityStartsLoggingEnabled() || callerAppHasForegroundActivity
+        boolean callerAppHasForegroundActivity =
+                callerApp != null && callerApp.hasForegroundActivities();
+        if (!mService.isActivityStartsLoggingEnabled() || callerAppHasForegroundActivity
                 || r == null) {
             // skip logging in this case
             return;
@@ -1089,9 +1085,10 @@ class ActivityStarter {
                             || !heavy.mName.equals(aInfo.processName))) {
                         int appCallingUid = callingUid;
                         if (caller != null) {
-                            ProcessRecord callerApp = mService.mAm.getRecordForAppLocked(caller);
+                            WindowProcessController callerApp =
+                                    mService.getProcessController(caller);
                             if (callerApp != null) {
-                                appCallingUid = callerApp.info.uid;
+                                appCallingUid = callerApp.mInfo.uid;
                             } else {
                                 Slog.w(TAG, "Unable to find app for caller " + caller
                                         + " (pid=" + callingPid + ") when starting: "
@@ -1131,7 +1128,7 @@ class ActivityStarter {
                                         callingUid, realCallingUid, mRequest.filterCallingUid));
                         aInfo = rInfo != null ? rInfo.activityInfo : null;
                         if (aInfo != null) {
-                            aInfo = mService.mAm.getActivityInfoForUser(aInfo, userId);
+                            aInfo = mService.mAmInternal.getActivityInfoForUser(aInfo, userId);
                         }
                     }
                 }
@@ -1284,6 +1281,7 @@ class ActivityStarter {
 
         setInitialState(r, options, inTask, doResume, startFlags, sourceRecord, voiceSession,
                 voiceInteractor);
+        final int preferredWindowingMode = mLaunchParams.mWindowingMode;
 
         // Do not start home activity if it cannot be launched on preferred display. We are not
         // doing this in ActivityStackSupervisor#canPlaceEntityOnDisplay because it might
@@ -1301,25 +1299,6 @@ class ActivityStarter {
         mIntent.setFlags(mLaunchFlags);
 
         ActivityRecord reusedActivity = getReusableIntentActivity();
-
-        int preferredWindowingMode = WINDOWING_MODE_UNDEFINED;
-        int preferredLaunchDisplayId = DEFAULT_DISPLAY;
-        if (mOptions != null) {
-            preferredWindowingMode = mOptions.getLaunchWindowingMode();
-            preferredLaunchDisplayId = mOptions.getLaunchDisplayId();
-        }
-
-        // windowing mode and preferred launch display values from {@link LaunchParams} take
-        // priority over those specified in {@link ActivityOptions}.
-        if (!mLaunchParams.isEmpty()) {
-            if (mLaunchParams.hasPreferredDisplay()) {
-                preferredLaunchDisplayId = mLaunchParams.mPreferredDisplayId;
-            }
-
-            if (mLaunchParams.hasWindowingMode()) {
-                preferredWindowingMode = mLaunchParams.mWindowingMode;
-            }
-        }
 
         if (reusedActivity != null) {
             // When the flags NEW_TASK and CLEAR_TASK are set, then the task gets reused but
@@ -1467,7 +1446,7 @@ class ActivityStarter {
             // Don't use mStartActivity.task to show the toast. We're not starting a new activity
             // but reusing 'top'. Fields in mStartActivity may not be fully initialized.
             mSupervisor.handleNonResizableTaskIfNeeded(top.getTask(), preferredWindowingMode,
-                    preferredLaunchDisplayId, topStack);
+                    mPreferredDisplayId, topStack);
 
             return START_DELIVERED_TO_TOP;
         }
@@ -1483,10 +1462,11 @@ class ActivityStarter {
             newTask = true;
             String packageName= mService.mContext.getPackageName();
             if (mPerf != null) {
+                mStartActivity.perfActivityBoostHandler =
                     mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
                                         packageName, -1, BoostFramework.Launch.BOOST_V1);
             }
-            result = setTaskFromReuseOrCreateNewTask(taskToAffiliate, topStack);
+            result = setTaskFromReuseOrCreateNewTask(taskToAffiliate);
         } else if (mSourceRecord != null) {
             result = setTaskFromSourceRecord();
         } else if (mInTask != null) {
@@ -1502,8 +1482,9 @@ class ActivityStarter {
 
         mService.mUgmInternal.grantUriPermissionFromIntent(mCallingUid, mStartActivity.packageName,
                 mIntent, mStartActivity.getUriPermissionsLocked(), mStartActivity.userId);
-        mService.mAm.grantEphemeralAccessLocked(mStartActivity.userId, mIntent,
-                UserHandle.getAppId(mStartActivity.appInfo.uid), UserHandle.getAppId(mCallingUid));
+        mService.getPackageManagerInternalLocked().grantEphemeralAccess(
+                mStartActivity.userId, mIntent, UserHandle.getAppId(mStartActivity.appInfo.uid),
+                UserHandle.getAppId(mCallingUid));
         if (newTask) {
             EventLog.writeEvent(EventLogTags.AM_CREATE_TASK, mStartActivity.userId,
                     mStartActivity.getTask().taskId);
@@ -1551,7 +1532,7 @@ class ActivityStarter {
         mSupervisor.updateUserStackLocked(mStartActivity.userId, mTargetStack);
 
         mSupervisor.handleNonResizableTaskIfNeeded(mStartActivity.getTask(), preferredWindowingMode,
-                preferredLaunchDisplayId, mTargetStack);
+                mPreferredDisplayId, mTargetStack);
 
         return START_SUCCESS;
     }
@@ -1615,12 +1596,16 @@ class ActivityStarter {
         mVoiceSession = voiceSession;
         mVoiceInteractor = voiceInteractor;
 
-        mPreferredDisplayId = getPreferedDisplayId(mSourceRecord, mStartActivity, options);
-
         mLaunchParams.reset();
 
-        mSupervisor.getLaunchParamsController().calculate(inTask, null /*layout*/, r, sourceRecord,
-                options, mLaunchParams);
+        mSupervisor.getLaunchParamsController().calculate(inTask, r.info.windowLayout, r,
+                sourceRecord, options, mLaunchParams);
+
+        if (mLaunchParams.hasPreferredDisplay()) {
+            mPreferredDisplayId = mLaunchParams.mPreferredDisplayId;
+        } else {
+            mPreferredDisplayId = DEFAULT_DISPLAY;
+        }
 
         mLaunchMode = r.launchMode;
 
@@ -1892,44 +1877,6 @@ class ActivityStarter {
     }
 
     /**
-     * Returns the ID of the display to use for a new activity. If the device is in VR mode,
-     * then return the Vr mode's virtual display ID. If not,  if the activity was started with
-     * a launchDisplayId, use that. Otherwise, if the source activity has a explicit display ID
-     * set, use that to launch the activity.
-     */
-    private int getPreferedDisplayId(
-            ActivityRecord sourceRecord, ActivityRecord startingActivity, ActivityOptions options) {
-        // Check if the Activity is a VR activity. If so, the activity should be launched in
-        // main display.
-        if (startingActivity != null && startingActivity.requestedVrComponent != null) {
-            return DEFAULT_DISPLAY;
-        }
-
-        // Get the virtual display id from ActivityManagerService.
-        int displayId = mService.mVr2dDisplayId;
-        if (displayId != INVALID_DISPLAY) {
-            if (DEBUG_STACK) {
-                Slog.d(TAG, "getSourceDisplayId :" + displayId);
-            }
-            return displayId;
-        }
-
-        // If the caller requested a display, prefer that display.
-        final int launchDisplayId =
-                (options != null) ? options.getLaunchDisplayId() : INVALID_DISPLAY;
-        if (launchDisplayId != INVALID_DISPLAY) {
-            return launchDisplayId;
-        }
-
-        displayId = sourceRecord != null ? sourceRecord.getDisplayId() : INVALID_DISPLAY;
-        // If the activity has a displayId set explicitly, launch it on the same displayId.
-        if (displayId != INVALID_DISPLAY) {
-            return displayId;
-        }
-        return DEFAULT_DISPLAY;
-    }
-
-    /**
      * Figure out which task and activity to bring to front when we have found an existing matching
      * activity record in history. May also clear the task if needed.
      * @param intentActivity Existing matching activity.
@@ -2134,8 +2081,7 @@ class ActivityStarter {
         mSupervisor.updateUserStackLocked(mStartActivity.userId, mTargetStack);
     }
 
-    private int setTaskFromReuseOrCreateNewTask(
-            TaskRecord taskToAffiliate, ActivityStack topStack) {
+    private int setTaskFromReuseOrCreateNewTask(TaskRecord taskToAffiliate) {
         mTargetStack = computeStackFocus(mStartActivity, true, mLaunchFlags, mOptions);
 
         // Do no move the target stack to front yet, as we might bail if
@@ -2189,7 +2135,11 @@ class ActivityStarter {
             return START_RETURN_LOCK_TASK_MODE_VIOLATION;
         }
         String packageName= mService.mContext.getPackageName();
-
+        if (mPerf != null) {
+            mStartActivity.perfActivityBoostHandler =
+                mPerf.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                                    packageName, -1, BoostFramework.Launch.BOOST_V1);
+        }
         final TaskRecord sourceTask = mSourceRecord.getTask();
         final ActivityStack sourceStack = mSourceRecord.getStack();
         // We only want to allow changing stack in two cases:
@@ -2441,17 +2391,6 @@ class ActivityStarter {
             }
         }
         if (stack == null) {
-            // We first try to put the task in the first dynamic stack on home display.
-            final ActivityDisplay display = mSupervisor.getDefaultDisplay();
-            for (int stackNdx = display.getChildCount() - 1; stackNdx >= 0; --stackNdx) {
-                stack = display.getChildAt(stackNdx);
-                if (!stack.isOnHomeDisplay()) {
-                    if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS,
-                            "computeStackFocus: Setting focused stack=" + stack);
-                    return stack;
-                }
-            }
-            // If there is no suitable dynamic stack then we figure out which static stack to use.
             stack = mSupervisor.getLaunchStack(r, aOptions, task, ON_TOP);
         }
         if (DEBUG_FOCUS || DEBUG_STACK) Slog.d(TAG_FOCUS, "computeStackFocus: New stack r="

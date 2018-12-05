@@ -110,6 +110,7 @@ android_library {
         "androidx.slice_slice-builders",
         "androidx.arch.core_core-runtime",
         "androidx.lifecycle_lifecycle-extensions",
+        "qtiNetworkLib",
         "SystemUI-tags",
         "SystemUI-proto",
         "metrics-helper-lib",
@@ -124,7 +125,6 @@ android_library {
         "android.car",
         "android.car.user",
         "android.test.base",
-        "telephony-ext",
         "ims-common",
     ],
     aaptflags: [

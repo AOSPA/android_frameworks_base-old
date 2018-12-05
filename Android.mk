@@ -87,6 +87,7 @@ $(INTERNAL_PLATFORM_HIDDENAPI_WHITELIST): \
     frameworks/base/tools/hiddenapi/generate_hiddenapi_lists.py \
     frameworks/base/config/hiddenapi-light-greylist.txt \
     frameworks/base/config/hiddenapi-vendor-list.txt \
+    frameworks/base/config/hiddenapi-max-sdk-p-blacklist.txt \
     frameworks/base/config/hiddenapi-force-blacklist.txt \
     $(INTERNAL_PLATFORM_HIDDENAPI_PUBLIC_LIST) \
     $(INTERNAL_PLATFORM_HIDDENAPI_PRIVATE_LIST) \
@@ -98,6 +99,7 @@ $(INTERNAL_PLATFORM_HIDDENAPI_WHITELIST): \
 	    --input-greylists \
 	        frameworks/base/config/hiddenapi-light-greylist.txt \
 	        frameworks/base/config/hiddenapi-vendor-list.txt \
+	        frameworks/base/config/hiddenapi-max-sdk-p-blacklist.txt \
 	        <(comm -12 <(sort $(INTERNAL_PLATFORM_REMOVED_DEX_API_FILE)) \
 	                   $(INTERNAL_PLATFORM_HIDDENAPI_PRIVATE_LIST)) \
 	        $(PRIVATE_GREYLIST_INPUTS) \
@@ -110,6 +112,17 @@ $(INTERNAL_PLATFORM_HIDDENAPI_WHITELIST): \
 	$(call commit-change-for-toc,$(INTERNAL_PLATFORM_HIDDENAPI_LIGHT_GREYLIST))
 	$(call commit-change-for-toc,$(INTERNAL_PLATFORM_HIDDENAPI_DARK_GREYLIST))
 	$(call commit-change-for-toc,$(INTERNAL_PLATFORM_HIDDENAPI_BLACKLIST))
+
+$(INTERNAL_PLATFORM_HIDDENAPI_GREYLIST_METADATA): \
+    frameworks/base/tools/hiddenapi/merge_csv.py \
+    $(PRIVATE_METADATA_INPUTS)
+	frameworks/base/tools/hiddenapi/merge_csv.py $(PRIVATE_METADATA_INPUTS) > $@
+
+$(call dist-for-goals,droidcore,$(INTERNAL_PLATFORM_HIDDENAPI_WHITELIST))
+$(call dist-for-goals,droidcore,$(INTERNAL_PLATFORM_HIDDENAPI_LIGHT_GREYLIST))
+$(call dist-for-goals,droidcore,$(INTERNAL_PLATFORM_HIDDENAPI_DARK_GREYLIST))
+$(call dist-for-goals,droidcore,$(INTERNAL_PLATFORM_HIDDENAPI_BLACKLIST))
+$(call dist-for-goals,droidcore,$(INTERNAL_PLATFORM_HIDDENAPI_GREYLIST_METADATA))
 
 # Include subdirectory makefiles
 # ============================================================

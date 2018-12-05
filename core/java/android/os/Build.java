@@ -17,6 +17,7 @@
 package android.os;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SuppressAutoDoc;
 import android.annotation.SystemApi;
@@ -129,9 +130,9 @@ public class Build {
      * <a href="/training/articles/security-key-attestation.html">key attestation</a> to obtain
      * proof of the device's original identifiers.
      *
-     * <p>Requires Permission: READ_PRIVILEGED_PHONE_STATE or for the calling package to be the
-     * device or profile owner. Profile owner access is deprecated and will be removed in a future
-     * release.
+     * <p>Requires Permission: READ_PRIVILEGED_PHONE_STATE, or for the calling package to be the
+     * device or profile owner and have the READ_PHONE_STATE permission. Profile owner access is
+     * deprecated and will be removed in a future release.
      *
      * @return The serial number if specified.
      */
@@ -1112,18 +1113,36 @@ public class Build {
         }
 
         /** The name of this partition, e.g. "system", or "vendor" */
+        @NonNull
         public String getName() {
             return mName;
         }
 
         /** The build fingerprint of this partition, see {@link Build#FINGERPRINT}. */
+        @NonNull
         public String getFingerprint() {
             return mFingerprint;
         }
 
         /** The time (ms since epoch), at which this partition was built, see {@link Build#TIME}. */
-        public long getTimeMillis() {
+        public long getBuildTimeMillis() {
             return mTimeMs;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (!(o instanceof Partition)) {
+                return false;
+            }
+            Partition op = (Partition) o;
+            return mName.equals(op.mName)
+                    && mFingerprint.equals(op.mFingerprint)
+                    && mTimeMs == op.mTimeMs;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(mName, mFingerprint, mTimeMs);
         }
     }
 
@@ -1133,7 +1152,8 @@ public class Build {
      * The list includes partitions that are suitable candidates for over-the-air updates. This is
      * not an exhaustive list of partitions on the device.
      */
-    public static List<Partition> getPartitions() {
+    @NonNull
+    public static List<Partition> getFingerprintedPartitions() {
         ArrayList<Partition> partitions = new ArrayList();
 
         String[] names = new String[] {
