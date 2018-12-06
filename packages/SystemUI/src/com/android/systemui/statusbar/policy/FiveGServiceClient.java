@@ -124,7 +124,7 @@ public class FiveGServiceClient {
             mUpperLayerInd = UpperLayerIndInfo.UPPER_LAYER_IND_INFO_UNAVAILABLE;
             mDcnr = DcParam.DCNR_RESTRICTED;
             mLevel = 0;
-            mNrConfigType = NrConfigType.INVALID;
+            mNrConfigType = NrConfigType.NSA_CONFIGURATION;
             mIconGroup = TelephonyIcons.UNKNOWN;
         }
 
