@@ -62,8 +62,6 @@
     <string name="wifi_security_passpoint" translatable="false">Passpoint</string>
     <!-- Do not translate.  Concise terminology for DPP network -->
     <string name="wifi_security_dpp" translatable="false">DPP</string>
-    <!-- Do not translate.  Concise terminology for SAE network -->
-    <string name="wifi_security_sae" translatable="false">SAE</string>
     <!-- Do not translate.  Terminology for wifi with WPA3 security -->
     <string name="wifi_security_sae" translatable="false">WPA3-Personal</string>
     <!-- Do not translate.  Terminology for wifi with OWE security -->
