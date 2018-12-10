@@ -34,8 +34,6 @@
     <string name="wifi_security_short_eap" translatable="false">802.1x</string>
     <!-- Do not translate.  Concise terminology for wifi with DPP security -->
     <string name="wifi_security_short_dpp" translatable="false">DPP</string>
-    <!-- Do not translate.  Concise terminology for wifi with SAE security -->
-    <string name="wifi_security_short_sae" translatable="false">SAE</string>
     <!-- Do not translate.  Concise terminology for wifi with WPA3 security -->
     <string name="wifi_security_short_sae" translatable="false">WPA3</string>
     <!-- Do not translate.  Concise terminology for wifi with OWE security -->
