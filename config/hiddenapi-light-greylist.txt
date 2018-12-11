@@ -1053,10 +1053,7 @@ Landroid/os/WorkSource;->sTmpWorkSource:Landroid/os/WorkSource;
 Landroid/os/WorkSource;->updateLocked(Landroid/os/WorkSource;ZZ)Z
 Landroid/os/ZygoteStartFailedEx;-><init>(Ljava/lang/String;)V
 Landroid/os/ZygoteStartFailedEx;-><init>(Ljava/lang/Throwable;)V
-<<<<<<< HEAD
-=======
 Landroid/preference/PreferenceGroupAdapter;->getItem(I)Landroid/preference/Preference;
->>>>>>> 5a05000482abc03a74556ae0e289172eb0ae5607
 Landroid/R$styleable;->ActionBar:[I
 Landroid/R$styleable;->ActionBar_background:I
 Landroid/R$styleable;->ActionBar_backgroundSplit:I
@@ -1385,9 +1382,6 @@ Landroid/speech/IRecognitionListener;->onEvent(ILandroid/os/Bundle;)V
 Landroid/telecom/Log;->i(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V
 Landroid/telecom/Log;->w(Ljava/lang/String;Ljava/lang/String;[Ljava/lang/Object;)V
 Landroid/telephony/CarrierMessagingServiceManager;-><init>()V
-<<<<<<< HEAD
-Landroid/telephony/TelephonyManager$MultiSimVariants;->values()[Landroid/telephony/TelephonyManager$MultiSimVariants;
-=======
 Landroid/telephony/JapanesePhoneNumberFormatter;->format(Landroid/text/Editable;)V
 Landroid/telephony/SmsCbCmasInfo;->getCategory()I
 Landroid/telephony/SmsCbCmasInfo;->getCertainty()I
@@ -1418,7 +1412,6 @@ Landroid/test/AndroidTestCase;->getTestContext()Landroid/content/Context;
 Landroid/test/AndroidTestCase;->setTestContext(Landroid/content/Context;)V
 Landroid/test/InstrumentationTestCase;->runMethod(Ljava/lang/reflect/Method;I)V
 Landroid/test/RepetitiveTest;->numIterations()I
->>>>>>> 5a05000482abc03a74556ae0e289172eb0ae5607
 Landroid/util/Singleton;-><init>()V
 Landroid/util/XmlPullAttributes;-><init>(Lorg/xmlpull/v1/XmlPullParser;)V
 Landroid/util/XmlPullAttributes;->mParser:Lorg/xmlpull/v1/XmlPullParser;
@@ -1479,10 +1472,7 @@ Landroid/view/IWindowSession;->setInTouchMode(Z)V
 Landroid/view/IWindowSession;->setTransparentRegion(Landroid/view/IWindow;Landroid/graphics/Region;)V
 Landroid/view/IWindowSession;->wallpaperCommandComplete(Landroid/os/IBinder;Landroid/os/Bundle;)V
 Landroid/view/IWindowSession;->wallpaperOffsetsComplete(Landroid/os/IBinder;)V
-<<<<<<< HEAD
-=======
 Landroid/view/RenderNodeAnimator;->setDuration(J)Landroid/view/RenderNodeAnimator;
->>>>>>> 5a05000482abc03a74556ae0e289172eb0ae5607
 Landroid/view/View$AttachInfo$InvalidateInfo;-><init>()V
 Landroid/view/View$CheckForLongPress;-><init>(Landroid/view/View;)V
 Landroid/view/View$ListenerInfo;-><init>()V
@@ -1494,11 +1484,8 @@ Landroid/webkit/IWebViewUpdateService$Stub;->asInterface(Landroid/os/IBinder;)La
 Landroid/webkit/IWebViewUpdateService;->getCurrentWebViewPackageName()Ljava/lang/String;
 Landroid/webkit/IWebViewUpdateService;->getValidWebViewPackages()[Landroid/webkit/WebViewProviderInfo;
 Landroid/webkit/IWebViewUpdateService;->isFallbackPackage(Ljava/lang/String;)Z
-<<<<<<< HEAD
-=======
 Landroid/widget/DigitalClock$FormatChangeObserver;-><init>(Landroid/widget/DigitalClock;)V
 Landroid/widget/QuickContactBadge$QueryHandler;-><init>(Landroid/widget/QuickContactBadge;Landroid/content/ContentResolver;)V
->>>>>>> 5a05000482abc03a74556ae0e289172eb0ae5607
 Landroid/widget/RelativeLayout$DependencyGraph$Node;-><init>()V
 Landroid/widget/ScrollBarDrawable;-><init>()V
 Lcom/android/i18n/phonenumbers/AsYouTypeFormatter;->clear()V
@@ -2998,7 +2985,6 @@ Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->DBG:Z
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->logd(Ljava/lang/String;)V
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->loge(Ljava/lang/String;)V
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mAdnCache:Lcom/android/internal/telephony/uicc/AdnRecordCache;
-Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mBaseHandler:Landroid/os/Handler;
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mCurrentApp:Lcom/android/internal/telephony/uicc/UiccCardApplication;
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mIs3gCard:Z
 Lcom/android/internal/telephony/IccPhoneBookInterfaceManager;->mLock:Ljava/lang/Object;
@@ -3054,7 +3040,6 @@ Lcom/android/internal/telephony/imsphone/ImsExternalCallTracker$ExternalCallStat
 Lcom/android/internal/telephony/imsphone/ImsExternalCallTracker$ExternalConnectionListener;-><init>(Lcom/android/internal/telephony/imsphone/ImsExternalCallTracker;)V
 Lcom/android/internal/telephony/imsphone/ImsExternalConnection;->rebuildCapabilities()V
 Lcom/android/internal/telephony/imsphone/ImsExternalConnection;->setActive()V
-Lcom/android/internal/telephony/imsphone/ImsPhone$Cf;-><init>(Ljava/lang/String;ZLandroid/os/Message;)V
 Lcom/android/internal/telephony/imsphone/ImsPhone;->getActionFromCFAction(I)I
 Lcom/android/internal/telephony/imsphone/ImsPhone;->getBackgroundCall()Lcom/android/internal/telephony/imsphone/ImsPhoneCall;
 Lcom/android/internal/telephony/imsphone/ImsPhone;->getCallForwardingOption(ILandroid/os/Message;)V
@@ -4025,8 +4010,6 @@ Lcom/android/internal/view/BaseIWindow;-><init>()V
 Lcom/android/internal/view/IInputMethodManager$Stub$Proxy;-><init>(Landroid/os/IBinder;)V
 Lcom/android/internal/view/IInputMethodManager$Stub;->asInterface(Landroid/os/IBinder;)Lcom/android/internal/view/IInputMethodManager;
 Lcom/android/internal/view/IInputMethodSession$Stub;->asInterface(Landroid/os/IBinder;)Lcom/android/internal/view/IInputMethodSession;
-<<<<<<< HEAD
-=======
 Lcom/android/internal/view/InputConnectionWrapper$InputContextCallback;->dispose()V
 Lcom/android/internal/view/InputConnectionWrapper$InputContextCallback;->getInstance()Lcom/android/internal/view/InputConnectionWrapper$InputContextCallback;
 Lcom/android/internal/view/menu/ActionMenu;-><init>(Landroid/content/Context;)V
@@ -4050,7 +4033,6 @@ Lcom/android/internal/widget/ActionBarContextView;-><init>(Landroid/content/Cont
 Lcom/android/internal/widget/ActionBarOverlayLayout;-><init>(Landroid/content/Context;Landroid/util/AttributeSet;)V
 Lcom/android/internal/widget/ActionBarOverlayLayout;->setWindowCallback(Landroid/view/Window$Callback;)V
 Lcom/android/internal/widget/EditableInputConnection;-><init>(Landroid/widget/TextView;)V
->>>>>>> 5a05000482abc03a74556ae0e289172eb0ae5607
 Lcom/android/internal/widget/ILockSettings$Stub;->asInterface(Landroid/os/IBinder;)Lcom/android/internal/widget/ILockSettings;
 Lcom/android/internal/widget/ILockSettings;->getBoolean(Ljava/lang/String;ZI)Z
 Lcom/android/internal/widget/ILockSettings;->getLong(Ljava/lang/String;JI)J
