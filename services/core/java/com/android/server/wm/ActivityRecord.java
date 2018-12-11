@@ -206,7 +206,7 @@ import android.util.BoostFramework;
 /**
  * An entry in the history stack, representing an activity.
  */
-final class ActivityRecord extends ConfigurationContainer implements AppWindowContainerListener {
+public final class ActivityRecord extends ConfigurationContainer implements AppWindowContainerListener {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityRecord" : TAG_ATM;
     private static final String TAG_CONFIGURATION = TAG + POSTFIX_CONFIGURATION;
     private static final String TAG_SAVED_STATE = TAG + POSTFIX_SAVED_STATE;
@@ -243,7 +243,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     final ComponentName realActivity;  // the intent component, or target of an alias.
     final String shortComponentName; // the short component name of the intent
     final String resolvedType; // as per original caller;
-    final String packageName; // the package implementing intent's component
+    public final String packageName; // the package implementing intent's component
     final String processName; // process where this component wants to run
     final String taskAffinity; // as per ActivityInfo.taskAffinity
     final boolean stateNotNeeded; // As per ActivityInfo.flags
@@ -309,7 +309,7 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
     private boolean mDeferHidingClient; // If true we told WM to defer reporting to the client
                                         // process that it is hidden.
     boolean sleeping;       // have we told the activity to sleep?
-    boolean launching;      // is activity launch in progress?
+    public boolean launching;      // is activity launch in progress?
     boolean nowVisible;     // is this activity's window visible?
     boolean mDrawn;          // is this activity's window drawn?
     boolean mClientVisibilityDeferred;// was the visibility change message to client deferred?
@@ -803,8 +803,9 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
                     if (bParams == null)
                         return null;
                     bParams.putStringArrayList("start_empty_apps", apps_l);
-                    service.mAm.startActivityAsUserEmpty(null, null, intent, null,
-                                  null, null, 0, 0, null, bParams, 0);
+                    // TODO(b/120845511)
+                    // service.mAm.startActivityAsUserEmpty(null, null, intent, null,
+                    //               null, null, 0, 0, null, bParams, 0);
                 }
             }
             return null;
@@ -1831,11 +1832,12 @@ final class ActivityRecord extends ConfigurationContainer implements AppWindowCo
             if (hasProcess() && app != service.mHomeProcess) {
                 service.mHomeProcess = app;
             }
-            try {
-                new PreferredAppsTask().execute();
-            } catch (Exception e) {
-                Log.v (TAG, "Exception: " + e);
-            }
+            // TODO(b/120845511)
+            // try {
+            //     new PreferredAppsTask().execute();
+            // } catch (Exception e) {
+            //     Log.v (TAG, "Exception: " + e);
+            // }
         }
         if (nowVisible) {
             // We won't get a call to reportActivityVisibleLocked() so dismiss lockscreen now.

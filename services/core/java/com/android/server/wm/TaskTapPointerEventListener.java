@@ -25,7 +25,7 @@ import android.view.WindowManagerPolicyConstants.PointerEventListener;
 
 import com.android.server.wm.WindowManagerService.H;
 import com.android.server.am.ActivityManagerService;
-import com.android.server.am.ActivityStackSupervisor;
+import com.android.server.wm.ActivityStackSupervisor;
 import android.util.BoostFramework;
 
 import static android.view.PointerIcon.TYPE_NOT_SPECIFIED;

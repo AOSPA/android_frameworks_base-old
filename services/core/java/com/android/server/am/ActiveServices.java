@@ -94,7 +94,9 @@ import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.am.ActivityManagerService.ItemMatcher;
 import com.android.server.uri.NeededUriGrants;
+import com.android.server.wm.ActivityRecord;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
+import com.android.server.wm.ActivityStack;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -2313,7 +2315,7 @@ public final class ActiveServices {
         mAm.mHandler.postAtTime(r.restarter, r.nextRestartTime);
         r.nextRestartTime = SystemClock.uptimeMillis() + r.restartDelay;
         Slog.w(TAG, "Scheduling restart of crashed service "
-                + r.shortName + " in " + r.restartDelay + "ms");
+                + r.shortInstanceName + " in " + r.restartDelay + "ms");
 
         if (SERVICE_RESCHEDULE && DEBUG_DELAYED_SERVICE) {
             for (int i=mRestartingServices.size()-1; i>=0; i--) {
@@ -2354,7 +2356,7 @@ public final class ActiveServices {
                 boolean isPersistent
                         = !((r.serviceInfo.applicationInfo.flags&ApplicationInfo.FLAG_PERSISTENT) == 0);
                 if(top_rc != null) {
-                    if(top_rc.launching && !r.shortName.contains(top_rc.packageName)
+                    if(top_rc.launching && !r.shortInstanceName.contains(top_rc.packageName)
                             && !isPersistent) {
                         shouldDelay = true;
                     }
@@ -2364,7 +2366,7 @@ public final class ActiveServices {
                 } else {
                     if (DEBUG_DELAYED_SERVICE) {
                         Slog.v(TAG, "Reschedule service restart due to app launch"
-                              +" r.shortName "+r.shortName+" r.app = "+r.app);
+                              +" r.shortInstanceName "+r.shortInstanceName+" r.app = "+r.app);
                     }
                     r.resetRestartCounter();
                     scheduleServiceRestartLocked(r, true);
@@ -2618,7 +2620,7 @@ public final class ActiveServices {
                     if (SERVICE_RESCHEDULE && DEBUG_DELAYED_SERVICE) {
                     Slog.w(TAG, " Failed to create Service !!!! ."
                            +"This will introduce huge delay...  "
-                           +r.shortName + " in " + r.restartDelay + "ms");
+                           +r.shortInstanceName + " in " + r.restartDelay + "ms");
                     }
                 }
 

@@ -158,6 +158,7 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.Watchdog;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.ActivityManagerService.ItemMatcher;
+import com.android.server.am.ActivityPluginDelegate;
 import com.android.server.wm.ConfigurationContainer;
 import com.android.server.wm.StackWindowController;
 import com.android.server.wm.StackWindowListener;
@@ -178,7 +179,7 @@ import java.util.Set;
 /**
  * State and management of a single stack of activities.
  */
-class ActivityStack<T extends StackWindowController> extends ConfigurationContainer
+public class ActivityStack<T extends StackWindowController> extends ConfigurationContainer
         implements StackWindowListener {
     private static final String TAG = TAG_WITH_CLASS_NAME ? "ActivityStack" : TAG_ATM;
     private static final String TAG_ADD_REMOVE = TAG + POSTFIX_ADD_REMOVE;
@@ -921,7 +922,7 @@ class ActivityStack<T extends StackWindowController> extends ConfigurationContai
         return super.setBounds(!inMultiWindowMode() ? null : bounds);
     }
 
-    ActivityRecord topRunningActivityLocked() {
+    public ActivityRecord topRunningActivityLocked() {
         return topRunningActivityLocked(false /* focusableOnly */);
     }
 
