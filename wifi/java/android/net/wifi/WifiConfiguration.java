@@ -2467,8 +2467,6 @@ public class WifiConfiguration implements Parcelable {
                 config.allowedAuthAlgorithms  = readBitSet(in);
                 config.allowedPairwiseCiphers = readBitSet(in);
                 config.allowedGroupCiphers    = readBitSet(in);
-                config.allowedGroupMgmtCiphers    = readBitSet(in);
-                config.allowedSuiteBCiphers    = readBitSet(in);
                 config.allowedGroupMgmtCiphers = readBitSet(in);
                 config.allowedSuiteBCiphers   = readBitSet(in);
 
